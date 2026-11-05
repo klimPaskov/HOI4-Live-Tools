@@ -492,6 +492,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_deep:") => panelkit::debug_deep(process, &n[9..]),
         n if n.starts_with("dbg_widget:") => panelkit::debug_widget_anywhere(process, &n[11..]),
         "dbg_alerts" => panelkit::debug_alerts(process),
+        n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),
+        n if n.starts_with("dbg_bytes:") => panelkit::debug_bytes(process, &n[10..]),
         "dbg_camera" => ui::read(process, |r, i| {
             Ok(json!({"height": screenmap::camera_height(r, i)?}))
         }),
@@ -664,6 +666,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_motorization","description":"Set an army's supply motorization: 0 none, 1 partial, 2 full. The supply hubs the army draws from then use trucks (about 40 per level per hub) to carry supply much farther into roadless land; it costs trucks from the stockpile (keep truck production running) and fuels nothing. With the game's ordinary control: the army's card selects it, then the motorization button on its badge is clicked until the level is reached, each click verified from memory. Read the current level in hoi4_armies (motorization). Refused before input with army_unknown or invalid_arguments.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"level":{"type":"integer","minimum":0,"maximum":2},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","level","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_division_disband","description":"Disband own divisions of one army (the division list's delete button; their equipment and manpower go back to the pool). Use it to cut useless divisions that only eat equipment, manpower and supply: tiny starting divisions (2-4 battalions), cavalry or irregulars a strong player would not keep, once the army has enough good divisions. `divisions` are ids as hoi4_armies / hoi4_supply list them; listing every division of the army disbands the whole army in one press. Each division is verified gone. Refused before input when a division is not in that army.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_detach","description":"Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":18},"into":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
@@ -793,6 +796,7 @@ impl Commands for MacClock {
                     | "hoi4_army_merge"
                     | "hoi4_army_motorization"
                     | "hoi4_army_detach"
+                    | "hoi4_division_disband"
                     | "hoi4_state_slots"
                     | "hoi4_air_wings"
                     | "hoi4_air_mission"
@@ -3960,6 +3964,61 @@ impl MacClock {
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
+        }
+        if name == "hoi4_division_disband" {
+            allowed(args, &["army", "divisions", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let ids: Vec<String> = args
+                .get("divisions")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .filter(|v: &Vec<String>| !v.is_empty() && v.len() <= 24)
+                .ok_or_else(|| Error::new("invalid_arguments", "divisions: 1..24 division ids"))?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"division_disband","army":army,"divisions":ids});
+            let keys = &self.keys;
+            let mut settle = || {
+                let view = armies::armies(process)?;
+                let present: Vec<&String> = ids
+                    .iter()
+                    .filter(|d| {
+                        view["armies"].as_array().into_iter().flatten().any(|a| {
+                            a["divisions"]
+                                .as_array()
+                                .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(d.as_str())))
+                        }) || view["unassigned"]
+                            .as_array()
+                            .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(d.as_str())))
+                    })
+                    .collect();
+                let detail = json!({"army":army,"divisions":ids,"still_present":present});
+                Ok(if present.is_empty() {
+                    journal::Outcome::Reached(detail)
+                } else if present.len() == ids.len() {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::disband(process, keys, army, &ids)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_army_detach" {
             allowed(

@@ -858,6 +858,76 @@ pub(super) fn debug_widget_anywhere(
     })
 }
 
+/// Probe-only (`SLOT_HEX:ROOT_HEX`): every named widget under one manager view's root with
+/// its rect and position fields.
+pub(super) fn debug_tree(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {
+    let chain: Vec<u64> = spec
+        .split(':')
+        .map(|a| u64::from_str_radix(a.trim_start_matches("0x"), 16))
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|_| Error::new("invalid_arguments", "SLOT_HEX:OFF_HEX[:OFF_HEX...]"))?;
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let mut p = r.u64(idler + MANAGER)?;
+        for off in &chain {
+            p = r.u64(p + off)?;
+        }
+        let root =
+            gui_tree::container(r, p, i)?.ok_or_else(|| Error::new("invalid_gui", "root"))?;
+        let mut out = Vec::new();
+        let mut stack = vec![(root, 0u32, String::new())];
+        while let Some((obj, depth, path)) = stack.pop() {
+            for child in gui_tree::children(r, obj)? {
+                let name = gui_tree::name(r, child, i)?.unwrap_or_default();
+                let p = format!("{path}/{name}");
+                let rect = gui_tree::rect_unclipped(r, i, child, GAME)
+                    .map(|x| [x.x, x.y, x.w, x.h])
+                    .ok();
+                out.push(serde_json::json!({"path": p, "shown": gui_tree::shown(r, child).unwrap_or(false), "rect": rect}));
+                if depth < 8 {
+                    if let Ok(Some(inner)) = gui_tree::container(r, child, i) {
+                        stack.push((inner, depth + 1, p));
+                    }
+                }
+            }
+        }
+        Ok(serde_json::json!(out))
+    })
+}
+
+/// Probe-only (`OFF_HEX:...:LEN_HEX`): bytes at the end of a pointer chain from the manager.
+pub(super) fn debug_bytes(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {
+    let mut chain: Vec<u64> = spec
+        .split(':')
+        .map(|a| u64::from_str_radix(a.trim_start_matches("0x"), 16))
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|_| Error::new("invalid_arguments", "OFF_HEX:...:LEN_HEX"))?;
+    let len = chain.pop().unwrap_or(0x100).min(0x800);
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let mut p = r.u64(idler + MANAGER)?;
+        for off in &chain {
+            p = r.u64(p + off)?;
+        }
+        let b = r.read(p, len as usize)?;
+        let rows: Vec<String> = b
+            .chunks(16)
+            .enumerate()
+            .map(|(n, c)| {
+                format!(
+                    "{:04x}: {}",
+                    n * 16,
+                    c.iter()
+                        .map(|x| format!("{x:02x}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            })
+            .collect();
+        Ok(serde_json::json!(rows))
+    })
+}
+
 /// Probe-only: every global alert icon in the top bar (manager +0x188, root +0x68): the icon
 /// widget's sprite words, to find the shown frame.
 pub(super) fn debug_alerts(process: &dyn Process) -> Result<serde_json::Value> {

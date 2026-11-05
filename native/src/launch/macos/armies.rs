@@ -1053,6 +1053,36 @@ pub(super) fn set_motorization(
 /// (+0x4a0, +0x4a8); each keeps its CArmyDivisionView rows in an array at +0xe0, and a row
 /// names its division by the id words at +0x10/+0x14 (mapped live 5 November 2026).
 const DIVISION_LISTS: [u64; 2] = [0x4a0, 0x4a8];
+/// The division list view's GUI root; the armies view keeps two list views and only the
+/// one whose root is visible is on screen (the other keeps stale rows).
+const LIST_ROOT: u64 = 0x40;
+fn list_shown(r: &Reader<'_>, list: u64) -> Result<bool> {
+    let root = r.u64(list + fld(r.string_abi(), &DIVISION_LIST, LIST_ROOT)?)?;
+    Ok(root != 0 && gui_tree::visible(r, root)?)
+}
+/// A shown widget of the on-screen division list view (e.g. its `btn_delete`).
+fn list_widget(r: &Reader<'_>, image: u64, name: &str) -> Result<Option<Rect>> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    for list_at in DIVISION_LISTS {
+        let list = r.u64(view + fld(abi, &ARMIES_VIEW, list_at)?)?;
+        if list == 0 || !list_shown(r, list)? {
+            continue;
+        }
+        let root = r.u64(list + fld(abi, &DIVISION_LIST, LIST_ROOT)?)?;
+        let Some(root) = gui_tree::container(r, root, image)? else {
+            continue;
+        };
+        if let Some(w) = super::panelkit::find(r, image, root, name, 4)? {
+            if gui_tree::shown(r, w)? {
+                return gui_tree::rect(r, image, w, GAME).map(Some);
+            }
+        }
+    }
+    Ok(None)
+}
 const LIST_ROWS: u64 = 0xe0;
 const ROW_TYPE_WORD: u64 = 0x10;
 const ROW_VTABLE: u64 = 0x363d658;
@@ -1079,7 +1109,7 @@ pub(super) fn division_row(r: &Reader<'_>, image: u64, id: &str) -> Result<Rect>
     let word = fld(abi, &DIVISION_ROW, ROW_TYPE_WORD)?;
     for list_at in DIVISION_LISTS {
         let list = r.u64(view + fld(abi, &ARMIES_VIEW, list_at)?)?;
-        if list == 0 {
+        if list == 0 || !list_shown(r, list)? {
             continue;
         }
         let (_, data, count) = r.array_header(list + fld(abi, &DIVISION_LIST, LIST_ROWS)?)?;
@@ -1181,6 +1211,65 @@ pub(super) fn detach(
         }
     }
     dest.ok_or_else(|| Error::new("invalid_arguments", "No division given"))
+}
+/// Disband own divisions of one army with the division list's delete button (the game returns
+/// their equipment and manpower to the pool). A whole army is disbanded in one press with the
+/// army selected; otherwise each division is selected from its row first. Each division is
+/// verified gone from the own divisions.
+pub(super) fn disband(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    ids: &[String],
+) -> Result<()> {
+    let source = read(process, |r, i| group_named(r, i, army))?;
+    let members = read(process, membership)?;
+    for id in ids {
+        if members.get(id) != Some(&source) {
+            return Err(Error::new(
+                "invalid_target",
+                format!("Division {id} is not in {army} (ids as hoi4_armies lists them)"),
+            ));
+        }
+    }
+    let whole = ids.len() >= members.values().filter(|g| **g == source).count();
+    let press_delete = |gone: &dyn Fn(&BTreeMap<String, u64>) -> bool| -> Result<()> {
+        let button = settled(process, "division list delete button", |r, i| {
+            list_widget(r, i, "btn_delete")?
+                .ok_or_else(|| Error::new("gui_target_unavailable", "No shown delete button"))
+        })?;
+        let (x, y) = button.center();
+        keys.click(GAME, x, y)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(900);
+        while std::time::Instant::now() < deadline {
+            if gone(&read(process, membership)?) {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        // A confirmation dialog: accept it.
+        keys.press(Key::Return)?;
+        wait(process, "divisions disbanded", |r, i| {
+            Ok(gone(&membership(r, i)?))
+        })
+    };
+    if whole {
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        return press_delete(&|m| ids.iter().all(|d| !m.contains_key(d)));
+    }
+    for id in ids {
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let (x, y) = row.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "division selected", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == 1)
+        })?;
+        press_delete(&|m| !m.contains_key(id))?;
+    }
+    Ok(())
 }
 /// Probe-only: rows of every division of `army` (select the army first).
 pub(super) fn debug_rows(process: &dyn Process, army: &str) -> Result<Value> {

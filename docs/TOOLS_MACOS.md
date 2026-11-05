@@ -96,6 +96,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_design_obsolete` (A): Decommission (obsolete:
 - `hoi4_design_options` (A): What the equipment designers offer, read from the game's own designer windows (Production panel, equipment selection list, the row's Create variant button;
 - `hoi4_designs` (R): Own equipment designs (ship, plane, tank and other variants) read from game memory;
+- `hoi4_division_disband` (A): Disband own divisions of one army (the division list's delete button;
 - `hoi4_division_templates` (R): Own division template names (for hoi4_train) and how many training lines each has queued.
 - `hoi4_supply` (R): Own divisions, the provinces and states they stand in and the supply system, read from game memory (no input, no lease, no pause).
 - `hoi4_template_create` (A): Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save).
