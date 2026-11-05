@@ -62,22 +62,30 @@ pub(super) fn restore_zoom(
     keys: &dyn crate::platform::game_input::GameInput,
 ) -> Result<()> {
     let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
-    let mut h = height(process)?;
+    let h = height(process)?;
     if h >= CLOSE {
         return Ok(());
     }
-    let mut step = -240;
-    for _ in 0..16 {
-        if h >= STRATEGIC {
-            break;
-        }
-        keys.scroll(super::panelkit::GAME, (960.0, 540.0), step)?;
-        std::thread::sleep(std::time::Duration::from_millis(180));
-        let now = height(process)?;
-        if now < h {
-            step = -step; // wrong direction for this input backend
-        }
-        h = now;
+    // One swoop: a single quick flick of wheel events that the game eases into one camera
+    // movement (one event zooms about 10%, measured live 5 November 2026), then at most one
+    // short correction.
+    let events = |from: f64| {
+        ((STRATEGIC / from.max(1.0)).ln() / 1.1f64.ln())
+            .ceil()
+            .clamp(1.0, 40.0) as u32
+    };
+    keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), -120, events(h))?;
+    let now = height(process)?;
+    if now < h - 1.0 {
+        // This input backend scrolls the other way: undo and swoop the right way.
+        keys.scroll_burst(
+            super::panelkit::GAME,
+            (960.0, 540.0),
+            120,
+            events(now) + events(h),
+        )?;
+    } else if now < STRATEGIC * 0.8 {
+        keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), -120, events(now))?;
     }
     Ok(())
 }

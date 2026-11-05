@@ -3429,6 +3429,11 @@ impl MacClock {
                         .press_code(num("code") as u16)
                         .map(|_| json!({"pressed":num("code")}))
                 }
+                "control" => {
+                    let code = args.get("code").and_then(Value::as_u64).unwrap_or(0) as u16;
+                    self.keys.press_control(code)?;
+                    Ok(json!({"pressed_control": code}))
+                }
                 "letter" => {
                     self.keys.preflight()?;
                     let c = string(args, "letter")?.chars().next().unwrap_or('z');

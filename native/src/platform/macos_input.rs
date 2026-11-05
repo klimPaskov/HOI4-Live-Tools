@@ -813,6 +813,47 @@ impl<'p> MacKeys<'p> {
         std::thread::sleep(std::time::Duration::from_millis(120));
         Ok(())
     }
+    /// `count` wheel events in one quick flick at a point: the game eases them into one
+    /// continuous camera movement (one wheel event zooms about 10%).
+    pub fn scroll_burst(
+        &self,
+        game: (u32, u32),
+        at: (f64, f64),
+        pixels: i32,
+        count: u32,
+    ) -> Result<()> {
+        let point = client_point(self.verified_content(game)?, at.0, at.1)?;
+        // SAFETY: a null source is allowed; events are released after posting.
+        unsafe {
+            let moved = CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON);
+            if moved.is_null() {
+                return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+            }
+            let ready = self.point_preflight(point);
+            if ready.is_ok() {
+                CGEventPost(HID_EVENT_TAP, moved);
+            }
+            CFRelease(moved);
+            ready?;
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            self.preflight()?;
+            for _ in 0..count.min(64) {
+                let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);
+                if wheel.is_null() {
+                    return Err(Error::new("input_unavailable", "Scroll event unavailable"));
+                }
+                let ready = self.point_preflight(point);
+                if ready.is_ok() {
+                    CGEventPost(HID_EVENT_TAP, wheel);
+                }
+                CFRelease(wheel);
+                ready?;
+                std::thread::sleep(std::time::Duration::from_millis(8));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        Ok(())
+    }
     /// One key press by ANSI virtual code (digits for the Find view).
     pub fn press_code(&self, code: u16) -> Result<()> {
         self.press_raw(code)
@@ -1606,6 +1647,15 @@ impl GameInput for MacKeys<'_> {
     }
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
         MacKeys::scroll(self, game, at, pixels)
+    }
+    fn scroll_burst(
+        &self,
+        game: (u32, u32),
+        at: (f64, f64),
+        pixels: i32,
+        count: u32,
+    ) -> Result<()> {
+        MacKeys::scroll_burst(self, game, at, pixels, count)
     }
     fn press_code(&self, code: u16) -> Result<()> {
         MacKeys::press_code(self, code)
