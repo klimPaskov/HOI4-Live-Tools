@@ -868,8 +868,12 @@ pub(super) fn debug_tree(process: &dyn Process, spec: &str) -> Result<serde_json
         .map_err(|_| Error::new("invalid_arguments", "SLOT_HEX:OFF_HEX[:OFF_HEX...]"))?;
     read(process, |r, i| {
         let idler = r.u64(i + game::layout(r).idler_global)?;
-        let mut p = r.u64(idler + MANAGER)?;
-        for off in &chain {
+        let mut p = if chain.first() == Some(&1) {
+            idler
+        } else {
+            r.u64(idler + MANAGER)?
+        };
+        for off in chain.iter().skip(usize::from(chain.first() == Some(&1))) {
             p = r.u64(p + off)?;
         }
         let root =
@@ -902,11 +906,16 @@ pub(super) fn debug_bytes(process: &dyn Process, spec: &str) -> Result<serde_jso
         .map(|a| u64::from_str_radix(a.trim_start_matches("0x"), 16))
         .collect::<std::result::Result<_, _>>()
         .map_err(|_| Error::new("invalid_arguments", "OFF_HEX:...:LEN_HEX"))?;
-    let len = chain.pop().unwrap_or(0x100).min(0x800);
+    let len = chain.pop().unwrap_or(0x100).min(0x4000);
     read(process, |r, i| {
         let idler = r.u64(i + game::layout(r).idler_global)?;
-        let mut p = r.u64(idler + MANAGER)?;
-        for off in &chain {
+        // A leading "1" starts from the idler instead of the interface manager.
+        let mut p = if chain.first() == Some(&1) {
+            idler
+        } else {
+            r.u64(idler + MANAGER)?
+        };
+        for off in chain.iter().skip(usize::from(chain.first() == Some(&1))) {
             p = r.u64(p + off)?;
         }
         let b = r.read(p, len as usize)?;
@@ -926,6 +935,77 @@ pub(super) fn debug_bytes(process: &dyn Process, spec: &str) -> Result<serde_jso
             .collect();
         Ok(serde_json::json!(rows))
     })
+}
+
+/// Probe-only: views reachable from idler pointer slots (two levels) whose GUI root holds a
+/// widget `name` (for windows outside the interface manager).
+pub(super) fn debug_widget_idler(process: &dyn Process, name: &str) -> Result<serde_json::Value> {
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let slots = r.read(idler, 0x2000)?;
+        let mut hits = Vec::new();
+        for (si, c) in slots.chunks_exact(8).enumerate() {
+            let view = u64::from_le_bytes(c.try_into().unwrap());
+            if !plausible(view) {
+                continue;
+            }
+            let Ok(inner) = r.read(view, 0x600) else {
+                continue;
+            };
+            for (vi, d) in std::iter::once((usize::MAX, view.to_le_bytes().as_slice()))
+                .chain(inner.chunks_exact(8).enumerate())
+            {
+                let obj = u64::from_le_bytes(d.try_into().unwrap());
+                if !plausible(obj) {
+                    continue;
+                }
+                for off in [
+                    0x20u64, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x68, 0x8, 0x10, 0x18,
+                ] {
+                    let Ok(p) = r.u64(obj + off) else { continue };
+                    if !plausible(p) {
+                        continue;
+                    }
+                    let Ok(Some(root)) = gui_tree::container(r, p, i) else {
+                        continue;
+                    };
+                    if let Ok(Some(w)) = find(r, i, root, name, 5) {
+                        let rect = gui_tree::rect(r, i, w, GAME)
+                            .map(|x| [x.x, x.y, x.w, x.h])
+                            .ok();
+                        hits.push(serde_json::json!({"idler_slot": format!("{:#x}", si * 8), "view_field": if vi == usize::MAX { "self".to_string() } else { format!("{:#x}", vi * 8) }, "root_at": format!("{off:#x}"), "rect": rect, "state": gui_tree::button_state(r, w).ok()}));
+                        break;
+                    }
+                }
+                if hits.len() > 8 {
+                    return Ok(serde_json::json!({"hits": hits}));
+                }
+            }
+        }
+        Ok(serde_json::json!({"hits": hits}))
+    })
+}
+
+/// Probe-only (`OFF_HEX:LEN_HEX:PATH`): raw image bytes (data segment) saved to a file, read
+/// in 64 KiB pieces; unreadable pieces are zero-filled.
+pub(super) fn debug_image_save(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {
+    let mut it = spec.splitn(3, ':');
+    let (Some(off), Some(len), Some(path)) = (it.next(), it.next(), it.next()) else {
+        return Err(Error::new("invalid_arguments", "OFF_HEX:LEN_HEX:PATH"));
+    };
+    let off = u64::from_str_radix(off, 16).map_err(|_| Error::new("invalid_arguments", "OFF"))?;
+    let len = u64::from_str_radix(len, 16).map_err(|_| Error::new("invalid_arguments", "LEN"))?;
+    let mut out = Vec::with_capacity(len as usize);
+    let mut at = 0u64;
+    while at < len {
+        let n = (len - at).min(0x10000);
+        let piece = read(process, |r, i| r.read(i + off + at, n as usize))
+            .unwrap_or_else(|_| vec![0; n as usize]);
+        out.extend_from_slice(&piece);
+        at += n;
+    }
+    std::fs::write(path, &out).map_err(|e| Error::new("io", e.to_string()))?;
+    Ok(serde_json::json!({"saved": out.len()}))
 }
 
 /// Probe-only: every global alert icon in the top bar (manager +0x188, root +0x68): the icon
