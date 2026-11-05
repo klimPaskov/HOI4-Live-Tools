@@ -97,6 +97,13 @@ These came from failed training wars; they are general, not tied to one country.
 - **Supply caps a front.** Every front has a supply ceiling. More divisions than it carries starve all of them
   (seen: 18 divisions at 14-27% supply, organisation ~12, no progress). Read `hoi4_supply` every war tick; when an
   army is below 50% supply, thin it (split and move part elsewhere) rather than adding more.
+- **Quality at the front, quantity in the rear.** When supply is the limit, every division at the front eats the
+  same supply and manpower whether it fights well or not. Attack with the best divisions only (highest attack,
+  full equipment, good organisation); pull weak units (irregulars, cavalry, under-strength or low-equipment
+  divisions) out of the strike armies (`hoi4_army_split`, `hoi4_army_merge`) into a rear army that holds quiet
+  borders and captured states. Fewer, better divisions at full supply beat many starving ones.
+- **Concentrate on victory points.** Strike armies go for the enemy's victory-point cities in order of value, not
+  along the whole border; the line armies only hold.
 - **Organisation decides attacks.** Attack with organisation above ~50%; below that, stop the plan, recover, then
   attack again all at once on the same axis. Continuous weak attacks lose.
 - **Exploit what the enemy lacks.** No air force: every fighter and CAS wing over the attack. No anti-tank: armour
