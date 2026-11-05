@@ -44,6 +44,7 @@ mod fleetops;
 mod focus;
 mod front_plan;
 mod glide;
+mod occlaw;
 mod peace;
 mod trade;
 #[cfg(target_os = "macos")]
@@ -494,6 +495,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         "dbg_alerts" => panelkit::debug_alerts(process),
         n if n.starts_with("dbg_widget_idler:") => panelkit::debug_widget_idler(process, &n[17..]),
         n if n.starts_with("dbg_image_save:") => panelkit::debug_image_save(process, &n[15..]),
+        "dbg_popups" => panelkit::debug_popups(process),
+        n if n.starts_with("dbg_find_root:") => panelkit::debug_find_root(process, &n[14..]),
         n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),
         n if n.starts_with("dbg_bytes:") => panelkit::debug_bytes(process, &n[10..]),
         "dbg_camera" => ui::read(process, |r, i| {
@@ -565,6 +568,7 @@ impl Commands for MacClock {
             diplomacy_state::tool(),
             diplomacy_state::countries_tool(),
             occupation::tool(),
+            occlaw::tool(),
             war_stats::tool(),
             alerts::tool(),
             json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
@@ -800,6 +804,7 @@ impl Commands for MacClock {
                     | "hoi4_army_motorization"
                     | "hoi4_army_detach"
                     | "hoi4_map_mode"
+                    | "hoi4_occupation_law"
                     | "hoi4_division_disband"
                     | "hoi4_state_slots"
                     | "hoi4_air_wings"
@@ -925,6 +930,7 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
 }
 /// Tools that move the map camera; the camera is zoomed back out after them.
 const MAP_TOOLS: &[&str] = &[
+    "hoi4_occupation_law",
     "hoi4_army_detach",
     "hoi4_army_create",
     "hoi4_army_assign",
@@ -3968,6 +3974,81 @@ impl MacClock {
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
+        }
+        if name == "hoi4_occupation_law" {
+            allowed(args, &["law", "via_state", "request_id", "lease_token"])?;
+            let law = string(args, "law")?;
+            if !occlaw::LAWS.iter().any(|(k, _)| *k == law) {
+                return Err(Error::new("invalid_arguments", "Unknown occupation law"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            let dir = mapdata::game_dir(exe)?;
+            let read_now = || -> Result<(Option<String>, Option<i32>)> {
+                let v = occupation::occupation(process, &dir, &serde_json::Map::new())?;
+                let current = v["player_occupation_law"]["key"]
+                    .as_str()
+                    .map(str::to_string);
+                let state = v["states"].as_array().and_then(|a| {
+                    a.iter()
+                        .find(|s| s["resistance_active"].as_bool() == Some(true))
+                        .and_then(|s| s["state_id"].as_i64())
+                        .map(|x| x as i32)
+                });
+                Ok((current, state))
+            };
+            let (current, first_state) = read_now()?;
+            let via = args
+                .get("via_state")
+                .and_then(Value::as_i64)
+                .map(|x| x as i32)
+                .or(first_state);
+            if !actions.receipt_exists(id) {
+                if current.as_deref() == Some(law) {
+                    return Ok(json!({"already":true,"law":law}));
+                }
+                if via.is_none() {
+                    return Err(Error::new(
+                        "invalid_target",
+                        "No occupied or resisting state to open the occupation view from; pass via_state",
+                    ));
+                }
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"occupation_law","law":law,"via_state":via});
+            let keys = &self.keys;
+            let before = current.clone();
+            let mut settle = || {
+                let (now, _) = read_now()?;
+                let detail = json!({"law":now,"wanted":law});
+                Ok(if now.as_deref() == Some(law) {
+                    journal::Outcome::Reached(detail)
+                } else if now == before {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let result = occlaw::set_default(process, keys, via.unwrap_or(0), law);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                while std::time::Instant::now() < deadline
+                    && read_now().ok().and_then(|x| x.0).as_deref() != Some(law)
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                occlaw::close(process, keys);
+                result
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_map_mode" {
             allowed(args, &["mode", "lease_token"])?;

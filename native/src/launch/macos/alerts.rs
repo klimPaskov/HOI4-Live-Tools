@@ -102,6 +102,20 @@ pub(super) fn alerts(process: &dyn Process) -> Result<Value> {
     })
 }
 
+/// Screen rect `[x, y, w, h]` of the shown alert named `name`, if any.
+pub(super) fn rect_of(r: &Reader<'_>, image: u64, name: &str) -> Result<Option<[i64; 4]>> {
+    Ok(list(r, image)?.into_iter().find_map(|a| {
+        (a["alert"].as_str() == Some(name))
+            .then(|| {
+                a["at"].as_array().map(|v| {
+                    let n = |k: usize| v.get(k).and_then(Value::as_i64).unwrap_or(0);
+                    [n(0), n(1), n(2), n(3)]
+                })
+            })
+            .flatten()
+    }))
+}
+
 fn list(r: &Reader<'_>, image: u64) -> Result<Vec<Value>> {
     let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;

@@ -148,6 +148,57 @@ fn slots(r: &Reader<'_>, image: u64) -> Result<Option<Slots>> {
 }
 
 /// Free building slots of own states `ids` (opens each state's view).
+/// Click around the screen centre (the camera already on state `id`) until the state view
+/// opens; divisions standing at the centre take a click as a selection.
+fn click_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    let opened = |r: &Reader<'_>, i: u64| -> Result<bool> {
+        Ok(slots(r, i)?.is_some_and(|s| s.unlocked > 0 || s.maximum > 0))
+    };
+    let mut seen = Err(Error::new("input_readback_failed", "no click"));
+    const POINTS: [(f64, f64); 6] = [
+        (960.0, 540.0),
+        (900.0, 610.0),
+        (1020.0, 610.0),
+        (900.0, 470.0),
+        (1020.0, 470.0),
+        (960.0, 660.0),
+    ];
+    for (x, y) in POINTS {
+        if read(process, opened)? {
+            return Ok(());
+        }
+        keys.click(GAME, x, y)?;
+        // The view slides in; give it time before judging the click.
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        seen = wait(process, "state view", opened);
+        if seen.is_ok() {
+            break;
+        }
+    }
+    seen
+}
+/// Open the state view of state `id` (plain map mode, Find, click) and return its root.
+pub(super) fn open_state_view(process: &dyn Process, keys: &dyn GameInput, id: i32) -> Result<u64> {
+    clear_notices(process, keys)?;
+    keys.press_code(crate::platform::game_input::vk::F1)?;
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    find_state(process, keys, id)?;
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    click_open(process, keys)?;
+    read(process, root)
+}
+/// Name shown by the open state view.
+pub(super) fn state_view_name(r: &Reader<'_>, image: u64) -> Result<Option<String>> {
+    Ok(slots(r, image)?.map(|s| s.name))
+}
+/// A shown widget of the open state view.
+pub(super) fn state_view_widget(r: &Reader<'_>, image: u64, name: &str) -> Result<Option<u64>> {
+    let root = root(r, image)?;
+    match find(r, image, root, name, 0)? {
+        Some(w) if gui_tree::shown(r, w)? => Ok(Some(w)),
+        _ => Ok(None),
+    }
+}
 pub(super) fn read_states(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -167,33 +218,7 @@ pub(super) fn read_states(
     for &id in ids {
         find_state(process, keys, id)?;
         std::thread::sleep(std::time::Duration::from_millis(600));
-        let opened = |r: &Reader<'_>, i: u64| -> Result<bool> {
-            Ok(slots(r, i)?.is_some_and(|s| s.unlocked > 0 || s.maximum > 0))
-        };
-        let mut seen = Err(Error::new("input_readback_failed", "no click"));
-        // Divisions standing at the state's centre take the click as a
-        // selection; try points around it (the first that opens the view wins).
-        const POINTS: [(f64, f64); 6] = [
-            (960.0, 540.0),
-            (900.0, 610.0),
-            (1020.0, 610.0),
-            (900.0, 470.0),
-            (1020.0, 470.0),
-            (960.0, 660.0),
-        ];
-        for (x, y) in POINTS {
-            if read(process, opened)? {
-                seen = Ok(());
-                break;
-            }
-            keys.click(GAME, x, y)?;
-            // The view slides in; give it time before judging the click.
-            std::thread::sleep(std::time::Duration::from_millis(900));
-            seen = wait(process, "state view", opened);
-            if seen.is_ok() {
-                break;
-            }
-        }
+        let seen = click_open(process, keys);
         let mut why = String::new();
         let row = match seen {
             Ok(()) => read(process, slots)?,
