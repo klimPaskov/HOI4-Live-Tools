@@ -144,3 +144,13 @@ def resolve_constants(text):
     for name in sorted(consts, key=len, reverse=True):
         text = re.sub(re.escape(name) + r"(?![A-Za-z0-9_])", lambda m, v=consts[name]: v, text)
     return text
+
+
+def find_decision(text, decision_id):
+    """The Stmt of a decision in a common/decisions file: `category = { <decision_id> = { ... } }`."""
+    for top in parse(text):
+        if top.is_block:
+            for c in top.children:
+                if c.is_block and c.key == decision_id:
+                    return c
+    return None

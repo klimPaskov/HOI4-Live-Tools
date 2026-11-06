@@ -11,6 +11,13 @@
   focus, every condition of `available` and `allow_branch`; a holding `bypass` is reported. Not checked: a focus
   already in progress, focus slots, political power.
 
+- `hoi4_smoke_namespace` (test mode): fires every event `<namespace>.N` through the console, answers each option
+  of its window (one firing per option), takes the decisions of a category or id prefix through the decision
+  panel after checking their conditions with the game, and reads the new `error.log` lines after every step.
+  One report (Markdown and JSON under `artifacts/`) lists per event and decision what appeared, what was
+  answered, the unmet condition of a decision that could not be taken and the error lines. State, unit leader
+  and character events, targeted decisions and missions are skipped with the reason. `dry_run` lists the plan.
+
 ## 1.3.0 - 2026-11-05
 
 The native Linux runtime gets the macOS management toolset on HOI4 1.19.4.1:
