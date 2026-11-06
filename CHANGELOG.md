@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+### Launch failures
+
 Four launch failures seen on 1.19.4.1 on 2 November are handled. Offline tests and fakes cover the logic; the
 in-game confirmation of each is still to be done (see the pull request).
 
@@ -17,6 +19,15 @@ in-game confirmation of each is still to be done (see the pull request).
   visibly changes the console area counts as opened when the console frame cannot be seen (it is closed the same
   way in the same call, and `keep_open` is refused in that case), and `hoi4_console` closes open windows with
   Esc once before giving up (`console_not_open`).
+
+### DLC without the Steam client
+
+- `hoi4_prepare` (Python, test mode): copies `launcher-v2.sqlite` and `dlc_signature` from the normal user
+  folder into the run's user folder with a byte-exact backup, so a launch without the Steam client keeps the
+  DLC. `hoi4_shutdown` (or `hoi4_prepare action=restore`) puts the folder back and never overwrites a file
+  that changed after the copy. `hoi4_launch prepare_dlc=true` does both steps. The README explains the launch
+  order (Steam closed, prepare, launch, test, shutdown). New config key `dlc_source_dir`.
+- `docs/tools.md` regenerated from the registry (it had drifted behind `hoi4_front`, `hoi4_memory` and others).
 
 ## 1.3.0 - 2026-11-05
 

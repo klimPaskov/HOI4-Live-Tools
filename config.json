@@ -1,6 +1,7 @@
 {
   "game_dir": "auto",
   "user_dir": "auto",
+  "dlc_source_dir": "auto",
   "artifacts_dir": "artifacts",
   "mode": "campaign",
   "play_mode": "fair",
