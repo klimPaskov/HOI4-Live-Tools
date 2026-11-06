@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `hoi4_check_trigger` (test mode): evaluates a trigger block in the running game for a country (or a state)
+  and returns true or false with the unmet condition. Each top-level condition is asked on its own through the
+  console (`eval_effect` wrapping an `if` that logs TRUE or FALSE to game.log), and a false `OR`, `NOT` or scope
+  block is explained by its children.
+- `hoi4_check_focus` (test mode): is a national focus selectable for a country? Reads the focus from the game
+  and mod files and asks the game about: already completed, each prerequisite group, each mutually exclusive
+  focus, every condition of `available` and `allow_branch`; a holding `bypass` is reported. Not checked: a focus
+  already in progress, focus slots, political power.
+
 ## 1.3.0 - 2026-11-05
 
 The native Linux runtime gets the macOS management toolset on HOI4 1.19.4.1:
