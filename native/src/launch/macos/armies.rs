@@ -319,6 +319,16 @@ fn counter_select(
     keys: &dyn GameInput,
     wanted: &[String],
 ) -> Result<Option<usize>> {
+    counter_select_with(process, keys, wanted, &[])
+}
+/// As `counter_select`; provinces may also hold divisions of `also_ok` (the receiving army's
+/// own divisions: assigning them to their own army changes nothing).
+fn counter_select_with(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    wanted: &[String],
+    also_ok: &[String],
+) -> Result<Option<usize>> {
     if wanted.is_empty() {
         return Ok(None);
     }
@@ -341,13 +351,19 @@ fn counter_select(
         let (points, missing) = read(process, |r, i| {
             let provinces = division_provinces(r, i)?;
             let mut clean: BTreeMap<i32, bool> = BTreeMap::new();
+            let mut has_wanted: BTreeSet<i32> = BTreeSet::new();
             for (id, province) in &provinces {
                 if let Some(p) = province {
-                    let ok = wanted_set.contains(id.as_str());
+                    let is_wanted = wanted_set.contains(id.as_str());
+                    if is_wanted {
+                        has_wanted.insert(*p);
+                    }
+                    let ok = is_wanted || also_ok.iter().any(|a| a == id);
                     let entry = clean.entry(*p).or_insert(true);
                     *entry &= ok;
                 }
             }
+            clean.retain(|p, _| has_wanted.contains(p));
             let mut pts = Vec::new();
             let mut missing = Vec::new();
             for (p, ok) in clean {
@@ -401,8 +417,11 @@ fn counter_select(
     std::thread::sleep(std::time::Duration::from_millis(250));
     read(process, |r, i| {
         Ok(selected_divisions(r, i)?.and_then(|ids| {
-            (!ids.is_empty() && ids.iter().all(|id| wanted_set.contains(id.as_str())))
-                .then_some(ids.len())
+            (ids.iter().any(|id| wanted_set.contains(id.as_str()))
+                && ids
+                    .iter()
+                    .all(|id| wanted_set.contains(id.as_str()) || also_ok.iter().any(|a| a == id)))
+            .then_some(ids.len())
         }))
     })
 }
@@ -702,7 +721,19 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
     // Exact first: click the counters of provinces holding only unassigned divisions.
     if plan.unassigned > 0 {
         let view = armies(process)?;
-        if let Some(n) = counter_select(process, keys, &unassigned_ids(&view, plan.state))? {
+        let own: Vec<String> = view["armies"]
+            .as_array()
+            .and_then(|a| a.iter().find(|x| x["army"] == json!(army)))
+            .and_then(|a| a["divisions"].as_array())
+            .map(|d| {
+                d.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let Some(n) =
+            counter_select_with(process, keys, &unassigned_ids(&view, plan.state), &own)?
+        {
             sizes.push(n);
             exact = true;
         }

@@ -1325,9 +1325,13 @@ pub(super) fn scan_path_for_root(
         if !plausible(w) {
             continue;
         }
-        let Ok(bytes) = r.read(w, 0x700) else {
-            continue;
-        };
+        let mut bytes = Vec::new();
+        for piece in 0..7u64 {
+            match r.read(w + piece * 0x100, 0x100) {
+                Ok(b) => bytes.extend(b),
+                Err(_) => break,
+            }
+        }
         for (k, c) in bytes.chunks_exact(8).enumerate() {
             let p = u64::from_le_bytes(c.try_into().unwrap());
             if !plausible(p) {

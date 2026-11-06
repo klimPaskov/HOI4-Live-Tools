@@ -515,6 +515,26 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_widget_idler:") => panelkit::debug_widget_idler(process, &n[17..]),
         n if n.starts_with("dbg_image_save:") => panelkit::debug_image_save(process, &n[15..]),
         "dbg_popups" => panelkit::debug_popups(process),
+        n if n.starts_with("dbg_container:") => {
+            let a = u64::from_str_radix(n[14..].trim_start_matches("0x"), 16).unwrap_or(0);
+            ui::read(process, |r, i| {
+                let as_container = crate::gui_tree::container(r, a, i).ok().flatten();
+                let target = as_container.unwrap_or(a);
+                let name = crate::gui_tree::name(r, target, i)
+                    .ok()
+                    .flatten()
+                    .or_else(|| crate::gui_tree::name(r, a, i).ok().flatten());
+                let kids: Vec<serde_json::Value> = crate::gui_tree::children(r, target)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .take(30)
+                    .map(|c| serde_json::json!(crate::gui_tree::name(r, c, i).ok().flatten()))
+                    .collect();
+                Ok(
+                    serde_json::json!({"container": as_container.map(|c| format!("{c:#x}")), "name": name, "children": kids, "vtable": format!("{:#x}", r.u64(a).unwrap_or(0).wrapping_sub(i))}),
+                )
+            })
+        }
         n if n.starts_with("dbg_scan_view:") => {
             // dbg_scan_view:SLOT[/HOP/HOP...]:NAME (hex)
             let (path, name) = n[14..].split_once(':').unwrap_or(("128", ""));
