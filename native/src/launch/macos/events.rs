@@ -496,8 +496,7 @@ pub(super) fn choose(
         .ok_or_else(|| Error::new("invalid_arguments", "No such event option"))?;
     let event = top.event;
     let others: Vec<u64> = open[..open.len() - 1].iter().map(|e| e.event).collect();
-    keys.click(GAME, x, y)?;
-    wait(process, "event answered", |r, i| {
+    let answered = |r: &crate::memory::Reader<'_>, i: u64| {
         let now = open_events(r, i)?;
         if others.iter().any(|o| !now.iter().any(|e| e.event == *o)) {
             return Err(Error::new(
@@ -506,7 +505,23 @@ pub(super) fn choose(
             ));
         }
         Ok(!now.iter().any(|e| e.event == event))
-    })
+    };
+    keys.click(GAME, x, y)?;
+    match wait(process, "event answered", answered) {
+        Ok(()) => Ok(()),
+        // A news window still fading in can drop the first click (the plan loop's retry always
+        // worked, live 6 Nov 2026): click the same option once more while it is still open.
+        Err(e) if e.code == "input_readback_failed" && top.scan.is_some() => {
+            if !read(process, |r, i| {
+                Ok(open_events(r, i)?.iter().any(|x| x.event == event))
+            })? {
+                return Ok(());
+            }
+            keys.click(GAME, x, y)?;
+            wait(process, "event answered", answered)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]
