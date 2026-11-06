@@ -440,6 +440,13 @@ pub fn tick(
         if let Some(step) = armies_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
+        // Home divisions disbanded early refill the fighting armies' equipment (w16: the
+        // African infantry fought at 13-33% for most of the year).
+        if plan["disband"].is_object() {
+            if let Some(step) = disband_step(state, tools, plan, lease, now)? {
+                return Ok(Tick::Acted(step));
+            }
+        }
     }
     // 2. research
     let research = tools.call("hoi4_research", &json!({"limit": 1}))?;
@@ -880,7 +887,7 @@ pub fn tick(
             return Ok(Tick::Acted(step));
         }
     }
-    if plan["disband"].is_object() {
+    if plan["disband"].is_object() && !(war_on && plan["war"]["first"] != json!(false)) {
         if let Some(step) = disband_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -903,17 +910,25 @@ fn armies_step(
         let max = cfg["max"].as_u64().unwrap_or(24);
         let min_general = cfg["min_for_general"].as_u64().unwrap_or(8);
         let roster = tools.call("hoi4_armies", &json!({}))?;
-        for entry in list(&roster, "unassigned_by_state") {
+        // "states": [ids] limits army creation to those states, in that order (the theatre
+        // first), so home garrisons do not cost the war its ticks.
+        let only: Vec<i64> = list(cfg, "states")
+            .iter()
+            .filter_map(Value::as_i64)
+            .collect();
+        let mut pending: Vec<&Value> = list(&roster, "unassigned_by_state").iter().collect();
+        if !only.is_empty() {
+            pending.retain(|e| e["state_id"].as_i64().is_some_and(|id| only.contains(&id)));
+            pending.sort_by_key(|e| {
+                let id = e["state_id"].as_i64().unwrap_or(0);
+                only.iter().position(|o| *o == id).unwrap_or(usize::MAX)
+            });
+        }
+        for entry in pending {
             let Some(id) = entry["state_id"].as_i64() else {
                 continue;
             };
             let key = id.to_string();
-            // "states": [ids] limits army creation to those states (the theatre), so home
-            // garrisons do not cost the war its ticks.
-            let only = list(cfg, "states");
-            if !only.is_empty() && !only.iter().any(|v| v.as_i64() == Some(id)) {
-                continue;
-            }
             if state.skipped(now, "armycreate", &key) {
                 continue;
             }
@@ -2031,8 +2046,21 @@ fn war_step(
         }
         let position = here.and_then(|s| state.centers.get(&s).copied());
         let open = |id: i32| targets.iter().any(|x| x.0 == id);
-        // Keep the current target while it is still held by an enemy.
-        let mut target = state.war_assign.get(&name).copied().filter(|t| open(*t));
+        // Keep the current target while it is still held by an enemy, unless a state before it
+        // on its axis was lost again: that one comes first (w16: Wello fell back to Ethiopia
+        // while both armies kept attacking Shewa behind it).
+        let behind = |t: i32| {
+            axes.iter().any(|axis| {
+                axis.iter()
+                    .position(|id| *id == t)
+                    .is_some_and(|at| axis[..at].iter().any(|id| open(*id)))
+            })
+        };
+        let mut target = state
+            .war_assign
+            .get(&name)
+            .copied()
+            .filter(|t| open(*t) && !behind(*t));
         if target.is_none() {
             if let Some(old) = state.war_assign.remove(&name) {
                 if let Some(n) = load.get_mut(&old) {
@@ -3626,7 +3654,11 @@ mod tests {
             "{step:?}"
         );
         let (_, args) = last_action(&w);
-        assert_eq!(args["state_id"], json!(28), "the front faces the nearest enemy state");
+        assert_eq!(
+            args["state_id"],
+            json!(28),
+            "the front faces the nearest enemy state"
+        );
         assert_eq!(state.war_guard.get("Army 1"), Some(&42));
     }
 
@@ -3646,6 +3678,21 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")),
             "{step:?}"
         );
+    }
+
+    #[test]
+    fn a_lost_state_earlier_on_the_axis_comes_before_the_assigned_target() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        state.war_assign.insert("Army 1".into(), 18);
+        state.war_stage.insert("Army 1".into(), 3);
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [[28, 18]]}});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert_eq!(state.war_assign.get("Army 1"), Some(&28), "{step:?}");
     }
 
     #[test]
