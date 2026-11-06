@@ -26,17 +26,53 @@ def _toggle(session):
     session.sleep(session.cfg["console"]["slide_seconds"])
 
 
+BLIND_CHANGE = 0.08     # share of the console zone that must change for a toggle to count when the frame is not seen
+
+
+def zone_change(a, b):
+    """Share of pixels in the area the console draws over (top-left) that differ clearly between two screenshots."""
+    import numpy as np
+    h, w = a.shape[:2]
+    y0, y1, x1 = int(h * 0.05), int(h * 0.7), int(w * 0.4)
+    d = np.abs(a[y0:y1, :x1].astype(np.int16) - b[y0:y1, :x1].astype(np.int16)).max(2)
+    return float((d > 24).mean())
+
+
 def open_console(session):
+    """Open the console and say how it was confirmed. The frame colour is the normal proof. A dark panel behind the
+    console (an open sea-region panel) or a total conversion's own interface hides the frame, so a toggle that
+    visibly changed the console area counts too: the session then remembers that the console was opened blind
+    (session.console_blind) and close_console confirms by the same change."""
+    img = session.grab()
+    if screen_mod.console_open(img):
+        session.console_blind = False
+        return True
+    if getattr(session, "console_blind", False):
+        return True                                  # opened blind earlier and not closed since
     for _ in range(3):
-        if is_open(session):
-            return True
+        before = img
         _toggle(session)
-    if not is_open(session):
-        raise ToolError("the console did not open (is the console key bound to ` on this keyboard layout?)")
-    return True
+        img = session.grab()
+        if screen_mod.console_open(img):
+            session.console_blind = False
+            return True
+        if zone_change(before, img) >= BLIND_CHANGE:
+            session.console_blind = True
+            return True
+    raise ToolError("the console did not open (is the console key bound to ` on this keyboard layout? An open "
+                    "panel or a mod's own window can also sit over it)", {"error": "console_not_open"})
 
 
 def close_console(session):
+    if getattr(session, "console_blind", False):
+        for _ in range(3):
+            before = session.grab()
+            _toggle(session)
+            after = session.grab()
+            if not screen_mod.console_open(after) and zone_change(before, after) >= BLIND_CHANGE:
+                session.console_blind = False
+                return True
+        raise ToolError("the console did not close", {"error": "console_not_closed"})
     for _ in range(3):
         if not is_open(session):
             return True
@@ -85,12 +121,20 @@ def run(session, commands, keep_open=False, read=True):
     time.sleep(0.3)
     # a side panel's dark frame (Recruit & Deploy) reads as the console's: close panels first (seen live in
     # phase 4: the console "did not close" and the effect never ran)
-    from . import panels
+    from . import menu, panels
     try:
         panels.to_map(session)
     except ToolError:
         pass
-    open_console(session)
+    try:
+        open_console(session)
+    except ToolError as exc:
+        if exc.details.get("error") != "console_not_open":
+            raise
+        # a panel the title strip does not know (an open sea region, a mod's window) can sit over the console:
+        # Esc closes windows one at a time, and clear_windows closes the pause menu it ends on
+        menu.clear_windows(session)
+        open_console(session)
     before, _ = read_output(session) if read else ([], None)
     with clipboard.Preserved():
         for cmd in commands:

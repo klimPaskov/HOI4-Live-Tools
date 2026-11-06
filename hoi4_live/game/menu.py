@@ -234,7 +234,71 @@ def close_esc_menu_if_open(session):
 
 
 CONFIRM_RX = r"^\W*(yes|[o0]k|confirm|exit|quit|exit\s*game|exit\s*to\s*menu)\W*$"
-START_RETRY_SECONDS = 30   # new_game clicks START again when the ready screen is still up after this long
+START_RETRY_SECONDS = 15   # new_game clicks START again when the ready screen is still up after this long
+START_MAX_RETRIES = 3      # ... at most this many more times, then it stops with an error (about 1 click in 5 is missed)
+
+# A mod can replace the Select Country screen. These are the cues of its heading and of the button that confirms it.
+COUNTRY_HEADING_RX = (r"select\s*(your\s*)?(country|nation)|choose\s*(your\s*)?(country|nation)|"
+                      r"pick\s*(a\s*)?(country|nation)|(country|nation)\s*select")
+FORWARD_BUTTON_RX = r"(select\s*(country|nation)|play|continue|confirm|next|proceed|embark)"
+
+
+def pregame_stage(texts):
+    """Which pre-game screen OCR lines show: 'select_country' (vanilla), 'select_scenario', 'ready' (START and Back
+    to menu), 'custom_country' (a mod's own country screen: a country heading, or Back to menu with a confirming
+    button) or None."""
+    has = lambda rx: any(re.search(rx, t, re.I) for t in texts)
+    if has(r"select\s*country") and has(r"other\s*countries|not\s*played"):
+        return "select_country"
+    if has(r"select\s*scenario") and has(r"brief\s*history"):
+        return "select_scenario"
+    if has(r"^\W*start\W*$") and has(r"back\s*to\s*menu"):
+        return "ready"
+    if has(COUNTRY_HEADING_RX) or (has(r"back\s*to\s*menu") and has(r"^\W*" + FORWARD_BUTTON_RX + r"\W*$")):
+        return "custom_country"
+    return None
+
+
+def _wait_country_stage(session, timeout=120):
+    """After the scenario is chosen: wait for the vanilla Select Country screen, the ready screen, or a mod's own
+    country screen (seen on two reads in a row, so a half drawn frame does not count)."""
+    t0 = time.time()
+    custom_seen = 0
+    last = []
+    while time.time() - t0 < timeout:
+        session.check_cancel()
+        img, res = ui.ocr_screen(session, scale=1.5)
+        last = [l.text for l in res.lines]
+        stage = pregame_stage(last)
+        if stage in ("select_country", "ready"):
+            return stage
+        custom_seen = custom_seen + 1 if stage == "custom_country" else 0
+        if custom_seen >= 2:
+            return stage
+        session.sleep(1.5)
+    raise ToolError(f"no country screen appeared within {timeout} s after the scenario was chosen",
+                    {"error": "country_screen_missing", "seen": last[:25]})
+
+
+def _custom_country(session, country):
+    """A mod's own country screen: click the country by name when asked, then the button that confirms it."""
+    steps = []
+    if country:
+        rx = re.escape(country) if not any(c in country for c in r"\^$[]()|*+?") else country
+        try:
+            steps.append(ui.click_text(session, rx, retries=3))
+        except ToolError as exc:
+            raise ToolError(f"this mod has its own Select Country screen and '{country}' was not found on it. Click "
+                            "the country by hand (hoi4_click), then call hoi4_new_game again: it continues from the "
+                            "ready screen.", {"error": "custom_country_screen", "seen": exc.details.get("seen")})
+        session.sleep(1.0)
+    try:
+        steps.append(ui.click_text(session, FORWARD_BUTTON_RX, exact=True, prefer="bottom", retries=2))
+    except ToolError as exc:
+        raise ToolError("this mod has its own Select Country screen and no button that confirms it was found. Choose "
+                        "the country and confirm by hand (hoi4_click), then call hoi4_new_game again: it continues "
+                        "from the ready screen.", {"error": "custom_country_screen", "seen": exc.details.get("seen")})
+    return steps
 
 
 def _rest_cursor_above_dialog(session):
@@ -367,7 +431,13 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
 
     start=False returns at the ready screen for rules review before starting.
     Minor countries have no name on that screen (flags only); start as a major and switch with the console
-    `tag` command in test mode, or pick on the map in a later phase."""
+    `tag` command in test mode, or pick on the map in a later phase.
+
+    A mod's own country screen (a total conversion replaces Select Country) is recognised by its heading or by a
+    confirming button next to Back to menu: the country is clicked by name when it is asked for, then the
+    confirming button. When that screen has neither, the call stops with `custom_country_screen` and the screen's
+    text, and a later call continues from the ready screen once the country is chosen by hand.
+    START is clicked again up to START_MAX_RETRIES times when the ready screen stays up."""
     from ..perception import topbar
     steps = []
 
@@ -379,13 +449,7 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         has = lambda rx: any(re.search(rx, t, re.I) for t in all_text)
         if state["screen"] in ("main_menu", "single_player_menu"):
             return state["screen"]
-        if has(r"select\s*country") and has(r"other\s*countries|not\s*played"):
-            return "select_country"
-        if has(r"select\s*scenario") and has(r"brief\s*history"):
-            return "select_scenario"
-        if has(r"^\W*start\W*$") and has(r"back\s*to\s*menu"):
-            return "ready"
-        return state["screen"]
+        return pregame_stage(all_text) or state["screen"]
 
     st = stage()
     for _ in range(4):
@@ -408,14 +472,17 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
             steps.append(ui.click_text(session, bookmark, retries=3))
             session.sleep(1.0)
         steps.append(ui.click_text(session, r"select\s*scenario", prefer="bottom"))
-        _wait_text(session, r"other\s*countries|not\s*played", 120)
-        st = "select_country"
+        st = _wait_country_stage(session, 120)
     if st == "select_country":
         if country:
             rx = re.escape(country) if not any(c in country for c in r"\^$[]()|*+?") else country
             steps.append(ui.click_text(session, rx, retries=3))
             session.sleep(1.0)
         steps.append(ui.click_text(session, r"select\s*country", prefer="bottom"))
+        _wait_text(session, r"start", 120, exact=True)
+        st = "ready"
+    if st == "custom_country":
+        steps.extend(_custom_country(session, country))
         _wait_text(session, r"start", 120, exact=True)
         st = "ready"
     if st != "ready":
@@ -426,13 +493,19 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
     gamemode.begin_run(session)
     steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
     t0 = last_click = time.time()
+    retries = 0
     while time.time() - t0 < timeout:
         session.check_cancel()
         d = topbar.read_date(session.grab(), session.ocr)
         if "error" not in d:
-            return {"steps": steps, "date": d["hoi4"], "seconds": round(time.time() - t0)}
+            return {"steps": steps, "date": d["hoi4"], "seconds": round(time.time() - t0), "start_retries": retries}
         if time.time() - last_click > START_RETRY_SECONDS and stage() == "ready":
             # on 1.19.4.1 about one START click in five did not register and the ready screen stayed up
+            if retries >= START_MAX_RETRIES:
+                raise ToolError(f"START was clicked {retries + 1} times and the ready screen is still up. Something "
+                                "on this screen blocks the game from starting (a custom game rule, or a mod dialog); "
+                                "take a screenshot and look.", {"error": "start_not_registered", "steps": steps})
+            retries += 1
             steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
             last_click = time.time()
         session.report(f"starting the game ({int(time.time() - t0)} s)")
