@@ -25,16 +25,18 @@ from . import console
 MAX_COMMAND = 250
 POLL_SECONDS = 6.0
 CHUNK = 20                      # commands per console session
-RESULT_RX = re.compile(r"(HLT[0-9a-f]{3})_(\d+)\s+(TRUE|FALSE)\b")
+# the `log` effect's line ends with the text; a console echo of the command would carry more text after it
+RESULT_RX = re.compile(r"\]:\s+(HLT[0-9a-f]{3})_(\d+)\s+(TRUE|FALSE)\s*$", re.M)
 
 
 class Node:
     """One condition: what was asked (`stmt`), what is evaluated for it (`eval_stmt`, a child of a scope block is
     wrapped in its scope), the answer, and the explanation of a false block."""
 
-    def __init__(self, stmt, kind=None, label=None, eval_stmt=None):
+    def __init__(self, stmt, kind=None, label=None, wrappers=()):
         self.stmt = stmt
-        self.eval_stmt = eval_stmt or stmt
+        self.wrappers = tuple(wrappers)                 # the scope blocks it sits in, outermost first
+        self.eval_stmt = _wrap(stmt, self.wrappers)
         self.kind = kind
         self.label = label
         self.result = None
@@ -55,6 +57,23 @@ class Node:
         if self.children:
             d["because"] = [c.as_dict() for c in self.children]
         return d
+
+
+def _wrap(stmt, wrappers):
+    for key, op in reversed(wrappers):
+        stmt = tt.Stmt(key, op, children=[stmt])
+    return stmt
+
+
+SCOPE_KEY = re.compile(r"^([A-Z][A-Z0-9]{2}|[0-9]{1,5}|(ROOT|FROM|PREV|THIS)(\.\w+)*|all_\w+|owner|controller|overlord|"
+                       r"faction_leader|capital_scope)$")
+
+
+def drillable(key):
+    """Blocks whose children can be asked one by one: AND / OR / NOT, and scope blocks (a tag, a state id, ROOT,
+    owner, all_* ...), where every child must hold. Parameter blocks (check_variable, has_idea_with_trait ...) and
+    any_* (all children must hold for the same element) are not split: a part of them means nothing."""
+    return bool(key) and (key.upper() in tt.LOGIC_KEYS or bool(SCOPE_KEY.match(key)))
 
 
 def command(scope, trigger_text, run, n):
@@ -120,16 +139,14 @@ def combine(key, results):
 
 def _children_of(node):
     """Child nodes of a block, each evaluated on its own. Logic blocks evaluate the child as it is; a scope block
-    (a tag, any_country, ROOT ...) evaluates it inside the same scope."""
+    (a tag, ROOT, owner, all_* ...) evaluates it inside the same scope, and the scopes of the parents stay around
+    it, so a grandchild is asked in the right country."""
     stmt = node.stmt
-    if not stmt.is_block or not stmt.children:
+    if not stmt.is_block or not stmt.children or not drillable(stmt.key):
         return []
-    logic = (stmt.key or "").upper() in tt.LOGIC_KEYS
-    out = []
-    for c in stmt.children:
-        wrapped = c if logic else tt.Stmt(stmt.key, stmt.op, children=[c])
-        out.append(Node(c, eval_stmt=wrapped))
-    return out
+    logic = stmt.key.upper() in tt.LOGIC_KEYS
+    wrappers = node.wrappers if logic else node.wrappers + ((stmt.key, stmt.op),)
+    return [Node(c, wrappers=wrappers) for c in stmt.children]
 
 
 def _blocking(node):
@@ -151,7 +168,11 @@ def check(session, scope, nodes, depth=2, max_checks=60):
     errors = evaluate(session, scope, nodes)
     checked = len([n for n in nodes if n.result is not None or n.note])
     truncated = False
-    level = [n for n in nodes if n.explain and n.result is False and n.stmt.is_block and n.stmt.children]
+    for n in nodes:
+        if n.explain and n.result is False and n.stmt.is_block and n.stmt.children and not drillable(n.stmt.key):
+            n.note = n.note or f"false ({n.stmt.key} blocks are not split into smaller conditions)"
+    level = [n for n in nodes if n.explain and n.result is False and n.stmt.is_block and n.stmt.children
+             and drillable(n.stmt.key)]
     # a block that was too long to ask whole is answered from its children
     for n in [n for n in nodes if n.result is None and n.stmt.is_block and n.stmt.children
               and "too long" in (n.note or "")]:
@@ -176,7 +197,8 @@ def check(session, scope, nodes, depth=2, max_checks=60):
                 if n.result is not None:
                     n.note = None
             _blocking(n)
-        level = [c for n in level for c in n.children if c.result is False and c.stmt.is_block and c.stmt.children]
+        level = [c for n in level for c in n.children if c.stmt.is_block and c.stmt.children
+                 and (c.result is False or (c.result is None and "too long" in (c.note or "")))]
     return {"result": overall(nodes), "checked": checked, "errors": errors[:20], "truncated": truncated}
 
 

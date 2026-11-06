@@ -91,7 +91,7 @@ def _raw_focus(entry, tree_id, idx, focus_id):
         return None, path
     from ..gamedata import scriptdb
     try:
-        text = scriptdb.read_bytes(path).decode("utf-8", "replace")
+        text = tt.resolve_constants(scriptdb.read_bytes(path).decode("utf-8", "replace"))
         return tt.find_focus(text, focus_id), path
     except (OSError, tt.ScriptError):
         return None, path
@@ -152,6 +152,10 @@ def hoi4_check_focus(session, args):
     nodes, gating, done, bypass, notes = focus_nodes(entry, raw, fid)
     rep = tc.check(session, tag, nodes, depth=args["depth"])
     available = tc.overall(gating)
+    if available is True and (notes or done.result is None):
+        # a condition was not asked (the file could not be read) or the completed check got no answer
+        available = None
+        notes = notes + ["not everything could be asked, so the answer is unknown"]
     if done.result is True:
         status, available = "completed", False
     else:

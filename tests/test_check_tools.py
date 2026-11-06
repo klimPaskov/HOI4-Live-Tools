@@ -189,6 +189,24 @@ class TriggerTests(Base):
         self.assertEqual([(c["condition"], c["result"]) for c in why],
                          [("is_in_faction_with = ROOT", True), ("has_war = yes", False)])
 
+    def test_a_grandchild_is_asked_inside_every_scope_around_it(self):
+        g = self.game({"has_war = yes": False, "tag = ITA": False})
+        res = self.trigger(g, "GER = { OR = { has_war = yes tag = ITA } }", depth=3)
+        self.assertIs(res.data["result"], False)
+        grandchildren = [c for c in g.commands if "limit = { GER = { has_war = yes } }" in c]
+        self.assertEqual(len(grandchildren), 1, g.commands)
+        or_node = res.data["unmet"][0]["because"][0]
+        self.assertEqual(or_node["condition"], "OR = { has_war = yes tag = ITA }")
+        self.assertEqual([c["condition"] for c in or_node["because"]], ["has_war = yes", "tag = ITA"])
+
+    def test_blocks_that_cannot_be_split_say_so(self):
+        g = self.game({"value > 5": True})
+        res = self.trigger(g, "check_variable = { var = x value > 5 }  any_country = { tag = GER has_war = yes }")
+        self.assertIs(res.data["result"], False)
+        notes = {u["condition"].split(" ")[0]: u.get("note") for u in res.data["unmet"]}
+        self.assertIn("not split", notes["any_country"])
+        self.assertTrue(all("because" not in u for u in res.data["unmet"]))
+
     def test_the_check_budget_stops_the_explaining(self):
         g = self.game({})
         nodes = [tc.Node(s) for s in tt.parse("OR = { a = 1 b = 2 c = 3 }")]
@@ -209,8 +227,25 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(tt.render_all(tt.conditions("OR = { a = 1 }")), "OR = { a = 1 }")
 
     def test_results_of_other_runs_are_ignored(self):
-        text = "x HLTabc_1 TRUE\ny HLTdef_1 FALSE\nz HLTabc_2 FALSE\n"
+        line = "[03:09:06][1936.01.11.23][effectbase.cpp:1783]: "
+        text = f"{line}HLTabc_1 TRUE\n{line}HLTdef_1 FALSE\n{line}HLTabc_2 FALSE\n"
         self.assertEqual(tc.parse_results(text, "HLTabc"), {1: True, 2: False})
+
+    def test_an_echo_of_the_command_is_not_an_answer(self):
+        echo = ('[03:09:05][console.cpp:12]: eval_effect GER = { if = { limit = { a = b } log = "HLTabc_1 TRUE" '
+                'else = { log = "HLTabc_1 FALSE" } } }\n')
+        real = "[03:09:06][1936.01.11.23][effectbase.cpp:1783]: HLTabc_1 FALSE\r\n"
+        self.assertEqual(tc.parse_results(echo + real, "HLTabc"), {1: False})
+        self.assertEqual(tc.parse_results(echo, "HLTabc"), {})
+
+    def test_operators_without_spaces_and_inline_math_stay_whole(self):
+        self.assertEqual(tt.render_all(tt.parse("a!=b c?=1 d>=2")), "a != b c ?= 1 d >= 2")
+        self.assertEqual(tt.render_all(tt.parse("x > @[ base + 1 ]")), "x > @[ base + 1 ]")
+
+    def test_constants_of_the_file_are_replaced(self):
+        text = "@min = 5\n@name_long = 7 # note\nfocus = { id = a available = { num > @min num > @name_long } }\n"
+        self.assertEqual(tt.render_all(tt.parse(tt.resolve_constants(text))),
+                         "focus = { id = a available = { num > 5 num > 7 } }")
 
 
 FOCUS_FILE = """
@@ -293,6 +328,31 @@ class FocusTests(Base):
         res = self.focus(g, "GER_right")
         self.assertIs(res.data["bypass"], True)
         self.assertIn("bypass", res.data["bypass_note"])
+
+    def test_a_focus_whose_file_cannot_be_read_is_never_called_available(self):
+        g = self.game({"has_completed_focus = GER_first": True})
+        with mock.patch.object(check_tools, "_raw_focus", return_value=(None, "gone.txt")):
+            res = self.focus(g, "GER_right")
+        self.assertEqual(res.data["status"], "unknown")
+        self.assertIsNone(res.data["available"])
+        self.assertTrue(any("could not be read" in n for n in res.data["not_checked"]))
+
+    def test_an_unanswered_completed_check_leaves_the_status_unknown(self):
+        g = self.game({}, drop=("has_completed_focus = GER_first",))
+        res = self.focus(g, "GER_first")
+        self.assertEqual(res.data["status"], "unknown")
+        self.assertIsNone(res.data["completed"])
+
+    def test_a_constant_in_available_is_resolved_before_it_is_asked(self):
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write("@min = 5\n" + FOCUS_FILE.replace("has_war = no date > 1936.6.1",
+                                                      "has_war = no num_of_factories > @min"))
+        self.idx = focus_data.build_index([self.path])
+        g = self.game({"has_completed_focus = GER_first": True, "has_war = no": True, "num_of_factories > 5": True})
+        with mock.patch.object(focus_data, "for_session", return_value=self.idx):
+            res = self.focus(g, "GER_right")
+        self.assertEqual(res.data["status"], "available", res.data)
+        self.assertTrue(any("num_of_factories > 5" in c for c in g.commands))
 
     def test_an_unknown_focus_suggests_the_close_ones(self):
         g = self.game({})

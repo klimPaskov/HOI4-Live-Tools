@@ -9,7 +9,7 @@ bare `{ ... }`.
 import re
 
 OPS = ("=", "<", ">", "<=", ">=", "!=", "?=")
-TOKEN = re.compile(r'"[^"\n]*"|#[^\n]*|[<>!?]=|[=<>{}]|[^\s=<>{}#"]+')
+TOKEN = re.compile(r'"[^"\n]*"|#[^\n]*|@\[[^\]\n]*\]|[<>!?]=|[=<>{}]|(?:[^\s=<>{}#"!?]|[!?](?!=))+')
 LOGIC_KEYS = ("AND", "OR", "NOT")
 # blocks a caller may paste around the real conditions: `limit = { ... }`, `available = { ... }`
 WRAPPER_KEYS = ("limit", "available", "trigger", "allow_branch", "bypass", "visible", "potential", "allowed", "allow")
@@ -129,3 +129,18 @@ def _walk_focuses(stmt, focus_id):
 def child_blocks(stmt, key):
     """Every direct child block called `key` (a focus has one `available`, but several `prerequisite`)."""
     return [c for c in stmt.children if c.is_block and c.key == key]
+
+
+CONST_DEF = re.compile(r'^[ \t]*(@[A-Za-z0-9_]+)[ \t]*=[ \t]*(-?[0-9.]+|"[^"\n]*"|[A-Za-z0-9_]+)[ \t\r]*(?:#[^\n]*)?$', re.M)     # \r: the files are CRLF on Windows
+
+
+def resolve_constants(text):
+    """Replace `@name` by the value of its `@name = value` line in the same file (the line itself is dropped). The
+    game does this at load, but the console would see an undefined @name. Inline math `@[ ... ]` stays as it is."""
+    consts = {m.group(1): m.group(2) for m in CONST_DEF.finditer(text)}
+    if not consts:
+        return text
+    text = CONST_DEF.sub("", text)
+    for name in sorted(consts, key=len, reverse=True):
+        text = re.sub(re.escape(name) + r"(?![A-Za-z0-9_])", lambda m, v=consts[name]: v, text)
+    return text
