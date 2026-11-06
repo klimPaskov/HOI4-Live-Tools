@@ -355,7 +355,112 @@ pub(super) fn debug_list(process: &dyn Process) -> Result<Value> {
                 );
             }
         }
-        Ok(json!({"list": format!("{list:#x}"), "words": out, "kids": kids}))
+        // std::vector-style (begin, end) pairs whose elements are GUI containers, in the widget
+        // and in objects it points to (two levels).
+        let mut vectors = Vec::new();
+        let scan = |obj: u64, path: String, vectors: &mut Vec<Value>| {
+            let Ok(bytes) = r.read(obj, 0x300) else {
+                return;
+            };
+            let words: Vec<u64> = bytes
+                .chunks_exact(8)
+                .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+                .collect();
+            for k in 0..words.len().saturating_sub(1) {
+                let (b, e) = (words[k], words[k + 1]);
+                if !(0x10000..0x7fff_ffff_0000).contains(&b)
+                    || e <= b
+                    || (e - b) % 8 != 0
+                    || e - b > 8 * 200
+                {
+                    continue;
+                }
+                let first = r.u64(b).unwrap_or(0);
+                let name = gui_tree::container(r, first, i)
+                    .ok()
+                    .flatten()
+                    .and_then(|c| gui_tree::name(r, c, i).ok().flatten())
+                    .or_else(|| gui_tree::name(r, first, i).ok().flatten());
+                if name.is_some() {
+                    vectors.push(json!({"at": format!("{path}+{:#x}", k * 8), "count": (e - b) / 8, "first_name": name}));
+                }
+            }
+        };
+        scan(list, "list".into(), &mut vectors);
+        // the listbox object behind the widget, and two levels of pointers from it
+        if let Ok(Some(lb)) = gui_tree::container(r, list, i) {
+            scan(lb, "lb".into(), &mut vectors);
+            if let Ok(b) = r.read(lb, 0x300) {
+                for (k, c) in b.chunks_exact(8).enumerate() {
+                    let v = u64::from_le_bytes(c.try_into().unwrap());
+                    if (0x10000..0x7fff_ffff_0000).contains(&v) {
+                        scan(v, format!("lb[{:#x}]", k * 8), &mut vectors);
+                        if let Ok(b2) = r.read(v, 0x100) {
+                            for (k2, c2) in b2.chunks_exact(8).enumerate() {
+                                let v2 = u64::from_le_bytes(c2.try_into().unwrap());
+                                if (0x10000..0x7fff_ffff_0000).contains(&v2) {
+                                    scan(
+                                        v2,
+                                        format!("lb[{:#x}][{:#x}]", k * 8, k2 * 8),
+                                        &mut vectors,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for c in words.chunks_exact(8).enumerate() {
+            let v = u64::from_le_bytes(c.1.try_into().unwrap());
+            if (0x10000..0x7fff_ffff_0000).contains(&v) {
+                scan(v, format!("[{:#x}]", c.0 * 8), &mut vectors);
+            }
+        }
+        Ok(json!({"list": format!("{list:#x}"), "kids": kids, "vectors": vectors}))
+    })
+}
+/// Probe-only (`dbg_find_text:TEXT`): pointer paths (up to depth 4) from the organisation list
+/// widget to a string equal to TEXT.
+pub(super) fn debug_find_text(process: &dyn Process, text: &str) -> Result<Value> {
+    read(process, |r, i| {
+        let root = pk::open_root(r, i, &pk::MIO_LIST)?;
+        let list = if text.starts_with('@') {
+            root
+        } else {
+            pk::need(r, i, root, "organisation_list", 4)?
+        };
+        let text = text.trim_start_matches('@');
+        let mut hits = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut frontier = vec![(list, String::from("list"))];
+        let mut reads = 0;
+        for _depth in 0..6 {
+            let mut next = Vec::new();
+            for (obj, path) in frontier {
+                if !seen.insert(obj) || reads > 400_000 {
+                    continue;
+                }
+                let Ok(bytes) = r.read(obj, 0x800) else {
+                    continue;
+                };
+                reads += 1;
+                for (k, c) in bytes.chunks_exact(8).enumerate() {
+                    let off = (k * 8) as u64;
+                    if let Ok(t) = r.string_bounded(obj + off, 64) {
+                        if t == text {
+                            hits.push(json!(format!("{path}+{off:#x}")));
+                        }
+                    }
+                    let v = u64::from_le_bytes(c.try_into().unwrap());
+                    if (0x10000..0x7fff_ffff_0000).contains(&v) && v % 8 == 0 {
+                        next.push((v, format!("{path}+{off:#x}->")));
+                    }
+                }
+            }
+            frontier = next;
+        }
+        Ok(json!({"hits": hits, "reads": reads}))
     })
 }
 /// Row windows of the organisation list (grid items, else child windows).

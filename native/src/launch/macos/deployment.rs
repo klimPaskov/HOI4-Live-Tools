@@ -230,6 +230,21 @@ pub(super) fn row_button(
         .ok_or_else(|| Error::new("invalid_gui", "Template row window required"))?;
     let widget = gui_tree::child(r, image, frame, button)?
         .ok_or_else(|| Error::new("gui_target_unavailable", format!("{button} not found")))?;
+    if button == "edit_button" {
+        // Locked templates (event or focus templates such as Camicie Nere and the irregulars)
+        // show View on this button instead of Edit; the designer then ignores every change.
+        let label = super::navalui::label_at(r, widget).unwrap_or_default();
+        if label.trim().eq_ignore_ascii_case("view") {
+            return Err(Error::new(
+                "template_locked",
+                format!(
+                    "Template {name} is locked by the game (its button reads View, not Edit): it \
+                     cannot be renamed or edited. Edit another template, or create a new one \
+                     with hoi4_template_create. Nothing was changed."
+                ),
+            ));
+        }
+    }
     Ok((
         gui_tree::rect(r, image, widget, GAME)?,
         gui_tree::disabled(r, widget)?,

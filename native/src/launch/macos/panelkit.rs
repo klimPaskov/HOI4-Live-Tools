@@ -117,7 +117,8 @@ pub(super) const OPERATIVE_ORDERS: Class = Class {
 pub(super) const OPERATIVE_RECRUIT: Class = Class {
     name: "COperativeLeaderRecruitmentWindow",
     vtable: 0x369bd60,
-    root_name: "operative_leader_window",
+    // operativeleaderwindow (mapped live 6 Nov 2026; it shared the bar's name before).
+    root_name: "operativeleaderwindow",
 };
 pub(super) const MIO_LIST: Class = Class {
     name: "NIndustrialOrganisation::COrganisationListWindow",
@@ -207,6 +208,33 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
             }
         }
     }
+    // Windows reached by a fixed path from a manager slot (slot, field, root field), accepted
+    // only when the root carries the class's .gui root name.
+    for (root_name, slot, field, root_at) in SLOT_PATHS {
+        if *root_name != class.root_name {
+            continue;
+        }
+        let Ok(view) = r.u64(manager + slot) else {
+            continue;
+        };
+        if !plausible(view) {
+            continue;
+        }
+        let Ok(window) = r.u64(view + field) else {
+            continue;
+        };
+        if !plausible(window) {
+            continue;
+        }
+        let Ok(p) = r.u64(window + root_at) else {
+            continue;
+        };
+        if let Ok(Some(root)) = gui_tree::container(r, p, image) {
+            if container_name(r, image, root).ok().flatten().as_deref() == Some(class.root_name) {
+                return Ok(Some(root));
+            }
+        }
+    }
     // Windows owned by another view rather than the manager.
     for (child, owner_class, offset, root_at) in CHILD_WINDOWS {
         if child.vtable != class.vtable {
@@ -243,6 +271,16 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
 /// at +0x4a8 with its root at +0x50 (mapped live 1 November 2026).
 /// The organisation list hangs off the politics view at +0x3958 (also referenced from each
 /// later organisation slot record, stride 0x470) with its root at +0xf0.
+/// (root name, manager slot, field of the slot's view, root field of that window), mapped live:
+/// the operative bottom bar (operativeleader.gui) on 1.19.4.1, 6 Nov 2026
+/// (dbg_find_root 1d0: 0x530 -> 0x430).
+const SLOT_PATHS: &[(&str, u64, u64, u64)] = &[
+    ("operative_leader_window", 0x1d0, 0x530, 0x430),
+    // the candidate window opened from an empty operative slot (dbg_slot_object 1d0:930)
+    ("operativeleaderwindow", 0x1d0, 0x930, 0x518),
+    // the mission bar shown over an operative's portrait (dbg_slot_object 1d0:938)
+    ("operative_order_bar", 0x1d0, 0x938, 0x440),
+];
 const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
     (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
     // Name and insignia window, mapped live 6 Nov 2026 (dbg_find_root e8: 0x498 -> 0x48).
@@ -1082,6 +1120,61 @@ pub(super) fn popup_roots_named(r: &Reader<'_>, i: u64, names: &[&str]) -> Resul
         }
     }
     Ok(out)
+}
+/// Probe-only (`SLOT_HEX:FIELD_HEX`): named GUI containers referenced from the object at
+/// manager slot SLOT + FIELD (offsets 0..0x800).
+pub(super) fn debug_slot_object(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {
+    let (a, b) = spec
+        .split_once(':')
+        .ok_or_else(|| Error::new("invalid_arguments", "SLOT_HEX:FIELD_HEX"))?;
+    let slot = u64::from_str_radix(a, 16).map_err(|_| Error::new("invalid_arguments", "slot"))?;
+    let field = u64::from_str_radix(b, 16).map_err(|_| Error::new("invalid_arguments", "field"))?;
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let manager = r.u64(idler + MANAGER)?;
+        let view = r.u64(manager + slot)?;
+        let object = r.u64(view + field)?;
+        let mut out = Vec::new();
+        for off in (0..0x800u64).step_by(8) {
+            let Ok(p) = r.u64(object + off) else { continue };
+            if !plausible(p) {
+                continue;
+            }
+            if let Ok(Some(root)) = gui_tree::container(r, p, i) {
+                fn tree(
+                    r: &Reader<'_>,
+                    i: u64,
+                    obj: u64,
+                    depth: u32,
+                    out: &mut Vec<String>,
+                    prefix: &str,
+                ) {
+                    let Ok(children) = gui_tree::children(r, obj) else {
+                        return;
+                    };
+                    for c in children.into_iter().take(40) {
+                        let name = gui_tree::name(r, c, i).ok().flatten().unwrap_or_default();
+                        let inner = gui_tree::container(r, c, i).ok().flatten();
+                        let grid_count = r.array_header(c + 0x0).ok().map(|x| x.2);
+                        out.push(format!(
+                            "{prefix}{name}{}",
+                            if inner.is_some() { "/" } else { "" }
+                        ));
+                        let _ = grid_count;
+                        if let (Some(inner), true) = (inner, depth > 0) {
+                            tree(r, i, inner, depth - 1, out, &format!("{prefix}  "));
+                        }
+                    }
+                }
+                let mut names = Vec::new();
+                tree(r, i, root, 5, &mut names, "");
+                out.push(serde_json::json!({"at": format!("{off:#x}"), "name": container_name(r, i, root).ok().flatten(), "visible": gui_tree::visible(r, root).ok(), "tree": names}));
+            }
+        }
+        Ok(
+            serde_json::json!({"object": format!("{object:#x}"), "vtable": format!("{:#x}", r.u64(object)?.wrapping_sub(i)), "roots": out}),
+        )
+    })
 }
 pub(super) fn debug_popups(process: &dyn Process) -> Result<serde_json::Value> {
     read(process, |r, i| {

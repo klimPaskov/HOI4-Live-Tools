@@ -760,6 +760,25 @@ pub(super) fn typable(name: &str) -> bool {
 /// Backspace proves the box has the keyboard focus), then type the new name one key at a time,
 /// each verified against the working copy. A space is typed only after focus is proven, since
 /// a stray Space would toggle the game's pause.
+/// The template name as typed: the name edit box's own text (inside the `divisions` dropdown),
+/// else the designer's working copy. In the designer opened from a template's Edit button the
+/// working copy does not follow the edit box while typing (live 6 Nov 2026), so the box is read.
+fn typed_name(r: &Reader<'_>, image: u64) -> Result<String> {
+    let from_box = (|| -> Result<Option<String>> {
+        let dd = dropdown_widget(r, image)?;
+        let Some(frame) = gui_tree::container(r, dd, image)? else {
+            return Ok(None);
+        };
+        let Some(edit) = super::panelkit::find(r, image, frame, "name", 3)? else {
+            return Ok(None);
+        };
+        Ok(Some(super::navalui::edit_text(r, image, edit)?))
+    })();
+    match from_box {
+        Ok(Some(text)) => Ok(text),
+        _ => Ok(draft(r, image)?.name),
+    }
+}
 pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     if !typable(name) {
         return Err(Error::new(
@@ -767,7 +786,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
             "Template names may use letters, digits, space and - _ . , / ' ( )",
         ));
     }
-    let current = read(process, draft)?.name;
+    let current = read(process, typed_name)?;
     if current == name {
         return Ok(());
     }
@@ -821,14 +840,25 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
         }
         points.extend([110.0, -90.0, -150.0, -50.0, 60.0, 170.0]);
         let name_y = edit.map(|rect| rect.center().1).unwrap_or(y);
+        // The first point is also tried a little lower: the estimate sits on the box's top edge
+        // (y 251 while the box spans about 249..276 on screen, live 6 Nov 2026).
+        let mut tries: Vec<(f64, f64)> = Vec::new();
         for (n, dx) in points.into_iter().enumerate() {
-            let y = if n == 0 && edit.is_some() { name_y } else { y };
+            if n == 0 && edit.is_some() {
+                tries.push((dx, name_y + 11.0));
+                tries.push((dx, name_y + 6.0));
+                tries.push((dx, name_y));
+            } else {
+                tries.push((dx, y));
+            }
+        }
+        for (dx, y) in tries {
             keys.click(GAME, x - dx, y)?;
             std::thread::sleep(Duration::from_millis(250));
             keys.press_code(crate::platform::game_input::vk::END)?; // End
             keys.press_code(crate::platform::game_input::vk::DELETE)?;
             if wait(process, "name box focused", |r, i| {
-                Ok(draft(r, i)?.name.chars().count() == length - 1)
+                Ok(typed_name(r, i)?.chars().count() == length - 1)
             })
             .is_ok()
             {
@@ -851,7 +881,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
         keys.press_code(crate::platform::game_input::vk::DELETE)?;
         length -= 1;
         wait(process, "name erased", |r, i| {
-            Ok(draft(r, i)?.name.chars().count() == length)
+            Ok(typed_name(r, i)?.chars().count() == length)
         })?;
     }
     let mut typed = String::new();
@@ -863,7 +893,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
             keys.press_code(code)?;
         }
         typed.push(c);
-        wait(process, "name key", |r, i| Ok(draft(r, i)?.name == typed))?;
+        wait(process, "name key", |r, i| Ok(typed_name(r, i)? == typed))?;
     }
     Ok(())
 }
