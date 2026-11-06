@@ -1821,7 +1821,7 @@ fn finish(mut v: Value) -> Value {
     v["observation_paused_game"] = json!(false);
     v["input_authorized"] = json!(false);
     v["data"] =
-        json!("vanilla install map files + visible state ownership; no hidden enemy information");
+        json!("game map files (install plus enabled mods) + visible state ownership; no hidden enemy information");
     v
 }
 

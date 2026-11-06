@@ -71,6 +71,7 @@ mod mapdata;
 mod mgmt;
 mod mio_act;
 mod mios;
+mod modlayer;
 mod naval;
 mod navalact;
 mod navalui;

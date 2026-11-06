@@ -1,4 +1,4 @@
-//! Read-only vanilla map data from the owned game's install: province unit
+//! Read-only map data from the owned game's content (install, or install plus enabled mods): province unit
 //! positions (map/unitstacks.txt) and state province lists (history/states).
 //! Used only to orient battle-plan drags on screen.
 use crate::error::{Error, Result};
@@ -11,13 +11,20 @@ use std::{
 type Positions = HashMap<i32, (f64, f64)>;
 
 /// Game install directory of an executable at `<dir>/hoi4.app/Contents/MacOS/hoi4`.
-pub(super) fn game_dir(exe: &str) -> Result<PathBuf> {
+pub(super) fn install_dir(exe: &str) -> Result<PathBuf> {
     Path::new(exe)
         .ancestors()
         .nth(4)
         .filter(|d| d.join("map").is_dir() && d.join("history").is_dir())
         .map(Path::to_path_buf)
         .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))
+}
+/// The game content every reader uses: the install, or with enabled mods a merged view of the
+/// install and the mods in load order (see `super::modlayer`), so map, history, common and
+/// localisation files follow the mods the game itself loaded.
+pub(super) fn game_dir(exe: &str) -> Result<PathBuf> {
+    let install = install_dir(exe)?;
+    Ok(super::modlayer::content_dir(&install, exe).unwrap_or(install))
 }
 
 /// Parse unitstacks lines `province;type;x;y;z;rotation;offset`; the type-0

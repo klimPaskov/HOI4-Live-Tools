@@ -821,6 +821,46 @@ pub(super) fn debug_deep(process: &dyn Process, spec: &str) -> Result<serde_json
 
 /// Probe-only (`WIDGET_NAME`): manager slots whose view root contains a widget of that name
 /// (root offset tried: VIEW_ROOT and the fallbacks), with the first match's rectangle.
+/// The first shown widget named `name` under any interface-manager view root, with its rect.
+/// Finds buttons of views whose own layout is not mapped (by the name in the game's .gui files,
+/// so a mod's interface that keeps the name still works).
+pub(super) fn widget_anywhere(
+    r: &Reader<'_>,
+    i: u64,
+    name: &str,
+) -> Result<Option<(u64, gui_tree::Rect)>> {
+    let idler = r.u64(i + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + MANAGER)?;
+    let slots = r.read(manager, MANAGER_SCAN)?;
+    for c in slots.chunks_exact(8) {
+        let view = u64::from_le_bytes(c.try_into().unwrap());
+        if !plausible(view) {
+            continue;
+        }
+        for off in [
+            VIEW_ROOT, 0x68, 0x50, 0x60, 0x70, 0x78, 0x430, 0x20, 0x28, 0x30, 0x8, 0x10, 0x18,
+        ] {
+            let Ok(p) = r.u64(view + off) else { continue };
+            if !plausible(p) {
+                continue;
+            }
+            let Ok(Some(root)) = gui_tree::container(r, p, i) else {
+                continue;
+            };
+            if !gui_tree::visible(r, root).unwrap_or(false) {
+                continue;
+            }
+            if let Ok(Some(w)) = find(r, i, root, name, 6) {
+                if gui_tree::shown(r, w).unwrap_or(false) {
+                    if let Ok(rect) = gui_tree::rect(r, i, w, GAME) {
+                        return Ok(Some((w, rect)));
+                    }
+                }
+            }
+        }
+    }
+    Ok(None)
+}
 pub(super) fn debug_widget_anywhere(
     process: &dyn Process,
     name: &str,
