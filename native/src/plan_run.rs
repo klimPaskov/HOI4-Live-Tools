@@ -437,6 +437,9 @@ pub fn tick(
         if let Some(step) = war_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
+        if let Some(step) = armies_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
     }
     // 2. research
     let research = tools.call("hoi4_research", &json!({"limit": 1}))?;
@@ -865,7 +868,36 @@ pub fn tick(
     if let Some(step) = extras_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
-    // 9. every division in an army of sensible size, generals only for real armies
+    // 9. armies (here unless the war runs first, which runs them right after itself)
+    if !(war_on && plan["war"]["first"] != json!(false)) {
+        if let Some(step) = armies_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
+    // 8b. war executive (when it does not run first)
+    if war_on && plan["war"]["first"] == json!(false) {
+        if let Some(step) = war_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
+    if plan["disband"].is_object() {
+        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
+    Ok(Tick::Nothing)
+}
+
+/// 9. every division in an army of sensible size, generals only for real armies. At war it runs
+/// right after the war step: the war cannot start before its armies exist (w15: the opening's
+/// armies came a month late behind research, production and construction ticks).
+fn armies_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     if plan["armies"].is_object() {
         let cfg = &plan["armies"];
         let max = cfg["max"].as_u64().unwrap_or(24);
@@ -918,7 +950,7 @@ pub fn tick(
                         2 * DAY
                     },
                 );
-                return Ok(Tick::Acted(format!("army_assign state {id}: {ok} {why}")));
+                return Ok(Some(format!("army_assign state {id}: {ok} {why}")));
             }
             let (ok, why) = state.act(
                 tools,
@@ -957,7 +989,7 @@ pub fn tick(
                     10 * DAY
                 },
             );
-            return Ok(Tick::Acted(format!("army_create state {id}: {ok} {why}")));
+            return Ok(Some(format!("army_create state {id}: {ok} {why}")));
         }
         for army in list(&roster, "armies") {
             let name = text(&army["army"]);
@@ -974,9 +1006,7 @@ pub fn tick(
                 if !ok {
                     state.skip(now, "armysplit", name, 2 * DAY);
                 }
-                return Ok(Tick::Acted(format!(
-                    "army_split {name} {chunk}: {ok} {why}"
-                )));
+                return Ok(Some(format!("army_split {name} {chunk}: {ok} {why}")));
             }
         }
         // Consolidate: fold the smallest army below `min_for_general` into the army that ends
@@ -1018,9 +1048,7 @@ pub fn tick(
                     if !ok {
                         state.skip(now, "armymerge", &source, 2 * DAY);
                     }
-                    return Ok(Tick::Acted(format!(
-                        "army_merge {source} -> {target}: {ok} {why}"
-                    )));
+                    return Ok(Some(format!("army_merge {source} -> {target}: {ok} {why}")));
                 }
             }
         }
@@ -1050,24 +1078,11 @@ pub fn tick(
                     name,
                     if ok { 14 * DAY } else { 2 * DAY },
                 );
-                return Ok(Tick::Acted(format!(
-                    "general {general} -> {name}: {ok} {why}"
-                )));
+                return Ok(Some(format!("general {general} -> {name}: {ok} {why}")));
             }
         }
     }
-    // 8b. war executive (when it does not run first)
-    if war_on && plan["war"]["first"] == json!(false) {
-        if let Some(step) = war_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    if plan["disband"].is_object() {
-        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    Ok(Tick::Nothing)
+    Ok(None)
 }
 
 /// `disband`: {"templates":["Camicie Nere",..],"keep_states":[ids],"max":N}: divisions of these
@@ -1848,7 +1863,10 @@ fn war_step(
         .unwrap_or_default();
     // "guard_states": [ids]: the first army seen standing in such a state guards it (army names
     // depend on the order the armies were made in).
-    for post in list(cfg, "guard_states").iter().filter_map(|v| v.as_i64().map(|v| v as i32)) {
+    for post in list(cfg, "guard_states")
+        .iter()
+        .filter_map(|v| v.as_i64().map(|v| v as i32))
+    {
         if state.war_guard.values().any(|p| *p == post) {
             continue;
         }
@@ -1908,10 +1926,9 @@ fn war_step(
         if ok && next == 2 {
             state.war_stage.insert(key, 2);
         }
-        state.war_cool.insert(
-            name.clone(),
-            now + if ok { cooldown * 2 } else { cooldown },
-        );
+        state
+            .war_cool
+            .insert(name.clone(), now + if ok { cooldown * 2 } else { cooldown });
         return Ok(Some(format!(
             "war {label} {name} -> state {post}: {ok} {why}"
         )));
@@ -1932,12 +1949,18 @@ fn war_step(
                 a["division_count"].as_u64().unwrap_or(0) >= min_army
                     && !reserve.iter().any(|r| r == n)
                     && !guards.contains_key(n)
-                    && !state.war_assign.get(n).is_some_and(|t| targets.iter().any(|x| x.0 == *t && x.1))
+                    && !state
+                        .war_assign
+                        .get(n)
+                        .is_some_and(|t| targets.iter().any(|x| x.0 == *t && x.1))
             })
             .filter_map(|a| {
                 let s = a["main_state"].as_i64()? as i32;
                 let (x, z) = state.centers.get(&s).copied()?;
-                Some((text(&a["army"]).to_string(), (x - lx).powi(2) + (z - lz).powi(2)))
+                Some((
+                    text(&a["army"]).to_string(),
+                    (x - lx).powi(2) + (z - lz).powi(2),
+                ))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1));
         if let Some((name, _)) = nearest {
@@ -3562,7 +3585,11 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("war guard move Army 1 -> state 5")),
             "{step:?}"
         );
-        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_offensive"));
+        assert!(!w
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_army_offensive"));
     }
 
     #[test]
