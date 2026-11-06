@@ -23,7 +23,7 @@ const GAME: (u32, u32) = (1920, 1080);
 const MAP_LEFT: f64 = 740.0;
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_railway_build","description":"Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends must be own or controlled land the game lets railways cross. Verified by the own construction queue holding one more line. Typed refusals before input: no_node_in_state (lists what to build), province_not_in_state, unknown_state. Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.","inputSchema":{"type":"object","properties":{"from_province":{"type":"integer","minimum":1,"maximum":99999},"from_state":{"type":"integer","minimum":1,"maximum":4095},"to_province":{"type":"integer","minimum":1,"maximum":99999},"to_state":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_railway_build","description":"Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends must be own or controlled land the game lets railways cross. Verified by the own construction queue holding one more line or one more railway level (a path already queued gets another level on its line). Typed refusals before input: no_node_in_state (lists what to build), province_not_in_state, unknown_state. Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.","inputSchema":{"type":"object","properties":{"from_province":{"type":"integer","minimum":1,"maximum":99999},"from_state":{"type":"integer","minimum":1,"maximum":4095},"to_province":{"type":"integer","minimum":1,"maximum":99999},"to_state":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
 }
 
 /// Supply hub provinces listed in `map/supply_nodes.txt` (`level province` per line).
@@ -227,10 +227,26 @@ fn pan_to(
         format!("Province {province} could not be brought on screen with the arrow keys"),
     ))
 }
+/// Queue lines plus the levels queued on railway lines: a railway along a path already in the
+/// queue raises that line's level count instead of adding a line (live 6 Nov 2026: four
+/// Asmara-Tigray orders made one line of 4 levels, and the line count never moved).
 fn queue_lines(process: &dyn Process) -> Result<i64> {
-    crate::economy::snapshot(process)?["construction_projects_queued"]
+    let lines = crate::economy::snapshot(process)?["construction_projects_queued"]
         .as_i64()
-        .ok_or_else(|| Error::new("construction_target_unavailable", "Queue lines unreadable"))
+        .ok_or_else(|| Error::new("construction_target_unavailable", "Queue lines unreadable"))?;
+    let page = crate::construction::page(process, 0, 128)?;
+    Ok(lines + railway_levels(&page))
+}
+pub(super) fn railway_levels(page: &Value) -> i64 {
+    page["lines"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter(|r| r["line_kind"] == "railway")
+                .filter_map(|r| r["amount_raw_signed"].as_i64())
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 pub(super) fn build(
@@ -260,13 +276,14 @@ pub(super) fn build(
         // on a supply node'), so reach the target with the arrow keys, projecting after each tap.
         let (x, y) = pan_to(process, keys, &dir, to_p)?;
         keys.click(GAME, x, y)?;
-        let deadline = Instant::now() + Duration::from_secs(3);
+        let deadline = Instant::now() + Duration::from_secs(5);
         loop {
             let now = queue_lines(process)?;
             if now > before {
                 return Ok(
                     json!({"from_province":from_p,"from_state":from_s,"to_province":to_p,
-                    "to_state":to_s,"queue_lines_before":before,"queue_lines_after":now}),
+                    "to_state":to_s,"queue_work_before":before,"queue_work_after":now,
+                    "note":"queue work = construction lines + railway levels queued"}),
                 );
             }
             if Instant::now() >= deadline {
@@ -274,7 +291,7 @@ pub(super) fn build(
                     "railway_not_queued",
                     format!(
                         "Shift+Click on province {from_p} and a click on province {to_p} queued no \
-                         railway within 3 s. Most likely {from_p} is not a railway node now (a \
+                         railway within 5 s (no new line, no new railway level). Most likely {from_p} is not a railway node now (a \
                          supply hub, naval base or the capital) or no railway path joins them \
                          through own territory; nothing was retried"
                     ),
@@ -290,6 +307,13 @@ pub(super) fn build(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn railway_levels_sum_only_railway_lines() {
+        let page = json!({"lines":[{"line_kind":"building","amount_raw_signed":1},
+            {"line_kind":"railway","amount_raw_signed":4},{"line_kind":"railway","amount_raw_signed":2}]});
+        assert_eq!(railway_levels(&page), 6);
+        assert_eq!(railway_levels(&json!({})), 0);
+    }
     #[test]
     fn supply_nodes_file_lines_give_provinces() {
         assert_eq!(

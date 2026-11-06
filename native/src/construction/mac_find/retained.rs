@@ -287,7 +287,7 @@ impl Observation {
         if matches!(self.binding.requested, Some(RequestedState::Foreign { .. })) {
             return Err(Error::new(
                 "construction_target_unavailable",
-                "Retained Find state must be owned and controlled by the current player",
+                "Retained Find state must be controlled by the current player",
             ));
         }
         Ok(FindAnchor {

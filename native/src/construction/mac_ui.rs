@@ -445,7 +445,7 @@ fn observe(
     if !location::own_state(&r, base, state, own_tag)? {
         return Err(Error::new(
             "construction_target_unavailable",
-            "Requested state must be owned and controlled by the current player",
+            "Requested state must be controlled by the current player",
         ));
     }
     if r.i32(state + l.state_id)? != state_id {

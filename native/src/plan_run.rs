@@ -426,6 +426,15 @@ pub fn tick(
         }
         return Ok(Tick::Waiting { event: key, new });
     }
+    // 1a. war first: at war a game day passes in about 2.5 s at speed 3, and one construction
+    // step can take 100 s (w15, 6 Nov 2026: 111-day stalls while the tick built factories), so
+    // the war executive acts before everything else unless the plan says "war": {"first": false}.
+    let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
+    if war_on && plan["war"]["first"] != json!(false) {
+        if let Some(step) = war_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
     // 2. research
     let research = tools.call("hoi4_research", &json!({"limit": 1}))?;
     let slots: Vec<Option<String>> = list(&research, "slots")
@@ -1038,8 +1047,8 @@ pub fn tick(
             }
         }
     }
-    // 8b. war executive
-    if plan["war"].is_object() && plan["war"]["enabled"] != json!(false) {
+    // 8b. war executive (when it does not run first)
+    if war_on && plan["war"]["first"] == json!(false) {
         if let Some(step) = war_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -1817,8 +1826,100 @@ fn war_step(
             })
             .unwrap_or_default()
     };
+    // Guards: {"Army 4": 844} holds that own state: the army goes there and draws a front on
+    // the nearest border, and never attacks (w15: Ethiopia walked into Eritrea and Somalia
+    // after every army had left for the offensive).
+    let guards: HashMap<String, i32> = cfg["guards"]
+        .as_object()
+        .map(|g| {
+            g.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_i64()? as i32)))
+                .collect()
+        })
+        .unwrap_or_default();
     for army in list(&roster, "armies") {
         let name = text(&army["army"]).to_string();
+        let Some(&post) = guards.get(&name) else {
+            continue;
+        };
+        if state.war_cool.get(&name).is_some_and(|until| *until > now) {
+            continue;
+        }
+        let here = army["main_state"].as_i64().map(|s| s as i32);
+        let key = format!("guard:{name}");
+        let stage = state.war_stage.get(&key).copied().unwrap_or(0);
+        let (tool, args, label, next) = if here != Some(post) && stage < 2 {
+            (
+                "hoi4_army_move",
+                json!({"army": name, "state_id": post}),
+                "guard move",
+                1,
+            )
+        } else if stage < 2 {
+            (
+                "hoi4_army_front",
+                json!({"army": name, "state_id": post}),
+                "guard front",
+                2,
+            )
+        } else {
+            continue;
+        };
+        let (ok, why) = state.act(tools, lease, tool, args, "wg")?;
+        if ok && next == 2 {
+            state.war_stage.insert(key, 2);
+        }
+        state.war_cool.insert(
+            name.clone(),
+            now + if ok { cooldown * 2 } else { cooldown },
+        );
+        return Ok(Some(format!(
+            "war {label} {name} -> state {post}: {ok} {why}"
+        )));
+    }
+    // An own state an enemy holds that no army is retaking draws the nearest fighting army off
+    // its axis at once: the axes alone left Eritrea and Somalia occupied for months (w15).
+    for (lib, _) in targets.iter().filter(|t| t.1) {
+        if load.get(lib).copied().unwrap_or(0) > 0 {
+            continue;
+        }
+        let Some(&(lx, lz)) = state.centers.get(lib) else {
+            continue;
+        };
+        let nearest = list(&roster, "armies")
+            .iter()
+            .filter(|a| {
+                let n = text(&a["army"]);
+                a["division_count"].as_u64().unwrap_or(0) >= min_army
+                    && !reserve.iter().any(|r| r == n)
+                    && !guards.contains_key(n)
+                    && !state.war_assign.get(n).is_some_and(|t| targets.iter().any(|x| x.0 == *t && x.1))
+            })
+            .filter_map(|a| {
+                let s = a["main_state"].as_i64()? as i32;
+                let (x, z) = state.centers.get(&s).copied()?;
+                Some((text(&a["army"]).to_string(), (x - lx).powi(2) + (z - lz).powi(2)))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((name, _)) = nearest {
+            if let Some(old) = state.war_assign.insert(name.clone(), *lib) {
+                if let Some(n) = load.get_mut(&old) {
+                    *n = n.saturating_sub(1);
+                }
+            }
+            *load.entry(*lib).or_default() += 1;
+            state.war_stage.remove(&name);
+            state.war_move.remove(&name);
+            state.war_since.remove(&name);
+            state.war_rest.remove(&name);
+            state.war_cool.remove(&name);
+        }
+    }
+    for army in list(&roster, "armies") {
+        let name = text(&army["army"]).to_string();
+        if guards.contains_key(&name) {
+            continue;
+        }
         let here = army["main_state"].as_i64().map(|s| s as i32);
         let in_theatre = theatre.is_empty()
             || here.is_some_and(|s| theatre.contains(&s) || !mine_ids.contains(&s));
@@ -3406,6 +3507,53 @@ mod tests {
             .find(|(n, _)| n.starts_with("hoi4_army_"))
             .cloned()
             .unwrap()
+    }
+
+    #[test]
+    fn a_guard_army_moves_to_its_post_and_never_attacks() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "guards": {"Army 1": 5}}});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war guard move Army 1 -> state 5")),
+            "{step:?}"
+        );
+        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_offensive"));
+    }
+
+    #[test]
+    fn an_occupied_own_state_takes_the_nearest_army_off_its_axis() {
+        let w = War {
+            liberate: true,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_stage.insert("Army 1".into(), 3);
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [[28]]}});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")),
+            "{step:?}"
+        );
+    }
+
+    #[test]
+    fn the_war_acts_before_research_when_it_runs_first() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        tick(&mut state, &w, &war_plan(), "l", START).unwrap();
+        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_research"));
     }
 
     #[test]
