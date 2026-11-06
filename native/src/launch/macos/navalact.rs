@@ -415,6 +415,10 @@ pub(super) fn select_fleet(
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
+                eprintln!(
+                    "select_fleet5: want {name} card {index} title now {:?}",
+                    read(process, |r, i| Ok(format!("{:?}", nui::panel_fleet(r, i))))
+                );
                 break;
             }
             pause(60);
