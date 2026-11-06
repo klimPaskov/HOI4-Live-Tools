@@ -67,7 +67,9 @@ without the Steam client. Without Steam the game finds no DLC in a user folder t
 lacks two files the Paradox launcher keeps there, `launcher-v2.sqlite` and
 `dlc_signature`. Your normal user folder has them. A scratch folder (set with
 `HOI4_LIVE_USER_DIR`, or a `gameDataPath` redirect) does not, and the game then
-loads 0 DLC. The order is:
+loads 0 DLC. Mod testing needs the server in test mode (`HOI4_LIVE_MODE=test`, or
+`"mode": "test"` in `config.json`): the default is campaign mode, which refuses the
+console, events and `hoi4_prepare`. The order is:
 
 1. **Close Steam and the Paradox launcher** completely: quit them from the tray
    icon, not just the window. `steamwebhelper` and `steamcmd` count too.
