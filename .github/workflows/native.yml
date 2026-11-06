@@ -1,8 +1,16 @@
 name: Native Rust
 on:
+  # Only the Rust runtime is built here: a change to the Python package or to the docs does not need three operating
+  # systems of cargo. A pull request runs on its own; a push only runs on master.
   push:
-    branches: [master, 'codex/**']
+    branches: [master]
+    paths: ['native/**', 'third_party/**']
   pull_request:
+    paths: ['native/**', 'third_party/**']
+# A new push to a pull request cancels the run it replaces.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:

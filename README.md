@@ -32,6 +32,53 @@ No full campaign has been accepted on any runtime yet. Earlier Mac campaign
 defeats remain preserved alongside the later qualification tests. Status details
 are below.
 
+## What works where
+
+Mod testing (launch the game, fire events, run effects, read `error.log`) is a
+feature of the **Python package on Windows**. The native Linux and macOS builds
+read the game's memory to play a campaign. They have no console, no events and no
+`error.log` tools, and they start the game without your mods. Use this table to
+pick:
+
+| What you want to do | Windows, Python package | Linux | macOS |
+| --- | --- | --- | --- |
+| Install | `python install.py`, registers your coding client | Native `.tar.gz`; the Python installer refuses | Native `.tar.gz` (Apple silicon); the Python installer refuses |
+| Launch with your mods, `-debug`, new game, load, save, quit | **Works** (tested live on 1.19.4.1) | No. The Python package refuses; the native launcher starts the game with an empty playset | Not accepted. The Python code exists but has no live run; the native build has no launcher |
+| Console, `hoi4_eval_effect`, `hoi4_fire_event`, answer popups | **Works** in test mode | No | Not tested |
+| Smoke tests, trigger and focus checks, localisation sweep (they use the console) | In test mode. Offline-tested on recorded fixtures; the first live run is pending | No | Not tested |
+| Read `error.log` and `game.log`, query plain-text saves | **Works** | Plain file reads that should work; not tested live | Plain file reads that should work; not tested live |
+| Screenshots, OCR, click and type in the game window | **Works** (needs the English Windows OCR component) | No in Python | Not tested |
+| Play a campaign through the interface | Python tools, recorded attempts only | Native, about 104 tools tested live, experimental | Native, about 120 tools tested live, experimental |
+| Game builds accepted | No build gate; tested on 1.19.4.1 | HOI4 1.19.4.1 x86_64 only | HOI4 1.19.4.1 x86_64 under Rosetta only |
+
+Things every modder should know:
+
+- **Test mode.** The server starts in campaign mode, which refuses the console,
+  events and effects. Set `HOI4_LIVE_MODE=test` (or `"mode": "test"` in
+  `config.json`) before you start it. A campaign session cannot go back to test mode.
+- **Steam.** On every system the game is never started while Steam, `steamwebhelper`
+  or `steamcmd` runs. Follow the [launch order](#launch-order-for-a-mod-test) so the
+  DLC still loads. Career Profile and Awards need the Steam client.
+- **Windows setup.** Windowed or borderless game, UI scale 1, English Windows OCR,
+  console key on the `` ` `` key of a US layout. A 1920×1080 borderless window is
+  what the live runs used.
+- **Mods and `-debug`.** The Python package launches the game with whatever your
+  playset enables. The native Linux launcher starts it with no mods.
+- **Not working yet.** The Windows native adapter, ARM64 Linux, and a clean
+  two-year campaign on any system. The status section below keeps the details.
+
+### Mod checks (Windows, test mode)
+
+With the game running in test mode, an agent can run these. They are new: tested
+on fakes and recorded log lines, with the first run in the live game still pending.
+
+| Tool | What it answers |
+| --- | --- |
+| `hoi4_smoke_namespace` | Fires every event of a namespace through the console, answers each option (one firing per option), takes the decisions of a category or prefix, and reads `error.log` after each step. One report. |
+| `hoi4_check_trigger` | Is this trigger true for this country? True or false, and the condition that is not met. |
+| `hoi4_check_focus` | Can this country take this focus? Names the unmet prerequisite, exclusive focus, `available` or `allow_branch` condition. |
+| `hoi4_sweep_loc` | Visits the map and each panel, reads the screen with OCR and lists `[missing_key]`, raw keys, unresolved `$VARIABLES$` and colour codes shown as text, plus localisation warnings in the logs. |
+
 ## Quick start: Windows release
 
 You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
