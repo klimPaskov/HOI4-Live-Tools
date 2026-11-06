@@ -123,7 +123,7 @@ fn hidden_and_unmaterialized_find_skip_retained_query_and_rows() {
 #[test]
 fn foreign_target_exposes_no_template_anchor_payload() {
     let mut f = fixture();
-    f.int(STATE + 0xc0, 7);
+    f.int(STATE + 0xc4, 7);
     let value = snapshot(&f, Some(1)).unwrap();
     assert_eq!(value["target"]["own_owned_and_controlled"], false);
     assert!(value["target"]["anchor"].is_null());
@@ -410,7 +410,7 @@ fn retained_edges_reject_replacement_before_foreign_object_payload() {
 
 #[test]
 fn retained_ownership_loss_refuses_before_state_template_and_view_payload() {
-    for field in [STATE + 0xc0, STATE + 0xc4] {
+    for field in [STATE + 0xc4] {
         let mut f = fixture();
         let anchor = observe(&f, Some(1)).unwrap().anchor().unwrap();
         f.int(field, 7);
@@ -545,7 +545,7 @@ fn retained_process_and_base_refuse_before_any_memory_payload() {
 #[test]
 fn foreign_requested_state_stays_public_metadata_but_cannot_be_retained_as_own() {
     let mut f = fixture();
-    f.int(STATE + 0xc0, 7);
+    f.int(STATE + 0xc4, 7);
     let observation = observe(&f, Some(1)).unwrap();
     assert_eq!(
         observation.value().unwrap()["target"]["own_owned_and_controlled"],

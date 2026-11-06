@@ -220,7 +220,7 @@ fn requested_key_state_and_own_initial_state_are_required_even_with_empty_queue(
             "construction_target_unavailable"
         );
         let l = c::layout(&Reader::new(&f));
-        f.int(STATE + l.state_owner, 2);
+        f.int(STATE + l.state_controller, 2);
         assert!(Anchor::bind_scoped(&f, &scope(&f), "arms_factory", 1, until()).is_err());
         assert!(f.untouched(TEMPLATE + l.template_key, 24));
         assert!(f.untouched(PRODUCTION + 0x70, 16));
@@ -264,22 +264,15 @@ fn original_database_catalog_header_member_and_target_replacements_refuse_before
 #[test]
 fn requested_state_pointer_or_ownership_change_refuses_before_queue_and_template() {
     for abi in abis() {
-        for field in 0..3 {
+        // Control decides (occupied states can be built in); the owner alone may change.
+        for field in 0..2 {
             let mut f = fixture(abi);
             let a = bind(&f);
             let l = c::layout(&Reader::new(&f));
             if field == 0 {
                 f.word(f.get_word(GS + l.gs_states) + 8, FOREIGN);
             } else {
-                f.int(
-                    STATE
-                        + if field == 1 {
-                            l.state_owner
-                        } else {
-                            l.state_controller
-                        },
-                    2,
-                );
+                f.int(STATE + l.state_controller, 2);
             }
             poison(&f, a.observe_unchanged(&f, until()).unwrap_err());
             assert!(f.untouched(TEMPLATE + l.template_key, 24));

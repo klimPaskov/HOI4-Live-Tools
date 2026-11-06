@@ -520,7 +520,7 @@ fn original_ownership_edges_refuse_before_any_foreign_payload() {
         assert!(a.observe(&f).is_err(), "{field:x}");
         assert!(f.untouched(FOREIGN, 0x1000), "{field:x}");
     }
-    for field in [STATE + 0xc0, STATE + 0xc4] {
+    for field in [STATE + 0xc4] {
         let mut f = fixture();
         let a = bind_selection(&f, "arms_factory", 1).unwrap();
         f.int(field, 2);

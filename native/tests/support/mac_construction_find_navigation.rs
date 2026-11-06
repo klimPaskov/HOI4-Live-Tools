@@ -158,7 +158,7 @@ fn bind_never_opens_focuses_or_clears_an_unready_find() {
         assert!(bind(&f, 64).is_err(), "mode {mode}");
     }
     let mut f = fixture();
-    f.int(STATE + 0xc0, 7);
+    f.int(STATE + 0xc4, 7);
     assert_eq!(
         bind(&f, 64).unwrap_err().code,
         "construction_target_unavailable"
