@@ -39,6 +39,13 @@ in-game confirmation of each is still to be done (see the pull request).
   and mod files and asks the game about: already completed, each prerequisite group, each mutually exclusive
   focus, every condition of `available` and `allow_branch`; a holding `bypass` is reported. Not checked: a focus
   already in progress, focus slots, political power.
+- New test-mode tool `hoi4_sweep_loc`: sweeps the map and the panels for `[missing_key]`, raw localisation keys, unresolved `$VARIABLES$` and `[Root.GetName]` commands and colour codes shown as text through OCR, and lists the localisation warnings that `error.log` and `text.log` gained during the sweep.
+- `hoi4_smoke_namespace` (test mode): fires every event `<namespace>.N` through the console, answers each option
+  of its window (one firing per option), takes the decisions of a category or id prefix through the decision
+  panel after checking their conditions with the game, and reads the new `error.log` lines after every step.
+  One report (Markdown and JSON under `artifacts/`) lists per event and decision what appeared, what was
+  answered, the unmet condition of a decision that could not be taken and the error lines. State, unit leader
+  and character events, targeted decisions and missions are skipped with the reason. `dry_run` lists the plan.
 
 ## 1.3.0 - 2026-11-05
 
