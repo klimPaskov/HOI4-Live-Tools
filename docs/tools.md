@@ -405,6 +405,48 @@ _lock: acting_
 
 - `hoi4_scenario {"name": "smoke", "steps": [{"tool": "hoi4_status"}, {"tool": "hoi4_fire_event", "args": {"event": "my_mod.1", "tag": "USA", "answer": "first"}}, {"tool": "hoi4_time", "args": {"action": "step", "days": 10}}, {"tool": "hoi4_save", "args": {"name": "smoke"}}, {"tool": "hoi4_logs", "args": {"since": "session"}}]}`
 
+### `hoi4_smoke_namespace`
+
+Smoke test of a mod namespace (test mode). Fires every event `<namespace>.N` through the console, answers each option of its window (one firing per option, options=each), and takes the decisions of a category or id prefix through the decision panel after checking their conditions with the game. After every step the new error.log lines are read. Returns one report (Markdown and JSON under artifacts/): per event and decision the window seen, the options answered, the unmet condition of a decision that could not be taken, and the error lines. State, unit leader and character events, targeted decisions and missions are skipped with the reason. dry_run lists what would be fired without touching the game. A long namespace takes minutes (about 6 s per firing); `only` and `limit` narrow it.
+
+_lock: acting, test mode only_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `namespace` | string | yes |  | event namespace, e.g. my_mod |
+| `tag` | string |  |  | country the events fire for and the decisions are taken as (a different player is switched with the console `tag` command); omit for the player |
+| `what` | events \| decisions \| both |  | "events" |  |
+| `decision_category` | string |  |  | decisions of this category |
+| `decision_prefix` | string |  |  | decisions whose id starts with this (default: the namespace when what includes decisions) |
+| `options` | each \| first |  | "each" | each: fire again for every option; first: only the first option |
+| `only` | array of string |  |  | just these event or decision ids |
+| `limit` | integer |  | 60 | events and decisions to run, each, in id order |
+| `wait_s` | number |  | 2.0 | seconds to wait for a window after firing |
+| `pp` | integer |  | 2000 | political power added once before taking decisions (0: none) |
+| `stop_on_error` | boolean |  | false |  |
+| `dry_run` | boolean |  | false |  |
+
+- `hoi4_smoke_namespace {"namespace": "my_mod", "tag": "GER"}`
+- `hoi4_smoke_namespace {"namespace": "my_mod", "what": "both", "decision_category": "my_mod_decisions"}`
+- `hoi4_smoke_namespace {"namespace": "my_mod", "dry_run": true}`
+
+### `hoi4_sweep_loc`
+
+Sweep the game for untranslated and broken text (test mode). Visits the bare map and each panel, reads the screen with OCR and flags [missing_key], raw localisation keys (my_mod.1.t, GER_focus_name), unresolved variables ($NAME$, [Root.GetName], literal \n), section-sign colour codes and your own regexes. A screenshot is kept for every screen with findings. Also lists the localisation warnings that error.log and text.log gained during the sweep (since='all' adds the ones that were already there). Panels that do not open are reported and skipped. Ends on the bare map and writes a report (Markdown + JSON) under artifacts/.
+
+_lock: acting, test mode only_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `panels` | array of string |  | ["politics", "decisions", "research", "production", "construction", "trade", "deployment", "logistics", "officer_corps", "faction", "army_overview", "navy_overview", "air_overview", "intelligence"] | panels to open after the map (default: all 14 with a key, [] sweeps the map only) |
+| `extra_patterns` | array of string |  |  | regexes (case-insensitive search) for text you want flagged |
+| `since` | start \| all |  | "start" | log warnings since the sweep started, or also those already in the logs |
+| `max_lines_per_screen` | integer |  | 40 | findings listed per screen (the totals count all of them) |
+
+- `hoi4_sweep_loc {}`
+- `hoi4_sweep_loc {"panels": ["politics", "decisions"], "extra_patterns": ["^TODO", "lorem ipsum"]}`
+- `hoi4_sweep_loc {"panels": [], "since": "all"}`
+
 ## Time
 
 ### `hoi4_time`

@@ -29,7 +29,7 @@ in-game confirmation of each is still to be done (see the pull request).
   order (Steam closed, prepare, launch, test, shutdown). New config key `dlc_source_dir`.
 - `docs/tools.md` regenerated from the registry (it had drifted behind `hoi4_front`, `hoi4_memory` and others).
 
-### Availability checks
+### Smoke tests and checks (R-5)
 
 - `hoi4_check_trigger` (test mode): evaluates a trigger block in the running game for a country (or a state)
   and returns true or false with the unmet condition. Each top-level condition is asked on its own through the
