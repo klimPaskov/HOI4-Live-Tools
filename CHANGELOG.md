@@ -20,6 +20,15 @@ in-game confirmation of each is still to be done (see the pull request).
   way in the same call, and `keep_open` is refused in that case), and `hoi4_console` closes open windows with
   Esc once before giving up (`console_not_open`).
 
+### DLC without the Steam client
+
+- `hoi4_prepare` (Python, test mode): copies `launcher-v2.sqlite` and `dlc_signature` from the normal user
+  folder into the run's user folder with a byte-exact backup, so a launch without the Steam client keeps the
+  DLC. `hoi4_shutdown` (or `hoi4_prepare action=restore`) puts the folder back and never overwrites a file
+  that changed after the copy. `hoi4_launch prepare_dlc=true` does both steps. The README explains the launch
+  order (Steam closed, prepare, launch, test, shutdown). New config key `dlc_source_dir`.
+- `docs/tools.md` regenerated from the registry (it had drifted behind `hoi4_front`, `hoi4_memory` and others).
+
 ### Availability checks
 
 - `hoi4_check_trigger` (test mode): evaluates a trigger block in the running game for a country (or a state)

@@ -60,6 +60,36 @@ To uninstall, run `python install.py uninstall`. See
 configuration and the command line, and [the tool reference](docs/tools.md) for
 every tool and argument.
 
+## Launch order for a mod test
+
+Live Tools never starts the game while Steam can see it, so a test run is a game
+without the Steam client. Without Steam the game finds no DLC in a user folder that
+lacks two files the Paradox launcher keeps there, `launcher-v2.sqlite` and
+`dlc_signature`. Your normal user folder has them. A scratch folder (set with
+`HOI4_LIVE_USER_DIR`, or a `gameDataPath` redirect) does not, and the game then
+loads 0 DLC. Mod testing needs the server in test mode (`HOI4_LIVE_MODE=test`, or
+`"mode": "test"` in `config.json`): the default is campaign mode, which refuses the
+console, events and `hoi4_prepare`. The order is:
+
+1. **Close Steam and the Paradox launcher** completely: quit them from the tray
+   icon, not just the window. `steamwebhelper` and `steamcmd` count too.
+   `hoi4_launch` refuses while any of them runs.
+2. **`hoi4_prepare`** copies the two DLC files from your normal user folder into the
+   run's folder. Every file it replaces is backed up byte for byte first. When the
+   run's folder is your normal one it reports that there is nothing to copy.
+   `hoi4_prepare {"action": "status"}` shows what each folder holds.
+3. **`hoi4_launch`** starts the game (`debug: true` for the console tools).
+   `hoi4_launch {"prepare_dlc": true}` does steps 2 and 3 in one call.
+4. **Test.** Fire events, run effects, read `error.log`.
+5. **`hoi4_shutdown`** quits through the game's own menu and puts the run's folder
+   back as it was. If the server was restarted in between, run
+   `hoi4_prepare {"action": "restore"}` once the game has exited. A file that
+   changed after the copy is never overwritten; it is reported instead, and
+   `force: true` restores the original and keeps the changed file next to the backup.
+
+Career Profile and Awards need the Steam client, so achievement checks cannot run
+this way. Everything in the journal stays under `artifacts/dlc_backups/`.
+
 ## Native Rust preview
 
 The native runtime builds on [Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP).

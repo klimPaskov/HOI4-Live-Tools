@@ -2,7 +2,7 @@
 
 Lookup order for the file: $HOI4_LIVE_CONFIG, then config.json next to the package (the repository root).
 Every key is optional; missing keys fall back to DEFAULTS. Environment overrides:
-    HOI4_LIVE_GAME_DIR, HOI4_LIVE_USER_DIR, HOI4_LIVE_ARTIFACTS, HOI4_LIVE_MODE (test|campaign),
+    HOI4_LIVE_GAME_DIR, HOI4_LIVE_USER_DIR, HOI4_LIVE_DLC_SOURCE_DIR, HOI4_LIVE_ARTIFACTS, HOI4_LIVE_MODE (test|campaign),
     HOI4_LIVE_CALL_LOG (a .jsonl file that records every tool call)
 """
 
@@ -17,6 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULTS = {
     "game_dir": "auto",
     "user_dir": "auto",
+    "dlc_source_dir": "auto",
     "artifacts_dir": "artifacts",
     "mode": "campaign",
     "play_mode": "fair",
@@ -65,6 +66,9 @@ class Config:
         self.game_dir = steam_game_dir() if gd == "auto" else gd
         ud = env.get("HOI4_LIVE_USER_DIR") or data["user_dir"]
         self.user_dir = platform.current().user_dir() if ud == "auto" else ud
+        # where hoi4_prepare copies launcher-v2.sqlite and dlc_signature from: the normal user folder
+        ds = env.get("HOI4_LIVE_DLC_SOURCE_DIR") or data.get("dlc_source_dir", "auto")
+        self.dlc_source_dir = platform.current().user_dir() if ds == "auto" else ds
         art = env.get("HOI4_LIVE_ARTIFACTS") or data["artifacts_dir"]
         self.artifacts_dir = art if os.path.isabs(art) else os.path.join(ROOT, art)
         self.mode = env.get("HOI4_LIVE_MODE") or data["mode"]
@@ -95,7 +99,7 @@ class Config:
 
     def summary(self):
         return {"config_file": self.source, "game_dir": self.game_dir, "user_dir": self.user_dir,
-                "artifacts_dir": self.artifacts_dir, "mode": self.mode, "play_mode": self.play_mode,
+                "dlc_source_dir": self.dlc_source_dir, "artifacts_dir": self.artifacts_dir, "mode": self.mode, "play_mode": self.play_mode,
                 "lock_path": self.lock_path}
 
 
