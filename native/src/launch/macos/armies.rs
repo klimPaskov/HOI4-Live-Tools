@@ -347,6 +347,7 @@ fn counter_select_with(
     // most 14 taps. Seen live 6 Nov 2026: Italian Somaliland's unassigned divisions projected
     // at (-700, 1466) with the state centred.
     let mut taps = 0;
+    let mut zooms = 0;
     let points = loop {
         let (points, missing) = read(process, |r, i| {
             let provinces = division_provinces(r, i)?;
@@ -388,6 +389,15 @@ fn counter_select_with(
         };
         if taps >= 14 {
             break points;
+        }
+        // Some provinces off screen while others show: one wheel step out (at most two) brings
+        // a whole large state on screen in one pass, instead of picking it up over several
+        // follow-up assigns (Eritrea took 82 s, live 6 Nov 2026).
+        if !points.is_empty() && zooms < 2 {
+            keys.scroll(GAME, (960.0, 540.0), -120)?;
+            zooms += 1;
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            continue;
         }
         use crate::platform::game_input::vk;
         if mx < 470.0 {
@@ -978,7 +988,9 @@ pub(super) fn create(
         .ok()
         .map(|view| army_names(&view))
         .unwrap_or_default();
+    let t0 = std::time::Instant::now();
     create_once(process, keys, state, absorb)?;
+    eprintln!("army_create timing: create_once {:?}", t0.elapsed());
     if absorb {
         return Ok(());
     }
@@ -999,7 +1011,14 @@ pub(super) fn create(
         if plan.unassigned == 0 || plan.take == 0 {
             break;
         }
-        if let Err(e) = assign(process, keys, &plan) {
+        let t1 = std::time::Instant::now();
+        let res = assign(process, keys, &plan);
+        eprintln!(
+            "army_create timing: fold assign {:?} -> {:?}",
+            t1.elapsed(),
+            res.as_ref().map(|_| ()).map_err(|e| e.code)
+        );
+        if let Err(e) = res {
             eprintln!("army_create fold: assign {}: {}", e.code, e.message);
             break;
         }
