@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Launch failures
+
+Four launch failures seen on 1.19.4.1 on 2 November are handled. Offline tests and fakes cover the logic; the
+in-game confirmation of each is still to be done (see the pull request).
+
+- `hoi4_launch` with `-debug` fails at once when the game reports a MAP_ERROR (it waits on an OK dialog),
+  with the error lines from `error.log`, the dialog text if OCR reads it, and a screenshot, instead of waiting
+  for the launch timeout. A normal launch lists the lines as `map_errors`.
+- `hoi4_new_game` clicks START again at most three more times (30 s apart) when the ready screen stays up, then
+  fails with `start_not_registered`. The result reports `start_retries`.
+- `hoi4_new_game` goes through a mod's own Select Country screen: it recognises it by its heading or by a
+  confirming button next to Back to menu, clicks the country by name and the button, and continues from the
+  ready screen. When the screen offers neither, the call stops with `custom_country_screen` and the text it saw.
+- The console opens over an open sea-region panel and over a total conversion's own interface. A toggle that
+  visibly changes the console area counts as opened when the console frame cannot be seen (it is closed the same
+  way in the same call, and `keep_open` is refused in that case), and `hoi4_console` closes open windows with
+  Esc once before giving up (`console_not_open`).
+
+### DLC without the Steam client
+
 - `hoi4_prepare` (Python, test mode): copies `launcher-v2.sqlite` and `dlc_signature` from the normal user
   folder into the run's user folder with a byte-exact backup, so a launch without the Steam client keeps the
   DLC. `hoi4_shutdown` (or `hoi4_prepare action=restore`) puts the folder back and never overwrites a file

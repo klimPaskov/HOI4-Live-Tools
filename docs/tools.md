@@ -6,7 +6,7 @@ Generated from the server's registry (`python -m hoi4_live docs`). Coordinates a
 
 ### `hoi4_launch`
 
-Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game already runs it is left alone (restart=true quits it through its own menu first). The playset and settings are never changed.
+Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game already runs it is left alone (restart=true quits it through its own menu first). The playset and settings are never changed. A -debug launch fails at once when the game reports a MAP_ERROR (it waits on an OK dialog), with the error lines and a screenshot; a normal launch lists them as map_errors.
 
 _lock: acting_
 
