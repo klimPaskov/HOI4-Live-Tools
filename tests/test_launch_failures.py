@@ -49,6 +49,11 @@ class MapErrorTests(unittest.TestCase):
         self.assertIn("province 4711", str(cm.exception))
         self.assertIn("still running", str(cm.exception))
 
+    def test_only_map_errors_match(self):
+        self.assertIsNone(launch_errors.map_error_on_screen(["Failed to load bitmap error.dds"]))
+        self.assertIsNotNone(launch_errors.map_error_on_screen(["[map.cpp:9]: MAP_ERROR: x"]))
+        self.assertIsNotNone(launch_errors.map_error_on_screen(["Map Error: bad adjacency"]))
+
     def test_a_normal_launch_only_reports_them(self):
         self.logs.mark("launch", ("error",))
         self.write("[10:00:05][map.cpp:9]: MAP_ERROR: province 4711 has no state\n")
@@ -133,6 +138,13 @@ class StartRetryTests(unittest.TestCase):
         self.assertEqual(click.call_count, 3)
         self.assertEqual(out["start_retries"], 2)
 
+    def test_a_country_asked_for_on_the_ready_screen_is_reported_as_not_applied(self):
+        session = mock.Mock()
+        p1, p2 = self.ready_screen()
+        with p1, p2, mock.patch.object(menu.ui, "click_text"),                 mock.patch("hoi4_live.perception.topbar.read_date", return_value={"hoi4": "1936.1.1.12"}):
+            out = menu.new_game(session, country="Poland")
+        self.assertIn("not applied", out["steps"][1]["note"])
+
     def test_a_click_that_registers_is_not_repeated(self):
         session = mock.Mock()
         p1, p2 = self.ready_screen()
@@ -153,7 +165,11 @@ class CountryScreenTests(unittest.TestCase):
         self.assertEqual(menu.pregame_stage(self.SCENARIO), "select_scenario")
         self.assertEqual(menu.pregame_stage(self.READY), "ready")
         self.assertEqual(menu.pregame_stage(["Choose your nation", "Back to menu"]), "custom_country")
-        self.assertEqual(menu.pregame_stage(["Zinovia", "Play", "Back to menu"]), "custom_country")
+        self.assertEqual(menu.pregame_stage(["Zinovia", "Confirm", "Back to menu"]), "custom_country")
+        # precision over recall: a description that says "pick a nation", or Play/Continue next to Back to menu
+        # without a heading, is not taken for a country screen
+        self.assertIsNone(menu.pregame_stage(["Pick a nation that suits you and play", "Back to menu"]))
+        self.assertIsNone(menu.pregame_stage(["Zinovia", "Play", "Back to menu"]))
         self.assertIsNone(menu.pregame_stage(["Loading", "Please wait"]))
         self.assertIsNone(menu.pregame_stage(["Single Player", "Multiplayer", "Continue"]))
 
@@ -228,34 +244,31 @@ def with_dark_corner(img):
 
 class ConsoleBlindTests(unittest.TestCase):
     """The console frame is not seen (a sea-region panel, a total conversion's interface): a toggle that visibly
-    changes the console area counts as opened, and closing confirms the same way."""
+    changes the console area counts as opened, and closing confirms the same way. Nothing is kept between calls."""
 
     def session(self, *screens):
         s = mock.Mock()
         s.cfg = {"console": {"toggle_key": "grave", "slide_seconds": 0}}
         s.grab.side_effect = list(screens)
-        s.console_blind = False
         return s
 
     def setUp(self):
         p = mock.patch.object(console.screen_mod, "console_open", return_value=False)
-        p.start()
+        self.frame = p.start()
         self.addCleanup(p.stop)
 
     def test_open_by_screen_change_and_close_by_screen_change(self):
         closed, opened = noise(), with_dark_corner(noise())
         s = self.session(closed, opened, opened, closed)
-        self.assertTrue(console.open_console(s))
-        self.assertTrue(s.console_blind)
+        self.assertEqual(console.open_console(s), "blind")
         s.input.key.assert_called_once_with("grave")
-        self.assertTrue(console.close_console(s))
-        self.assertFalse(s.console_blind)
+        self.assertTrue(console.close_console(s, blind=True))
         self.assertEqual(s.input.key.call_count, 2)
 
-    def test_a_console_opened_blind_is_not_toggled_again_by_the_next_open(self):
+    def test_the_frame_is_still_the_normal_proof(self):
+        self.frame.return_value = True
         s = self.session(noise())
-        s.console_blind = True
-        self.assertTrue(console.open_console(s))
+        self.assertEqual(console.open_console(s), "frame")
         s.input.key.assert_not_called()
 
     def test_nothing_changing_after_three_toggles_is_a_failure_with_a_code(self):
@@ -269,9 +282,9 @@ class ConsoleBlindTests(unittest.TestCase):
     def test_a_blind_close_that_changes_nothing_fails_after_three_tries(self):
         still = with_dark_corner(noise())
         s = self.session(*([still] * 6))
-        s.console_blind = True
-        with self.assertRaises(ToolError):
-            console.close_console(s)
+        with self.assertRaises(ToolError) as cm:
+            console.close_console(s, blind=True)
+        self.assertEqual(cm.exception.details["error"], "console_not_closed")
         self.assertEqual(s.input.key.call_count, 3)
 
     def test_zone_change_ignores_the_rest_of_the_screen(self):
@@ -282,30 +295,37 @@ class ConsoleBlindTests(unittest.TestCase):
         self.assertGreater(console.zone_change(a, with_dark_corner(a)), console.BLIND_CHANGE)
 
 
-class ConsoleRunClearsWindowsTests(unittest.TestCase):
-    def test_run_closes_windows_once_when_the_console_stays_hidden(self):
+class ConsoleRunTests(unittest.TestCase):
+    def run_console(self, opens, **kw):
         s = mock.Mock()
         s.cfg = {"console": {"toggle_key": "grave", "slide_seconds": 0}}
-        opened = [ToolError("no", {"error": "console_not_open"}), True]
-        with mock.patch.object(console, "open_console", side_effect=opened), \
-                mock.patch.object(console, "close_console") as close, \
-                mock.patch.object(console, "read_output", return_value=([], None)), \
-                mock.patch.object(console, "clipboard"), \
-                mock.patch("hoi4_live.game.panels.to_map"), \
-                mock.patch("hoi4_live.game.menu.clear_windows") as clear:
-            out = console.run(s, ["time"])
+        with mock.patch.object(console, "open_console", side_effect=opens),                 mock.patch.object(console, "close_console") as close,                 mock.patch.object(console, "read_output", return_value=([], None)),                 mock.patch.object(console, "clipboard"),                 mock.patch("hoi4_live.game.panels.to_map"),                 mock.patch("hoi4_live.game.menu.clear_windows") as clear:
+            try:
+                out = console.run(s, ["time"], **kw)
+            except ToolError as exc:
+                out = exc
+        return s, out, close, clear
+
+    def test_run_closes_windows_once_when_the_console_stays_hidden(self):
+        s, out, close, clear = self.run_console([ToolError("no", {"error": "console_not_open"}), "frame"])
         clear.assert_called_once_with(s)
-        close.assert_called_once()
+        close.assert_called_once_with(s)
         self.assertEqual(out[0]["command"], "time")
 
     def test_other_errors_are_not_retried_that_way(self):
-        s = mock.Mock()
-        with mock.patch.object(console, "open_console", side_effect=ToolError("capture failed")), \
-                mock.patch("hoi4_live.game.panels.to_map"), \
-                mock.patch("hoi4_live.game.menu.clear_windows") as clear:
-            with self.assertRaises(ToolError):
-                console.run(s, ["time"])
+        s, out, close, clear = self.run_console([ToolError("capture failed")])
+        self.assertIsInstance(out, ToolError)
         clear.assert_not_called()
+
+    def test_a_blind_console_is_closed_blind_in_the_same_call(self):
+        s, out, close, clear = self.run_console(["blind"])
+        close.assert_called_once_with(s, blind=True)
+        self.assertEqual(out[0]["command"], "time")
+
+    def test_keep_open_cannot_be_tracked_blind_so_it_is_closed_and_refused(self):
+        s, out, close, clear = self.run_console(["blind"], keep_open=True)
+        close.assert_called_once_with(s, blind=True)
+        self.assertEqual(out.details["error"], "console_blind_keep_open")
 
 
 if __name__ == "__main__":

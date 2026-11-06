@@ -39,40 +39,36 @@ def zone_change(a, b):
 
 
 def open_console(session):
-    """Open the console and say how it was confirmed. The frame colour is the normal proof. A dark panel behind the
-    console (an open sea-region panel) or a total conversion's own interface hides the frame, so a toggle that
-    visibly changed the console area counts too: the session then remembers that the console was opened blind
-    (session.console_blind) and close_console confirms by the same change."""
+    """Open the console. Returns "frame" when its frame colour was seen, or "blind" when it was not and the toggle
+    only visibly changed the console area. A dark panel behind the console (an open sea-region panel) or a total
+    conversion's own interface hides the frame; the screen change then has to do. Nothing is remembered between
+    calls: run() closes the console in the same call, the way it was opened."""
     img = session.grab()
     if screen_mod.console_open(img):
-        session.console_blind = False
-        return True
-    if getattr(session, "console_blind", False):
-        return True                                  # opened blind earlier and not closed since
+        return "frame"
     for _ in range(3):
         before = img
         _toggle(session)
         img = session.grab()
         if screen_mod.console_open(img):
-            session.console_blind = False
-            return True
+            return "frame"
         if zone_change(before, img) >= BLIND_CHANGE:
-            session.console_blind = True
-            return True
+            return "blind"
     raise ToolError("the console did not open (is the console key bound to ` on this keyboard layout? An open "
                     "panel or a mod's own window can also sit over it)", {"error": "console_not_open"})
 
 
-def close_console(session):
-    if getattr(session, "console_blind", False):
+def close_console(session, blind=False):
+    """Close the console. blind=True confirms the close by the screen change, because the frame is not seen."""
+    if blind:
         for _ in range(3):
             before = session.grab()
             _toggle(session)
             after = session.grab()
-            if not screen_mod.console_open(after) and zone_change(before, after) >= BLIND_CHANGE:
-                session.console_blind = False
+            if zone_change(before, after) >= BLIND_CHANGE:
                 return True
-        raise ToolError("the console did not close", {"error": "console_not_closed"})
+        raise ToolError("the console did not close; press ` by hand before the next command",
+                        {"error": "console_not_closed"})
     for _ in range(3):
         if not is_open(session):
             return True
@@ -127,14 +123,14 @@ def run(session, commands, keep_open=False, read=True):
     except ToolError:
         pass
     try:
-        open_console(session)
+        how = open_console(session)
     except ToolError as exc:
         if exc.details.get("error") != "console_not_open":
             raise
         # a panel the title strip does not know (an open sea region, a mod's window) can sit over the console:
         # Esc closes windows one at a time, and clear_windows closes the pause menu it ends on
         menu.clear_windows(session)
-        open_console(session)
+        how = open_console(session)
     before, _ = read_output(session) if read else ([], None)
     with clipboard.Preserved():
         for cmd in commands:
@@ -153,7 +149,12 @@ def run(session, commands, keep_open=False, read=True):
                 entry["response"] = _new_lines(before, after, cmd)
                 before = after
             results.append(entry)
-    if not keep_open:
+    if how == "blind":
+        close_console(session, blind=True)
+        if keep_open:
+            raise ToolError("the console opened but its frame cannot be seen, so keep_open cannot be tracked; it was "
+                            "closed again", {"error": "console_blind_keep_open", "results": results})
+    elif not keep_open:
         close_console(session)
     return results
 

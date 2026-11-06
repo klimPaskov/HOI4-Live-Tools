@@ -234,13 +234,16 @@ def close_esc_menu_if_open(session):
 
 
 CONFIRM_RX = r"^\W*(yes|[o0]k|confirm|exit|quit|exit\s*game|exit\s*to\s*menu)\W*$"
-START_RETRY_SECONDS = 15   # new_game clicks START again when the ready screen is still up after this long
+START_RETRY_SECONDS = 30   # new_game clicks START again when the ready screen is still up after this long
 START_MAX_RETRIES = 3      # ... at most this many more times, then it stops with an error (about 1 click in 5 is missed)
 
 # A mod can replace the Select Country screen. These are the cues of its heading and of the button that confirms it.
-COUNTRY_HEADING_RX = (r"select\s*(your\s*)?(country|nation)|choose\s*(your\s*)?(country|nation)|"
-                      r"pick\s*(a\s*)?(country|nation)|(country|nation)\s*select")
+# whole lines only, so a bookmark's description that says "pick a nation" is not taken for the heading
+COUNTRY_HEADING_RX = (r"^\W*(select|choose|pick)\s*(your\s*|a\s*)?(country|nation)\W*$|"
+                      r"^\W*(country|nation)\s*select(ion)?\W*$")
 FORWARD_BUTTON_RX = r"(select\s*(country|nation)|play|continue|confirm|next|proceed|embark)"
+# next to Back to menu, only these words give a mod's country screen away without its heading
+STRONG_FORWARD_RX = r"(select\s*(country|nation)|confirm|proceed|embark)"
 
 
 def pregame_stage(texts):
@@ -254,7 +257,7 @@ def pregame_stage(texts):
         return "select_scenario"
     if has(r"^\W*start\W*$") and has(r"back\s*to\s*menu"):
         return "ready"
-    if has(COUNTRY_HEADING_RX) or (has(r"back\s*to\s*menu") and has(r"^\W*" + FORWARD_BUTTON_RX + r"\W*$")):
+    if has(COUNTRY_HEADING_RX) or (has(r"back\s*to\s*menu") and has(r"^\W*" + STRONG_FORWARD_RX + r"\W*$")):
         return "custom_country"
     return None
 
@@ -487,6 +490,8 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         st = "ready"
     if st != "ready":
         raise ToolError(f"new_game starts from the main menu or a pre-game screen (now: {st})")
+    if country and steps[0]["stage"] == "ready":
+        steps.append({"note": f"the ready screen was already up: the country '{country}' was not applied"})
     if not start:
         return {"steps": steps, "prepared": True, "started": False, "stage": "ready"}
     from . import gamemode

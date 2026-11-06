@@ -10,7 +10,7 @@ import re
 
 from ..errors import ToolError
 
-MAP_ERROR_RX = re.compile(r"MAP[_ ]?ERROR", re.I)
+MAP_ERROR_RX = re.compile(r"(?<![A-Za-z])MAP[_ ]?ERROR", re.I)     # not "bitmap error"
 
 
 def map_error_lines(session, mark="launch", limit=6):
