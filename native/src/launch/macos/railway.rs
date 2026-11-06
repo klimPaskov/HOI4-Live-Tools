@@ -117,9 +117,11 @@ fn node_of_state(dir: &Path, state: i32) -> Result<i32> {
     Err(Error::new(
         "no_node_in_state",
         format!(
-            "State {state} has no supply hub or naval base in the map files to start a railway from: \
-             pass from_province (a hub built during the game, or the capital) or build a supply hub \
-             there first (hoi4_construction_add building supply_node)"
+            "State {state} has no supply hub or naval base in the map files to start a railway from. \
+             Start from a state that has one (a port or an older hub further back, e.g. the colony's \
+             port): the game builds the shortest path and re-uses existing railways, so a railway from \
+             the port to the front state goes through this one. Or pass from_province (a hub built \
+             during the game) or build a supply hub here first (hoi4_construction_add supply_node)"
         ),
     ))
 }
