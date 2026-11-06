@@ -499,16 +499,17 @@ fn war_goal_choose(
         })?;
     let before = read(process, |r, i| dialog_text(r, i, "wargoal_name"))?;
     let (x0, y0) = (f64::from(send.x), f64::from(send.y));
-    click_and_check(
-        process,
-        keys,
-        (
-            x0 + u.type_row.0,
-            y0 + u.type_row.1 + u.type_row.2 * index as f64,
-        ),
-        "war goal type chosen",
-        |r, i| Ok(dialog_text(r, i, "wargoal_name")? != before),
-    )?;
+    let at = (
+        x0 + u.type_row.0,
+        y0 + u.type_row.1 + u.type_row.2 * index as f64,
+    );
+    let chosen = |r: &Reader<'_>, i: u64| Ok(dialog_text(r, i, "wargoal_name")? != before);
+    // The first click right after the dialog opens was lost once (live 6 Nov 2026, Albania);
+    // a second click on the same row picks the type (choosing a type changes nothing yet).
+    if click_and_check(process, keys, at, "war goal type chosen", chosen).is_err() {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        click_and_check(process, keys, at, "war goal type chosen", chosen)?;
+    }
     let offered = settled(process, "war goal states", |r, i| {
         dialog_grid(r, i, "additionals_grid")
     })?;

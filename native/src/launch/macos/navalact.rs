@@ -393,9 +393,7 @@ pub(super) fn select_fleet(
         .ok_or_else(|| Error::new("fleet_unknown", "The fleet is not among the own fleets"))?;
     // The card order is the fleet order; a different order is detected by the panel title and the
     // other cards are tried once each (a card click only selects, it changes nothing).
-    // The first click after the region view or a state view closes can open nothing (seen live
-    // 6 Nov 2026 in hoi4_fleet_region), so the expected card is clicked twice before the others.
-    let mut candidates: Vec<usize> = vec![wanted, wanted];
+    let mut candidates: Vec<usize> = vec![wanted];
     candidates.extend((0..cards.len()).filter(|i| *i != wanted));
     for index in candidates {
         let Some(card) = cards.get(index) else {
@@ -403,26 +401,23 @@ pub(super) fn select_fleet(
         };
         let x = f64::from(card.frame.x) + f64::from(card.frame.w) / 2.0;
         let y = (f64::from(card.frame.y) + f64::from(card.frame.h) / 2.0).min(1040.0);
-        let previous = read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?;
         click_at(keys, x, y)?;
-        // The panel's title edit box is filled while the panel opens; a read in that moment can see
-        // a half-written string (invalid_string, seen live on 1.19.4.1, 31 October 2026), so a failed
-        // read counts as "not open yet" here. With a panel already open the title changes a moment
-        // after the click: wait for the wanted name or a different one, not just any title (a
-        // stale title made every card look wrong, live 6 Nov 2026).
-        let ok = wait(process, "fleet panel", |r, i| {
-            Ok(nui::panel_fleet(r, i)
-                .ok()
-                .flatten()
-                .is_some_and(|n| same_name(&n, name) || Some(&n) != previous.as_ref()))
-        });
-        if ok.is_ok() {
-            pause(250);
+        // The title of a panel that was open before can still read for a moment after the
+        // click (a stale 'Italy Fleet 1' made the right card look wrong, and the second click
+        // on it closed the panel; live 6 Nov 2026): wait for the wanted title itself.
+        // A half-written title read (invalid_string) counts as not yet.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+        loop {
             if read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?
                 .is_some_and(|n| same_name(&n, name))
             {
+                pause(200);
                 return Ok(());
             }
+            if std::time::Instant::now() >= deadline {
+                break;
+            }
+            pause(60);
         }
     }
     Err(Error::new(

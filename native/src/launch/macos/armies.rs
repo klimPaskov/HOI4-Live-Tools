@@ -1937,6 +1937,19 @@ pub(super) fn execute(
     wait(process, "plan state changed", |r, i| {
         Ok(executing(r, i, army)? == run)
     })
+    .map_err(|e| {
+        if !run {
+            return e;
+        }
+        Error::new(
+            "plan_not_executable",
+            "The Execute click did not start the plan. For a naval invasion the game waits until \
+             the invasion has prepared (days shown on the plan button) and needs naval dominance in \
+             every sea region on its path (fleets on patrol or strike force there: \
+             hoi4_fleet_region + hoi4_fleet_mission); execute again once both hold. Other plans: \
+             re-read hoi4_armies (battle_plan_orders) before retrying",
+        )
+    })
 }
 
 /// Province IDs where the divisions of `army` stand.

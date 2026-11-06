@@ -779,7 +779,50 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
     let mut length = current.chars().count();
     if length > 0 {
         let mut focused = false;
-        for dx in [110.0, -90.0, -150.0, -50.0, 60.0, 170.0] {
+        // The edit box itself (`name` inside the `divisions` dropdown, divisiondesignerview.gui)
+        // when its rectangle reads; the offsets from the arrow are the fallback.
+        let edit = read(process, |r, i| {
+            let dd = dropdown_widget(r, i)?;
+            let Some(frame) = gui_tree::container(r, dd, i)? else {
+                return Ok(None);
+            };
+            Ok(super::panelkit::find(r, i, frame, "name", 3)?
+                .and_then(|w| gui_tree::rect(r, i, w, GAME).ok()))
+        })
+        .ok()
+        .flatten()
+        .filter(|rect| rect.w > 10 && rect.h > 5);
+        // The dropdown's own rectangles read wrong in the designer opened from a template's Edit
+        // (the arrow read at 721,241 while drawn near 470,294; live 6 Nov 2026), while its
+        // priority buttons read right: the name box centre lies (-250, -38) from
+        // priority_button_1's corner in divisiondesignerview.gui (name at 175,62 size 185x20;
+        // priority_button_1 at 517,110).
+        let by_priority = read(process, |r, i| {
+            Ok(
+                super::panelkit::find(r, i, root(r, i)?, "priority_button_1", 5)?
+                    .and_then(|w| gui_tree::rect(r, i, w, GAME).ok()),
+            )
+        })
+        .ok()
+        .flatten()
+        .map(|p| (f64::from(p.x) - 250.0, f64::from(p.y) - 38.0));
+        let edit = by_priority
+            .map(|(px, py)| gui_tree::Rect {
+                x: (px - 1.0) as i32,
+                y: (py - 1.0) as i32,
+                w: 2,
+                h: 2,
+            })
+            .or(edit);
+        let mut points: Vec<f64> = Vec::new();
+        if let Some(rect) = edit {
+            let (ex, _) = rect.center();
+            points.push(x - ex);
+        }
+        points.extend([110.0, -90.0, -150.0, -50.0, 60.0, 170.0]);
+        let name_y = edit.map(|rect| rect.center().1).unwrap_or(y);
+        for (n, dx) in points.into_iter().enumerate() {
+            let y = if n == 0 && edit.is_some() { name_y } else { y };
             keys.click(GAME, x - dx, y)?;
             std::thread::sleep(Duration::from_millis(250));
             keys.press_code(crate::platform::game_input::vk::END)?; // End
