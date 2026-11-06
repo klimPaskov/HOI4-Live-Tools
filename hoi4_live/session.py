@@ -139,7 +139,7 @@ class Session:
                     "error": "a game is still running; the DLC files stay in place until it exits"}
         try:
             out = dlc_prepare.restore(self.cfg.user_dir, self.dlc_backup_root)
-        except ToolError as exc:
+        except (ToolError, OSError) as exc:        # a file in use on Windows raises PermissionError
             return {"restored": [], "removed": [], "conflicts": {}, "error": str(exc)}
         if not out["conflicts"]:
             self.dlc_prepared = False

@@ -168,9 +168,11 @@ def apply(user_dir, source_dir, backup_root, now=None):
         if entry is None:
             entry = {"existed": current is not None, "baseline_sha256": _digest(current) if current is not None else None,
                      "written_sha256": written}
-            if current is not None and current != sources[name]:
+            if current is not None:
+                # the backup is written even when the file already equals the source: if it changes later, restore
+                # still has the original to put back
                 os.makedirs(jdir, exist_ok=True)
-                _atomic_write(Path(os.path.join(jdir, name)), current)       # the backup, before anything is replaced
+                _atomic_write(Path(os.path.join(jdir, name)), current)       # before anything is replaced
         elif current is not None and _digest(current) not in (entry["written_sha256"], entry["baseline_sha256"]):
             raise ToolError(f"{name} in {user_dir} changed since the earlier prepare; run hoi4_prepare action=restore "
                             "first", {"error": "dlc_prepare_conflict", "file": name})

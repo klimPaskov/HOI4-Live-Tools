@@ -133,6 +133,7 @@ def _apply_dlc(session, source=None):
     if process.running_pids(session.cfg["window"]["process_name"]):
         raise ToolError("the game is running; prepare the DLC files before launching it",
                         {"error": "dlc_prepare_game_running"})
+    session.dlc_prepared = True            # set first: a copy that fails half way is still undone by the restore
     rep = dlc_prepare.apply(session.cfg.user_dir, source or session.cfg.dlc_source_dir, session.dlc_backup_root)
     session.dlc_prepared = not rep["same_folder"]
     return rep
@@ -268,6 +269,7 @@ def hoi4_launch(session, args):
         session.sleep(2)
         session.report("waiting for the game window")
         if process.crash_dirs(cfg.user_dir) - crashes_before:
+            session.restore_dlc_after_exit()
             raise ToolError("the game crashed during startup", {"crash": sorted(process.crash_dirs(cfg.user_dir) - crashes_before)})
     if not session.window.find():
         raise ToolError("no game window appeared", data)
@@ -280,8 +282,10 @@ def hoi4_launch(session, args):
             session.check_cancel()
             new = process.crash_dirs(cfg.user_dir) - crashes_before
             if new:
+                session.restore_dlc_after_exit()
                 raise ToolError("the game crashed during startup", {"crash": sorted(new)})
             if not process.running_pids():
+                session.restore_dlc_after_exit()
                 raise ToolError("the game exited during startup")
             session.window.close_notepad_logs()
             idle = session.logs.idle_seconds("setup") or 0

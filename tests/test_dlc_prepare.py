@@ -170,6 +170,26 @@ class Conflicts(Folders):
         with open(kept[0], "rb") as f:
             self.assertEqual(f.read(), SQLITE + b"rewritten by the game")
 
+    def test_a_file_that_was_already_identical_still_has_its_backup(self):
+        # review finding: no backup was written when the target equalled the source, so a later change could never
+        # be restored (even with force) and the journal wedged
+        self.put(self.target, "launcher-v2.sqlite", SQLITE)
+        self.apply()
+        self.put(self.target, "launcher-v2.sqlite", SQLITE + b"rewritten by the game")
+        out = self.restore()
+        self.assertIn("launcher-v2.sqlite", out["conflicts"])
+        out = self.restore(force=True)
+        self.assertFalse(out["conflicts"])
+        self.assertEqual(self.get(self.target, "launcher-v2.sqlite"), SQLITE)
+        self.assertEqual(self.apply()["copied"], ["dlc_signature"])      # not wedged: a new prepare works again
+
+    def test_an_identical_file_deleted_after_the_copy_comes_back(self):
+        self.put(self.target, "dlc_signature", SIG)
+        self.apply()
+        os.remove(os.path.join(self.target, "dlc_signature"))
+        self.assertFalse(self.restore()["conflicts"])
+        self.assertEqual(self.get(self.target, "dlc_signature"), SIG)
+
     def test_a_file_deleted_after_the_copy_does_not_break_restore(self):
         self.put(self.target, "dlc_signature", b"original")
         self.apply()
@@ -319,6 +339,39 @@ class ToolLevel(Folders):
             out = session.restore_dlc_after_exit()
         self.assertEqual(sorted(out["removed"]), sorted(dlc_prepare.DLC_FILES))
         self.assertIsNone(session.restore_dlc_after_exit())      # nothing prepared any more
+
+    def test_a_copy_that_fails_half_way_is_still_undone_by_the_restore(self):
+        session = self.make_session()
+        real = dlc_prepare._atomic_write
+        calls = []
+
+        def flaky(path, data):
+            calls.append(path)
+            # the journal and the first file are written, the second file fails (disk full)
+            if os.path.basename(str(path)) == "dlc_signature" and "scratch" in str(path):
+                raise OSError("disk full")
+            return real(path, data)
+        p1, p2 = self.patches()
+        with p1, p2, mock.patch.object(dlc_prepare, "_atomic_write", side_effect=flaky):
+            out = self.call(session)
+        self.assertTrue(out["isError"])
+        self.assertTrue(session.dlc_prepared)
+        self.assertEqual(self.get(self.target, "launcher-v2.sqlite"), SQLITE)        # half copied
+        with p1, p2:
+            res = session.restore_dlc_after_exit()
+        self.assertFalse(res["conflicts"])
+        self.assertIsNone(self.get(self.target, "launcher-v2.sqlite"))
+        self.assertFalse(session.dlc_prepared)
+
+    def test_a_restore_that_raises_an_oserror_is_reported_not_raised(self):
+        session = self.make_session()
+        p1, p2 = self.patches()
+        with p1, p2:
+            self.call(session)
+            with mock.patch.object(dlc_prepare, "restore", side_effect=PermissionError("in use")):
+                out = session.restore_dlc_after_exit()
+        self.assertIn("in use", out["error"])
+        self.assertTrue(session.dlc_prepared)
 
     def test_restore_after_exit_waits_for_the_game_and_reports_conflicts(self):
         session = self.make_session()
