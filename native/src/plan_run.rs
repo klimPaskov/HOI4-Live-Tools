@@ -1119,11 +1119,12 @@ fn disband_step(
         .filter_map(|row| row["state_id"].as_i64())
         .collect();
     let supply = tools.call("hoi4_supply", &json!({}))?;
-    // Armies with any division outside the candidate states are left whole.
+    // Armies with a division in enemy-held land are fighting and left whole; a home army with
+    // a few divisions already in the theatre is not.
     let mut fighting: HashSet<String> = HashSet::new();
     for d in list(&supply, "divisions") {
         if let (Some(army), Some(at)) = (d["army"].as_str(), d["state_id"].as_i64()) {
-            if keep.contains(&at) || !own.contains(&at) {
+            if !own.contains(&at) {
                 fighting.insert(army.to_string());
             }
         }
@@ -1133,7 +1134,13 @@ fn disband_step(
         let (Some(army), Some(id)) = (d["army"].as_str(), d["id"].as_str()) else {
             continue;
         };
+        // Each division is judged where it stands: one division of a home army that already
+        // reached the theatre no longer shields the rest (w16: Army 5 kept nine divisions in
+        // Italy while the African infantry fought at 13-33% equipment).
+        let standing = d["state_id"].as_i64();
+        let candidate = standing.is_some_and(|at| own.contains(&at) && !keep.contains(&at));
         if !templates.iter().any(|t| t == text(&d["template"]))
+            || !candidate
             || fighting.contains(army)
             || state.skipped(now, "disband", army)
         {
@@ -3740,6 +3747,7 @@ mod tests {
     #[test]
     fn weak_templates_outside_the_theatre_are_disbanded_one_army_at_a_time() {
         // Army 9 fights in enemy land (835) and Army 1 stands in the theatre: both are kept.
+        // A home army with one division already in the theatre loses only its home divisions.
         struct D(RefCell<Vec<(String, Value)>>);
         impl Tools for D {
             fn call(&self, name: &str, args: &Value) -> Result<Value> {
