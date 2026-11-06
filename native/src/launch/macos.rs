@@ -516,6 +516,7 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_image_save:") => panelkit::debug_image_save(process, &n[15..]),
         "dbg_popups" => panelkit::debug_popups(process),
         "dbg_mio_list" => mio_act::debug_list(process),
+        "dbg_factions" => diplomacy_state::debug_factions(process),
         "dbg_views" => panelkit::debug_views(process),
         n if n.starts_with("dbg_find_root:") => panelkit::debug_find_root(process, &n[14..]),
         n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),

@@ -408,10 +408,10 @@ fn goals_of(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Goal>> {
             if ptr < 0x10000 || ptr % 8 != 0 {
                 continue;
             }
-            let vtable = match r.u64(ptr) {
-                Ok(v) => v,
-                Err(e) if e.code == "read_bound" => continue,
-                Err(e) => return Err(e),
+            // Non-pointer values that pass the shape check fail to read (read_failed with a
+            // war on, live 6 Nov 2026, Albania): any unreadable entry is not a war goal.
+            let Ok(vtable) = r.u64(ptr) else {
+                continue;
             };
             if vtable != wargoal {
                 continue;
@@ -441,6 +441,32 @@ struct Faction {
     unresolved_members: usize,
 }
 
+/// Probe-only: readable strings at every 8-byte offset of each faction object (to find the
+/// name field), with member counts.
+pub(super) fn debug_factions(process: &dyn Process) -> Result<Value> {
+    super::ui::read(process, |r, image| {
+        let abi = r.string_abi();
+        let w = world(r, image)?;
+        let system = r.u64(w.gs + fld(abi, &GAME_STATE, GS_FACTIONS)?)?;
+        let faction = image + img(abi, FACTION_VTABLE)?;
+        let mut out = Vec::new();
+        for ptr in r.pointer_array(system + fld(abi, &FACTION_SYSTEM, FS_LIST)?)? {
+            if ptr == 0 || r.u64(ptr)? != faction {
+                continue;
+            }
+            let mut strings = Vec::new();
+            for off in (0..0x400u64).step_by(8) {
+                if let Ok(text) = r.string_bounded(ptr + off, 96) {
+                    if text.len() >= 3 && text.chars().all(|c| !c.is_control()) {
+                        strings.push(json!({"off": format!("{off:#x}"), "text": text}));
+                    }
+                }
+            }
+            out.push(json!({"faction": format!("{ptr:#x}"), "strings": strings}));
+        }
+        Ok(json!(out))
+    })
+}
 fn factions(r: &Reader<'_>, image: u64, w: &World) -> Result<Vec<Faction>> {
     let abi = r.string_abi();
     let system = r.u64(w.gs + fld(abi, &GAME_STATE, GS_FACTIONS)?)?;
@@ -453,10 +479,25 @@ fn factions(r: &Reader<'_>, image: u64, w: &World) -> Result<Vec<Faction>> {
         if ptr == 0 || r.u64(ptr)? != faction {
             continue;
         }
-        let name = r.string_bounded(ptr + fld(abi, &FACTION_CLASS, FACTION_NAME)?, 96)?;
+        // +0x18 holds a custom name (a faction founded in the game); the historical factions
+        // keep it empty and show their name from +0x30 (Axis, Allies, Comintern; live 6 Nov 2026).
+        // A faction founded during the game can hold fields that do not read like the
+        // historical ones (seen 6 Nov 2026: two new factions failed the whole read); such a
+        // faction is listed with what could be read instead of failing every caller.
+        let name_at = fld(abi, &FACTION_CLASS, FACTION_NAME)?;
+        let custom = r.string_bounded(ptr + name_at, 96).unwrap_or_default();
+        let name = if custom.trim().is_empty() {
+            r.string_bounded(ptr + name_at + 0x18, 96)
+                .unwrap_or_default()
+        } else {
+            custom
+        };
         let mut members = Vec::new();
         let mut unresolved = 0;
-        for member in r.pointer_array(ptr + fld(abi, &FACTION_CLASS, FACTION_MEMBERS)?)? {
+        let list = r
+            .pointer_array(ptr + fld(abi, &FACTION_CLASS, FACTION_MEMBERS)?)
+            .unwrap_or_default();
+        for member in list {
             if member == 0 {
                 continue;
             }
@@ -596,9 +637,12 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
         ));
     }
     let ptrs: Vec<u64> = own_wars.iter().map(|x| x.ptr).collect();
-    let holders = all_war_holders(r, image, w)?;
-    let picture = war_picture(w.player_tag, &ptrs, &holders)?;
-    let goals = goals_of(r, image, w.player_country)?;
+    let holders = all_war_holders(r, image, w)
+        .map_err(|e| Error::new(e.code, format!("war holders: {}", e.message)))?;
+    let picture = war_picture(w.player_tag, &ptrs, &holders)
+        .map_err(|e| Error::new(e.code, format!("war picture: {}", e.message)))?;
+    let goals = goals_of(r, image, w.player_country)
+        .map_err(|e| Error::new(e.code, format!("war goals: {}", e.message)))?;
     let mut enemy_codes = BTreeSet::new();
     let mut wars = Vec::new();
     for (rel, enemy) in own_wars.iter().zip(picture.enemies.iter().map(|(_, t)| *t)) {
@@ -671,11 +715,15 @@ pub(super) fn state(process: &dyn Process) -> Result<Value> {
         let w = world(r, image)?;
         let me = w.player_tag;
         let mut names = Names::new(r, image, &w);
-        let (rels, unknown) = relations_of(r, image, w.player_country)?;
-        let list = factions(r, image, &w)?;
-        let tension = world_tension(r, image, &w)?;
+        let (rels, unknown) = relations_of(r, image, w.player_country)
+            .map_err(|e| Error::new(e.code, format!("relations: {}", e.message)))?;
+        let list = factions(r, image, &w)
+            .map_err(|e| Error::new(e.code, format!("factions: {}", e.message)))?;
+        let tension = world_tension(r, image, &w)
+            .map_err(|e| Error::new(e.code, format!("world tension: {}", e.message)))?;
         let date = r.i32(w.gs + game::layout(r).date)?;
-        let (wars, _) = wars_value(r, image, &w)?;
+        let (wars, _) = wars_value(r, image, &w)
+            .map_err(|e| Error::new(e.code, format!("wars: {}", e.message)))?;
 
         let by = |kind: Kind| rels.iter().filter(move |x| x.kind == kind);
         let given: Vec<Value> = by(Kind::Guarantee)
