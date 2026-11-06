@@ -117,6 +117,17 @@ the runner do it, and the player decides strategy:
   about 45): an exhausted army stops its plan and attacks again when it recovers.
 - `"motorization": 2`: every driven army's supply hubs use trucks.
 - `"reserve": ["Army 2"]`: armies only the player commands. Executing plans are never touched.
+- `"guard_states": [559, 844]` (or `"guards": {"Army 3": 844}`): the army standing in that own
+  state holds a front there and never attacks. Keep one on every own border state the offensive
+  leaves behind (w15: Ethiopia walked into Somaliland and Jubaland once every army had left).
+- An own state an enemy takes draws the nearest fighting army off its axis at once.
+- The war step runs right after events (`"first": false` puts it back after construction): a
+  game day passes in about 2.5 s at speed 3.
+- `"armies": {"states": [550, 559], "generals": [...], "consolidate": false}`: armies are made
+  from unassigned divisions only in those states; generals come from the `hoi4_army_commander`
+  list (names outside it are refused).
+- Construction (supply hubs, railways) works in occupied states you control: build a supply
+  hub in each taken state on the axis and a railway to it from the nearest port or hub.
 - `"disband": {"templates": [...], "max": N}`: divisions of weak templates standing in own states
   outside the theatre are disbanded so their equipment refills the front.
 

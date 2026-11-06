@@ -133,6 +133,8 @@ pub struct State {
     war_move: HashSet<String>,
     /// armies resting (plan stopped for organisation or supply) since a game hour
     war_rest: HashMap<String, GameHour>,
+    /// Armies bound to a `war.guard_states` post (army -> own state).
+    war_guard: HashMap<String, i32>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -215,6 +217,7 @@ impl Default for State {
             war_since: HashMap::new(),
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
+            war_guard: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -873,6 +876,12 @@ pub fn tick(
                 continue;
             };
             let key = id.to_string();
+            // "states": [ids] limits army creation to those states (the theatre), so home
+            // garrisons do not cost the war its ticks.
+            let only = list(cfg, "states");
+            if !only.is_empty() && !only.iter().any(|v| v.as_i64() == Some(id)) {
+                continue;
+            }
             if state.skipped(now, "armycreate", &key) {
                 continue;
             }
@@ -1829,7 +1838,7 @@ fn war_step(
     // Guards: {"Army 4": 844} holds that own state: the army goes there and draws a front on
     // the nearest border, and never attacks (w15: Ethiopia walked into Eritrea and Somalia
     // after every army had left for the offensive).
-    let guards: HashMap<String, i32> = cfg["guards"]
+    let mut guards: HashMap<String, i32> = cfg["guards"]
         .as_object()
         .map(|g| {
             g.iter()
@@ -1837,6 +1846,36 @@ fn war_step(
                 .collect()
         })
         .unwrap_or_default();
+    // "guard_states": [ids]: the first army seen standing in such a state guards it (army names
+    // depend on the order the armies were made in).
+    for post in list(cfg, "guard_states").iter().filter_map(|v| v.as_i64().map(|v| v as i32)) {
+        if state.war_guard.values().any(|p| *p == post) {
+            continue;
+        }
+        let standing = list(&roster, "armies").iter().find(|a| {
+            let n = text(&a["army"]);
+            a["main_state"].as_i64() == Some(post as i64)
+                && !guards.contains_key(n)
+                && !state.war_guard.contains_key(n)
+        });
+        if let Some(a) = standing {
+            let n = text(&a["army"]).to_string();
+            if let Some(old) = state.war_assign.remove(&n) {
+                if let Some(c) = load.get_mut(&old) {
+                    *c = c.saturating_sub(1);
+                }
+            }
+            state.war_guard.insert(n, post);
+        }
+    }
+    let present: HashSet<String> = list(&roster, "armies")
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .collect();
+    state.war_guard.retain(|n, _| present.contains(n));
+    for (n, p) in &state.war_guard {
+        guards.entry(n.clone()).or_insert(*p);
+    }
     for army in list(&roster, "armies") {
         let name = text(&army["army"]).to_string();
         let Some(&post) = guards.get(&name) else {
@@ -3524,6 +3563,23 @@ mod tests {
             "{step:?}"
         );
         assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_offensive"));
+    }
+
+    #[test]
+    fn the_army_standing_in_a_guard_state_holds_a_front_there() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "guard_states": [42]}});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war guard front Army 1 -> state 42")),
+            "{step:?}"
+        );
+        assert_eq!(state.war_guard.get("Army 1"), Some(&42));
     }
 
     #[test]
