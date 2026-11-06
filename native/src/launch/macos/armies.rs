@@ -2159,7 +2159,30 @@ pub(super) fn move_to(
         (900.0, 480.0),
         (1020.0, 480.0),
     ];
-    for (x, y) in POINTS {
+    // The state's own land provinces projected through the camera first: far out, the points
+    // around the centre fell on Tripoli's air base icon or the sea and an overseas move never
+    // started (live 6 Nov 2026). Points on the centre icon itself are skipped.
+    let mut points: Vec<(f64, f64)> = target_points(process, state).unwrap_or_default();
+    let projected = !points.is_empty();
+    points.extend(POINTS);
+    // Divisions waiting in their ports show no new heading for a sea transfer: one click on a
+    // projected land province of the target is the order, repeating it only re-issues it.
+    let in_ports = projected && {
+        let ports = read(process, super::naval::naval_base_provinces).unwrap_or_default();
+        let at = read(process, division_provinces).unwrap_or_default();
+        let ids = read(process, |r, i| army_division_ids(r, i, army)).unwrap_or_default();
+        !ids.is_empty()
+            && ids.iter().all(|id| {
+                at.get(id)
+                    .copied()
+                    .flatten()
+                    .is_some_and(|p| ports.contains(&p))
+            })
+    };
+    for (n, (x, y)) in points.into_iter().enumerate() {
+        if in_ports && n == 1 {
+            return Ok(());
+        }
         keys.right_click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
         while std::time::Instant::now() < deadline {
@@ -2170,6 +2193,48 @@ pub(super) fn move_to(
         }
     }
     Ok(())
+}
+/// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
+/// centre first, skipping the centre itself where the state's map icons sit; at most eight.
+fn target_points(process: &dyn Process, state: i32) -> Result<Vec<(f64, f64)>> {
+    let Some(identity) = process.identity() else {
+        return Ok(Vec::new());
+    };
+    let dir = super::mapdata::game_dir(&identity.exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let provinces = super::mapdata::state_provinces(&dir, state)?;
+    let mut pts = read(process, |r, i| {
+        let mut out = Vec::new();
+        for p in &provinces {
+            if let Some(&(x, z)) = positions.get(p) {
+                if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
+                    let near_centre = (s.0 - 960.0).abs() < 28.0 && (s.1 - 540.0).abs() < 28.0;
+                    if (470.0..1700.0).contains(&s.0)
+                        && (120.0..880.0).contains(&s.1)
+                        && !near_centre
+                    {
+                        out.push(s);
+                    }
+                }
+            }
+        }
+        Ok(out)
+    })?;
+    pts.sort_by(|a, b| {
+        let d = |p: &(f64, f64)| (p.0 - 960.0).powi(2) + (p.1 - 540.0).powi(2);
+        d(a).total_cmp(&d(b))
+    });
+    pts.truncate(8);
+    Ok(pts)
+}
+/// Ids of the divisions of own army `army`.
+pub(super) fn army_division_ids(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<String>> {
+    let group = group_named(r, image, army)?;
+    Ok(membership(r, image)?
+        .into_iter()
+        .filter(|(_, g)| *g == group)
+        .map(|(id, _)| id)
+        .collect())
 }
 /// Name of the commander of `army`, if any.
 pub(super) fn commander(r: &Reader<'_>, image: u64, army: &str) -> Result<Option<String>> {

@@ -153,7 +153,7 @@ fn fold_states(edges: &BTreeSet<(i32, i32)>, state_of: &HashMap<i32, i32>) -> Ad
     out
 }
 
-fn province_states(dir: &Path) -> Result<HashMap<i32, i32>> {
+pub(super) fn province_states(dir: &Path) -> Result<HashMap<i32, i32>> {
     let entries = std::fs::read_dir(dir.join("history/states"))
         .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
     let mut out = HashMap::new();

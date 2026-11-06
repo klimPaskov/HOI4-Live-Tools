@@ -13,6 +13,7 @@ mod armies;
 mod commanders;
 mod construction;
 mod construction_find;
+mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
 // Default-off single ordinary Escape qualification.
@@ -655,6 +656,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
+            railway::tool(),
             json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
@@ -775,6 +777,7 @@ impl Commands for MacClock {
                     | "hoi4_occupation"
                     | "hoi4_war_risk"
                     | "hoi4_save"
+                    | "hoi4_railway_build"
                     | "hoi4_front_plan"
                     | "hoi4_encirclement_candidates"
                     | "hoi4_war_goal_targets"
@@ -2847,6 +2850,35 @@ impl MacClock {
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
+        if name == "hoi4_railway_build" {
+            allowed(
+                args,
+                &[
+                    "from_province",
+                    "from_state",
+                    "to_province",
+                    "to_state",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            let int = |k: &str| {
+                args.get(k)
+                    .and_then(Value::as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+                    .filter(|v| *v > 0)
+            };
+            return railway::build(
+                process,
+                &self.keys,
+                (int("from_province"), int("from_state")),
+                (int("to_province"), int("to_state")),
+            );
+        }
         if name == "hoi4_save" {
             allowed(args, &["request_id", "lease_token"])?;
             let token = string(args, "lease_token")?;
@@ -4600,9 +4632,29 @@ impl MacClock {
                         .filter(|(a, b)| **a != 0 && a != b)
                         .count()
                         > 0;
+                // A sea transfer leaves a division standing in its port with its heading
+                // unchanged until it lands (live 6 Nov 2026: Sicily to Tripoli sailed while every
+                // read said nothing moved). With every division in an own port and the target
+                // in another state, the order is reported as an unverified sea transfer.
+                let in_ports = !started && now == 0 && {
+                    let ports = ui::read(process, naval::naval_base_provinces).unwrap_or_default();
+                    let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                    let ids: Vec<String> =
+                        ui::read(process, |r, i| armies::army_division_ids(r, i, army))
+                            .unwrap_or_default();
+                    !ids.is_empty()
+                        && ids.iter().all(|id| {
+                            at.get(id)
+                                .copied()
+                                .flatten()
+                                .is_some_and(|p| ports.contains(&p) && !wanted.contains(&p))
+                        })
+                };
                 let detail = json!({"army":army,"state_id":state,"divisions_heading":now,"divisions":total,
-                    "under_way_by_other_route":now == 0 && started});
-                Ok(if now > 0 || started {
+                    "under_way_by_other_route":now == 0 && started,
+                    "sea_transfer_unverified":in_ports,
+                    "note":if in_ports {"every division waits in an own port: a sea transfer shows no heading until it lands; check hoi4_armies after the crossing days instead of repeating the order"} else {""}});
+                Ok(if now > 0 || started || in_ports {
                     journal::Outcome::Reached(detail)
                 } else if retry {
                     journal::Outcome::Diverged(detail)

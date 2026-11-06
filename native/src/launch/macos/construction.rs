@@ -278,6 +278,44 @@ fn province_points(
     Ok(points)
 }
 
+/// Open the construction panel and select building `key` (also railway mode for `rail_way`),
+/// verified from the construction manager's selection.
+pub(super) fn select_building(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    key: &str,
+) -> Result<()> {
+    if !read(process, open)? {
+        keys.press(Key::letter('t')?)?;
+        wait(process, "open construction", open)?;
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while read(process, |r, i| button(r, i, key))?.is_none() {
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::new(
+                "invalid_target",
+                "This building is not offered in the construction panel",
+            ));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    let rect = settled(process, "building button", |r, i| {
+        button(r, i, key)?.ok_or_else(|| {
+            Error::new(
+                "invalid_target",
+                "This building is not offered in the construction panel",
+            )
+        })
+    })?;
+    super::ui::dismiss_notices(process, keys)?;
+    let (x, y) = rect.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select building", |r, i| {
+        Ok(selection(r, i)?.1.as_deref() == Some(key))
+    })
+    .map_err(|e| select_failed(e, key))
+}
+
 pub(super) fn add(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -286,6 +324,13 @@ pub(super) fn add(
     count: i64,
     province: Option<i32>,
 ) -> Result<()> {
+    if key == "rail_way" || key == "railway" {
+        return Err(Error::new(
+            "use_railway_tool",
+            "Railways run between provinces, not in one state: use hoi4_railway_build \
+             (from_state/from_province to to_state/to_province). Nothing was clicked.",
+        ));
+    }
     clear_notices(process, keys)?;
     let start = queued(process, key, state)?;
     if !read(process, open)? {
