@@ -176,6 +176,18 @@ pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     });
 }
 
+/// Append what the construction manager selected instead (mode and building) to a
+/// selection failure, so an intermittent refusal explains itself.
+fn with_selection(process: &dyn Process, mut e: Error) -> Error {
+    if let Ok((mode, key)) = read(process, selection) {
+        let open = read(process, open).unwrap_or(false);
+        e.message = format!(
+            "{} [observed afterwards: panel open {open}, selection mode {mode}, selected {:?}]",
+            e.message, key
+        );
+    }
+    e
+}
 /// The building button click was sent but the manager's selection never named
 /// the building. Other codes (ownership, lease, torn reads) keep their cause.
 fn select_failed(error: Error, key: &str) -> Error {
@@ -313,7 +325,7 @@ pub(super) fn select_building(
     wait(process, "select building", |r, i| {
         Ok(selection(r, i)?.1.as_deref() == Some(key))
     })
-    .map_err(|e| select_failed(e, key))
+    .map_err(|e| with_selection(process, select_failed(e, key)))
 }
 
 pub(super) fn add(
@@ -366,7 +378,7 @@ pub(super) fn add(
     wait(process, "select building", |r, i| {
         Ok(selection(r, i)?.1.as_deref() == Some(key))
     })
-    .map_err(|e| select_failed(e, key))?;
+    .map_err(|e| with_selection(process, select_failed(e, key)))?;
     let result = (|| {
         find_state(process, keys, state)?;
         // let the camera settle before projecting provinces

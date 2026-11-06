@@ -63,14 +63,29 @@ fn read_agency(r: &Reader<'_>, i: u64) -> Result<AgencyGui> {
     let root = pk::open_root(r, i, &pk::AGENCY_VIEW)?;
     let before = pk::need(r, i, root, "before_creation_panel", 2)?;
     let created = !gui_tree::shown(r, before)?;
+    // The creation progress bar counts as shown under the Create Agency button even when
+    // nothing runs (live 6 Nov 2026: 'already being created' with the button on screen), so a
+    // creation is in progress only while the bar is shown and the button cannot be pressed.
     let (creating, creation_button_enabled) = match gui_tree::container(r, before, i)? {
-        Some(panel) if !created => (
-            pk::shown(r, i, panel, "creation_progressbar", 2)?,
-            match pk::find(r, i, panel, "creation_button", 2)? {
-                Some(button) => gui_tree::shown(r, button)? && !gui_tree::disabled(r, button)?,
+        Some(panel) if !created => {
+            let button = pk::find(r, i, panel, "creation_button", 2)?;
+            let button_shown = match button {
+                Some(b) => gui_tree::shown(r, b)?,
                 None => false,
-            },
-        ),
+            };
+            let enabled = match button {
+                Some(b) => button_shown && !gui_tree::disabled(r, b)?,
+                None => false,
+            };
+            // While the agency forms ('Agency being formed... N days') the button stays on
+            // screen but disabled.
+            // The cancel button (the X on the bar) is shown only while it forms.
+            let cancel = pk::shown(r, i, panel, "cancel_creation_button", 2).unwrap_or(false);
+            (
+                cancel || (pk::shown(r, i, panel, "creation_progressbar", 2)? && !button_shown),
+                enabled,
+            )
+        }
         _ => (false, false),
     };
     // The progress bars stay shown when idle, with STATUS_NO_AGENCY_UPGRADE /

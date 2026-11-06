@@ -297,6 +297,67 @@ fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Resu
     Ok(())
 }
 
+/// Probe-only: words of the organisation list widget; pointers that resolve to GUI containers
+/// (and pointers to arrays of them) are named, to map the smooth listbox's rows.
+pub(super) fn debug_list(process: &dyn Process) -> Result<Value> {
+    read(process, |r, i| {
+        let root = pk::open_root(r, i, &pk::MIO_LIST)?;
+        let list = pk::need(r, i, root, "organisation_list", 4)?;
+        let mut out = Vec::new();
+        let words = r.read(list, 0x400)?;
+        for (k, c) in words.chunks_exact(8).enumerate() {
+            let v = u64::from_le_bytes(c.try_into().unwrap());
+            let mut note = String::new();
+            if (0x10000..0x7fff_ffff_0000).contains(&v) {
+                if let Ok(Some(cont)) = gui_tree::container(r, v, i) {
+                    note = format!("container {:?}", gui_tree::name(r, cont, i).ok().flatten());
+                } else if let Ok((_, data, count)) = r.array_header(v) {
+                    if (1..200).contains(&count) {
+                        let first = r.u64(data).unwrap_or(0);
+                        let named = gui_tree::container(r, first, i)
+                            .ok()
+                            .flatten()
+                            .and_then(|c| gui_tree::name(r, c, i).ok().flatten());
+                        note = format!("array count {count} first {first:#x} {named:?}");
+                    }
+                }
+            }
+            if !note.is_empty() || v != 0 {
+                out.push(
+                    json!({"off": format!("{:#x}", k * 8), "v": format!("{v:#x}"), "note": note}),
+                );
+            }
+        }
+        // Children of the widget and of sub-objects it points into (embedded containers).
+        let mut kids = Vec::new();
+        let mut bases = vec![list];
+        for c in words.chunks_exact(8) {
+            let v = u64::from_le_bytes(c.try_into().unwrap());
+            if v > list && v < list + 0x400 {
+                bases.push(v);
+            }
+        }
+        for b in bases {
+            if let Ok(children) = gui_tree::children(r, b) {
+                let names: Vec<Value> = children
+                    .iter()
+                    .take(12)
+                    .map(|c| {
+                        let inner = gui_tree::container(r, *c, i).ok().flatten();
+                        let name = inner
+                            .and_then(|x| gui_tree::name(r, x, i).ok().flatten())
+                            .or_else(|| gui_tree::name(r, *c, i).ok().flatten());
+                        json!({"child": format!("{c:#x}"), "name": name})
+                    })
+                    .collect();
+                kids.push(
+                    json!({"base": format!("{b:#x}"), "children": children.len(), "first": names}),
+                );
+            }
+        }
+        Ok(json!({"list": format!("{list:#x}"), "words": out, "kids": kids}))
+    })
+}
 /// Row windows of the organisation list (grid items, else child windows).
 fn list_frames(r: &Reader<'_>, i: u64) -> Result<Vec<u64>> {
     let root = pk::open_root(r, i, &pk::MIO_LIST)?;

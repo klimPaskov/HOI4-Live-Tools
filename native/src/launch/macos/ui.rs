@@ -579,6 +579,13 @@ fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui
             return Ok(Some(gui_tree::rect(r, image, widget, (1920, 1080))?));
         }
     }
+    // The game's generic confirmation window by its .gui name (its class was missing from the
+    // list above on 1.19.4.1: delete-task-force and lost-progress confirmations stayed open).
+    for root in super::panelkit::popup_roots_named(r, image, &["default_confirmation_popup"])? {
+        if let Some(widget) = gui_tree::child(r, image, root, button)? {
+            return Ok(Some(gui_tree::rect(r, image, widget, (1920, 1080))?));
+        }
+    }
     Ok(None)
 }
 /// Whether a "Reassign Armies" confirmation is open.

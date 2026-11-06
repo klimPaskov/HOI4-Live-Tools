@@ -423,6 +423,14 @@ pub(super) fn answer_confirmation(
                 }
             }
         }
+        // The game's generic confirmation window, recognised by its .gui name.
+        for root in super::panelkit::popup_roots_named(r, i, &["default_confirmation_popup"])? {
+            if let Some(w) = gui_tree::child(r, i, root, button)? {
+                if gui_tree::shown(r, w)? {
+                    return Ok(Some(gui_tree::rect(r, i, w, GAME)?));
+                }
+            }
+        }
         Ok(None)
     };
     let deadline = Instant::now() + Duration::from_millis(1500);

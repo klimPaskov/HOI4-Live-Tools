@@ -245,6 +245,8 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
 /// later organisation slot record, stride 0x470) with its root at +0xf0.
 const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
     (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
+    // Name and insignia window, mapped live 6 Nov 2026 (dbg_find_root e8: 0x498 -> 0x48).
+    (AGENCY_LOGO, AGENCY_VIEW, 0x498, 0x48),
     (MIO_LIST, POLITICS_VIEW, 0x3958, 0xf0),
 ];
 
@@ -1049,6 +1051,38 @@ pub(super) fn debug_image_save(process: &dyn Process, spec: &str) -> Result<serd
 }
 
 /// Probe-only: windows in the game GUI's popup list (vtable, root offset, root name).
+/// Visible pop-up roots whose .gui name is in `names`, from every window in the game's pop-up
+/// list whatever its class (a mod or a game update that keeps the window's name still matches;
+/// the confirmation class list missed `default_confirmation_popup` on 1.19.4.1, 6 Nov 2026).
+pub(super) fn popup_roots_named(r: &Reader<'_>, i: u64, names: &[&str]) -> Result<Vec<u64>> {
+    let abi = r.string_abi();
+    let idler = r.u64(i + game::layout(r).idler_global)?;
+    let gui = r.u64(idler + fld(abi, &IDLER, GUI_FROM_IDLER)?)?;
+    let (_, data, count) = r.array_header(gui + fld(abi, &GAME_GUI, POPUP_LIST)?)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(64) as u64 {
+        let window = r.u64(data + index * 8)?;
+        if !plausible(window) {
+            continue;
+        }
+        for off in [VIEW_ROOT, 0x28, 0x20, 0x30, 0x68] {
+            let Ok(p) = r.u64(window + off) else { continue };
+            if !plausible(p) {
+                continue;
+            }
+            if let Ok(Some(root)) = gui_tree::container(r, p, i) {
+                let name = container_name(r, i, root).ok().flatten();
+                if name.as_deref().is_some_and(|n| names.contains(&n))
+                    && gui_tree::visible(r, root).unwrap_or(false)
+                {
+                    out.push(root);
+                }
+                break;
+            }
+        }
+    }
+    Ok(out)
+}
 pub(super) fn debug_popups(process: &dyn Process) -> Result<serde_json::Value> {
     read(process, |r, i| {
         let abi = r.string_abi();
