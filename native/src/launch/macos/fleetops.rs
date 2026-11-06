@@ -459,6 +459,19 @@ pub(super) fn drive(
             press_toolbar(process, keys, plan.op)?;
             if matches!(plan.op, Op::Reserve | Op::Delete | Op::Merge | Op::Balance) {
                 answered = kit::answer_confirmation(process, keys, true)?;
+                if !answered {
+                    // The 'Delete task force' window is not one of the confirmation classes
+                    // (it stayed open, live 6 Nov 2026): accept the command dialog our own
+                    // toolbar press just opened.
+                    answered = super::ui::accept_command(process, keys)?;
+                }
+                if !answered && plan.op == Op::Delete {
+                    // Last resort for an unknown dialog class: Return accepts the modal window
+                    // this press opened; the fleet list below verifies what happened.
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    keys.press_code(crate::platform::game_input::vk::RETURN)?;
+                    answered = true;
+                }
             }
         }
         let expect = plan.clone();

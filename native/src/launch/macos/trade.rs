@@ -296,7 +296,7 @@ pub(super) fn auto_import_tool() -> Value {
     json!({"name":"hoi4_auto_import","description":"HOI4 1.19.4 Automatic Importing (Trade view): without enabled/budget it reads whether it is on, its civilian factory budget and the factories available for trade (opens the view with R, changes nothing). With enabled (true/false) and/or budget (civilian factories; only while on) it clicks the checkbox and the budget slider, verified from the view's own checkbox frame and budget text. The game then starts and ends trades itself to cover resource shortages (oil also covers fuel) and blocks manual trades: hoi4_trade_set refuses with auto_import_enabled while it is on. Import priority order and accepted shortages are left at the game's settings.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"budget":{"type":"integer","minimum":0,"maximum":500},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}})
 }
 pub(super) fn set_tool() -> Value {
-    json!({"name":"hoi4_trade_set","description":"Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it) through the Trade view: select the resource filter, click the partner's row, set the offer window's buy slider (a click on its track, then its arrows until the window's own 'Buy amount' reads the number) and press Send. amount: an integer (0 cancels the purchase), \"max\" or \"needed\" (the window's button that buys what the country needs). Typed refusals before anything is sent: partner_not_listed (lists the partners), amount_above_available (the window's maximum is named), trade_unavailable (the game offers no slider). Verified from the partner's contracted units in the view's Delivered column after Send (the game moves the goods with convoys over the following days; imports show in the balance table once they arrive).","inputSchema":{"type":"object","properties":{"resource":{"type":"string","maxLength":24},"country":{"type":"string","maxLength":64},"amount":{"anyOf":[{"type":"integer","minimum":0,"maximum":100000},{"type":"string","enum":["max","needed"]}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["resource","country","amount","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_trade_set","description":"Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it, or its three-letter tag such as USA) through the Trade view: select the resource filter, click the partner's row, set the offer window's buy slider (a click on its track, then its arrows until the window's own 'Buy amount' reads the number) and press Send. amount: an integer (0 cancels the purchase), \"max\" or \"needed\" (the window's button that buys what the country needs). Typed refusals before anything is sent: partner_not_listed (lists the partners), amount_above_available (the window's maximum is named), trade_unavailable (the game offers no slider). Verified from the partner's contracted units in the view's Delivered column after Send (the game moves the goods with convoys over the following days; imports show in the balance table once they arrive).","inputSchema":{"type":"object","properties":{"resource":{"type":"string","maxLength":24},"country":{"type":"string","maxLength":64},"amount":{"anyOf":[{"type":"integer","minimum":0,"maximum":100000},{"type":"string","enum":["max","needed"]}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["resource","country","amount","request_id","lease_token"],"additionalProperties":false}})
 }
 
 /// The Trade view's tables (the caller has checked the lease).
@@ -409,9 +409,30 @@ pub(super) fn plan(
     }
     select_resource(process, keys, index)?;
     let list = settled(process, "trade partners", partners)?;
+    // The view lists display names; a three-letter tag (USA) is resolved to the game's own name
+    // for that country, so tags work for every country, modded ones included.
+    let tag_name =
+        if country.trim().len() == 3 && country.trim().bytes().all(|b| b.is_ascii_alphanumeric()) {
+            read(process, |r, i| {
+                Ok(super::diplomacy_state::display_name_of_tag(
+                    r,
+                    i,
+                    &country.trim().to_ascii_uppercase(),
+                )
+                .ok()
+                .flatten())
+            })?
+        } else {
+            None
+        };
     let found = list
         .iter()
-        .find(|p| p.country.eq_ignore_ascii_case(country.trim()))
+        .find(|p| {
+            p.country.eq_ignore_ascii_case(country.trim())
+                || tag_name
+                    .as_deref()
+                    .is_some_and(|n| p.country.eq_ignore_ascii_case(n))
+        })
         .cloned()
         .ok_or_else(|| {
             Error::new(

@@ -777,6 +777,14 @@ fn kind_label(kind: Kind) -> &'static str {
 }
 
 /// Tag index of the three-letter tag `tag`, from the game's tag table.
+/// The game's display name of country `tag` (e.g. "United States" for USA), read from the
+/// country object so modded and newly created countries resolve too.
+pub(super) fn display_name_of_tag(r: &Reader<'_>, image: u64, tag: &str) -> Result<Option<String>> {
+    let w = world(r, image)?;
+    let index = tag_index_of(r, image, tag)?;
+    Ok(Names::new(r, image, &w).entry(index).1)
+}
+
 pub(super) fn tag_index_of(r: &Reader<'_>, image: u64, tag: &str) -> Result<i32> {
     let g = game::layout(r);
     let db = r.u64(image + g.tag_db_global)?;

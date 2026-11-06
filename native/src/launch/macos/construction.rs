@@ -213,8 +213,11 @@ fn no_slot_or_not_allowed(key: &str, state: i32) -> Error {
 pub(super) const PROVINCE_BUILDINGS: [&str; 4] =
     ["supply_node", "naval_base", "bunker", "coastal_bunker"];
 
-/// Screen points to click for a building: the given province, or for province buildings every
-/// province of the state that projects on screen (centre first), or the screen centre.
+/// Screen points to click for a building: the given province, or every province of the state
+/// that projects on screen (nearest the centre first). State buildings fall back to the screen
+/// centre when the map data is unavailable. A state's centre can lie outside the state (long
+/// coastal states such as Eritrea: an infrastructure click there was refused live, 6 Nov 2026),
+/// while a click on any of its own provinces places a state building in it.
 fn aim_points(
     process: &dyn Process,
     key: &str,
@@ -223,8 +226,19 @@ fn aim_points(
 ) -> Result<Vec<(f64, f64)>> {
     let wants_province = province.is_some() || PROVINCE_BUILDINGS.contains(&key);
     if !wants_province {
-        return Ok(vec![(960.0, 540.0)]);
+        return Ok(match province_points(process, state, None) {
+            Ok(points) if !points.is_empty() => points,
+            _ => vec![(960.0, 540.0)],
+        });
     }
+    province_points(process, state, province)
+}
+
+fn province_points(
+    process: &dyn Process,
+    state: i32,
+    province: Option<i32>,
+) -> Result<Vec<(f64, f64)>> {
     let dir = process
         .identity()
         .and_then(|i| super::mapdata::game_dir(&i.exe).ok())

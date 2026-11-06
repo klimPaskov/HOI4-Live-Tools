@@ -193,6 +193,7 @@ pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Resu
     super::construction::leave(process, keys);
     // A confirmation left open by an interrupted action blocks every click.
     decline_stale(process, keys)?;
+    acknowledge_news(process, keys)?;
     let cleared = match dismiss_notices(process, keys) {
         Ok(n) => n,
         Err(e) => {
@@ -208,6 +209,9 @@ pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Resu
             return Err(e);
         }
     };
+    // One-option events (news) decide nothing: acknowledge them instead of refusing the action
+    // (a news event refused every army action live, 6 Nov 2026). Real choices stay with the player.
+    acknowledge_news(process, keys)?;
     // An event window is drawn over panels; clicks would land on it, so the
     // player answers events before anything else.
     let open = read(process, super::events::open_ids)?;
@@ -218,6 +222,18 @@ pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Resu
         ));
     }
     Ok(cleared)
+}
+/// Answer one-option events on top (news: nothing to decide), up to eight in a row.
+fn acknowledge_news(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    for _ in 0..8 {
+        let Some(id) = read(process, super::events::single_option_top)? else {
+            break;
+        };
+        if super::events::choose(process, keys, &id, 0).is_err() {
+            break;
+        }
+    }
+    Ok(())
 }
 /// Click away every notice pop-up (they can sit on top of an event window).
 pub(super) fn dismiss_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
@@ -335,9 +351,22 @@ pub(super) fn save_game(
     };
     let before = newest().map(|(t, _)| t);
     clear_notices(process, keys)?;
-    if !read(process, menu_open)? {
+    // Escape first closes whatever view is open (a trade or politics view left open took the
+    // only Escape live, 6 Nov 2026), so press it until the menu itself is open.
+    let mut presses = 0;
+    while !read(process, menu_open)? {
+        if presses == 4 {
+            return Err(Error::new(
+                "input_readback_failed",
+                "game menu open: four Escape presses did not open the game menu",
+            ));
+        }
         keys.press(Key::Escape)?;
-        wait(process, "game menu open", menu_open)?;
+        presses += 1;
+        let deadline = Instant::now() + Duration::from_millis(900);
+        while Instant::now() < deadline && !read(process, menu_open)? {
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
     let button = settled(process, "save button", |r, i| {
         let root = menu_root(r, i)?;

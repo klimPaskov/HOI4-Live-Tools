@@ -307,6 +307,105 @@ fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<ScreenB
         Ok((x0 > 460.0 && y0 > 110.0 && x1 < 1540.0 && y1 < 830.0).then_some(((x0, y0), (x1, y1))))
     })
 }
+/// Select own divisions by clicking their unit counters: a click on a province's counter selects
+/// every own division standing there, Shift+click adds the next province. Only provinces whose
+/// own divisions are all in `wanted` are clicked, so the selection can never take divisions of
+/// another army. Returns how many divisions the game's selection holds when it holds only wanted
+/// divisions (read back from the selection list), else None and the caller falls back to boxes.
+/// Exact where boxes miss divisions spread over a large state (seen live 6 Nov 2026: boxes took
+/// 5 and then 3 of a state's 10 unassigned divisions).
+fn counter_select(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    wanted: &[String],
+) -> Result<Option<usize>> {
+    if wanted.is_empty() {
+        return Ok(None);
+    }
+    let Some(identity) = process.identity() else {
+        return Ok(None);
+    };
+    let Ok(dir) = super::mapdata::game_dir(&identity.exe) else {
+        return Ok(None);
+    };
+    let Ok(positions) = super::mapdata::positions(&dir) else {
+        return Ok(None);
+    };
+    let wanted_set: BTreeSet<&str> = wanted.iter().map(String::as_str).collect();
+    // Large states put some provinces off screen around the state's centre: pan the camera with
+    // the arrow keys toward the provinces still off screen (projected again after every tap), at
+    // most 14 taps. Seen live 6 Nov 2026: Italian Somaliland's unassigned divisions projected
+    // at (-700, 1466) with the state centred.
+    let mut taps = 0;
+    let points = loop {
+        let (points, missing) = read(process, |r, i| {
+            let provinces = division_provinces(r, i)?;
+            let mut clean: BTreeMap<i32, bool> = BTreeMap::new();
+            for (id, province) in &provinces {
+                if let Some(p) = province {
+                    let ok = wanted_set.contains(id.as_str());
+                    let entry = clean.entry(*p).or_insert(true);
+                    *entry &= ok;
+                }
+            }
+            let mut pts = Vec::new();
+            let mut missing = Vec::new();
+            for (p, ok) in clean {
+                if !ok {
+                    continue;
+                }
+                let Some(&(x, z)) = positions.get(&p) else {
+                    continue;
+                };
+                match super::screenmap::to_screen(r, i, x, z)? {
+                    Some(s) if (470.0..1700.0).contains(&s.0) && (120.0..900.0).contains(&s.1) => {
+                        pts.push(s)
+                    }
+                    Some(s) => missing.push(s),
+                    None => {}
+                }
+            }
+            Ok((pts, missing))
+        })?;
+        let Some(&(mx, my)) = missing.first() else {
+            break points;
+        };
+        if taps >= 14 {
+            break points;
+        }
+        use crate::platform::game_input::vk;
+        if mx < 470.0 {
+            keys.press_code(vk::LEFT)?;
+        } else if mx >= 1700.0 {
+            keys.press_code(vk::RIGHT)?;
+        }
+        if my < 120.0 {
+            keys.press_code(vk::UP)?;
+        } else if my >= 900.0 {
+            keys.press_code(vk::DOWN)?;
+        }
+        taps += 1;
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    if points.is_empty() {
+        return Ok(None);
+    }
+    for (k, (x, y)) in points.iter().enumerate() {
+        if k == 0 {
+            keys.click(GAME, *x, *y)?;
+        } else {
+            keys.shift_click(GAME, *x, *y)?;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    read(process, |r, i| {
+        Ok(selected_divisions(r, i)?.and_then(|ids| {
+            (!ids.is_empty() && ids.iter().all(|id| wanted_set.contains(id.as_str())))
+                .then_some(ids.len())
+        }))
+    })
+}
 fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
     r.string_bounded(group + ui(r)?.group_name, 128)
 }
@@ -600,6 +699,14 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
     let mut sizes = Vec::new();
     let mut exact = false;
     let mut partial = None;
+    // Exact first: click the counters of provinces holding only unassigned divisions.
+    if plan.unassigned > 0 {
+        let view = armies(process)?;
+        if let Some(n) = counter_select(process, keys, &unassigned_ids(&view, plan.state))? {
+            sizes.push(n);
+            exact = true;
+        }
+    }
     // Large states (Eritrea, Hararghe) spread divisions beyond the boxes around the centre:
     // a second pass zooms the map out two wheel steps around the state's centre.
     for pass in 0..2 {
@@ -618,6 +725,14 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
             let size = read(process, selection_size)? as usize;
             sizes.push(size);
             if size == expected {
+                exact = true;
+                break;
+            }
+            // A selection read back as only unassigned divisions is always safe to assign: the
+            // right-click moves nothing out of another army (seen live 6 Nov 2026: boxes held
+            // exactly the 2 unassigned divisions beside the army's 4 and were refused).
+            if size > 0 && read(process, selection_unassigned_only).unwrap_or(false) {
+                partial = Some((k + pass * ASSIGN_BOXES.len(), size));
                 exact = true;
                 break;
             }
@@ -843,10 +958,18 @@ pub(super) fn create(
         let Some(name) = army_names(&view).difference(&names_before).next().cloned() else {
             break;
         };
-        let Ok(plan) = plan_assign(&view, state, Some(&name), 24) else {
-            break;
+        let plan = match plan_assign(&view, state, Some(&name), 24) {
+            Ok(plan) => plan,
+            Err(e) => {
+                eprintln!("army_create fold: plan_assign {}: {}", e.code, e.message);
+                break;
+            }
         };
-        if plan.unassigned == 0 || plan.take == 0 || assign(process, keys, &plan).is_err() {
+        if plan.unassigned == 0 || plan.take == 0 {
+            break;
+        }
+        if let Err(e) = assign(process, keys, &plan) {
+            eprintln!("army_create fold: assign {}: {}", e.code, e.message);
             break;
         }
     }
@@ -894,11 +1017,17 @@ fn create_once(
                 .unwrap_or(0)
         })
         .unwrap_or(0);
-    keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
-    wait(process, "select divisions", |r, i| {
-        Ok(selection_size(r, i)? > 0)
-    })?;
-    if let Some(expected) = unassigned_here.filter(|_| !absorb) {
+    let by_counters = match (&view_before, absorb) {
+        (Some(view), false) => counter_select(process, keys, &unassigned_ids(view, state))?,
+        _ => None,
+    };
+    if by_counters.is_none() {
+        keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
+        wait(process, "select divisions", |r, i| {
+            Ok(selection_size(r, i)? > 0)
+        })?;
+    }
+    if let Some(expected) = unassigned_here.filter(|_| !absorb && by_counters.is_none()) {
         if read(process, selection_size)? as usize != expected {
             for (from, to) in ASSIGN_BOXES.iter().skip(1) {
                 keys.drag(GAME, *from, *to)?;
@@ -1399,14 +1528,28 @@ pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &st
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
     })?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
-    let (x, y) = card.center();
-    keys.click(GAME, x, y)?;
-    wait(process, "select army", |r, i| {
-        Ok(selection_size(r, i)? & 0xffff_ffff == size)
-    })?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    Ok(card)
+    // The card strip re-lays out when an army is added or removed (a detach creating a new army
+    // moved Army 1's card and the next click missed it, live 6 Nov 2026): wait for a stable
+    // rectangle, and click once more on a fresh read if the selection does not follow.
+    let mut last = None;
+    for _ in 0..2 {
+        let card = settled(process, "army card", |r, i| {
+            card_rect(r, i, army, "portrait_btn")
+        })?;
+        let (x, y) = card.center();
+        keys.click(GAME, x, y)?;
+        match wait(process, "select army", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == size)
+        }) {
+            Ok(()) => {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                return Ok(card);
+            }
+            Err(e) => last = Some(e),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    Err(last.unwrap())
 }
 /// Move every division of army `source` into army `target` with the game's own controls:
 /// a left click on the source card selects exactly its divisions, a right click on the
