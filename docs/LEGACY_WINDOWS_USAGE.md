@@ -309,11 +309,12 @@ summary every week as `HOI4LIVE` lines in `game.log`, which the server reads inc
 ## Configuration
 
 `config.json` (every key optional; environment overrides `HOI4_LIVE_GAME_DIR`, `HOI4_LIVE_USER_DIR`,
-`HOI4_LIVE_ARTIFACTS`, `HOI4_LIVE_MODE`, `HOI4_LIVE_CONFIG`):
+`HOI4_LIVE_DLC_SOURCE_DIR`, `HOI4_LIVE_ARTIFACTS`, `HOI4_LIVE_MODE`, `HOI4_LIVE_CONFIG`):
 
 | key | default | meaning |
 |---|---|---|
 | `game_dir`, `user_dir` | `auto` | install folder (Steam registry and libraries) and Documents/Paradox Interactive/Hearts of Iron IV |
+| `dlc_source_dir` | `auto` | the folder `hoi4_prepare` copies `launcher-v2.sqlite` and `dlc_signature` from (your normal user folder) |
 | `artifacts_dir` | `artifacts` | screenshots, popup crops, scenario reports and the server log (`artifacts/logs/hoi4_live.log`) |
 | `mode` | `test` | initial session mode |
 | `save_prefix` | `hoi4live_` | prefix of every save the server writes |

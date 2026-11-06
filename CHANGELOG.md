@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- `hoi4_prepare` (Python, test mode): copies `launcher-v2.sqlite` and `dlc_signature` from the normal user
+  folder into the run's user folder with a byte-exact backup, so a launch without the Steam client keeps the
+  DLC. `hoi4_shutdown` (or `hoi4_prepare action=restore`) puts the folder back and never overwrites a file
+  that changed after the copy. `hoi4_launch prepare_dlc=true` does both steps. The README explains the launch
+  order (Steam closed, prepare, launch, test, shutdown). New config key `dlc_source_dir`.
+- `docs/tools.md` regenerated from the registry (it had drifted behind `hoi4_front`, `hoi4_memory` and others).
+
 ## 1.3.0 - 2026-11-05
 
 The native Linux runtime gets the macOS management toolset on HOI4 1.19.4.1:

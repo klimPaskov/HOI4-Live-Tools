@@ -62,6 +62,7 @@ class Session:
         self.launched_identity = None
         self.config_session = None
         self.config_owner_id = None
+        self.dlc_prepared = False           # hoi4_prepare copied the DLC files into the run's user folder
         self.owned_process_only = self._campaign_latched or os.environ.get("HOI4_LIVE_OWNED_ONLY", "0") == "1"
         self._memory_process = None
         self._memory_reader = None
@@ -120,6 +121,29 @@ class Session:
         if game and game["phase"] != "exited":
             self.config_session.mark_game_exited(self.config_owner_id)
         return self.config_session.restore()
+
+    @property
+    def dlc_backup_root(self):
+        return os.path.join(self.cfg.artifacts_dir, "dlc_backups")
+
+    def restore_dlc_after_exit(self):
+        """Undo this session's hoi4_prepare once the game has exited. None when nothing was prepared.
+
+        A failure is reported in the result and never raised: the shutdown that called this already succeeded, and
+        the journal stays for `hoi4_prepare action=restore`."""
+        if not self.dlc_prepared:
+            return None
+        from .game import dlc_prepare, process
+        if process.running_pids(self.cfg["window"]["process_name"]):
+            return {"restored": [], "removed": [], "conflicts": {},
+                    "error": "a game is still running; the DLC files stay in place until it exits"}
+        try:
+            out = dlc_prepare.restore(self.cfg.user_dir, self.dlc_backup_root)
+        except ToolError as exc:
+            return {"restored": [], "removed": [], "conflicts": {}, "error": str(exc)}
+        if not out["conflicts"]:
+            self.dlc_prepared = False
+        return out
 
     # ------------------------------------------------------------------ per-call context
     def begin_call(self, name, progress=None, cancel=None):
