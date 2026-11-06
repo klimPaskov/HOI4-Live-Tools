@@ -753,6 +753,29 @@ impl GameInput for X11Input<'_> {
         sleep(Duration::from_millis(120));
         Ok(())
     }
+    fn scroll_burst(
+        &self,
+        game: (u32, u32),
+        at: (f64, f64),
+        pixels: i32,
+        count: u32,
+    ) -> Result<()> {
+        self.check()?;
+        self.idle()?;
+        let point = self.point(game, at.0, at.1)?;
+        self.motion(point)?;
+        sleep(Duration::from_millis(40));
+        let (button, _) = notches(pixels);
+        for _ in 0..count.min(64) {
+            self.check()?;
+            let down = self.button(button, true);
+            let up = self.button(button, false);
+            down.and(up)?;
+            sleep(Duration::from_millis(8));
+        }
+        sleep(Duration::from_millis(250));
+        Ok(())
+    }
     fn press_code(&self, code: u16) -> Result<()> {
         let keycode = self.keycode(code)?;
         self.tap(keycode, None)

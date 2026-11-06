@@ -43,6 +43,83 @@ pub(super) fn to_screen(r: &Reader<'_>, image: u64, x: f64, z: f64) -> Result<Op
     Ok(project(&proj, &view, x, z))
 }
 
+/// Camera eye height above the map (larger = zoomed out).
+pub(super) fn camera_height(r: &Reader<'_>, image: u64) -> Result<f64> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let abi = r.string_abi();
+    let camera = r.u64(idler + fld(abi, &IDLER, 0x718)?)?;
+    let view: [f64; 16] = floats(r, camera + fld(abi, &CAMERA, 0xd0)?)?;
+    Ok(view[13])
+}
+
+/// Zoomed in closer than this, the camera is brought back out after a map action.
+const CLOSE: f64 = 500.0;
+/// Strategic view height (the game starts at 800; 50 is fully in, 3000 fully out).
+const STRATEGIC: f64 = 750.0;
+/// Scroll the map camera back out to the strategic height when an action left it close in.
+pub(super) fn restore_zoom(
+    process: &dyn crate::platform::Process,
+    keys: &dyn crate::platform::game_input::GameInput,
+) -> Result<()> {
+    let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
+    let h = height(process)?;
+    if h >= CLOSE {
+        return Ok(());
+    }
+    // One swoop: a single quick flick of wheel events that the game eases into one camera
+    // movement (one event zooms about 10%, measured live 5 November 2026), then at most one
+    // short correction.
+    let events = |from: f64| {
+        ((STRATEGIC / from.max(1.0)).ln() / 1.1f64.ln())
+            .ceil()
+            .clamp(1.0, 40.0) as u32
+    };
+    keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), -120, events(h))?;
+    let now = height(process)?;
+    if now < h - 1.0 {
+        // This input backend scrolls the other way: undo and swoop the right way.
+        keys.scroll_burst(
+            super::panelkit::GAME,
+            (960.0, 540.0),
+            120,
+            events(now) + events(h),
+        )?;
+    } else if now < STRATEGIC * 0.8 {
+        keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), -120, events(now))?;
+    }
+    Ok(())
+}
+
+/// Bring a far-out camera in to the strategic height in one swoop (map icons such as air
+/// bases are not drawn when the camera is far out). No-op when already at or below it.
+pub(super) fn zoom_in_to_strategic(
+    process: &dyn crate::platform::Process,
+    keys: &dyn crate::platform::game_input::GameInput,
+) -> Result<()> {
+    let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
+    let h = height(process)?;
+    if h <= STRATEGIC * 1.1 {
+        return Ok(());
+    }
+    let events = |from: f64| {
+        ((from / STRATEGIC).ln() / 1.1f64.ln())
+            .ceil()
+            .clamp(1.0, 40.0) as u32
+    };
+    keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), 120, events(h))?;
+    let now = height(process)?;
+    if now > h + 1.0 {
+        // This input backend scrolls the other way: undo and swoop the right way.
+        keys.scroll_burst(
+            super::panelkit::GAME,
+            (960.0, 540.0),
+            -120,
+            events(now) + events(h),
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn project(proj: &[f64; 16], view: &[f64; 16], x: f64, z: f64) -> Option<(f64, f64)> {
     let (tx, ty) = (proj[0], proj[5]);
     if tx <= 0.0 || ty <= 0.0 {

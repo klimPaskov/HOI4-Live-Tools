@@ -99,14 +99,14 @@ const MACOS: Ui = Ui {
 /// the owning class has no reviewed vtable).
 const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
 const DIVISION: xlayout::Class = xlayout::Class::new("CArmy", 0x34ace60);
-const GROUP: xlayout::Class = xlayout::Class::new("orders.group", 0);
+const GROUP: xlayout::Class = xlayout::Class::new("COrdersGroup", 0x3516b78);
 const LEADER: xlayout::Class = xlayout::Class::new("unit.leader", 0);
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
 const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
 const LEADER_VIEW: xlayout::Class = xlayout::Class::new("CLeaderGroupView", 0x3670a20);
 const PORTRAIT: xlayout::Class = xlayout::Class::new("leader_group.portrait", 0);
 const ORDER: xlayout::Class = xlayout::Class::new("COrderInstance", 0x3512bf0);
-const ARMIES_VIEW: xlayout::Class = xlayout::Class::new("CArmiesView", 0);
+const ARMIES_VIEW: xlayout::Class = xlayout::Class::new("CArmiesView", 0x363d530);
 const LEADER_WINDOW: xlayout::Class = xlayout::Class::new("CArmyLeaderWindow", 0);
 const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
 const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
@@ -307,6 +307,105 @@ fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<ScreenB
         Ok((x0 > 460.0 && y0 > 110.0 && x1 < 1540.0 && y1 < 830.0).then_some(((x0, y0), (x1, y1))))
     })
 }
+/// Select own divisions by clicking their unit counters: a click on a province's counter selects
+/// every own division standing there, Shift+click adds the next province. Only provinces whose
+/// own divisions are all in `wanted` are clicked, so the selection can never take divisions of
+/// another army. Returns how many divisions the game's selection holds when it holds only wanted
+/// divisions (read back from the selection list), else None and the caller falls back to boxes.
+/// Exact where boxes miss divisions spread over a large state (seen live 6 Nov 2026: boxes took
+/// 5 and then 3 of a state's 10 unassigned divisions).
+fn counter_select(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    wanted: &[String],
+) -> Result<Option<usize>> {
+    if wanted.is_empty() {
+        return Ok(None);
+    }
+    let Some(identity) = process.identity() else {
+        return Ok(None);
+    };
+    let Ok(dir) = super::mapdata::game_dir(&identity.exe) else {
+        return Ok(None);
+    };
+    let Ok(positions) = super::mapdata::positions(&dir) else {
+        return Ok(None);
+    };
+    let wanted_set: BTreeSet<&str> = wanted.iter().map(String::as_str).collect();
+    // Large states put some provinces off screen around the state's centre: pan the camera with
+    // the arrow keys toward the provinces still off screen (projected again after every tap), at
+    // most 14 taps. Seen live 6 Nov 2026: Italian Somaliland's unassigned divisions projected
+    // at (-700, 1466) with the state centred.
+    let mut taps = 0;
+    let points = loop {
+        let (points, missing) = read(process, |r, i| {
+            let provinces = division_provinces(r, i)?;
+            let mut clean: BTreeMap<i32, bool> = BTreeMap::new();
+            for (id, province) in &provinces {
+                if let Some(p) = province {
+                    let ok = wanted_set.contains(id.as_str());
+                    let entry = clean.entry(*p).or_insert(true);
+                    *entry &= ok;
+                }
+            }
+            let mut pts = Vec::new();
+            let mut missing = Vec::new();
+            for (p, ok) in clean {
+                if !ok {
+                    continue;
+                }
+                let Some(&(x, z)) = positions.get(&p) else {
+                    continue;
+                };
+                match super::screenmap::to_screen(r, i, x, z)? {
+                    Some(s) if (470.0..1700.0).contains(&s.0) && (120.0..900.0).contains(&s.1) => {
+                        pts.push(s)
+                    }
+                    Some(s) => missing.push(s),
+                    None => {}
+                }
+            }
+            Ok((pts, missing))
+        })?;
+        let Some(&(mx, my)) = missing.first() else {
+            break points;
+        };
+        if taps >= 14 {
+            break points;
+        }
+        use crate::platform::game_input::vk;
+        if mx < 470.0 {
+            keys.press_code(vk::LEFT)?;
+        } else if mx >= 1700.0 {
+            keys.press_code(vk::RIGHT)?;
+        }
+        if my < 120.0 {
+            keys.press_code(vk::UP)?;
+        } else if my >= 900.0 {
+            keys.press_code(vk::DOWN)?;
+        }
+        taps += 1;
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+    if points.is_empty() {
+        return Ok(None);
+    }
+    for (k, (x, y)) in points.iter().enumerate() {
+        if k == 0 {
+            keys.click(GAME, *x, *y)?;
+        } else {
+            keys.shift_click(GAME, *x, *y)?;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    read(process, |r, i| {
+        Ok(selected_divisions(r, i)?.and_then(|ids| {
+            (!ids.is_empty() && ids.iter().all(|id| wanted_set.contains(id.as_str())))
+                .then_some(ids.len())
+        }))
+    })
+}
 fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
     r.string_bounded(group + ui(r)?.group_name, 128)
 }
@@ -356,7 +455,8 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 Ok(
                     json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
                     "plan_executing":executing,"division_count":ids.len(),"divisions":ids,
-                    "states":standing,"main_state":main_state}),
+                    "states":standing,"main_state":main_state,
+                    "motorization":(r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff}),
                 )
             })
             .collect::<Result<Vec<_>>>()?;
@@ -599,6 +699,14 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
     let mut sizes = Vec::new();
     let mut exact = false;
     let mut partial = None;
+    // Exact first: click the counters of provinces holding only unassigned divisions.
+    if plan.unassigned > 0 {
+        let view = armies(process)?;
+        if let Some(n) = counter_select(process, keys, &unassigned_ids(&view, plan.state))? {
+            sizes.push(n);
+            exact = true;
+        }
+    }
     // Large states (Eritrea, Hararghe) spread divisions beyond the boxes around the centre:
     // a second pass zooms the map out two wheel steps around the state's centre.
     for pass in 0..2 {
@@ -607,9 +715,8 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
         }
         if pass == 1 {
             find_state(process, keys, plan.state)?;
-            keys.scroll(GAME, (960.0, 540.0), -240)?;
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            keys.scroll(GAME, (960.0, 540.0), -240)?;
+            // Both wheel steps in one flick: one smooth zoom-out.
+            keys.scroll_burst(GAME, (960.0, 540.0), -240, 2)?;
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
         for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
@@ -618,6 +725,14 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
             let size = read(process, selection_size)? as usize;
             sizes.push(size);
             if size == expected {
+                exact = true;
+                break;
+            }
+            // A selection read back as only unassigned divisions is always safe to assign: the
+            // right-click moves nothing out of another army (seen live 6 Nov 2026: boxes held
+            // exactly the 2 unassigned divisions beside the army's 4 and were refused).
+            if size > 0 && read(process, selection_unassigned_only).unwrap_or(false) {
+                partial = Some((k + pass * ASSIGN_BOXES.len(), size));
                 exact = true;
                 break;
             }
@@ -743,6 +858,42 @@ pub(super) fn check_create(view: &Value, state: i32, absorb: bool) -> Result<()>
         ),
     ))
 }
+/// Ids of the selected own divisions, or None when the selection holds anything else.
+/// The selection is a linked list in the idler: head at `selection_size - 0x10`, each node
+/// {object, prev, next}; mapped live 5 November 2026 (two selected divisions; a province
+/// selection reads CProvince objects instead).
+fn selected_divisions(r: &Reader<'_>, image: u64) -> Result<Option<Vec<String>>> {
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let count = selection_size(r, image)?;
+    let mut node = r.u64(idler + u.selection_size - 0x10)?;
+    let mut out = Vec::new();
+    for _ in 0..count.min(512) {
+        if node == 0 {
+            return Ok(None);
+        }
+        let object = r.u64(node)?;
+        if object == 0 || r.u64(object)? != image + u.division_vtable {
+            return Ok(None);
+        }
+        let handle = r.read(object + u.division_handle, 8)?;
+        out.push(format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        ));
+        node = r.u64(node + 0x10)?;
+    }
+    Ok((out.len() as u64 == count).then_some(out))
+}
+/// Every selected object is an own division that belongs to no army.
+fn selection_unassigned_only(r: &Reader<'_>, image: u64) -> Result<bool> {
+    let Some(ids) = selected_divisions(r, image)? else {
+        return Ok(false);
+    };
+    let groups = membership(r, image)?;
+    Ok(!ids.is_empty() && ids.iter().all(|id| groups.get(id) == Some(&0)))
+}
 pub(super) fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     // A 32-bit count: in 1.19.4 the next four bytes are no longer zero (a selection of 26 read
@@ -783,8 +934,56 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
     gui_tree::rect(r, image, button, GAME)
 }
 
-/// Create an army from own divisions around state `state`.
+/// Create an army from own divisions around state `state`, then fold the state's
+/// remaining unassigned divisions into it: one box rarely holds all of a large state's
+/// divisions (seen live 5 November 2026: Eritrea needed one create and four assigns).
 pub(super) fn create(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    state: i32,
+    absorb: bool,
+) -> Result<()> {
+    let names_before: BTreeSet<String> = armies(process)
+        .ok()
+        .map(|view| army_names(&view))
+        .unwrap_or_default();
+    create_once(process, keys, state, absorb)?;
+    if absorb {
+        return Ok(());
+    }
+    // Best effort: the army exists; a fold that cannot be done safely leaves the rest
+    // unassigned for hoi4_army_assign, never fails the create.
+    for _ in 0..6 {
+        let Ok(view) = armies(process) else { break };
+        let Some(name) = army_names(&view).difference(&names_before).next().cloned() else {
+            break;
+        };
+        let plan = match plan_assign(&view, state, Some(&name), 24) {
+            Ok(plan) => plan,
+            Err(e) => {
+                eprintln!("army_create fold: plan_assign {}: {}", e.code, e.message);
+                break;
+            }
+        };
+        if plan.unassigned == 0 || plan.take == 0 {
+            break;
+        }
+        if let Err(e) = assign(process, keys, &plan) {
+            eprintln!("army_create fold: assign {}: {}", e.code, e.message);
+            break;
+        }
+    }
+    Ok(())
+}
+fn army_names(view: &Value) -> BTreeSet<String> {
+    view["armies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["army"].as_str().map(str::to_string))
+        .collect()
+}
+fn create_once(
     process: &dyn Process,
     keys: &dyn GameInput,
     state: i32,
@@ -818,11 +1017,17 @@ pub(super) fn create(
                 .unwrap_or(0)
         })
         .unwrap_or(0);
-    keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
-    wait(process, "select divisions", |r, i| {
-        Ok(selection_size(r, i)? > 0)
-    })?;
-    if let Some(expected) = unassigned_here.filter(|_| !absorb) {
+    let by_counters = match (&view_before, absorb) {
+        (Some(view), false) => counter_select(process, keys, &unassigned_ids(view, state))?,
+        _ => None,
+    };
+    if by_counters.is_none() {
+        keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
+        wait(process, "select divisions", |r, i| {
+            Ok(selection_size(r, i)? > 0)
+        })?;
+    }
+    if let Some(expected) = unassigned_here.filter(|_| !absorb && by_counters.is_none()) {
         if read(process, selection_size)? as usize != expected {
             for (from, to) in ASSIGN_BOXES.iter().skip(1) {
                 keys.drag(GAME, *from, *to)?;
@@ -847,7 +1052,12 @@ pub(super) fn create(
             }
             // A part of a large state's unassigned divisions is fine when no army stands
             // there (seen live: a box held 5 of Eritrea's 18 with no army in the state).
-            let partial_ok = armies_here == 0 && held > 0 && held <= expected;
+            // With armies here too, a partial box is fine when the selection read back holds
+            // only unassigned divisions (Ethiopia run 10: 11 divisions spread over a state
+            // stayed outside every army because no box held all of them).
+            let partial_ok = held > 0
+                && held <= expected
+                && (armies_here == 0 || read(process, selection_unassigned_only).unwrap_or(false));
             if held != expected && !partial_ok {
                 // No box holds exactly the unassigned divisions here: a new army would also
                 // take divisions of neighbouring armies (seen live 1 November 2026: a create
@@ -906,6 +1116,346 @@ pub(super) fn create(
     })
 }
 
+/// Probe-only: hex words of an own army object (`NAME` or `NAME:LEN`).
+pub(super) fn debug_bytes(process: &dyn Process, spec: &str) -> Result<Value> {
+    let (army, len) = match spec.rsplit_once(':') {
+        Some((a, n)) if n.parse::<usize>().is_ok() => (a, n.parse::<usize>().unwrap()),
+        _ => (spec, 0x400),
+    };
+    read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        let bytes = r.read(group, len.min(0x2000))?;
+        let words: Vec<String> = bytes
+            .chunks(8)
+            .map(|c| {
+                let mut w = [0u8; 8];
+                w[..c.len()].copy_from_slice(c);
+                format!("{:016x}", u64::from_le_bytes(w))
+            })
+            .collect();
+        Ok(json!({"army": army, "words": words}))
+    })
+}
+/// Supply-hub motorization of an army (0 none, 1 partial, 2 full): hubs it draws from use
+/// trucks to reach farther. Field mapped live on 5 November 2026 (army +0x38 cycled 0->1->2->0
+/// with each click on the badge's motorization button).
+const MOTORIZATION: u64 = 0x38;
+/// The selected army's badge: CArmiesView (interface manager +0x1d8) keeps the badges of the
+/// selection in an array at +0x488; a badge holds its root at +0x20 and the army's group
+/// handle at +0x1f8 (mapped live 5 November 2026).
+const ARMIES_VIEW_SLOT: u64 = 0x1d8;
+const BADGES: u64 = 0x488;
+const BADGE_ROOT: u64 = 0x20;
+const BADGE_HANDLE: u64 = 0x1f8;
+const BADGE_VTABLE: u64 = 0x363d598;
+const BADGE: xlayout::Class = xlayout::Class::new("CArmyBadgeView", 0x363d598);
+
+pub(super) fn motorization(r: &Reader<'_>, image: u64, army: &str) -> Result<u32> {
+    let group = group_named(r, image, army)?;
+    Ok((r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff)
+}
+
+/// The motorization button on the badge of `army`, which must be the only selected army.
+fn motorization_button(r: &Reader<'_>, image: u64, army: &str) -> Result<Rect> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let handle = r.u64(group_named(r, image, army)? + u.group_handle)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + u.manager)?;
+    let view = r.u64(manager + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    if r.u64(view)? != image + img(abi, ARMIES_VIEW.vtable)? {
+        return Err(Error::new("invalid_gui", "Exact armies view required"));
+    }
+    let (_, data, count) = r.array_header(view + fld(abi, &ARMIES_VIEW, BADGES)?)?;
+    for k in 0..count.min(8) as u64 {
+        let badge = r.u64(data + k * 8)?;
+        if r.u64(badge)? != image + img(abi, BADGE_VTABLE)?
+            || r.u64(badge + fld(abi, &BADGE, BADGE_HANDLE)?)? != handle
+        {
+            continue;
+        }
+        let root = gui_tree::container(r, r.u64(badge + fld(abi, &BADGE, BADGE_ROOT)?)?, image)?
+            .ok_or_else(|| Error::new("invalid_gui", "Army badge window required"))?;
+        let button = super::panelkit::find(r, image, root, "army_motorization_priority_button", 6)?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Motorization button not found"))?;
+        if !gui_tree::shown(r, button)? {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "Motorization button not shown",
+            ));
+        }
+        return gui_tree::rect(r, image, button, GAME);
+    }
+    Err(Error::new(
+        "gui_target_unavailable",
+        format!("No badge for {army} is shown after selecting it"),
+    ))
+}
+
+/// Set the supply motorization level of `army` with the badge's ordinary toggle button
+/// (each click advances 0 -> 1 -> 2 -> 0); every click is verified from memory.
+pub(super) fn set_motorization(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    level: u32,
+) -> Result<()> {
+    let now = read(process, |r, i| motorization(r, i, army))?;
+    if now == level {
+        return Ok(());
+    }
+    clear_notices(process, keys)?;
+    select_army(process, keys, army)?;
+    let clicks = (level + 3 - now) % 3;
+    for step in 1..=clicks {
+        let button = read(process, |r, i| motorization_button(r, i, army))?;
+        let (x, y) = button.center();
+        keys.click(GAME, x, y)?;
+        let want = (now + step) % 3;
+        wait(process, "motorization level", |r, i| {
+            Ok(motorization(r, i, army)? == want)
+        })?;
+    }
+    Ok(())
+}
+
+/// The army panel's division rows: CArmiesView keeps two CArmyDivisionListView objects
+/// (+0x4a0, +0x4a8); each keeps its CArmyDivisionView rows in an array at +0xe0, and a row
+/// names its division by the id words at +0x10/+0x14 (mapped live 5 November 2026).
+const DIVISION_LISTS: [u64; 2] = [0x4a0, 0x4a8];
+/// The division list view's GUI root; the armies view keeps two list views and only the
+/// one whose root is visible is on screen (the other keeps stale rows).
+const LIST_ROOT: u64 = 0x40;
+fn list_shown(r: &Reader<'_>, list: u64) -> Result<bool> {
+    let root = r.u64(list + fld(r.string_abi(), &DIVISION_LIST, LIST_ROOT)?)?;
+    Ok(root != 0 && gui_tree::visible(r, root)?)
+}
+/// A shown widget of the on-screen division list view (e.g. its `btn_delete`).
+fn list_widget(r: &Reader<'_>, image: u64, name: &str) -> Result<Option<Rect>> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    for list_at in DIVISION_LISTS {
+        let list = r.u64(view + fld(abi, &ARMIES_VIEW, list_at)?)?;
+        if list == 0 || !list_shown(r, list)? {
+            continue;
+        }
+        let root = r.u64(list + fld(abi, &DIVISION_LIST, LIST_ROOT)?)?;
+        let Some(root) = gui_tree::container(r, root, image)? else {
+            continue;
+        };
+        if let Some(w) = super::panelkit::find(r, image, root, name, 4)? {
+            if gui_tree::shown(r, w)? {
+                return gui_tree::rect(r, image, w, GAME).map(Some);
+            }
+        }
+    }
+    Ok(None)
+}
+const LIST_ROWS: u64 = 0xe0;
+const ROW_TYPE_WORD: u64 = 0x10;
+const ROW_VTABLE: u64 = 0x363d658;
+const DIVISION_LIST: xlayout::Class = xlayout::Class::new("CArmyDivisionListView", 0x363d5c0);
+const DIVISION_ROW: xlayout::Class = xlayout::Class::new("CArmyDivisionView", 0x363d658);
+const ROW_ROOTS: [u64; 6] = [0x20, 0x28, 0x30, 0x8, 0x10, 0x18];
+
+/// Screen rectangle of the shown panel row of division `id` ("type:token" as hoi4_armies).
+pub(super) fn division_row(r: &Reader<'_>, image: u64, id: &str) -> Result<Rect> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let (t, k) = id
+        .split_once(':')
+        .and_then(|(a, b)| {
+            Some((
+                u32::from_str_radix(a, 16).ok()?,
+                u32::from_str_radix(b, 16).ok()?,
+            ))
+        })
+        .ok_or_else(|| Error::new("invalid_arguments", "division id must be TYPE:TOKEN (hex)"))?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    let row_vt = image + img(abi, ROW_VTABLE)?;
+    let word = fld(abi, &DIVISION_ROW, ROW_TYPE_WORD)?;
+    for list_at in DIVISION_LISTS {
+        let list = r.u64(view + fld(abi, &ARMIES_VIEW, list_at)?)?;
+        if list == 0 || !list_shown(r, list)? {
+            continue;
+        }
+        let (_, data, count) = r.array_header(list + fld(abi, &DIVISION_LIST, LIST_ROWS)?)?;
+        for n in 0..count.min(64) as u64 {
+            let row = r.u64(data + n * 8)?;
+            if r.u64(row)? != row_vt
+                || r.i32(row + word)? as u32 != t
+                || r.i32(row + word + 4)? as u32 != k
+            {
+                continue;
+            }
+            for at in ROW_ROOTS {
+                let Ok(p) = r.u64(row + fld(abi, &DIVISION_ROW, at)?) else {
+                    continue;
+                };
+                if let Ok(Some(root)) = gui_tree::container(r, p, image) {
+                    if gui_tree::visible(r, root)? {
+                        // The row's background button is its click target (army_division_view).
+                        if let Some(bg) = super::panelkit::find(r, image, root, "btn_bg", 1)? {
+                            if gui_tree::shown(r, bg)? {
+                                return gui_tree::rect(r, image, bg, GAME);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Err(Error::new(
+        "gui_target_unavailable",
+        format!("Division {id} has no shown row in the army panel"),
+    ))
+}
+/// Move the chosen divisions of `army` into `into` (an own army) or, without it, into one
+/// new army, one division at a time with the game's controls: the army's card opens its
+/// division list, a click on a division's row selects that division alone, then the new-army
+/// card (first one) or a right click on the target's card (the rest) moves it. Each move is
+/// verified from division membership. Returns the receiving army's name.
+pub(super) fn detach(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    ids: &[String],
+    into: Option<&str>,
+) -> Result<String> {
+    let source = read(process, |r, i| group_named(r, i, army))?;
+    let members = read(process, membership)?;
+    for id in ids {
+        if members.get(id) != Some(&source) {
+            return Err(Error::new(
+                "invalid_target",
+                format!("Division {id} is not in {army} (ids as hoi4_armies lists them)"),
+            ));
+        }
+    }
+    if ids.len() >= members.values().filter(|g| **g == source).count() {
+        return Err(Error::new(
+            "invalid_target",
+            "That would empty the army; use hoi4_army_merge to move a whole army",
+        ));
+    }
+    let mut dest: Option<String> = into.map(str::to_string);
+    for id in ids {
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let (x, y) = row.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "division selected", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == 1)
+        })?;
+        match &dest {
+            Some(name) => {
+                let target = read(process, |r, i| group_named(r, i, name))?;
+                let card = read(process, |r, i| card_rect(r, i, name, "portrait_btn"))?;
+                let (cx, cy) = card.center();
+                keys.right_click(GAME, cx, cy)?;
+                wait(process, "division moved", |r, i| {
+                    Ok(membership(r, i)?.get(id) == Some(&target))
+                })?;
+            }
+            None => {
+                let groups_before: BTreeSet<u64> =
+                    read(process, membership)?.values().copied().collect();
+                let card = settled(process, "new army card", |r, i| new_card(r, i, false))?;
+                let (cx, cy) = card.center();
+                keys.click(GAME, cx, cy)?;
+                wait(process, "new army", |r, i| {
+                    Ok(membership(r, i)?
+                        .get(id)
+                        .is_some_and(|g| *g != 0 && !groups_before.contains(g)))
+                })?;
+                let name = read(process, |r, i| {
+                    let g = membership(r, i)?[id];
+                    army_name(r, g)
+                })?;
+                dest = Some(name);
+            }
+        }
+    }
+    dest.ok_or_else(|| Error::new("invalid_arguments", "No division given"))
+}
+/// Disband own divisions of one army with the division list's delete button (the game returns
+/// their equipment and manpower to the pool). A whole army is disbanded in one press with the
+/// army selected; otherwise each division is selected from its row first. Each division is
+/// verified gone from the own divisions.
+pub(super) fn disband(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    ids: &[String],
+) -> Result<()> {
+    let source = read(process, |r, i| group_named(r, i, army))?;
+    let members = read(process, membership)?;
+    for id in ids {
+        if members.get(id) != Some(&source) {
+            return Err(Error::new(
+                "invalid_target",
+                format!("Division {id} is not in {army} (ids as hoi4_armies lists them)"),
+            ));
+        }
+    }
+    let whole = ids.len() >= members.values().filter(|g| **g == source).count();
+    let press_delete = |gone: &dyn Fn(&BTreeMap<String, u64>) -> bool| -> Result<()> {
+        let button = settled(process, "division list delete button", |r, i| {
+            list_widget(r, i, "btn_delete")?
+                .ok_or_else(|| Error::new("gui_target_unavailable", "No shown delete button"))
+        })?;
+        let (x, y) = button.center();
+        keys.click(GAME, x, y)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(900);
+        while std::time::Instant::now() < deadline {
+            if gone(&read(process, membership)?) {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        // A confirmation dialog: accept it.
+        keys.press(Key::Return)?;
+        wait(process, "divisions disbanded", |r, i| {
+            Ok(gone(&membership(r, i)?))
+        })
+    };
+    if whole {
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        return press_delete(&|m| ids.iter().all(|d| !m.contains_key(d)));
+    }
+    for id in ids {
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let (x, y) = row.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "division selected", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == 1)
+        })?;
+        press_delete(&|m| !m.contains_key(id))?;
+    }
+    Ok(())
+}
+/// Probe-only: rows of every division of `army` (select the army first).
+pub(super) fn debug_rows(process: &dyn Process, army: &str) -> Result<Value> {
+    read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        let ids: Vec<String> = membership(r, i)?
+            .into_iter()
+            .filter(|(_, g)| *g == group)
+            .map(|(d, _)| d)
+            .collect();
+        Ok(json!(ids
+            .iter()
+            .map(|id| json!({"id": id, "row": division_row(r, i, id).map(|x| [x.x, x.y, x.w, x.h]).map_err(|e| e.message)}))
+            .collect::<Vec<_>>()))
+    })
+}
 /// Own army groups (from the own armies).
 fn army_groups(r: &Reader<'_>, image: u64) -> Result<BTreeSet<u64>> {
     let u = ui(r)?;
@@ -978,14 +1528,28 @@ pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &st
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
     })?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
-    let (x, y) = card.center();
-    keys.click(GAME, x, y)?;
-    wait(process, "select army", |r, i| {
-        Ok(selection_size(r, i)? & 0xffff_ffff == size)
-    })?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    Ok(card)
+    // The card strip re-lays out when an army is added or removed (a detach creating a new army
+    // moved Army 1's card and the next click missed it, live 6 Nov 2026): wait for a stable
+    // rectangle, and click once more on a fresh read if the selection does not follow.
+    let mut last = None;
+    for _ in 0..2 {
+        let card = settled(process, "army card", |r, i| {
+            card_rect(r, i, army, "portrait_btn")
+        })?;
+        let (x, y) = card.center();
+        keys.click(GAME, x, y)?;
+        match wait(process, "select army", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == size)
+        }) {
+            Ok(()) => {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                return Ok(card);
+            }
+            Err(e) => last = Some(e),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    Err(last.unwrap())
 }
 /// Move every division of army `source` into army `target` with the game's own controls:
 /// a left click on the source card selects exactly its divisions, a right click on the
@@ -1080,10 +1644,16 @@ fn highlighted_near(
     anchor: (f64, f64),
     patch: i32,
 ) -> Vec<(f64, f64)> {
+    // Front-line drawing tints the whole map dark blue, so "changed" alone matches almost
+    // everything (seen live 5 November 2026: no front found around Bale). The valid fronts
+    // are bright dashes in the army's colour (e.g. (161,194,112)); the tinted map stays dark
+    // and blue-dominant (about (30,55,90)).
     let changed = |x: f64, y: f64| match (plain.rgb(x, y), drawing.rgb(x, y)) {
         (Some(a), Some(b)) => {
             let d = |p: u8, q: u8| (i32::from(p) - i32::from(q)).abs();
-            d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2) > 90
+            let bright = b.0.max(b.1) >= 130;
+            let not_blue = b.2 < b.0.max(b.1);
+            d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2) > 90 && bright && not_blue
         }
         _ => false,
     };
@@ -1268,15 +1838,22 @@ pub(super) fn front(
     find_state(process, keys, state)?;
     std::thread::sleep(std::time::Duration::from_millis(500));
     if let Some((x, z)) = near {
-        for _ in 0..4 {
-            match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
-                Some((sx, sy)) if (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy) => {
-                    break
-                }
-                _ => {
-                    keys.scroll(GAME, (960.0, 540.0), -240)?;
-                    std::thread::sleep(std::time::Duration::from_millis(400));
-                }
+        // Zoom out (at most four wheel steps, as before) until the point lies in the usable
+        // area: the steps it needs, sized from its screen offset, go in one smooth flick.
+        let mut left = 4;
+        for _ in 0..2 {
+            let events = match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+                Some(p) => super::glide::zoom_out_events(p, (520.0, 160.0, 1500.0, 800.0), left),
+                None => left.min(2),
+            };
+            if events == 0 {
+                break;
+            }
+            keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            left -= events;
+            if left == 0 {
+                break;
             }
         }
     }
@@ -1455,6 +2032,21 @@ pub(super) fn offensive(
 /// Divisions of `army` whose movement target (province id at +0x2ac of the
 /// division, mapped live on 24 July 1941 by diffing a right-click move order)
 /// lies in the provinces `wanted`, and the army's division count.
+/// Each division's current heading (province id, 0 when standing) for army `army`.
+pub(super) fn headings(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i32>> {
+    let u = ui(r)?;
+    let group = group_named(r, image, army)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division + u.division_group)? == group {
+            out.push(r.i32(division + u.heading_for)?);
+        }
+    }
+    Ok(out)
+}
 pub(super) fn heading_for(
     r: &Reader<'_>,
     image: u64,
@@ -1556,9 +2148,93 @@ pub(super) fn move_to(
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     find_state(process, keys, state)?;
-    keys.right_click(GAME, 960.0, 540.0)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    let before = read(process, |r, i| headings(r, i, army))?;
+    // Map icons at the state's centre (air base, port, victory point) take a right click
+    // for themselves (seen live 10 Dec 2026: Tripoli's air base); try points around the
+    // centre until the divisions get a new heading.
+    const POINTS: [(f64, f64); 5] = [
+        (960.0, 540.0),
+        (900.0, 600.0),
+        (1020.0, 600.0),
+        (900.0, 480.0),
+        (1020.0, 480.0),
+    ];
+    // The state's own land provinces projected through the camera first: far out, the points
+    // around the centre fell on Tripoli's air base icon or the sea and an overseas move never
+    // started (live 6 Nov 2026). Points on the centre icon itself are skipped.
+    let mut points: Vec<(f64, f64)> = target_points(process, state).unwrap_or_default();
+    let projected = !points.is_empty();
+    points.extend(POINTS);
+    // Divisions waiting in their ports show no new heading for a sea transfer: one click on a
+    // projected land province of the target is the order, repeating it only re-issues it.
+    let in_ports = projected && {
+        let ports = read(process, super::naval::naval_base_provinces).unwrap_or_default();
+        let at = read(process, division_provinces).unwrap_or_default();
+        let ids = read(process, |r, i| army_division_ids(r, i, army)).unwrap_or_default();
+        !ids.is_empty()
+            && ids.iter().all(|id| {
+                at.get(id)
+                    .copied()
+                    .flatten()
+                    .is_some_and(|p| ports.contains(&p))
+            })
+    };
+    for (n, (x, y)) in points.into_iter().enumerate() {
+        if in_ports && n == 1 {
+            return Ok(());
+        }
+        keys.right_click(GAME, x, y)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
+        while std::time::Instant::now() < deadline {
+            if read(process, |r, i| headings(r, i, army))? != before {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
     Ok(())
+}
+/// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
+/// centre first, skipping the centre itself where the state's map icons sit; at most eight.
+fn target_points(process: &dyn Process, state: i32) -> Result<Vec<(f64, f64)>> {
+    let Some(identity) = process.identity() else {
+        return Ok(Vec::new());
+    };
+    let dir = super::mapdata::game_dir(&identity.exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let provinces = super::mapdata::state_provinces(&dir, state)?;
+    let mut pts = read(process, |r, i| {
+        let mut out = Vec::new();
+        for p in &provinces {
+            if let Some(&(x, z)) = positions.get(p) {
+                if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
+                    let near_centre = (s.0 - 960.0).abs() < 28.0 && (s.1 - 540.0).abs() < 28.0;
+                    if (470.0..1700.0).contains(&s.0)
+                        && (120.0..880.0).contains(&s.1)
+                        && !near_centre
+                    {
+                        out.push(s);
+                    }
+                }
+            }
+        }
+        Ok(out)
+    })?;
+    pts.sort_by(|a, b| {
+        let d = |p: &(f64, f64)| (p.0 - 960.0).powi(2) + (p.1 - 540.0).powi(2);
+        d(a).total_cmp(&d(b))
+    });
+    pts.truncate(8);
+    Ok(pts)
+}
+/// Ids of the divisions of own army `army`.
+pub(super) fn army_division_ids(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<String>> {
+    let group = group_named(r, image, army)?;
+    Ok(membership(r, image)?
+        .into_iter()
+        .filter(|(_, g)| *g == group)
+        .map(|(id, _)| id)
+        .collect())
 }
 /// Name of the commander of `army`, if any.
 pub(super) fn commander(r: &Reader<'_>, image: u64, army: &str) -> Result<Option<String>> {
@@ -1765,7 +2441,7 @@ fn assign_commander_once(
             .find(|(n, _)| n.to_lowercase() == wanted)
             .map(|(_, rect)| rect))
     };
-    let Some(mut rect) = settled(process, "commander list", find)? else {
+    let Some(rect) = settled(process, "commander list", find)? else {
         let names: Vec<String> = read(process, leader_rows)?
             .into_iter()
             .map(|(n, _)| n)
@@ -1782,41 +2458,45 @@ fn assign_commander_once(
         ));
     };
     let band = read(process, |r, i| Ok(leader_band(r, i)))?;
-    for _ in 0..40 {
-        let bottom = rect.y + rect.h;
-        let top = bottom - PORTRAIT_DRAWN;
-        if top >= band.0 && bottom <= band.1 {
-            break;
-        }
-        // The list can flicker shut while the game rebuilds it; give it a moment,
-        // then open it again from the commander slot.
-        let mut open = false;
-        for attempt in 0..8 {
-            if read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
-                open = true;
-                break;
+    // The drawn portrait (the row's lower part) glides into the list band in one movement.
+    let drawn = |rect: &Rect| {
+        let bottom = f64::from(rect.y + rect.h);
+        (bottom - f64::from(PORTRAIT_DRAWN), bottom)
+    };
+    let outcome = super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (960.0, 560.0),
+            pixels: 240,
+            band: (f64::from(band.0), f64::from(band.1)),
+            search: 0,
+        },
+        || {
+            // The list can flicker shut while the game rebuilds it; give it a moment,
+            // then open it again from the commander slot.
+            for attempt in 0..8 {
+                if read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                if attempt == 4 {
+                    keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
+                }
             }
-            std::thread::sleep(std::time::Duration::from_millis(250));
-            if attempt == 4 {
-                keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
-            }
-        }
-        if !open {
-            return Err(Error::new(
+            Err(Error::new(
                 "input_readback_failed",
                 format!("Commander list closed while bringing the row into view (row {rect:?}, list band {band:?})"),
-            ));
-        }
-        let pixels = if top < band.0 { 240 } else { -240 };
-        keys.scroll(GAME, (960.0, 560.0), pixels)?;
-        std::thread::sleep(std::time::Duration::from_millis(150));
-        let moved = read(process, find)?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))?;
-        // The first or last row cannot scroll further: keep it when its middle is shown.
-        if moved == rect {
-            break;
-        }
-        rect = moved;
+            ))
+        },
+        |r, i| Ok(find(r, i)?.map(|x| drawn(&x))),
+    )?;
+    // The first or last row cannot scroll further: it is kept when its middle is shown.
+    if outcome == super::glide::Glided::Unknown {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "General left the list",
+        ));
     }
     let rect = settled(process, "general row", |r, i| {
         find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))

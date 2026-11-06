@@ -8,10 +8,12 @@ mod air;
 mod airact;
 mod airread;
 mod airui;
+mod alerts;
 mod armies;
 mod commanders;
 mod construction;
 mod construction_find;
+mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
 // Default-off single ordinary Escape qualification.
@@ -42,6 +44,8 @@ mod fleetops;
 #[cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod focus;
 mod front_plan;
+mod glide;
+mod occlaw;
 mod peace;
 mod trade;
 #[cfg(target_os = "macos")]
@@ -70,6 +74,7 @@ mod mios;
 mod naval;
 mod navalact;
 mod navalui;
+mod occupation;
 mod panelkit;
 mod politics;
 mod production;
@@ -92,6 +97,7 @@ mod testmem;
 mod ui;
 mod ui_action;
 mod units;
+mod war_stats;
 mod wars;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
@@ -399,6 +405,8 @@ impl ClockBackend<'_> {
         let Some(key) = Self::plan(action, &before) else {
             return Ok(true);
         };
+        // An open focus tree's search box would take the key as text.
+        let _ = panelkit::close_focus_tree(self.process, self.keys);
         self.keys.press(key)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -445,8 +453,23 @@ fn string<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&'
         .ok_or_else(|| Error::new("invalid_arguments", format!("{name} must be a string")))
 }
 fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
-    if args.keys().any(|v| !keys.contains(&v.as_str())) {
-        return Err(Error::new("invalid_arguments", "Unexpected input argument"));
+    // A request id or lease token on a read is harmless: players add them by habit and a
+    // refusal only costs a call (Ethiopia continuation, 6 Nov 2026).
+    if let Some(bad) = args
+        .keys()
+        .find(|v| !keys.contains(&v.as_str()) && *v != "request_id" && *v != "lease_token")
+    {
+        return Err(Error::new(
+            "invalid_arguments",
+            format!(
+                "Unexpected input argument {bad:?}; this tool takes: {}",
+                keys.iter()
+                    .filter(|k| !matches!(**k, "request_id" | "lease_token"))
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ));
     }
     Ok(())
 }
@@ -460,6 +483,44 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         "hoi4_industry" => resources::industry(process),
         "hoi4_supply" => supply::report(process, 0.7),
         "hoi4_economy_detail" => economy_detail::detail(process),
+        // Probe-only (macprobe): raw bytes of an own army object, for mapping fields.
+        n if n.starts_with("dbg_army_bytes:") => armies::debug_bytes(process, &n[15..]),
+        n if n.starts_with("dbg_rows:") => armies::debug_rows(process, &n[9..]),
+        n if n.starts_with("dbg_hex:") => occupation::debug_hex(process, &n[8..]),
+        n if n.starts_with("dbg_country:") => occupation::debug_country(process, &n[12..]),
+        "dbg_states" => occupation::debug_states(process),
+        "hoi4_war_stats" => war_stats::stats(process, &serde_json::Map::new()),
+        "hoi4_alerts" => alerts::alerts(process),
+        "hoi4_war_stats_all" => {
+            let mut args = serde_json::Map::new();
+            args.insert("all".into(), json!(true));
+            war_stats::stats(process, &args)
+        }
+        "hoi4_occupation" | "hoi4_occupation_all" => {
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            let mut args = serde_json::Map::new();
+            if name.ends_with("_all") {
+                args.insert("scope".into(), json!("all"));
+            }
+            occupation::occupation(process, &mapdata::game_dir(exe)?, &args)
+        }
+        n if n.starts_with("dbg_owner:") => panelkit::debug_owner(process, &n[10..]),
+        n if n.starts_with("dbg_deep:") => panelkit::debug_deep(process, &n[9..]),
+        n if n.starts_with("dbg_widget:") => panelkit::debug_widget_anywhere(process, &n[11..]),
+        "dbg_alerts" => panelkit::debug_alerts(process),
+        n if n.starts_with("dbg_widget_idler:") => panelkit::debug_widget_idler(process, &n[17..]),
+        n if n.starts_with("dbg_image_save:") => panelkit::debug_image_save(process, &n[15..]),
+        "dbg_popups" => panelkit::debug_popups(process),
+        "dbg_views" => panelkit::debug_views(process),
+        n if n.starts_with("dbg_find_root:") => panelkit::debug_find_root(process, &n[14..]),
+        n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),
+        n if n.starts_with("dbg_bytes:") => panelkit::debug_bytes(process, &n[10..]),
+        "dbg_camera" => ui::read(process, |r, i| {
+            Ok(json!({"height": screenmap::camera_height(r, i)?}))
+        }),
         _ => Err(Error::new(
             "capability_unavailable",
             "Unknown read-only tool",
@@ -525,6 +586,10 @@ impl Commands for MacClock {
             country_status::tool(),
             diplomacy_state::tool(),
             diplomacy_state::countries_tool(),
+            occupation::tool(),
+            occlaw::tool(),
+            war_stats::tool(),
+            alerts::tool(),
             json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             trade::tool(),
             trade::set_tool(),
@@ -566,11 +631,11 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"renew"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
-            json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"type":"integer","minimum":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... (state buildings only).","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... Province buildings (supply_node = supply hub, naval_base, bunker, coastal_bunker) are clicked on a province: pass province_id, or the tool tries the state's provinces nearest the centre in turn until the game accepts one (a supply hub needs a province the game allows, usually on a railway). Railways (rail_way) are not supported.","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":99999},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_politics_choose","description":"Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"idea":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["category","slot","idea","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_decisions_list","description":"Open the decisions panel and list offered decisions (key, enabled by the game, whether a timer for it is running). Changes nothing.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
@@ -591,6 +656,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
+            railway::tool(),
             json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
@@ -625,6 +691,10 @@ impl Commands for MacClock {
             json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_motorization","description":"Set an army's supply motorization: 0 none, 1 partial, 2 full. The supply hubs the army draws from then use trucks (about 40 per level per hub) to carry supply much farther into roadless land; it costs trucks from the stockpile (keep truck production running) and fuels nothing. With the game's ordinary control: the army's card selects it, then the motorization button on its badge is clicked until the level is reached, each click verified from memory. Read the current level in hoi4_armies (motorization). Refused before input with army_unknown or invalid_arguments.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"level":{"type":"integer","minimum":0,"maximum":2},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","level","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_division_disband","description":"Disband own divisions of one army (the division list's delete button; their equipment and manpower go back to the pool). Use it to cut useless divisions that only eat equipment, manpower and supply: tiny starting divisions (2-4 battalions), cavalry or irregulars a strong player would not keep, once the army has enough good divisions. `divisions` are ids as hoi4_armies / hoi4_supply list them; listing every division of the army disbands the whole army in one press. Each division is verified gone. Refused before input when a division is not in that army.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_map_mode","description":"Switch the map mode with the game's own F-key shortcut, as a human checks the map: political (F1, default; armies and fronts), naval (F2), air (F3, air regions and superiority), supply (F4), terrain (F5), resistance (F6), compliance (F7), resources (F8), air_raids (F9), factions (F10). A view change only (no game state changes, nothing to read back): switch to political again before giving army orders. Look at a mode when its domain matters: supply before an offensive, resistance and compliance for occupied states, air for superiority, naval for sea lanes.","inputSchema":{"type":"object","properties":{"mode":{"type":"string","enum":["political","naval","air","supply","terrain","resistance","compliance","resources","air_raids","factions"]},"lease_token":{"type":"string"}},"required":["mode","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_detach","description":"Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":18},"into":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_state_slots","description":"Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
@@ -702,8 +772,12 @@ impl Commands for MacClock {
                     | "hoi4_research_extras"
                     | "hoi4_states"
                     | "hoi4_wars"
+                    | "hoi4_war_stats"
+                    | "hoi4_alerts"
+                    | "hoi4_occupation"
                     | "hoi4_war_risk"
                     | "hoi4_save"
+                    | "hoi4_railway_build"
                     | "hoi4_front_plan"
                     | "hoi4_encirclement_candidates"
                     | "hoi4_war_goal_targets"
@@ -748,6 +822,11 @@ impl Commands for MacClock {
                     | "hoi4_army_group_create"
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
+                    | "hoi4_army_motorization"
+                    | "hoi4_army_detach"
+                    | "hoi4_map_mode"
+                    | "hoi4_occupation_law"
+                    | "hoi4_division_disband"
                     | "hoi4_state_slots"
                     | "hoi4_air_wings"
                     | "hoi4_air_mission"
@@ -774,6 +853,163 @@ impl Commands for MacClock {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
+        // A request_id already in the journal is a settlement of an earlier dispatch: let it
+        // through so a typo's open journal can still be settled.
+        let journaled = arguments
+            .get("request_id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| {
+                self.state
+                    .lock()
+                    .map(|c| c.actions.receipt_exists(id))
+                    .unwrap_or(false)
+            });
+        // Real campaigns never pause: an action (not the clock tool, not the peace screens) that
+        // leaves the game newly paused is undone with the game's own pause key (Ethiopia run 11:
+        // the game stood paused for 100 s after a plan-runner tick with a focus and a front).
+        let guard_pause = !journaled
+            && arguments.get("request_id").is_some()
+            && name != "hoi4_time"
+            && !name.starts_with("hoi4_peace")
+            && process.identity() == self.process.identity();
+        let was_paused = if guard_pause { self.paused_now() } else { None };
+        let result = (if journaled {
+            Ok(())
+        } else {
+            army_names_exist(process, name, arguments)
+                .and_then(|()| self.army_screen_ready(process, name))
+        })
+        .and_then(|()| self.call_inner(process, name, arguments))
+        .and_then(not_applied_is_error);
+        // Map actions zoom in to aim (Find, border clicks); give the player and the viewer the
+        // strategic view back afterwards. Best effort: never changes the tool's result.
+        if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
+            let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
+        }
+        if was_paused == Some(false) {
+            let _ = ui::close_menu(self.process.as_ref(), &*self.keys);
+            if self.paused_now() == Some(true) {
+                let _ = self.keys.press(Key::Pause);
+            }
+        }
+        result
+    }
+}
+impl MacClock {
+    /// Army orders need the political map with no panel over it: a run left the map in naval
+    /// mode with the diplomacy panel open and every army order failed until both were cleared
+    /// by hand (Ethiopia run 10). F1 is the game's own political map-mode key.
+    /// The game's paused flag, read like the clock tool reads it (None when unreadable).
+    fn paused_now(&self) -> Option<bool> {
+        let mut control = self.state.lock().ok()?;
+        control
+            .guard
+            .observe(self.process.as_ref())
+            .ok()
+            .map(|s| s.paused)
+    }
+    fn army_screen_ready(&self, process: &dyn Process, name: &str) -> Result<()> {
+        let army_tool = name.starts_with("hoi4_army_") || name == "hoi4_division_disband";
+        if !army_tool || process.identity() != self.process.identity() {
+            return Ok(());
+        }
+        let process = self.process.as_ref();
+        panelkit::close_panels(process, &*self.keys)?;
+        self.keys.press_code(122)?;
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        Ok(())
+    }
+}
+/// Army names are checked before anything is journaled: a typo used to become an uncertain
+/// dispatch that blocked every later action (seen live: "Army 1 1 ").
+fn army_names_exist(process: &dyn Process, name: &str, arguments: &Value) -> Result<()> {
+    if !name.starts_with("hoi4_army_")
+        || matches!(name, "hoi4_army_create" | "hoi4_army_assign_plan")
+    {
+        return Ok(());
+    }
+    let wanted: Vec<&str> = ["army", "source", "target", "into"]
+        .iter()
+        .filter_map(|k| arguments.get(*k).and_then(Value::as_str))
+        .chain(
+            arguments
+                .get("armies")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str),
+        )
+        .collect();
+    if wanted.is_empty() {
+        return Ok(());
+    }
+    let view = armies::armies(process)?;
+    let mut names: Vec<String> = view["armies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["army"].as_str().map(str::to_string))
+        .collect();
+    names.extend(
+        view["army_groups"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|g| g["army_group"].as_str().map(str::to_string)),
+    );
+    for w in wanted {
+        if !names.iter().any(|n| n == w) {
+            return Err(Error::new(
+                "army_unknown",
+                format!(
+                    "No own army or army group is named {w:?}; nothing was done. Names: {}",
+                    names.join(", ")
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+/// A settled receipt whose target did not happen (NotApplied) or happened only in part
+/// (Diverged) is a failure for the caller, never a success with a buried status (seen live:
+/// an army_commander retry settled with no general and was read as success).
+fn not_applied_is_error(value: Value) -> Result<Value> {
+    let status = value["receipt"]["status"].as_str().unwrap_or("");
+    let code = match status {
+        "NotApplied" => "action_not_applied",
+        "Diverged" => "action_diverged",
+        _ => return Ok(value),
+    };
+    let detail = value["receipt"]["detail"].to_string();
+    Err(Error::new(
+        code,
+        format!(
+            "The action did not reach its target ({status}); game state now: {detail}. \
+             Read the state again and send a corrected action with a NEW request_id \
+             (this id stays settled)."
+        ),
+    ))
+}
+/// Tools that move the map camera; the camera is zoomed back out after them.
+const MAP_TOOLS: &[&str] = &[
+    "hoi4_occupation_law",
+    "hoi4_army_detach",
+    "hoi4_army_create",
+    "hoi4_army_assign",
+    "hoi4_army_front",
+    "hoi4_army_offensive",
+    "hoi4_army_move",
+    "hoi4_army_split",
+    "hoi4_army_merge",
+    "hoi4_construction_add",
+    "hoi4_fleet_region",
+    "hoi4_naval_invasion",
+    "hoi4_air_mission",
+    "hoi4_air_rebase",
+    "hoi4_peace_take",
+];
+impl MacClock {
+    fn call_inner(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         if process.identity() != self.process.identity() {
             return Err(Error::new(
                 "ownership_changed",
@@ -934,6 +1170,22 @@ impl Commands for MacClock {
                 json!({"country":tag,"would_join":joiners,"borders_not_held":weak,
                 "declare_would_be_refused":!weak.is_empty()}),
             );
+        }
+        if name == "hoi4_alerts" {
+            allowed(args, &[])?;
+            return alerts::alerts(process);
+        }
+        if name == "hoi4_war_stats" {
+            allowed(args, &["all"])?;
+            return war_stats::stats(process, args);
+        }
+        if name == "hoi4_occupation" {
+            allowed(args, &["scope", "limit"])?;
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            return occupation::occupation(process, &mapdata::game_dir(exe)?, args);
         }
         if name == "hoi4_wars" {
             allowed(args, &["enemies", "max_states"])?;
@@ -1560,14 +1812,12 @@ impl Commands for MacClock {
                     ],
                 )?;
             }
-            let design = args
-                .get("design")
-                .and_then(Value::as_i64)
-                .and_then(|d| i32::try_from(d).ok())
-                .filter(|d| *d > 0)
-                .ok_or_else(|| {
-                    Error::new("invalid_arguments", "design must be a positive design id")
-                })?;
+            let design = design_arg(
+                process,
+                args.get("design").ok_or_else(|| {
+                    Error::new("invalid_arguments", "design is required (id or name)")
+                })?,
+            )?;
             let want_obsolete = match args.get("obsolete") {
                 None => true,
                 Some(v) if obsolete => v
@@ -1583,12 +1833,24 @@ impl Commands for MacClock {
             let line = if obsolete {
                 0
             } else {
-                args.get("line")
-                    .and_then(Value::as_u64)
-                    .filter(|l| *l > 0)
-                    .ok_or_else(|| {
-                        Error::new("invalid_arguments", "line must be a production line handle")
-                    })?
+                let raw = args.get("line").and_then(Value::as_u64).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "line must be a line index (hoi4_production_lines) or a line handle",
+                    )
+                })?;
+                // A small number is the line's index (as hoi4_production_lines numbers it):
+                // resolved to its handle here so a retried request settles the same line.
+                if raw < 4096 {
+                    production::lines(process)?
+                        .get(raw as usize)
+                        .map(|l| l.handle)
+                        .ok_or_else(|| {
+                            Error::new("line_unknown", format!("No own production line {raw}"))
+                        })?
+                } else {
+                    raw
+                }
             };
             let accept = args
                 .get("accept_progress_loss")
@@ -2066,7 +2328,14 @@ impl Commands for MacClock {
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_research_start" {
-            allowed(args, &["technology", "slot", "request_id", "lease_token"])?;
+            allowed(
+                args,
+                &["technology", "slot", "replace", "request_id", "lease_token"],
+            )?;
+            let replace = args
+                .get("replace")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let key = string(args, "technology")?;
             if key.is_empty()
                 || key.len() > 128
@@ -2104,7 +2373,7 @@ impl Commands for MacClock {
             if actions.receipt_exists(id) {
                 // A retry only settles or replays its receipt; it never refuses on new state.
             } else {
-                research::check(&before, key, slot)?;
+                research::check(&before, key, slot, replace)?;
                 bounded_keys.preflight()?;
             }
             let keys = &bounded_keys;
@@ -2195,14 +2464,7 @@ impl Commands for MacClock {
                 as i32;
             let design = match args.get("design") {
                 None => None,
-                Some(v) if adding => Some(
-                    v.as_i64()
-                        .and_then(|d| i32::try_from(d).ok())
-                        .filter(|d| *d > 0)
-                        .ok_or_else(|| {
-                            Error::new("invalid_arguments", "design must be a positive design id")
-                        })?,
-                ),
+                Some(v) if adding => Some(design_arg(process, v)?),
                 Some(_) => {
                     return Err(Error::new(
                         "invalid_arguments",
@@ -2587,6 +2849,35 @@ impl Commands for MacClock {
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_railway_build" {
+            allowed(
+                args,
+                &[
+                    "from_province",
+                    "from_state",
+                    "to_province",
+                    "to_state",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            let int = |k: &str| {
+                args.get(k)
+                    .and_then(Value::as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+                    .filter(|v| *v > 0)
+            };
+            return railway::build(
+                process,
+                &self.keys,
+                (int("from_province"), int("from_state")),
+                (int("to_province"), int("to_state")),
+            );
         }
         if name == "hoi4_save" {
             allowed(args, &["request_id", "lease_token"])?;
@@ -3362,6 +3653,11 @@ impl Commands for MacClock {
                         .press_code(num("code") as u16)
                         .map(|_| json!({"pressed":num("code")}))
                 }
+                "control" => {
+                    let code = args.get("code").and_then(Value::as_u64).unwrap_or(0) as u16;
+                    self.keys.press_control(code)?;
+                    Ok(json!({"pressed_control": code}))
+                }
                 "letter" => {
                     self.keys.preflight()?;
                     let c = string(args, "letter")?.chars().next().unwrap_or('z');
@@ -3773,6 +4069,276 @@ impl Commands for MacClock {
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
         }
+        if name == "hoi4_occupation_law" {
+            allowed(args, &["law", "via_state", "request_id", "lease_token"])?;
+            let law = string(args, "law")?;
+            if !occlaw::LAWS.iter().any(|(k, _)| *k == law) {
+                return Err(Error::new("invalid_arguments", "Unknown occupation law"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            let dir = mapdata::game_dir(exe)?;
+            let read_now = || -> Result<(Option<String>, Option<i32>)> {
+                let v = occupation::occupation(process, &dir, &serde_json::Map::new())?;
+                let current = v["player_occupation_law"]["key"]
+                    .as_str()
+                    .map(str::to_string);
+                let state = v["states"].as_array().and_then(|a| {
+                    a.iter()
+                        .find(|s| s["resistance_active"].as_bool() == Some(true))
+                        .and_then(|s| s["state_id"].as_i64())
+                        .map(|x| x as i32)
+                });
+                Ok((current, state))
+            };
+            let (current, first_state) = read_now()?;
+            let via = args
+                .get("via_state")
+                .and_then(Value::as_i64)
+                .map(|x| x as i32)
+                .or(first_state);
+            if !actions.receipt_exists(id) {
+                if current.as_deref() == Some(law) {
+                    return Ok(json!({"already":true,"law":law}));
+                }
+                if via.is_none() {
+                    return Err(Error::new(
+                        "invalid_target",
+                        "No occupied or resisting state to open the occupation view from; pass via_state",
+                    ));
+                }
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"occupation_law","law":law,"via_state":via});
+            let keys = &self.keys;
+            let before = current.clone();
+            let mut settle = || {
+                let (now, _) = read_now()?;
+                let detail = json!({"law":now,"wanted":law});
+                Ok(if now.as_deref() == Some(law) {
+                    journal::Outcome::Reached(detail)
+                } else if now == before {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let result = occlaw::set_default(process, keys, via.unwrap_or(0), law);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                while std::time::Instant::now() < deadline
+                    && read_now().ok().and_then(|x| x.0).as_deref() != Some(law)
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                occlaw::close(process, keys);
+                result
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_map_mode" {
+            allowed(args, &["mode", "lease_token"])?;
+            // macOS virtual key codes of F1..F10 (the game's map mode shortcuts, mapped live).
+            let (key, code) = match string(args, "mode")? {
+                "political" => ("F1", 122),
+                "naval" => ("F2", 120),
+                "air" => ("F3", 99),
+                "supply" => ("F4", 118),
+                "terrain" => ("F5", 96),
+                "resistance" => ("F6", 97),
+                "compliance" => ("F7", 98),
+                "resources" => ("F8", 100),
+                "air_raids" => ("F9", 101),
+                "factions" => ("F10", 109),
+                _ => return Err(Error::new("invalid_arguments", "Unknown map mode")),
+            };
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            self.keys.press_code(code)?;
+            return Ok(json!({"mode": string(args, "mode")?, "key": key, "read_back": false}));
+        }
+        if name == "hoi4_division_disband" {
+            allowed(args, &["army", "divisions", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let ids: Vec<String> = args
+                .get("divisions")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .filter(|v: &Vec<String>| !v.is_empty() && v.len() <= 24)
+                .ok_or_else(|| Error::new("invalid_arguments", "divisions: 1..24 division ids"))?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"division_disband","army":army,"divisions":ids});
+            let keys = &self.keys;
+            let mut settle = || {
+                let view = armies::armies(process)?;
+                let present: Vec<&String> = ids
+                    .iter()
+                    .filter(|d| {
+                        view["armies"].as_array().into_iter().flatten().any(|a| {
+                            a["divisions"]
+                                .as_array()
+                                .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(d.as_str())))
+                        }) || view["unassigned"]
+                            .as_array()
+                            .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(d.as_str())))
+                    })
+                    .collect();
+                let detail = json!({"army":army,"divisions":ids,"still_present":present});
+                Ok(if present.is_empty() {
+                    journal::Outcome::Reached(detail)
+                } else if present.len() == ids.len() {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::disband(process, keys, army, &ids)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_detach" {
+            allowed(
+                args,
+                &["army", "divisions", "into", "request_id", "lease_token"],
+            )?;
+            let army = string(args, "army")?;
+            let into = args.get("into").and_then(Value::as_str);
+            for v in std::iter::once(army).chain(into) {
+                if v.is_empty() || v.len() > 128 || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", "Invalid army name"));
+                }
+            }
+            if into == Some(army) {
+                return Err(Error::new("invalid_arguments", "into is the same army"));
+            }
+            let ids: Vec<String> = args
+                .get("divisions")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .filter(|v: &Vec<String>| !v.is_empty() && v.len() <= 18)
+                .ok_or_else(|| Error::new("invalid_arguments", "divisions: 1..18 division ids"))?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_detach","army":army,"divisions":ids,"into":into});
+            let keys = &self.keys;
+            let moved_to = std::cell::RefCell::new(into.map(str::to_string));
+            let mut settle = || {
+                let view = armies::armies(process)?;
+                let army_of = |d: &str| -> Option<String> {
+                    view["armies"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find_map(|a| {
+                            a["divisions"]
+                                .as_array()
+                                .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(d)))
+                                .then(|| a["army"].as_str().unwrap_or("").to_string())
+                        })
+                };
+                let now: Vec<Option<String>> = ids.iter().map(|d| army_of(d)).collect();
+                let detail = json!({"army":army,"divisions":ids,"now_in":now});
+                let all_out = now.iter().all(|a| a.as_deref().is_some_and(|a| a != army));
+                let same = now.windows(2).all(|w| w[0] == w[1]);
+                let target_ok = moved_to
+                    .borrow()
+                    .as_deref()
+                    .is_none_or(|t| now.first().and_then(|a| a.as_deref()) == Some(t));
+                Ok(if all_out && same && target_ok {
+                    journal::Outcome::Reached(detail)
+                } else if now.iter().all(|a| a.as_deref() == Some(army)) {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let name = armies::detach(process, keys, army, &ids, into)?;
+                *moved_to.borrow_mut() = Some(name);
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_motorization" {
+            allowed(args, &["army", "level", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let level = args
+                .get("level")
+                .and_then(Value::as_u64)
+                .filter(|v| *v <= 2)
+                .ok_or_else(|| Error::new("invalid_arguments", "level must be 0, 1 or 2"))?
+                as u32;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                ui::read(process, |r, i| armies::motorization(r, i, army)).map_err(|_| {
+                    Error::new(
+                        "army_unknown",
+                        "No own army has this name (see hoi4_armies)",
+                    )
+                })?;
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_motorization","army":army,"level":level});
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = ui::read(process, |r, i| armies::motorization(r, i, army))?;
+                let body = json!({"army":army,"motorization":now});
+                Ok(if now == level {
+                    journal::Outcome::Reached(body)
+                } else {
+                    journal::Outcome::Diverged(body)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::set_motorization(process, keys, army, level)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
         if name == "hoi4_army_merge" {
             allowed(args, &["source", "target", "request_id", "lease_token"])?;
             let source = string(args, "source")?;
@@ -4042,14 +4608,56 @@ impl Commands for MacClock {
             }
             let action = json!({"kind":"army_move","army":army,"state_id":state});
             let keys = &self.keys;
+            // A move by sea or a long route first heads for the embarkation port or the next
+            // leg, not the target state (seen live: home divisions sailed while the receipt said
+            // NotApplied). New headings on the divisions count as the move having started.
+            let headings_before =
+                ui::read(process, |r, i| armies::headings(r, i, army)).unwrap_or_default();
             let mut settle = || {
-                let (now, total) = heading()?;
-                let detail =
-                    json!({"army":army,"state_id":state,"divisions_heading":now,"divisions":total});
-                Ok(if retry {
-                    journal::Outcome::Diverged(detail)
-                } else if now > 0 {
+                let (now, total) = match heading() {
+                    Ok(v) => v,
+                    // No such army: nothing can have moved (settles a journal a typo left open).
+                    Err(e) if e.code == "invalid_target" => {
+                        return Ok(journal::Outcome::TargetAbsent(
+                            json!({"army":army,"state_id":state,"error":e.message}),
+                        ))
+                    }
+                    Err(e) => return Err(e),
+                };
+                let after = ui::read(process, |r, i| armies::headings(r, i, army))?;
+                let started = after.len() == headings_before.len()
+                    && after
+                        .iter()
+                        .zip(&headings_before)
+                        .filter(|(a, b)| **a != 0 && a != b)
+                        .count()
+                        > 0;
+                // A sea transfer leaves a division standing in its port with its heading
+                // unchanged until it lands (live 6 Nov 2026: Sicily to Tripoli sailed while every
+                // read said nothing moved). With every division in an own port and the target
+                // in another state, the order is reported as an unverified sea transfer.
+                let in_ports = !started && now == 0 && {
+                    let ports = ui::read(process, naval::naval_base_provinces).unwrap_or_default();
+                    let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                    let ids: Vec<String> =
+                        ui::read(process, |r, i| armies::army_division_ids(r, i, army))
+                            .unwrap_or_default();
+                    !ids.is_empty()
+                        && ids.iter().all(|id| {
+                            at.get(id)
+                                .copied()
+                                .flatten()
+                                .is_some_and(|p| ports.contains(&p) && !wanted.contains(&p))
+                        })
+                };
+                let detail = json!({"army":army,"state_id":state,"divisions_heading":now,"divisions":total,
+                    "under_way_by_other_route":now == 0 && started,
+                    "sea_transfer_unverified":in_ports,
+                    "note":if in_ports {"every division waits in an own port: a sea transfer shows no heading until it lands; check hoi4_armies after the crossing days instead of repeating the order"} else {""}});
+                Ok(if now > 0 || started || in_ports {
                     journal::Outcome::Reached(detail)
+                } else if retry {
+                    journal::Outcome::Diverged(detail)
                 } else {
                     journal::Outcome::Unchanged(detail)
                 })
@@ -4517,9 +5125,22 @@ impl Commands for MacClock {
         if name == "hoi4_construction_add" {
             allowed(
                 args,
-                &["building", "state_id", "count", "request_id", "lease_token"],
+                &[
+                    "building",
+                    "state_id",
+                    "province_id",
+                    "count",
+                    "request_id",
+                    "lease_token",
+                ],
             )?;
             let key = string(args, "building")?;
+            let province = match args.get("province_id") {
+                None => None,
+                Some(v) => Some(v.as_i64().filter(|v| (1..100_000).contains(v)).ok_or_else(
+                    || Error::new("invalid_arguments", "province_id must be 1..99999"),
+                )? as i32),
+            };
             if key.is_empty()
                 || key.len() > 64
                 || !key
@@ -4543,8 +5164,7 @@ impl Commands for MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let action =
-                json!({"kind":"construction_add","building":key,"state_id":state,"count":count});
+            let action = json!({"kind":"construction_add","building":key,"state_id":state,"province_id":province,"count":count});
             let start = construction::queued(process, key, state)?;
             let retry = actions.receipt_exists(id);
             if !retry {
@@ -4560,7 +5180,7 @@ impl Commands for MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                construction::add(process, keys, key, state, count)
+                construction::add(process, keys, key, state, count, province)
             };
             let receipt = actions.execute_baselined(
                 id,
@@ -4627,6 +5247,41 @@ impl Commands for MacClock {
         allowed(args, &["paused", "speed", "request_id", "lease_token"])?;
         let id = string(args, "request_id")?;
         let token = string(args, "lease_token")?;
+        // Both targets in one call (players write {"paused":false,"speed":3}): the speed goes
+        // first under `<id>-speed`, then the pause state under the id itself.
+        if let (Some(paused), Some(speed)) = (args.get("paused"), args.get("speed")) {
+            let paused = paused
+                .as_bool()
+                .ok_or_else(|| Error::new("invalid_arguments", "Paused must be a boolean"))?;
+            let speed = speed
+                .as_u64()
+                .filter(|v| *v <= 4)
+                .ok_or_else(|| Error::new("invalid_arguments", "Speed must be integer 0..4"))?
+                as u8;
+            let epoch = guard.epoch.clone();
+            let mut backend = ClockBackend {
+                process,
+                keys: &self.keys,
+                guard,
+                authority,
+                token,
+            };
+            let first = journal.execute(
+                &format!("{id}-speed"),
+                &epoch,
+                Action::SetSpeed(speed),
+                &mut backend,
+                Duration::from_secs(10),
+            )?;
+            let receipt = journal.execute(
+                id,
+                &epoch,
+                Action::SetPaused(paused),
+                &mut backend,
+                Duration::from_secs(10),
+            )?;
+            return Ok(json!({"receipt":receipt,"speed_receipt":first}));
+        }
         let action = match (args.get("paused"), args.get("speed")) {
             (Some(v), None) => Action::SetPaused(
                 v.as_bool()
@@ -4641,7 +5296,7 @@ impl Commands for MacClock {
             _ => {
                 return Err(Error::new(
                     "invalid_arguments",
-                    "Supply exactly one clock target",
+                    "Supply a clock target: paused, speed or both",
                 ))
             }
         };
@@ -4719,5 +5374,44 @@ mod placement_deadline_tests {
             qualification_remaining(false, None, original).unwrap(),
             None
         );
+    }
+}
+
+/// A `design` argument: a positive design id, or a design's name as hoi4_designs lists it
+/// (case-insensitive, exact), resolved from the own design list in memory.
+fn design_arg(process: &dyn Process, value: &Value) -> Result<i32> {
+    if let Some(id) = value
+        .as_i64()
+        .and_then(|d| i32::try_from(d).ok())
+        .filter(|d| *d > 0)
+    {
+        return Ok(id);
+    }
+    let name = value
+        .as_str()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| {
+            Error::new(
+                "invalid_arguments",
+                "design must be a design id or a design name from hoi4_designs",
+            )
+        })?;
+    let all = designs::read_all(process)?;
+    let found: Vec<i32> = all
+        .iter()
+        .filter(|d| d.variant.name.eq_ignore_ascii_case(name))
+        .map(|d| d.variant.id)
+        .collect();
+    match found.as_slice() {
+        [id] => Ok(*id),
+        [] => Err(Error::new(
+            "design_unknown",
+            format!("No own design is named {name:?} (hoi4_designs lists the names and ids)"),
+        )),
+        _ => Err(Error::new(
+            "design_ambiguous",
+            format!("Several own designs are named {name:?}: pass the design id ({found:?})"),
+        )),
     }
 }

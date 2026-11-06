@@ -677,6 +677,41 @@ pub(super) fn in_list(rect: &Rect, category: &str) -> bool {
     let top = if category == "naval_button" { 250 } else { 170 };
     rect.y >= top && rect.y + rect.h <= 1040
 }
+/// Glide the selection list (only while it is open) until `button` lies inside the list of
+/// `category` (see `in_list`), in one smooth movement.
+pub(super) fn glide_button(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    category: &str,
+    button: impl Fn(&Reader<'_>, u64) -> Result<Option<Rect>>,
+) -> Result<super::glide::Glided> {
+    let top = if category == "naval_button" {
+        250.0
+    } else {
+        170.0
+    };
+    super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (780.0, 700.0),
+            pixels: 240,
+            band: (top, 1040.0),
+            search: 0,
+        },
+        || {
+            if read(process, selection_open)? {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    "input_readback_failed",
+                    "The design selection list closed",
+                ))
+            }
+        },
+        move |r, i| Ok(button(r, i)?.map(|b| super::glide::span_y(&b))),
+    )
+}
 
 /// Category button order that can list a design of this coarse kind.
 pub(super) fn categories_for(kind: &str) -> &'static [&'static str] {
@@ -795,8 +830,8 @@ pub(super) fn locate(
             set_outdated(process, keys, true)?;
             ticked_by_us = true;
         }
-        let mut last_y: Option<i32> = None;
-        for _ in 0..40 {
+        let mut glided = false;
+        loop {
             let list = read(process, rows)?;
             for r in &list {
                 if r.shown && !seen.contains(&r.key) {
@@ -818,14 +853,18 @@ pub(super) fn locate(
                     ticked_by_us,
                 });
             }
-            if last_y == Some(button.y) {
+            if glided {
                 debug.push(format!("{category}: row {id} cannot be scrolled into view"));
                 break;
             }
-            last_y = Some(button.y);
-            let pixels = if button.y < 170 { 240 } else { -240 };
-            keys.scroll(GAME, (780.0, 700.0), pixels)?;
-            std::thread::sleep(Duration::from_millis(250));
+            glided = true;
+            // One glide brings the row's button into the list (only while the list is open).
+            glide_button(process, keys, category, move |r, i| {
+                Ok(rows(r, i)?
+                    .into_iter()
+                    .find(|x| x.id == id && x.shown)
+                    .and_then(|row| row.variant_button.or(row.obsolete_button)))
+            })?;
         }
         if ticked_by_us {
             // Wrong list: put the filter back before trying the next category.

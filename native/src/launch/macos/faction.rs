@@ -301,21 +301,33 @@ fn drive_create(process: &dyn Process, keys: &dyn GameInput, plan: &CreatePlan) 
     let result = (|| -> Result<Value> {
         open_from_topbar(process, keys, "new_faction_window")?;
         pause(500);
-        let mut list = settled(process, "faction templates", templates)?;
+        let list = settled(process, "faction templates", templates)?;
         let pairs: Vec<(String, String)> = list
             .iter()
             .map(|t| (t.name.clone(), t.manifest.clone()))
             .collect();
         let index = pick_template(&pairs, plan.template.as_deref())?;
-        for _ in 0..4 {
-            if on_screen(list[index].select) {
-                break;
-            }
-            let down = list[index].select.y > 500;
-            keys.scroll(kit::GAME, (700.0, 450.0), if down { -240 } else { 240 })?;
-            pause(300);
-            list = settled(process, "faction templates", templates)?;
+        if !on_screen(list[index].select) {
+            // One glide brings the card into view (the template grid errors once the window
+            // is gone, which stops the glide).
+            super::glide::glide(
+                process,
+                keys,
+                &super::glide::Glide {
+                    at: (700.0, 450.0),
+                    pixels: 240,
+                    band: (150.0, 960.0),
+                    search: 0,
+                },
+                || Ok(()),
+                |r, i| {
+                    Ok(templates(r, i)?
+                        .get(index)
+                        .map(|t| super::glide::span_y(&t.select)))
+                },
+            )?;
         }
+        let list = settled(process, "faction templates", templates)?;
         let chosen = list[index].clone();
         if !on_screen(chosen.select) {
             return Err(Error::new(

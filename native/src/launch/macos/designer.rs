@@ -773,23 +773,36 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
     }
     let dd = settled(process, "name box", |r, i| Ok(dropdown(r, i)?.expand))?;
     let (x, y) = dd.center();
-    // The name box is the left part of the dropdown; the expand arrow sits at its right end.
-    keys.click(GAME, x - 110.0, y)?;
-    std::thread::sleep(Duration::from_millis(250));
-    keys.press_code(crate::platform::game_input::vk::END)?; // End
+    // The name box sits beside the template dropdown's expand arrow: left of it on some layouts,
+    // right of it in the designer opened from a template's Edit (live 6 Nov 2026). Its rectangle
+    // is not read, so try points on both sides until the first Backspace proves the focus.
     let mut length = current.chars().count();
     if length > 0 {
-        keys.press_code(crate::platform::game_input::vk::DELETE)?;
-        length -= 1;
-        wait(process, "name box focused", |r, i| {
-            Ok(draft(r, i)?.name.chars().count() == length)
-        })
-        .map_err(|_| {
-            Error::new(
+        let mut focused = false;
+        for dx in [110.0, -90.0, -150.0, -50.0, 60.0, 170.0] {
+            keys.click(GAME, x - dx, y)?;
+            std::thread::sleep(Duration::from_millis(250));
+            keys.press_code(crate::platform::game_input::vk::END)?; // End
+            keys.press_code(crate::platform::game_input::vk::DELETE)?;
+            if wait(process, "name box focused", |r, i| {
+                Ok(draft(r, i)?.name.chars().count() == length - 1)
+            })
+            .is_ok()
+            {
+                focused = true;
+                break;
+            }
+        }
+        if !focused {
+            return Err(Error::new(
                 "input_readback_failed",
                 "The name box did not take the keyboard focus",
-            )
-        })?;
+            ));
+        }
+        length -= 1;
+    } else {
+        keys.click(GAME, x - 110.0, y)?;
+        std::thread::sleep(Duration::from_millis(250));
     }
     while length > 0 {
         keys.press_code(crate::platform::game_input::vk::DELETE)?;

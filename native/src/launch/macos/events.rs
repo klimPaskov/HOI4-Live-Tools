@@ -420,6 +420,14 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
         "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout})).collect::<Vec<_>>()}),
     )
 }
+/// The event drawn on top when it offers exactly one option (news events: "OK"-style
+/// acknowledgements with nothing to decide).
+pub(super) fn single_option_top(r: &Reader<'_>, image: u64) -> Result<Option<String>> {
+    Ok(open_events(r, image)?
+        .pop()
+        .filter(|e| e.options.len() == 1)
+        .map(|e| e.id))
+}
 /// Ids of the open events, in list order.
 pub(super) fn open_ids(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
     Ok(open_events(r, image)?.into_iter().map(|e| e.id).collect())

@@ -68,8 +68,9 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 5. Use what the enemy gives you: an enemy salient (an enemy-held state sticking into your
    line) is a pocket for you; check `hoi4_encirclement_candidates` every week even in defence.
 
-## 4. Every war tick (every 3-5 game days, speed 2 in war)
+## 4. Every war tick (every 3-5 game days, speed 3, never paused)
 
+0. `hoi4_alerts` : the game's own alert row; each alert names the tool that fixes it.
 1. Answer events at once (`hoi4_events`, `hoi4_event_choose`): an open event blocks every action.
 2. `hoi4_wars` : new occupied or threatened own states, uncovered borders -> fix first.
 3. `hoi4_armies` : armies without plans, unassigned divisions (fold them, `hoi4_army_assign`).
@@ -82,11 +83,42 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 
 - `hoi4_army_front` fails in very flat desert where the game shows no highlight: use
   `hoi4_army_move` into the enemy state as a direct attack order instead.
+- `hoi4_army_motorization {army, level}`: 0/1/2; level shown in `hoi4_armies` (motorization).
+- `hoi4_army_create` folds every unassigned division standing in the state into the new army.
+- `hoi4_army_detach {army, divisions:[ids], into?}`: move chosen divisions (ids and their template, equipment
+  fill and supply from `hoi4_supply`) into a new army or an existing one: weak units to the rear, fresh ones forward.
+- Equipment: `macplay sitrep` lists divisions short of an equipment type; losses of artillery and support equipment
+  need their own production lines, not only infantry equipment.
+- `hoi4_research_start {..., replace:true}` switches a busy research slot.
+- `hoi4_division_disband {army, divisions:[ids]}`: disband useless divisions (all of an army's ids
+  disband the army); men and equipment return to the pool. See army-organisation.md.
+- `hoi4_map_mode {mode}`: supply before an offensive, resistance/compliance for occupied land, air
+  for superiority; back to `political` before army orders.
+- `hoi4_occupation_law {law}`: default occupation law (verified); `hoi4_occupation` reads it.
+- At the end of a war, `hoi4_war_stats`: own losses must be far below the enemy's.
 - `hoi4_army_move` replaces the army's battle plan with a manual order (planning is lost).
 - `hoi4_naval_invasion` needs convoys and naval superiority; its receipt says
   `landing_verified:false`, so check the map/army after it starts.
 - Peace: `hoi4_peace_options`, `hoi4_peace_take {"states":[ids]}`, `hoi4_peace_submit`,
   `hoi4_peace_exit`.
+
+## 5b. Let the plan runner carry routine fighting
+
+At speed 3 a game month passes in under two wall minutes; a player making a few tool calls a
+minute cannot re-issue every stalled attack (Ethiopia runs 9-11). The plan's `war` object makes
+the runner do it, and the player decides strategy:
+
+- `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
+  every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
+  axis whose next enemy-held state is nearest: front line, offensive line, execute.
+- `"stall_days": 8`: an ordered army without progress gets a direct `hoi4_army_move` into its
+  target (battle plans in roadless mountains may never advance; direct moves did).
+- `"rest_below": 12, "resume_above": 30` (absolute organisation; a rested infantry division reads
+  about 45): an exhausted army stops its plan and attacks again when it recovers.
+- `"motorization": 2`: every driven army's supply hubs use trucks.
+- `"reserve": ["Army 2"]`: armies only the player commands. Executing plans are never touched.
+- `"disband": {"templates": [...], "max": N}`: divisions of weak templates standing in own states
+  outside the theatre are disbanded so their equipment refills the front.
 
 ## 6. Principles learned in live play (apply to any war)
 
@@ -95,6 +127,13 @@ These came from failed training wars; they are general, not tied to one country.
 - **Supply caps a front.** Every front has a supply ceiling. More divisions than it carries starve all of them
   (seen: 18 divisions at 14-27% supply, organisation ~12, no progress). Read `hoi4_supply` every war tick; when an
   army is below 50% supply, thin it (split and move part elsewhere) rather than adding more.
+- **Quality at the front, quantity in the rear.** When supply is the limit, every division at the front eats the
+  same supply and manpower whether it fights well or not. Attack with the best divisions only (highest attack,
+  full equipment, good organisation); pull weak units (irregulars, cavalry, under-strength or low-equipment
+  divisions) out of the strike armies (`hoi4_army_split`, `hoi4_army_merge`) into a rear army that holds quiet
+  borders and captured states. Fewer, better divisions at full supply beat many starving ones.
+- **Concentrate on victory points.** Strike armies go for the enemy's victory-point cities in order of value, not
+  along the whole border; the line armies only hold.
 - **Organisation decides attacks.** Attack with organisation above ~50%; below that, stop the plan, recover, then
   attack again all at once on the same axis. Continuous weak attacks lose.
 - **Exploit what the enemy lacks.** No air force: every fighter and CAS wing over the attack. No anti-tank: armour
@@ -103,6 +142,14 @@ These came from failed training wars; they are general, not tied to one country.
   operations point at them, and defence protects one's own.
 - **Reinforcements take time.** Moving divisions by sea or across a continent takes weeks to months; decide in the
   first days of a war, not when the front stalls.
+- **Motorize supply far from railways.** An army fighting beyond the railheads (colonies, deserts,
+  mountains, deep advances) gets far more supply when its hubs use trucks:
+  `hoi4_army_motorization {army, level:2}` (seen live: 29% -> 41% supply and rising organisation in nine
+  game days). It spends trucks (about 40 per hub per level), so keep a truck production line running.
+  Set it on day one of such a war, not after the attack stalls.
+- **Read the scenario's own rules.** Missions, timers and war-ending conditions of the country's focus
+  tree and decisions decide what "winning" means (a mission timer can end a war as a loss even while
+  advancing); check them before planning and plan the operation around them.
 - **Construction is slow.** Buildings finish long after a short war; in a war of months spend factories on the
   economy and production, not on front-line infrastructure or supply hubs.
 - **Never idle.** Every army has an order every tick; every stalled offensive is re-planned, every idle army gets a

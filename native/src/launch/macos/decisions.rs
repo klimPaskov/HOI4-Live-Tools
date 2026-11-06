@@ -3,6 +3,7 @@
 //! select button. Verified when the decision view shows the decision taken:
 //! a timed entry for it appears, its entry disappears or its button turns
 //! disabled. Lists the offered decisions with the game's enabled state.
+use super::glide::{glide, span_y, Glide, Glided};
 use super::ui::{accept_command, clear_notices, decline_stale, read, settled, wait};
 use crate::{
     error::{Error, Result},
@@ -288,35 +289,38 @@ pub(super) fn take(
             "The game disables this decision (cost, cooldown or conditions)",
         ));
     }
-    // Scroll the row into the list area, only while the panel is open.
-    let mut rect = row.rect;
-    // At either end the list cannot scroll; a row then may sit up to the
-    // panel's edge, just outside the comfortable band.
-    let mut band = LIST;
-    for _ in 0..40 {
-        match rect {
-            Some(r) if r.y >= band.0 && r.y + r.h <= band.1 => break,
-            _ => {}
-        }
-        if !read(process, open)? {
-            return Err(Error::new("input_readback_failed", "Decision panel closed"));
-        }
-        let pixels = match rect {
-            Some(r) if r.y < LIST.0 => 240,
-            _ => -240,
-        };
-        keys.scroll(GAME, (175.0, 600.0), pixels)?;
-        let previous = rect;
-        rect = read(process, |r, i| {
+    // Glide the row into the list area in one movement, only while the panel is open
+    // (a row not laid out yet is searched downwards one event at a time).
+    let outcome = glide(
+        process,
+        keys,
+        &Glide {
+            at: (175.0, 600.0),
+            pixels: 240,
+            band: (f64::from(LIST.0), f64::from(LIST.1)),
+            search: -1,
+        },
+        || {
+            if read(process, open)? {
+                Ok(())
+            } else {
+                Err(Error::new("input_readback_failed", "Decision panel closed"))
+            }
+        },
+        |r, i| {
             Ok(rows(r, i)?
                 .into_iter()
                 .find(|x| fits(x))
-                .and_then(|x| x.rect))
-        })?;
-        if rect.is_some() && rect == previous {
-            band = (LIST.0 - 20, LIST.1 + 22);
-        }
-    }
+                .and_then(|x| x.rect)
+                .map(|x| span_y(&x)))
+        },
+    )?;
+    // At either end the list cannot scroll; a row then may sit up to the
+    // panel's edge, just outside the comfortable band.
+    let band = match outcome {
+        Glided::Stuck(_) | Glided::Short(_) => (LIST.0 - 20, LIST.1 + 22),
+        _ => LIST,
+    };
     let rect = settled(process, "decision button", |r, i| {
         rows(r, i)?
             .into_iter()

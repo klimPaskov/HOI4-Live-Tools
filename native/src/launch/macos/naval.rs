@@ -311,6 +311,13 @@ pub(super) struct NavalBase {
     pub level: i32,
 }
 /// Own naval bases from the strategic navy of the own country index.
+/// Provinces of the own naval bases (the convoy read's list).
+pub(super) fn naval_base_provinces(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
+    Ok(naval_bases(r, image)?
+        .iter()
+        .filter_map(|b| b.province.as_ref().map(|p| p.province))
+        .collect())
+}
 fn naval_bases(r: &Reader<'_>, image: u64) -> Result<Vec<NavalBase>> {
     let navy = fleetmem::own_strategic(
         r,

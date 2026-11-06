@@ -286,7 +286,9 @@ pub(super) fn settle(
             && s.as_deref() == Some(key)
             && before.get(i).cloned().flatten().as_deref() != Some(key)
     });
-    if target.is_none() && before.get(slot).cloned().flatten().is_none() && !newly_elsewhere {
+    // Nothing new anywhere and the slot still shows what it showed before (empty, or the
+    // technology a replace meant to switch away from).
+    if target == before.get(slot).cloned().flatten() && !newly_elsewhere {
         Settled::Unchanged
     } else {
         Settled::Unknown
@@ -300,7 +302,7 @@ pub(super) fn assignments(process: &dyn Process) -> Result<Assignments> {
 }
 
 /// Refusals that need no input: unknown/finished/assigned technology, busy slot.
-pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> {
+pub(super) fn check(before: &Assignments, key: &str, slot: usize, replace: bool) -> Result<()> {
     if before.completed.contains(key) {
         return Err(Error::new(
             "already_researched",
@@ -318,7 +320,11 @@ pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> 
     }
     match before.slots.get(slot) {
         None => Err(Error::new("invalid_arguments", "Slot outside own slots")),
-        Some(Some(_)) => Err(Error::new("invalid_target", "Research slot is busy")),
+        Some(Some(_)) if replace => Ok(()),
+        Some(Some(_)) => Err(Error::new(
+            "invalid_target",
+            "Research slot is busy (pass replace:true to switch it to this technology)",
+        )),
         Some(None) => Ok(()),
     }
 }
@@ -394,23 +400,34 @@ pub(super) fn start(
             icon
         }
     };
-    // Later technologies sit below the visible part of a folder; scroll the
+    // Later technologies sit below the visible part of a folder; glide the
     // tree (only while it is open) until the tile is inside the tree area.
     let in_view = |t: &Rect| t.y >= 140 && t.y + t.h <= 1040;
-    for _ in 0..30 {
-        let tile = read(process, |r, i| gui_tree::rect_unclipped(r, i, icon, GAME))?;
-        if in_view(&tile) {
-            break;
-        }
-        if !read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
-            return Err(Error::new(
-                "input_readback_failed",
-                "Technology tree closed",
-            ));
-        }
-        let pixels = if tile.y < 140 { 240 } else { -240 };
-        keys.scroll(GAME, (1700.0, 600.0), pixels)?;
-    }
+    super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (1700.0, 600.0),
+            pixels: 240,
+            band: (140.0, 1040.0),
+            search: 0,
+        },
+        || {
+            if read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    "input_readback_failed",
+                    "Technology tree closed",
+                ))
+            }
+        },
+        |r, i| {
+            Ok(Some(super::glide::span_y(&gui_tree::rect_unclipped(
+                r, i, icon, GAME,
+            )?)))
+        },
+    )?;
     let tile = settled(process, "tile", |r, i| {
         gui_tree::rect_unclipped(r, i, icon, GAME)
     })?;
@@ -438,12 +455,55 @@ pub(super) fn start(
     // Arms Against Tyranny: a plain click on Research opens the Military Industrial
     // Organization chooser for technologies an organisation can take; Shift+Click researches
     // with the suggested organisation at once (the button's tooltip, 1.19.4.1).
+    let was_busy = read(process, |r, base| {
+        Ok(research::assignments(r, base)?
+            .0
+            .get(slot)
+            .cloned()
+            .flatten()
+            .is_some())
+    })?;
     let (x, y) = button.center();
     keys.shift_click(GAME, x, y)?;
-    wait(process, "start research", |r, base| {
+    let started = |r: &Reader<'_>, base: u64| {
         let (slots, _) = research::assignments(r, base)?;
         Ok(slots.get(slot).and_then(|s| s.as_deref()) == Some(key))
-    })
+    };
+    if was_busy {
+        // Switching a busy slot asks "Are you sure you want to research X instead of Y with
+        // N% progress?"; OK accepts it (Return, the dialog's default button). Seen live
+        // 5 November 2026. Return is retried: an event or tooltip can take the first one.
+        for _ in 0..3 {
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            if read(process, started)? {
+                break;
+            }
+            keys.press(Key::Return)?;
+        }
+    }
+    let result = wait(process, "start research", started);
+    if result.is_err() {
+        // Never leave the confirmation open: it blocks every later click (run 9).
+        let _ = keys.press(Key::Escape);
+    }
+    // Leave the full-screen tree: map tools cannot work under it (run 9).
+    close_tree(process, keys);
+    result
+}
+
+/// Close the technology tree (and its detail window) when open.
+pub(super) fn close_tree(process: &dyn Process, keys: &dyn GameInput) {
+    for _ in 0..3 {
+        match read(process, |r, i| open(r, i, ui(r)?.tree_view)) {
+            Ok(true) => {
+                let _ = keys.press(Key::Escape);
+                let _ = wait(process, "close tree", |r, i| {
+                    Ok(!open(r, i, ui(r)?.tree_view)?)
+                });
+            }
+            _ => break,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -496,18 +556,27 @@ mod tests {
     #[test]
     fn refusals_need_no_input() {
         let s = state(&[None, Some("radio")], &["infantry_weapons"]);
-        assert!(check(&s, "support_weapons", 0).is_ok());
-        let done = check(&s, "infantry_weapons", 0).unwrap_err();
+        assert!(check(&s, "support_weapons", 0, false).is_ok());
+        let done = check(&s, "infantry_weapons", 0, false).unwrap_err();
         assert_eq!(done.code, "already_researched");
         assert!(done.message.contains("infantry_weapons"));
-        assert_eq!(check(&s, "radio", 0).unwrap_err().code, "invalid_target");
         assert_eq!(
-            check(&s, "support_weapons", 1).unwrap_err().code,
+            check(&s, "radio", 0, false).unwrap_err().code,
             "invalid_target"
         );
         assert_eq!(
-            check(&s, "support_weapons", 2).unwrap_err().code,
+            check(&s, "support_weapons", 1, false).unwrap_err().code,
+            "invalid_target"
+        );
+        assert_eq!(
+            check(&s, "support_weapons", 2, false).unwrap_err().code,
             "invalid_arguments"
+        );
+        // replace: a busy slot may be switched; the other refusals stay.
+        assert!(check(&s, "support_weapons", 1, true).is_ok());
+        assert_eq!(
+            check(&s, "radio", 1, true).unwrap_err().code,
+            "invalid_target"
         );
     }
 }
