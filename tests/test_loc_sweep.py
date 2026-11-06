@@ -34,6 +34,7 @@ class SuspiciousTests(unittest.TestCase):
             ("my_mod.1.t", "raw_key"), ("  my_mod.1.t  ", "raw_key"), ("my_mod.1.t.", "raw_key"),
             ("GER_focus_name", "raw_key"), ("GER_focus_name,", "raw_key"), ('"GER_focus_name"', "raw_key"),
             ("FOCUS_DESC_x", "raw_key"), ("ideas_title", "raw_key"), ("news.1.t", "raw_key"), ("GER_1936", "raw_key"),
+            ("|GER_focus_name", "raw_key"), ("[GER_focus_name]", "raw_key"), ('"GER_focus_name".', "raw_key"),
             ("$COUNTRY$", "unresolved_variable"), ("$VALUE|Y$", "unresolved_variable"),
             ("Gain $AMOUNT$ political power", "unresolved_variable"),
             ("[Root.GetName]", "unresolved_variable"), ("[This.Owner.GetNameDef]", "unresolved_variable"),
@@ -52,7 +53,8 @@ class SuspiciousTests(unittest.TestCase):
                      "Q_key", "ab_c",                                           # too short to be a key
                      "Press the Q_key", "Use the Shift_Left key to scroll",      # prose with an underscore
                      "$5", "$50 / $100", "[Get started]", "[PP]", "Cost: 5 [x]", "C:/new",
-                     "|||", "l.l.l", "I_I"]:
+                     "|||", "l.l.l", "I_I",
+                     "Ju.87.A", "Mod.1.2.3", "Volk.1.2", "v1.19.4-rc1"]:               # names and versions, not keys
             self.assertIsNone(locsweep.suspicious(text), repr(text))
 
     def test_raw_key_needs_the_whole_line_and_a_valid_shape(self):
@@ -177,6 +179,10 @@ class FakeSession:
         self.view = "map"
         return closed
 
+    def current(self, session, img=None):
+        """The panel title strip: None on the bare map. `stuck_view` makes to_map leave a panel open."""
+        return None if self.view == "map" else self.view
+
     # capture and OCR
     def grab(self, focus=None):
         self.events.append(("grab", self.view))
@@ -208,7 +214,8 @@ class FakeSession:
 
     # helpers for the tests
     def patched(self):
-        return mock.patch.multiple(panels, open_panel=self.open_panel, close=self.close, to_map=self.to_map)
+        return mock.patch.multiple(panels, open_panel=self.open_panel, close=self.close, to_map=self.to_map,
+                                   current=self.current)
 
     def append(self, log, *lines):
         with open(os.path.join(self.logs_dir, log + ".log"), "ab") as f:
@@ -333,6 +340,17 @@ class SweepTests(unittest.TestCase):
         self.assertEqual(report["map_error"], "pause menu is open")
         self.assertIn("could not return to the map", locsweep.summary(report))
         self.assertEqual(report["totals"]["findings"], 1)                # the findings are still reported
+
+    def test_a_panel_that_to_map_leaves_open_is_not_the_map(self):
+        # to_map gives up quietly after a few closes or on a title it does not know
+        sess = self.session()
+        def stuck(session, max_steps=4):
+            sess.events.append(("to_map",))
+            sess.view = "politics"                                                       # closes nothing
+        sess.to_map = stuck
+        report = self.run_sweep(sess, ["politics"])
+        self.assertFalse(report["returned_to_map"])
+        self.assertIn("politics panel is still open", report["map_error"])
 
     def test_log_warnings_only_since_the_sweep_started(self):
         sess = self.session()

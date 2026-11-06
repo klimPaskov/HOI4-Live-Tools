@@ -16,6 +16,7 @@ missions are skipped. Taking decisions needs political power: `pp` is added once
 import datetime
 import json
 import os
+import re
 import time
 
 from ..errors import ToolError
@@ -26,6 +27,7 @@ from ..gamedata import events as ev_data
 from ..gamedata import scriptdb
 from ..gamedata import triggertext as tt
 from ..perception import popups as popups_mod
+from ..session import Cancelled as _Cancelled
 from . import dispatch
 from .registry import ToolResult, tool
 
@@ -33,9 +35,13 @@ MAX_ERRORS_SHOWN = 8
 
 
 # ------------------------------------------------------------------------------------------------ events
+ID_RX = re.compile(r"[A-Za-z0-9_.]+")             # what the console command takes (as hoi4_fire_event)
+
+
 def _errors(session, mark):
-    rows, info = session.logs.delta("error", mark, limit=MAX_ERRORS_SHOWN)
-    return rows, info.get("lines", 0)
+    """The first MAX_ERRORS_SHOWN distinct new error lines (the first one is usually the cause) and the line count."""
+    rows, info = session.logs.delta("error", mark, limit=500)
+    return rows[:MAX_ERRORS_SHOWN], info.get("lines", 0)
 
 
 def fire_once(session, ev, tag, option, wait_s):
@@ -48,6 +54,10 @@ def fire_once(session, ev, tag, option, wait_s):
     session.sleep(wait_s)
     img = session.grab()
     found = popups_mod.detect(img)
+    if not found and not ev["hidden"]:
+        session.sleep(1.0)                              # a window can open late on a busy game
+        img = session.grab()
+        found = popups_mod.detect(img)
     fire = {"option": option, "response": out[0].get("response") if out else None, "popup": None}
     if found:
         try:
@@ -59,9 +69,19 @@ def fire_once(session, ev, tag, option, wait_s):
         except ToolError as exc:
             fire["answer_error"] = str(exc)
             fire["popup"] = {"options": (exc.details or {}).get("options") or [], "kind": None, "title": None}
+            try:                                        # the window is still open: close it with its first option
+                game_popups.answer(session, 0, option=0)
+            except ToolError:
+                pass
         rest = game_popups.handle_all(session, "first", phase="smoke")
         if rest:
             fire["chained"] = [r.get("title") or r.get("kind") for r in rest]
+            if any(r.get("closed") is False for r in rest):
+                fire["chained_not_closed"] = True
+    if found:
+        left = popups_mod.detect(session.grab())
+        if left:
+            fire["left_open"] = len(left)               # the next firing would click this window by mistake
     rows, lines = _errors(session, mark)
     fire["new_error_lines"] = lines
     if rows:
@@ -70,47 +90,85 @@ def fire_once(session, ev, tag, option, wait_s):
 
 
 def smoke_event(session, ev, tag, answer_each, wait_s):
+    """Fire an event once per option. Whatever fails after the first firing is recorded on the record, so the
+    firings that did run are not lost."""
     t0 = time.time()
     rec = {"id": ev["id"], "kind": "event", "type": ev["type"], "hidden": ev["hidden"], "fires": []}
     if ev["type"] not in ev_data.FIREABLE:
         rec.update(status="skipped", reason=f"{ev['type']} needs a scope the console cannot give; "
                                             f"use hoi4_eval_effect with a {ev['type']} effect")
         return rec
-    first = fire_once(session, ev, tag, 0, wait_s)
-    rec["fires"].append(first)
-    count = len((first.get("popup") or {}).get("options") or [])
-    rec["options_seen"] = count
-    if answer_each:
-        for k in range(1, count):
-            session.check_cancel()
-            rec["fires"].append(fire_once(session, ev, tag, k, wait_s))
+    if not ID_RX.fullmatch(ev["id"]):
+        rec.update(status="skipped", reason="the id has characters the console command does not take")
+        return rec
+    try:
+        first = fire_once(session, ev, tag, 0, wait_s)
+        rec["fires"].append(first)
+        count = len((first.get("popup") or {}).get("options") or [])
+        rec["options_seen"] = count
+        if answer_each and not first.get("left_open"):
+            for k in range(1, count):
+                session.check_cancel()
+                again = fire_once(session, ev, tag, k, wait_s)
+                rec["fires"].append(again)
+                if again.get("left_open"):
+                    break
+    except _Cancelled:
+        raise
+    except ToolError as exc:
+        rec["error"] = str(exc)
+        rec["error_code"] = (exc.details or {}).get("error") or type(exc).__name__
     rec["status"], rec["notes"] = _event_status(ev, rec)
+    mark_repeated_errors(rec["fires"])
     rec["seconds"] = round(time.time() - t0, 1)
     return rec
 
 
+def mark_repeated_errors(fires):
+    """An error in the event's `immediate` block repeats in every firing: mark the repeats, so they are not read as
+    caused by each option."""
+    first = {r["line"] for r in (fires[0].get("new_errors") or [])} if fires else set()
+    for f in fires[1:]:
+        for row in f.get("new_errors") or []:
+            if row["line"] in first:
+                row["repeats_first_firing"] = True
+
+
 def _event_status(ev, rec):
+    """ok | errors | stuck | partial | no_window. A run problem (a ToolError) counts as errors."""
     notes = []
     fires = rec["fires"]
+    status = "ok"
+    if rec.get("error"):
+        notes.append("the run stopped on this event: " + rec["error"])
+        status = "errors"
     if any(f.get("new_error_lines") for f in fires):
         notes.append("error.log gained lines")
         status = "errors"
-    else:
-        status = "ok"
-    if any(f.get("answer_error") for f in fires):
-        notes.append("an option could not be answered: " + "; ".join(f["answer_error"] for f in fires
-                                                                       if f.get("answer_error")))
-        status = "errors" if status == "errors" else "stuck"
-    if any(f.get("popup") and f.get("closed") is False for f in fires):
-        notes.append("a window did not close after its option was clicked")
-        status = "errors" if status == "errors" else "stuck"
+    if any(f.get("left_open") or f.get("chained_not_closed")
+           or (f.get("popup") and f.get("closed") is False) for f in fires):
+        notes.append("a window stayed open after its option was clicked")
+        if status == "ok":
+            status = "stuck"
+    if not fires:
+        return status, notes
     if not ev["hidden"] and not fires[0].get("popup"):
-        notes.append("no window appeared (a fire_only_once event, an event the console did not fire, or an event "
-                     "whose window the detector does not see)")
+        notes.append("no window appeared (an event the console did not fire, or a window the detector does not see)")
         if status == "ok":
             status = "no_window"
     if ev["hidden"] and fires[0].get("popup"):
         notes.append("a hidden event showed a window")
+    # an option that could not be tested is not a pass
+    missing = [f["option"] for f in fires[1:] if not f.get("popup")]
+    short = [f["option"] for f in fires[1:] if f.get("answer_error")]
+    if (missing or short) and status == "ok":
+        status = "partial"
+    if missing:
+        notes.append("no window on the re-firing for option(s) " + ", ".join(str(m) for m in missing)
+                     + (" (fire_only_once)" if ev.get("once") else ""))
+    if short:
+        notes.append("option(s) " + ", ".join(str(m) for m in short)
+                     + " were not on the window any more (an earlier option changed the game)")
     return status, notes
 
 
@@ -146,31 +204,46 @@ def smoke_decision(session, did, d, tag, wait_s):
     if d.get("targeted"):
         rec.update(status="skipped", reason="a targeted decision: it needs a target chosen on the map")
         return rec
-    nodes = decision_nodes(_raw_decision(d, did))
-    if nodes:
-        rep = tc.check(session, tag, nodes, depth=2)
-        rec["conditions"] = rep["result"]
-        if rep["result"] is False:
-            rec.update(status="not_taken", reason="a condition is unmet", unmet=tc.unmet(nodes))
-            rec["seconds"] = round(time.time() - t0, 1)
-            return rec
-    mark = f"smoke_{int(time.time() * 1000) % 10_000_000}"
-    session.logs.mark(mark, ("error",))
-    out = dispatch.call(session, "hoi4_decisions", {"action": "take", "decision": did})
-    text = "\n".join(c["text"] for c in out["content"] if c["type"] == "text")
-    rec["take"] = {"ok": not out.get("isError"), "message": text.splitlines()[0] if text else ""}
-    session.sleep(wait_s)
-    rest = game_popups.handle_all(session, "first", phase="smoke")
-    if rest:
-        rec["windows"] = [r.get("title") or r.get("kind") for r in rest]
-    rows, lines = _errors(session, mark)
-    rec["new_error_lines"] = lines
-    if rows:
-        rec["new_errors"] = rows
-    if lines:
+    try:
+        nodes = decision_nodes(_raw_decision(d, did))
+        if nodes:
+            rep = tc.check(session, tag, nodes, depth=2)
+            rec["conditions"] = rep["result"]
+            if rep["result"] is False:
+                rec.update(status="not_taken", reason="a condition is unmet", unmet=tc.unmet(nodes))
+                rec["seconds"] = round(time.time() - t0, 1)
+                return rec
+        mark = f"smoke_{int(time.time() * 1000) % 10_000_000}"
+        session.logs.mark(mark, ("error",))
+        out = dispatch.call(session, "hoi4_decisions", {"action": "take", "decision": did})
+        text = "\n".join(c["text"] for c in out["content"] if c["type"] == "text")
+        rec["take"] = {"ok": not out.get("isError"), "message": text.splitlines()[0] if text else ""}
+        session.sleep(wait_s)
+        rest = game_popups.handle_all(session, "first", phase="smoke")
+        if rest:
+            rec["windows"] = [r.get("title") or r.get("kind") for r in rest]
+            if any(r.get("closed") is False for r in rest):
+                rec["left_open"] = True
+        if popups_mod.detect(session.grab()):
+            rec["left_open"] = True
+        rows, lines = _errors(session, mark)
+        rec["new_error_lines"] = lines
+        if rows:
+            rec["new_errors"] = rows
+    except _Cancelled:
+        raise
+    except ToolError as exc:
+        rec.update(status="errors", error=str(exc), error_code=(exc.details or {}).get("error") or type(exc).__name__)
+        rec["seconds"] = round(time.time() - t0, 1)
+        return rec
+    if rec.get("new_error_lines"):
         rec["status"] = "errors"
+    elif rec.get("left_open"):
+        rec["status"] = "stuck"
+        rec["reason"] = "a window stayed open after the decision was taken"
     elif not rec["take"]["ok"]:
-        rec["status"] = "not_taken"
+        # conditions that held but a take that failed is a problem; with no conditions to go on it is only "not taken"
+        rec["status"] = "take_failed" if rec.get("conditions") is True else "not_taken"
         rec["reason"] = rec["take"]["message"]
     else:
         rec["status"] = "ok"
@@ -211,6 +284,30 @@ def _write_report(session, name, report):
     return base + ".md", base + ".json"
 
 
+def _stop_reason(rec, stop_on_error):
+    """Why the run must stop after this record, or None. A window left open ends it always: the next firing would
+    click the wrong window. A game that is gone ends it too."""
+    if rec.get("left_open") or rec["status"] == "stuck":
+        return "a window stayed open; close it and run again"
+    if rec.get("error_code") in ("GameNotRunning", "console_not_open"):
+        return rec.get("error", "the game does not answer")
+    if stop_on_error and rec["status"] in ("errors", "take_failed", "partial"):
+        return "stop_on_error"
+    return None
+
+
+def _finish(session, ns, report, t0, problems):
+    totals = {}
+    for r in report["events"] + report["decisions"]:
+        totals[r["status"]] = totals.get(r["status"], 0) + 1
+    report["totals"] = totals
+    report["ok"] = not any(s in totals for s in problems) and "stopped" not in report and not report.get("cancelled")
+    report["seconds"] = round(time.time() - t0)
+    md, js = _write_report(session, ns, report)
+    report["report"], report["json"] = md, js
+    return totals
+
+
 @tool("hoi4_smoke_namespace",
       "Smoke test of a mod namespace (test mode). Fires every event `<namespace>.N` through the console, answers each "
       "option of its window (one firing per option, options=each), and takes the decisions of a category or id "
@@ -223,8 +320,9 @@ def _write_report(session, name, report):
       {"properties": {
           "namespace": {"type": "string", "pattern": r"^[A-Za-z0-9_]+$", "description": "event namespace, e.g. my_mod"},
           "tag": {"type": "string", "pattern": "^[A-Z][A-Z0-9]{2}$",
-                  "description": "country the events fire for and the decisions are taken as (a different "
-                                 "player is switched with the console `tag` command); omit for the player"},
+                  "description": "country the events fire for and the decisions are taken as: the player is "
+                                 "switched to it first with the console `tag` command and stays switched; omit for "
+                                 "the current player"},
           "what": {"type": "string", "enum": ["events", "decisions", "both"], "default": "events"},
           "decision_category": {"type": "string", "description": "decisions of this category"},
           "decision_prefix": {"type": "string", "description": "decisions whose id starts with this (default: the "
@@ -276,46 +374,54 @@ def hoi4_smoke_namespace(session, args):
     if args["dry_run"]:
         return ToolResult(f"dry run: {len(events)} event(s), {len(decisions)} decision(s)", plan)
 
+    if not re.fullmatch(r"[A-Za-z0-9_]+", ns) or (tag and not re.fullmatch(r"[A-Z][A-Z0-9]{2}", tag)):
+        raise ToolError("namespace and tag must be plain letters, digits and underscores", {"field": "namespace"})
     t0 = time.time()
     report = {"namespace": ns, "tag": tag or "player", "events": [], "decisions": [], "plan": plan}
     total = len(events) + len(decisions)
+    problems = ("errors", "stuck", "no_window", "partial", "take_failed")
     done = 0
-    stop = False
-    for ev in events:
-        session.check_cancel()
-        done += 1
-        session.report(f"event {ev['id']} ({done}/{total})", done, total)
-        rec = smoke_event(session, ev, tag, args["options"] == "each", args["wait_s"])
-        report["events"].append(rec)
-        if args["stop_on_error"] and rec["status"] in ("errors", "stuck"):
-            stop = True
-            break
-    if decisions and not stop:
-        pre = []
+    try:
         if tag:
-            pre.append(f"tag {tag}")
-        if args["pp"]:
-            pre.append(f"eval_effect add_political_power = {args['pp']}")
-        if pre:
-            console.run(session, pre, read=False)
-        for did, d in decisions.items():
+            # a window only opens for the player: switch to the country first (it stays the player afterwards)
+            console.run(session, [f"tag {tag}"], read=False)
+            report["tag_switched"] = True
+        for ev in events:
             session.check_cancel()
             done += 1
-            session.report(f"decision {did} ({done}/{total})", done, total)
-            rec = smoke_decision(session, did, d, tag, args["wait_s"])
-            report["decisions"].append(rec)
-            if args["stop_on_error"] and rec["status"] in ("errors", "stuck"):
+            session.report(f"event {ev['id']} ({done}/{total})", done, total)
+            rec = smoke_event(session, ev, tag, args["options"] == "each", args["wait_s"])
+            report["events"].append(rec)
+            reason = _stop_reason(rec, args["stop_on_error"])
+            if reason:
+                report["stopped"] = f"{ev['id']}: {reason}"
                 break
-    totals = {}
-    for r in report["events"] + report["decisions"]:
-        totals[r["status"]] = totals.get(r["status"], 0) + 1
-    report["totals"] = totals
-    report["ok"] = not any(s in totals for s in ("errors", "stuck", "no_window"))
-    report["seconds"] = round(time.time() - t0)
-    md, js = _write_report(session, ns, report)
-    report["report"], report["json"] = md, js
-    bad = sum(totals.get(s, 0) for s in ("errors", "stuck", "no_window"))
+        if decisions and "stopped" not in report:
+            if args["pp"]:
+                console.run(session, [f"eval_effect add_political_power = {args['pp']}"], read=False)
+            for i, (did, d) in enumerate(decisions.items()):
+                session.check_cancel()
+                done += 1
+                session.report(f"decision {did} ({done}/{total})", done, total)
+                if args["pp"] and i and i % 5 == 0:
+                    console.run(session, [f"eval_effect add_political_power = {args['pp']}"], read=False)
+                rec = smoke_decision(session, did, d, tag, args["wait_s"])
+                report["decisions"].append(rec)
+                reason = _stop_reason(rec, args["stop_on_error"])
+                if reason:
+                    report["stopped"] = f"{did}: {reason}"
+                    break
+    except _Cancelled:
+        # a cancel keeps what was done: the report is written, then the cancel goes on
+        report["cancelled"] = True
+        _finish(session, ns, report, t0, problems)
+        raise
+    except ToolError as exc:
+        report["stopped"] = f"the run could not go on: {exc}"
+    totals = _finish(session, ns, report, t0, problems)
+    bad = sum(totals.get(s, 0) for s in problems)
     head = (f"smoke {ns}: {'PASS' if report['ok'] else 'FAIL'}, {len(report['events'])} event(s) and "
             f"{len(report['decisions'])} decision(s) run, {bad} with problems, "
-            + ", ".join(f"{v} {k}" for k, v in sorted(totals.items())))
+            + ", ".join(f"{v} {k}" for k, v in sorted(totals.items()))
+            + (f"; stopped: {report['stopped']}" if report.get("stopped") else ""))
     return ToolResult(head, report)

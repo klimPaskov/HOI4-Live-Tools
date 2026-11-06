@@ -53,8 +53,10 @@ _VARIABLE_RXS = (
 )
 _COLOUR_RX = re.compile(chr(0xA7))
 _KEY_SHAPE = re.compile(r"^[A-Za-z][A-Za-z0-9\-]*(?:[._][A-Za-z0-9\-]+)+$")
-_VERSION_RX = re.compile(r"^[vV]?\d+(?:\.\d+)+$")
+_VERSION_RX = re.compile(r"^[vV]?\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.]+)?$")           # 1.19.4.1, v1.19.4-rc1
 _KEY_MIN, _KEY_MAX = 6, 80
+# quotes, brackets and a pipe OCR puts around a key, and the dots, commas and colons it adds after it
+_EDGE_RX = re.compile(r"^[\s\"'`|\[\]()]+|[\s\"'`|\[\]().,;:!]+$")
 
 
 def compile_patterns(patterns):
@@ -72,15 +74,15 @@ def compile_patterns(patterns):
 
 
 def _is_raw_key(text):
-    token = text.strip().strip("\"'`").rstrip(".,;:!")
+    token = _EDGE_RX.sub("", text)
     if not (_KEY_MIN <= len(token) <= _KEY_MAX) or not _KEY_SHAPE.match(token) or _VERSION_RX.match(token):
         return False
     if sum(c.isalpha() for c in token) < 3:
         return False
     if "_" in token:
         return True
-    parts = token.split(".")                  # the event style: namespace.number.t
-    return len(parts) >= 3 and any(p.isdigit() for p in parts)
+    parts = token.split(".")                  # the event style: namespace.number.t, always lower case
+    return token == token.lower() and len(parts) >= 3 and any(p.isdigit() for p in parts)
 
 
 def suspicious(text, extra_patterns=()):
@@ -194,7 +196,10 @@ def sweep(session, panels=DEFAULT_PANELS, extra_patterns=(), since="start", max_
     finally:
         try:
             panels_mod.to_map(session)
-            returned = True
+            still = panels_mod.current(session)    # to_map gives up after a few closes or on a title it does not know
+            returned = still is None
+            if still is not None:
+                map_error = f"the {still} panel is still open"
         except Exception as e:                     # never hide the error that is already on its way out
             map_error = str(e)
     logs, log_info = _read_logs(session, MARK)

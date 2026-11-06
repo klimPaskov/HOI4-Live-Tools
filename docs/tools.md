@@ -414,7 +414,7 @@ _lock: acting, test mode only_
 | argument | type | required | default | description |
 |---|---|---|---|---|
 | `namespace` | string | yes |  | event namespace, e.g. my_mod |
-| `tag` | string |  |  | country the events fire for and the decisions are taken as (a different player is switched with the console `tag` command); omit for the player |
+| `tag` | string |  |  | country the events fire for and the decisions are taken as: the player is switched to it first with the console `tag` command and stays switched; omit for the current player |
 | `what` | events \| decisions \| both |  | "events" |  |
 | `decision_category` | string |  |  | decisions of this category |
 | `decision_prefix` | string |  |  | decisions whose id starts with this (default: the namespace when what includes decisions) |
