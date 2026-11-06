@@ -204,13 +204,26 @@ fn pan_to(
             format!("No map position for province {province}"),
         )
     })?;
-    for _ in 0..24 {
+    // A far target (Eritrea to Wello, live 6 Nov 2026) is out of reach of a few taps: the
+    // wheel zooms out first (up to three steps; zooming keeps the railway in progress), and a
+    // point behind the camera means the target lies below the screen.
+    let mut zooms = 0;
+    for _ in 0..48 {
         let p = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))?;
         let Some((sx, sy)) = p else {
-            break;
+            keys.press_code(vk::DOWN)?;
+            thread::sleep(Duration::from_millis(220));
+            continue;
         };
         if (MAP_LEFT..1700.0).contains(&sx) && (120.0..900.0).contains(&sy) {
             return Ok((sx, sy));
+        }
+        let far = (sx - 960.0).abs() > 1400.0 || (sy - 540.0).abs() > 900.0;
+        if far && zooms < 3 {
+            keys.scroll(GAME, (1100.0, 540.0), -120)?;
+            zooms += 1;
+            thread::sleep(Duration::from_millis(400));
+            continue;
         }
         if sx < MAP_LEFT {
             keys.press_code(vk::LEFT)?;
@@ -233,6 +246,19 @@ fn pan_to(
 /// queue raises that line's level count instead of adding a line (live 6 Nov 2026: four
 /// Asmara-Tigray orders made one line of 4 levels, and the line count never moved).
 fn queue_lines(process: &dyn Process) -> Result<i64> {
+    // The queue is rewritten on game days; a torn snapshot is read again.
+    let mut attempt = 0;
+    loop {
+        match queue_work(process) {
+            Err(e) if e.code == "torn_read" && attempt < 8 => {
+                attempt += 1;
+                thread::sleep(Duration::from_millis(15 * attempt));
+            }
+            result => return result,
+        }
+    }
+}
+fn queue_work(process: &dyn Process) -> Result<i64> {
     let lines = crate::economy::snapshot(process)?["construction_projects_queued"]
         .as_i64()
         .ok_or_else(|| Error::new("construction_target_unavailable", "Queue lines unreadable"))?;
