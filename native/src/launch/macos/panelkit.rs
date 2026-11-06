@@ -127,7 +127,8 @@ pub(super) const MIO_LIST: Class = Class {
 };
 pub(super) const MIO_DETAIL: Class = Class {
     name: "NIndustrialOrganisation::COrganisationDetailWindow",
-    vtable: 0x362c958,
+    // 0x362cd98 on 1.19.4.1 (live 6 Nov 2026); reached by SLOT_PATHS
+    vtable: 0x362cd98,
     root_name: "industrial_organisation_detail_window",
 };
 pub(super) const MIO_POLICY: Class = Class {
@@ -177,6 +178,130 @@ fn root_of(r: &Reader<'_>, image: u64, object: u64, class: &Class) -> Option<u64
 /// Root container of the live window of `class`, or None when the game holds no
 /// such window object.
 pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option<u64>> {
+    // Fixed paths first: a stale hidden instance of the same class elsewhere must not win.
+    {
+        let abi = r.string_abi();
+        let idler = r.u64(image + game::layout(r).idler_global)?;
+        let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+        for (root_name, slot, hops, span, roots) in OWNER_SCANS {
+            if *root_name != class.root_name {
+                continue;
+            }
+            let Ok(mut owner) = r.u64(manager + slot) else {
+                continue;
+            };
+            for hop in hops.iter() {
+                owner = if plausible(owner) {
+                    r.u64(owner + hop).unwrap_or(0)
+                } else {
+                    0
+                };
+            }
+            if !plausible(owner) {
+                continue;
+            }
+            let want = image + img(abi, class.vtable)?;
+            // Read in 1 KiB pieces: one large read can exceed the reader's budget.
+            let mut bytes = Vec::new();
+            let mut at = 0u64;
+            while at < *span {
+                match r.read(owner + at, 0x400) {
+                    Ok(b) => bytes.extend(b),
+                    Err(_) => bytes.extend(std::iter::repeat_n(0u8, 0x400)),
+                }
+                at += 0x400;
+            }
+            let mut hidden = None;
+            for c in bytes.chunks_exact(8) {
+                let w = u64::from_le_bytes(c.try_into().unwrap());
+                if !plausible(w) || r.u64(w).ok() != Some(want) {
+                    continue;
+                }
+                for at in roots.iter() {
+                    let Ok(p) = r.u64(w + at) else { continue };
+                    let Ok(Some(root)) = gui_tree::container(r, p, image) else {
+                        continue;
+                    };
+                    if container_name(r, image, root).ok().flatten().as_deref()
+                        != Some(class.root_name)
+                    {
+                        continue;
+                    }
+                    if gui_tree::visible(r, root).unwrap_or(false) {
+                        return Ok(Some(root));
+                    }
+                    hidden.get_or_insert(root);
+                }
+            }
+            if *root_name == "industrial_organisation_policy_window" {
+                let detail_vt = image + img(abi, MIO_DETAIL.vtable)?;
+                for c in bytes.chunks_exact(8) {
+                    let d = u64::from_le_bytes(c.try_into().unwrap());
+                    if !plausible(d) || r.u64(d).ok() != Some(detail_vt) {
+                        continue;
+                    }
+                    let mut at = 0u64;
+                    while at < POLICY_IN_DETAIL_SPAN {
+                        let Ok(chunk) = r.read(d + at, 0x400) else {
+                            at += 0x400;
+                            continue;
+                        };
+                        for c2 in chunk.chunks_exact(8) {
+                            let w = u64::from_le_bytes(c2.try_into().unwrap());
+                            if !plausible(w) || r.u64(w).ok() != Some(want) {
+                                continue;
+                            }
+                            for root_at in roots.iter() {
+                                let Ok(p) = r.u64(w + root_at) else { continue };
+                                if let Ok(Some(root)) = gui_tree::container(r, p, image) {
+                                    if container_name(r, image, root).ok().flatten().as_deref()
+                                        == Some(class.root_name)
+                                        && gui_tree::visible(r, root).unwrap_or(false)
+                                    {
+                                        return Ok(Some(root));
+                                    }
+                                }
+                            }
+                        }
+                        at += 0x400;
+                    }
+                }
+            }
+            if let Some(root) = hidden {
+                return Ok(Some(root));
+            }
+        }
+        // Windows reached by a fixed path from a manager slot (slot, field, root field), accepted
+        // only when the root carries the class's .gui root name.
+        for (root_name, slot, hops, root_at) in SLOT_PATHS {
+            if *root_name != class.root_name {
+                continue;
+            }
+            let Ok(mut window) = r.u64(manager + slot) else {
+                continue;
+            };
+            let mut ok = plausible(window);
+            for hop in hops.iter() {
+                if !ok {
+                    break;
+                }
+                window = r.u64(window + hop).unwrap_or(0);
+                ok = plausible(window);
+            }
+            if !ok {
+                continue;
+            }
+            let Ok(p) = r.u64(window + root_at) else {
+                continue;
+            };
+            if let Ok(Some(root)) = gui_tree::container(r, p, image) {
+                if container_name(r, image, root).ok().flatten().as_deref() == Some(class.root_name)
+                {
+                    return Ok(Some(root));
+                }
+            }
+        }
+    }
     let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let want = image + img(abi, class.vtable)?;
@@ -204,33 +329,6 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
         let p = u64::from_le_bytes(chunk.try_into().unwrap());
         if plausible(p) && r.u64(p).ok() == Some(want) {
             if let Some(root) = root_of(r, image, p, class) {
-                return Ok(Some(root));
-            }
-        }
-    }
-    // Windows reached by a fixed path from a manager slot (slot, field, root field), accepted
-    // only when the root carries the class's .gui root name.
-    for (root_name, slot, field, root_at) in SLOT_PATHS {
-        if *root_name != class.root_name {
-            continue;
-        }
-        let Ok(view) = r.u64(manager + slot) else {
-            continue;
-        };
-        if !plausible(view) {
-            continue;
-        }
-        let Ok(window) = r.u64(view + field) else {
-            continue;
-        };
-        if !plausible(window) {
-            continue;
-        }
-        let Ok(p) = r.u64(window + root_at) else {
-            continue;
-        };
-        if let Ok(Some(root)) = gui_tree::container(r, p, image) {
-            if container_name(r, image, root).ok().flatten().as_deref() == Some(class.root_name) {
                 return Ok(Some(root));
             }
         }
@@ -274,12 +372,36 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
 /// (root name, manager slot, field of the slot's view, root field of that window), mapped live:
 /// the operative bottom bar (operativeleader.gui) on 1.19.4.1, 6 Nov 2026
 /// (dbg_find_root 1d0: 0x530 -> 0x430).
-const SLOT_PATHS: &[(&str, u64, u64, u64)] = &[
-    ("operative_leader_window", 0x1d0, 0x530, 0x430),
+/// Windows found by scanning an owner object (manager slot, hops) for pointers to objects of the
+/// class's vtable, with the root at one of the given offsets: the organisation detail and policy
+/// windows move between fields of the MIO list window (+0x2dd8 / +0x2de0 seen live, 6 Nov 2026).
+/// (root name, manager slot, hops to the owner, span of the owner to scan, root fields)
+type OwnerScan = (&'static str, u64, &'static [u64], u64, &'static [u64]);
+const OWNER_SCANS: &[OwnerScan] = &[
+    (
+        "industrial_organisation_detail_window",
+        0x128,
+        &[0x3958],
+        0x3400,
+        &[0xc0],
+    ),
+    (
+        "industrial_organisation_policy_window",
+        0x128,
+        &[0x3958],
+        0x3400,
+        &[0x28],
+    ),
+];
+/// The policy window hangs off a detail window (+0x1ca8 seen live): detail objects found in
+/// the list window, then their fields up to this span.
+const POLICY_IN_DETAIL_SPAN: u64 = 0x2000;
+const SLOT_PATHS: &[(&str, u64, &[u64], u64)] = &[
+    ("operative_leader_window", 0x1d0, &[0x530], 0x430),
     // the candidate window opened from an empty operative slot (dbg_slot_object 1d0:930)
-    ("operativeleaderwindow", 0x1d0, 0x930, 0x518),
+    ("operativeleaderwindow", 0x1d0, &[0x930], 0x518),
     // the mission bar shown over an operative's portrait (dbg_slot_object 1d0:938)
-    ("operative_order_bar", 0x1d0, 0x938, 0x440),
+    ("operative_order_bar", 0x1d0, &[0x938], 0x440),
 ];
 const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
     (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
@@ -1127,12 +1249,19 @@ pub(super) fn debug_slot_object(process: &dyn Process, spec: &str) -> Result<ser
     let (a, b) = spec
         .split_once(':')
         .ok_or_else(|| Error::new("invalid_arguments", "SLOT_HEX:FIELD_HEX"))?;
-    let slot = u64::from_str_radix(a, 16).map_err(|_| Error::new("invalid_arguments", "slot"))?;
+    let mut parts = a
+        .split('/')
+        .map(|p| u64::from_str_radix(p, 16).unwrap_or(0));
+    let slot = parts.next().unwrap_or(0);
+    let hops: Vec<u64> = parts.collect();
     let field = u64::from_str_radix(b, 16).map_err(|_| Error::new("invalid_arguments", "field"))?;
     read(process, |r, i| {
         let idler = r.u64(i + game::layout(r).idler_global)?;
         let manager = r.u64(idler + MANAGER)?;
-        let view = r.u64(manager + slot)?;
+        let mut view = r.u64(manager + slot)?;
+        for hop in &hops {
+            view = r.u64(view + hop)?;
+        }
         let object = r.u64(view + field)?;
         let mut out = Vec::new();
         for off in (0..0x800u64).step_by(8) {
@@ -1155,12 +1284,10 @@ pub(super) fn debug_slot_object(process: &dyn Process, spec: &str) -> Result<ser
                     for c in children.into_iter().take(40) {
                         let name = gui_tree::name(r, c, i).ok().flatten().unwrap_or_default();
                         let inner = gui_tree::container(r, c, i).ok().flatten();
-                        let grid_count = r.array_header(c + 0x0).ok().map(|x| x.2);
                         out.push(format!(
                             "{prefix}{name}{}",
                             if inner.is_some() { "/" } else { "" }
                         ));
-                        let _ = grid_count;
                         if let (Some(inner), true) = (inner, depth > 0) {
                             tree(r, i, inner, depth - 1, out, &format!("{prefix}  "));
                         }
@@ -1175,6 +1302,51 @@ pub(super) fn debug_slot_object(process: &dyn Process, spec: &str) -> Result<ser
             serde_json::json!({"object": format!("{object:#x}"), "vtable": format!("{:#x}", r.u64(object)?.wrapping_sub(i)), "roots": out}),
         )
     })
+}
+/// Probe-only: (field, root field, vtable) of windows held by the view in manager slot `slot`
+/// (fields 0..0x6000) whose root container is named `name`.
+/// As `scan_view_for_root`, starting from the object reached by `hops` from the slot's view.
+pub(super) fn scan_path_for_root(
+    r: &Reader<'_>,
+    i: u64,
+    slot: u64,
+    hops: &[u64],
+    name: &str,
+) -> Result<Vec<String>> {
+    let idler = r.u64(i + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + MANAGER)?;
+    let mut view = r.u64(manager + slot)?;
+    for hop in hops {
+        view = r.u64(view + hop)?;
+    }
+    let mut out = Vec::new();
+    for field in (0..0x6000u64).step_by(8) {
+        let Ok(w) = r.u64(view + field) else { continue };
+        if !plausible(w) {
+            continue;
+        }
+        let Ok(bytes) = r.read(w, 0x700) else {
+            continue;
+        };
+        for (k, c) in bytes.chunks_exact(8).enumerate() {
+            let p = u64::from_le_bytes(c.try_into().unwrap());
+            if !plausible(p) {
+                continue;
+            }
+            if let Ok(Some(root)) = gui_tree::container(r, p, i) {
+                if container_name(r, i, root).ok().flatten().as_deref() == Some(name) {
+                    let vt = r.u64(w).unwrap_or(0).wrapping_sub(i);
+                    out.push(format!(
+                        "view+{field:#x} -> +{:#x} (vt {vt:#x}) visible {:?} shown {:?}",
+                        k * 8,
+                        gui_tree::visible(r, root).ok(),
+                        gui_tree::shown(r, root).ok()
+                    ));
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 pub(super) fn debug_popups(process: &dyn Process) -> Result<serde_json::Value> {
     read(process, |r, i| {

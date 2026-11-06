@@ -515,6 +515,19 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_widget_idler:") => panelkit::debug_widget_idler(process, &n[17..]),
         n if n.starts_with("dbg_image_save:") => panelkit::debug_image_save(process, &n[15..]),
         "dbg_popups" => panelkit::debug_popups(process),
+        n if n.starts_with("dbg_scan_view:") => {
+            // dbg_scan_view:SLOT[/HOP/HOP...]:NAME (hex)
+            let (path, name) = n[14..].split_once(':').unwrap_or(("128", ""));
+            let mut parts = path
+                .split('/')
+                .map(|p| u64::from_str_radix(p, 16).unwrap_or(0));
+            let slot = parts.next().unwrap_or(0x128);
+            let hops: Vec<u64> = parts.collect();
+            ui::read(process, |r, i| {
+                panelkit::scan_path_for_root(r, i, slot, &hops, name)
+            })
+            .map(|v| serde_json::json!(v))
+        }
         n if n.starts_with("dbg_slot_object:") => panelkit::debug_slot_object(process, &n[16..]),
         "dbg_mio_list" => mio_act::debug_list(process),
         n if n.starts_with("dbg_find_text:") => mio_act::debug_find_text(process, &n[14..]),

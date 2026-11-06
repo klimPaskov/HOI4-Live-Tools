@@ -447,7 +447,14 @@ pub(super) fn debug_find_text(process: &dyn Process, text: &str) -> Result<Value
                 reads += 1;
                 for (k, c) in bytes.chunks_exact(8).enumerate() {
                     let off = (k * 8) as u64;
-                    if let Ok(t) = r.string_bounded(obj + off, 64) {
+                    if let Some(want) = text.strip_prefix("gui=") {
+                        let v = u64::from_le_bytes(c.try_into().unwrap());
+                        if let Ok(Some(cont)) = gui_tree::container(r, v, i) {
+                            if gui_tree::name(r, cont, i).ok().flatten().as_deref() == Some(want) {
+                                hits.push(json!(format!("{path}+{off:#x} -> {v:#x}")));
+                            }
+                        }
+                    } else if let Ok(t) = r.string_bounded(obj + off, 64) {
                         if t == text {
                             hits.push(json!(format!("{path}+{off:#x}")));
                         }
@@ -520,11 +527,129 @@ fn require_row(process: &dyn Process, display: &str) -> std::result::Result<(), 
     Ok(())
 }
 
+/// Rows of the organisation list as drawn (industrial_organization_list.gui: rows 100 high,
+/// details_button at 400,50 and background_button over the row): the smooth listbox keeps its
+/// rows outside the window tree on 1.19.4.1, so they are found by opening each row's details
+/// and reading the detail window's name (industrial_org_name). Returns the row index with its
+/// detail window left open.
+const ROW_HEIGHT: i32 = 100;
+fn list_rect(r: &Reader<'_>, i: u64) -> Result<gui_tree::Rect> {
+    let root = pk::open_root(r, i, &pk::MIO_LIST)?;
+    let list = pk::need(r, i, root, "organisation_list", 4)?;
+    if let Ok(rect) = gui_tree::rect(r, i, list, pk::GAME) {
+        return Ok(rect);
+    }
+    // The smooth listbox has no reviewed renderer: its parent window `organisations` plus the
+    // list's own .gui placement (position 10,7, size 515x552).
+    // Anchored on the close button (a plain button, x = 550 - 38, y = 4 in the 550-wide window):
+    // the list sits at (0,85) + (10,7) inside the window, 515x552.
+    let close = pk::need(r, i, root, "close_button", 3)?;
+    let c = gui_tree::rect(r, i, close, pk::GAME)?;
+    let (x0, y0) = (c.x - 512, c.y - 4);
+    Ok(gui_tree::Rect {
+        x: x0 + 10,
+        y: y0 + 92,
+        w: 515,
+        h: 552,
+    })
+}
+fn detail_name(r: &Reader<'_>, i: u64) -> Result<String> {
+    let root = pk::open_root(r, i, &pk::MIO_DETAIL)?;
+    if let Ok(Some(t)) = pk::text(r, i, root, "industrial_org_name", 3) {
+        if !t.trim().is_empty() {
+            return Ok(t);
+        }
+    }
+    let w = pk::need(r, i, root, "industrial_org_name", 3)?;
+    super::navalui::edit_text(r, i, w)
+}
+fn close_detail(process: &dyn Process, keys: &dyn GameInput) {
+    if pk::open_now(process, &pk::MIO_DETAIL) {
+        let clicked = pk::click(process, keys, "close detail", |r, i| {
+            let root = pk::open_root(r, i, &pk::MIO_DETAIL)?;
+            pk::rect_of(r, i, root, "close_button", 4)
+        });
+        if clicked.is_err() {
+            pk::dismiss_window(process, keys, &pk::MIO_DETAIL);
+        }
+        let _ = wait(process, "detail closed", |r, i| {
+            Ok(!pk::is_open(r, i, &pk::MIO_DETAIL)?)
+        });
+    }
+}
+fn row_by_details(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    display: &str,
+) -> std::result::Result<usize, Fail> {
+    let list = read(process, list_rect)?;
+    let mut seen = Vec::new();
+    for k in 0..12 {
+        let top = list.y + ROW_HEIGHT * k;
+        if top + 70 > list.y + list.h {
+            break;
+        }
+        close_detail(process, keys);
+        keys.click(pk::GAME, f64::from(list.x + 445), f64::from(top + 62))?;
+        let opened = wait(process, "organisation detail", |r, i| {
+            pk::is_open(r, i, &pk::MIO_DETAIL)
+        })
+        .is_ok();
+        if !opened {
+            break; // no row there
+        }
+        pause(250);
+        let name = read(process, detail_name).unwrap_or_default();
+        if loc::same(&name, display) {
+            return Ok(k as usize);
+        }
+        seen.push(name);
+    }
+    close_detail(process, keys);
+    Err(refuse(
+        "organization_not_offered",
+        format!(
+            "The organisation list shows {} but not {display:?}; nothing was changed",
+            if seen.is_empty() {
+                "no rows".to_string()
+            } else {
+                seen.join(" | ")
+            }
+        ),
+    ))
+}
+fn rows_readable(process: &dyn Process) -> bool {
+    read(process, |r, i| Ok(!list_frames(r, i)?.is_empty())).unwrap_or(false)
+}
+/// The open policy window's root: its own class path, else a descendant of the detail window
+/// named industrial_organisation_policy_window (it opens inside the detail window).
+fn policy_root(r: &Reader<'_>, i: u64) -> Result<u64> {
+    if let Ok(root) = pk::open_root(r, i, &pk::MIO_POLICY) {
+        return Ok(root);
+    }
+    let detail = pk::open_root(r, i, &pk::MIO_DETAIL)?;
+    let w = pk::find(r, i, detail, "industrial_organisation_policy_window", 6)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Policy window not open"))?;
+    let root = gui_tree::container(r, w, i)?
+        .ok_or_else(|| Error::new("invalid_gui", "Policy window is not a window"))?;
+    if !gui_tree::shown(r, w)? {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Policy window not open",
+        ));
+    }
+    Ok(root)
+}
 fn open_detail(
     process: &dyn Process,
     keys: &dyn GameInput,
     display: &str,
 ) -> std::result::Result<(), Fail> {
+    if !rows_readable(process) {
+        row_by_details(process, keys, display)?;
+        pause(300);
+        return Ok(());
+    }
     require_row(process, display)?;
     pk::click(process, keys, "organisation details", |r, i| {
         row_rect(r, i, display, "details_button")
@@ -567,11 +692,22 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
     let result: Driven = (|| {
         open_system(process, keys, slot)?;
         open_roster(process, keys, slot)?;
-        require_row(process, display)?;
         let before = political_power(process);
-        pk::click(process, keys, "organisation row", |r, i| {
-            row_rect(r, i, display, "background_button")
-        })?;
+        if rows_readable(process) {
+            require_row(process, display)?;
+            pk::click(process, keys, "organisation row", |r, i| {
+                row_rect(r, i, display, "background_button")
+            })?;
+        } else {
+            let k = row_by_details(process, keys, display)?;
+            close_detail(process, keys);
+            let list = read(process, list_rect)?;
+            keys.click(
+                pk::GAME,
+                f64::from(list.x + 200),
+                f64::from(list.y + ROW_HEIGHT * k as i32 + 30),
+            )?;
+        }
         let confirmed = accept_command(process, keys)?;
         pause(600);
         let closed = !pk::open_now(process, &pk::MIO_LIST);
@@ -606,13 +742,22 @@ fn policy(
             let root = pk::open_root(r, i, &pk::MIO_DETAIL)?;
             pk::rect_of(r, i, root, "open_policies", 4)
         })?;
-        wait(process, "open policy window", |r, i| {
-            pk::is_open(r, i, &pk::MIO_POLICY)
-        })?;
+        if let Err(e) = wait(process, "open policy window", |r, i| {
+            Ok(policy_root(r, i).is_ok())
+        }) {
+            // Debug aid: HOI4_DEBUG_HOLD keeps the windows open for probing.
+            if let Some(secs) = std::env::var("HOI4_DEBUG_HOLD")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+            {
+                std::thread::sleep(std::time::Duration::from_secs(secs.min(60)));
+            }
+            return Err(e.into());
+        }
         pause(400);
         let wanted = policy_name.to_string();
         let rows = |r: &Reader<'_>, i: u64| -> Result<(Vec<String>, Option<gui_tree::Rect>)> {
-            let root = pk::open_root(r, i, &pk::MIO_POLICY)?;
+            let root = policy_root(r, i)?;
             let list = pk::need(r, i, root, "policy_list", 4)?;
             let frames: Vec<u64> = match pk::items(r, i, list) {
                 Ok(items) if !items.is_empty() => items.into_iter().map(|x| x.frame).collect(),
@@ -692,7 +837,17 @@ fn trait_entries(r: &Reader<'_>, i: u64) -> Result<Vec<TraitEntry>> {
             Some(b) => gui_tree::shown(r, b)? && !gui_tree::disabled(r, b)?,
             None => false,
         };
-        let queue = pk::text(r, i, entry, "queue_number", 4)?.unwrap_or_default();
+        // The queue number keeps its .gui placeholder ("99") while hidden: only a shown
+        // number is a queue position (every trait read "99" unqueued, live 6 Nov 2026).
+        let shown = pk::find(r, i, entry, "queue_number", 4)?
+            .map(|w| gui_tree::shown(r, w))
+            .transpose()?
+            .unwrap_or(false);
+        let queue = if shown {
+            pk::text(r, i, entry, "queue_number", 4)?.unwrap_or_default()
+        } else {
+            String::new()
+        };
         let rect = icon.and_then(|b| pk::rect(r, i, b).ok());
         out.push(TraitEntry {
             index,
@@ -772,8 +927,26 @@ fn mio_trait(
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Trait icon left the window"))
         })?;
         let confirmed = accept_command(process, keys)?;
-        pause(600);
-        let after = read(process, trait_entries).unwrap_or_default();
+        pause(300);
+        // The queue number is drawn a moment after the click (a queued trait read unqueued at
+        // 600 ms, live 6 Nov 2026): poll up to 2 s.
+        let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+        let mut after = read(process, trait_entries).unwrap_or_default();
+        while !after.get(index).is_some_and(|e| !e.queue.is_empty())
+            && std::time::Instant::now() < deadline
+        {
+            pause(150);
+            after = read(process, trait_entries).unwrap_or_default();
+        }
+        if after.is_empty() {
+            // Queueing a trait detaches the detail window from the list window (window_not_found
+            // right after a click that did queue, live 6 Nov 2026): reopen it and read again.
+            leave(process, keys);
+            open_system(process, keys, slot)?;
+            open_roster(process, keys, slot)?;
+            open_detail(process, keys, display)?;
+            after = read(process, trait_entries).unwrap_or_default();
+        }
         let queued = after.get(index).is_some_and(|e| !e.queue.is_empty());
         Ok(json!({
             "trait_queued": queued,
