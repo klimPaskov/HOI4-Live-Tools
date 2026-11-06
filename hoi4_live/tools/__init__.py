@@ -17,4 +17,5 @@ from . import memory_tools  # noqa: F401 (guarded Windows reads)
 from . import governor_tools  # noqa: F401 (daily routine and event-driven waits)
 from . import check_tools  # noqa: F401 (trigger and focus availability, test mode)
 from . import smoke_tools  # noqa: F401 (namespace smoke test, test mode)
+from . import sweep_tools  # noqa: F401  (localisation sweep)
 from .registry import all_tools, get  # noqa: F401
