@@ -1139,7 +1139,10 @@ mod tests {
             "Comando Navale Ionio e Basso Ad",
             "Comando Navale Ionio e Basso Adriatico"
         ));
-        assert!(same_name("comando navale sicilia", "Comando Navale Sicilia"));
+        assert!(same_name(
+            "comando navale sicilia",
+            "Comando Navale Sicilia"
+        ));
         // short names never match by prefix
         assert!(!same_name("Comando Navale", "Comando Navale Sicilia"));
         assert!(!same_name(

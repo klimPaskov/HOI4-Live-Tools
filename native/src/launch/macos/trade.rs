@@ -58,6 +58,68 @@ const RESOURCES: [&str; 7] = [
     "chromium",
     "coal",
 ];
+/// The trade view's resources in the game's own order, read once from common/resources
+/// (a mod can add or reorder resources); the vanilla list when the files are unreadable.
+static RES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+fn res() -> &'static [&'static str] {
+    RES.get().map(Vec::as_slice).unwrap_or(&RESOURCES)
+}
+pub(super) fn parse_resource_keys(text: &str) -> Vec<String> {
+    // Keys one level inside `resources = { ... }`.
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("");
+        let trimmed = line.trim();
+        if depth == 1 {
+            if let Some((key, rest)) = trimmed.split_once('=') {
+                let key = key.trim();
+                if rest.trim_start().starts_with('{')
+                    && !key.is_empty()
+                    && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                {
+                    out.push(key.to_string());
+                }
+            }
+        }
+        depth += line.matches('{').count() as i32 - line.matches('}').count() as i32;
+    }
+    out
+}
+fn init_resources(process: &dyn Process) {
+    if RES.get().is_some() {
+        return;
+    }
+    let Some(dir) = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())
+    else {
+        return;
+    };
+    let mut keys: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir.join("common/resources")) {
+        let mut files: Vec<_> = entries.flatten().map(|e| e.path()).collect();
+        files.sort();
+        for f in files {
+            if f.extension().is_some_and(|e| e == "txt") {
+                if let Ok(text) = std::fs::read_to_string(&f) {
+                    for k in parse_resource_keys(&text) {
+                        if !keys.contains(&k) {
+                            keys.push(k);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if !keys.is_empty() {
+        let leaked: Vec<&'static str> = keys
+            .into_iter()
+            .map(|k| &*Box::leak(k.into_boxed_str()))
+            .collect();
+        let _ = RES.set(leaked);
+    }
+}
 /// Offer window layout (countrytradeview.gui): the slider sits 234 px left
 /// of the Send button's left edge, is 300 px long and 53 px above its top.
 const SLIDER_LEFT_OF_SEND: f64 = 234.0;
@@ -226,7 +288,7 @@ fn resource_rows(r: &Reader<'_>, image: u64) -> Result<Vec<Value>> {
                 .unwrap_or(json!(t)))
         };
         out.push(json!({
-            "resource":RESOURCES.get(index).copied().unwrap_or("unknown"),
+            "resource":res().get(index).copied().unwrap_or("unknown"),
             "index":index,
             "balance":number("balance")?,"produced":number("produced")?,
             "imported":number("imported")?,"exported":number("exported")?,
@@ -274,17 +336,17 @@ fn select_resource(process: &dyn Process, keys: &dyn GameInput, index: usize) ->
 fn resource_index(name: &str) -> Result<usize> {
     let lower = name.trim().to_lowercase();
     if let Ok(i) = lower.parse::<usize>() {
-        if i < RESOURCES.len() {
+        if i < res().len() {
             return Ok(i);
         }
     }
-    RESOURCES
+    res()
         .iter()
         .position(|r| *r == lower || (lower == "aluminum" && *r == "aluminium"))
         .ok_or_else(|| {
             Error::new(
                 "invalid_arguments",
-                format!("resource must be one of: {}", RESOURCES.join(", ")),
+                format!("resource must be one of: {}", res().join(", ")),
             )
         })
 }
@@ -306,6 +368,7 @@ pub(super) fn view(
     resource: Option<&str>,
     limit: usize,
 ) -> Result<Value> {
+    init_resources(process);
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
     if let Some(name) = resource {
@@ -331,7 +394,7 @@ pub(super) fn view(
         .collect();
     let mut out = json!({"civilian_factories":serde_json::from_str::<Value>(&factories).unwrap_or(Value::Null),
         "resources":rows,
-        "selected_resource":chosen.and_then(|i| RESOURCES.get(i)),"selected_note":"the partner list belongs to the resource filter last clicked (the view always shows one resource; without `resource` it is whichever was last chosen)",
+        "selected_resource":chosen.and_then(|i| res().get(i)),"selected_note":"the partner list belongs to the resource filter last clicked (the view always shows one resource; without `resource` it is whichever was last chosen)",
         "validation":{"resource_order":"common/resources order; the table columns match the economy (oil 3, aluminium 95, ... coal 195 at the 1936 start)",
             "partners":"names, bought and available read from the list; the offer window's slider is set by hoi4_trade_set"},
         "observation_paused_game":false});
@@ -394,6 +457,7 @@ pub(super) fn plan(
     resource: &str,
     country: &str,
 ) -> Result<Plan> {
+    init_resources(process);
     let index = resource_index(resource)?;
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
@@ -439,7 +503,7 @@ pub(super) fn plan(
                 "partner_not_listed",
                 format!(
                     "{country} does not offer {}. Partners listed: {}",
-                    RESOURCES[index],
+                    res()[index],
                     list.iter()
                         .take(40)
                         .map(|p| format!("{} ({})", p.country, p.available))
@@ -494,13 +558,13 @@ pub(super) fn execute(
     wait(process, "offer window", offer_open)?;
     let flow = (|| -> Result<Value> {
         let head = read(process, |r, i| text_of(r, i, offer_root(r, i)?, "trade"))?;
-        let wanted = format!("units of {}", RESOURCES[plan.resource]).to_lowercase();
+        let wanted = format!("units of {}", res()[plan.resource]).to_lowercase();
         if !head.to_lowercase().contains(&wanted) {
             return Err(Error::new(
                 "resource_mismatch",
                 format!(
                     "The offer window is for another resource ({head}); wanted {}; nothing was sent",
-                    RESOURCES[plan.resource]
+                    res()[plan.resource]
                 ),
             ));
         }
@@ -627,12 +691,17 @@ pub(super) fn contracted(text: &str) -> Option<i64> {
     last.trim().parse().ok()
 }
 pub(super) fn resource_name(index: usize) -> &'static str {
-    RESOURCES.get(index).copied().unwrap_or("unknown")
+    res().get(index).copied().unwrap_or("unknown")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resource_keys_are_read_in_file_order_one_level_deep() {
+        let text = "resources = {\n\toil = {\n\t\ticon_frame = 1\n\t\tcic = 0.125\n\t}\n\taluminium = {\n\t}\n\tcoal = { icon_frame = 7 }\n}\n";
+        assert_eq!(parse_resource_keys(text), vec!["oil", "aluminium", "coal"]);
+    }
     #[test]
     fn budget_text_colour_tells_whether_auto_import_is_on() {
         assert_eq!(enabled_from_budget_text("\u{11}g5\u{11}!"), Some(false));

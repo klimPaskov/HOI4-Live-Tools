@@ -38,10 +38,10 @@ pub(super) fn create_tool() -> Value {
     json!({"name":"hoi4_design_create","description":"Create a new own equipment variant through the game's designer: Production panel, equipment selection list, the base design's Create variant button, then the designer's own controls, name box and Save. Equipment without module slots (tanks/planes without No Step Back/By Blood Alone, `other`) takes `upgrades` {row: level} (the designer's upgrade rows, e.g. armor, reliability, gun, engine, range; absolute levels 0..20, listed by hoi4_design_options); equipment with module slots (ships, and tanks/planes with No Step Back/By Blood Alone) takes `modules` {slot: module_key or null to empty the slot} (slot names and module keys as in hoi4_designs detail/hoi4_design_options; only the slots named are changed, the rest keep the base design's modules). `base` is a design id or an exact design name/type key. Saving a custom (named) design uses the designer's Save As New so the original design and its production lines stay unchanged. Spends army/air/navy experience read from the window and returned. Refused before any input: kind_mismatch, base_unknown/base_ambiguous (candidates listed), design_not_offered, slot_unknown (slots listed), name_taken, name_not_typable, nothing_to_change, designer_unsupported. Found while building (nothing saved, the draft is dropped): upgrade_unknown, upgrade_level_max, slot_locked, module_unavailable (unlocked modules listed), insufficient_experience. Verified when exactly one new own design with the requested name and exactly the requested modules (or the designer's computed stats) is listed by hoi4_designs; the receipt carries that row. Use the returned design_id with hoi4_production_add `design`.","inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["tank","plane","ship","other"]},"base":{"type":["integer","string"]},"upgrades":{"type":"object","additionalProperties":{"type":"integer","minimum":0,"maximum":20}},"modules":{"type":"object","additionalProperties":{"type":["string","null"],"maxLength":96}},"name":{"type":"string","maxLength":40},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["kind","base","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn obsolete_tool() -> Value {
-    json!({"name":"hoi4_design_obsolete","description":"Decommission (obsolete: true, default) or recommission (obsolete: false) an own equipment variant with the Production selection list's Decommission/Recommission button: a decommissioned variant is marked outdated equipment and hidden from the lists unless Show outdated equipment is ticked (the tool ticks and restores that filter itself when it must reach a hidden row). `design` is the design id from hoi4_designs. Refused before input: design_unknown, already_obsolete, not_obsolete. Verified from the design's obsolete flag in memory (hoi4_designs `obsolete`).","inputSchema":{"type":"object","properties":{"design":{"type":"integer","minimum":1},"obsolete":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["design","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_design_obsolete","description":"Decommission (obsolete: true, default) or recommission (obsolete: false) an own equipment variant with the Production selection list's Decommission/Recommission button: a decommissioned variant is marked outdated equipment and hidden from the lists unless Show outdated equipment is ticked (the tool ticks and restores that filter itself when it must reach a hidden row). `design` is the design id or name from hoi4_designs. Refused before input: design_unknown, already_obsolete, not_obsolete. Verified from the design's obsolete flag in memory (hoi4_designs `obsolete`).","inputSchema":{"type":"object","properties":{"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"obsolete":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["design","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn set_production_tool() -> Value {
-    json!({"name":"hoi4_design_set_production","description":"Change which design an existing own production line builds: click the line's equipment picture, then the wanted design in the selection list (ordinary UI, same category). The game warns that progress of the line is lost; pass accept_progress_loss: true to confirm. `line` is the line handle from hoi4_production_lines/hoi4_designs production_lines. Refused before input: line_unknown, design_unknown, design_wrong_type (a line only switches inside its equipment family as the game lists it), already_building, progress_loss_unconfirmed. Verified when the design's production_lines contain the line handle.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":1},"design":{"type":"integer","minimum":1},"accept_progress_loss":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","design","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_design_set_production","description":"Change which design an existing own production line builds: click the line's equipment picture, then the wanted design in the selection list (ordinary UI, same category). The game warns that progress of the line is lost; pass accept_progress_loss: true to confirm. `line` is the line index as hoi4_production_lines numbers it (0-based) or its handle; `design` a design id or name. Refused before input: line_unknown, design_unknown, design_wrong_type (a line only switches inside its equipment family as the game lists it), already_building, progress_loss_unconfirmed. Verified when the design's production_lines contain the line handle.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"accept_progress_loss":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","design","request_id","lease_token"],"additionalProperties":false}})
 }
 
 // ---- arguments -------------------------------------------------------------------------------
@@ -1369,19 +1369,28 @@ pub(super) fn plan_set_production(
     design: i32,
     accept_progress_loss: bool,
 ) -> Result<LineChange> {
-    let line = lines.iter().find(|l| l.handle == handle).ok_or_else(|| {
-        Error::new(
-            "line_unknown",
-            format!(
-                "No own production line {handle}; lines: {}",
-                lines
-                    .iter()
-                    .map(|l| l.handle.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        )
-    })?;
+    // A small number is the line's index as hoi4_production_lines and hoi4_production_set use it.
+    let line = lines
+        .iter()
+        .find(|l| l.handle == handle)
+        .or_else(|| {
+            (handle < 4096)
+                .then(|| lines.get(handle as usize))
+                .flatten()
+        })
+        .ok_or_else(|| {
+            Error::new(
+                "line_unknown",
+                format!(
+                    "No own production line {handle}; lines: {}",
+                    lines
+                        .iter()
+                        .map(|l| l.handle.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+        })?;
     let target = all
         .iter()
         .find(|d| d.variant.id == design)
@@ -1518,12 +1527,19 @@ pub(super) fn set_production_apply(
                         .ok_or_else(|| Error::new("gui_target_unavailable", "Design row not found"))
                 })?;
                 dui::click_rect(keys, b)?;
-                let _ = super::ui::accept_command(process, keys)?;
-                wait(process, "line retargeted", |r, i| {
+                let accepted = super::ui::accept_command(process, keys)?;
+                let retargeted = |r: &crate::memory::Reader<'_>, i: u64| {
                     let (_, production) = crate::economy::own_production(r, i)?;
                     let all = designs::designs(r, i, production)?;
                     Ok(settle_set_production(&all, change) == Verdict::Reached)
-                })?;
+                };
+                if !accepted && wait(process, "line retargeted", retargeted).is_err() {
+                    // The 'progress will be lost' confirmation is not a known command dialog
+                    // class (it stayed open, live 6 Nov 2026): Return accepts the modal window
+                    // this click opened.
+                    keys.press_code(crate::platform::game_input::vk::RETURN)?;
+                }
+                wait(process, "line retargeted", retargeted)?;
                 return Ok(
                     json!({"line":change.handle,"design":change.design,"from_design":change.from_design,
                     "route":"Y (Production) -> the line's equipment picture -> the design's row in the list that opens"}),

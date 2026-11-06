@@ -632,7 +632,7 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"type":"integer","minimum":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... Province buildings (supply_node = supply hub, naval_base, bunker, coastal_bunker) are clicked on a province: pass province_id, or the tool tries the state's provinces nearest the centre in turn until the game accepts one (a supply hub needs a province the game allows, usually on a railway). Railways (rail_way) are not supported.","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":99999},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
@@ -1809,14 +1809,12 @@ impl MacClock {
                     ],
                 )?;
             }
-            let design = args
-                .get("design")
-                .and_then(Value::as_i64)
-                .and_then(|d| i32::try_from(d).ok())
-                .filter(|d| *d > 0)
-                .ok_or_else(|| {
-                    Error::new("invalid_arguments", "design must be a positive design id")
-                })?;
+            let design = design_arg(
+                process,
+                args.get("design").ok_or_else(|| {
+                    Error::new("invalid_arguments", "design is required (id or name)")
+                })?,
+            )?;
             let want_obsolete = match args.get("obsolete") {
                 None => true,
                 Some(v) if obsolete => v
@@ -1832,12 +1830,24 @@ impl MacClock {
             let line = if obsolete {
                 0
             } else {
-                args.get("line")
-                    .and_then(Value::as_u64)
-                    .filter(|l| *l > 0)
-                    .ok_or_else(|| {
-                        Error::new("invalid_arguments", "line must be a production line handle")
-                    })?
+                let raw = args.get("line").and_then(Value::as_u64).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "line must be a line index (hoi4_production_lines) or a line handle",
+                    )
+                })?;
+                // A small number is the line's index (as hoi4_production_lines numbers it):
+                // resolved to its handle here so a retried request settles the same line.
+                if raw < 4096 {
+                    production::lines(process)?
+                        .get(raw as usize)
+                        .map(|l| l.handle)
+                        .ok_or_else(|| {
+                            Error::new("line_unknown", format!("No own production line {raw}"))
+                        })?
+                } else {
+                    raw
+                }
             };
             let accept = args
                 .get("accept_progress_loss")
@@ -2451,14 +2461,7 @@ impl MacClock {
                 as i32;
             let design = match args.get("design") {
                 None => None,
-                Some(v) if adding => Some(
-                    v.as_i64()
-                        .and_then(|d| i32::try_from(d).ok())
-                        .filter(|d| *d > 0)
-                        .ok_or_else(|| {
-                            Error::new("invalid_arguments", "design must be a positive design id")
-                        })?,
-                ),
+                Some(v) if adding => Some(design_arg(process, v)?),
                 Some(_) => {
                     return Err(Error::new(
                         "invalid_arguments",
@@ -5319,5 +5322,44 @@ mod placement_deadline_tests {
             qualification_remaining(false, None, original).unwrap(),
             None
         );
+    }
+}
+
+/// A `design` argument: a positive design id, or a design's name as hoi4_designs lists it
+/// (case-insensitive, exact), resolved from the own design list in memory.
+fn design_arg(process: &dyn Process, value: &Value) -> Result<i32> {
+    if let Some(id) = value
+        .as_i64()
+        .and_then(|d| i32::try_from(d).ok())
+        .filter(|d| *d > 0)
+    {
+        return Ok(id);
+    }
+    let name = value
+        .as_str()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| {
+            Error::new(
+                "invalid_arguments",
+                "design must be a design id or a design name from hoi4_designs",
+            )
+        })?;
+    let all = designs::read_all(process)?;
+    let found: Vec<i32> = all
+        .iter()
+        .filter(|d| d.variant.name.eq_ignore_ascii_case(name))
+        .map(|d| d.variant.id)
+        .collect();
+    match found.as_slice() {
+        [id] => Ok(*id),
+        [] => Err(Error::new(
+            "design_unknown",
+            format!("No own design is named {name:?} (hoi4_designs lists the names and ids)"),
+        )),
+        _ => Err(Error::new(
+            "design_ambiguous",
+            format!("Several own designs are named {name:?}: pass the design id ({found:?})"),
+        )),
     }
 }

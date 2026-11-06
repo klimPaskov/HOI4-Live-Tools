@@ -86,7 +86,16 @@ pub(super) fn label(frame: u32) -> Option<(&'static str, &'static str)> {
         ),
         67 => (
             "admiral_assignable",
-            "an admiral can be assigned to a naval headquarters: hoi4_navy_admirals",
+            "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true}",
+        ),
+        // Named from the game's tooltips on 6 Nov 2026 (1.19.4.1).
+        68 => (
+            "insufficient_energy",
+            "coal short of the energy demand (factories produce less): hoi4_trade_set resource coal, hoi4_auto_import, or build energy",
+        ),
+        29 => (
+            "insufficient_resources",
+            "resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import",
         ),
         _ => return None,
     })
