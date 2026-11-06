@@ -1952,7 +1952,11 @@ fn war_step(
         // advance where battle plans do not (seen in Ethiopia: a plan that never left the
         // start state; moves took Bale and Sidamo).
         let ordered = executing || stage >= 3 || state.war_move.contains(&name);
-        if ordered && !standing_in_target && now - since >= stall {
+        // An army inside its target that has not taken it for twice the stall time also gets a
+        // direct move: it gathers the divisions on the state's centre instead of a thin plan line
+        // (Wello stayed Ethiopian for two months with 12 divisions inside it, live 6 Nov 2026).
+        let stuck_inside = standing_in_target && now - since >= 2 * stall;
+        if ordered && (!standing_in_target || stuck_inside) && now - since >= stall {
             let (ok, why) = state.act(
                 tools,
                 lease,
