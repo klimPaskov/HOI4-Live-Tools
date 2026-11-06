@@ -1,8 +1,15 @@
 name: Cross-platform Python
 on:
+  # A pull request runs on its own; a push only runs on master, so a branch with a pull request is not tested twice.
   push:
-    branches: [master, 'feat/**', 'codex/**']
+    branches: [master]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE', 'NOTICE']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE', 'NOTICE']
+# A new push to a pull request cancels the run it replaces.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
