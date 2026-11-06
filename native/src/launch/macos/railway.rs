@@ -69,7 +69,12 @@ pub(super) fn parse_victory_points(text: &str) -> Vec<(i32, f64)> {
             break;
         };
         let inner = &rest[open + 1..open + close];
-        let nums: Vec<&str> = inner.split_whitespace().collect();
+        // Comments (`#Massaua`) run to the end of their line.
+        let nums: Vec<&str> = inner
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or(""))
+            .flat_map(str::split_whitespace)
+            .collect();
         if nums.len() >= 2 {
             if let (Ok(p), Ok(v)) = (nums[0].parse::<i32>(), nums[1].parse::<f64>()) {
                 out.push((p, v));
