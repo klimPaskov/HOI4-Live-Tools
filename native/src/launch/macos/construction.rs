@@ -468,3 +468,170 @@ mod tests {
         assert!(e.message.contains("nothing was retried"));
     }
 }
+
+/// Shown widgets named `name` anywhere in the open construction view (child windows and grid
+/// items), top to bottom.
+fn row_buttons(r: &Reader<'_>, image: u64, name: &str) -> Result<Vec<Rect>> {
+    fn walk(
+        r: &Reader<'_>,
+        image: u64,
+        object: u64,
+        name: &str,
+        depth: u32,
+        out: &mut Vec<Rect>,
+    ) -> Result<()> {
+        for child in gui_tree::children(r, object)? {
+            if gui_tree::name(r, child, image)?.as_deref() == Some(name)
+                && gui_tree::shown(r, child)?
+            {
+                let rect = gui_tree::rect(r, image, child, GAME)?;
+                if rect.w > 0 && rect.h > 0 {
+                    out.push(rect);
+                }
+            }
+            if depth == 0 {
+                continue;
+            }
+            if let Some(inner) = gui_tree::container(r, child, image)? {
+                walk(r, image, inner, name, depth - 1, out)?;
+            }
+            if let Some(frames) = super::panelkit::grid_frames(r, image, child)? {
+                for frame in frames {
+                    walk(r, image, frame, name, depth - 1, out)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    walk(r, image, root(r, image)?, name, 10, &mut out)?;
+    out.sort_by_key(|rect| (rect.y, rect.x));
+    out.dedup();
+    Ok(out)
+}
+
+/// Handles of the own construction lines in queue order.
+fn queue_handles(process: &dyn Process) -> Result<Vec<String>> {
+    let page = construction::page(process, 0, 128)?;
+    Ok(page["lines"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|l| l["line_handle"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Move construction line `line` (0-based queue index) to the top, one up, one down, to the
+/// bottom, or remove it, with the row's own buttons (countryconstructionsview.gui:
+/// increase_priority, decrease_priority, close_production_line). Verified by the line's new
+/// position in the own queue (or its absence after a removal).
+pub(super) fn reorder(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    line: usize,
+    action: &str,
+) -> Result<serde_json::Value> {
+    let button = match action {
+        "top" | "up" => "increase_priority",
+        "down" | "bottom" => "decrease_priority",
+        "remove" => "close_production_line",
+        _ => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "action must be top, up, down, bottom or remove",
+            ))
+        }
+    };
+    let before = queue_handles(process)?;
+    let n = before.len();
+    let handle = before.get(line).cloned().ok_or_else(|| {
+        Error::new(
+            "invalid_target",
+            format!("No construction line {line}: the queue has {n} (hoi4_construction_queue lists them in order)"),
+        )
+    })?;
+    let wanted = match action {
+        "top" => Some(0),
+        "up" => Some(line.saturating_sub(1)),
+        "down" => Some((line + 1).min(n - 1)),
+        "bottom" => Some(n - 1),
+        _ => None,
+    };
+    if wanted == Some(line) {
+        return Ok(
+            serde_json::json!({"line_handle": handle, "position": line, "unchanged": "already there"}),
+        );
+    }
+    clear_notices(process, keys)?;
+    if !read(process, open)? {
+        keys.press(Key::letter('t')?)?;
+        wait(process, "open construction", open)?;
+    }
+    let result = (|| -> Result<serde_json::Value> {
+        let rows = settled(process, "construction rows", |r, i| {
+            row_buttons(r, i, button)
+        })?;
+        if rows.len() != n {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                format!("The construction panel shows {} {button} buttons for {n} queue lines; nothing was clicked", rows.len()),
+            ));
+        }
+        let (x, y) = rows[line].center();
+        let position = |process: &dyn Process| -> Result<Option<usize>> {
+            Ok(queue_handles(process)?.iter().position(|h| *h == handle))
+        };
+        match action {
+            "remove" => {
+                keys.click(GAME, x, y)?;
+                if !super::ui::accept_command(process, keys)? {
+                    // no confirmation pop-up was found: the removal may already be done
+                }
+                wait(process, "line removed", |_, _| {
+                    Ok(position(process)?.is_none())
+                })?;
+                Ok(serde_json::json!({"line_handle": handle, "removed": true, "lines_before": n}))
+            }
+            _ => {
+                // Shift moves a line to the top or bottom in one click; without effect the
+                // single steps follow.
+                if matches!(action, "top" | "bottom") {
+                    keys.shift_click(GAME, x, y)?;
+                } else {
+                    keys.click(GAME, x, y)?;
+                }
+                let target = wanted.unwrap_or(line);
+                let moved = wait(process, "line moved", |_, _| {
+                    Ok(position(process)? == Some(target))
+                });
+                if moved.is_err() && matches!(action, "top" | "bottom") {
+                    for _ in 0..n {
+                        let Some(at) = position(process)? else { break };
+                        if at == target {
+                            break;
+                        }
+                        let rows = read(process, |r, i| row_buttons(r, i, button))?;
+                        let Some(rect) = rows.get(at) else { break };
+                        let (x, y) = rect.center();
+                        keys.click(GAME, x, y)?;
+                        thread::sleep(Duration::from_millis(400));
+                    }
+                }
+                let now = position(process)?;
+                if now != Some(target) {
+                    return Err(Error::new(
+                        "input_readback_failed",
+                        format!(
+                            "Line {handle} is at {now:?} after the {button} click, not at {target}"
+                        ),
+                    ));
+                }
+                Ok(serde_json::json!({"line_handle": handle, "from": line, "to": target}))
+            }
+        }
+    })();
+    leave(process, keys);
+    result
+}

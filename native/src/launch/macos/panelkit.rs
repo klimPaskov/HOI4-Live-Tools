@@ -554,6 +554,19 @@ pub(super) fn grids(
     }
     Ok(())
 }
+/// The item windows of `object` when it is a grid box, else None.
+pub(super) fn grid_frames(r: &Reader<'_>, image: u64, object: u64) -> Result<Option<Vec<u64>>> {
+    let grid = image + img(r.string_abi(), GRID_VTABLE)?;
+    if r.u64(object)? != grid {
+        return Ok(None);
+    }
+    Ok(Some(
+        items(r, image, object)?
+            .into_iter()
+            .map(|i| i.frame)
+            .collect(),
+    ))
+}
 /// Text of a named text box child (game markup removed).
 pub(super) fn text(
     r: &Reader<'_>,
