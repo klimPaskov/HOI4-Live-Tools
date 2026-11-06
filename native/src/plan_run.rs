@@ -1913,9 +1913,21 @@ fn war_step(
                 1,
             )
         } else if stage < 2 {
+            // The front tool takes an enemy-held state: the one nearest the post (the game
+            // refuses an own, own-controlled state as a front target, live w16).
+            let facing = state.centers.get(&post).copied().and_then(|(px, pz)| {
+                targets
+                    .iter()
+                    .filter_map(|(id, _)| {
+                        let (x, z) = state.centers.get(id).copied()?;
+                        Some((*id, (x - px).powi(2) + (z - pz).powi(2)))
+                    })
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(id, _)| id)
+            });
             (
                 "hoi4_army_front",
-                json!({"army": name, "state_id": post}),
+                json!({"army": name, "state_id": facing.unwrap_or(post)}),
                 "guard front",
                 2,
             )
@@ -3606,6 +3618,8 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("war guard front Army 1 -> state 42")),
             "{step:?}"
         );
+        let (_, args) = last_action(&w);
+        assert_eq!(args["state_id"], json!(28), "the front faces the nearest enemy state");
         assert_eq!(state.war_guard.get("Army 1"), Some(&42));
     }
 
