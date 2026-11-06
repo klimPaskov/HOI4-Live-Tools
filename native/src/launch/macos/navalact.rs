@@ -387,6 +387,23 @@ pub(super) fn select_fleet(
     }
     close_region_view(process, keys)?;
     let cards = settled(process, "fleet cards", nui::cards)?;
+    let wanted_tfs: Vec<String> = own_fleets(process)
+        .ok()
+        .and_then(|fleets| {
+            fleets
+                .into_iter()
+                .find(|f| same_name(&f.name, name))
+                .map(|f| {
+                    let mut names: Vec<String> = f
+                        .task_forces
+                        .iter()
+                        .map(|t| t.name.to_lowercase())
+                        .collect();
+                    names.sort();
+                    names
+                })
+        })
+        .unwrap_or_default();
     let wanted = order
         .iter()
         .position(|n| same_name(n, name))
@@ -408,9 +425,24 @@ pub(super) fn select_fleet(
         // A half-written title read (invalid_string) counts as not yet.
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
         loop {
-            if read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?
-                .is_some_and(|n| same_name(&n, name))
-            {
+            // The title edit box does not always read (long names: invalid_string, live 6 Nov
+            // 2026), so the panel also counts as the wanted fleet's when its object points at
+            // that fleet.
+            let by_title = read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?
+                .is_some_and(|n| same_name(&n, name));
+            // The panel's task forces (read from the navies view's own list, reliable) equal
+            // the wanted fleet's.
+            let by_task_forces = !wanted_tfs.is_empty()
+                && read(process, |r, i| Ok(nui::entries(r, i).ok()))
+                    .ok()
+                    .flatten()
+                    .is_some_and(|shown| {
+                        let mut names: Vec<String> =
+                            shown.iter().map(|e| e.name.to_lowercase()).collect();
+                        names.sort();
+                        names == wanted_tfs
+                    });
+            if by_title || by_task_forces {
                 pause(200);
                 return Ok(());
             }
