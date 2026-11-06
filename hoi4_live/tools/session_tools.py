@@ -7,7 +7,7 @@ import uuid
 
 from .. import __version__
 from ..errors import ToolError
-from ..game import console, menu, process, saves, timectl, ui
+from ..game import console, launch_errors, menu, process, saves, timectl, ui
 from ..perception import popups as popups_mod
 from ..perception import topbar
 from .common import MODE, apply_mode, attach, result
@@ -127,7 +127,8 @@ def _validate_campaign_playset(cfg):
 @tool("hoi4_launch",
       "Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game "
       "already runs it is left alone (restart=true quits it through its own menu first). The playset and settings "
-      "are never changed.",
+      "are never changed. A -debug launch fails at once when the game reports a MAP_ERROR (it waits on an OK "
+      "dialog), with the error lines and a screenshot; a normal launch lists them as map_errors.",
       {"properties": {
           "debug": {"type": "boolean", "default": False, "description": "launch with -debug"},
           "wait_menu": {"type": "boolean", "default": True},
@@ -214,12 +215,14 @@ def hoi4_launch(session, args):
             if not process.running_pids():
                 raise ToolError("the game exited during startup")
             session.window.close_notepad_logs()
+            launch_errors.check(session, args["debug"])          # a MAP_ERROR dialog: fail now, not at the timeout
             idle = session.logs.idle_seconds("setup") or 0
             if idle > 10:
                 try:
                     ok, texts = menu.main_menu_visible(session)
                 except ToolError:
-                    ok = False
+                    ok, texts = False, []
+                launch_errors.check(session, args["debug"], texts)
                 if ok:
                     break
             session.report(f"loading ({int(time.time() - t0)} s)")
@@ -228,6 +231,9 @@ def hoi4_launch(session, args):
             raise ToolError("timed out waiting for the main menu", data)
         session.window.pin_client()
         data["menu_after_s"] = round(time.time() - t0, 1)
+        map_errors = launch_errors.map_error_lines(session)
+        if map_errors:
+            data["map_errors"] = map_errors                      # without -debug these are only lines in error.log
     img = session.grab()
     res = ToolResult(f"HOI4 launched (pid {pid}) in {round(time.time() - t0)} s", data)
     return attach(res, session, img, "launch")
