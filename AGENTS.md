@@ -78,3 +78,4 @@ For campaign strategy and FAIR/META rules, read
   audited archives and release pins for HOI4 Mod Setup/Agentic HOI4 Modding must
   agree. Windows downstream pins move only after the release is accepted.
 - Never add Co-Authored-By, "Generated with" or any AI attribution line to commits or PRs: the user is the sole author.
+- Merge pull requests and push without asking the maintainer once the required checks pass (maintainer decision D-23, 2026-11-06). Never force push, never reset or clean in a way that loses work, and never delete a branch with unmerged work.
