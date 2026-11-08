@@ -332,7 +332,9 @@ fn click(
     }
     let check = || {
         deadline(until)?;
-        unchanged(candidate, &probe()?)?;
+        // A busy game day can tear this re-read: read again before calling it a change (a focus
+        // start failed with torn_read just before the click, w24).
+        unchanged(candidate, &super::ui::retry_torn(&probe)?)?;
         deadline(until)
     };
     let guarded = keys.guarded(process, &check)?;
@@ -457,7 +459,10 @@ fn start_inner(
             deadline(until)
         };
         let before_down = || {
-            unchanged(&tree, &sample(process, &owner, key, binding::symbols)?)?;
+            unchanged(
+                &tree,
+                &super::ui::retry_torn(|| sample(process, &owner, key, binding::symbols))?,
+            )?;
             deadline(until)
         };
         let guarded = keys.guarded(process, &scope)?;

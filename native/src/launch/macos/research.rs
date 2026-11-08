@@ -344,12 +344,7 @@ pub(super) fn start(
     }
     result
 }
-fn start_inner(
-    process: &dyn Process,
-    keys: &dyn GameInput,
-    key: &str,
-    slot: usize,
-) -> Result<()> {
+fn start_inner(process: &dyn Process, keys: &dyn GameInput, key: &str, slot: usize) -> Result<()> {
     let image = process.image_base();
     let click = |rect: Rect| {
         clear_notices(process, keys)?;

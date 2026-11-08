@@ -774,19 +774,25 @@ pub fn tick(
                 state.stages.focus = Some((format!("focus: started {key}"), false));
                 return Ok(Tick::Acted(format!("focus {key}")));
             }
-            // A focus the game disables (requirements, exclusive branch) is
-            // retried soon and does not hold up the next key in the path.
+            // A focus the game disables (requirements, exclusive branch) waits 10 game days
+            // (6 game hours was under a second at speed 3) and does not hold up the next key.
+            // Anything else (a torn read, a readback) ends the focus step for this tick: going on
+            // to the next key started focuses out of plan order (w24).
             let blocked = why.contains("focus_not_available")
                 || why.contains("prerequisite")
-                || why.contains("exclusive");
+                || why.contains("exclusive")
+                || why.contains("invalid_target");
             let hours = if blocked {
-                skip_hours(plan, "focus_blocked", 6)
+                skip_hours(plan, "focus_blocked", 10 * DAY)
             } else {
                 skip_hours(plan, "focus", DAY)
             };
             state.skip(now, "focus", &key, hours);
             let code = why.split(':').next().unwrap_or("refused").to_string();
             state.stages.focus_why.insert(key, code);
+            if !blocked {
+                break;
+            }
         }
         if !path.is_empty() || !fallback.is_empty() {
             let left = startable(state, &path).len() + startable(state, &fallback).len();
@@ -3282,7 +3288,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_focus_is_retried_after_a_game_day_not_before() {
+    fn a_focus_the_game_refuses_is_retried_after_ten_game_days() {
         struct Refusing;
         impl Tools for Refusing {
             fn call(&self, name: &str, _: &Value) -> Result<Value> {
@@ -3299,13 +3305,13 @@ mod tests {
         let first = tick(&mut state, &Refusing, &plan, "l", START).unwrap();
         assert_eq!(first, Tick::Nothing);
         assert!(state.skipped(START, "focus", "F1"));
-        // same game hour or any time within the day: untouched
+        // any time within ten game days: untouched
         assert_eq!(
-            tick(&mut state, &Refusing, &plan, "l", START + DAY - 1).unwrap(),
+            tick(&mut state, &Refusing, &plan, "l", START + 10 * DAY - 1).unwrap(),
             Tick::Nothing
         );
-        // a day later it is tried again
-        assert!(!state.skipped(START + DAY, "focus", "F1"));
+        // then it is tried again
+        assert!(!state.skipped(START + 10 * DAY, "focus", "F1"));
     }
 
     #[test]
@@ -5169,7 +5175,7 @@ mod tests {
     }
 
     #[test]
-    fn a_blocked_focus_is_skipped_briefly_and_the_next_key_starts_in_the_same_tick() {
+    fn a_blocked_focus_waits_ten_days_and_the_next_key_starts_in_the_same_tick() {
         let reads = focus_reads();
         let tools = ActionReplies {
             reads: &reads,
@@ -5191,14 +5197,14 @@ mod tests {
         assert_eq!(tried, ["A", "B"]);
         assert!(state.skipped(START + 5, "focus", "A"));
         assert!(
-            !state.skipped(START + 6, "focus", "A"),
-            "default blocked window is 6 game hours, not a day"
+            !state.skipped(START + 10 * DAY, "focus", "A"),
+            "default blocked window is 10 game days (6 hours was under a second at speed 3)"
         );
         assert_eq!(
             focus_blocked(&state, &plan, START + 1),
             ["A:focus_not_available"]
         );
-        assert!(focus_blocked(&state, &plan, START + 6).is_empty());
+        assert!(focus_blocked(&state, &plan, START + 10 * DAY).is_empty());
     }
 
     #[test]
