@@ -60,6 +60,12 @@ pub(super) fn read<T>(
 
 /// HOI4_TRACE=1: every named wait and settle logs its duration to stderr (finding where an
 /// action spends its time).
+/// A free-form trace line (HOI4_TRACE).
+pub(super) fn trace_text(text: &str) {
+    if std::env::var_os("HOI4_TRACE").is_some() {
+        eprintln!("[trace] {text}");
+    }
+}
 pub(super) fn trace(stage: &str, since: Instant) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("HOI4_TRACE").is_some()) {

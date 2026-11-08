@@ -359,17 +359,21 @@ pub(super) fn select_wing(
 /// its provinces when the region is unknown), nearest their mean, away from the air base icons
 /// and the wings' map markers, which take a right click for themselves (live 8 Nov 2026: the
 /// mean of Tigray's Danakil provinces sat on the Eritrean base and the order did nothing).
-fn region_point(
+fn region_points(
     process: &dyn Process,
     dir: Option<&std::path::Path>,
     state: i32,
     region: Option<i32>,
-) -> Option<(f64, f64)> {
-    let dir = dir?;
-    let positions = super::mapdata::positions(dir).ok()?;
+) -> Vec<(f64, f64)> {
+    let Some(dir) = dir else {
+        return Vec::new();
+    };
+    let Ok(positions) = super::mapdata::positions(dir) else {
+        return Vec::new();
+    };
     let in_region = super::mapdata::province_regions(dir).ok();
     let world: Vec<(f64, f64)> = super::mapdata::state_provinces(dir, state)
-        .ok()?
+        .unwrap_or_default()
         .into_iter()
         .filter(|p| match (region, &in_region) {
             (Some(r), Some(map)) => map.get(p) == Some(&r),
@@ -378,7 +382,7 @@ fn region_point(
         .filter_map(|p| positions.get(&p).copied())
         .collect();
     if world.is_empty() {
-        return None;
+        return Vec::new();
     }
     read(process, |r, i| {
         let icons = super::airui::base_icons(r, i).unwrap_or_default();
@@ -389,7 +393,7 @@ fn region_point(
             }
         }
         if pts.is_empty() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         let n = pts.len() as f64;
         let mean = pts
@@ -407,10 +411,9 @@ fn region_point(
             let d = |p: &(f64, f64)| (p.0 - mean.0).powi(2) + (p.1 - mean.1).powi(2);
             d(a).total_cmp(&d(b))
         });
-        Ok(pts.into_iter().find(clear))
+        Ok(pts.into_iter().filter(clear).take(4).collect())
     })
-    .ok()
-    .flatten()
+    .unwrap_or_default()
 }
 /// Give wing `name` mission `mission` over the region containing `state`.
 pub(super) fn assign(
@@ -478,19 +481,31 @@ pub(super) fn assign(
     // Project only once the camera rests (air mode may have just zoomed it in).
     super::screenmap::wait_camera_still(process, 700);
     let high_ok = read(process, super::screenmap::camera_height).is_ok_and(|h| h <= 1400.0);
-    let target = high_ok
-        .then(|| region_point(process, dir.as_deref(), state, region))
-        .flatten()
-        .filter(|(x, y)| (520.0..1500.0).contains(x) && (160.0..800.0).contains(y));
-    let target = match target {
-        Some(p) => p,
-        None => {
-            find_state(process, keys, state)?;
-            region_point(process, dir.as_deref(), state, region)
-                .filter(|(x, y)| (420.0..1700.0).contains(x) && (120.0..900.0).contains(y))
-                .unwrap_or((960.0, 540.0))
-        }
+    let near = |pts: Vec<(f64, f64)>, x: (f64, f64), y: (f64, f64)| -> Vec<(f64, f64)> {
+        pts.into_iter()
+            .filter(|p| (x.0..x.1).contains(&p.0) && (y.0..y.1).contains(&p.1))
+            .collect()
     };
+    let mut targets = if high_ok {
+        near(
+            region_points(process, dir.as_deref(), state, region),
+            (520.0, 1500.0),
+            (160.0, 800.0),
+        )
+    } else {
+        Vec::new()
+    };
+    if targets.is_empty() {
+        find_state(process, keys, state)?;
+        targets = near(
+            region_points(process, dir.as_deref(), state, region),
+            (420.0, 1700.0),
+            (120.0, 900.0),
+        );
+        if targets.is_empty() {
+            targets.push((960.0, 540.0));
+        }
+    }
     if !read(process, has_bit)? {
         let _ = deselect(process, keys);
         return Err(Error::new(
@@ -503,31 +518,40 @@ pub(super) fn assign(
     // A camera still gliding would carry the click elsewhere: wait until it rests (at once
     // when it already does; the Find view waited too).
     super::screenmap::wait_camera_still(process, 600);
-    if std::env::var_os("HOI4_TRACE").is_some() {
-        let bases = read(process, |r, i| {
-            Ok(super::airui::base_icons(r, i)
-                .unwrap_or_default()
-                .iter()
-                .map(|b| b.center())
-                .collect::<Vec<_>>())
-        })
-        .unwrap_or_default();
-        eprintln!("[trace] air region click at {target:?} (state {state}, region {region:?}, bases {bases:?})");
-    }
-    keys.right_click(GAME, target.0, target.1)?;
-    let result = wait(process, "air mission assigned", |r, i| {
+    // The wing's new area: the intended region when known (a click in a neighbouring region
+    // is not the order), otherwise any change.
+    let assigned = |r: &Reader<'_>, i: u64| -> Result<bool> {
         Ok(super::airact::own_wing(r, i, name)?.is_some_and(|w| {
             w.mission_mask & bit != 0
                 && w.region_id > 0
-                && mem_before.is_none_or(|b| b != area(&w))
+                && region.map_or(mem_before.is_none_or(|b| b != area(&w)), |want| {
+                    w.region_id == want
+                })
         }))
-    })
-    .map_err(|_| {
-        Error::new(
-            "input_readback_failed",
-            "The wing's mission or region did not change (the region is out of the wing's range, or the wing already has it)",
-        )
-    });
+    };
+    // A point can lie under a map marker (an air region's mission marker took the click while
+    // the same point worked for a wing with no region, live 8 Nov 2026): try the next one.
+    let mut result = Err(Error::new(
+        "input_readback_failed",
+        "The wing's mission or region did not change (the region is out of the wing's range, or every point clicked lay under a map marker)",
+    ));
+    for target in targets {
+        super::ui::trace_text(&format!(
+            "air region click at {target:?} (state {state}, region {region:?})"
+        ));
+        keys.right_click(GAME, target.0, target.1)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1200);
+        while std::time::Instant::now() < deadline {
+            if read(process, assigned)? {
+                result = Ok(());
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+        if result.is_ok() {
+            break;
+        }
+    }
     let _ = deselect(process, keys);
     result
 }
