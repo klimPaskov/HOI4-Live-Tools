@@ -4,7 +4,7 @@
 //! a timed entry for it appears, its entry disappears or its button turns
 //! disabled. Lists the offered decisions with the game's enabled state.
 use super::glide::{glide, span_y, Glide, Glided};
-use super::ui::{accept_command, clear_notices, decline_stale, read, settled, wait};
+use super::ui::{clear_notices, decline_stale, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -332,7 +332,9 @@ pub(super) fn take(
     clear_notices(process, keys)?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
-    accept_command(process, keys)?;
+    // A confirmation appears only for some decisions: stop waiting for it once one of the
+    // proofs below shows.
+    super::ui::accept_command_until(process, keys, |r, i| Ok(taken(&rows(r, i)?, &before, key)))?;
     // Proof: political power spent, a timer started or the entry left the list.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
     loop {

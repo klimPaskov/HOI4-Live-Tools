@@ -78,6 +78,11 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
+    if let Some(list) = value["tools"].as_array_mut() {
+        list.push(json!({"name":"hoi4_observe","description":"What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}}));
+        list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. An army you order yourself (any hoi4_army_* action) is left to you by its war rules for war.player_claim_seconds (default 300); release:[names] hands armies back at once. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"release":{"type":"array","items":{"type":"string"},"maxItems":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
+        list.push(json!({"name":"hoi4_wait_change","description":"Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":30},"limit":{"type":"integer","minimum":1,"maximum":200}},"required":["since"],"additionalProperties":false}}));
+    }
     value["tools"].as_array_mut().unwrap().push(json!({"name":"hoi4_focus_input_probe","description":"Read-only Mac preview: witness the exact unfinished own Focus node in an already-open idle tree using the input binding. Optional include_pan also verifies complete obstacle geometry. Reports bounded logical payload-read counts and whole-observation time, with no controller, navigation, cursor movement, pause, eligibility or input authority. Other platforms explicitly refuse.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"include_pan":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
     value["tools"]
         .as_array_mut()
@@ -460,6 +465,103 @@ impl Server {
                 json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
+            "hoi4_autopilot" => {
+                let known = [
+                    "enabled",
+                    "interval_ms",
+                    "release",
+                    "request_id",
+                    "lease_token",
+                ];
+                if object.keys().any(|k| !known.contains(&k.as_str())) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Unknown autopilot argument",
+                    ));
+                }
+                if commands.and_then(|c| c.plan_path()).is_none() {
+                    return Err(Error::new(
+                        "autopilot_unavailable",
+                        "No standing plan in this server (needs the owned input session)",
+                    ));
+                }
+                let pilot = crate::autopilot::autopilot();
+                match object.get("enabled").and_then(Value::as_bool) {
+                    Some(true) => {
+                        let token = object
+                            .get("lease_token")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| {
+                                Error::new("invalid_arguments", "lease_token required")
+                            })?;
+                        let ms = object
+                            .get("interval_ms")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(1000);
+                        pilot.enable(token, Duration::from_millis(ms.clamp(250, 10_000)));
+                    }
+                    Some(false) => pilot.disable(),
+                    None => {}
+                }
+                if let Some(list) = object.get("release").and_then(Value::as_array) {
+                    let armies: Vec<String> = list
+                        .iter()
+                        .filter_map(|a| a.as_str().map(str::to_string))
+                        .collect();
+                    pilot.release(&armies);
+                }
+                Ok(pilot.status())
+            }
+            "hoi4_observe" | "hoi4_wait_change" => {
+                let known = ["since", "kinds", "urgent_only", "limit", "timeout_seconds"];
+                if object.keys().any(|k| !known.contains(&k.as_str()))
+                    || (name == "hoi4_observe" && object.contains_key("timeout_seconds"))
+                {
+                    return Err(Error::new("invalid_arguments", "Unknown observe argument"));
+                }
+                let feed = crate::watch::feed();
+                if !feed.running() {
+                    return Err(Error::new(
+                        "watcher_unavailable",
+                        "The change watcher is not running in this server (it needs the owned macOS input session)",
+                    ));
+                }
+                let since = object.get("since").and_then(Value::as_u64).unwrap_or(0);
+                let kinds: Vec<String> = object
+                    .get("kinds")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|k| k.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let urgent = object
+                    .get("urgent_only")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                let limit = object
+                    .get("limit")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(50)
+                    .clamp(1, 200) as usize;
+                if name == "hoi4_observe" {
+                    Ok(feed.observe(since, &kinds, urgent, limit))
+                } else {
+                    let secs = object
+                        .get("timeout_seconds")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(15)
+                        .clamp(1, 30);
+                    Ok(feed.wait(
+                        since,
+                        &kinds,
+                        urgent,
+                        std::time::Duration::from_secs(secs),
+                        limit,
+                    ))
+                }
+            }
             "hoi4_research" => {
                 if object
                     .keys()

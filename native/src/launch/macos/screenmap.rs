@@ -43,6 +43,31 @@ pub(super) fn to_screen(r: &Reader<'_>, image: u64, x: f64, z: f64) -> Result<Op
     Ok(project(&proj, &view, x, z))
 }
 
+/// The camera's view matrix (moves while the camera pans or zooms).
+pub(super) fn view_matrix(r: &Reader<'_>, image: u64) -> Result<[f64; 16]> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let abi = r.string_abi();
+    let camera = r.u64(idler + fld(abi, &IDLER, 0x718)?)?;
+    floats(r, camera + fld(abi, &CAMERA, 0xd0)?)
+}
+
+/// Wait until the camera has stopped moving: the view matrix is the same in two reads 45 ms
+/// apart (at most `max_ms`). Replaces fixed sleeps after Find, zoom and pan inputs.
+pub(super) fn wait_camera_still(process: &dyn crate::platform::Process, max_ms: u64) {
+    let started = std::time::Instant::now();
+    let read = |p: &dyn crate::platform::Process| super::ui::read(p, view_matrix).ok();
+    let mut last = read(process);
+    while started.elapsed().as_millis() < u128::from(max_ms) {
+        std::thread::sleep(std::time::Duration::from_millis(45));
+        let now = read(process);
+        if now.is_some() && now == last {
+            break;
+        }
+        last = now;
+    }
+    super::ui::trace("camera still", started);
+}
+
 /// Camera eye height above the map (larger = zoomed out).
 pub(super) fn camera_height(r: &Reader<'_>, image: u64) -> Result<f64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
@@ -52,6 +77,14 @@ pub(super) fn camera_height(r: &Reader<'_>, image: u64) -> Result<f64> {
     Ok(view[13])
 }
 
+/// Highest camera at which the game draws the highlighted front lines (and unit counters):
+/// fronts were drawn at 750 and none showed at 932 (live 8 Nov 2026). Above it, aiming orders
+/// go through the Find view, which brings the camera in.
+pub(super) const AIM_MAX: f64 = 760.0;
+/// Whether the camera is low enough to aim front and offensive orders where it is.
+pub(super) fn aim_height_ok(process: &dyn crate::platform::Process) -> bool {
+    super::ui::read(process, camera_height).is_ok_and(|h| h <= AIM_MAX)
+}
 /// Zoomed in closer than this, the camera is brought back out after a map action.
 const CLOSE: f64 = 500.0;
 /// Strategic view height (the game starts at 800; 50 is fully in, 3000 fully out).

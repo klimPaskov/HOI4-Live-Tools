@@ -251,6 +251,66 @@ mod retry_settle_tests {
         assert!(j.unresolved().is_some());
     }
     #[test]
+    fn an_unresolved_army_order_blocks_army_input_but_not_research() {
+        let d = dir("domain-scope");
+        let mut j = journal(&d);
+        let mut settle = || Ok(Outcome::Unknown);
+        let mut dispatch = || Err(Error::new("action_deadline", "late"));
+        assert!(j
+            .execute(
+                "a1",
+                &epoch(),
+                json!({"kind":"army_move"}),
+                &mut settle,
+                &mut dispatch
+            )
+            .is_err());
+        assert!(j.blocked_for("army"));
+        assert!(!j.blocked_for("research"));
+        assert!(j.blocked_for("*"));
+        // a new army order is refused, a research start goes through
+        let mut ok_settle = || Ok(Outcome::Reached(json!({})));
+        let mut ok_dispatch = || Ok(());
+        assert!(j
+            .execute(
+                "a2",
+                &epoch(),
+                json!({"kind":"army_front"}),
+                &mut ok_settle,
+                &mut ok_dispatch
+            )
+            .is_err());
+        let mut ok_settle = || Ok(Outcome::Reached(json!({})));
+        let mut ok_dispatch = || Ok(());
+        assert!(j
+            .execute(
+                "r1",
+                &epoch(),
+                json!({"kind":"research_start"}),
+                &mut ok_settle,
+                &mut ok_dispatch
+            )
+            .is_ok());
+    }
+    #[test]
+    fn an_unresolved_event_answer_blocks_everything() {
+        let d = dir("domain-global");
+        let mut j = journal(&d);
+        let mut settle = || Ok(Outcome::Unknown);
+        let mut dispatch = || Err(Error::new("action_deadline", "late"));
+        assert!(j
+            .execute(
+                "e1",
+                &epoch(),
+                json!({"kind":"event_choose"}),
+                &mut settle,
+                &mut dispatch
+            )
+            .is_err());
+        assert!(j.blocked_for("research"));
+        assert!(j.blocked_for("army"));
+    }
+    #[test]
     fn baseline_free_unchanged_settles_a_retry_and_unblocks_input() {
         let d = dir("retry-unchanged");
         let mut j = journal(&d);
@@ -312,4 +372,14 @@ mod retry_settle_tests {
         assert!(r.is_ok());
         assert_eq!(calls, 3);
     }
+}
+
+#[test]
+fn compound_step_request_ids_are_valid() {
+    // hoi4_army_attack journals its steps as <id>:front, :offensive, :execute
+    // (a '/' separator was refused by every live call, 8 Nov 2026).
+    for flag in ["front", "offensive", "execute"] {
+        assert!(valid_id(&format!("player-17:{flag}")).is_ok());
+    }
+    assert!(valid_id("player-17/front").is_err());
 }

@@ -355,6 +355,63 @@ pub(super) fn select_wing(
     Ok(before)
 }
 
+/// Screen point for the region click: one of `state`'s provinces that lie in `region` (all of
+/// its provinces when the region is unknown), nearest their mean, away from the air base icons
+/// and the wings' map markers, which take a right click for themselves (live 8 Nov 2026: the
+/// mean of Tigray's Danakil provinces sat on the Eritrean base and the order did nothing).
+fn region_point(
+    process: &dyn Process,
+    dir: Option<&std::path::Path>,
+    state: i32,
+    region: Option<i32>,
+) -> Option<(f64, f64)> {
+    let dir = dir?;
+    let positions = super::mapdata::positions(dir).ok()?;
+    let in_region = super::mapdata::province_regions(dir).ok();
+    let world: Vec<(f64, f64)> = super::mapdata::state_provinces(dir, state)
+        .ok()?
+        .into_iter()
+        .filter(|p| match (region, &in_region) {
+            (Some(r), Some(map)) => map.get(p) == Some(&r),
+            _ => true,
+        })
+        .filter_map(|p| positions.get(&p).copied())
+        .collect();
+    if world.is_empty() {
+        return None;
+    }
+    read(process, |r, i| {
+        let icons = super::airui::base_icons(r, i).unwrap_or_default();
+        let mut pts = Vec::new();
+        for (x, z) in &world {
+            if let Some(p) = super::screenmap::to_screen(r, i, *x, *z)? {
+                pts.push(p);
+            }
+        }
+        if pts.is_empty() {
+            return Ok(None);
+        }
+        let n = pts.len() as f64;
+        let mean = pts
+            .iter()
+            .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+        let clear = |p: &(f64, f64)| {
+            icons.iter().all(|b| {
+                let (bx, by) = b.center();
+                // the base circle and the wing markers stacked below it (seen live: three
+                // wings' markers reach about 90 px under the circle)
+                (p.0 - bx).abs() > 95.0 || !(-45.0..140.0).contains(&(p.1 - by))
+            })
+        };
+        pts.sort_by(|a, b| {
+            let d = |p: &(f64, f64)| (p.0 - mean.0).powi(2) + (p.1 - mean.1).powi(2);
+            d(a).total_cmp(&d(b))
+        });
+        Ok(pts.into_iter().find(clear))
+    })
+    .ok()
+    .flatten()
+}
 /// Give wing `name` mission `mission` over the region containing `state`.
 pub(super) fn assign(
     process: &dyn Process,
@@ -368,6 +425,23 @@ pub(super) fn assign(
         .find(|(n, _)| *n == mission)
         .map(|(_, f)| *f)
         .ok_or_else(|| Error::new("invalid_arguments", "Unknown mission"))?;
+    // Already flying this mission over the state's region: nothing to click (a repeated order
+    // used to wait out the whole readback for a change that could not come).
+    let dir = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok());
+    let region = dir
+        .as_ref()
+        .and_then(|dir| super::mapdata::state_regions(dir).ok())
+        .and_then(|m| m.get(&state).map(|v| v.0));
+    if let Some(region) = region {
+        let bit = 1 << (wanted - 1);
+        if read(process, |r, i| super::airact::own_wing(r, i, name))?
+            .is_some_and(|w| w.mission_mask & bit != 0 && w.region_id == region)
+        {
+            return Ok(());
+        }
+    }
     select_wing(process, keys, name)?;
     let buttons = settled(process, "mission buttons", mission_buttons)?;
     let (_, button, enabled, _) = buttons
@@ -397,7 +471,26 @@ pub(super) fn assign(
             return Err(error);
         }
     }
-    find_state(process, keys, state)?;
+    // The state's centre where the camera already is (aiming height); the Find view
+    // (which centres it and waits for the camera to rest) otherwise.
+    // Strategic air regions are large: a click on the state's projected centre lands in the
+    // right region from far higher than unit orders allow.
+    // Project only once the camera rests (air mode may have just zoomed it in).
+    super::screenmap::wait_camera_still(process, 700);
+    let high_ok = read(process, super::screenmap::camera_height).is_ok_and(|h| h <= 1400.0);
+    let target = high_ok
+        .then(|| region_point(process, dir.as_deref(), state, region))
+        .flatten()
+        .filter(|(x, y)| (520.0..1500.0).contains(x) && (160.0..800.0).contains(y));
+    let target = match target {
+        Some(p) => p,
+        None => {
+            find_state(process, keys, state)?;
+            region_point(process, dir.as_deref(), state, region)
+                .filter(|(x, y)| (420.0..1700.0).contains(x) && (120.0..900.0).contains(y))
+                .unwrap_or((960.0, 540.0))
+        }
+    };
     if !read(process, has_bit)? {
         let _ = deselect(process, keys);
         return Err(Error::new(
@@ -407,10 +500,21 @@ pub(super) fn assign(
     }
     let area = |w: &super::airread::Wing| (w.mission_mask, w.region_id);
     let mem_before = read(process, |r, i| super::airact::own_wing(r, i, name))?.map(|w| area(&w));
-    // The camera glides to the state after the Find; give it time to rest before the click.
-    std::thread::sleep(std::time::Duration::from_millis(900));
-    keys.right_click(GAME, 960.0, 540.0)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    // A camera still gliding would carry the click elsewhere: wait until it rests (at once
+    // when it already does; the Find view waited too).
+    super::screenmap::wait_camera_still(process, 600);
+    if std::env::var_os("HOI4_TRACE").is_some() {
+        let bases = read(process, |r, i| {
+            Ok(super::airui::base_icons(r, i)
+                .unwrap_or_default()
+                .iter()
+                .map(|b| b.center())
+                .collect::<Vec<_>>())
+        })
+        .unwrap_or_default();
+        eprintln!("[trace] air region click at {target:?} (state {state}, region {region:?}, bases {bases:?})");
+    }
+    keys.right_click(GAME, target.0, target.1)?;
     let result = wait(process, "air mission assigned", |r, i| {
         Ok(super::airact::own_wing(r, i, name)?.is_some_and(|w| {
             w.mission_mask & bit != 0

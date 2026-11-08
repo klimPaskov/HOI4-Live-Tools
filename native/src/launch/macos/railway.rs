@@ -242,6 +242,66 @@ fn pan_to(
         format!("Province {province} could not be brought on screen with the arrow keys"),
     ))
 }
+/// A screen point (game pixels).
+type Point = (f64, f64);
+/// Screen points of both railway ends once both lie in the open map, bringing them there with
+/// at most one Find (of the start state) and one zoom-out burst; None when they still do not
+/// fit (the caller pans with the arrow keys).
+fn aim_both(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    dir: &Path,
+    from_state: i32,
+    from: i32,
+    to: i32,
+) -> Result<Option<(Point, Point)>> {
+    let positions = mapdata::positions(dir)?;
+    let (Some(&a), Some(&b)) = (positions.get(&from), positions.get(&to)) else {
+        return Ok(None);
+    };
+    let area = (MAP_LEFT, 120.0, 1700.0, 900.0);
+    let inside = |p: (f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
+    let project = || -> Result<(Option<Point>, Option<Point>)> {
+        read(process, |r, i| {
+            Ok((
+                super::screenmap::to_screen(r, i, a.0, a.1)?,
+                super::screenmap::to_screen(r, i, b.0, b.1)?,
+            ))
+        })
+    };
+    let both = |pa: Option<(f64, f64)>, pb: Option<(f64, f64)>| match (pa, pb) {
+        (Some(x), Some(y)) if inside(x) && inside(y) => Some((x, y)),
+        _ => None,
+    };
+    let (pa, pb) = project()?;
+    if super::screenmap::aim_height_ok(process) {
+        if let Some(found) = both(pa, pb) {
+            return Ok(Some(found));
+        }
+    }
+    find_state(process, keys, from_state)?;
+    let mut left = 24;
+    for _ in 0..2 {
+        let (pa, pb) = project()?;
+        if let Some(found) = both(pa, pb) {
+            return Ok(Some(found));
+        }
+        let need = |p: Option<(f64, f64)>| match p {
+            Some(p) => super::glide::zoom_out_events(p, area, left),
+            None => left.min(6),
+        };
+        let events = need(pa).max(need(pb));
+        if events == 0 || left == 0 {
+            break;
+        }
+        keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
+        thread::sleep(Duration::from_millis(80));
+        super::screenmap::wait_camera_still(process, 700);
+        left = left.saturating_sub(events);
+    }
+    let (pa, pb) = project()?;
+    Ok(both(pa, pb))
+}
 /// Queue lines plus the levels queued on railway lines: a railway along a path already in the
 /// queue raises that line's level count instead of adding a line (live 6 Nov 2026: four
 /// Asmara-Tigray orders made one line of 4 levels, and the line count never moved).
@@ -293,16 +353,24 @@ pub(super) fn build(
     let before = queue_lines(process)?;
     super::construction::select_building(process, keys, "rail_way")?;
     let result = (|| -> Result<Value> {
-        find_state(process, keys, from_s)?;
-        thread::sleep(Duration::from_millis(350));
-        // The construction panel covers the left of the screen: both ends are clicked in the
-        // open map to its right (a Shift+Click on Asmara landed on the panel, live 6 Nov 2026).
-        let (x, y) = pan_to(process, keys, &dir, from_p)?;
+        // Both ends on screen at once: no Find when they already are, otherwise Find the start
+        // and zoom out in one burst until the end shows too (the arrow-key crawl took 10-14 s
+        // per railway in the Ethiopia runs). Zooming keeps a railway in progress.
+        let ends = aim_both(process, keys, &dir, from_s, from_p, to_p)?;
+        let (x, y) = match ends {
+            Some((a, _)) => a,
+            // The construction panel covers the left of the screen: both ends are clicked in
+            // the open map to its right (a Shift+Click on Asmara landed on the panel, 6 Nov 2026).
+            None => pan_to(process, keys, &dir, from_p)?,
+        };
         keys.shift_click(GAME, x, y)?;
-        thread::sleep(Duration::from_millis(400));
+        thread::sleep(Duration::from_millis(120));
         // The Find view would end the railway in progress (live 6 Nov 2026: 'Railway must start
-        // on a supply node'), so reach the target with the arrow keys, projecting after each tap.
-        let (x, y) = pan_to(process, keys, &dir, to_p)?;
+        // on a supply node'), so a target still off screen is reached with the arrow keys.
+        let (x, y) = match ends {
+            Some((_, b)) => b,
+            None => pan_to(process, keys, &dir, to_p)?,
+        };
         keys.click(GAME, x, y)?;
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {

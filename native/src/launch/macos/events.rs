@@ -32,6 +32,9 @@ struct Ui {
     item_container: u64,
     grid_position: u64,
     grid_slot: u64,
+    /// The grid's screen transform (f32 x, -y of its top-left corner, game pixels), kept by
+    /// the game's layout pass; covers windows whose options move below a variable text.
+    grid_screen: u64,
     icon_position: u64,
     text: u64,
     manager: u64,
@@ -55,6 +58,10 @@ const MACOS: Ui = Ui {
     item_container: 0x10,
     grid_position: 0x70,
     grid_slot: 0xd4,
+    // Live 8 Nov 2026 (BBA_italo_ethiopian_war_events.01, EventWindow_leader): (793, -596)
+    // here, the window origin 678 + the grid's gui x 115; the centres it gives lay on both
+    // drawn options. The local transform (115, -10) sits at +0x2e0.
+    grid_screen: 0x320,
     // 1.19.4: CIcon fields +8 (live: the news picture's local position (59, 91) of
     // eventwindow.gui sits at +0xfc; grid position +0x70 and slot +0xd4 unchanged).
     icon_position: 0xfc,
@@ -97,6 +104,7 @@ fn ui(r: &Reader<'_>) -> Result<Ui> {
         item_container: fld(abi, &GRID_ITEM, m.item_container)?,
         grid_position: fld(abi, &GRID, m.grid_position)?,
         grid_slot: fld(abi, &GRID, m.grid_slot)?,
+        grid_screen: fld(abi, &GRID, m.grid_screen)?,
         icon_position: fld(abi, &ICON, m.icon_position)?,
         text: fld(abi, &TEXT_BOX, m.text)?,
         manager: fld(abi, &IDLER, m.manager)?,
@@ -143,6 +151,10 @@ struct Open {
     event: u64,
     id: String,
     title: String,
+    /// The event's own text (Description text box), read from memory.
+    description: String,
+    /// The leader shown in leader/operative layouts (leader_fullname), when present.
+    leader: Option<String>,
     options: Vec<String>,
     centres: Option<Vec<(f64, f64)>>,
     /// News windows: options are found on screen below this point within
@@ -177,6 +189,17 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
             Some(t) => r.string_bounded(t + u.text, 256).unwrap_or_default(),
             None => String::new(),
         };
+        let text_of = |name: &str| -> Result<Option<String>> {
+            Ok(match find(r, image, window, name, 0)? {
+                Some(t) => r
+                    .string_bounded(t + u.text, 4096)
+                    .ok()
+                    .map(|v| plain_text(&v)),
+                None => None,
+            })
+        };
+        let description = text_of("Description")?.unwrap_or_default();
+        let leader = text_of("leader_fullname")?.filter(|v| !v.trim().is_empty());
         let grid = find(r, image, window, "options_grid", 0)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Event options not found"))?;
         let (_, items, n) = r.array_header(grid + u.grid_items)?;
@@ -197,6 +220,8 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
             event,
             id,
             title,
+            description,
+            leader,
             options,
             centres,
             scan,
@@ -219,6 +244,17 @@ fn option_centres(
     count: usize,
 ) -> Result<Centres> {
     let u = ui(r)?;
+    // The options grid's own screen position from the game's layout pass, so a description
+    // of any length needs no capture. Trusted only when its x agrees with the window origin
+    // from the layout's anchor sprite: a window not laid out yet keeps a stale transform
+    // (live 8 Nov 2026: (150, 24) for a window queued behind two others).
+    if let Some(left) = grid_left(r, image, window, grid, kind)? {
+        if let Some(centres) = grid_centres(r, grid, &u, count)? {
+            if (centres[0].0 - f64::from(left) - grid_half(r, grid, &u)?).abs() <= 3.0 {
+                return Ok((Some(centres), None));
+            }
+        }
+    }
     if kind == "EventWindow_leader" {
         // eventwindow.gui: leader_frame at (35, 116) of the window, options_grid at x 115,
         // 300 px slots, below a description of variable height: scan the option column
@@ -285,6 +321,71 @@ fn option_centres(
         ),
         None,
     ))
+}
+/// Screen x of the options grid's left edge implied by the layout's anchor sprite (the
+/// picture, the leader frame or the agency insignia), None for unreviewed layouts.
+fn grid_left(
+    r: &Reader<'_>,
+    image: u64,
+    window: u64,
+    grid: u64,
+    kind: &str,
+) -> Result<Option<i32>> {
+    let u = ui(r)?;
+    let anchored = |name: &str, local: Option<i32>, grid_x: i32| -> Result<Option<i32>> {
+        let Some(sprite) = find(r, image, window, name, 0)? else {
+            return Ok(None);
+        };
+        let Ok(f) = gui_tree::rect(r, image, sprite, GAME) else {
+            return Ok(None);
+        };
+        let local = match local {
+            Some(v) => v,
+            None => pair(r, sprite + u.icon_position)?.0,
+        };
+        Ok(Some(f.x - local + grid_x))
+    };
+    let (gx, _) = pair(r, grid + u.grid_position)?;
+    match kind {
+        "EventWindow" | "EventWindow_News" => anchored("event_picture", None, gx),
+        // eventwindow.gui: leader_frame at x 25 inside leader_picture_container at x 10.
+        "EventWindow_leader" => anchored("leader_frame", Some(35), gx),
+        "EventWindow_Operative" => anchored("agency_insignia", Some(361), gx),
+        _ => Ok(None),
+    }
+}
+fn grid_half(r: &Reader<'_>, grid: u64, u: &Ui) -> Result<f64> {
+    Ok(f64::from(pair(r, grid + u.grid_slot)?.0) / 2.0)
+}
+/// Option centres from the grid's screen transform and slot size; None when the values are
+/// not a plausible on-screen grid (the window not laid out yet, or an unmapped build).
+fn grid_centres(
+    r: &Reader<'_>,
+    grid: u64,
+    u: &Ui,
+    count: usize,
+) -> Result<Option<Vec<(f64, f64)>>> {
+    let raw = r.read(grid + u.grid_screen, 8)?;
+    let x = f64::from(f32::from_le_bytes(raw[..4].try_into().unwrap()));
+    let y = -f64::from(f32::from_le_bytes(raw[4..].try_into().unwrap()));
+    let (sw, sh) = pair(r, grid + u.grid_slot)?;
+    Ok(grid_layout(x, y, sw, sh, count))
+}
+fn grid_layout(x: f64, y: f64, sw: i32, sh: i32, count: usize) -> Option<Vec<(f64, f64)>> {
+    if !x.is_finite() || !y.is_finite() || !(1..=800).contains(&sw) || !(1..=200).contains(&sh) {
+        return None;
+    }
+    let (w, h) = (f64::from(GAME.0), f64::from(GAME.1));
+    let centres: Vec<(f64, f64)> = (0..count)
+        .map(|i| {
+            (
+                x + f64::from(sw) / 2.0,
+                y + f64::from(sh) * (i as f64 + 0.5),
+            )
+        })
+        .collect();
+    let inside = |(cx, cy): &(f64, f64)| *cx > 0.0 && *cx < w && *cy > 0.0 && *cy < h;
+    (count > 0 && x >= 0.0 && y >= 0.0 && centres.iter().all(inside)).then_some(centres)
 }
 /// Dark option bars (rows mostly darker than the newspaper) in a column of
 /// the capture: (top, bottom) of each band 20..60 px tall, top to bottom.
@@ -416,8 +517,9 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let last = open.len().saturating_sub(1);
     Ok(
         json!({"peace_conference_open":peace,"events":open.iter().enumerate().map(|(i, e)| json!({
-        "event":e.id,"title":e.title,"options":e.options,"on_top":i == last,
-        "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout})).collect::<Vec<_>>()}),
+        "event":e.id,"title":e.title,"description":e.description,"leader":e.leader,"options":e.options,"on_top":i == last,
+        "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout,
+        "option_points":e.centres.as_ref().map(|c| c.iter().map(|(x, y)| [x.round(), y.round()]).collect::<Vec<_>>())})).collect::<Vec<_>>()}),
     )
 }
 /// The event drawn on top when it offers exactly one option (news events: "OK"-style
@@ -511,7 +613,7 @@ pub(super) fn choose(
         Ok(()) => Ok(()),
         // A news window still fading in can drop the first click (the plan loop's retry always
         // worked, live 6 Nov 2026): click the same option once more while it is still open.
-        Err(e) if e.code == "input_readback_failed" && top.scan.is_some() => {
+        Err(e) if e.code == "input_readback_failed" && top.layout != "EventWindow" => {
             if !read(process, |r, i| {
                 Ok(open_events(r, i)?.iter().any(|x| x.event == event))
             })? {
@@ -587,5 +689,125 @@ mod tests {
         let bands = dark_bands(&capture, 908.0, 120.0, 494.0);
         assert_eq!(bands.len(), 1);
         assert!((bands[0].0 - 738.0).abs() <= 2.0 && (bands[0].1 - 776.0).abs() <= 2.0);
+    }
+}
+
+/// Probe-only: the top event window's widget tree (path, rect, shown, text of text boxes),
+/// child windows and grid items included.
+pub(super) fn debug_event(process: &dyn Process) -> Result<Value> {
+    read(process, |r, image| {
+        let u = ui(r)?;
+        let idler = r.u64(image + game::layout(r).idler_global)?;
+        let gui = r.u64(idler + u.gui)?;
+        let (_, data, count) = r.array_header(gui + u.popups)?;
+        let mut window = None;
+        for index in 0..count.min(32) as u64 {
+            let entry = r.u64(data + index * 8)?;
+            if r.u64(entry)? != image + u.event_window_vtable {
+                continue;
+            }
+            let root = r.u64(entry + u.root)?;
+            if let Some(w) = gui_tree::container(r, base_of(r, image, root)?, image)? {
+                if gui_tree::visible(r, w)? {
+                    window = Some(w);
+                }
+            }
+        }
+        let Some(window) = window else {
+            return Ok(json!({"open": false}));
+        };
+        let mut out = Vec::new();
+        let mut stack = vec![(window, 0u32, String::new())];
+        while let Some((obj, depth, path)) = stack.pop() {
+            for child in gui_tree::children(r, obj)? {
+                let name = gui_tree::name(r, child, image)?.unwrap_or_default();
+                let p = format!("{path}/{name}");
+                let rect = gui_tree::rect_unclipped(r, image, child, GAME)
+                    .map(|x| [x.x, x.y, x.w, x.h])
+                    .ok();
+                let text = if ["Title", "Description", "Name", "leader_fullname"]
+                    .contains(&name.as_str())
+                {
+                    r.string_bounded(child + u.text, 4000).ok()
+                } else {
+                    None
+                };
+                out.push(json!({"path": p, "rect": rect, "shown": gui_tree::shown(r, child).unwrap_or(false),
+                    "state": gui_tree::button_state(r, child).ok(), "text": text}));
+                if depth < 8 {
+                    if let Ok(Some(inner)) = gui_tree::container(r, child, image) {
+                        stack.push((inner, depth + 1, p.clone()));
+                    }
+                    if name == "options_grid" {
+                        if let Ok((_, items, n)) = r.array_header(child + u.grid_items) {
+                            for i in 0..n.min(8) as u64 {
+                                let item = r.u64(items + i * 8)?;
+                                let entry = r.u64(item + u.item_container)?;
+                                if let Ok(Some(frame)) =
+                                    gui_tree::container(r, base_of(r, image, entry)?, image)
+                                {
+                                    let base = base_of(r, image, entry)?;
+                                    let rect = gui_tree::rect_unclipped(r, image, base, GAME)
+                                        .map(|x| [x.x, x.y, x.w, x.h])
+                                        .ok();
+                                    out.push(json!({"path": format!("{p}/item{i}"), "rect": rect}));
+                                    stack.push((frame, depth + 1, format!("{p}/item{i}")));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(json!({"open": true, "widgets": out}))
+    })
+}
+
+/// Event text without the game's markup: colour codes (`§Y` ... `§!`), icon tags (`£name£`)
+/// and control characters other than line breaks.
+pub(super) fn plain_text(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '§' => {
+                chars.next();
+            }
+            '£' => {
+                for d in chars.by_ref() {
+                    if d == '£' || d == ' ' {
+                        break;
+                    }
+                }
+            }
+            '\n' => out.push('\n'),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    // a removed icon tag leaves two spaces
+    while out.contains("  ") {
+        out = out.replace("  ", " ");
+    }
+    out.trim().to_string()
+}
+
+#[cfg(test)]
+mod text_tests {
+    #[test]
+    fn grid_transform_gives_option_centres_on_screen() {
+        // Live leader event, 8 Nov 2026: grid at (793, 596), slots 300 x 47.
+        let c = super::grid_layout(793.0, 596.0, 300, 47, 2).unwrap();
+        assert_eq!(c, vec![(943.0, 619.5), (943.0, 666.5)]);
+        assert!(super::grid_layout(0.0, -5.0, 300, 47, 2).is_none());
+        assert!(super::grid_layout(793.0, 1070.0, 300, 47, 2).is_none());
+        assert!(super::grid_layout(f64::NAN, 5.0, 300, 47, 1).is_none());
+    }
+    #[test]
+    fn markup_is_removed_and_words_kept() {
+        assert_eq!(
+            super::plain_text("The §Ylast§! stand at £army_experience£ Wello.\nNow."),
+            "The last stand at Wello.\nNow."
+        );
     }
 }

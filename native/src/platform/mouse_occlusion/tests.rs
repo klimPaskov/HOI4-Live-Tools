@@ -326,3 +326,36 @@ fn cursor_identity_uses_uid_path_and_start_not_pid_or_display_name_alone() {
         assert_eq!(cursor_owner(168, text).unwrap_err().code, "input_window_metadata");
     }
 }
+
+#[test]
+fn the_full_display_notification_center_overlay_passes_but_its_banners_block() {
+    let full = Window {
+        id: 31,
+        owner: 679,
+        layer: 21,
+        bounds: [0.0, 0.0, 1920.0, 1243.0],
+        owner_name: Some("Notification Center".into()),
+        name: None,
+        ..game()
+    };
+    assert!(check(&[full.clone(), game()]).is_ok());
+    // a banner (small) from the same owner still blocks
+    let banner = Window {
+        id: 32,
+        bounds: [800.0, 400.0, 360.0, 200.0],
+        ..full.clone()
+    };
+    assert!(check(&[banner, game()]).is_err());
+    // a full-display window of any other owner still blocks
+    let other = Window {
+        owner_name: Some("Docker Desktop".into()),
+        ..full.clone()
+    };
+    assert!(check(&[other, game()]).is_err());
+    // the same window with its title visible (Screen Recording granted) also passes
+    let titled = Window {
+        name: Some("Notification Center".into()),
+        ..full
+    };
+    assert!(check(&[titled, game()]).is_ok());
+}

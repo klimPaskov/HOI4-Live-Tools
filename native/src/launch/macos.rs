@@ -490,6 +490,7 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_hex:") => occupation::debug_hex(process, &n[8..]),
         n if n.starts_with("dbg_country:") => occupation::debug_country(process, &n[12..]),
         "dbg_states" => occupation::debug_states(process),
+        "dbg_event" => events::debug_event(process),
         "hoi4_war_stats" => war_stats::stats(process, &serde_json::Map::new()),
         "hoi4_alerts" => alerts::alerts(process),
         "hoi4_war_stats_all" => {
@@ -557,7 +558,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),
         n if n.starts_with("dbg_bytes:") => panelkit::debug_bytes(process, &n[10..]),
         "dbg_camera" => ui::read(process, |r, i| {
-            Ok(json!({"height": screenmap::camera_height(r, i)?}))
+            let v = screenmap::view_matrix(r, i)?;
+            Ok(json!({"height": screenmap::camera_height(r, i)?, "x": v[12], "z": v[14]}))
         }),
         _ => Err(Error::new(
             "capability_unavailable",
@@ -691,10 +693,11 @@ impl Commands for MacClock {
             json!({"name":"hoi4_front_plan","description":"War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"},"description":"enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]"},"max_axes":{"type":"integer","minimum":1,"maximum":6}},"required":["enemy"],"additionalProperties":false}}),
             json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
             json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
-            json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
             railway::tool(),
+            json!({"name":"hoi4_army_attack","description":"Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute). Skip a step with front:false (the army already holds a front), offensive:false or execute:false. Stops at the first failing step and says which steps were done.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"front":{"type":"boolean"},"offensive":{"type":"boolean"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_construction_order","description":"Reorder or remove one own construction line with its row buttons in the construction panel: action top (Shift+Click on the up arrow), up, down, bottom or remove (the row's close button). `line` is the 0-based index as hoi4_construction_queue lists the lines; the first lines get the civilian factories (15 per line), so put the supply hub or railway the front needs first. Verified by the line's new position in the own queue (or its absence after remove).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":127},"action":{"type":"string","enum":["top","up","down","bottom","remove"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","action","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_save","description":"Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
@@ -829,6 +832,7 @@ impl Commands for MacClock {
                     | "hoi4_army_assign_plan"
                     | "hoi4_army_assign"
                     | "hoi4_army_front"
+                    | "hoi4_army_attack"
                     | "hoi4_army_plan"
                     | "hoi4_army_offensive"
                     | "hoi4_army_move"
@@ -913,17 +917,38 @@ impl Commands for MacClock {
             && !name.starts_with("hoi4_peace")
             && process.identity() == self.process.identity();
         let was_paused = if guard_pause { self.paused_now() } else { None };
+        // A direct player order on an army takes it from the executor's war rules for a while.
+        if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
+            if let Some(army) = arguments.get("army").and_then(Value::as_str) {
+                if arguments.get("request_id").is_some() {
+                    crate::autopilot::autopilot().claim(army);
+                }
+            }
+        }
+        // Army orders leave the camera at unit level so a spectator can follow the units
+        // (maintainer, 8 Nov 2026); the strategic view comes back before the next action that
+        // is not an army order.
+        let army_tool = name.starts_with("hoi4_army_");
+        if !army_tool
+            && !journaled
+            && arguments.get("request_id").is_some()
+            && process.identity() == self.process.identity()
+        {
+            let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
+        }
         let result = (if journaled {
             Ok(())
         } else {
-            army_names_exist(process, name, arguments)
-                .and_then(|()| self.army_screen_ready(process, name))
+            army_names_exist(process, name, arguments).and_then(|()| {
+                self.army_screen_ready(process, name, arguments.get("lease_token").is_some())
+            })
         })
         .and_then(|()| self.call_inner(process, name, arguments))
         .and_then(not_applied_is_error);
         // Map actions zoom in to aim (Find, border clicks); give the player and the viewer the
         // strategic view back afterwards. Best effort: never changes the tool's result.
-        if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
+        if MAP_TOOLS.contains(&name) && !army_tool && process.identity() == self.process.identity()
+        {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
         if was_paused == Some(false) {
@@ -948,8 +973,11 @@ impl MacClock {
             .ok()
             .map(|s| s.paused)
     }
-    fn army_screen_ready(&self, process: &dyn Process, name: &str) -> Result<()> {
-        let army_tool = name.starts_with("hoi4_army_") || name == "hoi4_division_disband";
+    fn army_screen_ready(&self, process: &dyn Process, name: &str, leased: bool) -> Result<()> {
+        // Input (panel closing, F1) only for actions: a lease-free read such as
+        // hoi4_army_assign_plan runs on the read lane, beside an action, and must send nothing.
+        let army_tool =
+            (name.starts_with("hoi4_army_") || name == "hoi4_division_disband") && leased;
         if !army_tool || process.identity() != self.process.identity() {
             return Ok(());
         }
@@ -1030,13 +1058,15 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
         ),
     ))
 }
-/// Tools that move the map camera; the camera is zoomed back out after them.
+/// Tools that move the map camera; the camera is zoomed back out after them (army tools
+/// excepted: their camera stays at unit level until the next other action).
 const MAP_TOOLS: &[&str] = &[
     "hoi4_occupation_law",
     "hoi4_army_detach",
     "hoi4_army_create",
     "hoi4_army_assign",
     "hoi4_army_front",
+    "hoi4_army_attack",
     "hoi4_army_offensive",
     "hoi4_army_move",
     "hoi4_army_split",
@@ -1062,6 +1092,59 @@ impl MacClock {
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
         if name == "hoi4_daily_governor" {
             return self.daily.call(self, args);
+        }
+        if name == "hoi4_army_attack" {
+            // One call for front + offensive + execute: each step is its own journalled action
+            // (request ids <id>:front, :offensive, :execute), the per-call panel reset and zoom
+            // restore run once, and the first failing step ends the call with the steps so far.
+            allowed(
+                args,
+                &[
+                    "army",
+                    "state_id",
+                    "front",
+                    "offensive",
+                    "execute",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            let id = string(args, "request_id")?.to_string();
+            let step = |flag: &str| args.get(flag).and_then(Value::as_bool).unwrap_or(true);
+            let mut done = Vec::new();
+            for (flag, tool) in [
+                ("front", "hoi4_army_front"),
+                ("offensive", "hoi4_army_offensive"),
+                ("execute", "hoi4_army_plan"),
+            ] {
+                if !step(flag) {
+                    continue;
+                }
+                let mut sub = serde_json::Map::new();
+                sub.insert("army".into(), args["army"].clone());
+                if flag == "execute" {
+                    sub.insert("execute".into(), json!(true));
+                } else {
+                    sub.insert("state_id".into(), args["state_id"].clone());
+                }
+                sub.insert("request_id".into(), json!(format!("{id}:{flag}")));
+                sub.insert("lease_token".into(), args["lease_token"].clone());
+                match self.call_inner(process, tool, &Value::Object(sub)) {
+                    Ok(v) => done.push(json!({"step": flag, "result": v})),
+                    Err(e) => {
+                        return Err(Error::new(
+                            e.code,
+                            format!(
+                                "{} failed: {} (steps done before it: {})",
+                                flag,
+                                e.message,
+                                serde_json::to_string(&done).unwrap_or_default()
+                            ),
+                        ))
+                    }
+                }
+            }
+            return Ok(json!({"army": args["army"], "state_id": args["state_id"], "steps": done}));
         }
         if name == "hoi4_country_status" {
             allowed(args, &[])?;
@@ -1155,7 +1238,7 @@ impl MacClock {
             return commanders::list(process);
         }
         if name == "hoi4_supply" {
-            allowed(args, &["strength_below"])?;
+            allowed(args, &["strength_below", "summary", "army"])?;
             let below = match args.get("strength_below") {
                 None => 0.7,
                 Some(v) => v
@@ -1165,7 +1248,41 @@ impl MacClock {
                         Error::new("invalid_arguments", "strength_below must be 0..1")
                     })?,
             };
-            return supply::report(process, below);
+            let mut full = supply::report(process, below)?;
+            // summary:true keeps the per-army rows, totals and short lists (a few KB instead of
+            // 40-60 KB of division rows); army:"X" keeps one army's divisions.
+            if let Some(army) = args.get("army").and_then(Value::as_str) {
+                for key in ["divisions", "below_70", "below_50", "shortages"] {
+                    if let Some(list) = full[key].as_array_mut() {
+                        list.retain(|d| d["army"] == army);
+                    }
+                }
+                if let Some(list) = full["armies"].as_array_mut() {
+                    list.retain(|d| d["army"] == army);
+                }
+            }
+            if args.get("summary").and_then(Value::as_bool) == Some(true) {
+                let count = |k: &str| full[k].as_array().map_or(0, Vec::len);
+                let counts = json!({"divisions": count("divisions"), "below_70": count("below_70"),
+                    "below_50": count("below_50"), "shortages": count("shortages"),
+                    "overdrawn_provinces": count("overdrawn_provinces"), "provinces": count("provinces")});
+                if let Some(o) = full.as_object_mut() {
+                    for key in ["divisions", "provinces", "states", "supply_nodes"] {
+                        o.remove(key);
+                    }
+                    for key in ["below_70", "below_50", "shortages", "overdrawn_provinces"] {
+                        if let Some(list) = o.get_mut(key).and_then(Value::as_array_mut) {
+                            list.truncate(10);
+                        }
+                    }
+                    o.insert("counts".into(), counts);
+                    o.insert(
+                        "summary_note".into(),
+                        json!("short lists cut to 10; call without summary (or with army) for every division"),
+                    );
+                }
+            }
+            return Ok(full);
         }
         if name == "hoi4_template_get" {
             allowed(args, &["template"])?;
@@ -1296,12 +1413,13 @@ impl MacClock {
         }
         let mut state = crate::daily_worker::input_state(&self.state, || self.daily.input_check())?;
         if input_gate::applies(name, args) {
-            input_gate::check(
+            input_gate::check_in(
                 &state.journal,
                 &state.actions,
                 &state.guard.epoch.game,
                 name == "hoi4_time",
                 args.get("request_id").and_then(Value::as_str),
+                journal::domain_of(name),
             )?;
         }
         let Control {

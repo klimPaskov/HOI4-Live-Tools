@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod alarms;
+pub mod autopilot;
 pub mod calendar;
 pub mod error;
 #[cfg(any(target_os = "linux", test))]
@@ -23,6 +24,7 @@ pub mod research_folders;
 pub mod research_ui;
 mod target_node;
 pub mod technology;
+pub mod watch;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) mod xlayout;
 

@@ -1132,8 +1132,21 @@ fn create_once(
     // "Reassign Armies" appears when the box selection took every division
     // of an existing army, which would be deleted with its orders. Never
     // accept: decline and say what to do instead (accepting once merged two
-    // armies of 24 and 19 divisions into one of 52).
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // armies of 24 and 19 divisions into one of 52). Either the dialog or the new army shows
+    // within 500 ms; stop waiting at the first of them.
+    let created = |r: &Reader<'_>, i: u64| -> Result<bool> {
+        Ok(membership(r, i)?
+            .values()
+            .any(|g| *g != 0 && !groups_before.contains(g)))
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    while std::time::Instant::now() < deadline
+        && !read(process, |r, i| {
+            Ok(super::ui::reassign_open(r, i)? || created(r, i)?)
+        })?
+    {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
     if read(process, super::ui::reassign_open)? {
         if absorb {
             // The caller asked for the armies standing here to be folded in.
@@ -1574,6 +1587,17 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
 /// Select exactly `army` with its card: the selection must hold all of its
 /// divisions, not a selection left over from before.
 pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
+    let card = select_army_quick(process, keys, army)?;
+    // The army panel slides in after the selection; callers click its division rows next.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(card)
+}
+/// `select_army` without the wait for the army panel, for orders that go to the map next.
+pub(super) fn select_army_quick(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+) -> Result<Rect> {
     let size = read(process, |r, i| {
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
@@ -1591,10 +1615,7 @@ pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &st
         match wait(process, "select army", |r, i| {
             Ok(selection_size(r, i)? & 0xffff_ffff == size)
         }) {
-            Ok(()) => {
-                std::thread::sleep(std::time::Duration::from_millis(300));
-                return Ok(card);
-            }
+            Ok(()) => return Ok(card),
             Err(e) => last = Some(e),
         }
         std::thread::sleep(std::time::Duration::from_millis(400));
@@ -1868,7 +1889,9 @@ pub(super) fn front(
     army: &str,
     state: i32,
 ) -> Result<()> {
+    let t0 = std::time::Instant::now();
     clear_notices(process, keys)?;
+    super::ui::trace("front: notices", t0);
     let own = read(process, own_states)?;
     if own.contains(&state) {
         return Err(Error::new(
@@ -1877,7 +1900,8 @@ pub(super) fn front(
         ));
     }
     let before = read(process, |r, i| orders(r, i, army))?;
-    let card = select_army(process, keys, army)?;
+    let card = select_army_quick(process, keys, army)?;
+    super::ui::trace("front: selected", t0);
     // Centre on the target state's province nearest the army: valid fronts are highlighted
     // only along the army's own line, which the state's centre can be far from (seen live:
     // an army in Bale facing Hararghe).
@@ -1885,8 +1909,21 @@ pub(super) fn front(
         .ok()
         .flatten()
         .or_else(|| front_point_province(process, army, state).ok().flatten());
-    find_state(process, keys, state)?;
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // The Find view is only needed when the border point is not already in the usable area.
+    let visible = super::screenmap::aim_height_ok(process)
+        && near.is_some_and(|(x, z)| {
+            read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
+                .ok()
+                .flatten()
+                .is_some_and(|(sx, sy)| {
+                    (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy)
+                })
+        });
+    super::ui::trace("front: border point", t0);
+    if !visible {
+        find_state(process, keys, state)?;
+    }
+    super::ui::trace("front: find", t0);
     if let Some((x, z)) = near {
         // Zoom out (at most four wheel steps, as before) until the point lies in the usable
         // area: the steps it needs, sized from its screen offset, go in one smooth flick.
@@ -1900,7 +1937,8 @@ pub(super) fn front(
                 break;
             }
             keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            super::screenmap::wait_camera_still(process, 600);
             left -= events;
             if left == 0 {
                 break;
@@ -1910,14 +1948,30 @@ pub(super) fn front(
     // The fronts this army can take are highlighted only in front-line
     // drawing, in a colour that varies by army and lighting; compare one
     // capture before Z with one after it, at the same camera position.
+    super::ui::trace("front: zoom", t0);
     let plain = keys.capture(GAME)?;
+    super::ui::trace("front: capture 1", t0);
     keys.press(Key::letter('z')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(600));
-    let drawing = keys.capture(GAME)?;
     // The card's tooltip may change under the resting cursor.
     let tooltip =
         |x: f64, y: f64| x > f64::from(card.x) - 60.0 && x < f64::from(card.x) + 460.0 && y > 680.0;
+    // Capture until the highlighted fronts are drawn (about 100-300 ms after Z) instead of
+    // a fixed 300 ms.
+    let mut drawing = keys.capture(GAME)?;
     let mut candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    for _ in 0..6 {
+        if !candidates.is_empty() {
+            // One more frame: the highlight fades in, and a later frame holds all of it.
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            drawing = keys.capture(GAME)?;
+            candidates = highlighted(&plain, &drawing, &tooltip, 4);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        drawing = keys.capture(GAME)?;
+        candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    }
+    super::ui::trace("front: capture 2", t0);
     // Highlighted border pixels nearest the projected border point first (thin dashed lines).
     if let Some((x, z)) = near {
         if let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
@@ -1930,6 +1984,7 @@ pub(super) fn front(
             candidates = nearby;
         }
     }
+    super::ui::trace("front: candidates", t0);
     for (x, y) in candidates {
         keys.click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
@@ -2081,16 +2136,37 @@ pub(super) fn offensive(
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    // The target state's centre where the camera already is; the Find view (it centres the
+    // state on screen) when it is not in the usable area, or when a drag there drew nothing.
+    let projected = super::screenmap::aim_height_ok(process)
+        .then(|| state_screen_centre(process, state).ok().flatten())
+        .flatten()
+        .filter(|(x, y)| (520.0..1500.0).contains(x) && (160.0..800.0).contains(y));
+    let draw = |(cx, cy): (f64, f64)| -> Result<()> {
+        keys.press(Key::letter('x')?)?;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
+        let from = clamp(cx + dx * 260.0, cy + dy * 260.0);
+        let to = clamp(cx - dx * 40.0, cy - dy * 40.0);
+        keys.right_drag(GAME, from, to)?;
+        wait(process, "offensive line placed", |r, i| {
+            Ok(plan_nodes(r, i, army)? > before)
+        })
+    };
+    if let Some(centre) = projected {
+        if draw(centre).is_ok() {
+            return Ok(());
+        }
+        let _ = keys.press(Key::Escape);
+        if read(process, |r, i| plan_nodes(r, i, army))? > before {
+            return Ok(());
+        }
+        let (x, y) = card.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    }
     find_state(process, keys, state)?;
-    keys.press(Key::letter('x')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
-    let from = clamp(960.0 + dx * 260.0, 540.0 + dy * 260.0);
-    let to = clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0);
-    keys.right_drag(GAME, from, to)?;
-    wait(process, "offensive line placed", |r, i| {
-        Ok(plan_nodes(r, i, army)? > before)
-    })
+    draw((960.0, 540.0))
 }
 /// Divisions of `army` whose movement target (province id at +0x2ac of the
 /// division, mapped live on 24 July 1941 by diffing a right-click move order)
@@ -2210,8 +2286,15 @@ pub(super) fn move_to(
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
-    find_state(process, keys, state)?;
     let before = read(process, |r, i| headings(r, i, army))?;
+    // The state already on screen (the usual case for a front-line army): right-click one of
+    // its projected provinces where the camera is. The Find view (open, type, glide, about
+    // 1.5 s) only when none shows, and the camera stays where the viewer follows the units.
+    let visible = target_points(process, state).unwrap_or_default();
+    if !visible.is_empty() && order_at(process, keys, army, &before, visible, false)? {
+        return Ok(());
+    }
+    find_state(process, keys, state)?;
     // Map icons at the state's centre (air base, port, victory point) take a right click
     // for themselves (seen live 10 Dec 2026: Tripoli's air base); try points around the
     // centre until the divisions get a new heading.
@@ -2228,8 +2311,20 @@ pub(super) fn move_to(
     let mut points: Vec<(f64, f64)> = target_points(process, state).unwrap_or_default();
     let projected = !points.is_empty();
     points.extend(POINTS);
-    // Divisions waiting in their ports show no new heading for a sea transfer: one click on a
-    // projected land province of the target is the order, repeating it only re-issues it.
+    order_at(process, keys, army, &before, points, projected)?;
+    Ok(())
+}
+/// Right-click `points` in turn until the army's headings change (true). Divisions waiting in
+/// their ports show no new heading for a sea transfer: with `projected` points, one click on a
+/// land province of the target is the order, repeating it only re-issues it.
+fn order_at(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    before: &[i32],
+    points: Vec<(f64, f64)>,
+    projected: bool,
+) -> Result<bool> {
     let in_ports = projected && {
         let ports = read(process, super::naval::naval_base_provinces).unwrap_or_default();
         let at = read(process, division_provinces).unwrap_or_default();
@@ -2244,18 +2339,39 @@ pub(super) fn move_to(
     };
     for (n, (x, y)) in points.into_iter().enumerate() {
         if in_ports && n == 1 {
-            return Ok(());
+            return Ok(true);
         }
         keys.right_click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
         while std::time::Instant::now() < deadline {
             if read(process, |r, i| headings(r, i, army))? != before {
-                return Ok(());
+                return Ok(true);
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(40));
         }
     }
-    Ok(())
+    Ok(false)
+}
+/// Screen point of the mean of `state`'s land province positions (map files, live camera).
+pub(super) fn state_screen_centre(process: &dyn Process, state: i32) -> Result<Option<(f64, f64)>> {
+    let Some(identity) = process.identity() else {
+        return Ok(None);
+    };
+    let dir = super::mapdata::game_dir(&identity.exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let provinces = super::mapdata::state_provinces(&dir, state)?;
+    let pts: Vec<(f64, f64)> = provinces
+        .iter()
+        .filter_map(|p| positions.get(p).copied())
+        .collect();
+    if pts.is_empty() {
+        return Ok(None);
+    }
+    let n = pts.len() as f64;
+    let (x, z) = pts
+        .iter()
+        .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+    read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
 }
 /// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
 /// centre first, skipping the centre itself where the state's map icons sit; at most eight.
@@ -2637,11 +2753,13 @@ fn assign_commander_once(
         f64::from(rect.x) + 34.0,
         f64::from(bottom - PORTRAIT_DRAWN / 2),
     )?;
-    // Moving a commander who leads another army asks for confirmation.
-    super::ui::accept_command(process, keys)?;
-    wait(process, "commander assigned", |r, i| {
+    // Moving a commander who leads another army asks for confirmation; without one the
+    // assignment shows at once.
+    let assigned = |r: &Reader<'_>, i: u64| {
         Ok(commander(r, i, army)?.is_some_and(|c| c.to_lowercase() == wanted))
-    })
+    };
+    super::ui::accept_command_until(process, keys, assigned)?;
+    wait(process, "commander assigned", assigned)
 }
 
 /// Group own armies `names` into a new army group: the first army's card,
