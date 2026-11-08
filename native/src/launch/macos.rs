@@ -924,6 +924,17 @@ impl Commands for MacClock {
                 }
             }
         }
+        // Army orders leave the camera at unit level so a spectator can follow the units
+        // (maintainer, 8 Nov 2026); the strategic view comes back before the next action that
+        // is not an army order.
+        let army_tool = name.starts_with("hoi4_army_");
+        if !army_tool
+            && !journaled
+            && arguments.get("request_id").is_some()
+            && process.identity() == self.process.identity()
+        {
+            let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
+        }
         let result = (if journaled {
             Ok(())
         } else {
@@ -935,7 +946,8 @@ impl Commands for MacClock {
         .and_then(not_applied_is_error);
         // Map actions zoom in to aim (Find, border clicks); give the player and the viewer the
         // strategic view back afterwards. Best effort: never changes the tool's result.
-        if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
+        if MAP_TOOLS.contains(&name) && !army_tool && process.identity() == self.process.identity()
+        {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
         if was_paused == Some(false) {
@@ -1045,7 +1057,8 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
         ),
     ))
 }
-/// Tools that move the map camera; the camera is zoomed back out after them.
+/// Tools that move the map camera; the camera is zoomed back out after them (army tools
+/// excepted: their camera stays at unit level until the next other action).
 const MAP_TOOLS: &[&str] = &[
     "hoi4_occupation_law",
     "hoi4_army_detach",

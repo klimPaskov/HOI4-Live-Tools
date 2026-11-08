@@ -2090,16 +2090,37 @@ pub(super) fn offensive(
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    // The target state's centre where the camera already is; the Find view (it centres the
+    // state on screen) when it is not in the usable area, or when a drag there drew nothing.
+    let projected = state_screen_centre(process, state)
+        .ok()
+        .flatten()
+        .filter(|(x, y)| (520.0..1500.0).contains(x) && (160.0..800.0).contains(y));
+    let draw = |(cx, cy): (f64, f64)| -> Result<()> {
+        keys.press(Key::letter('x')?)?;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
+        let from = clamp(cx + dx * 260.0, cy + dy * 260.0);
+        let to = clamp(cx - dx * 40.0, cy - dy * 40.0);
+        keys.right_drag(GAME, from, to)?;
+        wait(process, "offensive line placed", |r, i| {
+            Ok(plan_nodes(r, i, army)? > before)
+        })
+    };
+    if let Some(centre) = projected {
+        if draw(centre).is_ok() {
+            return Ok(());
+        }
+        let _ = keys.press(Key::Escape);
+        if read(process, |r, i| plan_nodes(r, i, army))? > before {
+            return Ok(());
+        }
+        let (x, y) = card.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    }
     find_state(process, keys, state)?;
-    keys.press(Key::letter('x')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
-    let from = clamp(960.0 + dx * 260.0, 540.0 + dy * 260.0);
-    let to = clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0);
-    keys.right_drag(GAME, from, to)?;
-    wait(process, "offensive line placed", |r, i| {
-        Ok(plan_nodes(r, i, army)? > before)
-    })
+    draw((960.0, 540.0))
 }
 /// Divisions of `army` whose movement target (province id at +0x2ac of the
 /// division, mapped live on 24 July 1941 by diffing a right-click move order)
@@ -2219,8 +2240,15 @@ pub(super) fn move_to(
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
-    find_state(process, keys, state)?;
     let before = read(process, |r, i| headings(r, i, army))?;
+    // The state already on screen (the usual case for a front-line army): right-click one of
+    // its projected provinces where the camera is. The Find view (open, type, glide, about
+    // 1.5 s) only when none shows, and the camera stays where the viewer follows the units.
+    let visible = target_points(process, state).unwrap_or_default();
+    if !visible.is_empty() && order_at(process, keys, army, &before, visible, false)? {
+        return Ok(());
+    }
+    find_state(process, keys, state)?;
     // Map icons at the state's centre (air base, port, victory point) take a right click
     // for themselves (seen live 10 Dec 2026: Tripoli's air base); try points around the
     // centre until the divisions get a new heading.
@@ -2237,8 +2265,20 @@ pub(super) fn move_to(
     let mut points: Vec<(f64, f64)> = target_points(process, state).unwrap_or_default();
     let projected = !points.is_empty();
     points.extend(POINTS);
-    // Divisions waiting in their ports show no new heading for a sea transfer: one click on a
-    // projected land province of the target is the order, repeating it only re-issues it.
+    order_at(process, keys, army, &before, points, projected)?;
+    Ok(())
+}
+/// Right-click `points` in turn until the army's headings change (true). Divisions waiting in
+/// their ports show no new heading for a sea transfer: with `projected` points, one click on a
+/// land province of the target is the order, repeating it only re-issues it.
+fn order_at(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    before: &[i32],
+    points: Vec<(f64, f64)>,
+    projected: bool,
+) -> Result<bool> {
     let in_ports = projected && {
         let ports = read(process, super::naval::naval_base_provinces).unwrap_or_default();
         let at = read(process, division_provinces).unwrap_or_default();
@@ -2253,18 +2293,39 @@ pub(super) fn move_to(
     };
     for (n, (x, y)) in points.into_iter().enumerate() {
         if in_ports && n == 1 {
-            return Ok(());
+            return Ok(true);
         }
         keys.right_click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
         while std::time::Instant::now() < deadline {
             if read(process, |r, i| headings(r, i, army))? != before {
-                return Ok(());
+                return Ok(true);
             }
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(40));
         }
     }
-    Ok(())
+    Ok(false)
+}
+/// Screen point of the mean of `state`'s land province positions (map files, live camera).
+fn state_screen_centre(process: &dyn Process, state: i32) -> Result<Option<(f64, f64)>> {
+    let Some(identity) = process.identity() else {
+        return Ok(None);
+    };
+    let dir = super::mapdata::game_dir(&identity.exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let provinces = super::mapdata::state_provinces(&dir, state)?;
+    let pts: Vec<(f64, f64)> = provinces
+        .iter()
+        .filter_map(|p| positions.get(p).copied())
+        .collect();
+    if pts.is_empty() {
+        return Ok(None);
+    }
+    let n = pts.len() as f64;
+    let (x, z) = pts
+        .iter()
+        .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+    read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
 }
 /// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
 /// centre first, skipping the centre itself where the state's map icons sit; at most eight.
