@@ -2437,7 +2437,13 @@ pub fn run(
         let step = step?;
         let pause = match step {
             Tick::Acted(what) => {
+                // A failed action ends the run: retrying it at once only repeats the failure
+                // (live 8 Nov 2026: an event behind a system dialog was clicked 346 times).
+                let failed = what.contains(": false");
                 actions.push(what);
+                if failed {
+                    break json!("action failed");
+                }
                 // Never sleep while holding the game: the player's calls wait behind a run
                 // (w17: plan runs held the broker 63% of the wall time, 4 s sleeps included).
                 // After 3 s of work the run returns so the next caller gets the input.

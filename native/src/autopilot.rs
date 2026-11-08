@@ -15,6 +15,8 @@ struct On {
     steps: u64,
     actions: u64,
     last: Option<String>,
+    /// Consecutive steps whose actions all failed: the wait doubles (up to 30 s).
+    failing: u32,
 }
 
 #[derive(Default)]
@@ -41,6 +43,7 @@ impl Autopilot {
                 steps: 0,
                 actions: 0,
                 last: None,
+                failing: 0,
             });
         }
     }
@@ -55,8 +58,12 @@ impl Autopilot {
         let on = on.as_ref()?;
         (Instant::now() >= on.next).then(|| on.token.clone())
     }
-    /// After a step: acted steps run again at once (more may be waiting), quiet ones wait.
+    /// After a step: one with a successful action runs again at once (more may be waiting),
+    /// a quiet one waits the interval, one whose actions all failed waits longer each time.
     pub fn ran(&self, actions: usize, last: Option<String>) {
+        self.ran_with(actions, actions, last)
+    }
+    pub fn ran_with(&self, actions: usize, succeeded: usize, last: Option<String>) {
         if let Ok(mut on) = self.on.lock() {
             if let Some(on) = on.as_mut() {
                 on.steps += 1;
@@ -64,12 +71,16 @@ impl Autopilot {
                 if last.is_some() {
                     on.last = last;
                 }
-                on.next = Instant::now()
-                    + if actions > 0 {
-                        Duration::ZERO
-                    } else {
-                        on.interval
-                    };
+                let wait = if succeeded > 0 {
+                    on.failing = 0;
+                    Duration::ZERO
+                } else if actions > 0 {
+                    on.failing = (on.failing + 1).min(8);
+                    (on.interval * (1 << on.failing.min(5))).min(Duration::from_secs(30))
+                } else {
+                    on.interval
+                };
+                on.next = Instant::now() + wait;
             }
         }
     }
@@ -136,6 +147,19 @@ mod tests {
         assert_eq!(a.status()["actions"], 1);
         a.disable();
         assert!(a.due().is_none());
+    }
+    #[test]
+    fn failing_steps_back_off() {
+        let a = Autopilot::default();
+        a.enable("t", Duration::from_millis(50));
+        a.ran_with(1, 0, Some("x: false".into()));
+        assert!(a.due().is_none(), "a failed step does not rerun at once");
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(a.due().is_none(), "the wait doubled");
+        std::thread::sleep(Duration::from_millis(60));
+        assert!(a.due().is_some());
+        a.ran_with(1, 1, None);
+        assert!(a.due().is_some(), "a success reruns at once");
     }
     #[test]
     fn claimed_armies_expire_and_can_be_released() {
