@@ -162,6 +162,8 @@ pub struct State {
     war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
     /// The enemy-held province of an own state last ordered for an army, and when.
     war_province: HashMap<String, (i32, GameHour)>,
+    /// `construction_plan` items already queued (by `order`).
+    plan_built: HashSet<i64>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -249,6 +251,7 @@ impl Default for State {
             war_guard: HashMap::new(),
             war_repeat: HashMap::new(),
             war_province: HashMap::new(),
+            plan_built: HashSet::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -493,6 +496,9 @@ pub fn tick(
         if let Some(step) = war_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
+        if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
         if let Some(step) = armies_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -547,7 +553,11 @@ pub fn tick(
         let mut priority: Vec<String> = Vec::new();
         if let Some(path) = plan["research_path"].as_array() {
             for step in path {
-                if year.is_none_or(|y| step["year"].as_i64().unwrap_or(0) <= y) {
+                let due = match step["not_before"].as_str().and_then(date_hour) {
+                    Some(at) if year.is_some() => now >= at,
+                    _ => year.is_none_or(|y| step["year"].as_i64().unwrap_or(0) <= y),
+                };
+                if due {
                     priority.extend(strings(step, "techs"));
                 }
             }
@@ -1247,6 +1257,22 @@ fn game_year(now: GameHour) -> Option<i64> {
     let y = now / 8760 - 5000;
     (1900..2100).contains(&y).then_some(y)
 }
+/// The game hour at the start of date `text` ("1936.03.05" or "1936-03-05"); the game's calendar
+/// has 365 days and the raw hour counts from year -5000.
+fn date_hour(text: &str) -> Option<GameHour> {
+    let parts: Vec<i64> = text
+        .split(['.', '-'])
+        .filter_map(|p| p.trim().parse().ok())
+        .collect();
+    let (y, m, d) = (*parts.first()?, *parts.get(1)?, *parts.get(2)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    const DAYS: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let before: i64 = DAYS[..(m - 1) as usize].iter().sum();
+    Some(((y + 5000) * 365 + before + d - 1) * 24)
+}
+
 /// How long to leave a refused tech alone: for the rest of the run when the game will never
 /// take it (not in this country's tree, an inactive variant, disabled), else `default`.
 fn tech_skip(why: &str, default: GameHour) -> GameHour {
@@ -1261,6 +1287,98 @@ fn tech_skip(why: &str, default: GameHour) -> GameHour {
     } else {
         default
     }
+}
+
+/// `construction_plan`: ordered items `{order, building, state, province?, path?, from_state?,
+/// to_state?, when, priority?}` queued once each when `when` holds: a date ("1936.01.01"),
+/// `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`. Supply
+/// lines are then raised by the supply-first rule. One item per step.
+fn construction_plan_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some(items) = plan["construction_plan"].as_array() else {
+        return Ok(None);
+    };
+    let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
+    let mut provinces_of: HashMap<i64, Value> = HashMap::new();
+    let mut detail = |state_id: i64| -> Value {
+        provinces_of
+            .entry(state_id)
+            .or_insert_with(|| {
+                tools
+                    .call("hoi4_states", &json!({"query": state_id.to_string()}))
+                    .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                    .unwrap_or_default()
+            })
+            .clone()
+    };
+    for item in items {
+        let order = item["order"].as_i64().unwrap_or(-1);
+        let key = order.to_string();
+        if state.plan_built.contains(&order) || state.skipped(now, "cplan", &key) {
+            continue;
+        }
+        let home = item["state"]
+            .as_i64()
+            .or_else(|| item["to_state"].as_i64())
+            .unwrap_or(0);
+        let when = text(&item["when"]);
+        let due = if let Some(p) = when.strip_prefix("province_controlled:") {
+            let p: i64 = p.trim().parse().unwrap_or(0);
+            list(&detail(home), "provinces")
+                .iter()
+                .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me)
+        } else if let Some(id) = when.strip_prefix("state_fully_controlled:") {
+            let row = detail(id.trim().parse().unwrap_or(0));
+            let all = list(&row, "provinces");
+            !all.is_empty() && all.iter().all(|r| text(&r["controller"]) == me)
+        } else if let Some(rest) = when.strip_prefix("owner:") {
+            let (id, tag) = rest.split_once('=').unwrap_or(("0", ""));
+            text(&detail(id.trim().parse().unwrap_or(0))["owner"]) == tag.trim()
+        } else if let Some(at) = date_hour(when) {
+            now >= at
+        } else {
+            when.is_empty()
+        };
+        if !due {
+            continue;
+        }
+        let building = text(&item["building"]);
+        let (tool, args) = if building == "rail_way" || building == "railway" {
+            let path: Vec<i64> = list(item, "path")
+                .iter()
+                .filter_map(Value::as_i64)
+                .collect();
+            let mut a = json!({
+                "from_state": item["from_state"].as_i64().unwrap_or(home),
+                "to_state": item["to_state"].as_i64().unwrap_or(home)});
+            if let (Some(f), Some(t)) = (path.first(), path.last()) {
+                a["from_province"] = json!(f);
+                a["to_province"] = json!(t);
+            }
+            ("hoi4_railway_build", a)
+        } else {
+            let mut a = json!({"building": building, "state_id": home});
+            if let Some(p) = item["province"].as_i64() {
+                a["province_id"] = json!(p);
+            }
+            ("hoi4_construction_add", a)
+        };
+        let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
+        if ok {
+            state.plan_built.insert(order);
+        } else {
+            state.skip(now, "cplan", &key, 2 * DAY);
+        }
+        return Ok(Some(format!(
+            "construction plan #{order} {building} in {home}: {ok} {why}"
+        )));
+    }
+    Ok(None)
 }
 
 /// The first supply line (supply hub or railway) that stands behind a line of another kind, by
@@ -2087,6 +2205,7 @@ fn war_step(
         }
     }
     let roster = tools.call("hoi4_armies", &json!({}))?;
+    let mut vp_rows: HashMap<i64, Value> = HashMap::new();
     let mut load: HashMap<i32, usize> = HashMap::new();
     for target in state.war_assign.values() {
         *load.entry(*target).or_default() += 1;
@@ -2431,6 +2550,66 @@ fn war_step(
                         state.war_cool.insert(name.clone(), now + cooldown);
                         continue;
                     }
+                }
+            }
+        }
+        // `vp_targets`: the plan's victory-point provinces in order, each for a named army or any
+        // army. The army goes for the first one not yet held (own land to retake comes first).
+        if !own_target {
+            if let Some(vp) = plan["vp_targets"].as_array() {
+                let names: Vec<String> = list(&roster, "armies")
+                    .iter()
+                    .map(|a| text(&a["army"]).to_string())
+                    .collect();
+                let mine_now = |t: &Value| text(&t["army"]).contains(name.as_str());
+                let unowned =
+                    |t: &Value| !names.iter().any(|n| text(&t["army"]).contains(n.as_str()));
+                let mut chosen: Option<(i64, i64)> = None;
+                for t in vp {
+                    if !(mine_now(t) || unowned(t)) {
+                        continue;
+                    }
+                    let (Some(p), Some(st)) = (t["province"].as_i64(), t["state"].as_i64()) else {
+                        continue;
+                    };
+                    let row = vp_rows
+                        .entry(st)
+                        .or_insert_with(|| {
+                            tools
+                                .call("hoi4_states", &json!({"query": st.to_string()}))
+                                .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                                .unwrap_or_default()
+                        })
+                        .clone();
+                    let held = list(&row, "provinces")
+                        .iter()
+                        .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
+                    if !held {
+                        chosen = Some((st, p));
+                        break;
+                    }
+                }
+                if let Some((st, p)) = chosen {
+                    let on_way = state
+                        .war_province
+                        .get(&name)
+                        .is_some_and(|(q, at)| i64::from(*q) == p && now - at < 3 * DAY);
+                    if on_way {
+                        state.war_cool.insert(name.clone(), now + cooldown);
+                        continue;
+                    }
+                    state.war_province.insert(name.clone(), (p as i32, now));
+                    let (ok, why) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_army_move",
+                        json!({"army": name, "state_id": st, "province_id": p}),
+                        "wv",
+                    )?;
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    return Ok(Some(format!(
+                        "war vp target {name} -> province {p} (state {st}): {ok} {why}"
+                    )));
                 }
             }
         }
@@ -4253,6 +4432,103 @@ mod tests {
             )
             .unwrap();
         assert_eq!(*tools.0.borrow(), 5);
+    }
+
+    #[test]
+    fn dates_map_to_raw_game_hours() {
+        // 1936.01.01.12 read live as 60759371 (hour 11 of the day, counted from 0)
+        assert_eq!(super::date_hour("1936.01.01"), Some(60759360));
+        assert_eq!(
+            super::date_hour("1936-03-05"),
+            Some(60759360 + (31 + 28 + 4) * 24)
+        );
+        assert_eq!(super::date_hour("1936.13.01"), None);
+        assert_eq!(super::game_year(60759371), Some(1936));
+    }
+
+    #[test]
+    fn construction_plan_items_wait_for_their_trigger_and_go_once() {
+        struct Plan(RefCell<Vec<(String, Value)>>, RefCell<&'static str>);
+        impl Tools for Plan {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "ITA"}),
+                    "hoi4_states" => json!({"states": [{"state_id": 842, "owner": "ETH",
+                        "provinces": [{"province": 13238, "controller": *self.1.borrow()},
+                                      {"province": 2072, "controller": "ETH"}]}]}),
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [
+            {"order": 3, "building": "rail_way", "from_state": 550, "to_state": 842,
+             "path": [13250, 13238], "when": "province_controlled:13238"},
+            {"order": 5, "building": "supply_node", "state": 842, "province": 2072,
+             "when": "state_fully_controlled:842"}]});
+        let tools = Plan(RefCell::new(vec![]), RefCell::new("ETH"));
+        let mut state = State::default();
+        let built = |t: &Plan| {
+            t.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_railway_build" || n == "hoi4_construction_add")
+                .count()
+        };
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        *tools.1.borrow_mut() = "ITA";
+        let step = construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(step.unwrap().starts_with("construction plan #3"));
+        let rail = tools
+            .0
+            .borrow()
+            .iter()
+            .find(|(n, _)| n == "hoi4_railway_build")
+            .cloned()
+            .unwrap();
+        assert_eq!(rail.1["from_province"], 13250);
+        assert_eq!(rail.1["to_province"], 13238);
+        // #3 done, #5 waits for all of 842
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(built(&tools), 1);
+    }
+
+    #[test]
+    fn vp_targets_send_the_army_to_the_first_province_not_yet_held() {
+        struct Vp(RefCell<Vec<(String, Value)>>);
+        impl Tools for Vp {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                if name == "hoi4_states" && args["query"] == "28" {
+                    return Ok(json!({"states": [{"state_id": 28, "provinces": [
+                        {"province": 70, "controller": "GER"}, {"province": 71, "controller": "FRA"}]}]}));
+                }
+                War {
+                    liberate: false,
+                    front_ok: true,
+                    calls: RefCell::new(vec![]),
+                }
+                .call(name, args)
+            }
+        }
+        let w = Vp(RefCell::new(vec![]));
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "direct_moves": true},
+            "vp_targets": [{"province": 70, "state": 28, "army": "strike (Army 1)"},
+                           {"province": 71, "state": 28, "army": "strike (Army 1)"}]});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war vp target Army 1 -> province 71")),
+            "{step:?}"
+        );
     }
 
     /// The war fake with a validated war list at peace.
