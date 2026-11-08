@@ -119,6 +119,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let stdin = io::stdin();
     let stdout = io::stdout();
+    #[cfg(target_os = "macos")]
+    if let Some(commands) = &commands {
+        // Two lanes: tool calls that take no input lease (memory reads) answer at once on
+        // their own threads; everything else keeps one ordered worker (the single input owner).
+        // HOI4_SERIAL=1 restores the one-lane server for comparison.
+        if std::env::var_os("HOI4_SERIAL").is_none() {
+            let listed = server.handle_with_commands(
+                serde_json::json!({"jsonrpc":"2.0","id":0,"method":"tools/list"}),
+                Some(commands),
+            );
+            let reads = hoi4_live_native::framing::read_tools(listed.as_ref());
+            let stop = std::sync::atomic::AtomicBool::new(false);
+            return std::thread::scope(|scope| {
+                // The change watcher (hoi4_observe / hoi4_wait_change): own-situation reads on
+                // their own thread, like the read lane. HOI4_WATCH=0 turns it off.
+                if std::env::var("HOI4_WATCH").map_or(true, |v| v != "0") {
+                    let (server, stop) = (&server, &stop);
+                    scope.spawn(move || watch_loop(server, commands, stop));
+                }
+                let served = hoi4_live_native::framing::serve_lanes(
+                    stdin.lock(),
+                    io::stdout(),
+                    |m| hoi4_live_native::framing::is_read_call(m, &reads),
+                    |message| server.handle_with_commands(message, Some(commands)),
+                    4,
+                );
+                stop.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(served?)
+            });
+        }
+    }
     hoi4_live_native::framing::serve(stdin.lock(), stdout.lock(), |message| {
         #[cfg(target_os = "macos")]
         if let Some(commands) = &commands {
@@ -127,4 +158,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         server.handle(message)
     })?;
     Ok(())
+}
+
+/// One read tool through the server, its JSON body (None on error).
+#[cfg(target_os = "macos")]
+fn read_tool(
+    server: &Server,
+    commands: &dyn hoi4_live_native::protocol::Commands,
+    name: &str,
+    args: serde_json::Value,
+) -> Option<serde_json::Value> {
+    let reply = server.handle_with_commands(
+        serde_json::json!({"jsonrpc":"2.0","id":0,"method":"tools/call",
+            "params":{"name":name,"arguments":args}}),
+        Some(commands),
+    )?;
+    let result = &reply["result"];
+    if result["isError"] == serde_json::json!(true) {
+        return None;
+    }
+    serde_json::from_str(result["content"][0]["text"].as_str()?).ok()
+}
+
+/// Sample the own situation into the change feed until `stop`: cheap reads every 300 ms,
+/// supply/research/focus/economy about once a second, wars every 2 s.
+#[cfg(target_os = "macos")]
+fn watch_loop(
+    server: &Server,
+    commands: &dyn hoi4_live_native::protocol::Commands,
+    stop: &std::sync::atomic::AtomicBool,
+) {
+    use hoi4_live_native::watch::{feed, Compact, Limits, Reads};
+    use serde_json::json;
+    let mut tick: u64 = 0;
+    while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+        let read = |name: &str, args: serde_json::Value| read_tool(server, commands, name, args);
+        let mut r = Reads {
+            overview: read("hoi4_overview", json!({})),
+            events: read("hoi4_events", json!({})),
+            armies: read("hoi4_armies", json!({})),
+            alerts: read("hoi4_alerts", json!({})),
+            ..Reads::default()
+        };
+        if tick % 3 == 0 {
+            r.supply = read("hoi4_supply", json!({}));
+            r.research = read("hoi4_research", json!({"limit": 1}));
+            r.focus = read("hoi4_focus_completed", json!({"limit": 1}));
+            r.economy = read("hoi4_economy", json!({}));
+        }
+        if tick % 7 == 0 {
+            r.wars = read("hoi4_wars", json!({}));
+        }
+        feed().push(Compact::from_reads(&r), Limits::default());
+        tick += 1;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
 }

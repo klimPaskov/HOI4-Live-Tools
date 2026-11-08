@@ -87,6 +87,27 @@ struct Window {
     owner: i32,
     bounds: Rect,
 }
+/// The window list for the identity check in `preflight`, reused for up to 150 ms: a key press
+/// or click sequence runs several preflights within a few frames, and each fresh list cost a
+/// round trip to the window server (about 10% of a map action, profiled 6 Nov 2026). The
+/// occlusion check at the click point still reads a fresh list on every click.
+fn windows_recent() -> Result<Vec<Window>> {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    static RECENT: Mutex<Option<(Instant, Vec<Window>)>> = Mutex::new(None);
+    if let Ok(cache) = RECENT.lock() {
+        if let Some((at, list)) = cache.as_ref() {
+            if at.elapsed() < Duration::from_millis(150) {
+                return Ok(list.clone());
+            }
+        }
+    }
+    let list = windows()?;
+    if let Ok(mut cache) = RECENT.lock() {
+        *cache = Some((Instant::now(), list.clone()));
+    }
+    Ok(list)
+}
 /// Normal on-screen windows in current front-to-back order.
 fn windows() -> Result<Vec<Window>> {
     unsafe {
@@ -509,7 +530,7 @@ impl<'p> MacKeys<'p> {
                 "Native game geometry or window binding changed; rebind required",
             ));
         }
-        if select_window(self.pid, content(&current), &windows()?)? != self.window {
+        if select_window(self.pid, content(&current), &windows_recent()?)? != self.window {
             return Err(Error::new(
                 "input_geometry_changed",
                 "Owned OS window changed; rebind required",

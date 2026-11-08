@@ -55,9 +55,7 @@ pub(super) fn view_matrix(r: &Reader<'_>, image: u64) -> Result<[f64; 16]> {
 /// apart (at most `max_ms`). Replaces fixed sleeps after Find, zoom and pan inputs.
 pub(super) fn wait_camera_still(process: &dyn crate::platform::Process, max_ms: u64) {
     let started = std::time::Instant::now();
-    let read = |p: &dyn crate::platform::Process| {
-        super::ui::read(p, |r, i| view_matrix(r, i)).ok()
-    };
+    let read = |p: &dyn crate::platform::Process| super::ui::read(p, |r, i| view_matrix(r, i)).ok();
     let mut last = read(process);
     while started.elapsed().as_millis() < u128::from(max_ms) {
         std::thread::sleep(std::time::Duration::from_millis(45));

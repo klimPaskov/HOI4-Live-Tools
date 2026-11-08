@@ -152,6 +152,8 @@ pub struct State {
     war_rest: HashMap<String, GameHour>,
     /// Armies bound to a `war.guard_states` post (army -> own state).
     war_guard: HashMap<String, i32>,
+    /// Direct moves issued without the army changing state since: (target, state, count).
+    war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -235,6 +237,7 @@ impl Default for State {
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
+            war_repeat: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -2182,8 +2185,16 @@ fn war_step(
         // An army inside its target that has not taken it for twice the stall time also gets a
         // direct move: it gathers the divisions on the state's centre instead of a thin plan line
         // (Wello stayed Ethiopian for two months with 12 divisions inside it, live 6 Nov 2026).
-        let stuck_inside = standing_in_target && now - since >= 2 * stall;
-        if ordered && (!standing_in_target || stuck_inside) && now - since >= stall {
+        // Backoff: each direct move that did not get the army out of its state doubles the wait
+        // before the next one (w17 re-issued one stalled move 18 times, each a full army order,
+        // while the army stayed put and scattered).
+        let repeats = match state.war_repeat.get(&name) {
+            Some((t, h, n)) if *t == target && *h == here => *n,
+            _ => 0,
+        };
+        let stall_now = stall * (1 << repeats.min(3));
+        let stuck_inside = standing_in_target && now - since >= 2 * stall_now;
+        if ordered && (!standing_in_target || stuck_inside) && now - since >= stall_now {
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -2193,6 +2204,9 @@ fn war_step(
             )?;
             state.war_move.insert(name.clone());
             state.war_since.insert(name.clone(), (target, here, now));
+            state
+                .war_repeat
+                .insert(name.clone(), (target, here, repeats + 1));
             state.war_cool.insert(name.clone(), now + cooldown);
             return Ok(Some(format!(
                 "war stalled {name} {} days -> move to state {target}: {ok} {why}",
@@ -3733,6 +3747,35 @@ mod tests {
         let plan = json!({"war": {"enemies": ["FRA"], "axes": [[28, 18]]}});
         let step = tick(&mut state, &w, &plan, "l", START).unwrap();
         assert_eq!(state.war_assign.get("Army 1"), Some(&28), "{step:?}");
+    }
+
+    #[test]
+    fn repeated_stall_moves_back_off_while_the_army_stays_put() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_stage.insert("Army 1".into(), 3);
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 4, "cooldown_hours": 1}});
+        let moves = |w: &War| {
+            w.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .count()
+        };
+        // first move after 4 days of no progress
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        tick(&mut state, &w, &plan, "l", START + 4 * DAY).unwrap();
+        assert_eq!(moves(&w), 1);
+        // the army did not move: the next one waits 8 days, not 4
+        tick(&mut state, &w, &plan, "l", START + 8 * DAY + 1).unwrap();
+        assert_eq!(moves(&w), 1);
+        tick(&mut state, &w, &plan, "l", START + 12 * DAY + 1).unwrap();
+        assert_eq!(moves(&w), 2);
     }
 
     #[test]
