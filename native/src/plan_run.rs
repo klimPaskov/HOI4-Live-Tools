@@ -1804,6 +1804,23 @@ fn war_step(
     // Targets: own states an enemy holds (priority), then enemy-owned states an enemy holds.
     let mine = tools.call("hoi4_states", &json!({"query": me}))?;
     let mut enemies: HashSet<String> = strings(cfg, "enemies").into_iter().collect();
+    // The plan's enemies count only while at war with them (live 8 Nov 2026: after the peace
+    // the executor still sent "stalled" moves into Ethiopia). Best effort: without a validated
+    // war list the plan's names stand.
+    if let Ok(wars) = tools.call("hoi4_wars", &json!({})) {
+        let w = &wars["wars"];
+        if w["validated"] == json!(true) {
+            let at_war: HashSet<String> = list(w, "enemies")
+                .iter()
+                .filter_map(|e| {
+                    e.as_str()
+                        .map(str::to_string)
+                        .or_else(|| e["tag"].as_str().map(str::to_string))
+                })
+                .collect();
+            enemies.retain(|t| at_war.contains(t));
+        }
+    }
     let mut targets: Vec<(i32, bool)> = Vec::new();
     for row in list(&mine, "states") {
         if let (Some(id), Some(x), Some(z)) = (
@@ -3687,6 +3704,35 @@ mod tests {
             .find(|(n, _)| n.starts_with("hoi4_army_"))
             .cloned()
             .unwrap()
+    }
+
+    /// The war fake with a validated war list at peace.
+    struct AtPeace(War);
+    impl Tools for AtPeace {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            if name == "hoi4_wars" {
+                return Ok(json!({"wars": {"validated": true, "at_war": false, "enemies": []}}));
+            }
+            self.0.call(name, args)
+        }
+    }
+    #[test]
+    fn the_plans_enemies_are_left_alone_at_peace() {
+        let w = AtPeace(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        let mut state = State::default();
+        tick(&mut state, &w, &war_plan(), "l", START).unwrap();
+        assert!(
+            !w.0.calls
+                .borrow()
+                .iter()
+                .any(|(n, _)| n.starts_with("hoi4_army_")),
+            "{:?}",
+            w.0.calls.borrow()
+        );
     }
 
     #[test]
