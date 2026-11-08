@@ -672,7 +672,10 @@ pub fn tick(
                     tech_skip(&why, skip_hours(plan, "tech_fallback", 7 * DAY)),
                 );
             }
-        } else if fallback_on {
+        } else if fallback_on && plan["research_blind_catalogue"] == json!(true) {
+            // The old catalogue walk (every key tried by input) only on request: without the
+            // available list it opened the research tree for techs the game could never take
+            // (w24: 26 refusals). A server without the list leaves the slot to the player.
             let mut tried = 0;
             let mut offset = 0;
             'catalog: loop {
@@ -5026,7 +5029,7 @@ mod tests {
         let step = tick(
             &mut state,
             &tools,
-            &json!({"research_priority": ["radio"]}),
+            &json!({"research_blind_catalogue": true, "research_priority": ["radio"]}),
             "l",
             START,
         )
@@ -5109,14 +5112,16 @@ mod tests {
             ("hoi4_research", idle_research()),
             ("hoi4_technology_list", catalogue()),
         ]);
-        let plan = json!({"research_fallback_prefixes": ["infantry"]});
+        let plan =
+            json!({"research_blind_catalogue": true, "research_fallback_prefixes": ["infantry"]});
         tick(&mut State::default(), &tools, &plan, "l", START).unwrap();
         assert_eq!(started(&tools), ["infantry_weapons1"]);
         let tools = fake(vec![
             ("hoi4_research", idle_research()),
             ("hoi4_technology_list", catalogue()),
         ]);
-        let plan = json!({"research_fallback_categories": ["armor"]});
+        let plan =
+            json!({"research_blind_catalogue": true, "research_fallback_categories": ["armor"]});
         tick(&mut State::default(), &tools, &plan, "l", START).unwrap();
         assert_eq!(started(&tools), ["armor_basic"]);
         // nothing in the catalogue matches: nothing is started and the plan is exhausted
@@ -5125,7 +5130,8 @@ mod tests {
             ("hoi4_technology_list", catalogue()),
         ]);
         let mut state = State::default();
-        let plan = json!({"research_fallback_prefixes": ["air_"]});
+        let plan =
+            json!({"research_blind_catalogue": true, "research_fallback_prefixes": ["air_"]});
         assert_eq!(
             tick(&mut state, &tools, &plan, "l", START).unwrap(),
             Tick::Nothing
@@ -5330,7 +5336,8 @@ mod tests {
             ("hoi4_technology_list", catalogue()),
             ("hoi4_focus_completed", json!({"active_key": "Busy"})),
         ]);
-        let path = plan_file(&json!({"research_priority": ["radio"]}));
+        let path =
+            plan_file(&json!({"research_blind_catalogue": true, "research_priority": ["radio"]}));
         let mut state = State::default();
         let result = run(&mut state, &tools, &path, "l", 1).unwrap();
         let alarm = result["alarms"]

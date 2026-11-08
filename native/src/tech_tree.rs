@@ -145,6 +145,123 @@ pub fn years(dir: &Path) -> Result<Years> {
     Ok(map)
 }
 
+/// Conditions of a technology besides its `path` parents.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Meta {
+    /// `dependencies = { a = 1 }`: all required.
+    pub dependencies: Vec<String>,
+    /// `XOR = { a b }`: closed once any of them is researched.
+    pub xor: Vec<String>,
+    /// An `allow` block (special projects, scripted unlocks): not for automatic choice.
+    pub gated: bool,
+}
+
+/// Meta of each technology block in one file.
+pub fn parse_meta(text: &str) -> Vec<(String, Meta)> {
+    let mut out: Vec<(String, Meta)> = Vec::new();
+    let mut depth = 0i32;
+    let mut current: Option<(String, Meta)> = None;
+    let mut block: Option<String> = None; // key of the depth-3 block inside a tech
+    let mut words: Vec<String> = Vec::new();
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or("");
+        let spaced = line
+            .replace('{', " { ")
+            .replace('}', " } ")
+            .replace('=', " = ");
+        for t in spaced.split_whitespace() {
+            match t {
+                "{" => {
+                    let key = (words.len() >= 2 && words[words.len() - 1] == "=")
+                        .then(|| words[words.len() - 2].clone());
+                    if depth == 1 {
+                        if let Some(k) = key.clone() {
+                            current = Some((k, Meta::default()));
+                        }
+                    } else if depth == 2 {
+                        block = key.clone();
+                        if let (Some(k), Some((_, m))) = (key.as_deref(), current.as_mut()) {
+                            if k == "allow" || k == "allow_branch" {
+                                m.gated = true;
+                            }
+                        }
+                    }
+                    depth += 1;
+                }
+                "}" => {
+                    depth -= 1;
+                    if depth == 2 {
+                        block = None;
+                    }
+                    if depth == 1 {
+                        if let Some(done) = current.take() {
+                            out.push(done);
+                        }
+                    }
+                }
+                "=" => {}
+                word => {
+                    if depth == 3 {
+                        if let Some((_, m)) = current.as_mut() {
+                            match block.as_deref() {
+                                Some("dependencies")
+                                    if words.last().map(String::as_str) != Some("=") =>
+                                {
+                                    m.dependencies.push(word.to_string())
+                                }
+                                Some("XOR") => m.xor.push(word.to_string()),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            words.push(t.to_string());
+            if words.len() > 4 {
+                words.remove(0);
+            }
+        }
+    }
+    out
+}
+
+/// Meta of every technology in `dir/common/technologies`, cached per install.
+pub type Metas = Arc<HashMap<String, Meta>>;
+pub fn metas(dir: &Path) -> Result<Metas> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Metas>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let entries = std::fs::read_dir(dir.join("common/technologies"))
+        .map_err(|_| Error::new("map_data_unavailable", "Technology files unreadable"))?;
+    let mut map = HashMap::new();
+    for entry in entries.flatten() {
+        if let Ok(text) = std::fs::read_to_string(entry.path()) {
+            map.extend(parse_meta(&text));
+        }
+    }
+    let map = Arc::new(map);
+    cache.lock().unwrap().insert(dir.to_path_buf(), map.clone());
+    Ok(map)
+}
+
+/// `startable` plus the technology's own conditions: every dependency done, no exclusive
+/// partner done, no scripted `allow` gate.
+pub fn eligible(
+    prereqs: &HashMap<String, Vec<String>>,
+    metas: &HashMap<String, Meta>,
+    done: &HashSet<String>,
+    tech: &str,
+) -> bool {
+    startable(prereqs, done, tech)
+        && metas.get(tech).is_none_or(|m| {
+            !m.gated
+                && m.dependencies.iter().all(|d| done.contains(d))
+                && !m.xor.iter().any(|x| done.contains(x))
+        })
+}
+
 /// Prerequisites of every technology in `dir/common/technologies`, cached per install.
 pub fn prerequisites(dir: &Path) -> Result<Prerequisites> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, Prerequisites>>> = OnceLock::new();
@@ -213,5 +330,22 @@ mod tests {
         assert!(!startable(&map, &done, "artillery1"));
         let years = parse_years("technologies = {\n  a1 = {\n    start_year = 1936\n    path = { leads_to_tech = a2 }\n  }\n  a2 = { start_year = 1939 }\n}\n");
         assert_eq!(years, vec![("a1".into(), 1936), ("a2".into(), 1939)]);
+        let metas = parse_meta("technologies = {\n  motor_rockets = {\n    dependencies = { motorised_infantry = 1 }\n    path = { leads_to_tech = x }\n  }\n  concentrated = {\n    XOR = { dispersed }\n  }\n  jet = {\n    allow = { ROOT = { is_special_project_completed = sp:jet } }\n  }\n}\n");
+        let m: HashMap<String, Meta> = metas.into_iter().collect();
+        assert_eq!(
+            m["motor_rockets"].dependencies,
+            vec!["motorised_infantry".to_string()]
+        );
+        assert_eq!(m["concentrated"].xor, vec!["dispersed".to_string()]);
+        assert!(m["jet"].gated);
+        let none = HashMap::new();
+        let mut done = HashSet::new();
+        assert!(!eligible(&none, &m, &done, "motor_rockets"));
+        assert!(!eligible(&none, &m, &done, "jet"));
+        assert!(eligible(&none, &m, &done, "concentrated"));
+        done.insert("motorised_infantry".to_string());
+        done.insert("dispersed".to_string());
+        assert!(eligible(&none, &m, &done, "motor_rockets"));
+        assert!(!eligible(&none, &m, &done, "concentrated"));
     }
 }

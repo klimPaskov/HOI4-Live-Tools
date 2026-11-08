@@ -1174,9 +1174,10 @@ impl Server {
                             _ => break,
                         }
                     }
+                    let metas = crate::tech_tree::metas(&dir).unwrap_or_default();
                     let open: Vec<String> = all
                         .into_iter()
-                        .filter(|t| crate::tech_tree::startable(&prereqs, &done, t))
+                        .filter(|t| crate::tech_tree::eligible(&prereqs, &metas, &done, t))
                         .collect();
                     let years = crate::tech_tree::years(&dir).unwrap_or_default();
                     let start_years: serde_json::Map<String, Value> = open
@@ -1185,7 +1186,7 @@ impl Server {
                         .collect();
                     return Ok(json!({"technologies": open, "available_only": true,
                         "start_years": start_years,
-                        "note": "not researched and every prerequisite researched (game files); the game may still refuse one (exclusive branch, DLC variant)"}));
+                        "note": "not researched, every path parent and dependency researched, no exclusive partner researched, no scripted allow gate (game files); a DLC-dependent folder may still be inactive"}));
                 }
                 let filter = object
                     .get("filter")
