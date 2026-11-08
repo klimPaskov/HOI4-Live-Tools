@@ -526,7 +526,7 @@ fn pause(ms: u64) {
     thread::sleep(Duration::from_millis(ms));
 }
 fn icons_shown(r: &crate::memory::Reader<'_>, image: u64) -> Result<bool> {
-    Ok(!airui::base_icons(r, image)?.is_empty())
+    Ok(airui::base_icons(r, image)?.iter().any(|i| i.strategic))
 }
 /// Make sure the strategic air map (F3) is on; returns whether it was switched on here.
 fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
@@ -980,7 +980,9 @@ pub(super) fn probe_region(
         let _ = air::deselect(process, keys);
         find_state(process, keys, state)?;
         pause(300);
-        click(keys, 960.0, 540.0)?;
+        // Below the centre: the camera centres on the state, where a capital's victory point
+        // star takes the click and no region window opens (Berlin, state 64, Linux live).
+        click(keys, 960.0, 620.0)?;
         let view = {
             wait(process, "air region window", |r, i| {
                 Ok(airui::region_view(r, i)?.is_some())

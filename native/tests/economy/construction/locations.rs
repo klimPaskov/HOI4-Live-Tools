@@ -12,11 +12,11 @@ pub(super) fn located() -> Fixture {
     f.word(0xf0008, STATE);
     f.array(0x302b0, 0xf1000, 3);
     f.word(0xf1010, PROVINCE);
-    f.word(STATE, BASE + 0x41fba98);
+    f.word(STATE, BASE + 0x43908f8);
     f.number(STATE + 0x48, 1);
     f.number(STATE + 0xc8, 1);
     f.number(STATE + 0xcc, 1);
-    f.word(PROVINCE, BASE + 0x41fb728);
+    f.word(PROVINCE, BASE + 0x4390588);
     f.number(PROVINCE + 0xa4, 2);
     f.number(PROVINCE + 0x1a8, 1);
     f.word(PROVINCE + 0xe0, STATE);
@@ -24,7 +24,7 @@ pub(super) fn located() -> Fixture {
         (STATE_STATUS, 2, 1, 0xd0000, TEMPLATE, 1, 0xf2000, 0xf4000),
         (PROVINCE_STATUS, 1, 2, 0xd1000, OTHER, 2, 0xf3000, 0xf5000),
     ] {
-        f.word(status, BASE + 0x41b4768);
+        f.word(status, BASE + 0x4348d38);
         f.number(status + 0x68, flags);
         f.number(status + 0x6c, id);
         f.number(status + 0x70, 0);
@@ -178,9 +178,9 @@ fn runtime_status_bits_keep_bit_zero_kind_and_require_the_full_embedded_proof() 
 #[test]
 fn bad_ids_types_catalogs_and_reciprocal_links_refuse() {
     for (address, bytes) in [
-        (STATE_STATUS, (BASE + 0x41b49c8).to_le_bytes().to_vec()),
-        (STATE, (BASE + 0x41fb728).to_le_bytes().to_vec()),
-        (PROVINCE, (BASE + 0x41fba98).to_le_bytes().to_vec()),
+        (STATE_STATUS, (BASE + 0x4348f98).to_le_bytes().to_vec()),
+        (STATE, (BASE + 0x4390588).to_le_bytes().to_vec()),
+        (PROVINCE, (BASE + 0x43908f8).to_le_bytes().to_vec()),
         (STATE_STATUS + 0x6c, 0i32.to_le_bytes().to_vec()),
         (PROVINCE_STATUS + 0x6c, (-1i32).to_le_bytes().to_vec()),
         (STATE + 0x48, 2i32.to_le_bytes().to_vec()),
@@ -208,7 +208,7 @@ fn embedded_status_identity_is_required_before_building_map_read() {
     let mut f = located();
     let wrong = 0xe5000;
     f.word(0xd01b8, wrong);
-    f.word(wrong, BASE + 0x41b4768);
+    f.word(wrong, BASE + 0x4348d38);
     f.number(wrong + 0x68, 2);
     f.number(wrong + 0x6c, 1);
     f.number(wrong + 0x70, 0);

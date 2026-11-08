@@ -60,6 +60,9 @@ struct Config {
     run_directory: PathBuf,
     display: Display,
     settings_seed: Option<PathBuf>,
+    /// Optional `dlc_signature` from a user folder of the same installation.
+    #[serde(default)]
+    dlc_signature_seed: Option<PathBuf>,
     #[serde(default)]
     renderer: Renderer,
     gpu_transport: Option<PathBuf>,
@@ -109,6 +112,39 @@ fn json_read<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
         return Err(Error::new("invalid_session", "Configuration exceeds bound"));
     }
     serde_json::from_slice(&bytes).map_err(|e| Error::new("invalid_session", e.to_string()))
+}
+/// Bounded copy of an optional absolute regular seed file (never a symlink).
+fn read_seed(path: Option<&Path>, what: &str, limit: u64) -> Result<Option<Vec<u8>>> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    if !path.is_absolute() {
+        return Err(Error::new(
+            "invalid_session",
+            format!("{what} must be absolute"),
+        ));
+    }
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(Error::new(
+            "invalid_session",
+            format!("{what} must be a regular file"),
+        ));
+    }
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(limit + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(Error::new(
+            "invalid_session",
+            format!("{what} exceeds bound"),
+        ));
+    }
+    Ok(Some(bytes))
 }
 fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut file = OpenOptions::new()
@@ -953,6 +989,16 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                 )
             }
             Some("bind_input") => {
+                // The legacy clock, research, focus and production adapters were
+                // verified on Linux 1.19.3 only, and their GUI callback identities
+                // have no proven 1.19.4.1 counterpart. `--bind-management` hosts
+                // the same actions through the reviewed address table.
+                if shared.endpoint.session.build_id == crate::game::BUILD_ID {
+                    return Err(Error::new(
+                        "legacy_binding_retired",
+                        "Use --bind-management on HOI4 1.19.4.1",
+                    ));
+                }
                 translated::require_input_qualification(
                     &shared.endpoint.session,
                     &request["binding"],
@@ -1368,10 +1414,7 @@ pub fn serve(path: &Path) -> Result<()> {
         ));
     }
     private(&config.display.xauthority, false)?;
-    let display = platform::connect_socket(Path::new(&format!(
-        "/tmp/.X11-unix/X{}",
-        config.display.number
-    )))?;
+    let display = platform::connect_display(config.display.number, None)?;
     if peer(&display)? != config.display.server {
         return Err(Error::new(
             "ownership_changed",
@@ -1395,34 +1438,12 @@ pub fn serve(path: &Path) -> Result<()> {
             "Virpipe renderer requires an owned GPU transport",
         ));
     }
-    let seed = if let Some(path) = &config.settings_seed {
-        if !path.is_absolute() {
-            return Err(Error::new(
-                "invalid_session",
-                "Settings seed must be absolute",
-            ));
-        }
-        let mut file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-            .open(path)?;
-        if !file.metadata()?.is_file() {
-            return Err(Error::new(
-                "invalid_session",
-                "Settings seed must be a regular file",
-            ));
-        }
-        let mut bytes = Vec::new();
-        Read::by_ref(&mut file)
-            .take((1 << 20) + 1)
-            .read_to_end(&mut bytes)?;
-        if bytes.len() > 1 << 20 {
-            return Err(Error::new("invalid_session", "Settings seed exceeds bound"));
-        }
-        Some(bytes)
-    } else {
-        None
-    };
+    let seed = read_seed(config.settings_seed.as_deref(), "Settings seed", 1 << 20)?;
+    let dlc_signature = read_seed(
+        config.dlc_signature_seed.as_deref(),
+        "DLC signature seed",
+        4096,
+    )?;
     let directory = &config.run_directory;
     let parent = directory
         .parent()
@@ -1437,6 +1458,11 @@ pub fn serve(path: &Path) -> Result<()> {
     fs::DirBuilder::new().mode(0o700).create(&private_home)?;
     if let Some(seed) = &seed {
         write_new(&userdata.join("settings.txt"), seed)?;
+    }
+    // Without Steam a fresh user folder enables no DLC; the copied signature
+    // lets the game enable the DLC the installation already holds.
+    if let Some(signature) = &dlc_signature {
+        write_new(&userdata.join("dlc_signature"), signature)?;
     }
     write_new(
         &userdata.join("dlc_load.json"),

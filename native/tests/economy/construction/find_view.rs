@@ -20,22 +20,22 @@ fn floats(f: &mut Fixture, address: u64, values: &[f32]) {
 fn find_fixture() -> Fixture {
     let mut f = locations::located();
     f.region(REGISTRY, 0x240);
-    f.word(REGISTRY, BASE + 0x42736f8);
+    f.word(REGISTRY, BASE + 0x4409f68);
     f.word(0x324f8, REGISTRY);
     f.region(MANAGER, 0x200);
     f.word(0x326b8, MANAGER);
     f.word(MANAGER + 0x180, 0x32000);
     f.word(MANAGER + 0x190, FIND);
     f.region(FIND, 0x910);
-    f.word(FIND, BASE + 0x4318868);
+    f.word(FIND, BASE + 0x44ae730);
     f.word(FIND + 0x860, 0x32000);
     f.word(FIND + 0x868, WINDOW);
     f.region(WINDOW, 0x100);
-    f.word(WINDOW, BASE + 0x4347d58);
+    f.word(WINDOW, BASE + 0x44de2b0);
     f.put(WINDOW + 0xa5, &[8]);
     f.word(FIND + 0x870, TEXT);
     f.region(TEXT, 0x200);
-    f.word(TEXT + 0x1a0, BASE + 0x4349be8);
+    f.word(TEXT + 0x1a0, BASE + 0x44e0110);
     f.word(REGISTRY + 0x158, TEXT);
     f.word(REGISTRY + 0x230, TEXT + 0x1a0);
     f.string(FIND + 0x878, "1");
@@ -45,14 +45,14 @@ fn find_fixture() -> Fixture {
     f.number(ENTRIES + 0x48, 2);
     f.word(FIND + 0x8c0, ROW);
     f.region(ROW, 0x2c0);
-    f.word(ROW, BASE + 0x4318b08);
+    f.word(ROW, BASE + 0x44ae9d8);
     f.number(ROW + 0x2b8, 2);
     for offset in [0x2a0, 0x2a8, 0x2b0] {
         f.word(ROW + offset, STATE);
     }
     f.word(STATE + 0x20, TEMPLATE);
     f.region(TEMPLATE, 0x150);
-    f.word(TEMPLATE, BASE + 0x41fc068);
+    f.word(TEMPLATE, BASE + 0x4390ec8);
     f.number(TEMPLATE + 0x140, 3120);
     f.number(TEMPLATE + 0x144, 1480);
     f.word(0x32750, CAMERA);
@@ -133,7 +133,7 @@ fn row_entry_disagreement_and_uncataloged_state_refuse() {
     f.number(STATE + 0x48, 2);
     assert!(find_view(&f, None).is_err());
     let mut f = find_fixture();
-    f.word(ROW, BASE + 0x4318868);
+    f.word(ROW, BASE + 0x44ae730);
     assert!(find_view(&f, None).is_err());
 }
 
@@ -171,10 +171,10 @@ fn state_id_bounds_are_explicit() {
 #[test]
 fn type_refusals_name_the_object_and_image_relative_primary_only() {
     let mut f = find_fixture();
-    f.word(TEMPLATE, BASE + 0x41fb728);
+    f.word(TEMPLATE, BASE + 0x4390588);
     let e = find_view(&f, Some(1)).unwrap_err();
     assert!(e.message.contains("state template"));
-    assert!(e.message.contains("observed rva_41fb728"));
+    assert!(e.message.contains("observed rva_4390588"));
     let mut f = find_fixture();
     f.word(FIND, 0x7f00_0000_0000);
     let e = find_view(&f, None).unwrap_err();
@@ -198,7 +198,7 @@ fn text_focus_needs_keyboard_focus_and_embedded_receiver_of_exact_edit_box() {
         false
     );
     let mut f = find_fixture();
-    f.word(TEXT + 0x1a0, BASE + 0x4347d58);
+    f.word(TEXT + 0x1a0, BASE + 0x44de2b0);
     assert!(find_view(&f, None).unwrap()["find_view"]["text_box_focused"].is_null());
 }
 

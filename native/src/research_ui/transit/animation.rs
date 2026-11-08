@@ -118,8 +118,8 @@ impl Anchor {
         let idler = scope.anchors[1];
         let original = &self.original;
         let registry = link(&r, idler + 0x4f8, Some(original.registry))?;
-        exact(&r, registry, base + 0x42736f8)?;
-        if r.u64(base + 0x45778e0)? != registry {
+        exact(&r, registry, base + 0x4409f68)?;
+        if r.u64(base + 0x470e6d8)? != registry {
             return Err(changed("Original animation input registry changed"));
         }
         let manager = link(&r, idler + 0x6b8, Some(original.manager))?;
@@ -134,8 +134,8 @@ impl Anchor {
         }
         let view = link(&r, manager + 0xf0, Some(original.view))?;
         let tree = link(&r, manager + 0xf8, Some(original.tree))?;
-        exact(&r, view, base + 0x424dc38)?;
-        exact(&r, tree, base + 0x424de40)?;
+        exact(&r, view, base + 0x43e3978)?;
+        exact(&r, tree, base + 0x43e3b88)?;
         if r.u64(view + 0x2f0)? != idler
             || r.u64(tree + 0x2f0)? != idler
             || r.i32(view + 0x300)? != 0
@@ -148,7 +148,7 @@ impl Anchor {
             return Err(changed("Foreign displayed animation country"));
         }
         let root = link(&r, view + 0x2f8, Some(original.roots[0]))?;
-        exact(&r, root, base + 0x4347d58)?;
+        exact(&r, root, base + 0x44de2b0)?;
         if r.u64(root + 0x98)? != registry {
             return Err(changed("Original animation root registry changed"));
         }

@@ -6,13 +6,13 @@ fn fixture() -> Fake {
     let mut f = Fake::new();
     f.own_focus_ui_fixture();
     f.region(RP, 0x400);
-    f.word(RP, 0x424dc38);
+    f.word(RP, 0x43e3978);
     f.word(RP + 0x2f0, ID);
     f.word(RP + 0x2f8, PW);
     f.word(MAN + 0xf0, RP);
     for (w, flags) in [(PW, 8), (TW, 0)] {
         f.region(w, 0xf00);
-        f.word(w, 0x4347d58);
+        f.word(w, 0x44de2b0);
         f.word(w + 0x98, GUI);
         f.put(w + 0xa5, &[flags]);
     }

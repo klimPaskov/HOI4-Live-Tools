@@ -1,5 +1,97 @@
 # Changelog
 
+## Unreleased
+
+### Launch failures
+
+Four launch failures seen on 1.19.4.1 on 2 November are handled. Offline tests and fakes cover the logic; the
+in-game confirmation of each is still to be done (see the pull request).
+
+- `hoi4_launch` with `-debug` fails at once when the game reports a MAP_ERROR (it waits on an OK dialog),
+  with the error lines from `error.log`, the dialog text if OCR reads it, and a screenshot, instead of waiting
+  for the launch timeout. A normal launch lists the lines as `map_errors`.
+- `hoi4_new_game` clicks START again at most three more times (30 s apart) when the ready screen stays up, then
+  fails with `start_not_registered`. The result reports `start_retries`.
+- `hoi4_new_game` goes through a mod's own Select Country screen: it recognises it by its heading or by a
+  confirming button next to Back to menu, clicks the country by name and the button, and continues from the
+  ready screen. When the screen offers neither, the call stops with `custom_country_screen` and the text it saw.
+- The console opens over an open sea-region panel and over a total conversion's own interface. A toggle that
+  visibly changes the console area counts as opened when the console frame cannot be seen (it is closed the same
+  way in the same call, and `keep_open` is refused in that case), and `hoi4_console` closes open windows with
+  Esc once before giving up (`console_not_open`).
+
+### DLC without the Steam client
+
+- `hoi4_prepare` (Python, test mode): copies `launcher-v2.sqlite` and `dlc_signature` from the normal user
+  folder into the run's user folder with a byte-exact backup, so a launch without the Steam client keeps the
+  DLC. `hoi4_shutdown` (or `hoi4_prepare action=restore`) puts the folder back and never overwrites a file
+  that changed after the copy. `hoi4_launch prepare_dlc=true` does both steps. The README explains the launch
+  order (prepare, launch, test, shutdown). New config key `dlc_source_dir`.
+- `docs/tools.md` regenerated from the registry (it had drifted behind `hoi4_front`, `hoi4_memory` and others).
+
+### Smoke tests and checks (R-5)
+
+- `hoi4_check_trigger` (test mode): evaluates a trigger block in the running game for a country (or a state)
+  and returns true or false with the unmet condition. Each top-level condition is asked on its own through the
+  console (`eval_effect` wrapping an `if` that logs TRUE or FALSE to game.log), and a false `OR`, `NOT` or scope
+  block is explained by its children.
+- `hoi4_check_focus` (test mode): is a national focus selectable for a country? Reads the focus from the game
+  and mod files and asks the game about: already completed, each prerequisite group, each mutually exclusive
+  focus, every condition of `available` and `allow_branch`; a holding `bypass` is reported. Not checked: a focus
+  already in progress, focus slots, political power.
+- New test-mode tool `hoi4_sweep_loc`: sweeps the map and the panels for `[missing_key]`, raw localisation keys, unresolved `$VARIABLES$` and `[Root.GetName]` commands and colour codes shown as text through OCR, and lists the localisation warnings that `error.log` and `text.log` gained during the sweep.
+- `hoi4_smoke_namespace` (test mode): fires every event `<namespace>.N` through the console, answers each option
+  of its window (one firing per option), takes the decisions of a category or id prefix through the decision
+  panel after checking their conditions with the game, and reads the new `error.log` lines after every step.
+  One report (Markdown and JSON under `artifacts/`) lists per event and decision what appeared, what was
+  answered, the unmet condition of a decision that could not be taken and the error lines. State, unit leader
+  and character events, targeted decisions and missions are skipped with the reason. `dry_run` lists the plan.
+
+## 1.3.0 - 2026-11-05
+
+The native Linux runtime gets the macOS management toolset on HOI4 1.19.4.1:
+
+- `hoi4-live-native` for Linux x86_64 now accepts only HOI4 1.19.4.1 (GNU build ID `2265e6e7...`) and
+  binds about 120 tools with `--bind-management`. 104 of them were run live against the Linux game,
+  including a declared war ([Linux live verification](docs/LIVE_VERIFICATION_LINUX_1_19_4.md)).
+- The macOS build gets the fixes found on Linux (air mode detection, the intelligence agency,
+  "Delete task force" and "Agency Created!" pop-ups, stable confirmation clicks).
+- The Windows Python package is unchanged apart from its version.
+
+### Native runtime (Linux)
+
+- Linux accepts HOI4 1.19.4.1 x86_64 (GNU build ID `2265e6e7...`) and no longer 1.19.3.
+  `--bind-management` binds the full management toolset (about 120 tools) to the owned X11 window.
+  `--bind-input`, the 1.19.3 clock and research binding, refuses with `legacy_binding_retired`.
+- The tools read the game through `native/layouts/linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json`,
+  generated from the macOS build by `scripts/gen_linux_layout.py` (now with a monotone check, a
+  bracketed gap fill and `--live`) plus 305 entries checked in the running game, each with its
+  evidence (`scripts/data/xlayout-live-1.19.4.1.json`). The core Linux readers moved from 1.19.3 with
+  `scripts/linux_build_migrate.py`.
+- Live verification on Linux: 104 tools run against the game, including a declared war with fronts,
+  offensives and battle plans, air, navy, special projects, the intelligence agency, events and the
+  plan runner ([record](docs/LIVE_VERIFICATION_LINUX_1_19_4.md)). Peace conferences and operatives
+  were not reached on Linux. The older Linux-only GUI diagnostics written for 1.19.3 refuse on
+  1.19.4.1.
+- Linux differences fixed: view and popup roots, the fleet panel, navy leaders, trade offers, MIO and
+  scientist windows, special-project state machines and the libstdc++ breakthrough map, diplomacy
+  action dialogs, event windows, and edit boxes (their text is read from the editor's UTF-32
+  `std::wstring`).
+- X11 input: modifiers are held 150 ms around a key or click and presses last 60 ms; wheel scrolling
+  (one notch per 120 pixels) is verified. Captures of a window partly off screen read the visible
+  part from the root window. X11 connections fall back to the abstract socket (WSLg). The launcher
+  can seed `dlc_signature`.
+
+### Native runtime (both platforms)
+
+- Strategic air mode is detected from the large air base button; the region probe clicks off the
+  capital's star.
+- The agency's creation state comes from its cancel button, and Create Agency's logo window is found
+  through the agency view. "Delete task force" (`CConfirmDeleteUnits`) is confirmed and "Agency
+  Created!" is dismissed as a notice. Confirmation buttons are clicked only once their position is
+  stable.
+- Fleet region names go through the layout table, and the breakthrough value is read as an i32.
+
 ## 1.2.0 - 2026-11-02
 
 HOI4 1.19.4.1. The Windows runtime gets the 1.19.4.1 fixes below. The native runtime ships for the
@@ -11,12 +103,8 @@ first time as experimental downloadable builds:
   production and construction). It accepts only HOI4 1.19.3 (GNU build ID a4971c9e...); 1.19.4.1
   Linux builds are refused until their offsets are mapped and verified.
 
-Steam rules for every launcher (Python `hoi4_launch` and the native Linux launcher):
+Launch environment for every launcher (Python `hoi4_launch` and the native Linux launcher):
 
-- The game is never started while a Steam client, `steamwebhelper` or `steamcmd` runs
-  (`steam_running`). Under WSL the Windows host is checked too through `tasklist.exe`
-  (`steam_check_unavailable` when interop is off; `HOI4_LIVE_WINDOWS_STEAM_CHECK=skip` only when the
-  harness checks the Windows host itself).
 - No Steam variable (`SteamAppId`, `SteamGameId`, `STEAM_COMPAT_*` ...) or Steam overlay preload
   reaches the game. The native Linux launcher also gives the game an empty private `HOME` inside the
   run directory.

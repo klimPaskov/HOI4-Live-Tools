@@ -6,8 +6,8 @@ import time
 import uuid
 
 from .. import __version__
-from ..errors import ToolError
-from ..game import console, menu, process, saves, timectl, ui
+from ..errors import ModeRefused, ToolError
+from ..game import console, dlc_prepare, launch_errors, menu, process, saves, timectl, ui
 from ..perception import popups as popups_mod
 from ..perception import topbar
 from .common import MODE, apply_mode, attach, result
@@ -124,18 +124,87 @@ def _validate_campaign_playset(cfg):
                         {"error": "campaign_telemetry_descriptor_unverified"})
 
 
+def _apply_dlc(session, source=None):
+    """Copy the DLC files into the run's user folder. The launch order is: Steam closed, prepare, launch."""
+    if session.mode == "campaign":
+        raise ModeRefused("the DLC prepare step is for test runs with their own user folder; a campaign plays from "
+                          "the normal user folder")
+    process.refuse_running_steam()
+    if process.running_pids(session.cfg["window"]["process_name"]):
+        raise ToolError("the game is running; prepare the DLC files before launching it",
+                        {"error": "dlc_prepare_game_running"})
+    session.dlc_prepared = True            # set first: a copy that fails half way is still undone by the restore
+    rep = dlc_prepare.apply(session.cfg.user_dir, source or session.cfg.dlc_source_dir, session.dlc_backup_root)
+    session.dlc_prepared = not rep["same_folder"]
+    return rep
+
+
+@tool("hoi4_prepare",
+      "Prepare the run's user folder for a launch without the Steam client, which keeps the DLC. Live Tools never "
+      "launches while Steam runs, and a game started without Steam finds no DLC in a user folder that lacks "
+      "launcher-v2.sqlite and dlc_signature. action=apply copies those two files from the normal user folder "
+      "(config dlc_source_dir) into the run's folder (user_dir, e.g. a scratch folder set by HOI4_LIVE_USER_DIR) "
+      "after backing up what they replace. action=restore puts the original state back once the game has exited "
+      "(hoi4_shutdown does that by itself). action=status only reports. Nothing is copied when the run's folder is "
+      "the normal one. Launch order: close Steam, hoi4_prepare, hoi4_launch, test, hoi4_shutdown.",
+      {"properties": {
+          "action": {"type": "string", "enum": ["status", "apply", "restore"], "default": "apply"},
+          "source_dir": {"type": "string",
+                         "description": "folder to copy the two files from (default: config dlc_source_dir, the "
+                                        "normal Paradox user folder)"},
+          "force": {"type": "boolean", "default": False,
+                    "description": "restore: also restore a file that changed after the copy (the changed file is kept "
+                                   "next to the backup as <name>.after-run), and restore while a game still runs"}}},
+      family="session", lock="none",
+      annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
+      examples=[{"args": {}, "note": "copy the DLC files (Steam closed)"},
+                {"args": {"action": "status"}, "note": "what each folder holds and whether a prepare is needed"},
+                {"args": {"action": "restore"}, "note": "after the game exited, if hoi4_shutdown was not used"}])
+def hoi4_prepare(session, args):
+    cfg = session.cfg
+    action = args["action"]
+    if action == "status":
+        data = dlc_prepare.status(cfg.user_dir, args.get("source_dir") or cfg.dlc_source_dir, session.dlc_backup_root)
+        data["steam_running"] = sorted({n for n, _ in process.steam_processes()})
+        data["game_running"] = bool(process.running_pids(cfg["window"]["process_name"]))
+        return result("DLC files: " + data["reason"], **data)
+    if action == "apply":
+        rep = _apply_dlc(session, args.get("source_dir"))
+        if rep["same_folder"]:
+            return result("the run's user folder is the normal one and has both DLC files; nothing to copy", **rep)
+        return result(f"DLC files ready in {cfg.user_dir} ({len(rep['copied'])} copied). Keep Steam closed; "
+                      "hoi4_shutdown restores the folder", **rep)
+    if process.running_pids(cfg["window"]["process_name"]) and not args["force"]:
+        raise ToolError("the game is running; restore after it exited (force=true restores anyway)",
+                        {"error": "dlc_restore_game_running"})
+    rep = dlc_prepare.restore(cfg.user_dir, session.dlc_backup_root, force=args["force"])
+    if not rep["conflicts"]:
+        session.dlc_prepared = False
+    if rep.get("nothing_to_restore"):
+        return result("nothing to restore: no DLC prepare is active for this user folder", **rep)
+    if rep["conflicts"]:
+        return result(f"{len(rep['conflicts'])} file(s) left as they are: " + "; ".join(rep["conflicts"]), **rep)
+    return result(f"user folder restored ({len(rep['restored'])} replaced by the original, "
+                  f"{len(rep['removed'])} copies removed)", **rep)
+
+
 @tool("hoi4_launch",
       "Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game "
       "already runs it is left alone (restart=true quits it through its own menu first). The playset and settings "
-      "are never changed.",
+      "are never changed. A -debug launch fails at once when the game reports a MAP_ERROR (it waits on an OK "
+      "dialog), with the error lines and a screenshot; a normal launch lists them as map_errors.",
       {"properties": {
           "debug": {"type": "boolean", "default": False, "description": "launch with -debug"},
           "wait_menu": {"type": "boolean", "default": True},
           "restart": {"type": "boolean", "default": False, "description": "quit a running game first"},
+          "prepare_dlc": {"type": "boolean", "default": False,
+                          "description": "copy launcher-v2.sqlite and dlc_signature into the run's user folder first "
+                                         "(see hoi4_prepare); hoi4_shutdown puts the folder back"},
           "timeout_s": {"type": "integer", "minimum": 30, "maximum": 1800, "default": 900},
           "mode": MODE}},
       family="session", lock="acting",
-      examples=[{"args": {}, "note": "normal launch"}, {"args": {"debug": True}, "note": "debug build"}])
+      examples=[{"args": {}, "note": "normal launch"}, {"args": {"debug": True}, "note": "debug build"},
+                {"args": {"debug": True, "prepare_dlc": True}, "note": "scratch user folder: keep the DLC without Steam"}])
 def hoi4_launch(session, args):
     apply_mode(session, args)
     cfg = session.cfg
@@ -163,6 +232,7 @@ def hoi4_launch(session, args):
         session.play_policy.validate_launch_arguments(launch_args)
         _validate_campaign_playset(cfg)
     session.platform.preflight_game_launch()
+    dlc = _apply_dlc(session) if args.get("prepare_dlc") else None
     backup = session.prepare_config_session() if session.mode == "campaign" else None
     if backup:
         session.config_owner_id = uuid.uuid4().hex
@@ -175,6 +245,8 @@ def hoi4_launch(session, args):
         if backup:
             backup.mark_game_exited(session.config_owner_id)
             backup.restore()
+        if dlc:
+            session.restore_dlc_after_exit()
         raise
     session.launched_pid = pid
     session.launched_identity = session.platform.capture_process_identity(pid, cfg.game_exe)
@@ -189,7 +261,7 @@ def hoi4_launch(session, args):
     session._memory_process = session._memory_reader = None
     session._telemetry = None
     session.date_uncertain = True
-    data = {"pid": pid, "args": launch_args, "debug": args["debug"],
+    data = {"pid": pid, "args": launch_args, "debug": args["debug"], "dlc_prepare": dlc,
             "owned_launch": {"pid": pid, "creation_time": session.launched_identity.creation_time,
                              "executable_path": session.launched_identity.executable_path}}
     # window
@@ -198,6 +270,7 @@ def hoi4_launch(session, args):
         session.sleep(2)
         session.report("waiting for the game window")
         if process.crash_dirs(cfg.user_dir) - crashes_before:
+            session.restore_dlc_after_exit()
             raise ToolError("the game crashed during startup", {"crash": sorted(process.crash_dirs(cfg.user_dir) - crashes_before)})
     if not session.window.find():
         raise ToolError("no game window appeared", data)
@@ -210,16 +283,20 @@ def hoi4_launch(session, args):
             session.check_cancel()
             new = process.crash_dirs(cfg.user_dir) - crashes_before
             if new:
+                session.restore_dlc_after_exit()
                 raise ToolError("the game crashed during startup", {"crash": sorted(new)})
             if not process.running_pids():
+                session.restore_dlc_after_exit()
                 raise ToolError("the game exited during startup")
             session.window.close_notepad_logs()
+            launch_errors.check(session, args["debug"])          # a MAP_ERROR dialog: fail now, not at the timeout
             idle = session.logs.idle_seconds("setup") or 0
             if idle > 10:
                 try:
                     ok, texts = menu.main_menu_visible(session)
                 except ToolError:
-                    ok = False
+                    ok, texts = False, []
+                launch_errors.check(session, args["debug"], texts)
                 if ok:
                     break
             session.report(f"loading ({int(time.time() - t0)} s)")
@@ -228,6 +305,9 @@ def hoi4_launch(session, args):
             raise ToolError("timed out waiting for the main menu", data)
         session.window.pin_client()
         data["menu_after_s"] = round(time.time() - t0, 1)
+        map_errors = launch_errors.map_error_lines(session)
+        if map_errors:
+            data["map_errors"] = map_errors                      # without -debug these are only lines in error.log
     img = session.grab()
     res = ToolResult(f"HOI4 launched (pid {pid}) in {round(time.time() - t0)} s", data)
     return attach(res, session, img, "launch")
@@ -349,7 +429,7 @@ def hoi4_shutdown(session, args):
         restored = None
         if getattr(session, "config_session", None) is not None:
             restored = session.restore_configs_after_exit()
-        return result("HOI4 is not running", config_restore=restored)
+        return result("HOI4 is not running", config_restore=restored, dlc_restore=session.restore_dlc_after_exit())
     pid = session.window.pid
     session.require_owned_game()
     if args["force"]:
@@ -358,12 +438,13 @@ def hoi4_shutdown(session, args):
         process.kill(pid)
         exited = process.wait_exit(pid, 30)
         restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
-        return result(f"termination requested for pid {pid}", pid=pid, exited=exited, config_restore=restored)
+        return result(f"termination requested for pid {pid}", pid=pid, exited=exited, config_restore=restored,
+                      dlc_restore=session.restore_dlc_after_exit() if exited else None)
     menu.quit_to_desktop(session)
     exited = process.wait_exit(pid, 120)
     restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
     return result("game exited" if exited else "quit requested; the game is still closing", pid=pid, exited=exited,
-                  config_restore=restored)
+                  config_restore=restored, dlc_restore=session.restore_dlc_after_exit() if exited else None)
 
 
 @tool("hoi4_lock",

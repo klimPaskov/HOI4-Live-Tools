@@ -134,7 +134,7 @@ impl Fixture {
         self.put(text, format!("{}{name}\0", name.len()).as_bytes());
     }
     fn window(&mut self, p: u64, shown: bool) {
-        self.word(p, BASE + 0x4347d58);
+        self.word(p, BASE + 0x44de2b0);
         self.word(p + 0x98, REGISTRY);
         self.put(p + 0xa5, &[if shown { 8 } else { 0 }]);
         self.number(p + 0xeb0, 0);
@@ -203,15 +203,15 @@ impl Fixture {
             mutate_finish: None,
         };
         for (global, p) in [
-            (0x44086a8, GS),
-            (0x44085f8, IDLER),
-            (0x439f450, DB),
-            (0x43f3eb8, 0x37000),
+            (0x459e9f0, GS),
+            (0x459e908, IDLER),
+            (0x45353b0, DB),
+            (0x458a088, 0x37000),
         ] {
             f.word(BASE + global, p);
         }
-        f.word(GS, BASE + 0x42c7598);
-        f.word(IDLER, BASE + 0x42c9a88);
+        f.word(GS, BASE + 0x445e068);
+        f.word(IDLER, BASE + 0x4460048);
         f.number(GS + 0x460, 60759371);
         f.number(GS + 0x4b4, 0);
         f.number(GS + 0x518, 1);
@@ -238,11 +238,11 @@ impl Fixture {
         f.rtti(0x50100, "CNationalFocusProgress", 1);
         f.word(0x2a010, 0);
         f.word(COUNTRY + 0xf38, STATUS);
-        f.word(STATUS, BASE + 0x42108f8);
-        f.rtti(BASE + 0x42108f8, "CTechnologyStatus", 2);
-        f.rtti(BASE + 0x4210898, "CResearchSlot", 3);
-        f.rtti(BASE + 0x42107f8, "CTechnology", 4);
-        f.rtti(BASE + 0x4211038, "CTechnologyTemplate", 5);
+        f.word(STATUS, BASE + 0x43a5750);
+        f.rtti(BASE + 0x43a5750, "CTechnologyStatus", 2);
+        f.rtti(BASE + 0x43a56f0, "CResearchSlot", 3);
+        f.rtti(BASE + 0x43a5650, "CTechnology", 4);
+        f.rtti(BASE + 0x43a5f30, "CTechnologyTemplate", 5);
         f.word(STATUS + 0x130, COUNTRY);
         f.number(STATUS + 0x138, 1);
         let slots: Vec<_> = (0..4).map(|i| SLOT + i * 0x100).collect();
@@ -250,8 +250,8 @@ impl Fixture {
             .chain((0..4).map(|i| TEMPLATE + i * 0x1000))
             .collect();
         let technologies: Vec<_> = (0..4).map(|i| TECHNOLOGY + i * 0x1000).collect();
-        f.word(DB, BASE + 0x42110c8);
-        f.word(0x62500, BASE + 0x4201c78);
+        f.word(DB, BASE + 0x43a5fc0);
+        f.word(0x62500, BASE + 0x4396b48);
         f.array(DB + 0x48, CATALOG_DATA, &templates);
         f.array(STATUS + 0x88, OWN_DATA, &technologies);
         f.array(STATUS + 0x40, 0, &[]);
@@ -260,28 +260,28 @@ impl Fixture {
             let s = slots[i];
             let t = templates[i + 1];
             let tech = technologies[i];
-            f.word(s, BASE + 0x4210898);
+            f.word(s, BASE + 0x43a56f0);
             f.word(s + 0x10, STATUS);
             f.word(s + 0x18, tech);
-            f.word(tech, BASE + 0x42107f8);
+            f.word(tech, BASE + 0x43a5650);
             f.word(tech + 0x158, STATUS);
             f.word(tech + 0x160, t);
             f.number(tech + 0x174, 0);
             f.put(tech + 0x198, &0i64.to_le_bytes());
-            f.word(t, BASE + 0x4211038);
+            f.word(t, BASE + 0x43a5f30);
             f.string(t + 8, &format!("owned_tech_{i}"), 0);
             f.number(t + 0x30, i as i32 + 1);
             f.number(t + 0x3cc, 1);
         }
         f.word(IDLER + 0x4f8, REGISTRY);
         f.word(IDLER + 0x6b8, MANAGER);
-        f.word(BASE + 0x45778e0, REGISTRY);
-        f.word(REGISTRY, BASE + 0x42736f8);
+        f.word(BASE + 0x470e6d8, REGISTRY);
+        f.word(REGISTRY, BASE + 0x4409f68);
         f.word(MANAGER + 0x180, IDLER);
         f.word(MANAGER + 0xf0, VIEW);
         f.word(MANAGER + 0xf8, TREE);
-        f.word(VIEW, BASE + 0x424dc38);
-        f.word(TREE, BASE + 0x424de40);
+        f.word(VIEW, BASE + 0x43e3978);
+        f.word(TREE, BASE + 0x43e3b88);
         f.word(VIEW + 0x2f0, IDLER);
         f.word(TREE + 0x2f0, IDLER);
         f.number(TREE + 0xe24, 6);
@@ -291,7 +291,7 @@ impl Fixture {
         f.word(TREE + 0x2f8, TREE_ROOT);
         f.word(VIEW + 0x910, PARENT);
         f.word(VIEW + 0x900, FACILITIES);
-        f.word(FACILITIES, BASE + 0x42f2708);
+        f.word(FACILITIES, BASE + 0x4487c30);
         f.word(FACILITIES + 0x68, IDLER);
         f.word(FACILITIES + 0x60, PARENT);
         f.word(FACILITIES + 0x70, FACILITIES_ROOT);
@@ -527,7 +527,7 @@ fn invalid_image_range_refuses_without_reads() {
 }
 #[test]
 fn original_campaign_roots_refuse_before_substituted_object_payload() {
-    for global in [0x44086a8, 0x44085f8, 0x439f450] {
+    for global in [0x459e9f0, 0x459e908, 0x45353b0] {
         let mut f = Fixture::new(23);
         let (mut anchor, _) = f.bind(ManagedPanel::Idle).unwrap();
         f.reads.borrow_mut().clear();
@@ -582,7 +582,7 @@ fn original_ui_edges_reject_substitution_before_foreign_payload() {
 #[test]
 fn wrong_primary_refuses_before_that_objects_owner_fields() {
     let mut f = Fixture::new(23);
-    f.word(VIEW, BASE + 0x4347d58);
+    f.word(VIEW, BASE + 0x44de2b0);
     assert_eq!(
         f.bind(ManagedPanel::Idle).unwrap_err().code,
         "invalid_gui_type"
@@ -652,7 +652,7 @@ fn changed_named_attachment_cannot_redirect_facilities_payload() {
 fn hidden_info_observation_never_follows_its_technology_or_callback_payload() {
     let mut f = Fixture::new(23);
     f.array(TREE + 0xdc0, 0x400000, &[0x401000]);
-    f.word(0x401000, BASE + 0x430bbf0);
+    f.word(0x401000, BASE + 0x44a17b0);
     f.word(0x401a78, IDLER);
     f.word(0x401a80, TREE);
     f.word(0x401a88, 0x402000);
@@ -671,7 +671,7 @@ fn hidden_info_observation_never_follows_its_technology_or_callback_payload() {
 fn foreign_info_owner_refuses_before_container_pointer_or_payload() {
     let mut f = Fixture::new(23);
     f.array(TREE + 0xdc0, 0x400000, &[0x401000]);
-    f.word(0x401000, BASE + 0x430bbf0);
+    f.word(0x401000, BASE + 0x44a17b0);
     f.word(0x401a78, POISON);
     assert_eq!(
         f.bind(ManagedPanel::Idle).unwrap_err().code,
@@ -715,7 +715,7 @@ fn visible_tree_facilities_animation_and_mode_visibility_mismatch_refuse() {
 fn owned_info_animation_is_named_without_reading_hidden_payload() {
     let mut f = Fixture::new(23);
     f.array(TREE + 0xdc0, 0x400000, &[0x401000]);
-    f.word(0x401000, BASE + 0x430bbf0);
+    f.word(0x401000, BASE + 0x44a17b0);
     f.word(0x401a78, IDLER);
     f.word(0x401a80, TREE);
     f.word(0x401a88, 0x402000);
@@ -793,7 +793,7 @@ fn late_success_is_discarded_and_late_concrete_error_keeps_its_cause() {
         "panel_transit_deadline"
     );
     let mut f = Fixture::new(23);
-    f.late_at = Some(BASE + 0x44086a8);
+    f.late_at = Some(BASE + 0x459e9f0);
     f.error_at = f.late_at;
     let error = f.bind(ManagedPanel::Idle).unwrap_err();
     assert_eq!(error.code, "ownership_changed");
@@ -821,7 +821,7 @@ fn original_deadline_covers_final_batch_and_is_never_renewed() {
 #[test]
 fn short_reads_refuse_without_partial_snapshot() {
     let mut f = Fixture::new(23);
-    f.short_at = Some(BASE + 0x44086a8);
+    f.short_at = Some(BASE + 0x459e9f0);
     assert_eq!(f.bind(ManagedPanel::Idle).unwrap_err().code, "short_read");
 }
 #[test]

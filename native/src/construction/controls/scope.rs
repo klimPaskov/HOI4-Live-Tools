@@ -165,15 +165,15 @@ impl<'a> Recorder<'a> {
         self.watch_offset(button, 0xe8, Follow::None);
         self.watch_offset(window, 0xe70, Follow::Primary);
         self.watch_offset(window, 0xe78, Follow::Primary);
-        self.watch_offset(base, 0x4577890, Follow::Graphics);
+        self.watch_offset(base, 0x470e688, Follow::Graphics);
     }
     pub(super) fn renderer(&self, render: u64, primary: u64, base: u64) {
         // Already read and exact supported by the construction control producer.
         self.words.borrow_mut().insert(render, primary);
         self.node(render, 0);
         match primary.checked_sub(base) {
-            Some(0x4356e08 | 0x43593d8) => self.watch_offset(render, 0x168, Follow::Primary),
-            Some(0x434b370) => {
+            Some(0x44ed1d8 | 0x44ef818) => self.watch_offset(render, 0x168, Follow::Primary),
+            Some(0x44e15e0) => {
                 self.watch_offset(render, 0x168, Follow::Primary);
                 self.watch_offset(render, 0x1b0, Follow::Primary);
             }
@@ -248,17 +248,17 @@ impl Words {
     fn blockers(&self, base: u64, manager: u64, idler: u64) -> Result<Vec<OwnerRoot>> {
         let mut result = Vec::new();
         for (offset, primary) in [
-            (0x130, 0x4249c70),
-            (0x128, 0x42546e8),
-            (0xf0, 0x424dc38),
-            (0xf8, 0x424de40),
+            (0x130, 0x43df748),
+            (0x128, 0x43ea4f8),
+            (0xf0, 0x43e3978),
+            (0xf8, 0x43e3b88),
         ] {
             let owner = self.nonnull(manager + offset)?;
             if self.word(owner)? != base + primary || self.word(owner + 0x2f0)? != idler {
                 return Err(missing("Complete exact owned blocker roots required"));
             }
             let root = self.nonnull(owner + 0x2f8)?;
-            if self.word(root)? != base + 0x4347d58 {
+            if self.word(root)? != base + 0x44de2b0 {
                 return Err(missing("Exact materialized blocker container required"));
             }
             result.push(OwnerRoot { owner, root });
@@ -269,31 +269,31 @@ impl Words {
         let renderer = self.nonnull(control.button + 0xe8)?;
         let primary = self.word(renderer)?;
         let resource = match primary.checked_sub(base) {
-            Some(0x4356e08) => {
+            Some(0x44ed1d8) => {
                 let p = self.nonnull(renderer + 0x168)?;
-                if self.word(p)? != base + 0x4357160 {
+                if self.word(p)? != base + 0x44ed530 {
                     return Err(missing("Exact Sprite resource identity required"));
                 }
                 p
             }
-            Some(0x43593d8) => {
+            Some(0x44ef818) => {
                 let p = self.nonnull(renderer + 0x168)?;
-                if self.word(p)? != base + 0x4359740 {
+                if self.word(p)? != base + 0x44efb80 {
                     return Err(missing("Exact Text resource identity required"));
                 }
                 p
             }
-            Some(0x434b370) => {
+            Some(0x44e15e0) => {
                 let p = self.nonnull(renderer + 0x1b0)?;
-                if self.word(renderer + 0x168)? != p || self.word(p)? != base + 0x434b668 {
+                if self.word(renderer + 0x168)? != p || self.word(p)? != base + 0x44e18d8 {
                     return Err(missing("Exact aliased Frame resource identity required"));
                 }
                 p
             }
             _ => return Err(missing("Exact supported renderer identity required")),
         };
-        let graphics = self.nonnull(base + 0x4577890)?;
-        if self.word(graphics)? != base + 0x42417f8 {
+        let graphics = self.nonnull(base + 0x470e688)?;
+        if self.word(graphics)? != base + 0x43d7220 {
             return Err(missing("Exact witnessed graphics identity required"));
         }
         let positions = [
@@ -309,7 +309,7 @@ impl Words {
             }
             let primary = self.word(object)?;
             if object != renderer
-                && ![0x43484f0, 0x4356e08, 0x434b370, 0x434c5b0]
+                && ![0x44dea58, 0x44ed1d8, 0x44e15e0, 0x44e2820]
                     .iter()
                     .any(|p| primary == base + p)
             {

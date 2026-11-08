@@ -163,7 +163,7 @@ fn window(r: &Reader<'_>, base: u64, pointer: u64, registry: u64) -> Result<Valu
     if pointer == 0 {
         return Ok(json!({"materialized":false,"visible_predicate":null}));
     }
-    exact(r, pointer, base + 0x4347d58)?;
+    exact(r, pointer, base + 0x44de2b0)?;
     if r.u64(pointer + 0x98)? != registry {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -235,16 +235,16 @@ pub(crate) fn nullable_type(r: &Reader<'_>, base: u64, object: u64) -> Result<Va
 }
 pub(crate) fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
     let table = r.u64(object)?;
-    if ![base + 0x434c5b0, base + 0x434b370, base + 0x4356e08].contains(&table) {
+    if ![base + 0x44e2820, base + 0x44e15e0, base + 0x44ed1d8].contains(&table) {
         // Even a matching RTTI name never supplies a renderer field layout.
         return Ok(json!({"field_layout_verified":false}));
     }
     let frame = u32::from_le_bytes(r.read(object + 0x34, 4)?.try_into().unwrap());
     let hit_resource = r.u64(
         object
-            + if table == base + 0x434c5b0 {
+            + if table == base + 0x44e2820 {
                 0x160
-            } else if table == base + 0x434b370 {
+            } else if table == base + 0x44e15e0 {
                 0x1b0
             } else {
                 // Exact primary CSprite: the plain sprite factory passes its
@@ -254,7 +254,7 @@ pub(crate) fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<V
             },
     )?;
     let mut value = json!({"current_frame_raw":frame,"hit_resource_type_encoding":nullable_type(r,base,hit_resource)?,"geometry_verified":false});
-    if table == base + 0x434b370 {
+    if table == base + 0x44e15e0 {
         // Different getters use +168 and +1b0. The factory constructor stores
         // the same direct resource object in both; observe equality afresh.
         let dimension_resource = r.u64(object + 0x168)?;
@@ -297,7 +297,7 @@ fn technology_info(
     let mut output = Vec::new();
     let mut visible_count = 0;
     for info in &entries {
-        exact(r, *info, base + 0x430bbf0)?;
+        exact(r, *info, base + 0x44a17b0)?;
         if !unique.insert(*info) || r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
             return Err(Error::new(
                 "invalid_gui_owner",
@@ -316,7 +316,7 @@ fn technology_info(
             output.push(json!({"technology":null,"window":container_state,"ordinary_research_button":null,"eligibility":"unavailable","input_authorized":false}));
             continue;
         }
-        exact(r, technology, base + 0x42107f8)?;
+        exact(r, technology, base + 0x43a5650)?;
         // Refuse foreign technology before traversing its template/payload.
         if r.u64(technology + 0x158)? != status {
             return Err(Error::new(
@@ -325,8 +325,8 @@ fn technology_info(
             ));
         }
         if catalog.is_none() {
-            let db = r.u64(base + 0x439f450)?;
-            exact(r, db, base + 0x42110c8)?;
+            let db = r.u64(base + 0x45353b0)?;
+            exact(r, db, base + 0x43a5fc0)?;
             let templates = array(r, db + 0x48, 8192)?;
             let own = array(r, status + 0x88, 8192)?;
             if templates.is_empty() || own.len() != templates.len() - 1 {
@@ -339,7 +339,7 @@ fn technology_info(
         }
         let (templates, own) = catalog.as_ref().unwrap();
         let template = r.u64(technology + 0x160)?;
-        exact(r, template, base + 0x4211038)?;
+        exact(r, template, base + 0x43a5f30)?;
         let id = r.i32(template + 0x30)?;
         if id <= 0
             || templates.get(id as usize) != Some(&template)
@@ -367,7 +367,7 @@ fn technology_info(
                     "Named research button must match ordinary callback control",
                 ));
             }
-            exact(r, button, base + 0x43470c8)?;
+            exact(r, button, base + 0x44dd4f0)?;
             let disabled = r.i32(button + 0xac)?;
             let flags = u32::from_le_bytes(r.read(button + 0x74, 4)?.try_into().unwrap());
             json!({"materialized":true,"selected_control_alias_matches":r.u64(info + 0xab0)?==button,"disabled_raw":disabled,"disabled_predicate":disabled==3,"flags_raw":flags,"input_authorized":false})
@@ -493,12 +493,12 @@ fn observe(
     let observed = Witnesses::new(process);
     let r = Reader::new(&observed);
     let base = process.image_base();
-    let gs = r.u64(base + 0x44086a8)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(&r, gs, base + 0x42c7598)?;
-    exact(&r, idler, base + 0x42c9a88)?;
+    let gs = r.u64(base + 0x459e9f0)?;
+    let idler = r.u64(base + 0x459e908)?;
+    exact(&r, gs, base + 0x445e068)?;
+    exact(&r, idler, base + 0x4460048)?;
     let registry = r.u64(idler + 0x4f8)?;
-    exact(&r, registry, base + 0x42736f8)?;
+    exact(&r, registry, base + 0x4409f68)?;
     let tag = r.i32(gs + 0x518)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
@@ -539,7 +539,7 @@ fn observe(
     );
     r.object_type(country, "CCountry")?;
     let status = r.u64(country + 0xf38)?;
-    exact(&r, status, base + 0x42108f8)?;
+    exact(&r, status, base + 0x43a5750)?;
     if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
         return Err(Error::new(
             "invalid_research_owner",
@@ -549,7 +549,7 @@ fn observe(
     let slots = array(&r, status + 0xa0, 32)?;
     let mut unique = std::collections::BTreeSet::new();
     for slot in &slots {
-        exact(&r, *slot, base + 0x4210898)?;
+        exact(&r, *slot, base + 0x43a56f0)?;
         if !unique.insert(*slot) || r.u64(slot + 0x10)? != status {
             return Err(Error::new(
                 "invalid_research_owner",
@@ -566,8 +566,8 @@ fn observe(
     }
     let view = r.u64(manager + 0xf0)?;
     let tree = r.u64(manager + 0xf8)?;
-    exact(&r, view, base + 0x424dc38)?;
-    exact(&r, tree, base + 0x424de40)?;
+    exact(&r, view, base + 0x43e3978)?;
+    exact(&r, tree, base + 0x43e3b88)?;
     if r.u64(view + 0x2f0)? != idler || r.u64(tree + 0x2f0)? != idler || r.i32(tree + 0xe24)? != 6 {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -605,7 +605,7 @@ fn observe(
     let mut output = Vec::new();
     let mut widget_ids = std::collections::BTreeSet::new();
     for (index, widget) in widgets.iter().enumerate() {
-        exact(&r, *widget, base + 0x424e7d8)?;
+        exact(&r, *widget, base + 0x43e4530)?;
         if !widget_ids.insert(*widget)
             || r.u64(widget + 0x2a8)? != registry
             || r.u64(widget + 0x2b0)? != view
@@ -633,10 +633,10 @@ fn observe(
             let encoding = type_encoding(&r, base, *button)?;
             let mut value = json!({"type_encoding":encoding,"geometry_verified":false});
             let table = r.u64(*button)?;
-            let render = if table == base + 0x43470c8 {
+            let render = if table == base + 0x44dd4f0 {
                 value["disabled_raw"] = json!(r.i32(button + 0xac)?);
                 Some(r.u64(button + 0xe8)?)
-            } else if table == base + 0x4346b10 {
+            } else if table == base + 0x44dcf10 {
                 // CButtonDrag's constructor/getter use +110. Its +e8 is
                 // position data, and +ac is a state machine, not disabled.
                 value["state_raw"] = json!(r.i32(button + 0xac)?);
@@ -762,12 +762,12 @@ fn observe_target(
     let observed = Witnesses::new(process);
     let r = Reader::new(&observed);
     let base = process.image_base();
-    let gs = r.u64(base + 0x44086a8)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(&r, gs, base + 0x42c7598)?;
-    exact(&r, idler, base + 0x42c9a88)?;
+    let gs = r.u64(base + 0x459e9f0)?;
+    let idler = r.u64(base + 0x459e908)?;
+    exact(&r, gs, base + 0x445e068)?;
+    exact(&r, idler, base + 0x4460048)?;
     let registry = r.u64(idler + 0x4f8)?;
-    exact(&r, registry, base + 0x42736f8)?;
+    exact(&r, registry, base + 0x4409f68)?;
     let tag = r.i32(gs + 0x518)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
@@ -797,7 +797,7 @@ fn observe_target(
     );
     r.object_type(country, "CCountry")?;
     let status = r.u64(country + 0xf38)?;
-    exact(&r, status, base + 0x42108f8)?;
+    exact(&r, status, base + 0x43a5750)?;
     if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
         return Err(Error::new(
             "invalid_research_owner",
@@ -807,7 +807,7 @@ fn observe_target(
     let slots = array(&r, status + 0xa0, 32)?;
     let mut unique = std::collections::BTreeSet::new();
     for slot in &slots {
-        exact(&r, *slot, base + 0x4210898)?;
+        exact(&r, *slot, base + 0x43a56f0)?;
         if !unique.insert(*slot) || r.u64(slot + 0x10)? != status {
             return Err(Error::new(
                 "invalid_research_owner",
@@ -824,8 +824,8 @@ fn observe_target(
     }
     let view = r.u64(manager + 0xf0)?;
     let tree = r.u64(manager + 0xf8)?;
-    exact(&r, view, base + 0x424dc38)?;
-    exact(&r, tree, base + 0x424de40)?;
+    exact(&r, view, base + 0x43e3978)?;
+    exact(&r, tree, base + 0x43e3b88)?;
     if r.u64(view + 0x2f0)? != idler || r.u64(tree + 0x2f0)? != idler || r.i32(tree + 0xe24)? != 6 {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -872,7 +872,7 @@ fn observe_target(
     let mut visible = 0;
     let mut matching_info = None;
     for info in entries {
-        exact(&r, info, base + 0x430bbf0)?;
+        exact(&r, info, base + 0x44a17b0)?;
         if !unique.insert(info) || r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
             return Err(Error::new(
                 "invalid_gui_owner",

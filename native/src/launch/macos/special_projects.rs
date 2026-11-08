@@ -341,7 +341,9 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
             f.project = Some(id);
         }
     }
-    // breakthrough accounts: libc++ tree, root at +0x60, key high dword = spec id
+    // breakthrough accounts: a std::map (libc++ on macOS: root at +0x60, children +0/+8, key high
+    // dword of +0x18 = spec id, value +0x20; libstdc++ on Linux: root +0x68, children +0x10/+0x18,
+    // key +0x20, value +0x24, all through the layout table)
     let mut stack = vec![r.u64(status + at(r, &STATUS, 0x60)?)?];
     let mut seen = 0;
     while let Some(node) = stack.pop() {
@@ -358,7 +360,8 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
         if let Some(spec) = spec_index(&ids, hi(key) as i32) {
             out.breakthroughs.push(Breakthrough {
                 spec,
-                raw: r.u64(node + at(r, &BREAKTHROUGH_NODE, 0x20)?)? as i64,
+                // An i32; the dword after it is another field (33, 49, 81 on Linux, 0 on macOS).
+                raw: i64::from(r.i32(node + at(r, &BREAKTHROUGH_NODE, 0x20)?)?),
             });
         }
     }

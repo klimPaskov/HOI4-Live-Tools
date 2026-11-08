@@ -38,10 +38,10 @@ fn observe_inner(
     include_geometry: bool,
 ) -> Result<Value> {
     // Caller has already verified the complete own status/slot/view model.
-    exact(r, widget, base + 0x424e7d8)?;
-    exact(r, view, base + 0x424dc38)?;
-    exact(r, slot, base + 0x4210898)?;
-    exact(r, registry, base + 0x42736f8)?;
+    exact(r, widget, base + 0x43e4530)?;
+    exact(r, view, base + 0x43e3978)?;
+    exact(r, slot, base + 0x43a56f0)?;
+    exact(r, registry, base + 0x4409f68)?;
     if r.u64(widget + 0x2a8)? != registry
         || r.u64(widget + 0x2b0)? != view
         || r.u64(widget + 0x2b8)? != slot
@@ -61,7 +61,7 @@ fn observe_inner(
             "Slot container alignment required",
         ));
     }
-    if r.u64(container)? != base + 0x4347d58 {
+    if r.u64(container)? != base + 0x44de2b0 {
         return Ok(unavailable("unknown_container_layout"));
     }
     if r.u64(container + 0x98)? != registry {
@@ -79,7 +79,7 @@ fn observe_inner(
         return Ok(unavailable("control_unmaterialized"));
     }
     let encoding = nullable_type(r, base, button)?;
-    if r.u64(button)? != base + 0x4346b10 {
+    if r.u64(button)? != base + 0x44dcf10 {
         let mut o = unavailable("unknown_control_layout");
         o["control_type_encoding"] = encoding;
         return Ok(o);
@@ -90,7 +90,7 @@ fn observe_inner(
             "Own slot control registry required",
         ));
     }
-    if r.u64(button + 0x80)? != base + 0x4346ea8 {
+    if r.u64(button + 0x80)? != base + 0x44dd2c8 {
         return Ok(unavailable("unknown_observer_layout"));
     }
     if r.u64(button + 0xa0)? != 0 {
@@ -127,7 +127,7 @@ fn observe_inner(
     if target != widget + 0x20 {
         return Ok(unavailable("different_listener_target"));
     }
-    if r.u64(target)? != base + 0x424ea18 {
+    if r.u64(target)? != base + 0x43e4770 {
         return Ok(unavailable("unknown_slot_glue_layout"));
     }
     if r.u64(target + 0x18)? != base + 0x15b7be0
@@ -147,7 +147,7 @@ fn observe_inner(
             "Slot callback capture alignment required",
         ));
     }
-    if r.u64(capture)? != base + 0x15b35e0
+    if r.u64(capture)? != base + 0x168a260
         || r.u64(capture + 8)? != 0
         || r.u64(capture + 0x10)? != widget
     {
@@ -184,7 +184,7 @@ fn observe_inner(
     let mut details = json!({"field_layout_verified":false});
     let render_table = if render == 0 { 0 } else { r.u64(render)? };
     if render != 0
-        && [0x4356e08, 0x434c5b0, 0x434b370]
+        && [0x44ed1d8, 0x44e2820, 0x44e15e0]
             .iter()
             .any(|v| render_table == base + v)
     {
@@ -195,7 +195,7 @@ fn observe_inner(
             ));
         }
         details = render_details(r, base, render)?;
-        if render_table == base + 0x4356e08 {
+        if render_table == base + 0x44ed1d8 {
             let f = |off| -> Result<Value> {
                 let v = f32::from_le_bytes(r.read(render + off, 4)?.try_into().unwrap());
                 Ok(if v.is_finite() { json!(v) } else { Value::Null })
@@ -261,12 +261,12 @@ mod tests {
             };
             let b = 0x10000;
             for (a, n, t) in [
-                (0x20000, 0x300, 0x424e7d8),
-                (0x30000, 0x400, 0x424dc38),
-                (0x40000, 0x50, 0x4210898),
-                (0x50000, 0x200, 0x42736f8),
-                (0x60000, 0x1000, 0x4347d58),
-                (0x70000, 0x160, 0x4346b10),
+                (0x20000, 0x300, 0x43e4530),
+                (0x30000, 0x400, 0x43e3978),
+                (0x40000, 0x50, 0x43a56f0),
+                (0x50000, 0x200, 0x4409f68),
+                (0x60000, 0x1000, 0x44de2b0),
+                (0x70000, 0x160, 0x44dcf10),
             ] {
                 f.region(a, n);
                 f.word(a, b + t);
@@ -279,20 +279,20 @@ mod tests {
             f.word(0x70068, 0x50000);
             f.array(0x60958, 0xc0000, 1);
             f.word(0xc0000, 0x70000);
-            f.word(0x70080, b + 0x4346ea8);
+            f.word(0x70080, b + 0x44dd2c8);
             f.word(0x70088, 0x80000);
             f.word(0x70090, 0x80000);
             f.put(0x70098, &1i32.to_le_bytes());
             f.region(0x80000, 0x20);
             f.word(0x80000, 0x20020);
-            f.word(0x20020, b + 0x424ea18);
+            f.word(0x20020, b + 0x43e4770);
             f.word(0x20028, 0x90000);
             f.word(0x20038, b + 0x15b7be0);
             f.word(0x20040, b + 0x15b7bb0);
             f.region(0x90000, 0x18);
-            f.word(0x90000, b + 0x15b35e0);
+            f.word(0x90000, b + 0x168a260);
             f.word(0x90010, 0x20000);
-            f.metadata(b + 0x4346b10, b + 0x4357800, b + 0x350a000, "11CButtonDrag");
+            f.metadata(b + 0x44dcf10, b + 0x44edbd0, b + 0x3682000, "11CButtonDrag");
             f
         }
         fn observe(&self) -> Result<Value> {
@@ -401,8 +401,8 @@ mod tests {
         let b = 0x10000;
         f.word(0x70110, 0xa0000);
         f.region(0xa0000, 0x1b0);
-        f.word(0xa0000, b + 0x4356e08);
-        f.metadata(b + 0x4356e08, b + 0x4357900, b + 0x350a100, "7CSprite");
+        f.word(0xa0000, b + 0x44ed1d8);
+        f.metadata(b + 0x44ed1d8, b + 0x44edcd0, b + 0x3682100, "7CSprite");
         f.word(0xa0138, 0x70008);
         assert_eq!(f.observe().unwrap_err().code, "invalid_gui_owner");
         assert!(!f.reads.borrow().contains_key(&0xa0168));

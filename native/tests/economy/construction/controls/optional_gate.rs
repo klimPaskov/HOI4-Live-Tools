@@ -6,7 +6,7 @@ fn owned_gate(button: u64, parent: u64, descend: u8) -> Fixture {
     let mut f = controls_fixture();
     f.word(button + 0x1a8, POSITION);
     f.word(parent + 0xe78, POSITION);
-    f.word(POSITION, BASE + 0x43484f0);
+    f.word(POSITION, BASE + 0x44dea58);
     // No other position payload is mapped: only the admitted byte is needed.
     f.put(POSITION + 0x128, &[descend]);
     f
@@ -43,7 +43,7 @@ fn unknown_gate_identity_and_type_do_not_reach_optional_payload() {
     production_not_read(&f, &[POSITION, POSITION + 0x128]);
 
     let mut f = owned_gate(OPEN, INTEL, 1);
-    f.word(POSITION, BASE + 0x43484f1);
+    f.word(POSITION, BASE + 0x44dea59);
     assert_eq!(
         observe(&f).unwrap()["opener"]["local"]["conservative_dispatch_ready"],
         false

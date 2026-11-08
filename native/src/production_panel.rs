@@ -197,7 +197,7 @@ fn named(r: &Reader<'_>, window: u64, children: bool, key: &str) -> Result<Optio
     crate::gui_registry::lookup(r, window + names, &members(r, window + values)?, key, 128)
 }
 fn window(r: &Reader<'_>, base: u64, p: u64, registry: u64) -> Result<Value> {
-    exact(r, p, base + 0x4347d58)?;
+    exact(r, p, base + 0x44de2b0)?;
     if r.u64(p + 0x98)? != registry {
         return Err(invalid("Production window must belong to own registry"));
     }
@@ -242,7 +242,7 @@ fn selections(
             items.push(unavailable("selection_unmaterialized"));
             continue;
         }
-        exact(r, p, base + 0x4321298)?;
+        exact(r, p, base + 0x44b72c0)?;
         if r.u64(p + 0x7f0)? != idler || r.u64(p + 0x7f8)? != view {
             return Err(invalid("Production selection owner changed"));
         }
@@ -281,7 +281,7 @@ pub(crate) fn engine(
     let settings_state = if settings == 0 {
         json!({"predicate_clear":true,"reason":"engine_false_by_null"})
     } else {
-        exact(r, settings, base + 0x431a2f0)?;
+        exact(r, settings, base + 0x44b0210)?;
         if r.u64(settings + 0x30)? != idler {
             return Err(invalid("Settings blocker must belong to own idler"));
         }
@@ -296,7 +296,7 @@ pub(crate) fn engine(
             unavailable("menu_owner_unmaterialized"),
         )
     } else {
-        exact(r, menu, base + 0x425bf80)?;
+        exact(r, menu, base + 0x43f2360)?;
         if r.u64(menu + 0x19a0)? != idler || r.u64(menu + 0x19a8)? != manager {
             return Err(invalid("Menu blocker must belong to own manager"));
         }
@@ -306,7 +306,7 @@ pub(crate) fn engine(
         let state = if overview == 0 {
             json!({"predicate_clear":true,"reason":"engine_false_by_null"})
         } else {
-            exact(r, overview, base + 0x4300540)?;
+            exact(r, overview, base + 0x4495be0)?;
             if r.u64(overview + 0x1078)? != idler {
                 return Err(invalid("Overview blocker must belong to own idler"));
             }
@@ -341,7 +341,7 @@ fn callback(
     scope: &mut Vec<u64>,
 ) -> Result<Value> {
     let mut out = unavailable("opener_observer_unavailable");
-    if r.u64(button + 0x80)? != base + 0x4347488 || r.u64(button + 0xa0)? != 0 {
+    if r.u64(button + 0x80)? != base + 0x44dd8d0 || r.u64(button + 0xa0)? != 0 {
         return Ok(out);
     }
     let n = r.i32(button + 0x98)?;
@@ -365,7 +365,7 @@ fn callback(
         return Ok(out);
     }
     scope.extend([link, glue]);
-    if r.u64(glue)? != base + 0x426c518
+    if r.u64(glue)? != base + 0x4402d18
         || r.u64(glue + 0x18)? != base + 0x1886560
         || r.u64(glue + 0x20)? != base + 0x1886530
     {
@@ -408,7 +408,7 @@ pub(crate) fn optional_gate(
         return Ok(json!({"absent":false,"clear":null,"reason":"unbound_optional_gate"}));
     }
     pointer(gate)?;
-    if r.u64(gate)? != base + 0x43484f0 {
+    if r.u64(gate)? != base + 0x44dea58 {
         return Ok(json!({"absent":false,"clear":null,"reason":"unsupported_owned_position_type"}));
     }
     let descend = match r.byte(gate + 0x128)? {
@@ -441,7 +441,7 @@ fn opener(
     if topbar == 0 {
         return Ok(unavailable("topbar_unmaterialized"));
     }
-    exact(r, topbar, base + 0x426c3d0)?;
+    exact(r, topbar, base + 0x4402bc0)?;
     if r.u64(topbar + 0x68)? != idler || r.u64(topbar + 0x70)? != manager {
         return Err(invalid("Topbar must belong to own idler/manager"));
     }
@@ -479,7 +479,7 @@ fn opener(
     out["all_named_containers_settled_shown"] =
         json!(path.iter().all(|v| v["locally_shown_settled"] == true));
     out["path"] = json!(path);
-    if r.u64(button)? != base + 0x43470c8 {
+    if r.u64(button)? != base + 0x44dd4f0 {
         return Ok(out);
     }
     if r.u64(button + 0x68)? != registry {
@@ -515,7 +515,7 @@ fn opener(
         }
         pointer(render)?;
         let primary = r.u64(render)?;
-        if ![0x4356e08, 0x43593d8, 0x434b370]
+        if ![0x44ed1d8, 0x44ef818, 0x44e15e0]
             .iter()
             .any(|v| primary == base + v)
         {
@@ -557,10 +557,10 @@ pub(crate) fn observe(
     let base = process.image_base();
     let (country, production) = economy::own_production(&r, base)?;
     let campaign = game::context_from_reader(&r, base)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(&r, idler, base + 0x42c9a88)?;
+    let idler = r.u64(base + 0x459e908)?;
+    exact(&r, idler, base + 0x4460048)?;
     let registry = r.u64(idler + 0x4f8)?;
-    exact(&r, registry, base + 0x42736f8)?;
+    exact(&r, registry, base + 0x4409f68)?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -575,7 +575,7 @@ pub(crate) fn observe(
     let mut scope = Vec::new();
     let mut geometry = Vec::new();
     if view != 0 {
-        exact(&r, view, base + 0x4314180)?;
+        exact(&r, view, base + 0x44a9ea8)?;
         if r.u64(view + 0x2f0)? != idler {
             return Err(invalid("Production view owner differs"));
         }
@@ -606,7 +606,7 @@ pub(crate) fn observe(
                 let common = crate::construction::controls::blockers(
                     &r, base, country, idler, manager, registry,
                 )?;
-                if r.u64(base + 0x45778e0)? != registry {
+                if r.u64(base + 0x470e6d8)? != registry {
                     return Err(invalid("Input GUI must equal own registry"));
                 }
                 let gui_clear = r.byte(registry + 0x150)? == 0

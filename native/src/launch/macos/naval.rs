@@ -203,13 +203,14 @@ pub(super) fn fleets(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Fle
             if region == 0 {
                 continue;
             }
-            let template = r.u64(region + fleetmem::REGION_TEMPLATE)?;
+            let template = r.u64(region + at(r, &fleetmem::REGION, fleetmem::REGION_TEMPLATE)?)?;
             if template == 0 {
                 continue;
             }
+            let field = |off| at(r, &fleetmem::REGION_TEMPLATE_CLASS, off);
             regions.push((
-                r.string_bounded(template + fleetmem::TEMPLATE_KEY, 64)?,
-                r.string_bounded(template + fleetmem::TEMPLATE_NAME, 128)?,
+                r.string_bounded(template + field(fleetmem::TEMPLATE_KEY)?, 64)?,
+                r.string_bounded(template + field(fleetmem::TEMPLATE_NAME)?, 128)?,
             ));
         }
         let handle = r.read(f + at(r, &FLEET, FLEET_LEADER)?, 8)?;

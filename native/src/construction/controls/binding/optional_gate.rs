@@ -20,7 +20,7 @@ pub(super) fn observe(
         return Ok(json!({"absent":false,"clear":null,"reason":"unbound_optional_gate"}));
     }
     pointer(gate)?;
-    if r.u64(gate)? != base + 0x43484f0 {
+    if r.u64(gate)? != base + 0x44dea58 {
         return Ok(json!({"absent":false,"clear":null,"reason":"unsupported_owned_position_type"}));
     }
     // Standard virtual10 requires byte128 != 0 before base event dispatch.

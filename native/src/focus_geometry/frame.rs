@@ -18,9 +18,9 @@ pub(super) fn observe(
     render: u64,
 ) -> Result<Value> {
     let base = reuse.base();
-    exact(r, container, base + 0x4347d58)?;
-    exact(r, button, base + 0x43470c8)?;
-    exact(r, render, base + 0x434b370)?;
+    exact(r, container, base + 0x44de2b0)?;
+    exact(r, button, base + 0x44dd4f0)?;
+    exact(r, render, base + 0x44e15e0)?;
     if r.u64(container + 0x98)? != registry
         || r.u64(button + 0x68)? != registry
         || r.u64(render + 0x138)? != button
@@ -38,11 +38,11 @@ pub(super) fn observe(
     }
     out["resource_alias_matches"] = json!(true);
     out["resource_type_encoding"] = reuse.nullable_type(r, resource)?;
-    if r.u64(resource)? != base + 0x434b668 {
+    if r.u64(resource)? != base + 0x44e18d8 {
         out["reason"] = json!("resource_layout_unavailable");
         return Ok(out);
     }
-    exact(r, resource, base + 0x434b668)?;
+    exact(r, resource, base + 0x44e18d8)?;
     out["resource_layout_verified"] = json!(true);
     let frames = r.i32(resource + 0x90)?;
     let grid = r.i32(resource + 0x94)?;

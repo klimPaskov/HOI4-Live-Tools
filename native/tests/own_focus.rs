@@ -71,25 +71,25 @@ impl Fake {
             fail_final: false,
         };
         for (a, t) in [
-            (GS, 0x42c7598),
-            (ID, 0x42c9a88),
-            (GUI, 0x42736f8),
-            (VIEW, 0x4249c70),
-            (TREE, 0x4202410),
-            (DB, 0x4202590),
-            (F, 0x42024d0),
+            (GS, 0x445e068),
+            (ID, 0x4460048),
+            (GUI, 0x4409f68),
+            (VIEW, 0x43df748),
+            (TREE, 0x43972e0),
+            (DB, 0x4397460),
+            (F, 0x43973a0),
             (PANEL, 0x43023f8),
-            (WIN, 0x4347d58),
-            (BUTTON, 0x43470c8),
+            (WIN, 0x44de2b0),
+            (BUTTON, 0x44dd4f0),
         ] {
             s.region(a, 0x1800);
             s.word(a, t);
         }
         s.region(MAN, 0x400);
         s.region(CO, 0x1800);
-        s.word(0x44086a8, GS);
-        s.word(0x44085f8, ID);
-        s.word(0x439faf0, DB);
+        s.word(0x459e9f0, GS);
+        s.word(0x459e908, ID);
+        s.word(0x4535a30, DB);
         s.int(GS + 0x518, 1);
         s.int(CO + 8, 1);
         // Actual Reader::object_type on country, not bypassed.
@@ -250,7 +250,7 @@ fn duplicate_catalog_keys_refused() {
     let mut f = Fake::new();
     let second = 0x220000;
     f.region(second, 0x1800);
-    f.word(second, 0x42024d0);
+    f.word(second, 0x43973a0);
     f.word(second + 0x160, TREE);
     f.string(second + 0x18, "GER_rhineland");
     f.array(TREE + 0x30, 0x212000, &[F, second]);
@@ -305,7 +305,7 @@ fn alternate_registry_does_not_bind_start() {
 #[test]
 fn exact_control_type_and_duplicate_name_refused() {
     let mut f = Fake::new();
-    f.word(BUTTON, 0x43470d0);
+    f.word(BUTTON, 0x44dd4f8);
     assert_eq!(f.result().unwrap_err().code, "invalid_focus_type");
     let mut f = Fake::new();
     f.array(WIN + 0x9a0, 0x215000, &[BUTTON, BUTTON]);
@@ -382,7 +382,7 @@ fn duplicate_keys_outside_page_still_rejected() {
     let mut f = Fake::new();
     let second = 0x220000;
     f.region(second, 0x1800);
-    f.word(second, 0x42024d0);
+    f.word(second, 0x43973a0);
     f.word(second + 0x160, TREE);
     f.string(second + 0x18, "GER_rhineland");
     f.array(TREE + 0x30, 0x212000, &[F, second]);
@@ -436,7 +436,7 @@ fn changed_focus_fields_report_bounded_labels_without_addresses_or_payloads() {
 
 impl Fake {
     fn start_binding(&mut self) {
-        self.word(BUTTON + 0x80, 0x4347488);
+        self.word(BUTTON + 0x80, 0x44dd8d0);
         self.word(BUTTON + 0x88, 0x220000);
         self.word(BUTTON + 0x90, 0x220020);
         self.int(BUTTON + 0x98, 2);
@@ -473,14 +473,14 @@ impl Fake {
         }
         self.word(BUTTON + 0xe8, 0x222000);
         self.region(0x222000, 0x140);
-        self.word(0x222000, 0x43593d8);
+        self.word(0x222000, 0x44ef818);
         self.word(0x222138, BUTTON);
-        self.word(0x43593c8, 0);
-        self.word(0x43593d0, 0x43596f8);
-        self.region(0x43596f8, 16);
-        self.word(0x4359700, 0x350e700);
-        self.region(0x350e700, 128);
-        self.put(0x350e700, b"11CTextSprite");
+        self.word(0x44ef808, 0);
+        self.word(0x44ef810, 0x44efb38);
+        self.region(0x44efb38, 16);
+        self.word(0x44efb40, 0x3686700);
+        self.region(0x3686700, 128);
+        self.put(0x3686700, b"11CTextSprite");
     }
     fn binding(&self) -> serde_json::Value {
         self.result().unwrap()["details"][0]["window"]["start"]["ordinary_binding"].clone()
@@ -552,9 +552,9 @@ fn focus_start_listener_bounds_removed_override_and_member_variant() {
 fn focus_start_unknown_renderer_metadata_only_and_hidden_no_binding() {
     let mut f = Fake::new();
     f.start_binding();
-    f.word(0x222000, 0x43593e0);
-    f.word(0x43593d8, 0);
-    f.word(0x43593d0 + 8, 0x43596f8);
+    f.word(0x222000, 0x44ef820);
+    f.word(0x44ef818, 0);
+    f.word(0x44ef810 + 8, 0x44efb38);
     // malformed/unknown primary metadata explicitly unavailable, no layout payload.
     let v = f.binding();
     assert_eq!(v["callback_route_verified"], true);
@@ -611,12 +611,12 @@ impl Fake {
     fn focus_nodes(&mut self) {
         self.array(VIEW + 0x1138, 0x230000, &[0x231000]);
         self.region(0x231000, 0x2d0);
-        self.word(0x231000, 0x4249b90);
+        self.word(0x231000, 0x43df668);
         self.word(0x2312b0, VIEW);
         self.word(0x231020, F);
         self.word(0x231010, 0x232000);
         self.region(0x232000, 0xf00);
-        self.word(0x232000, 0x4347d58);
+        self.word(0x232000, 0x44de2b0);
         self.word(0x232098, GUI);
         self.array(0x2329a0, 0x233000, &[0x234000]);
         self.region(0x2329b8, 16);
@@ -624,25 +624,25 @@ impl Fake {
         self.int(0x2329c0, 1);
         self.int(0x2329c4, 1);
         self.string(0x233100, "symbol");
-        self.word(0x43470b8, 0);
-        self.word(0x43470c0, 0x4357000);
-        self.region(0x4357000, 16);
-        self.word(0x4357008, 0x350f000);
-        self.region(0x350f000, 128);
-        self.put(0x350f000, b"15CButtonStandard");
-        self.word(0x4346b00, 1);
+        self.word(0x44dd4e0, 0);
+        self.word(0x44dd4e8, 0x44ed3d0);
+        self.region(0x44ed3d0, 16);
+        self.word(0x44ed3d8, 0x3687000);
+        self.region(0x3687000, 128);
+        self.put(0x3687000, b"15CButtonStandard");
+        self.word(0x44dcf00, 1);
         self.region(0x234000, 0x110);
-        self.word(0x234000, 0x43470c8);
+        self.word(0x234000, 0x44dd4f0);
         self.word(0x234068, GUI);
         self.word(0x2312b8, 0x234000);
-        self.word(0x234080, 0x4347488);
+        self.word(0x234080, 0x44dd8d0);
         self.region(0x235000, 32);
         self.word(0x234088, 0x235000);
         self.word(0x234090, 0x235000);
         self.int(0x234098, 1);
         self.word(0x235000, 0x231028);
-        self.word(0x231028, 0x424a860);
-        for (off, cap, member) in [(8, 0x236000, 0x150b440), (0x148, 0x236020, 0x150b5f0)] {
+        self.word(0x231028, 0x43e0388);
+        for (off, cap, member) in [(8, 0x236000, 0x15d9440), (0x148, 0x236020, 0x15d9680)] {
             self.region(cap, 24);
             self.word(cap, member);
             self.word(cap + 0x10, 0x231000);
@@ -673,7 +673,7 @@ fn focus_nodes_wrong_later_owner_refuses_before_target_gui() {
     f.focus_nodes();
     f.array(VIEW + 0x1138, 0x230000, &[0x231000, 0x237000]);
     f.region(0x237000, 0x2d0);
-    f.word(0x237000, 0x4249b90);
+    f.word(0x237000, 0x43df668);
     f.word(0x2372b0, 0xdead0000);
     assert_eq!(f.node_result().unwrap_err().code, "foreign_focus_scope");
     assert!(f.untouched(0x231010, 8));
@@ -685,7 +685,7 @@ fn focus_nodes_duplicate_requested_and_foreign_definition_refuse() {
     f.focus_nodes();
     f.array(VIEW + 0x1138, 0x230000, &[0x231000, 0x237000]);
     f.region(0x237000, 0x2d0);
-    f.word(0x237000, 0x4249b90);
+    f.word(0x237000, 0x43df668);
     f.word(0x2372b0, VIEW);
     f.word(0x237020, F);
     assert_eq!(f.node_result().unwrap_err().code, "ambiguous_focus_node");
@@ -698,7 +698,7 @@ fn focus_nodes_duplicate_requested_and_foreign_definition_refuse() {
 fn focus_nodes_unsupported_control_and_callback_variants_metadata_only() {
     let mut f = Fake::new();
     f.focus_nodes();
-    f.word(0x234000, 0x4346b10);
+    f.word(0x234000, 0x44dcf10);
     assert_eq!(
         f.node_result().unwrap()["node_association"]["controls"][0]["binding_verified"],
         false
@@ -766,14 +766,14 @@ fn focus_nodes_valid_unrelated_item_never_reads_its_gui_payload() {
     let mut f = Fake::new();
     f.focus_nodes();
     f.region(0x238000, 0x1800);
-    f.word(0x238000, 0x42024d0);
+    f.word(0x238000, 0x43973a0);
     f.word(0x238160, TREE);
     f.string(0x238018, "GER_other");
     f.array(TREE + 0x30, 0x212000, &[F, 0x238000]);
     f.array(DB + 0x58, 0x213000, &[F, 0x238000]);
     f.array(VIEW + 0x1138, 0x230000, &[0x231000, 0x237000]);
     f.region(0x237000, 0x2d0);
-    f.word(0x237000, 0x4249b90);
+    f.word(0x237000, 0x43df668);
     f.word(0x2372b0, VIEW);
     f.word(0x237020, 0x238000);
     f.word(0x237010, 0xdead0000);
@@ -797,21 +797,21 @@ impl Fake {
         for (obj, table, ti, name, strp) in [
             (
                 render,
-                if text { 0x43593d8 } else { 0x4356e08 },
-                0x4358000,
+                if text { 0x44ef818 } else { 0x44ed1d8 },
+                0x44ee3d0,
                 if text { "11CTextSprite" } else { "7CSprite" },
-                0x350f300,
+                0x3687300,
             ),
             (
                 resource,
-                if text { 0x4359740 } else { 0x4357160 },
-                0x4358100,
+                if text { 0x44efb80 } else { 0x44ed530 },
+                0x44ee4d0,
                 if text {
                     "15CTextSpriteType"
                 } else {
                     "11CSpriteType"
                 },
-                0x350f400,
+                0x3687400,
             ),
         ] {
             self.word(obj, table);
@@ -825,15 +825,15 @@ impl Fake {
         self.put(render + 0x114, &1.0f32.to_le_bytes());
         self.put(render + 0xb0, &10.0f32.to_le_bytes());
         self.put(render + 0xb4, &(-20.0f32).to_le_bytes());
-        self.word(0x4577890, graphics);
+        self.word(0x470e688, graphics);
         self.region(graphics, 0x500);
-        self.word(graphics, 0x42417f8);
+        self.word(graphics, 0x43d7220);
         self.word(GUI + 0xb8, graphics);
-        self.word(graphics + 0x1f0, 0x43484f0);
-        self.word(graphics + 0x350, 0x43484f0);
+        self.word(graphics + 0x1f0, 0x44dea58);
+        self.word(graphics + 0x350, 0x44dea58);
         for a in [0x241000, 0x242000] {
             self.region(a, 0x160);
-            self.word(a, 0x43484f0);
+            self.word(a, 0x44dea58);
         }
         self.word(window + 0xe70, 0x241000);
         self.word(window + 0xe78, 0x242000);
@@ -900,13 +900,13 @@ fn focus_geometry_wrong_resource_before_scalar_payload_and_owner_refusal() {
     let mut f = Fake::new();
     f.focus_nodes();
     f.focus_geometry_fixture(0x232000, 0x234000, false);
-    f.word(0x245000, 0x4359740);
-    f.word(0x4359730, 0);
-    f.word(0x4359738, 0x4358200);
-    f.region(0x4358200, 16);
-    f.word(0x4358208, 0x350f500);
-    f.region(0x350f500, 128);
-    f.put(0x350f500, b"15CTextSpriteType");
+    f.word(0x245000, 0x44efb80);
+    f.word(0x44efb70, 0);
+    f.word(0x44efb78, 0x44ee5d0);
+    f.region(0x44ee5d0, 16);
+    f.word(0x44ee5d8, 0x3687500);
+    f.region(0x3687500, 128);
+    f.put(0x3687500, b"15CTextSpriteType");
     let v = f.geometry_result().unwrap();
     assert_eq!(
         v["node_association"]["controls"][0]["render_diagnostic"]["reason"],
@@ -948,13 +948,13 @@ fn focus_geometry_instant_metadata_does_not_borrow_sprite_or_text_payload() {
     let mut f = Fake::new();
     f.focus_nodes();
     f.focus_geometry_fixture(0x232000, 0x234000, false);
-    f.word(0x244000, 0x434c5b0);
-    f.word(0x434c5a0, 0);
-    f.word(0x434c5a8, 0x4358300);
-    f.region(0x4358300, 16);
-    f.word(0x4358308, 0x350f600);
-    f.region(0x350f600, 128);
-    f.put(0x350f600, b"14CInstantSprite");
+    f.word(0x244000, 0x44e2820);
+    f.word(0x44e2810, 0);
+    f.word(0x44e2818, 0x44ee740);
+    f.region(0x44ee740, 16);
+    f.word(0x44ee748, 0x3687600);
+    f.region(0x3687600, 128);
+    f.put(0x3687600, b"14CInstantSprite");
     let v = f.geometry_result().unwrap();
     assert_eq!(
         v["node_association"]["controls"][0]["render_diagnostic"]["reason"],
@@ -968,16 +968,16 @@ fn focus_geometry_instant_metadata_does_not_borrow_sprite_or_text_payload() {
 impl Fake {
     fn focus_frame_fixture(&mut self, window: u64, button: u64) {
         self.focus_geometry_fixture(window, button, false);
-        self.word(0x244000, 0x434b370);
+        self.word(0x244000, 0x44e15e0);
         self.word(0x2441b0, 0x245000);
-        self.word(0x245000, 0x434b668);
+        self.word(0x245000, 0x44e18d8);
         for (table, ti, name, strp) in [
-            (0x434b370, 0x4358300, "20CFrameAnimatedSprite", 0x350f500),
+            (0x44e15e0, 0x44ee740, "20CFrameAnimatedSprite", 0x3687500),
             (
-                0x434b668,
-                0x4358400,
+                0x44e18d8,
+                0x44ee840,
                 "24CFrameAnimatedSpriteType",
-                0x350f600,
+                0x3687600,
             ),
         ] {
             self.word(table - 16, 0);
@@ -1135,8 +1135,8 @@ fn focus_geometry_default_list_and_node_keep_metadata_shape_and_reads() {
 impl Fake {
     fn command_context_fixture(&mut self) {
         self.focus_nodes();
-        self.word(0x439f450, 0x251000);
-        self.word(0x43f3eb8, 0x252000);
+        self.word(0x45353b0, 0x251000);
+        self.word(0x458a088, 0x252000);
         self.array(0x252000, 0x253000, &[0, 0]);
         self.string(0x253020, "GER");
         self.string(CO + 0x10, "Germany");
@@ -1151,18 +1151,18 @@ impl Fake {
         self.int(GS + 0x620, 1);
         self.int(GS + 0x628, 1);
         self.region(0x254000, 0x100);
-        self.word(0x254000, 0x4202638);
+        self.word(0x254000, 0x4397508);
         self.word(0x254008, CO);
         self.word(CO + 0x1348, 0x254000);
         self.region(0x255000, 0x200);
-        self.word(0x255000, 0x42108f8);
+        self.word(0x255000, 0x43a5750);
         self.word(0x255130, CO);
         self.int(0x255138, 1);
         self.word(CO + 0xf38, 0x255000);
         for (table, ti, text, name) in [
-            (0x4202638, 0x256000, 0x257000, "CNationalFocusProgress"),
-            (0x42108f8, 0x256020, 0x257100, "CTechnologyStatus"),
-            (0x42024d0, 0x256040, 0x257200, "CNationalFocus"),
+            (0x4397508, 0x256000, 0x257000, "CNationalFocusProgress"),
+            (0x43a5750, 0x256020, 0x257100, "CTechnologyStatus"),
+            (0x43973a0, 0x256040, 0x257200, "CNationalFocus"),
         ] {
             self.word(table - 8, ti);
             self.region(ti, 16);
@@ -1262,7 +1262,7 @@ fn focus_command_positive_tag_scope_before_payload_and_wrong_progress_type() {
     assert!(f.untouched(CO + 0x1348, 8));
     let mut f = Fake::new();
     f.command_context_fixture();
-    f.word(0x254000, 0x42024d0);
+    f.word(0x254000, 0x43973a0);
     assert_eq!(
         own_focus::command_owned(&f, "GER_rhineland", false)
             .unwrap_err()
@@ -1302,10 +1302,10 @@ fn focus_command_exact_key_before_progress_and_owned_slot_scope() {
     let mut f = Fake::new();
     f.command_context_fixture();
     f.region(0x259000, 0x60);
-    f.word(0x259000, 0x4210898);
+    f.word(0x259000, 0x43a56f0);
     f.word(0x259010, 0x255000);
     f.array(0x2550a0, 0x25a000, &[0x259000]);
-    f.word(0x4210890, 0x256060);
+    f.word(0x43a56e8, 0x256060);
     f.region(0x256060, 16);
     f.word(0x256068, 0x257300);
     f.region(0x257300, 128);
@@ -1381,12 +1381,12 @@ impl Fake {
         self.command_context_fixture();
         self.int(MAN + 0x3d8, 13);
         self.region(0x260000, 0xf00);
-        self.word(0x260000, 0x4347d58);
+        self.word(0x260000, 0x44de2b0);
         self.word(0x260098, GUI);
         self.put(0x2600a5, &[8]);
         self.word(VIEW + 0x2f8, 0x260000);
         self.region(0x261000, 0xe00);
-        self.word(0x261000, 0x424de40);
+        self.word(0x261000, 0x43e3b88);
         self.word(0x2612f0, ID);
         self.int(0x261e20, 1);
         self.int(0x261e24, 6);
@@ -1400,12 +1400,12 @@ impl Fake {
     fn research_info_fixture(&mut self) {
         self.array(0x261dc0, 0x263000, &[0x262000]);
         self.region(0x262000, 0xb00);
-        self.word(0x262000, 0x430bbf0);
+        self.word(0x262000, 0x44a17b0);
         self.word(0x262a78, ID);
         self.word(0x262a80, 0x261000);
         self.word(0x262a88, 0x264000);
         self.region(0x264000, 0xf00);
-        self.word(0x264000, 0x4347d58);
+        self.word(0x264000, 0x44de2b0);
         self.word(0x264098, GUI);
         // Poison selected technology. GUI blocker reads must not touch it or payload.
         self.word(0x262a98, 0xdead0000);
@@ -1452,7 +1452,7 @@ fn focus_ui_complete_nonmatching_details_are_inspected_for_local_flags_only() {
     let mut f = Fake::new();
     f.own_focus_ui_fixture();
     f.region(0x265000, 0x1800);
-    f.word(0x265000, 0x42024d0);
+    f.word(0x265000, 0x43973a0);
     f.word(0x265160, TREE);
     f.string(0x265018, "GER_other");
     f.array(TREE + 0x30, 0x212000, &[F, 0x265000]);
@@ -1464,7 +1464,7 @@ fn focus_ui_complete_nonmatching_details_are_inspected_for_local_flags_only() {
     f.word(0x2667d0, 0x265000);
     f.word(0x2667c8, 0x267000);
     f.region(0x267000, 0xf00);
-    f.word(0x267000, 0x4347d58);
+    f.word(0x267000, 0x44de2b0);
     f.word(0x267098, GUI);
     f.put(0x2670a5, &[8]);
     f.array(VIEW + 0x1180, 0x214000, &[PANEL, 0x266000]);
@@ -1875,7 +1875,7 @@ fn selected_detail_exposes_start_window_even_when_node_symbol_route_is_unavailab
     f.start_binding();
     f.start_listener_targets(&[PANEL + 0x2a8]);
     f.focus_nodes();
-    f.word(0x234000, 0x4346b10); // Node symbol is not the detail Start button.
+    f.word(0x234000, 0x44dcf10); // Node symbol is not the detail Start button.
     let original = f.node_result().unwrap();
     assert_eq!(
         original["node_association"]["controls"][0]["binding_verified"],
@@ -1952,7 +1952,7 @@ fn selected_detail_refuses_missing_selection_and_missing_window_explicitly() {
 fn selected_detail_refuses_wrong_key_or_multiple_selected_details_without_guessing() {
     let mut f = Fake::new();
     f.region(0x238000, 0x1800);
-    f.word(0x238000, 0x42024d0);
+    f.word(0x238000, 0x43973a0);
     f.word(0x238160, TREE);
     f.string(0x238018, "GER_other");
     f.array(TREE + 0x30, 0x212000, &[F, 0x238000]);

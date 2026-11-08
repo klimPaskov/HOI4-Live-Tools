@@ -28,7 +28,7 @@ impl UiMemory {
         m.number(0x303d8, 13);
         m.word(0x402f8, 0x60000);
         m.zero(0x60000, 0xf00);
-        m.word(0x60000, 0x10000 + 0x4347d58);
+        m.word(0x60000, 0x10000 + 0x44de2b0);
         m.word(0x60098, 0x50000);
         m.put(0x600a5, &[8]);
         m.array(0x41180, 0x90000, i32::from(start));
@@ -40,14 +40,14 @@ impl UiMemory {
             m.word(0x807c0, 0x40000);
             m.word(0x807c8, 0x81000);
             m.zero(0x81000, 0xf00);
-            m.word(0x81000, 0x10000 + 0x4347d58);
+            m.word(0x81000, 0x10000 + 0x44de2b0);
             m.word(0x81098, 0x50000);
             m.put(0x810a5, &[8]);
         }
         m.word(0x300f8, 0x70000);
         m.word(0x300f0, 0);
         m.zero(0x70000, 0xe30);
-        m.word(0x70000, 0x10000 + 0x424de40);
+        m.word(0x70000, 0x10000 + 0x43e3b88);
         m.word(0x702f0, 0x20000);
         m.number(0x70e24, 6);
         m.array(0x70dc0, 0, 0);
@@ -332,12 +332,12 @@ fn positively_observed_own_info_and_detail_animation_blockers_refuse() {
         m.array(0x70dc0, 0xa0000, 1);
         m.word(0xa0000, 0xa1000);
         m.zero(0xa1000, 0xb00);
-        m.word(0xa1000, 0x10000 + 0x430bbf0);
+        m.word(0xa1000, 0x10000 + 0x44a17b0);
         m.word(0xa1a78, 0x20000);
         m.word(0xa1a80, 0x70000);
         m.word(0xa1a88, 0xa2000);
         m.zero(0xa2000, 0xf00);
-        m.word(0xa2000, 0x10000 + 0x4347d58);
+        m.word(0xa2000, 0x10000 + 0x44de2b0);
         m.word(0xa2098, 0x50000);
         m.put(0xa20a5, &[visible]);
         m.number(0xa2eb0, animation);
@@ -364,7 +364,7 @@ fn retained_other(m: &mut UiMemory, start: bool, visible: u8, animation: i32) {
     m.word(0xb07c0, 0x40000);
     m.word(0xb07c8, 0xb1000);
     m.zero(0xb1000, 0xf00);
-    m.word(0xb1000, 0x10000 + 0x4347d58);
+    m.word(0xb1000, 0x10000 + 0x44de2b0);
     m.word(0xb1098, 0x50000);
     m.put(0xb10a5, &[visible]);
     m.number(0xb1eb0, animation);

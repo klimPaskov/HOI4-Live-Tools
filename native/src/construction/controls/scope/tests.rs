@@ -66,10 +66,10 @@ impl Fixture {
             fault_reads: Cell::new(0),
         };
         let base = 0x10000;
-        f.word(base + 0x44086a8, 0x30000);
-        f.word(base + 0x44085f8, 0x32000);
-        f.word(base + 0x439f450, 0x36000);
-        f.word(base + 0x43f3eb8, 0x37000);
+        f.word(base + 0x459e9f0, 0x30000);
+        f.word(base + 0x459e908, 0x32000);
+        f.word(base + 0x45353b0, 0x36000);
+        f.word(base + 0x458a088, 0x37000);
         for (a, n) in [
             (0x30000, 0x700),
             (0x32000, 0x700),
@@ -79,8 +79,8 @@ impl Fixture {
         ] {
             f.region(a, n);
         }
-        f.word(0x30000, base + 0x42c7598);
-        f.word(0x32000, base + 0x42c9a88);
+        f.word(0x30000, base + 0x445e068);
+        f.word(0x32000, base + 0x4460048);
         f.number(0x30460, 60759371);
         f.number(0x304b4, 4);
         f.number(0x30518, 1);
@@ -165,25 +165,25 @@ impl Process for Fixture {
 }
 impl Fixture {
     fn economy(&mut self) {
-        self.object(0x20000, "CCountry", 0x10000 + 0x41fafb0);
+        self.object(0x20000, "CCountry", 0x10000 + 0x438fe10);
         self.number(0x20008, 1);
         self.region(0x40000, 0x400);
         self.region(0x41000, 0x100);
         self.word(0x20f40, 0x40000);
         self.word(0x20f68, 0x41000);
-        self.word(0x40000, 0x10000 + 0x42066f8);
-        self.word(0x40290, 0x20000);
-        self.word(0x41000, 0x10000 + 0x4202e30);
+        self.word(0x40000, 0x10000 + 0x439b308);
+        self.word(0x402a8, 0x20000);
+        self.word(0x41000, 0x10000 + 0x4397cf0);
         self.word(0x410c8, 0x20000);
         for (off, raw) in [
-            (0x2b8, 1_099_999i64),
-            (0x318, 599_999),
-            (0x378, 2_099_999),
-            (0x390, 350_000),
+            (0x2d0, 1_099_999i64),
+            (0x330, 599_999),
+            (0x390, 2_099_999),
+            (0x3a8, 350_000),
         ] {
             self.put(0x40000 + off, &raw.to_le_bytes());
         }
-        for (off, n) in [(0x2f8, 1), (0x300, 2), (0x3b8, 3), (0x3c0, 4), (0x3b0, 5)] {
+        for (off, n) in [(0x310, 1), (0x318, 2), (0x3d0, 3), (0x3d8, 4), (0x3c8, 5)] {
             self.number(0x40000 + off, n);
         }
         self.put(0x410e0, &(-150_001i64).to_le_bytes());
@@ -201,22 +201,22 @@ fn fixture() -> Fixture {
     let mut f = Fixture::new();
     f.economy();
     f.array(0x40070, 0x70000, 3);
-    f.word(BASE + 0x439f400, DB);
-    f.word(DB, BASE + 0x41b3ed8);
+    f.word(BASE + 0x4535360, DB);
+    f.word(DB, BASE + 0x43484a8);
     f.array(DB + 0x40, LIST, 3);
     for (index, template) in [SENTINEL, TEMPLATE, OTHER].iter().enumerate() {
         f.word(LIST + index as u64 * 8, *template);
     }
     for (template, key) in [(TEMPLATE, "infrastructure"), (OTHER, "arms_factory")] {
-        f.word(template, BASE + 0x41b49c8);
+        f.word(template, BASE + 0x4348f98);
         f.put(template + 0x18, &[1]);
         f.string(template + 0x248, key);
         // Neither intern nor localized name is needed for this direct key join.
     }
     for (i, line, table, handle) in [
-        (0, 0x80000, 0x4205680, 0xffff00010000003bu64),
-        (1, 0x81000, 0x42ee398, 0xf234567812345678),
-        (2, 0x82000, 0x4205680, 0x123400020000003b),
+        (0, 0x80000, 0x439a290, 0xffff00010000003bu64),
+        (1, 0x81000, 0x4483a10, 0xf234567812345678),
+        (2, 0x82000, 0x439a290, 0x123400020000003b),
     ] {
         f.word(0x70000 + i * 8, line);
         f.word(line, BASE + table);
@@ -232,11 +232,11 @@ fn fixture() -> Fixture {
         f.number(line + 0x48, 3);
     }
     for (line, building, template) in [(0x80000, 0xd0000, TEMPLATE), (0x82000, 0xd1000, OTHER)] {
-        f.word(line + 0x70, building);
-        f.number(line + 0x78, 1);
-        f.put(line + 0x8c, &[1]);
-        f.put(line + 0x99, &[1]);
-        f.word(building, BASE + 0x41b3e60);
+        f.word(line + 0x78, building);
+        f.number(line + 0x80, 1);
+        f.put(line + 0x94, &[1]);
+        f.put(line + 0xa1, &[1]);
+        f.word(building, BASE + 0x4348430);
         f.word(building + 0x1c0, template);
         // No location/foreign state or railway payload bytes are readable.
     }
@@ -289,25 +289,25 @@ fn named(f: &mut Fixture, window: u64, children: bool, name: &str, value: u64) {
 }
 fn window(f: &mut Fixture, p: u64, shown: bool) {
     f.region(p, 0xf00);
-    f.word(p, BASE + 0x4347d58);
+    f.word(p, BASE + 0x44de2b0);
     f.word(p + 0x98, REG);
     f.put(p + 0xa5, &[if shown { 8 } else { 0 }]);
 }
 fn control(f: &mut Fixture, button: u64, owner: u64, choice: bool) {
     f.region(button, 0x208);
-    f.word(button, BASE + 0x43470c8);
+    f.word(button, BASE + 0x44dd4f0);
     f.word(button + 0x68, REG);
     f.number(button + 0x74, 0x800);
     f.number(button + 0xac, 2);
-    f.word(button + 0x80, BASE + 0x4347488);
+    f.word(button + 0x80, BASE + 0x44dd8d0);
     let link = button + 0x3000;
     f.word(button + 0x88, link);
     f.word(button + 0x90, link);
     f.number(button + 0x98, 1);
     let (off, primary, manager, invoker, member) = if choice {
-        (0x28, 0x43104c0, 0x297df40, 0x297df10, 0x296f810)
+        (0x28, 0x44a6130, 0x297df40, 0x297df10, 0x2ac88c0)
     } else {
-        (0x21f0, 0x426c518, 0x1886560, 0x1886530, 0x186d470)
+        (0x21f0, 0x4402d18, 0x1886560, 0x1886530, 0x186d470)
     };
     let glue = owner + off;
     f.region(glue, 0x288);
@@ -329,8 +329,8 @@ fn control(f: &mut Fixture, button: u64, owner: u64, choice: bool) {
 fn controls_fixture() -> Fixture {
     let mut f = fixture();
     f.region(REG, 0x240);
-    f.word(REG, BASE + 0x42736f8);
-    f.word(BASE + 0x45778e0, REG);
+    f.word(REG, BASE + 0x4409f68);
+    f.word(BASE + 0x470e6d8, REG);
     f.word(0x324f8, REG);
     f.region(MAN, 0x500);
     f.word(0x326b8, MAN);
@@ -339,11 +339,11 @@ fn controls_fixture() -> Fixture {
     f.word(MAN + 0x150, PANEL);
     f.word(MAN + 0x188, TOP);
     f.region(PANEL, 0x340);
-    f.word(PANEL, BASE + 0x43101d8);
+    f.word(PANEL, BASE + 0x44a5e20);
     f.word(PANEL + 0x2f0, 0x32000);
     f.word(PANEL + 0x2f8, CONSTRUCTION_ROOT);
     f.region(TOP, 0x5000);
-    f.word(TOP, BASE + 0x426c3d0);
+    f.word(TOP, BASE + 0x4402bc0);
     f.word(TOP + 0x68, 0x32000);
     f.word(TOP + 0x70, MAN);
     f.word(TOP + 0x78, ROOT);
@@ -366,7 +366,7 @@ fn controls_fixture() -> Fixture {
     f.array(PANEL + 0x320, ITEMS, 1);
     f.word(ITEMS, ITEM);
     f.region(ITEM, 0x300);
-    f.word(ITEM, BASE + 0x43100f8);
+    f.word(ITEM, BASE + 0x44a5d40);
     f.word(ITEM + 0x20, TEMPLATE);
     f.word(ITEM + 0x10, CW);
     f.number(TEMPLATE + 0x2b8, 1);
@@ -376,23 +376,23 @@ fn controls_fixture() -> Fixture {
     f.word(MAN + 0x128, POLITICS);
     f.word(MAN + 0x130, FOCUS);
     f.region(FOCUS, 0x1200);
-    f.word(FOCUS, BASE + 0x4249c70);
+    f.word(FOCUS, BASE + 0x43df748);
     f.word(FOCUS + 0x2f0, 0x32000);
     f.word(FOCUS + 0x2f8, FROOT);
     f.word(FOCUS + 0x11d8, 0x20000);
     f.region(POLITICS, 0x300);
-    f.word(POLITICS, BASE + 0x42546e8);
+    f.word(POLITICS, BASE + 0x43ea4f8);
     f.word(POLITICS + 0x2f0, 0x32000);
     f.word(POLITICS + 0x38, MAN);
     f.word(POLITICS + 0x2f8, PROOT);
     f.word(MAN + 0xf0, RESEARCH);
     f.region(RESEARCH, 0x300);
-    f.word(RESEARCH, BASE + 0x424dc38);
+    f.word(RESEARCH, BASE + 0x43e3978);
     f.word(RESEARCH + 0x2f0, 0x32000);
     f.word(RESEARCH + 0x2f8, RROOT);
     f.word(MAN + 0xf8, TREE);
     f.region(TREE, 0xe28);
-    f.word(TREE, BASE + 0x424de40);
+    f.word(TREE, BASE + 0x43e3b88);
     f.word(TREE + 0x2f0, 0x32000);
     f.word(TREE + 0x2f8, TROOT);
     f.number(TREE + 0xe20, 1);
@@ -406,8 +406,8 @@ fn controls_fixture() -> Fixture {
 fn geometry_fixture() -> Fixture {
     let mut f = controls_fixture();
     f.region(GRAPHICS, 0x200);
-    f.word(GRAPHICS, BASE + 0x42417f8);
-    f.word(BASE + 0x4577890, GRAPHICS);
+    f.word(GRAPHICS, BASE + 0x43d7220);
+    f.word(BASE + 0x470e688, GRAPHICS);
     f.word(REG + 0xb8, GRAPHICS);
     for (i, n) in [512, 288, 2560, 1440].into_iter().enumerate() {
         f.number(GRAPHICS + 0x178 + i as u64 * 4, n);
@@ -420,8 +420,8 @@ fn geometry_fixture() -> Fixture {
 
 fn metadata(f: &mut Fixture, object: u64, primary: u64, name: &str) {
     let primary = BASE + primary;
-    let info = BASE + 0x435a800;
-    let string = BASE + 0x3516000;
+    let info = BASE + 0x44f0c40;
+    let string = BASE + 0x368e000;
     f.word(object, primary);
     f.word(primary - 16, 0);
     f.word(primary - 8, info);
@@ -462,8 +462,8 @@ fn copy_region(f: &mut Fixture, old: u64, new: u64, count: u64) {
 }
 fn typed(f: &mut Fixture, object: u64, primary: u64, name: &str, slot: u64) {
     let table = BASE + primary;
-    let info = BASE + 0x435a800 + slot * 0x40;
-    let string = BASE + 0x3516000 + slot * 0x100;
+    let info = BASE + 0x44f0c40 + slot * 0x40;
+    let string = BASE + 0x368e000 + slot * 0x100;
     f.word(object, table);
     f.word(table - 16, 0);
     f.word(table - 8, info);
@@ -481,7 +481,7 @@ const CHOICE_A: u64 = 0x450000;
 const CHOICE_B: u64 = 0x451000;
 fn node(f: &mut Fixture, p: u64) {
     f.region(p, 0x200);
-    typed(f, p, 0x43484f0, "C2dPositionObject", 2);
+    typed(f, p, 0x44dea58, "C2dPositionObject", 2);
     for off in [0x80, 0x94, 0x114] {
         f.put(p + off, &1.0f32.to_le_bytes());
     }
@@ -508,12 +508,12 @@ fn sprite_fixture() -> Fixture {
         ),
     ] {
         node(&mut f, render);
-        typed(&mut f, render, 0x4356e08, "CSprite", 0);
+        typed(&mut f, render, 0x44ed1d8, "CSprite", 0);
         f.word(button + 0xe8, render);
         f.word(render + 0x138, button);
         f.word(render + 0x168, resource);
         f.region(resource, 0x200);
-        typed(&mut f, resource, 0x4357160, "CSpriteType", 1);
+        typed(&mut f, resource, 0x44ed530, "CSpriteType", 1);
         for off in [0x90, 0x94] {
             f.number(resource + off, 1);
         }
@@ -758,7 +758,7 @@ fn missing_or_foreign_identities_leave_public_unavailable_and_refuse_action_scop
     assert!(o.scope(Stage::EnsureOpen).is_err());
     production_not_read(&f, &[FROOT, FROOT + 0xa5]);
     let mut f = controls_fixture();
-    f.word(ITEM, BASE + 0x43100f9);
+    f.word(ITEM, BASE + 0x44a5d41);
     let o = observed(&f, "infrastructure", false, None).unwrap();
     assert_eq!(o.value["choice"]["complete_choice_coverage"], false);
     assert!(o.scope(Stage::EnsureOpen).is_ok());

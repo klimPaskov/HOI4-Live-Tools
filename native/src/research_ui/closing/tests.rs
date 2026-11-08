@@ -31,7 +31,7 @@ fn closing_window_requires_literal_settled_owned_container() {
     let root = 0x20000;
     let registry = 0x30000;
     let mut m = Bytes::default();
-    m.word(root, base + 0x4347d58);
+    m.word(root, base + 0x44de2b0);
     m.word(root + 0x98, registry);
     m.put(root + 0xa5, &[8]);
     m.put(root + 0xeb0, &0i32.to_le_bytes());
@@ -49,7 +49,7 @@ fn closing_window_requires_literal_settled_owned_container() {
     m.word(root + 0x98, registry + 8);
     assert!(settled(&Reader::new(&m), base, root, registry).is_err());
     m.word(root + 0x98, registry);
-    m.word(root, base + 0x42f2708); // embedded view must never masquerade as window
+    m.word(root, base + 0x4487c30); // embedded view must never masquerade as window
     assert!(settled(&Reader::new(&m), base, root, registry).is_err());
     assert!(settled(&Reader::new(&m), base, 0, registry).is_err());
 }
@@ -60,7 +60,7 @@ fn closing_root_diagnostic_names_and_states_never_authorize_transition_retry() {
     let root = 0x20000;
     let registry = 0x30000;
     let mut m = Bytes::default();
-    m.word(root, base + 0x4347d58);
+    m.word(root, base + 0x44de2b0);
     m.word(root + 0x98, registry);
     m.put(root + 0xa5, &[8]);
     m.put(root + 0xeb0, &1i32.to_le_bytes());

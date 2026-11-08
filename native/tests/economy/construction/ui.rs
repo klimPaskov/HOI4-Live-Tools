@@ -16,7 +16,7 @@ const TEXT: u64 = 0x11d000;
 const HANDLE: u64 = 0xffff00010000003b;
 
 fn visible_window(f: &mut Fixture, p: u64) {
-    f.word(p, BASE + 0x4347d58);
+    f.word(p, BASE + 0x44de2b0);
     f.word(p + 0x98, REGISTRY);
     f.put(p + 0xa5, &[8]);
     f.number(p + 0xeb0, 0);
@@ -25,18 +25,18 @@ fn visible_window(f: &mut Fixture, p: u64) {
 fn fixture_ui() -> Fixture {
     let mut f = locations::located();
     f.word(0x324f8, REGISTRY);
-    f.word(REGISTRY, BASE + 0x42736f8);
+    f.word(REGISTRY, BASE + 0x4409f68);
     f.word(0x326b8, MANAGER);
     f.word(MANAGER + 0x180, 0x32000);
     f.number(MANAGER + 0x3f0, 0);
     f.word(MANAGER + 0x150, PANEL);
-    f.word(PANEL, BASE + 0x43101d8);
+    f.word(PANEL, BASE + 0x44a5e20);
     f.word(PANEL + 0x2f0, 0x32000);
     f.word(PANEL + 0x2f8, ROOT);
     visible_window(&mut f, ROOT);
     f.array(PANEL + 0x308, ITEMS, 1);
     f.word(ITEMS, ROW);
-    f.word(ROW, BASE + 0x4265548);
+    f.word(ROW, BASE + 0x43fba78);
     f.word(ROW + 0x538, REGISTRY);
     f.word(ROW + 0x540, HANDLE);
     f.word(ROW + 0xce8, HANDLE);
@@ -46,7 +46,7 @@ fn fixture_ui() -> Fixture {
     f.array(WINDOW + 0xa78, NAMES, 1);
     f.word(POINTERS, TEXT);
     f.string(NAMES, "location");
-    f.word(TEXT, BASE + 0x434c8a0);
+    f.word(TEXT, BASE + 0x44e2b10);
     f.word(TEXT + 0x68, REGISTRY);
     f.string(TEXT + 0x110, "Brandenburg");
     f
@@ -118,7 +118,7 @@ fn unjoined_full_handles_foreign_locations_and_unknown_rows_never_read_text_payl
     assert_eq!(observe(&f).unwrap()["ui"]["unjoined_row_count"], 1);
     production_not_read(&f, &[ROW + 0x10, WINDOW, TEXT]);
     let mut f = fixture_ui();
-    f.word(ROW, BASE + 0x4265549);
+    f.word(ROW, BASE + 0x43fba79);
     assert_eq!(observe(&f).unwrap()["ui"]["unsupported_row_count"], 1);
     production_not_read(&f, &[ROW + 0x540, ROW + 0xce8, ROW + 0x10, WINDOW, TEXT]);
 }
@@ -178,7 +178,7 @@ fn duplicate_own_rows_and_duplicate_array_members_are_rejected() {
         f.array(PANEL + 0x308, ITEMS, 2);
         let second = if duplicate_pointer { ROW } else { 0x120000 };
         f.word(ITEMS + 8, second);
-        f.word(second, BASE + 0x4265548);
+        f.word(second, BASE + 0x43fba78);
         f.word(second + 0x538, REGISTRY);
         f.word(second + 0x540, HANDLE);
         f.word(second + 0xce8, HANDLE);

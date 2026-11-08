@@ -124,11 +124,13 @@ fn linux() -> Result<&'static Layout> {
             widget_flags: fld(a, &GUI_OBJECT, m.widget_flags)?,
         })
     }
-    static LINUX: OnceLock<std::result::Result<Layout, Error>> = OnceLock::new();
-    LINUX
-        .get_or_init(translate)
-        .as_ref()
-        .map_err(|e| Error::new(e.code, e.message.clone()))
+    // Only a complete translation is kept; a refusal is answered again on the next read.
+    static LINUX: OnceLock<Layout> = OnceLock::new();
+    if let Some(layout) = LINUX.get() {
+        return Ok(layout);
+    }
+    let layout = translate()?;
+    Ok(LINUX.get_or_init(|| layout))
 }
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn linux() -> Result<&'static Layout> {
@@ -165,6 +167,10 @@ fn pointer(p: u64) -> Result<u64> {
 }
 
 /// Widget name from its GUI type, or None for an untyped widget.
+/// Bound on image-relative addresses (vtables, type information): the macOS
+/// image ends near 0x3800000, the Linux ELF's data near 0x4810000.
+pub(crate) const IMAGE_SPAN: u64 = 0x1000_0000;
+
 pub(crate) fn name(r: &Reader<'_>, base: u64, image: u64) -> Result<Option<String>> {
     let l = layout(r)?;
     let kind = r.u64(base + l.widget_type)?;
@@ -173,7 +179,7 @@ pub(crate) fn name(r: &Reader<'_>, base: u64, image: u64) -> Result<Option<Strin
     }
     pointer(kind)?;
     // The type's own primary must be an image vtable; anything else is not a GUI type.
-    if !(image..image + 0x400_0000).contains(&r.u64(kind)?) {
+    if !(image..image + IMAGE_SPAN).contains(&r.u64(kind)?) {
         return Ok(None);
     }
     let name = r.string_bounded(kind + l.type_name, 128)?;

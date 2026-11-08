@@ -6,7 +6,7 @@ Generated from the server's registry (`python -m hoi4_live docs`). Coordinates a
 
 ### `hoi4_launch`
 
-Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game already runs it is left alone (restart=true quits it through its own menu first). The playset and settings are never changed.
+Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game already runs it is left alone (restart=true quits it through its own menu first). The playset and settings are never changed. A -debug launch fails at once when the game reports a MAP_ERROR (it waits on an OK dialog), with the error lines and a screenshot; a normal launch lists them as map_errors.
 
 _lock: acting_
 
@@ -15,11 +15,13 @@ _lock: acting_
 | `debug` | boolean |  | false | launch with -debug |
 | `wait_menu` | boolean |  | true |  |
 | `restart` | boolean |  | false | quit a running game first |
+| `prepare_dlc` | boolean |  | false | copy launcher-v2.sqlite and dlc_signature into the run's user folder first (see hoi4_prepare); hoi4_shutdown puts the folder back |
 | `timeout_s` | integer |  | 900 |  |
 | `mode` | test \| campaign |  |  | switch the session mode first (campaign refuses console cheats) |
 
 - `hoi4_launch {}` (normal launch)
 - `hoi4_launch {"debug": true}` (debug build)
+- `hoi4_launch {"debug": true, "prepare_dlc": true}` (scratch user folder: keep the DLC without Steam)
 
 ### `hoi4_load`
 
@@ -58,7 +60,7 @@ _lock: none_
 
 ### `hoi4_new_game`
 
-Start a new game from the main menu (or from a running game with exit_to_menu=true): Single Player, New Game, the scenario (bookmark label, e.g. '1939'), a major country by its name on the Select Country screen, START. In test mode `tag` switches to any country afterwards with the console. Waits until the map is up.
+Start a new game from the main menu (or from a running game with exit_to_menu=true): Single Player, New Game, the scenario (bookmark label, e.g. '1939'), a major country by its name on the Select Country screen, START. start=false stops at the ready screen for rules review. In test mode `tag` switches to any country afterwards with the console. Otherwise waits until the map is up.
 
 _lock: acting_
 
@@ -66,6 +68,8 @@ _lock: acting_
 |---|---|---|---|---|
 | `bookmark` | string |  |  | scenario label regex, e.g. '1936' or 'August, 1939' |
 | `country` | string |  |  | a major's name as shown, e.g. 'United States', 'German Reich' |
+| `start` | boolean |  | true | false prepares the ready screen without clicking START |
+| `rules` | inspect \| reset_defaults |  |  | with start=false, inspect custom rules or click their normal Reset and Apply |
 | `exit_to_menu` | boolean |  | false | resign the running game first (unsaved progress is lost) |
 | `tag` | string |  |  | switch to this tag (test mode) |
 | `mode` | test \| campaign |  |  | switch the session mode first (campaign refuses console cheats) |
@@ -73,6 +77,22 @@ _lock: acting_
 - `hoi4_new_game {"country": "United States"}` (1936 USA)
 - `hoi4_new_game {"country": "German Reich", "tag": "SWE"}` (start, then tag-switch to Sweden (test mode))
 - `hoi4_new_game {"bookmark": "1939", "country": "Soviet Union", "exit_to_menu": true}`
+
+### `hoi4_prepare`
+
+Prepare the run's user folder for a launch without the Steam client, which keeps the DLC. A game started without the Steam client finds no DLC in a user folder that lacks launcher-v2.sqlite and dlc_signature. action=apply copies those two files from the normal user folder (config dlc_source_dir) into the run's folder (user_dir, e.g. a scratch folder set by HOI4_LIVE_USER_DIR) after backing up what they replace. action=restore puts the original state back once the game has exited (hoi4_shutdown does that by itself). action=status only reports. Nothing is copied when the run's folder is the normal one. Launch order: hoi4_prepare, hoi4_launch, test, hoi4_shutdown.
+
+_lock: none_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `action` | status \| apply \| restore |  | "apply" |  |
+| `source_dir` | string |  |  | folder to copy the two files from (default: config dlc_source_dir, the normal Paradox user folder) |
+| `force` | boolean |  | false | restore: also restore a file that changed after the copy (the changed file is kept next to the backup as <name>.after-run), and restore while a game still runs |
+
+- `hoi4_prepare {}` (copy the DLC files)
+- `hoi4_prepare {"action": "status"}` (what each folder holds and whether a prepare is needed)
+- `hoi4_prepare {"action": "restore"}` (after the game exited, if hoi4_shutdown was not used)
 
 ### `hoi4_save`
 
@@ -129,6 +149,7 @@ _lock: acting_
 | `text` | string |  |  | regex of a visible label to click instead of x/y |
 | `button` | left \| right \| middle |  | "left" |  |
 | `clicks` | integer |  | 1 |  |
+| `modifiers` | array of string |  |  | keys held during the click (shift or ctrl to add to a selection) |
 | `verify` | boolean |  | true | re-read the screen and attach a screenshot |
 
 - `hoi4_click {"x": 960, "y": 540}`
@@ -255,6 +276,36 @@ _lock: acting_
 
 ## Test mode
 
+### `hoi4_check_focus`
+
+Is a national focus selectable for a country, in the running game (test mode)? Returns true or false with the unmet condition. From the focus's script it asks the game about: already completed, each prerequisite group, each mutually exclusive focus, every condition of `available` and `allow_branch`; a bypass that holds is reported too. The files are the game's and the enabled mods' (common/national_focus). A focus already in progress, the focus slots and the political power are not checked. Nothing in the game changes.
+
+_lock: acting, test mode only_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `focus` | string | yes |  | focus id |
+| `tag` | string |  |  | country tag; omit for the player |
+| `depth` | integer |  | 2 | how many levels of a false block to explain (1: only the top-level conditions) |
+
+- `hoi4_check_focus {"focus": "GER_rhineland", "tag": "GER"}`
+- `hoi4_check_focus {"focus": "my_mod_focus_2"}`
+
+### `hoi4_check_trigger`
+
+Evaluate a trigger block in the running game for a country (test mode) and return true or false with the unmet condition. Each top-level condition is asked on its own, and a false block is explained by its children (OR: all false, NOT: the child that is true). `trigger` is the conditions as written in a script, with or without an outer `limit = { }`. A condition longer than about 170 characters cannot go through the console in one piece and is split into its children. Nothing in the game changes. The answer is read from game.log.
+
+_lock: acting, test mode only_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `trigger` | string | yes |  | conditions, e.g. 'has_war = yes NOT = { is_in_faction = yes }' |
+| `scope` | string |  |  | country tag, or a state id for a state trigger; omit for the player |
+| `depth` | integer |  | 2 | how many levels of a false block to explain (1: only the top-level conditions) |
+
+- `hoi4_check_trigger {"trigger": "has_war = yes", "scope": "GER"}`
+- `hoi4_check_trigger {"trigger": "limit = { date > 1937.1.1 OR = { tag = GER tag = ITA } }"}` (the player)
+
 ### `hoi4_console`
 
 Run console commands in the game (test mode). Commands are pasted, executed in order, and the console output that appeared after each one is read back with OCR. The console is closed again afterwards and new error.log lines are reported.
@@ -354,6 +405,48 @@ _lock: acting_
 
 - `hoi4_scenario {"name": "smoke", "steps": [{"tool": "hoi4_status"}, {"tool": "hoi4_fire_event", "args": {"event": "my_mod.1", "tag": "USA", "answer": "first"}}, {"tool": "hoi4_time", "args": {"action": "step", "days": 10}}, {"tool": "hoi4_save", "args": {"name": "smoke"}}, {"tool": "hoi4_logs", "args": {"since": "session"}}]}`
 
+### `hoi4_smoke_namespace`
+
+Smoke test of a mod namespace (test mode). Fires every event `<namespace>.N` through the console, answers each option of its window (one firing per option, options=each), and takes the decisions of a category or id prefix through the decision panel after checking their conditions with the game. After every step the new error.log lines are read. Returns one report (Markdown and JSON under artifacts/): per event and decision the window seen, the options answered, the unmet condition of a decision that could not be taken, and the error lines. State, unit leader and character events, targeted decisions and missions are skipped with the reason. dry_run lists what would be fired without touching the game. A long namespace takes minutes (about 6 s per firing); `only` and `limit` narrow it.
+
+_lock: acting, test mode only_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `namespace` | string | yes |  | event namespace, e.g. my_mod |
+| `tag` | string |  |  | country the events fire for and the decisions are taken as: the player is switched to it first with the console `tag` command and stays switched; omit for the current player |
+| `what` | events \| decisions \| both |  | "events" |  |
+| `decision_category` | string |  |  | decisions of this category |
+| `decision_prefix` | string |  |  | decisions whose id starts with this (default: the namespace when what includes decisions) |
+| `options` | each \| first |  | "each" | each: fire again for every option; first: only the first option |
+| `only` | array of string |  |  | just these event or decision ids |
+| `limit` | integer |  | 60 | events and decisions to run, each, in id order |
+| `wait_s` | number |  | 2.0 | seconds to wait for a window after firing |
+| `pp` | integer |  | 2000 | political power added once before taking decisions (0: none) |
+| `stop_on_error` | boolean |  | false |  |
+| `dry_run` | boolean |  | false |  |
+
+- `hoi4_smoke_namespace {"namespace": "my_mod", "tag": "GER"}`
+- `hoi4_smoke_namespace {"namespace": "my_mod", "what": "both", "decision_category": "my_mod_decisions"}`
+- `hoi4_smoke_namespace {"namespace": "my_mod", "dry_run": true}`
+
+### `hoi4_sweep_loc`
+
+Sweep the game for untranslated and broken text (test mode). Visits the bare map and each panel, reads the screen with OCR and flags [missing_key], raw localisation keys (my_mod.1.t, GER_focus_name), unresolved variables ($NAME$, [Root.GetName], literal \n), section-sign colour codes and your own regexes. A screenshot is kept for every screen with findings. Also lists the localisation warnings that error.log and text.log gained during the sweep (since='all' adds the ones that were already there). Panels that do not open are reported and skipped. Ends on the bare map and writes a report (Markdown + JSON) under artifacts/.
+
+_lock: acting, test mode only_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `panels` | array of string |  | ["politics", "decisions", "research", "production", "construction", "trade", "deployment", "logistics", "officer_corps", "faction", "army_overview", "navy_overview", "air_overview", "intelligence"] | panels to open after the map (default: all 14 with a key, [] sweeps the map only) |
+| `extra_patterns` | array of string |  |  | regexes (case-insensitive search) for text you want flagged |
+| `since` | start \| all |  | "start" | log warnings since the sweep started, or also those already in the logs |
+| `max_lines_per_screen` | integer |  | 40 | findings listed per screen (the totals count all of them) |
+
+- `hoi4_sweep_loc {}`
+- `hoi4_sweep_loc {"panels": ["politics", "decisions"], "extra_patterns": ["^TODO", "lorem ipsum"]}`
+- `hoi4_sweep_loc {"panels": [], "since": "all"}`
+
 ## Time
 
 ### `hoi4_time`
@@ -427,9 +520,9 @@ _lock: acting_
 
 | argument | type | required | default | description |
 |---|---|---|---|---|
-| `action` | modes \| view \| front \| at |  | "view" |  |
+| `action` | modes \| view \| front \| at \| minimap |  | "view" |  |
 | `mode` | string |  |  | map mode name (default, supply, terrain, resistance, ...) or F1-F10 |
-| `target` | string |  |  | state id, state or province name, 'capital' or 'front' |
+| `target` | string |  |  | state id, state or province name, 'capital' or 'front'; 'sea:<strategic region id>' or 'point:<x>,<y>' (map pixels) go through the minimap |
 | `zoom` | string |  | "region" | close | province | region | country | continent | world | notches like -5 |
 | `x` | integer |  |  |  |
 | `y` | integer |  |  |  |
@@ -442,6 +535,13 @@ _lock: acting_
 - `hoi4_map {"action": "view", "mode": "supply", "target": "Texas", "zoom": "region"}`
 - `hoi4_map {"action": "front"}`
 - `hoi4_map {"action": "at", "x": 960, "y": 540}`
+
+### `hoi4_memory`
+
+Read verified player-visible fields from this server's own Windows game launch. Refuses other processes, unknown builds, invalid pointers and inconsistent objects. Reports unavailable fields explicitly; date and command posting are not yet supported. No game state is written and the game is never paused.
+
+_lock: none_
+
 
 ### `hoi4_screen`
 
@@ -480,7 +580,7 @@ _lock: self_
 
 ### `hoi4_telemetry`
 
-The telemetry companion mod hoi4live_telemetry: a tiny generated mod that logs the player's numbers daily (political power, stability, war support, manpower, factories, divisions, fuel, convoys, resources, equipment, wars) and a weekly world summary as HOI4LIVE lines in game.log, read by hoi4_state and hoi4_briefing. status: files, playset, whether the running game loaded them, records seen, suspect error.log lines. install: (re)generate the files. enable: install, then add it last to dlc_load.json (backed up first). disable: remove it from dlc_load.json. restore: put back the dlc_load.json from before the first enable. watch: add (or remove=true) player/global variables and flags to log daily. read: the latest telemetry records. The game loads mods only at launch: after install/enable/watch, restart it (hoi4_launch restart=true) and load a save.
+The telemetry companion mod hoi4live_telemetry: a tiny generated mod that logs the player's numbers daily (political power, stability, war support, manpower, factories, divisions, fuel, convoys, resources, equipment, wars) and a weekly world summary as HOI4LIVE lines in game.log, read by hoi4_state and hoi4_briefing. status: files, playset, whether the running game loaded them, records seen, suspect error.log lines. install: (re)generate the files. enable: install, then add it last to dlc_load.json (backed up first). disable: remove it from dlc_load.json. restore: put back the dlc_load.json from before the first enable. watch: add (or remove=true) player/global variables and flags to log daily. read: the latest telemetry records. The game loads mods only at launch: after install/enable/watch, restart it (hoi4_launch restart=true) and load a save. Campaign install/enable require a closed game, empty watches and vanilla data; enable selects only observational telemetry under a durable configuration backup. Campaign disable/restore restore that owned backup only after any owned game has exited.
 
 _lock: none_
 
@@ -569,7 +669,7 @@ _lock: acting_
 
 ### `hoi4_focus`
 
-National focus. list: the focuses of the country's tree with status (available / current / locked / excluded / completed, from the files and the newest save), days, prerequisites, mutually exclusive focuses, script requirements and rewards; screen=true also reads the current focus on screen. details: the game's detail window for one focus (requirements met/unmet in colour, days, description, effects). select: start a focus through the tree view (search box, detail window, Start), verified on the politics panel. progress: the current focus and its progress. cancel: cancel the focus in progress. The focus is an id or its localised name.
+National focus. list: the focuses of the country's tree with status (available / current / locked / excluded / completed, from the files and the newest save), days, prerequisites, mutually exclusive focuses, script requirements and rewards; screen=true also reads the current focus on screen. details: the game's detail window for one focus (requirements met/unmet in colour, days, description, effects). select: start a focus through the tree view (search box, detail window, Start), verified on the politics panel. progress: the current focus and its progress. cancel: cancel the focus in progress. The focus is an id or its localised name; campaign selection requires the exact installed ID and unique screen verification.
 
 _lock: self_
 
@@ -582,7 +682,7 @@ _lock: self_
 | `search` | string |  |  | select/details: text to type in the tree's search box when the focus name has placeholders the game fills in |
 | `if_idle` | boolean |  | false | select: do nothing (deferred=true, no error) when a focus is in progress; for standing orders, which retry on the next firing |
 | `replace` | boolean |  | false | select: cancel the focus in progress first |
-| `force` | boolean |  | false | select even when the detail window shows unmet requirements |
+| `force` | boolean |  | false | test mode only: select even when the detail window shows unmet requirements |
 | `screen` | boolean |  | false | list: also read the current focus on screen |
 | `keep_open` | boolean |  | false | leave the focus tree open |
 | `limit` | integer |  | 40 |  |
@@ -701,6 +801,7 @@ _lock: acting_
 | `count` | integer |  | 1 | recruit: divisions |
 | `state` | string |  |  | recruit/deploy: deployment state; create_army/assign: the state whose divisions are selected (localised name or id) |
 | `box` | array of integer |  |  | create_army/assign: half width and height of the selection box around the state's centre at region zoom (default [220, 160]) |
+| `zoom` | close \| province \| region \| country |  |  | create_army/assign: camera zoom for the selection (default region; a closer zoom with a small box selects the divisions of one state only) |
 | `army` | string |  |  | army name as on its panel |
 | `army_index` | integer |  |  | army card number (left = 1) |
 | `armies` | array of string |  |  | army_group: army names |
@@ -720,6 +821,27 @@ _lock: acting_
 - `hoi4_army {"action": "general", "army": "Army 1", "general": "Omar Bradley"}`
 - `hoi4_army {"action": "army_group", "armies": ["Army 1", "Army 2"]}`
 
+### `hoi4_front`
+
+The front from a save, by state id, and the orders for a whole theatre. situation: every army (divisions, strength, organisation, orders), the states it stands in, the enemy-held states beside it with the enemy divisions there in test mode only; campaign mode reads our units and public map control, with enemy forces unknown. The objectives are victory-point states still in enemy hands, nearest first). plan: the same plus one suggested order per army (nearest unclaimed objective, the enemy state beside the army nearest to it). order: execute the plan or your own `orders` [{army, front_target, target}] (state ids; front line against the owner of front_target, offensive line through target, execute); every army is tried and failures listed. test-mode fresh=true saves the game first so the read is current (about 30 s); otherwise the newest save is used and its date is reported.
+
+_lock: self_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `action` | situation \| plan \| order |  | "situation" |  |
+| `enemy` | array of string |  |  | only these enemy tags (default: every country at war with us) |
+| `objectives` | array of string |  |  | plan/order: state ids to take, in priority order (default: victory-point states of the enemy, nearest first) |
+| `orders` | array of object |  |  | order: explicit orders instead of the plan |
+| `armies` | array of string |  |  | plan/order: only these armies (default all that touch the enemy) |
+| `fresh` | boolean |  | false | save first (the read is then current) |
+| `save` | string |  | "latest" |  |
+| `tag` | string |  |  | default: the player |
+
+- `hoi4_front {"action": "situation", "fresh": true}`
+- `hoi4_front {"action": "plan", "enemy": ["POL"]}`
+- `hoi4_front {"action": "order", "orders": [{"army": "Heer Nord", "front_target": "63", "target": "98"}]}`
+
 ### `hoi4_navy_air`
 
 Basic navy and air missions. list: fleets (task forces, ships, mission) and air wings (base, planes, mission) from the newest save. naval_mission: in the Strategic Navy map mode select a fleet by name, press a mission (patrol, strike_force, convoy_raiding, naval_exercises, convoy_escort, minelaying, minesweeping, naval_invasion_support, hold) and right-click a sea region: region (its name, found by opening the region views around the camera) near a coastal state or province the Find view knows. air_mission: in the Strategic Air map mode click the air wings at the air base in base (a state), press a mission (air_superiority, cas, interception, strategic_bombing, naval_strike, port_strike, naval_patrol, recon ...) and right-click the region at region_at (a state). Verified on the fleet panel (Active in Regions, the task forces' 'assigned region' lines) and the air wing panel (each wing's region).
@@ -731,10 +853,13 @@ _lock: acting_
 | `action` | list \| naval_mission \| air_mission |  | "list" |  |
 | `fleet` | string |  |  | naval_mission: fleet name |
 | `mission` | string |  |  | mission name (see the description) |
-| `region` | string |  |  | naval_mission: sea region name (e.g. Western Seaboard) |
+| `region` | string |  |  | naval_mission: sea region name (e.g. Western Seaboard), or its strategic region id |
+| `region_id` | integer |  |  | naval_mission: strategic region id (map/strategicregions; 18 English Channel, 16 North Sea, 42 Bay of Biscay): the camera goes there through the minimap, no name search |
 | `near` | string |  |  | naval_mission: coastal state/province to centre the camera |
 | `base` | string |  |  | air_mission: state with the air base |
-| `region_at` | string |  |  | air_mission: state inside the region to cover (default: the base's state) |
+| `region_at` | string |  |  | air_mission: state (id or name) inside the region to cover (default: the base's state) |
+| `types` | array of string |  |  | air_mission: only the wings of these types at the base (fighter, cas, tac_bomber, strat_bomber, nav_bomber, transport_plane, interceptor ...); default the wings of the counter clicked |
+| `plan` | array of object |  |  | air_mission: several assignments in one call, {base, mission, region_at, types} each (base and region_at are state ids; failures are listed per entry) |
 | `tag` | string |  |  | default: the player |
 | `save` | string |  | "latest" | save the lists come from: 'latest' (newest save of the country), 'none', or a save name |
 
@@ -750,7 +875,9 @@ _lock: acting_
 
 | argument | type | required | default | description |
 |---|---|---|---|---|
-| `action` | status \| front \| offensive \| spearhead \| execute \| hold \| delete \| attack \| batch |  | "status" |  |
+| `action` | status \| front \| offensive \| spearhead \| execute \| hold \| delete \| attack \| batch \| paint \| move |  | "status" |  |
+| `points` | array of array |  |  | paint: client pixels of a line to paint with the toolbar tool `tool` at the camera as it is (use hoi4_map view first); the army must be selectable |
+| `tool` | offensive \| spearhead \| front_line \| fallback |  | "offensive" | paint: the battle plan tool |
 | `front_target` | string |  |  | attack: a state of the enemy along the border (the front line is drawn against its owner) |
 | `replace` | boolean |  |  | front/offensive/spearhead: redraw even when the army already executes a plan (default: leave it, answer unchanged). attack: delete the old orders first (default true) |
 | `orders` | array of object |  |  | batch: one attack per entry {army|army_index, front_target, target}; every army is tried, failures are listed |
@@ -772,7 +899,7 @@ _lock: acting_
 
 ### `hoi4_advance`
 
-Run game time until something needs a decision, then say what and what to do about it. Time runs in short chunks; after each the telemetry's daily numbers are compared with the start and the run stops on the first stop_on condition (a technology finished, a focus completed, free civilian or military factories, a war started or ended, states lost or gained, surrender progress, low stability, high political power, low fuel, a change at the front) or when `days` or the date `until` is reached. Popups are answered by the policy (popups: choices = news and one-option events are answered, an event with a real choice stops the run and is returned with its text and options for the agent to answer; rules can pre-decide events by title or text). The result lists why it stopped, what changed, the popups answered and still open, the attention items and the tool calls that answer them; each run is written to the journal. Without the telemetry mod only the date, popups and focus notices stop a run.
+Run game time until something needs a decision, then say what and what to do about it. Time runs in short chunks; after each the telemetry's daily numbers are compared with the start and the run stops on the first stop_on condition (a technology finished, a focus completed, free civilian or military factories, a war started or ended, states lost or gained, surrender progress, low stability, high political power, low fuel, a change at the front) or when `days` or the date `until` is reached. Popups are answered by the policy (popups: choices = news and one-option events are answered, an event with a real choice stops the run and is returned with its text and options for the agent to answer; rules can pre-decide events by title or text). Fast runs keep the simulation running when they return for routine events or deadlines. The result lists why it returned, what changed, the popups answered and still open, the attention items and the tool calls that answer them; each run is written to the journal. Without the telemetry mod only the date, popups and focus notices stop a run.
 
 _lock: acting_
 
@@ -811,6 +938,21 @@ _lock: none_
 - `hoi4_clock {"action": "status"}`
 - `hoi4_clock {"action": "join", "wait_s": 120}`
 
+### `hoi4_governor`
+
+Declare a durable standing plan; status and digest read the cached observation. start requires campaign mode, a game launched by this session, a sticky desktop lease, and completed own-country telemetry. Research, verified focus preflight and explicit popup policy are supported; nonempty construction/production/army plans are refused until live state is implemented. start runs the existing fast clock in the background. Restarts never resume automatically.
+
+_lock: none_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `action` | plan \| status \| digest \| start \| stop |  | "status" |  |
+| `plan` | object |  |  | version=1; research/focus IDs, events mode/rules, retry bounds |
+| `days` | integer |  | 90 |  |
+| `speed` | integer |  | 5 |  |
+| `max_seconds` | integer |  | 900 |  |
+
+
 ### `hoi4_journal`
 
 The campaign journal of the country being played (artifacts/journal/journal_<TAG>.jsonl). add: write a note, plan, decision (a choice and why) or lesson, stamped with the in-game date. read: the newest entries, filtered by kind, date or a regex; the server itself writes `action` (every verified campaign action), `advance` (each hoi4_advance run) and `popup` (answered events) entries. plan: the standing plan (the newest plan entry). report: a markdown run report of the campaign so far.
@@ -838,7 +980,7 @@ _lock: none_
 
 ### `hoi4_standing`
 
-Standing orders: decisions you declare once and the clock executes when their situation comes up, so game time never waits for your next turn. A rule says WHEN (research_idle, tech_done, focus_done, construction_done, production_idle, pp_high, low_stability, war_started, ...) and WHAT: `do` (tool calls run every time) or `queue` (a list of calls; each firing runs the next entry, so you write your priorities once; entries may be lists of calls). They run inside hoi4_advance (also a background one) while it watches the telemetry; the game is paused around them unless pause=false. An empty queue or a failed call stops the run with standing_queue_empty / standing_failed and says why. set with append=true adds queue entries to an existing rule. Orders execute decisions; they choose nothing.
+Standing orders: decisions you declare once and the clock executes when their situation comes up, so game time never waits for your next turn. A rule says WHEN (research_idle, tech_done, focus_done, construction_done, production_idle, pp_high, low_stability, war_started, ...) and WHAT: `do` (tool calls run every time) or `queue` (a list of calls; each firing runs the next entry, so you write your priorities once; entries may be lists of calls). They run inside hoi4_advance (also a background one) while it watches the telemetry; time keeps running unless pause=true is explicitly requested. An empty queue or a failed call stops the run with standing_queue_empty / standing_failed and says why. set with append=true adds queue entries to an existing rule. Orders execute decisions; they choose nothing.
 
 _lock: none_
 
@@ -850,7 +992,7 @@ _lock: none_
 | `do` | array of object |  |  | calls run every time the rule fires |
 | `queue` | array of any |  |  | one entry (a call or a list of calls) per firing |
 | `append` | boolean |  | false | set: add `queue` entries to the rule |
-| `pause` | boolean |  | true | pause the game while the rule runs |
+| `pause` | boolean |  | false | pause for a bounded action that requires it |
 | `max_fires` | integer |  |  |  |
 | `on_fail` | stop \| skip |  | "stop" | queue rules: stop the run on a failed call (default), or skip the entry (kept under failed) and try the next in the same firing |
 | `min_gap_days` | integer |  | 0 |  |
@@ -858,3 +1000,15 @@ _lock: none_
 - `hoi4_standing {"action": "set", "name": "research", "when": ["research_idle"], "queue": [{"tool": "hoi4_research", "args": {"action": "start", "tech": "basic_machine_tools"}}, {"tool": "hoi4_research", "args": {"action": "start", "tech": "construction1"}}]}`
 - `hoi4_standing {"action": "list"}`
 - `hoi4_standing {"action": "remove", "name": "research"}`
+
+### `hoi4_wait_for`
+
+Wait inside the server for governor daily predicates or its stop notification, at most 60 seconds. Give OR predicates: {event:research_idle|tech_done|focus_idle|focus_done|production_idle|popup}, {after_days:positive_integer}, or {section,field,op:gte|lte|eq,value}. Unknown or stale values never satisfy a predicate. No screen reads or saves.
+
+_lock: none_
+
+| argument | type | required | default | description |
+|---|---|---|---|---|
+| `predicates` | array of object | yes |  |  |
+| `timeout_s` | number |  | 60 |  |
+

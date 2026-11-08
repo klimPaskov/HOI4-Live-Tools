@@ -32,6 +32,11 @@ use x11rb::{
 };
 
 const XK_SHIFT_L: u32 = 0xffe1;
+/// The game samples modifier state once per frame; on a software-rendered
+/// display a frame can take 100 ms or more, so a modifier is held well before
+/// and after the press, and a press lasts more than one fast frame.
+const MODIFIER_LEAD: Duration = Duration::from_millis(150);
+const PRESS_HOLD: Duration = Duration::from_millis(60);
 const XK_CONTROL_L: u32 = 0xffe3;
 const LEFT: u8 = 1;
 const RIGHT: u8 = 3;
@@ -397,6 +402,60 @@ impl X11Input<'_> {
         }
         Ok(())
     }
+    /// The on-screen part of the owned window read from the root window; pixels off screen stay
+    /// black (0).
+    fn capture_visible(&self, w: u16, h: u16) -> Result<Vec<u8>> {
+        let (x, y) = self.origin()?;
+        let screen = self
+            .conn()
+            .get_geometry(self.shared.root)
+            .map_err(xerror)?
+            .reply()
+            .map_err(xerror)?;
+        let left = i32::from(x).max(0);
+        let top = i32::from(y).max(0);
+        let right = (i32::from(x) + i32::from(w)).min(i32::from(screen.width));
+        let bottom = (i32::from(y) + i32::from(h)).min(i32::from(screen.height));
+        if right <= left || bottom <= top {
+            return Err(Error::new(
+                "capture_unavailable",
+                "Owned window is not on screen",
+            ));
+        }
+        let (vw, vh) = ((right - left) as u16, (bottom - top) as u16);
+        let image = self
+            .conn()
+            .get_image(
+                ImageFormat::Z_PIXMAP,
+                self.shared.root,
+                left as i16,
+                top as i16,
+                vw,
+                vh,
+                !0,
+            )
+            .map_err(xerror)?
+            .reply()
+            .map_err(xerror)?;
+        let row = usize::from(vw) * 4;
+        if image.data.len() != row * usize::from(vh) {
+            return Err(Error::new(
+                "capture_unavailable",
+                "Root image is not 32-bit BGRX",
+            ));
+        }
+        let stride = usize::from(w) * 4;
+        let mut data = vec![0u8; stride * usize::from(h)];
+        let (dx, dy) = (
+            (left - i32::from(x)) as usize,
+            (top - i32::from(y)) as usize,
+        );
+        for (i, line) in image.data.chunks_exact(row).enumerate() {
+            let at = (dy + i) * stride + dx * 4;
+            data[at..at + row].copy_from_slice(line);
+        }
+        Ok(data)
+    }
     fn origin(&self) -> Result<(i16, i16)> {
         let t = self
             .conn()
@@ -467,15 +526,15 @@ impl X11Input<'_> {
         self.idle()?;
         if let Some(m) = modifier {
             self.key(m, true)?;
-            sleep(Duration::from_millis(20));
+            sleep(MODIFIER_LEAD);
         }
         let down = self.key(keycode, true);
         if down.is_ok() {
-            sleep(Duration::from_millis(30));
+            sleep(PRESS_HOLD);
         }
         let up = self.key(keycode, false);
         let released = modifier.map_or(Ok(()), |m| {
-            sleep(Duration::from_millis(20));
+            sleep(MODIFIER_LEAD);
             self.key(m, false)
         });
         sleep(Duration::from_millis(40));
@@ -500,14 +559,17 @@ impl X11Input<'_> {
         before_down()?;
         if let Some(m) = modifier {
             self.key(m, true)?;
-            sleep(Duration::from_millis(20));
+            sleep(MODIFIER_LEAD);
         }
         let down = self.button(button, true);
         if down.is_ok() {
-            sleep(Duration::from_millis(30));
+            sleep(PRESS_HOLD);
         }
         let up = self.button(button, false);
-        let released = modifier.map_or(Ok(()), |m| self.key(m, false));
+        let released = modifier.map_or(Ok(()), |m| {
+            sleep(MODIFIER_LEAD);
+            self.key(m, false)
+        });
         sleep(Duration::from_millis(60));
         down.and(up).and(released)?;
         Ok(Point { x, y })
@@ -588,14 +650,20 @@ impl GameInput for X11Input<'_> {
                 "Game size differs from the owned client size",
             ));
         }
-        let image = self
+        let reply = self
             .conn()
             .get_image(ImageFormat::Z_PIXMAP, self.shared.window, 0, 0, w, h, !0)
             .map_err(xerror)?
-            .reply()
-            .map_err(xerror)?;
+            .reply();
         let (width, height) = (usize::from(w), usize::from(h));
-        if image.data.len() != width * height * 4 {
+        let data = match reply {
+            Ok(image) => image.data,
+            // X refuses a window's image with BadMatch while any part of it lies off screen. A
+            // window manager frame can do that: openbox kept a 1 px border on the undecorated game
+            // window, which sat at (1, 1) on a 1920x1080 screen (5 November 2026).
+            Err(_) => self.capture_visible(w, h)?,
+        };
+        if data.len() != width * height * 4 {
             return Err(Error::new(
                 "capture_unavailable",
                 "Owned window image is not 32-bit BGRX",
@@ -606,7 +674,7 @@ impl GameInput for X11Input<'_> {
             height,
             stride: width * 4,
             scale: 1.0,
-            data: image.data,
+            data,
         })
     }
     fn preflight(&self) -> Result<()> {
