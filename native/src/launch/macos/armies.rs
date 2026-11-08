@@ -2340,7 +2340,7 @@ fn order_at(
     Ok(false)
 }
 /// Screen point of the mean of `state`'s land province positions (map files, live camera).
-fn state_screen_centre(process: &dyn Process, state: i32) -> Result<Option<(f64, f64)>> {
+pub(super) fn state_screen_centre(process: &dyn Process, state: i32) -> Result<Option<(f64, f64)>> {
     let Some(identity) = process.identity() else {
         return Ok(None);
     };

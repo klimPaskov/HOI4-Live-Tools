@@ -529,13 +529,26 @@ fn icons_shown(r: &crate::memory::Reader<'_>, image: u64) -> Result<bool> {
     Ok(!airui::base_icons(r, image)?.is_empty())
 }
 /// Make sure the strategic air map (F3) is on; returns whether it was switched on here.
+/// Air mode is seen through the air base icons, which the game draws only near the camera
+/// and not when it is far out; the Find view to an own base (1.5 s) is the last resort.
 fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
     if read(process, icons_shown)? {
         return Ok(false);
     }
-    // Base icons are only drawn near the camera: a camera left over the Sahara or far out
-    // showed none, so every air action failed to see air mode (live 6 Nov 2026). Centre an
-    // own air base state first; the caller moves the camera to its target afterwards.
+    // Far out, no icons are drawn: come in to the strategic height first (one swoop).
+    if read(process, super::screenmap::camera_height).is_ok_and(|h| h > 825.0) {
+        let _ = super::screenmap::zoom_in_to_strategic(process, keys);
+        if read(process, icons_shown)? {
+            return Ok(false);
+        }
+    }
+    keys.press_code(F3)?;
+    if wait(process, "strategic air map mode", icons_shown).is_ok() {
+        pause(300);
+        return Ok(true);
+    }
+    // No icons near the camera (a camera left over the Sahara, live 6 Nov 2026), or F3 toggled
+    // an air mode that was already on (no icons drawn) off: centre an own air base state.
     if let Some(state) = own(process)
         .ok()
         .and_then(|(bases, _)| bases.iter().find_map(|b| b.state))
@@ -543,32 +556,15 @@ fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
         let _ = super::ui::find_state(process, keys, state);
         pause(350);
         if read(process, icons_shown)? {
-            return Ok(false);
+            return Ok(true);
         }
     }
-    if read(process, |r, i| {
-        Ok(airui::base_icons(r, i)
-            .map(|v| v.is_empty())
-            .unwrap_or(true))
-    })? {
-        // Already in air mode but too far out to show icons.
-        let _ = super::screenmap::zoom_in_to_strategic(process, keys);
-        if read(process, icons_shown)? {
-            return Ok(false);
-        }
+    let _ = super::screenmap::zoom_in_to_strategic(process, keys);
+    if read(process, icons_shown)? {
+        return Ok(true);
     }
     keys.press_code(F3)?;
-    if wait(process, "strategic air map mode", icons_shown).is_err() {
-        // Far out, the game draws no air base icons: come in to the strategic height.
-        super::screenmap::zoom_in_to_strategic(process, keys)?;
-        if wait(process, "strategic air map mode", icons_shown).is_err() {
-            // F3 toggles: when air mode was already on (far out, no icons drawn), the press
-            // above switched it off (seen live 6 Nov 2026 after the Air Forces Overview). Press
-            // it once more at the strategic height.
-            keys.press_code(F3)?;
-            wait(process, "strategic air map mode", icons_shown)?;
-        }
-    }
+    wait(process, "strategic air map mode", icons_shown)?;
     pause(300);
     Ok(true)
 }
@@ -1160,9 +1156,13 @@ pub(super) fn resolve_region(
     region: Option<String>,
 ) -> Result<(i32, Option<i32>)> {
     let Some(text) = region else {
-        return state
-            .map(|s| (s, None))
-            .ok_or_else(|| Error::new("invalid_arguments", "Give state_id or region"));
+        // A state alone: its main strategic region (most of its provinces), so the readback
+        // checks the region too (a click outside the wing's range used to pass as done).
+        let s = state.ok_or_else(|| Error::new("invalid_arguments", "Give state_id or region"))?;
+        let main = game_dir(process)
+            .and_then(|dir| mapdata::state_regions(&dir).ok())
+            .and_then(|m| m.get(&s).map(|v| v.0));
+        return Ok((s, main));
     };
     let dir = game_dir(process).ok_or_else(|| {
         Error::new(
