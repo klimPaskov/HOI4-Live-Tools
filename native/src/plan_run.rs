@@ -1430,19 +1430,40 @@ fn own_states(state: &mut State, tools: &dyn Tools, tag: &str, now: GameHour) ->
             return ids.clone();
         }
     }
-    let ids: Vec<i64> = tools
+    // Best places first: highest infrastructure, fully held, away from any enemy (w24 built in
+    // low-infrastructure states and on the front).
+    let front: HashSet<i64> = tools
+        .call("hoi4_wars", &json!({}))
+        .map(|w| {
+            list(&w, "borders")
+                .iter()
+                .filter(|b| b["hostile"] == json!(true))
+                .flat_map(|b| list(b, "own_border_states"))
+                .filter_map(|v| v.as_i64())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut rows: Vec<(i64, i64)> = tools
         .call("hoi4_states", &json!({"query": tag}))
         .map(|found| {
             list(&found, "states")
                 .iter()
                 .filter(|r| {
                     let ok = |k: &str| r[k].as_str().is_none_or(|o| o == tag);
-                    ok("owner") && ok("controller")
+                    ok("owner")
+                        && ok("controller")
+                        && list(r, "provinces_held_by_others").is_empty()
                 })
-                .filter_map(|r| r["state_id"].as_i64())
+                .filter_map(|r| {
+                    let id = r["state_id"].as_i64()?;
+                    Some((id, r["infrastructure_start"].as_i64().unwrap_or(0)))
+                })
+                .filter(|(id, _)| !front.contains(id))
                 .collect()
         })
         .unwrap_or_default();
+    rows.sort_by_key(|(id, infra)| (std::cmp::Reverse(*infra), *id));
+    let ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
     if !ids.is_empty() {
         state.con.own = Some((now, ids.clone()));
     }
@@ -1562,6 +1583,7 @@ fn construction_step(
             .copied()
             .filter(|id| usable(state, *id))
             .collect();
+        let listed = !eligible.is_empty();
         if eligible.is_empty()
             && (fallback_all || job["fallback_any_own_state"] == json!(true))
             && !tag.is_empty()
@@ -1585,9 +1607,11 @@ fn construction_step(
         if eligible.is_empty() {
             continue;
         }
-        // take turns between the listed states
-        let turn = state.con.rr % eligible.len();
-        eligible.rotate_left(turn);
+        // take turns between the listed states; the fallback keeps its best-first order
+        if listed {
+            let turn = state.con.rr % eligible.len();
+            eligible.rotate_left(turn);
+        }
         // read free slots where they are unknown or stale
         if probe && SHARED_SLOT_BUILDINGS.contains(&building.as_str()) {
             let unknown: Vec<i64> = eligible

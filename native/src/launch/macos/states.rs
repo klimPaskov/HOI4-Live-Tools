@@ -162,6 +162,7 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
         let all = names(dir)?;
         let centers = super::mapdata::state_centers(dir).ok();
         let victory = super::mapdata::state_victory_points(dir).ok();
+        let infrastructure = super::mapdata::state_infrastructure(dir).ok();
         let (mut vp_total, mut vp_lost) = (0.0f64, 0.0f64);
         let mut vp_kept: Vec<Value> = Vec::new();
         let mut rows = Vec::new();
@@ -173,6 +174,9 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
                     if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
                         row["x"] = json!(x.round());
                         row["z"] = json!(z.round());
+                    }
+                    if let Some(level) = infrastructure.as_ref().and_then(|m| m.get(&id)) {
+                        row["infrastructure_start"] = json!(level);
                     }
                     // Provinces another country holds inside the state: an enemy can take part
                     // of a state while the state still counts as ours (w22: Eritrea went
