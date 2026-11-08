@@ -257,6 +257,11 @@ pub(super) fn dismiss_notices(process: &dyn Process, keys: &dyn GameInput) -> Re
     let mut cleared = 0;
     let mut misses = 0;
     loop {
+        // No notice at all needs no settling (the two reads 60 ms apart only matter for one
+        // sliding in): this check runs before nearly every action.
+        if read(process, notices)?.is_empty() {
+            return Ok(cleared);
+        }
         let shown = settled(process, "notice", notices)?;
         let Some(&target) = shown.iter().rev().nth(misses) else {
             return if shown.is_empty() {
