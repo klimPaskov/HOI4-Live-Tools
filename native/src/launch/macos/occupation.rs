@@ -487,6 +487,46 @@ pub(super) fn debug_country(process: &dyn Process, tag: &str) -> Result<Value> {
     })
 }
 
+/// Probe: country-tag fields of each province of state `spec` (+0x160..+0x1b0 as i32 tags).
+pub(super) fn debug_provinces(process: &dyn Process, spec: &str) -> Result<Value> {
+    let state: i32 = spec
+        .parse()
+        .map_err(|_| Error::new("invalid_arguments", "dbg_provinces:STATE"))?;
+    let exe = process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe
+        .clone();
+    let dir = super::mapdata::game_dir(&exe)?;
+    let provinces = super::mapdata::state_provinces(&dir, state)?;
+    super::ui::read(process, |r, image| {
+        let gs = r.u64(image + crate::game::layout(r).gs_global)?;
+        let l = crate::construction::layout(r);
+        let (_, data, count) = r.array_header(gs + l.gs_provinces)?;
+        let mut out = Vec::new();
+        for p in &provinces {
+            if *p <= 0 || *p as usize >= count {
+                continue;
+            }
+            let ptr = r.u64(data + *p as u64 * 8)?;
+            if ptr == 0 {
+                continue;
+            }
+            let mut tags = Vec::new();
+            for off in (0x160..0x1b0u64).step_by(4) {
+                let v = r.i32(ptr + off)?;
+                if let Ok(name) = super::states::tag_name(r, image, v) {
+                    if name.len() == 3 {
+                        tags.push(json!([format!("{off:#x}"), name]));
+                    }
+                }
+            }
+            out.push(json!({"province": p, "id": r.i32(ptr + 0x9c)?, "tags": tags}));
+        }
+        Ok(json!({"state": state, "provinces": out}))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2280,6 +2280,7 @@ pub(super) fn move_to(
     keys: &dyn GameInput,
     army: &str,
     state: i32,
+    province: Option<i32>,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
@@ -2290,7 +2291,7 @@ pub(super) fn move_to(
     // The state already on screen (the usual case for a front-line army): right-click one of
     // its projected provinces where the camera is. The Find view (open, type, glide, about
     // 1.5 s) only when none shows, and the camera stays where the viewer follows the units.
-    let visible = target_points(process, state).unwrap_or_default();
+    let visible = target_points(process, state, province).unwrap_or_default();
     if !visible.is_empty() && order_at(process, keys, army, &before, visible, false)? {
         return Ok(());
     }
@@ -2308,9 +2309,12 @@ pub(super) fn move_to(
     // The state's own land provinces projected through the camera first: far out, the points
     // around the centre fell on Tripoli's air base icon or the sea and an overseas move never
     // started (live 6 Nov 2026). Points on the centre icon itself are skipped.
-    let mut points: Vec<(f64, f64)> = target_points(process, state).unwrap_or_default();
+    let mut points: Vec<(f64, f64)> = target_points(process, state, province).unwrap_or_default();
     let projected = !points.is_empty();
-    points.extend(POINTS);
+    // Points around the centre stand in for the state; a named province is only its own point.
+    if province.is_none() {
+        points.extend(POINTS);
+    }
     order_at(process, keys, army, &before, points, projected)?;
     Ok(())
 }
@@ -2375,19 +2379,30 @@ pub(super) fn state_screen_centre(process: &dyn Process, state: i32) -> Result<O
 }
 /// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
 /// centre first, skipping the centre itself where the state's map icons sit; at most eight.
-fn target_points(process: &dyn Process, state: i32) -> Result<Vec<(f64, f64)>> {
+fn target_points(
+    process: &dyn Process,
+    state: i32,
+    province: Option<i32>,
+) -> Result<Vec<(f64, f64)>> {
     let Some(identity) = process.identity() else {
         return Ok(Vec::new());
     };
     let dir = super::mapdata::game_dir(&identity.exe)?;
     let positions = super::mapdata::positions(&dir)?;
-    let provinces = super::mapdata::state_provinces(&dir, state)?;
+    let provinces = match province {
+        Some(p) => vec![p],
+        None => super::mapdata::state_provinces(&dir, state)?,
+    };
     let mut pts = read(process, |r, i| {
         let mut out = Vec::new();
         for p in &provinces {
             if let Some(&(x, z)) = positions.get(p) {
                 if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
-                    let near_centre = (s.0 - 960.0).abs() < 28.0 && (s.1 - 540.0).abs() < 28.0;
+                    // The state's centre carries its map icons; one named province is clicked
+                    // wherever it is.
+                    let near_centre = province.is_none()
+                        && (s.0 - 960.0).abs() < 28.0
+                        && (s.1 - 540.0).abs() < 28.0;
                     if (470.0..1700.0).contains(&s.0)
                         && (120.0..880.0).contains(&s.1)
                         && !near_centre

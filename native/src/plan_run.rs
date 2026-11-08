@@ -154,6 +154,8 @@ pub struct State {
     war_guard: HashMap<String, i32>,
     /// Direct moves issued without the army changing state since: (target, state, count).
     war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
+    /// The enemy-held province of an own state last ordered for an army, and when.
+    war_province: HashMap<String, (i32, GameHour)>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -238,6 +240,7 @@ impl Default for State {
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
             war_repeat: HashMap::new(),
+            war_province: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -1832,6 +1835,18 @@ fn war_step(
             if text(&row["owner"]) == me && text(&row["controller"]) != me {
                 enemies.insert(text(&row["controller"]).to_string());
                 targets.push((id as i32, true));
+            } else if text(&row["owner"]) == me {
+                // Part of an own state an enemy holds (w22: Ethiopia took Eritrea province by
+                // province around an army standing in it): retake it like an occupied state.
+                let held: Vec<String> = list(row, "provinces_held_by_others")
+                    .iter()
+                    .map(|p| text(&p["controller"]).to_string())
+                    .filter(|c| !c.is_empty() && *c != me)
+                    .collect();
+                if let Some(c) = held.first() {
+                    enemies.insert(c.clone());
+                    targets.push((id as i32, true));
+                }
             }
         }
     }
@@ -2240,15 +2255,53 @@ fn war_step(
         }
         let (tool, args, label, next_stage) = if liberate {
             if standing_in_target {
-                state.war_cool.insert(name.clone(), now + cooldown * 3);
-                continue;
+                // Inside the state: go for the nearest province the enemy holds in it (w22: the
+                // army waited inside Eritrea while it was taken around it and starved).
+                let detail = tools.call("hoi4_states", &json!({"query": target.to_string()}))?;
+                let (ax, az) = position.unwrap_or((0.0, 0.0));
+                let nearest = list(&detail, "states")
+                    .first()
+                    .map(|row| list(row, "provinces"))
+                    .unwrap_or_default()
+                    .iter()
+                    .filter(|p| {
+                        let c = text(&p["controller"]);
+                        !c.is_empty() && c != me
+                    })
+                    .filter_map(|p| {
+                        let id = p["province"].as_i64()? as i32;
+                        let (x, z) = (p["x"].as_f64()?, p["z"].as_f64()?);
+                        Some((id, (x - ax).powi(2) + (z - az).powi(2)))
+                    })
+                    .min_by(|a, b| a.1.total_cmp(&b.1));
+                let Some((province, _)) = nearest else {
+                    state.war_cool.insert(name.clone(), now + cooldown * 3);
+                    continue;
+                };
+                // Still on the way to the same province: let it arrive (no repeated orders).
+                if state
+                    .war_province
+                    .get(&name)
+                    .is_some_and(|(p, at)| *p == province && now - at < 3 * DAY)
+                {
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    continue;
+                }
+                state.war_province.insert(name.clone(), (province, now));
+                (
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": target, "province_id": province}),
+                    "move",
+                    0,
+                )
+            } else {
+                (
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": target}),
+                    "move",
+                    0,
+                )
             }
-            (
-                "hoi4_army_move",
-                json!({"army": name, "state_id": target}),
-                "move",
-                0,
-            )
         } else if stage == 0 && !executing {
             (
                 "hoi4_army_front",
@@ -2274,6 +2327,7 @@ fn war_step(
             state.war_cool.insert(name.clone(), now + cooldown);
             continue;
         };
+        let one_province = args.get("province_id").is_some();
         let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
         if ok {
             state.war_stage.insert(name.clone(), next_stage);
@@ -2284,7 +2338,7 @@ fn war_step(
             // A liberation move is a direct move: wait for progress, and let the stall check
             // (with its backoff) re-issue it (live 8 Nov 2026: the same move to an occupied own
             // state went out 13 times in three minutes).
-            if label == "move" {
+            if label == "move" && !one_province {
                 state.war_move.insert(name.clone());
                 state.war_since.insert(name.clone(), (target, here, now));
             }
@@ -3704,6 +3758,63 @@ mod tests {
             .find(|(n, _)| n.starts_with("hoi4_army_"))
             .cloned()
             .unwrap()
+    }
+
+    /// An army standing in an own state an enemy holds part of.
+    struct Inside(RefCell<Vec<(String, Value)>>);
+    impl Tools for Inside {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.0.borrow_mut().push((name.to_string(), args.clone()));
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0})),
+                "hoi4_overview" => Ok(json!({"player": "GER"})),
+                "hoi4_wars" => Ok(json!({"wars": {"validated": true, "enemies": ["POL"]}})),
+                "hoi4_states" => match args["query"].as_str().unwrap() {
+                    "GER" => Ok(
+                        json!({"states": [{"state_id": 42, "owner": "GER", "controller": "GER",
+                        "x": 0.0, "z": 0.0,
+                        "provinces_held_by_others": [{"province": 7, "controller": "POL"}]}]}),
+                    ),
+                    "POL" => Ok(json!({"states": []})),
+                    "42" => Ok(json!({"states": [{"state_id": 42, "provinces": [
+                        {"province": 6, "controller": "GER", "x": 0.0, "z": 0.0},
+                        {"province": 8, "controller": "POL", "x": 50.0, "z": 0.0},
+                        {"province": 7, "controller": "POL", "x": 5.0, "z": 0.0}]}]})),
+                    other => panic!("unexpected query {other}"),
+                },
+                "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                    {"army": "Army 1", "division_count": 10, "main_state": 42,
+                     "battle_plan_orders": 0, "plan_executing": false, "commander": "X"}]})),
+                _ if args.get("request_id").is_some() => {
+                    Ok(json!({"receipt": {"status": "Verified"}}))
+                }
+                _ => Ok(json!({})),
+            }
+        }
+    }
+    #[test]
+    fn an_army_inside_a_partly_taken_own_state_retakes_the_nearest_province_once() {
+        let w = Inside(RefCell::new(vec![]));
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["POL"], "cooldown_hours": 1}});
+        let moves = |w: &Inside| -> Vec<Value> {
+            w.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .map(|(_, a)| a.clone())
+                .collect()
+        };
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let m = moves(&w);
+        assert_eq!(m.len(), 1, "{:?}", w.0.borrow());
+        assert_eq!(m[0]["province_id"], 7);
+        assert_eq!(m[0]["state_id"], 42);
+        // a few hours later, still on the way: no second order
+        tick(&mut state, &w, &plan, "l", START + 6).unwrap();
+        assert_eq!(moves(&w).len(), 1);
     }
 
     /// The war fake with a validated war list at peace.

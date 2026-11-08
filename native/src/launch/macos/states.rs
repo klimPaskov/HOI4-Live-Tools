@@ -110,6 +110,45 @@ fn holders(r: &Reader<'_>, image: u64, id: i32) -> Result<(String, String)> {
     ))
 }
 
+/// Controller tag of each of `provinces` (the province controller field the construction
+/// checks use; live 8 Nov 2026: all eight Eritrean provinces read ETH while Italy owned the state).
+fn province_controllers(
+    r: &Reader<'_>,
+    image: u64,
+    provinces: &[i32],
+) -> Result<Vec<(i32, String)>> {
+    let g = game::layout(r);
+    let l = crate::construction::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    let mut out = Vec::new();
+    for &p in provinces {
+        let Ok(raw) = r.array_entry(gs + l.gs_provinces, p as usize, 8) else {
+            continue;
+        };
+        let province = u64::from_le_bytes(raw.try_into().unwrap());
+        if province == 0 || r.u64(province)? != image + l.province_vtable {
+            continue;
+        }
+        out.push((p, tag_name(r, image, r.i32(province + l.province_owner)?)?));
+    }
+    Ok(out)
+}
+/// Provinces of `state` held by a country other than `holder`.
+fn held_by_others(process: &dyn Process, dir: &Path, state: i32, holder: &str) -> Vec<Value> {
+    let Some(provinces) = super::mapdata::state_province_index(dir)
+        .ok()
+        .and_then(|m| m.get(&state).cloned())
+    else {
+        return Vec::new();
+    };
+    read(process, |r, i| province_controllers(r, i, &provinces))
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(_, c)| c != holder)
+        .map(|(p, c)| json!({"province": p, "controller": c}))
+        .collect()
+}
+
 /// States whose English name contains `query` (accent-insensitive), at most 25.
 pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<Value> {
     let wanted = fold(query.trim());
@@ -130,6 +169,13 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
                     if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
                         row["x"] = json!(x.round());
                         row["z"] = json!(z.round());
+                    }
+                    // Provinces another country holds inside the state: an enemy can take part
+                    // of a state while the state still counts as ours (w22: Eritrea went
+                    // province by province).
+                    let others = held_by_others(process, dir, id, &owner);
+                    if !others.is_empty() {
+                        row["provinces_held_by_others"] = json!(others);
                     }
                     rows.push(row);
                 }
@@ -156,6 +202,27 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
             if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
                 row["x"] = json!(x.round());
                 row["z"] = json!(z.round());
+            }
+            // One state asked for by ID: every province with its controller.
+            if id.to_string() == wanted {
+                let provinces = super::mapdata::state_province_index(dir)
+                    .ok()
+                    .and_then(|m| m.get(&id).cloned())
+                    .unwrap_or_default();
+                let positions = super::mapdata::positions(dir).ok();
+                if let Ok(list) = read(process, |r, i| province_controllers(r, i, &provinces)) {
+                    row["provinces"] = json!(list
+                        .into_iter()
+                        .map(|(p, c)| {
+                            let mut v = json!({"province": p, "controller": c});
+                            if let Some(&(x, z)) = positions.as_ref().and_then(|m| m.get(&p)) {
+                                v["x"] = json!(x.round());
+                                v["z"] = json!(z.round());
+                            }
+                            v
+                        })
+                        .collect::<Vec<_>>());
+                }
             }
             Ok(row)
         })
