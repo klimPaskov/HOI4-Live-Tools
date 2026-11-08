@@ -90,6 +90,21 @@ Acceptance at speed 3:
 
 The full research report (both the main investigation and an independent review) is kept with the run notes.
 
+## Live measurements (8 November 2026, Germany 1936, speed 2-3, same game)
+
+| Case | Baseline (dc0a55d + overlay fix) | New |
+|---|---|---|
+| Read (`hoi4_overview`) while actions run, round trip p50 / p95 | 187 / 484 ms | **1 / 1 ms** |
+| `hoi4_production_set` p50 / p95 | 444 / 739 ms | 419 / 455 ms |
+| Player action while the executor runs (round trip) | (no executor) | 594–738 ms, at most one executor step of waiting |
+| Change feed: event opened to `hoi4_wait_change` reply | (no feed) | woke on the same 300 ms sample |
+| Event report (`hoi4_events`: title, description, options) | title and options | adds full description and leader, 0.7 ms |
+| Executor with an action it cannot complete | (no executor) | 346 attempts in 50 steps, now 4 in 40 s (backoff) |
+
+Map actions (army orders, fronts, construction placement) were not measured: a macOS screen-recording
+permission prompt covered the centre of the screen, and the occlusion check rightly refused clicks
+under it.
+
 ## Status (8 November 2026)
 
-Everything above passes the unit tests (2,705). Live validation and the before/after benchmark are pending: the session that built them had no input or screen-capture permission on the test Mac.
+Everything above passes the unit tests (2,711). Live: two lanes, change feed, executor, event reports and the overlay rule are validated; map-action benchmarks are pending.
