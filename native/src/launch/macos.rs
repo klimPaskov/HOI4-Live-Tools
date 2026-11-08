@@ -919,6 +919,7 @@ impl Commands for MacClock {
             && process.identity() == self.process.identity();
         let was_paused = if guard_pause { self.paused_now() } else { None };
         let menus_before = ui::menus_closed();
+        let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
         if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
             if let Some(army) = arguments.get("army").and_then(Value::as_str) {
@@ -952,6 +953,26 @@ impl Commands for MacClock {
         if MAP_TOOLS.contains(&name) && !army_tool && process.identity() == self.process.identity()
         {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
+        }
+        // One context line per action for the run report: which actions leave the game paused
+        // (w24: pauses coincided with army creation and disbanding; cause unknown).
+        if guard_pause {
+            let after = self.paused_now();
+            eprintln!(
+                "[action] {}",
+                json!({"unix_ms": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0),
+                    "tool": name,
+                    "request_id": arguments.get("request_id"),
+                    "ms": started.elapsed().as_millis() as u64,
+                    "ok": result.is_ok(),
+                    "error": result.as_ref().err().map(|e| e.code),
+                    "paused_before": was_paused,
+                    "paused_after": after,
+                    "executor": crate::autopilot::autopilot().in_step()})
+            );
         }
         if was_paused == Some(false) {
             // Undo only a pause our own input caused: the game menu (a stray Escape) pauses the
