@@ -1211,7 +1211,7 @@ impl MacClock {
             return commanders::list(process);
         }
         if name == "hoi4_supply" {
-            allowed(args, &["strength_below"])?;
+            allowed(args, &["strength_below", "summary", "army"])?;
             let below = match args.get("strength_below") {
                 None => 0.7,
                 Some(v) => v
@@ -1221,7 +1221,41 @@ impl MacClock {
                         Error::new("invalid_arguments", "strength_below must be 0..1")
                     })?,
             };
-            return supply::report(process, below);
+            let mut full = supply::report(process, below)?;
+            // summary:true keeps the per-army rows, totals and short lists (a few KB instead of
+            // 40-60 KB of division rows); army:"X" keeps one army's divisions.
+            if let Some(army) = args.get("army").and_then(Value::as_str) {
+                for key in ["divisions", "below_70", "below_50", "shortages"] {
+                    if let Some(list) = full[key].as_array_mut() {
+                        list.retain(|d| d["army"] == army);
+                    }
+                }
+                if let Some(list) = full["armies"].as_array_mut() {
+                    list.retain(|d| d["army"] == army);
+                }
+            }
+            if args.get("summary").and_then(Value::as_bool) == Some(true) {
+                let count = |k: &str| full[k].as_array().map_or(0, Vec::len);
+                let counts = json!({"divisions": count("divisions"), "below_70": count("below_70"),
+                    "below_50": count("below_50"), "shortages": count("shortages"),
+                    "overdrawn_provinces": count("overdrawn_provinces"), "provinces": count("provinces")});
+                if let Some(o) = full.as_object_mut() {
+                    for key in ["divisions", "provinces", "states", "supply_nodes"] {
+                        o.remove(key);
+                    }
+                    for key in ["below_70", "below_50", "shortages", "overdrawn_provinces"] {
+                        if let Some(list) = o.get_mut(key).and_then(Value::as_array_mut) {
+                            list.truncate(10);
+                        }
+                    }
+                    o.insert("counts".into(), counts);
+                    o.insert(
+                        "summary_note".into(),
+                        json!("short lists cut to 10; call without summary (or with army) for every division"),
+                    );
+                }
+            }
+            return Ok(full);
         }
         if name == "hoi4_template_get" {
             allowed(args, &["template"])?;
