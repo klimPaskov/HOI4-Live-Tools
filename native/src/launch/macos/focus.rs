@@ -115,7 +115,9 @@ fn on_tree(rect: &Rect) -> bool {
 }
 pub(super) type Progress = own_focus::ProgressSnapshot;
 pub(super) fn progress(process: &dyn Process) -> Result<Progress> {
-    own_focus::progress_snapshot(process)
+    // A game day can rewrite the focus records under the read (a focus start failed with
+    // torn_read, live 8 Nov 2026).
+    super::ui::retry_torn(|| own_focus::progress_snapshot(process))
 }
 /// Refusals that need no input.
 pub(super) fn check(before: &Progress, key: &str) -> Result<()> {

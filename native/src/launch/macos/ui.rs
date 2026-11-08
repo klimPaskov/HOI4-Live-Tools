@@ -16,6 +16,20 @@ const STAGE_WAIT: Duration = Duration::from_secs(3);
 const SETTLE_WAIT: Duration = Duration::from_secs(2);
 
 /// One fresh read bracket; transient UI churn is retried a few times.
+/// `f` again (up to eight times) while it fails with torn_read: for whole-snapshot reads that
+/// do not go through `read` (a busy game day rewrites the records under them).
+pub(super) fn retry_torn<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
+    let mut attempt = 0;
+    loop {
+        match f() {
+            Err(e) if e.code == "torn_read" && attempt < 8 => {
+                attempt += 1;
+                thread::sleep(Duration::from_millis(5 * attempt));
+            }
+            result => return result,
+        }
+    }
+}
 pub(super) fn read<T>(
     process: &dyn Process,
     f: impl Fn(&Reader<'_>, u64) -> Result<T>,
