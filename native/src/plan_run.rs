@@ -164,6 +164,8 @@ pub struct State {
     war_province: HashMap<String, (i32, GameHour)>,
     /// `construction_plan` items already queued (by `order`).
     plan_built: HashSet<i64>,
+    /// `army_layout`: name_hint -> the army that plays that role.
+    layout: HashMap<String, String>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -252,6 +254,7 @@ impl Default for State {
             war_repeat: HashMap::new(),
             war_province: HashMap::new(),
             plan_built: HashSet::new(),
+            layout: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -493,6 +496,9 @@ pub fn tick(
     // the war executive acts before everything else unless the plan says "war": {"first": false}.
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
     if war_on && plan["war"]["first"] != json!(false) {
+        if let Some(step) = layout_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
         if let Some(step) = war_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -1287,6 +1293,160 @@ fn tech_skip(why: &str, default: GameHour) -> GameHour {
     } else {
         default
     }
+}
+
+/// `army_layout`: split the armies by role on day one, as the plan says (strike armies attack,
+/// guard armies hold): `[{name_hint, state, templates, count, role, general?,
+/// guard_states_in_order?, when?}]`. The first strike entry of a state takes the army standing
+/// there; every other entry gets up to `count` divisions of its templates detached from it. One
+/// action per step; guards are bound to their first post (they hold, never attack).
+fn layout_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some(entries) = plan["army_layout"].as_array() else {
+        return Ok(None);
+    };
+    if state.skipped(now, "layout", "all") {
+        return Ok(None);
+    }
+    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let armies = list(&roster, "armies");
+    let present: HashSet<String> = armies
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .collect();
+    state
+        .layout
+        .retain(|_, a| a.is_empty() || present.contains(a));
+    let taken: HashSet<String> = state.layout.values().cloned().collect();
+    for (index, e) in entries.iter().enumerate() {
+        let hint = text(&e["name_hint"]).to_string();
+        let home = e["state"].as_i64().unwrap_or(0);
+        if hint.is_empty() || state.layout.contains_key(&hint) {
+            continue;
+        }
+        if let Some(rest) = text(&e["when"]).strip_prefix("owner:") {
+            let (id, tag) = rest.split_once('=').unwrap_or(("0", ""));
+            let row = tools
+                .call("hoi4_states", &json!({"query": id.trim()}))
+                .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                .unwrap_or_default();
+            if text(&row["owner"]) != tag.trim() {
+                continue;
+            }
+        }
+        // The army standing in the entry's state that no other role holds yet.
+        let base = armies
+            .iter()
+            .filter(|a| a["main_state"].as_i64() == Some(home))
+            .map(|a| text(&a["army"]).to_string())
+            .find(|n| !taken.contains(n));
+        let first_strike = text(&e["role"]) == "strike"
+            && !entries[..index]
+                .iter()
+                .any(|x| x["state"].as_i64() == Some(home) && text(&x["role"]) == "strike");
+        if first_strike {
+            let Some(base) = base else { continue };
+            state.layout.insert(hint.clone(), base.clone());
+            return Ok(Some(format!("layout: {base} is {hint}")));
+        }
+        // Detach from the state's first strike army (or any army standing there).
+        let parent = entries[..index]
+            .iter()
+            .filter(|x| x["state"].as_i64() == Some(home) && text(&x["role"]) == "strike")
+            .filter_map(|x| state.layout.get(text(&x["name_hint"])))
+            .find(|a| present.contains(*a))
+            .cloned()
+            .or(base);
+        let Some(parent) = parent else { continue };
+        let detail = tools.call("hoi4_supply", &json!({"army": parent}))?;
+        let templates: Vec<String> = strings(e, "templates");
+        let count = e["count"].as_u64().unwrap_or(1) as usize;
+        let pick: Vec<String> = list(&detail, "divisions")
+            .iter()
+            .filter(|d| text(&d["army"]) == parent)
+            .filter(|d| templates.iter().any(|t| t == text(&d["template"])))
+            .filter_map(|d| d["id"].as_str().map(str::to_string))
+            .take(count)
+            .collect();
+        if pick.is_empty() {
+            // Nothing of those templates here: the role stays empty (never retried).
+            state.layout.insert(hint.clone(), String::new());
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_detach",
+            json!({"army": parent, "divisions": pick}),
+            "la",
+        )?;
+        if !ok {
+            state.skip(now, "layout", "all", 2 * DAY);
+            return Ok(Some(format!(
+                "layout: detach for {hint} from {parent}: {ok} {why}"
+            )));
+        }
+        let after = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        let new = list(&after, "armies")
+            .iter()
+            .map(|a| text(&a["army"]).to_string())
+            .find(|n| !present.contains(n));
+        let Some(new) = new else {
+            state.skip(now, "layout", "all", DAY);
+            return Ok(Some(format!(
+                "layout: detach for {hint} from {parent}: no new army seen"
+            )));
+        };
+        state.layout.insert(hint.clone(), new.clone());
+        if text(&e["role"]) == "guard" {
+            if let Some(post) = list(e, "guard_states_in_order")
+                .first()
+                .and_then(Value::as_i64)
+            {
+                state.war_guard.insert(new.clone(), post as i32);
+            }
+        }
+        return Ok(Some(format!(
+            "layout: {} divisions of {parent} -> {new} ({hint}): {ok} {why}",
+            pick.len()
+        )));
+    }
+    // Generals named by the layout, only where the army has none (no reassignment churn).
+    for e in entries {
+        let hint = text(&e["name_hint"]);
+        let general = text(&e["general"]);
+        let Some(army) = state.layout.get(hint).filter(|a| !a.is_empty()).cloned() else {
+            continue;
+        };
+        if general.is_empty() || state.skipped(now, "layoutgen", &army) {
+            continue;
+        }
+        let row = armies.iter().find(|a| text(&a["army"]) == army);
+        if row.is_some_and(|a| a["commander"].is_null()) {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_commander",
+                json!({"army": army, "general": general}),
+                "lg",
+            )?;
+            state.skip(
+                now,
+                "layoutgen",
+                &army,
+                if ok { 365 * DAY } else { 5 * DAY },
+            );
+            return Ok(Some(format!(
+                "layout general {general} -> {army}: {ok} {why}"
+            )));
+        }
+    }
+    Ok(None)
 }
 
 /// `construction_plan`: ordered items `{order, building, state, province?, path?, from_state?,
@@ -2282,11 +2442,14 @@ fn war_step(
         if state.war_guard.values().any(|p| *p == post) {
             continue;
         }
+        // An army the plan's layout gave a role (a strike army) is never taken as a guard here.
+        let laid_out: HashSet<&String> = state.layout.values().collect();
         let standing = list(&roster, "armies").iter().find(|a| {
             let n = text(&a["army"]);
             a["main_state"].as_i64() == Some(post as i64)
                 && !guards.contains_key(n)
                 && !state.war_guard.contains_key(n)
+                && !laid_out.contains(&n.to_string())
         });
         if let Some(a) = standing {
             let n = text(&a["army"]).to_string();
@@ -2561,9 +2724,15 @@ fn war_step(
                     .iter()
                     .map(|a| text(&a["army"]).to_string())
                     .collect();
-                let mine_now = |t: &Value| text(&t["army"]).contains(name.as_str());
-                let unowned =
-                    |t: &Value| !names.iter().any(|n| text(&t["army"]).contains(n.as_str()));
+                let by_layout = |t: &Value| state.layout.get(text(&t["army"])).cloned();
+                let mine_now = |t: &Value| {
+                    by_layout(t).is_some_and(|a| a == name)
+                        || (by_layout(t).is_none() && text(&t["army"]).contains(name.as_str()))
+                };
+                let unowned = |t: &Value| {
+                    by_layout(t).is_none_or(|a| a.is_empty())
+                        && !names.iter().any(|n| text(&t["army"]).contains(n.as_str()))
+                };
                 let mut chosen: Option<(i64, i64)> = None;
                 for t in vp {
                     if !(mine_now(t) || unowned(t)) {
@@ -4528,6 +4697,74 @@ mod tests {
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("war vp target Army 1 -> province 71")),
             "{step:?}"
+        );
+    }
+
+    #[test]
+    fn army_layout_takes_the_strike_army_and_detaches_a_guard_by_template() {
+        struct L(RefCell<Vec<(String, Value)>>, RefCell<bool>);
+        impl Tools for L {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                let split = *self.1.borrow();
+                Ok(match name {
+                    "hoi4_armies" => {
+                        let mut a =
+                            vec![json!({"army": "Army 1", "main_state": 550, "commander": null})];
+                        if split {
+                            a.push(json!({"army": "Army 2", "main_state": 550, "commander": null}));
+                        }
+                        json!({"armies": a})
+                    }
+                    "hoi4_supply" => json!({"divisions": [
+                        {"army": "Army 1", "id": "d1", "template": "Divisione di Fanteria"},
+                        {"army": "Army 1", "id": "d2", "template": "Camicie Nere"},
+                        {"army": "Army 1", "id": "d3", "template": "Camicie Nere"},
+                        {"army": "Army 1", "id": "d4", "template": "Camicie Nere"}]}),
+                    "hoi4_army_detach" => {
+                        *self.1.borrow_mut() = true;
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"army_layout": [
+            {"name_hint": "North strike (Army 1)", "state": 550, "role": "strike", "general": "Giovanni Messe"},
+            {"name_hint": "North guard", "state": 550, "role": "guard", "templates": ["Camicie Nere"],
+             "count": 2, "guard_states_in_order": [550]}]});
+        let tools = L(RefCell::new(vec![]), RefCell::new(false));
+        let mut state = State::default();
+        let s1 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert_eq!(s1, "layout: Army 1 is North strike (Army 1)");
+        let s2 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(s2.contains("-> Army 2 (North guard)"), "{s2}");
+        let detach = tools
+            .0
+            .borrow()
+            .iter()
+            .find(|(n, _)| n == "hoi4_army_detach")
+            .cloned()
+            .unwrap();
+        assert_eq!(detach.1["divisions"], json!(["d2", "d3"]));
+        assert_eq!(state.war_guard.get("Army 2"), Some(&550));
+        let s3 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            s3.starts_with("layout general Giovanni Messe -> Army 1"),
+            "{s3}"
+        );
+        assert_eq!(
+            layout_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
         );
     }
 
