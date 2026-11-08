@@ -266,6 +266,58 @@ pub(super) fn division_provinces(
     }
     Ok(out)
 }
+/// `threat` per army in an `armies` view: the land provinces bordering the army's provinces
+/// (outside them) and how many another country holds. `encirclement_risk` from 70% on.
+pub(super) fn add_threats(
+    process: &dyn Process,
+    dir: &std::path::Path,
+    view: &mut Value,
+) -> Result<()> {
+    let neighbours = super::wars::province_neighbours(dir)?;
+    let at = read(process, division_provinces)?;
+    let own = super::ui::retry_torn(|| crate::economy::snapshot(process))
+        .ok()
+        .and_then(|e| e["player"].as_str().map(str::to_string));
+    let Some(armies) = view["armies"].as_array_mut() else {
+        return Ok(());
+    };
+    for army in armies.iter_mut() {
+        let provinces: BTreeSet<i32> = army["divisions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|d| d.as_str())
+            .filter_map(|d| at.get(d).copied().flatten())
+            .collect();
+        if provinces.is_empty() {
+            continue;
+        }
+        let ring: Vec<i32> = provinces
+            .iter()
+            .flat_map(|p| neighbours.get(p).cloned().unwrap_or_default())
+            .filter(|p| !provinces.contains(p))
+            .collect::<BTreeSet<i32>>()
+            .into_iter()
+            .collect();
+        let held = read(process, |r, i| {
+            super::states::province_controllers(r, i, &ring)
+        })?;
+        let Some(me) = own.as_ref() else { continue };
+        let hostile = held.iter().filter(|(_, c)| c != me).count();
+        let share = if held.is_empty() {
+            0.0
+        } else {
+            hostile as f64 / held.len() as f64
+        };
+        army["threat"] = json!({
+            "neighbour_provinces": held.len(),
+            "held_by_others": hostile,
+            "share": (share * 100.0).round() / 100.0,
+            "encirclement_risk": share >= 0.7,
+        });
+    }
+    Ok(())
+}
 /// Screen rectangle: top-left and bottom-right corners.
 type ScreenBox = ((f64, f64), (f64, f64));
 

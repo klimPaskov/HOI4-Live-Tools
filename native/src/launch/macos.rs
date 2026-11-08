@@ -1314,7 +1314,15 @@ impl MacClock {
         }
         if name == "hoi4_armies" {
             allowed(args, &[])?;
-            return armies::armies(process);
+            let mut view = armies::armies(process)?;
+            // Pocket warning per army: the share of the land provinces around its divisions that
+            // another country holds (w24: armies were encircled with no warning).
+            if let Some(exe) = process.identity().map(|i| i.exe.clone()) {
+                if let Ok(dir) = mapdata::game_dir(&exe) {
+                    let _ = armies::add_threats(process, &dir, &mut view);
+                }
+            }
+            return Ok(view);
         }
         if name == "hoi4_war_risk" {
             allowed(args, &["country"])?;

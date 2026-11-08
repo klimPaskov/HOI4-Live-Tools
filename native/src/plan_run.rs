@@ -2008,6 +2008,21 @@ fn war_step(
     if targets.is_empty() {
         return Ok(None);
     }
+    // Fully held own states with their positions: where an army in a pocket falls back to.
+    let safe: Vec<(i32, (f64, f64))> = list(&mine, "states")
+        .iter()
+        .filter(|r| {
+            text(&r["owner"]) == me
+                && text(&r["controller"]) == me
+                && list(r, "provinces_held_by_others").is_empty()
+        })
+        .filter_map(|r| {
+            Some((
+                r["state_id"].as_i64()? as i32,
+                (r["x"].as_f64()?, r["z"].as_f64()?),
+            ))
+        })
+        .collect();
     // At war, supply comes first in the construction queue: a hub or railway behind another
     // line gets no factories (w23: the Tigray and Wello hubs sat behind industrial complexes
     // with none and the army starved in Wello).
@@ -2329,6 +2344,54 @@ fn war_step(
                 now
             }
         };
+        // A pocket forming: most land around the army is held by others. Fall back to the
+        // nearest fully held own state once, then re-check (w24: armies were encircled).
+        if army["threat"]["encirclement_risk"] == json!(true)
+            && cfg["avoid_pockets"] != json!(false)
+            && !state.skipped(now, "pocket", &name)
+        {
+            let (ax, az) = position.unwrap_or((0.0, 0.0));
+            if let Some((safe_id, _)) = safe
+                .iter()
+                .filter(|(id, _)| Some(*id) != here)
+                .min_by(|a, b| {
+                    let d = |p: &(f64, f64)| (p.0 - ax).powi(2) + (p.1 - az).powi(2);
+                    d(&a.1).total_cmp(&d(&b.1))
+                })
+                .copied()
+            {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": safe_id}),
+                    "wp",
+                )?;
+                state.skip(now, "pocket", &name, 3 * DAY);
+                state.war_move.remove(&name);
+                state.war_province.remove(&name);
+                state.war_cool.insert(name.clone(), now + cooldown * 2);
+                return Ok(Some(format!(
+                    "war pocket {name}: {:.0}% of the land around it is held by others -> back to state {safe_id}: {ok} {why}",
+                    army["threat"]["share"].as_f64().unwrap_or(0.0) * 100.0
+                )));
+            }
+        }
+        // Direct moves have no plan to stop: an exhausted or starving army gets no new attack
+        // order until it recovers (w24 kept pushing at 22-28% supply and organisation 17-27).
+        // (Retaking an own state is how a starving army gets its supply back: never held.)
+        let own_target = targets.iter().any(|t| t.0 == target && t.1);
+        if direct && !own_target {
+            if let Some((org, supply)) = org {
+                if org < rest_below || supply < supply_floor {
+                    let recovered = org >= resume_above && supply >= supply_floor;
+                    if !recovered {
+                        state.war_cool.insert(name.clone(), now + cooldown);
+                        continue;
+                    }
+                }
+            }
+        }
         // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
         // recovers or after `rest_max_days` (supply where the army stands may never recover).
         if let Some((org, supply)) = org {
@@ -4059,6 +4122,44 @@ mod tests {
                 .collect();
         assert_eq!(moves.len(), 1);
         assert_eq!(moves[0]["province_id"], 8);
+    }
+
+    #[test]
+    fn an_army_in_a_forming_pocket_falls_back_once() {
+        struct Pocket(RefCell<Vec<(String, Value)>>);
+        impl Tools for Pocket {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                if name == "hoi4_armies" {
+                    return Ok(json!({"unassigned_by_state": [], "armies": [
+                        {"army": "Army 1", "division_count": 10, "main_state": 28,
+                         "battle_plan_orders": 0, "plan_executing": false, "commander": "X",
+                         "threat": {"share": 0.8, "encirclement_risk": true}}]}));
+                }
+                War {
+                    liberate: false,
+                    front_ok: true,
+                    calls: RefCell::new(vec![]),
+                }
+                .call(name, args)
+            }
+        }
+        let w = Pocket(RefCell::new(vec![]));
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &war_plan(), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war pocket Army 1")),
+            "{step:?}"
+        );
+        let moves = |w: &Pocket| {
+            w.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .count()
+        };
+        assert_eq!(moves(&w), 1);
+        tick(&mut state, &w, &war_plan(), "l", START + 6).unwrap();
+        assert_eq!(moves(&w), 1, "no second fall-back order within 3 days");
     }
 
     /// The war fake with a validated war list at peace.

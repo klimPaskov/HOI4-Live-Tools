@@ -113,7 +113,7 @@ fn holders(r: &Reader<'_>, image: u64, id: i32) -> Result<(String, String)> {
 
 /// Controller tag of each of `provinces` (the province controller field the construction
 /// checks use; live 8 Nov 2026: all eight Eritrean provinces read ETH while Italy owned the state).
-fn province_controllers(
+pub(super) fn province_controllers(
     r: &Reader<'_>,
     image: u64,
     provinces: &[i32],

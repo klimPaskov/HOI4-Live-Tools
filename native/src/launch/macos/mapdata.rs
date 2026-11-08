@@ -92,9 +92,9 @@ pub(super) fn parse_state_provinces(text: &str) -> Vec<i32> {
 /// Every state's land provinces (history/states), read once per install.
 /// State id -> its starting infrastructure level (history/states `infrastructure = N`), read
 /// once per install. Construction places factories where infrastructure is high.
-pub(super) fn state_infrastructure(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, i32>>> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<HashMap<i32, i32>>>>> =
-        OnceLock::new();
+pub(super) type LevelIndex = std::sync::Arc<HashMap<i32, i32>>;
+pub(super) fn state_infrastructure(dir: &Path) -> Result<LevelIndex> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, LevelIndex>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(found) = cache.lock().unwrap().get(dir) {
         return Ok(found.clone());
