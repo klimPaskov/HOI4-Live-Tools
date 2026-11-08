@@ -1900,7 +1900,9 @@ pub(super) fn front(
         ));
     }
     let before = read(process, |r, i| orders(r, i, army))?;
-    let card = select_army_quick(process, keys, army)?;
+    // The highlighted fronts are drawn for the army whose panel has opened: keep the panel wait
+    // (with the quick selection no front was ever highlighted, live 8 Nov 2026).
+    let card = select_army(process, keys, army)?;
     super::ui::trace("front: selected", t0);
     // Centre on the target state's province nearest the army: valid fronts are highlighted
     // only along the army's own line, which the state's centre can be far from (seen live:
@@ -1971,7 +1973,38 @@ pub(super) fn front(
         drawing = keys.capture(GAME)?;
         candidates = highlighted(&plain, &drawing, &tooltip, 4);
     }
+    // Front drawing already on before the first capture (left by an earlier attempt): the
+    // highlight is in the "plain" capture and Z switched the mode off (live 8 Nov 2026: the
+    // dashed front was on screen and nothing was found). Switch it back on and use those points.
+    if candidates.is_empty() {
+        let reversed = highlighted(&drawing, &plain, &tooltip, 4);
+        if !reversed.is_empty() {
+            keys.press(Key::letter('z')?)?;
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            drawing = keys.capture(GAME)?;
+            candidates = highlighted(&plain, &drawing, &tooltip, 4);
+            if candidates.is_empty() {
+                candidates = reversed;
+            }
+        }
+    }
     super::ui::trace("front: capture 2", t0);
+    if let Some(dir) = std::env::var_os("HOI4_DUMP_FRONT") {
+        // Debug: both captures as PPM (game pixels, every other pixel).
+        for (name, cap) in [("plain", &plain), ("drawing", &drawing)] {
+            let mut out = b"P6 960 540 255\n".to_vec();
+            for y in 0..540 {
+                for x in 0..960 {
+                    let (r, g, b) = cap.rgb(x as f64 * 2.0, y as f64 * 2.0).unwrap_or((0, 0, 0));
+                    out.extend_from_slice(&[r, g, b]);
+                }
+            }
+            let _ = std::fs::write(
+                std::path::Path::new(&dir).join(format!("front-{name}.ppm")),
+                out,
+            );
+        }
+    }
     // Highlighted border pixels nearest the projected border point first (thin dashed lines).
     if let Some((x, z)) = near {
         if let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
@@ -2136,37 +2169,59 @@ pub(super) fn offensive(
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
-    // The target state's centre where the camera already is; the Find view (it centres the
-    // state on screen) when it is not in the usable area, or when a drag there drew nothing.
-    let projected = super::screenmap::aim_height_ok(process)
-        .then(|| state_screen_centre(process, state).ok().flatten())
-        .flatten()
-        .filter(|(x, y)| (520.0..1500.0).contains(x) && (160.0..800.0).contains(y));
-    let draw = |(cx, cy): (f64, f64)| -> Result<()> {
+    let draw_line = |from: (f64, f64), to: (f64, f64)| -> Result<()> {
         keys.press(Key::letter('x')?)?;
         std::thread::sleep(std::time::Duration::from_millis(300));
-        let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
-        let from = clamp(cx + dx * 260.0, cy + dy * 260.0);
-        let to = clamp(cx - dx * 40.0, cy - dy * 40.0);
         keys.right_drag(GAME, from, to)?;
         wait(process, "offensive line placed", |r, i| {
             Ok(plan_nodes(r, i, army)? > before)
         })
     };
-    if let Some(centre) = projected {
-        if draw(centre).is_ok() {
-            return Ok(());
-        }
+    let reselect = || -> Result<()> {
         let _ = keys.press(Key::Escape);
-        if read(process, |r, i| plan_nodes(r, i, army))? > before {
-            return Ok(());
-        }
         let (x, y) = card.center();
         keys.click(GAME, x, y)?;
-        wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+        wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))
+    };
+    // As a player draws it: from the army to the target. The game takes an offensive line only
+    // from the army's front, and the old arrow around the target's centre missed it whenever the
+    // front lay farther away on screen (w22: every offensive from Eritrea toward Wello failed).
+    let pos = super::mapdata::positions(game_dir)?;
+    let mean = |ids: &[i32]| -> Option<(f64, f64)> {
+        let pts: Vec<(f64, f64)> = ids.iter().filter_map(|p| pos.get(p).copied()).collect();
+        (!pts.is_empty()).then(|| {
+            let n = pts.len() as f64;
+            pts.iter()
+                .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n))
+        })
+    };
+    let target_provinces = super::mapdata::state_provinces(game_dir, state)?;
+    if let (Some(from_w), Some(to_w)) = (mean(&provinces), mean(&target_provinces)) {
+        let framed = super::screenmap::frame_two(
+            process,
+            keys,
+            from_w,
+            to_w,
+            (420.0, 140.0, 1700.0, 880.0),
+            || find_state(process, keys, state),
+        )?;
+        if let Some((from, to)) = framed {
+            if draw_line(from, to).is_ok() {
+                return Ok(());
+            }
+            if read(process, |r, i| plan_nodes(r, i, army))? > before {
+                return Ok(());
+            }
+            reselect()?;
+        }
     }
+    // Fallback, the earlier stroke: the target centred, a short arrow from the army's side.
     find_state(process, keys, state)?;
-    draw((960.0, 540.0))
+    let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
+    draw_line(
+        clamp(960.0 + dx * 260.0, 540.0 + dy * 260.0),
+        clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0),
+    )
 }
 /// Divisions of `army` whose movement target (province id at +0x2ac of the
 /// division, mapped live on 24 July 1941 by diffing a right-click move order)
@@ -2355,27 +2410,6 @@ fn order_at(
         }
     }
     Ok(false)
-}
-/// Screen point of the mean of `state`'s land province positions (map files, live camera).
-pub(super) fn state_screen_centre(process: &dyn Process, state: i32) -> Result<Option<(f64, f64)>> {
-    let Some(identity) = process.identity() else {
-        return Ok(None);
-    };
-    let dir = super::mapdata::game_dir(&identity.exe)?;
-    let positions = super::mapdata::positions(&dir)?;
-    let provinces = super::mapdata::state_provinces(&dir, state)?;
-    let pts: Vec<(f64, f64)> = provinces
-        .iter()
-        .filter_map(|p| positions.get(p).copied())
-        .collect();
-    if pts.is_empty() {
-        return Ok(None);
-    }
-    let n = pts.len() as f64;
-    let (x, z) = pts
-        .iter()
-        .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
-    read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
 }
 /// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
 /// centre first, skipping the centre itself where the state's map icons sit; at most eight.
