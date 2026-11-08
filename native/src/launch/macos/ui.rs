@@ -16,6 +16,20 @@ const STAGE_WAIT: Duration = Duration::from_secs(3);
 const SETTLE_WAIT: Duration = Duration::from_secs(2);
 
 /// One fresh read bracket; transient UI churn is retried a few times.
+/// `f` again (up to eight times) while it fails with torn_read: for whole-snapshot reads that
+/// do not go through `read` (a busy game day rewrites the records under them).
+pub(super) fn retry_torn<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
+    let mut attempt = 0;
+    loop {
+        match f() {
+            Err(e) if e.code == "torn_read" && attempt < 8 => {
+                attempt += 1;
+                thread::sleep(Duration::from_millis(5 * attempt));
+            }
+            result => return result,
+        }
+    }
+}
 pub(super) fn read<T>(
     process: &dyn Process,
     f: impl Fn(&Reader<'_>, u64) -> Result<T>,
@@ -46,6 +60,12 @@ pub(super) fn read<T>(
 
 /// HOI4_TRACE=1: every named wait and settle logs its duration to stderr (finding where an
 /// action spends its time).
+/// A free-form trace line (HOI4_TRACE).
+pub(super) fn trace_text(text: &str) {
+    if std::env::var_os("HOI4_TRACE").is_some() {
+        eprintln!("[trace] {text}");
+    }
+}
 pub(super) fn trace(stage: &str, since: Instant) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("HOI4_TRACE").is_some()) {
@@ -443,8 +463,18 @@ pub(super) fn save_game(
     Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
 }
 /// Close the game menu if an earlier input left it open (Escape closes it).
+/// Game menus our input closed so far: the menu pauses the game and closing it leaves the game
+/// paused (w11), so a pause during an action with a menu closed is ours to undo.
+static MENUS_CLOSED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(super) fn menus_closed() -> u64 {
+    MENUS_CLOSED.load(std::sync::atomic::Ordering::SeqCst)
+}
+pub(super) fn menu_shown(process: &dyn Process) -> bool {
+    read(process, menu_open).unwrap_or(false)
+}
 pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, menu_open)? {
+        MENUS_CLOSED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         keys.press(crate::platform::game_input::Key::Escape)?;
         wait(process, "game menu closed", |r, i| Ok(!menu_open(r, i)?))?;
     }

@@ -917,6 +917,7 @@ impl Commands for MacClock {
             && !name.starts_with("hoi4_peace")
             && process.identity() == self.process.identity();
         let was_paused = if guard_pause { self.paused_now() } else { None };
+        let menus_before = ui::menus_closed();
         // A direct player order on an army takes it from the executor's war rules for a while.
         if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
             if let Some(army) = arguments.get("army").and_then(Value::as_str) {
@@ -952,8 +953,13 @@ impl Commands for MacClock {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
         if was_paused == Some(false) {
+            // Undo only a pause our own input caused: the game menu (a stray Escape) pauses the
+            // game and closing it leaves it paused (w11). A pause without the menu came from the
+            // player or a multiplayer host and stays (live 8 Nov 2026: a pause given while an
+            // executor step ran was undone).
+            let menu = ui::menu_shown(self.process.as_ref());
             let _ = ui::close_menu(self.process.as_ref(), &*self.keys);
-            if self.paused_now() == Some(true) {
+            if (menu || ui::menus_closed() != menus_before) && self.paused_now() == Some(true) {
                 let _ = self.keys.press(Key::Pause);
             }
         }

@@ -136,8 +136,21 @@ camera height 760 or below: the game draws no highlighted fronts at 932.
 The change feed's `hoi4_wait_change` answered with the new changes in a p50 of 1.8 s round trip
 (10 s timeout, woken by the first change).
 
-Open: moving a fighter wing already assigned elsewhere into the region of its own base did not take
-(three tries); the commander list sometimes closes while scrolling (the retry recovers, about 3 s).
+### Reliability fixes from the soaks (8 November 2026, second round)
+
+| Problem seen live | Fix |
+|---|---|
+| One torn read inside a step switched the executor off for good; research slots then stayed idle for three game months | Only a lost lease, another game process or an unusable plan stop the executor; other step errors are noted (`autopilot_step_failed`) and retried with backoff |
+| The pause guard pressed Pause after any action that left the game newly paused, so a pause by the player or a multiplayer host could be undone | Only a pause our own input caused (the game menu) is undone |
+| Focus start failed on a torn read of the focus records | Focus and political-power preflights read again (`ui::retry_torn`) |
+| A wing already covering another region ignored the click on the target region's first point every time | The region click tries up to four of the region's provinces and only counts the intended region (live: Africa back to Danakil, 6.1 s) |
+| General assignment waited 1.2 s for an optional confirmation | 1.6 s in all, first try (was 3.1-3.2 s) |
+
+Six-minute soak at speed 3 after these fixes: 15 executor actions (research, focus, construction,
+events, war moves, rest and resume), two transient torn reads absorbed, one event refused because a
+newer event opened on top between the read and the click (answered on the next step).
+
+Open: the commander list sometimes closed while scrolling in one run (not seen again).
 
 ## Status (8 November 2026)
 

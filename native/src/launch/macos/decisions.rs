@@ -197,7 +197,7 @@ fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
 }
 /// Own political power in raw engine units.
 pub(super) fn political_power(process: &dyn Process) -> Result<i64> {
-    crate::economy::snapshot(process)?["political_power"]["raw_signed"]
+    super::ui::retry_torn(|| crate::economy::snapshot(process))?["political_power"]["raw_signed"]
         .as_i64()
         .ok_or_else(|| Error::new("invalid_economy_value", "Political power unavailable"))
 }
