@@ -40,6 +40,10 @@ pub struct Compact {
     pub idle_research: Option<usize>,
     pub focus: Option<Option<String>>,
     pub civ_idle: Option<i64>,
+    /// Provinces of own states another country holds (from the own-tag states read).
+    pub own_provinces_lost: Option<BTreeSet<i64>>,
+    /// Armies whose surroundings are mostly held by others (hoi4_armies threat).
+    pub at_risk: Option<BTreeSet<String>>,
 }
 
 fn state_ids(v: &Value) -> BTreeSet<i64> {
@@ -64,6 +68,8 @@ pub struct Reads {
     pub research: Option<Value>,
     pub focus: Option<Value>,
     pub economy: Option<Value>,
+    /// hoi4_states for the own tag.
+    pub states: Option<Value>,
 }
 
 impl Compact {
@@ -155,6 +161,33 @@ impl Compact {
         if let Some(e) = &r.economy {
             c.civ_idle = e["civilian_factories_idle"].as_i64();
         }
+        if let Some(st) = &r.states {
+            c.own_provinces_lost = Some(
+                st["states"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|row| {
+                        row["provinces_held_by_others"]
+                            .as_array()
+                            .cloned()
+                            .unwrap_or_default()
+                    })
+                    .filter_map(|p| p["province"].as_i64())
+                    .collect(),
+            );
+        }
+        if let Some(a) = &r.armies {
+            let rows = a["armies"].as_array().cloned().unwrap_or_default();
+            if rows.iter().any(|x| x.get("threat").is_some()) {
+                c.at_risk = Some(
+                    rows.iter()
+                        .filter(|x| x["threat"]["encirclement_risk"] == json!(true))
+                        .filter_map(|x| x["army"].as_str().map(str::to_string))
+                        .collect(),
+                );
+            }
+        }
         c
     }
     /// Fields this sample could not read keep the previous sample's value.
@@ -175,7 +208,9 @@ impl Compact {
             alerts,
             idle_research,
             focus,
-            civ_idle
+            civ_idle,
+            own_provinces_lost,
+            at_risk
         )
     }
     pub fn brief(&self) -> Value {
@@ -183,6 +218,8 @@ impl Compact {
             "open_events": self.events.as_ref().map(|e| e.iter().collect::<Vec<_>>()),
             "at_war_with": self.hostile.as_ref().map(|h| h.iter().collect::<Vec<_>>()),
             "own_states_occupied": self.occupied_own.as_ref().map(|s| s.iter().collect::<Vec<_>>()),
+            "own_provinces_held_by_others": self.own_provinces_lost.as_ref().map(|s| s.iter().collect::<Vec<_>>()),
+            "armies_at_risk": self.at_risk.as_ref().map(|s| s.iter().collect::<Vec<_>>()),
             "armies": self.armies.as_ref().map(|a| a.len()),
             "idle_research_slots": self.idle_research,
             "focus": self.focus,
@@ -244,6 +281,30 @@ pub fn diff(prev: &Compact, cur: &Compact, limits: Limits) -> Vec<Change> {
         }
         for t in a.difference(b) {
             out.push(change("war_ended", true, json!({"with": t})));
+        }
+    }
+    if let (Some(a), Some(b)) = (&prev.own_provinces_lost, &cur.own_provinces_lost) {
+        for p in b.difference(a) {
+            out.push(change("own_province_lost", true, json!({"province": p})));
+        }
+        for p in a.difference(b) {
+            out.push(change(
+                "own_province_regained",
+                false,
+                json!({"province": p}),
+            ));
+        }
+    }
+    if let (Some(a), Some(b)) = (&prev.at_risk, &cur.at_risk) {
+        for n in b.difference(a) {
+            out.push(change("army_encirclement_risk", true, json!({"army": n})));
+        }
+        for n in a.difference(b) {
+            out.push(change(
+                "army_encirclement_cleared",
+                false,
+                json!({"army": n}),
+            ));
         }
     }
     if let (Some(a), Some(b)) = (&prev.occupied_own, &cur.occupied_own) {
@@ -562,7 +623,26 @@ mod tests {
             idle_research: Some(0),
             focus: Some(Some("f".into())),
             civ_idle: Some(0),
+            own_provinces_lost: Some(BTreeSet::new()),
+            at_risk: Some(BTreeSet::new()),
         }
+    }
+    #[test]
+    fn a_lost_province_and_a_forming_pocket_are_urgent_changes() {
+        let a = sample(&[], &[], 40.0, 842);
+        let mut b = sample(&[], &[], 40.0, 842);
+        b.own_provinces_lost = Some([13250].into());
+        b.at_risk = Some(["Army 1".to_string()].into());
+        let kinds: Vec<(&str, bool)> = diff(&a, &b, Limits::default())
+            .iter()
+            .map(|c| (c.kind, c.urgent))
+            .collect();
+        assert!(kinds.contains(&("own_province_lost", true)));
+        assert!(kinds.contains(&("army_encirclement_risk", true)));
+        let back = diff(&b, &a, Limits::default());
+        assert!(back
+            .iter()
+            .any(|c| c.kind == "own_province_regained" && !c.urgent));
     }
     #[test]
     fn differences_become_typed_changes_and_urgent_ones_are_marked() {

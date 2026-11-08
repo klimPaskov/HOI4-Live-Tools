@@ -194,11 +194,23 @@ fn watch_loop(
     let mut tick: u64 = 0;
     while !stop.load(std::sync::atomic::Ordering::SeqCst) {
         let read = |name: &str, args: serde_json::Value| read_tool(server, commands, name, args);
+        // Army threats and own-province control every 10th sample (about 3 s): they read the
+        // provinces around every army.
+        let deep = tick % 10 == 0;
+        let overview = read("hoi4_overview", json!({}));
+        let tag = overview
+            .as_ref()
+            .and_then(|o| o["player"].as_str().map(str::to_string));
         let mut r = Reads {
-            overview: read("hoi4_overview", json!({})),
             events: read("hoi4_events", json!({})),
-            armies: read("hoi4_armies", json!({})),
+            armies: read("hoi4_armies", json!({"threat": deep})),
             alerts: read("hoi4_alerts", json!({})),
+            states: if deep {
+                tag.and_then(|t| read("hoi4_states", json!({"query": t})))
+            } else {
+                None
+            },
+            overview,
             ..Reads::default()
         };
         if tick % 3 == 0 {

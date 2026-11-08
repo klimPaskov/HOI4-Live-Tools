@@ -684,7 +684,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_armies","description":"Own armies (name, division ids) and unassigned division ids. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
             json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
@@ -1313,8 +1313,11 @@ impl MacClock {
             );
         }
         if name == "hoi4_armies" {
-            allowed(args, &[])?;
+            allowed(args, &["threat"])?;
             let mut view = armies::armies(process)?;
+            if args.get("threat") == Some(&json!(false)) {
+                return Ok(view);
+            }
             // Pocket warning per army: the share of the land provinces around its divisions that
             // another country holds (w24: armies were encircled with no warning).
             if let Some(exe) = process.identity().map(|i| i.exe.clone()) {
@@ -4823,11 +4826,33 @@ impl MacClock {
             };
             let heading = || ui::read(process, |r, i| armies::heading_for(r, i, army, &wanted));
             let retry = actions.receipt_exists(id);
-            if !retry {
-                self.keys.preflight()?;
-            }
             let action =
                 json!({"kind":"army_move","army":army,"state_id":state,"province_id":province});
+            // Already on its way there, or already standing there (half the divisions or more):
+            // no input at all (w24: the same three Somaliland provinces were ordered 17 times,
+            // each a card click, a Find view and a right click).
+            if !retry {
+                let (on_way, total) = heading().unwrap_or((0, 0));
+                let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
+                    .unwrap_or_default();
+                let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                let standing = ids
+                    .iter()
+                    .filter(|d| {
+                        at.get(*d)
+                            .copied()
+                            .flatten()
+                            .is_some_and(|p| wanted.contains(&p))
+                    })
+                    .count();
+                if total > 0 && (on_way + standing) * 2 >= total {
+                    return Ok(json!({"receipt": {"status": "Verified", "action": action,
+                        "detail": {"army": army, "divisions": total, "divisions_heading": on_way,
+                            "divisions_there": standing,
+                            "note": "already heading or standing there: nothing was sent"}}}));
+                }
+                self.keys.preflight()?;
+            }
             let keys = &self.keys;
             // A move by sea or a long route first heads for the embarkation port or the next
             // leg, not the target state (seen live: home divisions sailed while the receipt said
