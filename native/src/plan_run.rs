@@ -896,8 +896,8 @@ pub fn tick(
 }
 
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
-/// right after the war step: the war cannot start before its armies exist (w15: the opening's
-/// armies came a month late behind research, production and construction ticks).
+///    right after the war step: the war cannot start before its armies exist (w15: the opening's
+///    armies came a month late behind research, production and construction ticks).
 fn armies_step(
     state: &mut State,
     tools: &dyn Tools,

@@ -30,7 +30,7 @@ pub(super) fn install_dir(exe: &str) -> Result<PathBuf> {
 /// install and the mods in load order (see `super::modlayer`), so map, history, common and
 /// localisation files follow the mods the game itself loaded.
 pub(super) fn game_dir(exe: &str) -> Result<PathBuf> {
-    let install = game_dir(exe)?;
+    let install = install_dir(exe)?;
     Ok(super::modlayer::content_dir(&install, exe).unwrap_or(install))
 }
 

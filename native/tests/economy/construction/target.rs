@@ -78,7 +78,8 @@ fn construction_target_unknown_building_and_unproven_location_are_not_zero() {
 }
 #[test]
 fn construction_target_foreign_state_refuses_before_id_catalog_or_queue_payload() {
-    for field in [0xe00cc] {
+    {
+        let field = 0xe00cc;
         let mut f = complete();
         f.number(field, 2);
         assert_eq!(
