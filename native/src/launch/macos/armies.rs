@@ -1132,8 +1132,21 @@ fn create_once(
     // "Reassign Armies" appears when the box selection took every division
     // of an existing army, which would be deleted with its orders. Never
     // accept: decline and say what to do instead (accepting once merged two
-    // armies of 24 and 19 divisions into one of 52).
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // armies of 24 and 19 divisions into one of 52). Either the dialog or the new army shows
+    // within 500 ms; stop waiting at the first of them.
+    let created = |r: &Reader<'_>, i: u64| -> Result<bool> {
+        Ok(membership(r, i)?
+            .values()
+            .any(|g| *g != 0 && !groups_before.contains(g)))
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    while std::time::Instant::now() < deadline
+        && !read(process, |r, i| {
+            Ok(super::ui::reassign_open(r, i)? || created(r, i)?)
+        })?
+    {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
     if read(process, super::ui::reassign_open)? {
         if absorb {
             // The caller asked for the armies standing here to be folded in.
