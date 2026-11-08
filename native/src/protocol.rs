@@ -80,7 +80,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     ]});
     if let Some(list) = value["tools"].as_array_mut() {
         list.push(json!({"name":"hoi4_observe","description":"What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}}));
-        list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
+        list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. An army you order yourself (any hoi4_army_* action) is left to you by its war rules for war.player_claim_seconds (default 300); release:[names] hands armies back at once. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"release":{"type":"array","items":{"type":"string"},"maxItems":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
         list.push(json!({"name":"hoi4_wait_change","description":"Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":30},"limit":{"type":"integer","minimum":1,"maximum":200}},"required":["since"],"additionalProperties":false}}));
     }
     value["tools"].as_array_mut().unwrap().push(json!({"name":"hoi4_focus_input_probe","description":"Read-only Mac preview: witness the exact unfinished own Focus node in an already-open idle tree using the input binding. Optional include_pan also verifies complete obstacle geometry. Reports bounded logical payload-read counts and whole-observation time, with no controller, navigation, cursor movement, pause, eligibility or input authority. Other platforms explicitly refuse.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"include_pan":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
@@ -466,7 +466,13 @@ impl Server {
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_autopilot" => {
-                let known = ["enabled", "interval_ms", "request_id", "lease_token"];
+                let known = [
+                    "enabled",
+                    "interval_ms",
+                    "release",
+                    "request_id",
+                    "lease_token",
+                ];
                 if object.keys().any(|k| !known.contains(&k.as_str())) {
                     return Err(Error::new(
                         "invalid_arguments",
@@ -496,6 +502,13 @@ impl Server {
                     }
                     Some(false) => pilot.disable(),
                     None => {}
+                }
+                if let Some(list) = object.get("release").and_then(Value::as_array) {
+                    let armies: Vec<String> = list
+                        .iter()
+                        .filter_map(|a| a.as_str().map(str::to_string))
+                        .collect();
+                    pilot.release(&armies);
                 }
                 Ok(pilot.status())
             }

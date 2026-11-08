@@ -1796,7 +1796,11 @@ fn war_step(
     let min_army = cfg["min_army"].as_u64().unwrap_or(6);
     let per_target = cfg["per_target"].as_u64().unwrap_or(2) as usize;
     let cooldown: GameHour = cfg["cooldown_hours"].as_i64().unwrap_or(12);
-    let reserve = strings(cfg, "reserve");
+    // Armies the player ordered directly in the last `player_claim_seconds` (default 300) are
+    // left to the player, like `reserve` (the executor never fights the player for an army).
+    let mut reserve = strings(cfg, "reserve");
+    let claim = cfg["player_claim_seconds"].as_u64().unwrap_or(300);
+    reserve.extend(crate::autopilot::autopilot().claimed(Duration::from_secs(claim)));
     // Targets: own states an enemy holds (priority), then enemy-owned states an enemy holds.
     let mine = tools.call("hoi4_states", &json!({"query": me}))?;
     let mut enemies: HashSet<String> = strings(cfg, "enemies").into_iter().collect();

@@ -915,6 +915,14 @@ impl Commands for MacClock {
             && !name.starts_with("hoi4_peace")
             && process.identity() == self.process.identity();
         let was_paused = if guard_pause { self.paused_now() } else { None };
+        // A direct player order on an army takes it from the executor's war rules for a while.
+        if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
+            if let Some(army) = arguments.get("army").and_then(Value::as_str) {
+                if arguments.get("request_id").is_some() {
+                    crate::autopilot::autopilot().claim(army);
+                }
+            }
+        }
         let result = (if journaled {
             Ok(())
         } else {

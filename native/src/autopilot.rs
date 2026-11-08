@@ -3,6 +3,8 @@
 //! waits, instead of an outside loop polling the server and holding its only lane (w17: plan runs
 //! held the lane 63% of the wall time). A queued request always goes first.
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -18,6 +20,10 @@ struct On {
 #[derive(Default)]
 pub struct Autopilot {
     on: Mutex<Option<On>>,
+    /// Set only while an executor step runs on the input lane.
+    in_step: AtomicBool,
+    /// Armies the player ordered directly, with when: the executor leaves them alone.
+    claims: Mutex<HashMap<String, Instant>>,
 }
 
 pub fn autopilot() -> &'static Autopilot {
@@ -67,6 +73,40 @@ impl Autopilot {
             }
         }
     }
+    pub fn set_in_step(&self, on: bool) {
+        self.in_step.store(on, Ordering::SeqCst);
+    }
+    pub fn in_step(&self) -> bool {
+        self.in_step.load(Ordering::SeqCst)
+    }
+    /// A direct player order on an army: the executor's war rules skip it for a while.
+    pub fn claim(&self, army: &str) {
+        if let Ok(mut c) = self.claims.lock() {
+            c.insert(army.to_string(), Instant::now());
+        }
+    }
+    pub fn release(&self, armies: &[String]) {
+        if let Ok(mut c) = self.claims.lock() {
+            for a in armies {
+                c.remove(a);
+            }
+        }
+    }
+    /// Armies claimed within `window`.
+    pub fn claimed(&self, window: Duration) -> Vec<String> {
+        self.claims
+            .lock()
+            .map(|c| {
+                let mut v: Vec<String> = c
+                    .iter()
+                    .filter(|(_, at)| at.elapsed() < window)
+                    .map(|(a, _)| a.clone())
+                    .collect();
+                v.sort();
+                v
+            })
+            .unwrap_or_default()
+    }
     pub fn status(&self) -> Value {
         match self.on.lock().ok().as_deref() {
             Some(Some(on)) => {
@@ -96,5 +136,15 @@ mod tests {
         assert_eq!(a.status()["actions"], 1);
         a.disable();
         assert!(a.due().is_none());
+    }
+    #[test]
+    fn claimed_armies_expire_and_can_be_released() {
+        let a = Autopilot::default();
+        a.claim("Army 1");
+        a.claim("Army 2");
+        assert_eq!(a.claimed(Duration::from_secs(60)), vec!["Army 1", "Army 2"]);
+        assert!(a.claimed(Duration::ZERO).is_empty());
+        a.release(&["Army 1".to_string()]);
+        assert_eq!(a.claimed(Duration::from_secs(60)), vec!["Army 2"]);
     }
 }

@@ -223,11 +223,13 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
     let Some(token) = autopilot().due() else {
         return false;
     };
+    autopilot().set_in_step(true);
     let reply = server.handle_with_commands(
         serde_json::json!({"jsonrpc":"2.0","id":0,"method":"tools/call",
             "params":{"name":"hoi4_plan_run","arguments":{"seconds":1,"lease_token":token}}}),
         Some(commands),
     );
+    autopilot().set_in_step(false);
     let result = reply
         .as_ref()
         .map(|r| r["result"].clone())
