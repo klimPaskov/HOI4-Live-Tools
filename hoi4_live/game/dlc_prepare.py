@@ -1,9 +1,8 @@
 """DLC prepare step (maintainer decision R-6): launch without the Steam client and still keep the DLC.
 
-The Steam client must be closed for every run, because Live Tools never lets Steam see a run. Started without
-Steam, the game finds no DLC in a user folder that lacks the two files the Paradox launcher keeps there:
-`launcher-v2.sqlite` (the DLC ownership records) and `dlc_signature`. The folder you normally play from has
-them already. A fresh or redirected folder (`HOI4_LIVE_USER_DIR`, a `gameDataPath` redirect, a scratch folder
+Started without the Steam client, the game finds no DLC in a user folder that lacks the two files the Paradox
+launcher keeps there: `launcher-v2.sqlite` (the DLC ownership records) and `dlc_signature`. The folder you
+normally play from has them already. A fresh or redirected folder (`HOI4_LIVE_USER_DIR`, a `gameDataPath` redirect, a scratch folder
 for mod tests) does not, and the game then loads 0 DLC.
 
 `apply` copies the two files from the normal user folder into the run's user folder. Every file it replaces is

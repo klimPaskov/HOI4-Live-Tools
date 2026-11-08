@@ -1,8 +1,9 @@
-//! Steam must never see or register a run. The launcher refuses while a Steam
-//! client, its web helper or steamcmd runs (on Linux, and on the Windows host
-//! when the game runs under WSL), clears the environment (no Steam variables
-//! reach the game) and gives native launches an empty private HOME so the
-//! Steam API cannot find a client pipe even if Steam starts later.
+//! Steam variables never reach the game: the launcher clears the environment and
+//! gives native launches an empty private HOME so the Steam API cannot find a
+//! client pipe. Refusing to launch while a Steam client, its web helper or
+//! steamcmd runs (on Linux, and on the Windows host when the game runs under
+//! WSL) is opt-in: set `HOI4_LIVE_REQUIRE_STEAM_CLOSED=1` in the supervisor's
+//! environment.
 use super::*;
 
 /// Process names (Linux comm/argv0/exe basename, or Windows image names
@@ -14,6 +15,19 @@ const BLOCKING: &[&str] = &[
     "steam.sh",
     "steamcmd.sh",
 ];
+
+/// Opt-in switch: when set to a true value, a launch is refused while Steam runs.
+pub(super) const REQUIRE_CLOSED_ENV: &str = "HOI4_LIVE_REQUIRE_STEAM_CLOSED";
+
+/// Whether a value of `REQUIRE_CLOSED_ENV` asks for the check (off when unset or empty).
+pub(super) fn required_by(value: Option<&str>) -> bool {
+    value.is_some_and(|v| {
+        matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
 
 /// Opt-out for WSL hosts whose Windows interop is disabled by design and whose
 /// harness checks the Windows side itself. Read from the server environment.
@@ -30,8 +44,8 @@ fn refusal(name: &str, where_: &str) -> Error {
     Error::new(
         "steam_running",
         format!(
-            "{name} is running on the {where_}; close Steam and steamcmd before launching \
-             (the game is never started while Steam can see it)"
+            "{name} is running on the {where_} and {REQUIRE_CLOSED_ENV} is set; close Steam \
+             and steamcmd, or unset it, before launching"
         ),
     )
 }
@@ -112,7 +126,16 @@ fn check_windows_host() -> Result<()> {
 }
 
 pub(super) fn refuse_running_steam() -> Result<()> {
-    let proc_root = Path::new("/proc");
+    refuse_with(
+        std::env::var(REQUIRE_CLOSED_ENV).ok().as_deref(),
+        Path::new("/proc"),
+    )
+}
+
+fn refuse_with(setting: Option<&str>, proc_root: &Path) -> Result<()> {
+    if !required_by(setting) {
+        return Ok(());
+    }
     check_linux(proc_root)?;
     if is_wsl(proc_root) {
         check_windows_host()?;
@@ -148,6 +171,17 @@ mod tests {
             "x.steam",
         ] {
             assert!(!blocking_name(n), "{n}");
+        }
+    }
+
+    #[test]
+    fn check_is_opt_in() {
+        assert!(!required_by(None));
+        for v in ["", "0", "off", "no", "false"] {
+            assert!(!required_by(Some(v)), "{v}");
+        }
+        for v in ["1", "true", "YES", " on "] {
+            assert!(required_by(Some(v)), "{v}");
         }
     }
 
@@ -195,5 +229,23 @@ mod tests {
         assert!(format!("{err:?}").contains("steam_running"));
         let _ = fs::remove_dir_all(clean);
         let _ = fs::remove_dir_all(busy);
+    }
+
+    #[test]
+    fn running_steam_refuses_only_when_opted_in() {
+        let busy = fake_proc(&[
+            ("1", "systemd", b"/sbin/init\0"),
+            ("90", "steam", b"/home/u/.steam/steam\0"),
+            ("91", "bash", b"bash\0"),
+            ("92", "x", b"x\0"),
+        ]);
+        assert!(refuse_with(None, &busy).is_ok());
+        assert!(refuse_with(Some("0"), &busy).is_ok());
+        let err = refuse_with(Some("1"), &busy).unwrap_err();
+        assert!(format!("{err:?}").contains("steam_running"));
+        let clean = fake_proc(&[("1", "systemd", b"/sbin/init\0")]);
+        assert!(refuse_with(Some("1"), &clean).is_ok());
+        let _ = fs::remove_dir_all(busy);
+        let _ = fs::remove_dir_all(clean);
     }
 }

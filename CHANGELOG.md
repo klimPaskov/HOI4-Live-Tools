@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Launch check
+
+- Refusing a launch while a Steam client or steamcmd runs is now opt-in: set `HOI4_LIVE_REQUIRE_STEAM_CLOSED=1`
+  (Python server and native Linux supervisor). Unset, the launch goes ahead.
+
 ### Launch failures
 
 Four launch failures seen on 1.19.4.1 on 2 November are handled. Offline tests and fakes cover the logic; the

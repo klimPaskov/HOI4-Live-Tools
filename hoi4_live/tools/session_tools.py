@@ -125,7 +125,7 @@ def _validate_campaign_playset(cfg):
 
 
 def _apply_dlc(session, source=None):
-    """Copy the DLC files into the run's user folder. The launch order is: Steam closed, prepare, launch."""
+    """Copy the DLC files into the run's user folder. The launch order is: prepare, launch."""
     if session.mode == "campaign":
         raise ModeRefused("the DLC prepare step is for test runs with their own user folder; a campaign plays from "
                           "the normal user folder")
@@ -140,13 +140,12 @@ def _apply_dlc(session, source=None):
 
 
 @tool("hoi4_prepare",
-      "Prepare the run's user folder for a launch without the Steam client, which keeps the DLC. Live Tools never "
-      "launches while Steam runs, and a game started without Steam finds no DLC in a user folder that lacks "
-      "launcher-v2.sqlite and dlc_signature. action=apply copies those two files from the normal user folder "
+      "Prepare the run's user folder for a launch without the Steam client, which keeps the DLC. A game started "
+      "without the Steam client finds no DLC in a user folder that lacks launcher-v2.sqlite and dlc_signature. action=apply copies those two files from the normal user folder "
       "(config dlc_source_dir) into the run's folder (user_dir, e.g. a scratch folder set by HOI4_LIVE_USER_DIR) "
       "after backing up what they replace. action=restore puts the original state back once the game has exited "
       "(hoi4_shutdown does that by itself). action=status only reports. Nothing is copied when the run's folder is "
-      "the normal one. Launch order: close Steam, hoi4_prepare, hoi4_launch, test, hoi4_shutdown.",
+      "the normal one. Launch order: hoi4_prepare, hoi4_launch, test, hoi4_shutdown.",
       {"properties": {
           "action": {"type": "string", "enum": ["status", "apply", "restore"], "default": "apply"},
           "source_dir": {"type": "string",
@@ -157,7 +156,7 @@ def _apply_dlc(session, source=None):
                                    "next to the backup as <name>.after-run), and restore while a game still runs"}}},
       family="session", lock="none",
       annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
-      examples=[{"args": {}, "note": "copy the DLC files (Steam closed)"},
+      examples=[{"args": {}, "note": "copy the DLC files"},
                 {"args": {"action": "status"}, "note": "what each folder holds and whether a prepare is needed"},
                 {"args": {"action": "restore"}, "note": "after the game exited, if hoi4_shutdown was not used"}])
 def hoi4_prepare(session, args):
@@ -172,7 +171,7 @@ def hoi4_prepare(session, args):
         rep = _apply_dlc(session, args.get("source_dir"))
         if rep["same_folder"]:
             return result("the run's user folder is the normal one and has both DLC files; nothing to copy", **rep)
-        return result(f"DLC files ready in {cfg.user_dir} ({len(rep['copied'])} copied). Keep Steam closed; "
+        return result(f"DLC files ready in {cfg.user_dir} ({len(rep['copied'])} copied); "
                       "hoi4_shutdown restores the folder", **rep)
     if process.running_pids(cfg["window"]["process_name"]) and not args["force"]:
         raise ToolError("the game is running; restore after it exited (force=true restores anyway)",
