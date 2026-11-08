@@ -1,0 +1,947 @@
+{
+  "_comment": "Italy FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone loads the BBA Italo-Ethiopian war). Explained in italy-plan.md; game mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner. Keys marked NEW in italy-plan.md section 0 are not read by the current executor yet: the player follows them by hand until the executor is extended.",
+  "_validator": {
+    "tag": "ITA",
+    "start_date": "1936.1.1",
+    "stop_date": "1937.1.1",
+    "history_file": "history/countries/ITA - Italy.txt",
+    "dlcs": [
+      "Anniversary Pack",
+      "Arms Against Tyranny",
+      "By Blood Alone",
+      "Gotterdammerung",
+      "Historical German Portraits",
+      "La Resistance",
+      "No Compromise, No Surrender",
+      "No Step Back",
+      "Poland: United and Ready",
+      "Rocket Launcher Unit Pack"
+    ]
+  },
+  "active": true,
+  "auto_events": true,
+  "wait_events_days": 0,
+  "event_options": {
+    "BBA_italo_ethiopian_war_events.01": 1,
+    "BBA_italo_ethiopian_war_events.400": 0
+  },
+  "event_rules": [
+    {
+      "event": "BBA_italo_ethiopian_war_events.01",
+      "option_name": "BBA_italo_ethiopian_war_events.01.b",
+      "why": "180-day north/south mission timers instead of 120, ITA_logistics_in_ethiopia for 240 days, no +1 war escalation"
+    },
+    {
+      "event": "BBA_italo_ethiopian_war_events.400",
+      "option_name": "BBA_italo_ethiopian_war_events.400.a",
+      "why": "ultimatum to Aussa: AFA is annexed (AI accepts), Italy gets Afar 908 and 2 bands at Aussa 13240, the river-free Afar route to Addis"
+    },
+    {
+      "event": "BBA_italy_missiolinis.02_north",
+      "option_name": "BBA_italy_missiolinis.02_north.c",
+      "fallback_option_name": "BBA_italy_missiolinis.02_north.a",
+      "why": "first mission failure: Struggle in Ethiopia (-5% fascism, -3% stability, -25 PP) instead of the Abyssinian Fiasco (-15% fascism, -3% war support)"
+    },
+    {
+      "event": "BBA_italy_missiolinis.04_south",
+      "option_name": "BBA_italy_missiolinis.04_south.c",
+      "fallback_option_name": "BBA_italy_missiolinis.04_south.a",
+      "why": "same as 02_north"
+    },
+    {
+      "event": "ETH_events.1",
+      "option_name": "ETH_events.1.b",
+      "why": "Ethiopia demands Eritrea, Somaliland and Jubaland: refuse while Italy still holds any of 550/559/844 provinces and Army 1 exists"
+    },
+    {
+      "event": "BBA_italo_ethiopian_war_events.120",
+      "option_name": "BBA_italo_ethiopian_war_events.120.b",
+      "condition": "Italy controls state 271 or holds at least 12 Ethiopian victory points",
+      "else_option_name": "BBA_italo_ethiopian_war_events.120.a",
+      "why": "refusing costs -25% war support, -20% stability, -250 PP; accept only when the war is lost"
+    },
+    {
+      "event": "BBA_italo_ethiopian_war_events.110",
+      "option_name": "BBA_italo_ethiopian_war_events.110.b",
+      "condition": "Ethiopian surrender share at least 0.5",
+      "else_option_name": "BBA_italo_ethiopian_war_events.110.a",
+      "why": "refusing hands every democratic LoN major a topple_government wargoal on Italy (event 113); accept unless capitulation is close"
+    }
+  ],
+  "focus_path": [
+    "ITA_ethiopian_war_logistics_bba",
+    "ITA_army_primacy_bba",
+    "ITA_italian_highways_bba",
+    "ITA_fiocchi_munizioni",
+    "ITA_increase_artillery_production",
+    "ITA_preserve_army_traditions",
+    "ITA_railway_innovations",
+    "ITA_air_innovations_bba",
+    "ITA_ministry_of_italian_africa",
+    "ITA_develop_ethiopia",
+    "ITA_develop_eritrea",
+    "ITA_develop_somaliland",
+    "ITA_regional_development"
+  ],
+  "focus_fallback": [
+    "ITA_steel_industry_in_terni",
+    "ITA_expand_rome_flying_school",
+    "ITA_citta_dell_aria",
+    "ITA_brescia_small_arms_industry",
+    "ITA_expand_foggia_farm_fields"
+  ],
+  "research_priority": [
+    "basic_machine_tools",
+    "construction1",
+    "interwar_artillery",
+    "tech_military_police",
+    "support_weapons",
+    "tech_recon",
+    "concentrated_industry",
+    "range_improvements",
+    "tech_logistics_company",
+    "tech_field_hospital",
+    "excavation1",
+    "electronic_mechanical_engineering",
+    "synth_oil_experiments",
+    "radio",
+    "tech_maintenance_company",
+    "tech_signal_company"
+  ],
+  "research_fallback": false,
+  "research_fallback_prefixes": [
+    "construction",
+    "basic_machine_tools",
+    "tech_",
+    "support_weapons",
+    "interwar_"
+  ],
+  "research_path": [
+    {
+      "year": 1936,
+      "not_before": "1936.01.01",
+      "techs": [
+        "basic_machine_tools",
+        "construction1",
+        "interwar_artillery",
+        "tech_military_police",
+        "support_weapons",
+        "tech_recon",
+        "concentrated_industry",
+        "range_improvements",
+        "tech_logistics_company",
+        "tech_field_hospital",
+        "excavation1",
+        "electronic_mechanical_engineering",
+        "synth_oil_experiments",
+        "radio",
+        "tech_maintenance_company",
+        "tech_signal_company"
+      ]
+    },
+    {
+      "year": 1937,
+      "not_before": "1937.01.01",
+      "techs": [
+        "improved_machine_tools",
+        "construction2",
+        "concentrated_industry2",
+        "improved_equipment_conversion",
+        "excavation2",
+        "fuel_refining2",
+        "oil_processing",
+        "rubber_processing",
+        "mechanical_computing"
+      ]
+    },
+    {
+      "year": 1938,
+      "not_before": "1938.01.01",
+      "techs": [
+        "infantry_weapons2",
+        "support_weapons2",
+        "improved_radio",
+        "computing_machine"
+      ]
+    }
+  ],
+  "construction": [
+    {
+      "building": "arms_factory",
+      "count": 2,
+      "states": [
+        161,
+        157,
+        115,
+        162,
+        114
+      ]
+    }
+  ],
+  "construction_fallback_any_own_state": true,
+  "construction_min_idle": 2,
+  "construction_queue_depth": 3,
+  "construction_plan": [
+    {
+      "order": 1,
+      "building": "supply_node",
+      "state": 559,
+      "province": 2020,
+      "when": "1936.01.01",
+      "priority": "top",
+      "why": "only hub Italy can start on day one; 2020 touches Mogadishu port 12991, Wal Wal 12812 and Bale 4995"
+    },
+    {
+      "order": 2,
+      "building": "rail_way",
+      "from_state": 559,
+      "to_state": 559,
+      "path": [
+        12991,
+        2020
+      ],
+      "when": "1936.01.01",
+      "priority": "top"
+    },
+    {
+      "order": 3,
+      "building": "rail_way",
+      "from_state": 550,
+      "to_state": 842,
+      "path": [
+        13250,
+        13238
+      ],
+      "when": "province_controlled:13238",
+      "priority": "top"
+    },
+    {
+      "order": 4,
+      "building": "rail_way",
+      "from_state": 842,
+      "to_state": 842,
+      "path": [
+        13238,
+        2072
+      ],
+      "when": "province_controlled:2072",
+      "priority": "top"
+    },
+    {
+      "order": 5,
+      "building": "supply_node",
+      "state": 842,
+      "province": 2072,
+      "when": "state_fully_controlled:842",
+      "priority": "top",
+      "why": "Macalle hub feeds Wello, Gondar and the Afar corridor"
+    },
+    {
+      "order": 6,
+      "building": "rail_way",
+      "from_state": 550,
+      "to_state": 908,
+      "path": [
+        12766,
+        8043,
+        13236,
+        5041,
+        13240
+      ],
+      "when": "owner:908=ITA",
+      "priority": "top",
+      "why": "Massaua port to Aussa through own Afar land, no river"
+    },
+    {
+      "order": 7,
+      "building": "rail_way",
+      "from_state": 908,
+      "to_state": 271,
+      "path": [
+        13240,
+        13239
+      ],
+      "when": "province_controlled:13239",
+      "priority": "top",
+      "why": "joins the existing Addis-Dire Dawa line (railways.txt:884), so the captured Addis 5010 and Dire Dawa 7980 hubs get Italian supply"
+    },
+    {
+      "order": 8,
+      "building": "rail_way",
+      "from_state": 842,
+      "to_state": 843,
+      "path": [
+        2072,
+        7944,
+        5097
+      ],
+      "when": "province_controlled:5097",
+      "priority": "high"
+    },
+    {
+      "order": 9,
+      "building": "rail_way",
+      "from_state": 559,
+      "to_state": 835,
+      "path": [
+        2020,
+        12812,
+        13253,
+        12714,
+        13249,
+        7980
+      ],
+      "when": "province_controlled:12812",
+      "priority": "high",
+      "why": "build province by province as each one is Italian; ends at the Dire Dawa hub"
+    },
+    {
+      "order": 10,
+      "building": "infrastructure",
+      "state": 842,
+      "when": "state_fully_controlled:842",
+      "priority": "normal"
+    },
+    {
+      "order": 11,
+      "building": "arms_factory",
+      "states": [
+        161,
+        157,
+        115,
+        162,
+        114
+      ],
+      "when": "no hub or railway is buildable",
+      "priority": "filler"
+    }
+  ],
+  "production_priority": [
+    "infantry_equipment",
+    "artillery_equipment",
+    "support_equipment",
+    "motorized_equipment"
+  ],
+  "production": [
+    {
+      "equipment": "infantry_equipment_1",
+      "factories": 9
+    },
+    {
+      "equipment": "artillery_equipment_1",
+      "factories": 4
+    },
+    {
+      "equipment": "support_equipment_1",
+      "factories": 2
+    },
+    {
+      "equipment": "motorized_equipment_1",
+      "factories": 5
+    },
+    {
+      "equipment": "artillery_equipment_2",
+      "factories": 3,
+      "from": "1936.06.01"
+    }
+  ],
+  "production_min_idle": 1,
+  "politics": [
+    {
+      "category": "government",
+      "slot": 2,
+      "idea": "war_economy",
+      "cost": 150
+    }
+  ],
+  "decisions": [],
+  "doctrines": [
+    {
+      "folder": "land",
+      "track": "infantry",
+      "subdoctrine": "assault_infantry",
+      "when": "army_xp >= 100"
+    },
+    {
+      "folder": "land",
+      "track": "combat_support",
+      "subdoctrine": "fire_concentration",
+      "when": "army_xp >= 135"
+    },
+    {
+      "folder": "land",
+      "track": "operations",
+      "subdoctrine": "mission_type_tactics",
+      "when": "army_xp >= 135"
+    }
+  ],
+  "armies": {
+    "states": [
+      550,
+      559,
+      844,
+      908,
+      158,
+      160,
+      115
+    ],
+    "max": 24,
+    "min_for_general": 4,
+    "absorb": "assign",
+    "consolidate": false,
+    "generals": [
+      "Giovanni Messe",
+      "Amedeo Guillet",
+      "Alessandro Pirzio Biroli",
+      "Carlo Vecchiarelli",
+      "Hamid Idris Awate",
+      "Rodolfo Graziani",
+      "Pietro Badoglio"
+    ]
+  },
+  "army_layout": [
+    {
+      "name_hint": "North strike (Army 1)",
+      "state": 550,
+      "templates": [
+        "Divisione di Fanteria",
+        "Divisione Ascari Eritrea",
+        "Truppe Irregolari a Cavallo"
+      ],
+      "count": 8,
+      "general": "Giovanni Messe",
+      "role": "strike",
+      "axis": [
+        842,
+        841,
+        843,
+        271
+      ]
+    },
+    {
+      "name_hint": "Gondar group",
+      "state": 550,
+      "templates": [
+        "Divisione Alpina",
+        "Divisione di Fanteria"
+      ],
+      "count": 2,
+      "general": "Carlo Vecchiarelli",
+      "role": "strike",
+      "axis": [
+        841
+      ],
+      "note": "Divisione Alpina at 12723 plus the Divisione di Fanteria nearest to 13251; joins the strike army for the Gondar attack from 13251, 13237 and 2072 at once"
+    },
+    {
+      "name_hint": "North guard",
+      "state": 550,
+      "templates": [
+        "Camicie Nere",
+        "Banda Irregolare Eritrea",
+        "Banda Irregolare Libica"
+      ],
+      "count": 8,
+      "general": "Alessandro Pirzio Biroli",
+      "role": "guard",
+      "guard_states_in_order": [
+        550,
+        842,
+        908,
+        843
+      ]
+    },
+    {
+      "name_hint": "South (Army 2)",
+      "state": 559,
+      "templates": [
+        "Divisione Ascari Libica",
+        "Divisione Ascari Somala",
+        "Camicie Nere",
+        "Truppe Irregolari a Cavallo"
+      ],
+      "count": 4,
+      "general": "Amedeo Guillet",
+      "role": "strike",
+      "axis": [
+        835,
+        836
+      ]
+    },
+    {
+      "name_hint": "South guard",
+      "state": 559,
+      "templates": [
+        "Banda Irregolare Somala"
+      ],
+      "count": 2,
+      "role": "guard",
+      "guard_states_in_order": [
+        559
+      ]
+    },
+    {
+      "name_hint": "Jubaland guard",
+      "state": 844,
+      "templates": [
+        "Divisione di Fanteria"
+      ],
+      "count": 1,
+      "role": "guard",
+      "guard_states_in_order": [
+        844
+      ]
+    },
+    {
+      "name_hint": "Afar guard",
+      "state": 908,
+      "templates": [
+        "Banda Indigena Irregolare"
+      ],
+      "count": 2,
+      "role": "guard",
+      "guard_states_in_order": [
+        908
+      ],
+      "when": "owner:908=ITA"
+    }
+  ],
+  "army_group": {
+    "name_hint": "Africa Orientale",
+    "field_marshal": "Rodolfo Graziani",
+    "fallback_field_marshal": "Pietro Badoglio",
+    "members": [
+      "North strike (Army 1)",
+      "Gondar group",
+      "North guard"
+    ]
+  },
+  "disband": {
+    "templates": [
+      "Divisione di Fanteria",
+      "Divisione Alpina",
+      "Camicie Nere",
+      "Reggimento di Cavalleria",
+      "Divisione Celere"
+    ],
+    "max": 14
+  },
+  "air": {
+    "war_missions": true
+  },
+  "air_plan": [
+    {
+      "base_state": 550,
+      "airframe": "small_plane_airframe_0",
+      "version": "CR.32",
+      "count": 40,
+      "mission": "air_superiority",
+      "region": 273,
+      "then_region": 17,
+      "switch_when": "province_controlled:5097"
+    },
+    {
+      "base_state": 550,
+      "airframe": "small_plane_cas_airframe_0",
+      "version": "Ca.111",
+      "count": 48,
+      "mission": "cas",
+      "region": 273,
+      "then_region": 17,
+      "switch_when": "province_controlled:5097"
+    },
+    {
+      "base_state": 550,
+      "airframe": "medium_plane_airframe_1",
+      "version": "SM.81",
+      "count": 32,
+      "mission": "cas",
+      "fallback_mission": "air_superiority",
+      "region": 273
+    },
+    {
+      "rule": "keep at most 299 aircraft based in strategic regions 17, 273, 274 (on_daily_ETH escalation trigger)"
+    }
+  ],
+  "war": {
+    "enemies": [
+      "ETH"
+    ],
+    "min_army": 2,
+    "per_target": 2,
+    "cooldown_hours": 12,
+    "reserve": [],
+    "axes": [],
+    "theatre": [
+      550,
+      559,
+      844,
+      908,
+      842,
+      843,
+      841,
+      840,
+      835,
+      836,
+      837,
+      271
+    ],
+    "guard_states": [
+      550,
+      559,
+      844
+    ],
+    "guards": {},
+    "motorization": 2,
+    "stall_days": 8,
+    "rest_below": 20,
+    "resume_above": 35,
+    "supply_floor": 30,
+    "direct_moves": true,
+    "supply_first": true
+  },
+  "war_by_phase": {
+    "P1_hold_christmas": {
+      "axes": [],
+      "guard_states": [
+        550,
+        559,
+        844
+      ],
+      "guards": {}
+    },
+    "P2_tigray": {
+      "axes": [
+        [
+          842,
+          843,
+          271
+        ],
+        [
+          835
+        ]
+      ],
+      "guard_states": [
+        844
+      ],
+      "guards": {
+        "<North guard army>": 550,
+        "<South guard army>": 559
+      }
+    },
+    "P3_gondar_afar": {
+      "axes": [
+        [
+          841,
+          840
+        ],
+        [
+          842,
+          843,
+          271
+        ],
+        [
+          836,
+          837
+        ]
+      ],
+      "guard_states": [
+        844
+      ],
+      "guards": {
+        "<North guard army>": 842,
+        "<South guard army>": 559,
+        "<Afar guard army>": 908
+      }
+    },
+    "P4_addis": {
+      "axes": [
+        [
+          843,
+          271
+        ],
+        [
+          841,
+          840
+        ],
+        [
+          837,
+          836
+        ]
+      ],
+      "guard_states": [
+        844
+      ],
+      "guards": {
+        "<North guard army>": 843,
+        "<South guard army>": 559,
+        "<Afar guard army>": 908
+      }
+    },
+    "P5_harar_and_rest": {
+      "axes": [
+        [
+          835
+        ],
+        [
+          840
+        ],
+        [
+          837,
+          836
+        ]
+      ],
+      "guard_states": [
+        844
+      ],
+      "guards": {
+        "<North guard army>": 271,
+        "<South guard army>": 559,
+        "<Afar guard army>": 908
+      }
+    }
+  },
+  "vp_targets": [
+    {
+      "order": 1,
+      "province": 13238,
+      "name": "Adwa",
+      "state": 842,
+      "vp": 1,
+      "army": "North strike (Army 1)",
+      "by": "1936-02-10"
+    },
+    {
+      "order": 2,
+      "province": 13237,
+      "name": "Aksum",
+      "state": 842,
+      "vp": 1,
+      "army": "North strike (Army 1)",
+      "by": "1936-02-10"
+    },
+    {
+      "order": 3,
+      "province": 12812,
+      "name": "Wal Wal",
+      "state": 835,
+      "vp": 1,
+      "army": "South (Army 2)",
+      "by": "1936-02-20",
+      "mission": "south"
+    },
+    {
+      "order": 4,
+      "province": 2072,
+      "name": "Macalle",
+      "state": 842,
+      "vp": 2,
+      "army": "North strike (Army 1)",
+      "by": "1936-03-05",
+      "mission": "north"
+    },
+    {
+      "order": 5,
+      "province": 1984,
+      "name": "Gondar",
+      "state": 841,
+      "vp": 2,
+      "army": "Gondar group",
+      "by": "1936-04-10",
+      "mission": "north"
+    },
+    {
+      "order": 6,
+      "province": 4995,
+      "name": "Bale desert (no VP, shortens the southern front)",
+      "state": 836,
+      "vp": 0,
+      "army": "South (Army 2)",
+      "by": "1936-03-31"
+    },
+    {
+      "order": 7,
+      "province": 13247,
+      "name": "Moyale",
+      "state": 837,
+      "vp": 1,
+      "army": "South (Army 2)",
+      "by": "1936-06-30",
+      "mission": "south",
+      "path": [
+        11014,
+        8062,
+        13247
+      ]
+    },
+    {
+      "order": 8,
+      "province": 5097,
+      "name": "Dessie",
+      "state": 843,
+      "vp": 1,
+      "army": "North strike (Army 1)",
+      "by": "1936-04-30",
+      "path": [
+        13236,
+        5041,
+        5097
+      ]
+    },
+    {
+      "order": 9,
+      "province": 5010,
+      "name": "Addis Ababa",
+      "state": 271,
+      "vp": 5,
+      "army": "North strike (Army 1)",
+      "by": "1936-06-15",
+      "path": [
+        13240,
+        13239,
+        5010
+      ]
+    },
+    {
+      "order": 10,
+      "province": 8036,
+      "name": "Asella",
+      "state": 271,
+      "vp": 1,
+      "army": "North strike (Army 1)",
+      "by": "1936-06-30"
+    },
+    {
+      "order": 11,
+      "province": 7980,
+      "name": "Dire Dawa",
+      "state": 835,
+      "vp": 2,
+      "army": "North strike (Army 1)",
+      "by": "1936-07-15"
+    },
+    {
+      "order": 12,
+      "province": 13249,
+      "name": "Harar",
+      "state": 835,
+      "vp": 3,
+      "army": "South (Army 2)",
+      "by": "1936-07-31"
+    },
+    {
+      "order": 13,
+      "province": 13242,
+      "name": "Debre Markos",
+      "state": 840,
+      "vp": 2,
+      "army": "Gondar group",
+      "by": "1936-08-15"
+    },
+    {
+      "order": 14,
+      "province": 10775,
+      "name": "Gaba",
+      "state": 836,
+      "vp": 1,
+      "army": "South (Army 2)",
+      "by": "1936-08-31"
+    },
+    {
+      "order": 15,
+      "province": 13246,
+      "name": "Irgalem",
+      "state": 837,
+      "vp": 2,
+      "army": "North strike (Army 1)",
+      "by": "1936-08-31"
+    },
+    {
+      "order": 16,
+      "province": 8019,
+      "name": "Yabello",
+      "state": 837,
+      "vp": 1,
+      "army": "South (Army 2)",
+      "by": "1936-09-15"
+    },
+    {
+      "order": 17,
+      "province": 13244,
+      "name": "Gambella (only if Ethiopia moved its capital there)",
+      "state": 838,
+      "vp": 2,
+      "army": "North strike (Army 1)",
+      "by": "when needed"
+    }
+  ],
+  "surrender_goal": {
+    "total_ethiopian_vp": 32,
+    "limit": 0.8,
+    "vp_needed": 26,
+    "limit_with_demoralized_ras": 0.65,
+    "vp_needed_with_demoralized_ras": 21,
+    "must_control_state_at_end": 271
+  },
+  "retake_rules": [
+    {
+      "if": "any province of an own state (550, 559, 844, 908) is enemy-controlled",
+      "do": "the nearest guard army moves into that province; the strike army keeps attacking unless the province is 13250 Asmara, 12766 Massaua, 12991 Mogadishu or 12941 Kismayo"
+    },
+    {
+      "if": "Asmara 13250 or Massaua 12766 is enemy-controlled",
+      "do": "strike army stops its offensive and retakes it first (only Eritrean supply source)"
+    },
+    {
+      "if": "a captured axis province behind the strike army is enemy-controlled (842, 843, 908, 271)",
+      "do": "guard army retakes it; strike army continues only if its own supply is at least 30%"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P0_setup",
+      "from": "1936-01-01",
+      "until": "unpause",
+      "goal": "paused setup: production, research, focus, laws, armies split by role, generals, air missions, fronts on every border province"
+    },
+    {
+      "id": "P1_hold_christmas",
+      "from": "1936-01-01",
+      "until": "1936-01-16",
+      "goal": "every Eritrean, Somali and Jubaland province stays Italian while ETH_christmas_offensive_idea is active",
+      "exit": "date >= 1936-01-16 and no own province enemy-held"
+    },
+    {
+      "id": "P2_tigray",
+      "from": "1936-01-16",
+      "goal": "Adwa, Aksum, Macalle; south takes Wal Wal",
+      "exit": "state 842 fully Italian"
+    },
+    {
+      "id": "P3_gondar_afar",
+      "goal": "Gondar (north mission), Aussa annexation, Bale desert",
+      "exit": "province 1984 Italian and owner of 908 is ITA"
+    },
+    {
+      "id": "P4_addis",
+      "goal": "Dessie, then Addis Ababa through 13240-13239; rails behind the army",
+      "exit": "state 271 controlled by Italy"
+    },
+    {
+      "id": "P5_harar_and_rest",
+      "goal": "Dire Dawa, Harar, Debre Markos, Gaba, Irgalem, Yabello until capitulation",
+      "exit": "Ethiopia capitulated"
+    },
+    {
+      "id": "P6_peace",
+      "goal": "peace conference: take every Ethiopian state, then Ministry of Italian Africa focuses, garrisons and compliance"
+    }
+  ],
+  "alarms": {
+    "political_power": 160,
+    "consumer_goods_ratio": 0.45,
+    "idle_civilian_factories": 3,
+    "idle_military_factories": 1,
+    "unassigned_divisions": 1
+  }
+}
