@@ -463,8 +463,18 @@ pub(super) fn save_game(
     Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
 }
 /// Close the game menu if an earlier input left it open (Escape closes it).
+/// Game menus our input closed so far: the menu pauses the game and closing it leaves the game
+/// paused (w11), so a pause during an action with a menu closed is ours to undo.
+static MENUS_CLOSED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub(super) fn menus_closed() -> u64 {
+    MENUS_CLOSED.load(std::sync::atomic::Ordering::SeqCst)
+}
+pub(super) fn menu_shown(process: &dyn Process) -> bool {
+    read(process, menu_open).unwrap_or(false)
+}
 pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, menu_open)? {
+        MENUS_CLOSED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         keys.press(crate::platform::game_input::Key::Escape)?;
         wait(process, "game menu closed", |r, i| Ok(!menu_open(r, i)?))?;
     }
