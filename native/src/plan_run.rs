@@ -1123,6 +1123,21 @@ fn armies_step(
     Ok(None)
 }
 
+/// The first supply line (supply hub or railway) that stands behind a line of another kind, by
+/// its 0-based queue index.
+fn supply_line_to_raise(lines: &[Value]) -> Option<usize> {
+    let supply = |l: &Value| {
+        l["line_kind"] == json!("railway") || l["building"]["building_id"] == json!("supply_node")
+    };
+    let first_other = lines.iter().position(|l| !supply(l))?;
+    lines
+        .iter()
+        .enumerate()
+        .skip(first_other + 1)
+        .find(|(_, l)| supply(l))
+        .map(|(i, _)| i)
+}
+
 /// `disband`: {"templates":["Camicie Nere",..],"keep_states":[ids],"max":N}: divisions of these
 /// templates in an army, standing outside `keep_states` (default: war.theatre), are disbanded
 /// one army at a time so their men and equipment refill the fighting armies (Ethiopia run 10:
@@ -1871,6 +1886,27 @@ fn war_step(
     if targets.is_empty() {
         return Ok(None);
     }
+    // At war, supply comes first in the construction queue: a hub or railway behind another
+    // line gets no factories (w23: the Tigray and Wello hubs sat behind industrial complexes
+    // with none and the army starved in Wello).
+    if cfg["supply_first"] != json!(false) && !state.skipped(now, "supplyfirst", "queue") {
+        let queue = tools.call("hoi4_construction_queue", &json!({"limit": 32}))?;
+        if let Some(line) = supply_line_to_raise(list(&queue, "lines")) {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_construction_order",
+                json!({"line": line, "action": "top"}),
+                "sq",
+            )?;
+            if !ok {
+                state.skip(now, "supplyfirst", "queue", DAY);
+            }
+            return Ok(Some(format!(
+                "supply first: construction line {line} to the top: {ok} {why}"
+            )));
+        }
+    }
     let roster = tools.call("hoi4_armies", &json!({}))?;
     let mut load: HashMap<i32, usize> = HashMap::new();
     for target in state.war_assign.values() {
@@ -2154,7 +2190,11 @@ fn war_step(
             }
         }
         let Some(target) = target else { continue };
-        let liberate = targets.iter().any(|t| t.0 == target && t.1);
+        // `direct_moves`: attack with direct moves, state then province by province, instead of
+        // battle plans (w11 and w23: the plans stalled for weeks in the Ethiopian mountains and a
+        // direct move broke each stall).
+        let direct = cfg["direct_moves"] == json!(true);
+        let liberate = direct || targets.iter().any(|t| t.0 == target && t.1);
         let stage = state.war_stage.get(&name).copied().unwrap_or(0);
         let executing = army["plan_executing"] == json!(true);
         let standing_in_target = here == Some(target);
@@ -2249,8 +2289,9 @@ fn war_step(
                 (now - since) / DAY
             )));
         }
-        if state.war_move.contains(&name) {
-            // Moving: wait for progress (the stall check above re-issues the move).
+        if state.war_move.contains(&name) && !(liberate && standing_in_target) {
+            // Moving: wait for progress (the stall check above re-issues the move). Inside a
+            // state to retake or take, go on province by province below.
             continue;
         }
         let (tool, args, label, next_stage) = if liberate {
@@ -3758,6 +3799,43 @@ mod tests {
             .find(|(n, _)| n.starts_with("hoi4_army_"))
             .cloned()
             .unwrap()
+    }
+
+    #[test]
+    fn a_supply_line_behind_factories_is_raised_first() {
+        let ic =
+            json!({"line_kind": "building", "building": {"building_id": "industrial_complex"}});
+        let hub = json!({"line_kind": "building", "building": {"building_id": "supply_node"}});
+        let rail = json!({"line_kind": "railway", "building": null});
+        assert_eq!(
+            super::supply_line_to_raise(&[ic.clone(), ic.clone(), hub.clone(), rail.clone()]),
+            Some(2)
+        );
+        assert_eq!(
+            super::supply_line_to_raise(&[hub.clone(), rail.clone(), ic.clone()]),
+            None
+        );
+        assert_eq!(
+            super::supply_line_to_raise(&[hub.clone(), ic.clone(), rail.clone()]),
+            Some(2)
+        );
+        assert_eq!(super::supply_line_to_raise(std::slice::from_ref(&ic)), None);
+    }
+
+    #[test]
+    fn direct_moves_attack_with_a_move_instead_of_a_front() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "direct_moves": true}});
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let (name, args) = last_action(&w);
+        assert_eq!(name, "hoi4_army_move", "{:?}", w.calls.borrow());
+        assert!(args["state_id"] == 28 || args["state_id"] == 18, "{args}");
+        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_front"));
     }
 
     /// An army standing in an own state an enemy holds part of.
