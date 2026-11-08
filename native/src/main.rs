@@ -218,6 +218,23 @@ fn watch_loop(
 
 /// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
 #[cfg(target_os = "macos")]
+/// Step errors that end the executor: its authority or its game is gone, or the plan cannot be
+/// used. Everything else is retried with backoff.
+fn autopilot_stops_on(code: &str) -> bool {
+    code.contains("lease")
+        || matches!(
+            code,
+            "invalid_plan"
+                | "invalid_plan_state"
+                | "plan_conflict"
+                | "ownership_changed"
+                | "owner_changed"
+                | "process_absent"
+                | "process_lost"
+                | "capability_unavailable"
+                | ""
+        )
+}
 fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Commands) -> bool {
     use hoi4_live_native::{autopilot::autopilot, watch::feed};
     let Some(token) = autopilot().due() else {
@@ -239,13 +256,26 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
         .and_then(|t| serde_json::from_str(t).ok())
         .unwrap_or_default();
     if result["isError"] == serde_json::json!(true) {
-        // A refused step (lease gone, plan unreadable) stops the executor visibly.
-        autopilot().disable();
-        feed().note(
-            "autopilot_stopped",
-            true,
-            serde_json::json!({"reason": body}),
-        );
+        let code = body["error"]["code"].as_str().unwrap_or("");
+        if autopilot_stops_on(code) {
+            // A refused step (lease gone, another game, plan unreadable) stops the executor
+            // visibly.
+            autopilot().disable();
+            feed().note(
+                "autopilot_stopped",
+                true,
+                serde_json::json!({"reason": body}),
+            );
+        } else {
+            // A transient failure (a torn read on a busy game day stopped the executor for good,
+            // live 8 Nov 2026) counts as a failed step: the executor backs off and tries again.
+            feed().note(
+                "autopilot_step_failed",
+                false,
+                serde_json::json!({"reason": body}),
+            );
+            autopilot().ran_with(1, 0, Some(format!("step: false {code}")));
+        }
         return true;
     }
     let actions: Vec<String> = body["actions"]
@@ -262,4 +292,29 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
     let succeeded = actions.iter().filter(|a| !a.contains(": false")).count();
     autopilot().ran_with(actions.len(), succeeded, actions.last().cloned());
     true
+}
+
+#[cfg(test)]
+mod autopilot_stop_tests {
+    #[test]
+    fn transient_errors_back_off_and_lost_authority_stops() {
+        for code in [
+            "torn_read",
+            "short_read",
+            "input_readback_failed",
+            "events_open",
+            "plan_busy",
+        ] {
+            assert!(!super::autopilot_stops_on(code), "{code}");
+        }
+        for code in [
+            "input_lease_required",
+            "invalid_plan",
+            "ownership_changed",
+            "process_lost",
+            "",
+        ] {
+            assert!(super::autopilot_stops_on(code), "{code}");
+        }
+    }
 }
