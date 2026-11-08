@@ -61,8 +61,7 @@ days. Supply hubs are not worth building in this war (user).
 
 ## Running a live game (macOS)
 
-- Never start HOI4 while Steam or steamcmd runs; launch
-  `hoi4.app/Contents/MacOS/hoi4 -userdir=…` directly, copy `dlc_signature` and
+- Launch `hoi4.app/Contents/MacOS/hoi4 -userdir=…` directly, copy `dlc_signature` and
   `dlc_load.json` from `~/Documents/Paradox Interactive/Hearts of Iron IV` (10 DLCs),
   force 1920×1080 in `pdx_settings.txt`. Without Steam a fresh user folder has no DLCs.
 - Memory access needs the task-port authorization (`security authorize -u

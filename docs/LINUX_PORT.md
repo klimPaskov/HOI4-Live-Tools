@@ -65,5 +65,4 @@ Binding: `hoi4-live-native --bind-management RUN_DIRECTORY BINDING` with
 `{"window": <X11 id>, "window_class": "<exact WM_CLASS bytes>", "client": [1920, 1080]}`
 and the run directory's `input.json` (controller, player) as on macOS.
 
-Unchanged: never start the game while Steam or steamcmd runs, no Steam variables,
-private `HOME`, owned display, owned process identity.
+Unchanged: no Steam variables, private `HOME`, owned display, owned process identity.

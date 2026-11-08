@@ -26,7 +26,7 @@ in-game confirmation of each is still to be done (see the pull request).
   folder into the run's user folder with a byte-exact backup, so a launch without the Steam client keeps the
   DLC. `hoi4_shutdown` (or `hoi4_prepare action=restore`) puts the folder back and never overwrites a file
   that changed after the copy. `hoi4_launch prepare_dlc=true` does both steps. The README explains the launch
-  order (Steam closed, prepare, launch, test, shutdown). New config key `dlc_source_dir`.
+  order (prepare, launch, test, shutdown). New config key `dlc_source_dir`.
 - `docs/tools.md` regenerated from the registry (it had drifted behind `hoi4_front`, `hoi4_memory` and others).
 
 ### Smoke tests and checks (R-5)
@@ -103,12 +103,8 @@ first time as experimental downloadable builds:
   production and construction). It accepts only HOI4 1.19.3 (GNU build ID a4971c9e...); 1.19.4.1
   Linux builds are refused until their offsets are mapped and verified.
 
-Steam rules for every launcher (Python `hoi4_launch` and the native Linux launcher):
+Launch environment for every launcher (Python `hoi4_launch` and the native Linux launcher):
 
-- The game is never started while a Steam client, `steamwebhelper` or `steamcmd` runs
-  (`steam_running`). Under WSL the Windows host is checked too through `tasklist.exe`
-  (`steam_check_unavailable` when interop is off; `HOI4_LIVE_WINDOWS_STEAM_CHECK=skip` only when the
-  harness checks the Windows host itself).
 - No Steam variable (`SteamAppId`, `SteamGameId`, `STEAM_COMPAT_*` ...) or Steam overlay preload
   reaches the game. The native Linux launcher also gives the game an empty private `HOME` inside the
   run directory.
