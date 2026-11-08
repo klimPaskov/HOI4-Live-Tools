@@ -352,10 +352,10 @@ fn the_full_display_notification_center_overlay_passes_but_its_banners_block() {
         ..full.clone()
     };
     assert!(check(&[other, game()]).is_err());
-    // a titled Notification Center window (the open panel) still blocks
+    // the same window with its title visible (Screen Recording granted) also passes
     let titled = Window {
         name: Some("Notification Center".into()),
         ..full
     };
-    assert!(check(&[titled, game()]).is_err());
+    assert!(check(&[titled, game()]).is_ok());
 }

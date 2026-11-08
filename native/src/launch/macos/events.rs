@@ -143,6 +143,10 @@ struct Open {
     event: u64,
     id: String,
     title: String,
+    /// The event's own text (Description text box), read from memory.
+    description: String,
+    /// The leader shown in leader/operative layouts (leader_fullname), when present.
+    leader: Option<String>,
     options: Vec<String>,
     centres: Option<Vec<(f64, f64)>>,
     /// News windows: options are found on screen below this point within
@@ -177,6 +181,17 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
             Some(t) => r.string_bounded(t + u.text, 256).unwrap_or_default(),
             None => String::new(),
         };
+        let text_of = |name: &str| -> Result<Option<String>> {
+            Ok(match find(r, image, window, name, 0)? {
+                Some(t) => r
+                    .string_bounded(t + u.text, 4096)
+                    .ok()
+                    .map(|v| plain_text(&v)),
+                None => None,
+            })
+        };
+        let description = text_of("Description")?.unwrap_or_default();
+        let leader = text_of("leader_fullname")?.filter(|v| !v.trim().is_empty());
         let grid = find(r, image, window, "options_grid", 0)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Event options not found"))?;
         let (_, items, n) = r.array_header(grid + u.grid_items)?;
@@ -197,6 +212,8 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
             event,
             id,
             title,
+            description,
+            leader,
             options,
             centres,
             scan,
@@ -416,7 +433,7 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let last = open.len().saturating_sub(1);
     Ok(
         json!({"peace_conference_open":peace,"events":open.iter().enumerate().map(|(i, e)| json!({
-        "event":e.id,"title":e.title,"options":e.options,"on_top":i == last,
+        "event":e.id,"title":e.title,"description":e.description,"leader":e.leader,"options":e.options,"on_top":i == last,
         "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout})).collect::<Vec<_>>()}),
     )
 }
@@ -587,5 +604,116 @@ mod tests {
         let bands = dark_bands(&capture, 908.0, 120.0, 494.0);
         assert_eq!(bands.len(), 1);
         assert!((bands[0].0 - 738.0).abs() <= 2.0 && (bands[0].1 - 776.0).abs() <= 2.0);
+    }
+}
+
+/// Probe-only: the top event window's widget tree (path, rect, shown, text of text boxes),
+/// child windows and grid items included.
+pub(super) fn debug_event(process: &dyn Process) -> Result<Value> {
+    read(process, |r, image| {
+        let u = ui(r)?;
+        let idler = r.u64(image + game::layout(r).idler_global)?;
+        let gui = r.u64(idler + u.gui)?;
+        let (_, data, count) = r.array_header(gui + u.popups)?;
+        let mut window = None;
+        for index in 0..count.min(32) as u64 {
+            let entry = r.u64(data + index * 8)?;
+            if r.u64(entry)? != image + u.event_window_vtable {
+                continue;
+            }
+            let root = r.u64(entry + u.root)?;
+            if let Some(w) = gui_tree::container(r, base_of(r, image, root)?, image)? {
+                if gui_tree::visible(r, w)? {
+                    window = Some(w);
+                }
+            }
+        }
+        let Some(window) = window else {
+            return Ok(json!({"open": false}));
+        };
+        let mut out = Vec::new();
+        let mut stack = vec![(window, 0u32, String::new())];
+        while let Some((obj, depth, path)) = stack.pop() {
+            for child in gui_tree::children(r, obj)? {
+                let name = gui_tree::name(r, child, image)?.unwrap_or_default();
+                let p = format!("{path}/{name}");
+                let rect = gui_tree::rect_unclipped(r, image, child, GAME)
+                    .map(|x| [x.x, x.y, x.w, x.h])
+                    .ok();
+                let text = if ["Title", "Description", "Name", "leader_fullname"]
+                    .contains(&name.as_str())
+                {
+                    r.string_bounded(child + u.text, 4000).ok()
+                } else {
+                    None
+                };
+                out.push(json!({"path": p, "rect": rect, "shown": gui_tree::shown(r, child).unwrap_or(false),
+                    "state": gui_tree::button_state(r, child).ok(), "text": text}));
+                if depth < 8 {
+                    if let Ok(Some(inner)) = gui_tree::container(r, child, image) {
+                        stack.push((inner, depth + 1, p.clone()));
+                    }
+                    if name == "options_grid" {
+                        if let Ok((_, items, n)) = r.array_header(child + u.grid_items) {
+                            for i in 0..n.min(8) as u64 {
+                                let item = r.u64(items + i * 8)?;
+                                let entry = r.u64(item + u.item_container)?;
+                                if let Ok(Some(frame)) =
+                                    gui_tree::container(r, base_of(r, image, entry)?, image)
+                                {
+                                    let base = base_of(r, image, entry)?;
+                                    let rect = gui_tree::rect_unclipped(r, image, base, GAME)
+                                        .map(|x| [x.x, x.y, x.w, x.h])
+                                        .ok();
+                                    out.push(json!({"path": format!("{p}/item{i}"), "rect": rect}));
+                                    stack.push((frame, depth + 1, format!("{p}/item{i}")));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(json!({"open": true, "widgets": out}))
+    })
+}
+
+/// Event text without the game's markup: colour codes (`§Y` ... `§!`), icon tags (`£name£`)
+/// and control characters other than line breaks.
+pub(super) fn plain_text(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '§' => {
+                chars.next();
+            }
+            '£' => {
+                for d in chars.by_ref() {
+                    if d == '£' || d == ' ' {
+                        break;
+                    }
+                }
+            }
+            '\n' => out.push('\n'),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    // a removed icon tag leaves two spaces
+    while out.contains("  ") {
+        out = out.replace("  ", " ");
+    }
+    out.trim().to_string()
+}
+
+#[cfg(test)]
+mod text_tests {
+    #[test]
+    fn markup_is_removed_and_words_kept() {
+        assert_eq!(
+            super::plain_text("The §Ylast§! stand at £army_experience£ Wello.\nNow."),
+            "The last stand at Wello.\nNow."
+        );
     }
 }
