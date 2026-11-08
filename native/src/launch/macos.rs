@@ -558,7 +558,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),
         n if n.starts_with("dbg_bytes:") => panelkit::debug_bytes(process, &n[10..]),
         "dbg_camera" => ui::read(process, |r, i| {
-            Ok(json!({"height": screenmap::camera_height(r, i)?}))
+            let v = screenmap::view_matrix(r, i)?;
+            Ok(json!({"height": screenmap::camera_height(r, i)?, "x": v[12], "z": v[14]}))
         }),
         _ => Err(Error::new(
             "capability_unavailable",

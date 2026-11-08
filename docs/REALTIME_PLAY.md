@@ -115,7 +115,12 @@ The full research report (both the main investigation and an independent review)
 | `hoi4_production_set` | 0.7-1.75 s | 0.08-0.4 s | Empty notice check is one read (was a 60 ms settle before nearly every action) |
 | `hoi4_research_start` | 1.5-1.8 s | about 1.5 s | (the research panel's slide-in dominates) |
 | `hoi4_air_mission` | 5-8 s, some false successes | 3.9-4.3 s; 25-80 ms when already assigned | Region-checked readback, no Find on entering air mode, clicks off the base icons |
-| `hoi4_army_create` | 39.9 s (10 + 18 divisions) | 10.5 s (5 + 6 divisions) | (earlier selection and journal changes) |
+| `hoi4_army_create` | 39.9 s (10 + 18 divisions) | 4.7 s (2 divisions), 10.5 s (5 + 6) | Stops at the dialog or the new army instead of a fixed 500 ms |
+| `hoi4_focus_start` | 1.7 s | 0.84 s | (notice check, panel waits) |
+
+The Find view costs about 1.5 s by nature: the game glides the camera to the state in an eased
+movement of about a second (sampled live: still settling 1.8 s after the key), which is why every
+order first tries to aim where the camera already is.
 
 Army orders now leave the camera at unit level (the maintainer watches the units); the strategic
 view returns before the next non-army action. Front and offensive aim without the Find view only at
