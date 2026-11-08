@@ -8,6 +8,7 @@ use crate::{
     platform::Process,
 };
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::Path;
 
 /// Lower-case ASCII folding for the accented letters of European state names.
@@ -160,6 +161,9 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
     if query.len() == 3 && query.bytes().all(|b| b.is_ascii_uppercase()) {
         let all = names(dir)?;
         let centers = super::mapdata::state_centers(dir).ok();
+        let victory = super::mapdata::state_victory_points(dir).ok();
+        let (mut vp_total, mut vp_lost) = (0.0f64, 0.0f64);
+        let mut vp_kept: Vec<Value> = Vec::new();
         let mut rows = Vec::new();
         for (id, name) in all {
             if let Ok((owner, controller)) = read(process, |r, i| holders(r, i, id)) {
@@ -177,11 +181,56 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
                     if !others.is_empty() {
                         row["provinces_held_by_others"] = json!(others);
                     }
+                    // Victory points of the country's own states and who holds them: the share
+                    // held by others drives its surrender progress.
+                    if owner == query {
+                        if let Some(vps) = victory.as_ref().and_then(|v| v.get(&id)) {
+                            let ids: Vec<i32> = vps.iter().map(|(p, _)| *p).collect();
+                            let held: HashMap<i32, String> =
+                                read(process, |r, i| province_controllers(r, i, &ids))
+                                    .unwrap_or_default()
+                                    .into_iter()
+                                    .collect();
+                            let mut list = Vec::new();
+                            for (p, v) in vps {
+                                let c = held.get(p).cloned().unwrap_or_default();
+                                vp_total += v;
+                                if !c.is_empty() && c != owner {
+                                    vp_lost += v;
+                                } else {
+                                    vp_kept.push(
+                                        json!({"state_id": id, "province": p, "victory_points": v}),
+                                    );
+                                }
+                                list.push(
+                                    json!({"province": p, "victory_points": v, "controller": c}),
+                                );
+                            }
+                            row["victory_points"] = json!(list);
+                        }
+                    }
                     rows.push(row);
                 }
             }
         }
-        return Ok(json!({"states":rows}));
+        let mut out = json!({"states": rows});
+        if vp_total > 0.0 {
+            vp_kept.sort_by(|a, b| {
+                b["victory_points"]
+                    .as_f64()
+                    .unwrap_or(0.0)
+                    .total_cmp(&a["victory_points"].as_f64().unwrap_or(0.0))
+            });
+            vp_kept.truncate(12);
+            out["victory_points"] = json!({
+                "total": vp_total,
+                "held_by_others": vp_lost,
+                "share_held_by_others": (vp_lost / vp_total * 1000.0).round() / 1000.0,
+                "largest_still_held": vp_kept,
+                "note": "estimate from the map files and live province control: a country's surrender progress follows the share of its own victory points others hold (laws, national spirits and events move the threshold)"
+            });
+        }
+        return Ok(out);
     }
     let found: Vec<(i32, String)> = names(dir)?
         .into_iter()
@@ -210,11 +259,20 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
                     .and_then(|m| m.get(&id).cloned())
                     .unwrap_or_default();
                 let positions = super::mapdata::positions(dir).ok();
+                let vps: HashMap<i32, f64> = super::mapdata::state_victory_points(dir)
+                    .ok()
+                    .and_then(|m| m.get(&id).cloned())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect();
                 if let Ok(list) = read(process, |r, i| province_controllers(r, i, &provinces)) {
                     row["provinces"] = json!(list
                         .into_iter()
                         .map(|(p, c)| {
                             let mut v = json!({"province": p, "controller": c});
+                            if let Some(vp) = vps.get(&p) {
+                                v["victory_points"] = json!(vp);
+                            }
                             if let Some(&(x, z)) = positions.as_ref().and_then(|m| m.get(&p)) {
                                 v["x"] = json!(x.round());
                                 v["z"] = json!(z.round());

@@ -2312,7 +2312,11 @@ fn war_step(
                     .filter_map(|p| {
                         let id = p["province"].as_i64()? as i32;
                         let (x, z) = (p["x"].as_f64()?, p["z"].as_f64()?);
-                        Some((id, (x - ax).powi(2) + (z - az).powi(2)))
+                        // Victory points first, largest first, then nearest (w24 held four
+                        // provinces of Shewa but never Addis Abeba's own, so Ethiopia never
+                        // came near capitulation).
+                        let vp = p["victory_points"].as_f64().unwrap_or(0.0);
+                        Some((id, (x - ax).powi(2) + (z - az).powi(2) - vp * 1.0e9))
                     })
                     .min_by(|a, b| a.1.total_cmp(&b.1));
                 let Some((province, _)) = nearest else {
@@ -3893,6 +3897,34 @@ mod tests {
         // a few hours later, still on the way: no second order
         tick(&mut state, &w, &plan, "l", START + 6).unwrap();
         assert_eq!(moves(&w).len(), 1);
+    }
+
+    #[test]
+    fn a_victory_point_province_comes_before_a_nearer_one() {
+        struct Vp(RefCell<Vec<(String, Value)>>);
+        impl Tools for Vp {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                if name == "hoi4_states" && args["query"] == "42" {
+                    return Ok(json!({"states": [{"state_id": 42, "provinces": [
+                        {"province": 7, "controller": "POL", "x": 5.0, "z": 0.0},
+                        {"province": 8, "controller": "POL", "x": 50.0, "z": 0.0, "victory_points": 5.0}]}]}));
+                }
+                Inside(RefCell::new(vec![])).call(name, args)
+            }
+        }
+        let w = Vp(RefCell::new(vec![]));
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["POL"], "cooldown_hours": 1}});
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let moves: Vec<Value> =
+            w.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .map(|(_, a)| a.clone())
+                .collect();
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0]["province_id"], 8);
     }
 
     /// The war fake with a validated war list at peace.
