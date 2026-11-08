@@ -47,11 +47,11 @@ game memory --> WATCHER (own situation sampled every 0.3-2 s -> typed changes, s
 | `batch` output shrinks lists but stays valid JSON | `macplay.py` | The 700-character cut broke JSON mid-object |
 | A repeated successful action returns its stored result | `macplay.py` | The `already_done` error cost the player a turn |
 | The preflight window list is reused for 150 ms (identity check only; the occlusion check stays fresh) | `platform/macos_input.rs` | About 10% of a map action went to window-server round trips |
+| Journal quarantine by domain: an unresolved action blocks new input only in its own domain (army, air, navy, research, focus, construction, production, politics, diplomacy, intelligence). The clock, events, the peace screens and unknown kinds still block everything | `journal::domain_of`, `input_gate::check_in` | One uncertain dispatch used to stop all input for a run (w11). Approved by the maintainer, 8 Nov 2026 |
 | Camera-still waits, the Find view skipped when the point is visible, 35/35/25 ms clicks and 25/25 ms keys, a plan run that never sleeps holding the lane, `timing_ms`, `HOI4_TRACE` | commit `a35782c` | Fixed sleeps were most of each action |
 
 ## Not changed, on purpose
 
-- **Journal quarantine.** One unresolved dispatch still blocks all input. It is a deliberate safety guarantee; narrowing it is a decision for the maintainer.
 - **The remaining post-success sleeps** (army selection, scroll bursts, the Find view stages). They need live tuning against misclicks.
 - **Reads.** They are already 0–30 ms, so caching them or porting them to faster code gains nothing.
 

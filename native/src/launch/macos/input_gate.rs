@@ -21,10 +21,24 @@ pub(super) fn check(
     is_clock: bool,
     request_id: Option<&str>,
 ) -> Result<()> {
+    check_in(clock, game, identity, is_clock, request_id, "*")
+}
+
+/// `check` for a tool of one input domain: an unresolved game action blocks only its own
+/// domain (and global ones block all). The clock journal still blocks every game path.
+pub(super) fn check_in(
+    clock: &Journal,
+    game: &GameJournal,
+    identity: &Identity,
+    is_clock: bool,
+    request_id: Option<&str>,
+    domain: &str,
+) -> Result<()> {
     let blocked = if is_clock {
         game.blocked()
     } else {
-        clock.blocks_game(identity) || (game.blocked() && !game.permits_recovery(request_id))
+        clock.blocks_game(identity)
+            || (game.blocked_for(domain) && !game.permits_recovery(request_id))
     };
     if blocked {
         return Err(Error::new(

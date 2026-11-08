@@ -222,8 +222,22 @@ impl GameJournal {
             .values()
             .find(|r| r.status == Status::Dispatching)
     }
+    /// An unresolved dispatch that blocks new input in `domain`: one in the same domain, or any
+    /// one whose domain is global (`*`), or any one at all when `domain` is global.
+    pub(super) fn unresolved_in(&self, domain: &str) -> Option<&Receipt> {
+        self.receipts.values().find(|r| {
+            r.status == Status::Dispatching && {
+                let theirs = domain_of(r.action["kind"].as_str().unwrap_or(""));
+                domain == "*" || theirs == "*" || theirs == domain
+            }
+        })
+    }
     pub(super) fn blocked(&self) -> bool {
         self.poisoned || self.unresolved().is_some()
+    }
+    /// Blocked for new input in `domain` (a persistence failure blocks everything).
+    pub(super) fn blocked_for(&self, domain: &str) -> bool {
+        self.poisoned || self.unresolved_in(domain).is_some()
     }
     /// Only an existing request may take the read-only replay/settlement path.
     /// Persistence failure cannot be cleared by a new lease or request ID.
@@ -442,11 +456,11 @@ impl GameJournal {
                 )
             });
         }
-        if let Some(open) = self.unresolved() {
+        if let Some(open) = self.unresolved_in(domain_of(action["kind"].as_str().unwrap_or(""))) {
             return Err(Error::new(
                 "action_uncertain",
                 format!(
-                    "Unresolved dispatch {} blocks input; retry that request_id to settle it",
+                    "Unresolved dispatch {} blocks input in its domain; retry that request_id to settle it",
                     open.id
                 ),
             ));
@@ -995,5 +1009,45 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(error.code, "action_uncertain");
+    }
+}
+
+/// The input domain of an action kind or tool name (`hoi4_` prefix ignored). An uncertain
+/// action blocks new input only in its own domain: an army order whose effect is not yet
+/// proven does not stop research or production. The clock, events, the peace screens and
+/// anything unknown stay global (`*`): an uncertain one may have left a modal window open.
+pub(super) fn domain_of(kind: &str) -> &'static str {
+    let k = kind.strip_prefix("hoi4_").unwrap_or(kind);
+    let first = k.split('_').next().unwrap_or("");
+    match first {
+        "army" | "armies" | "division" | "train" | "deploy" | "template" => "army",
+        "air" => "air",
+        "fleet" | "naval" | "navy" => "navy",
+        "research" | "technology" | "doctrine" => "research",
+        "focus" => "focus",
+        "construction" | "railway" => "construction",
+        "production" | "design" => "production",
+        "politics" | "decision" | "occupation" | "mio" | "special" => "politics",
+        "diplomacy" | "faction" | "trade" | "auto" => "diplomacy",
+        "agency" | "operative" => "intelligence",
+        _ => "*",
+    }
+}
+
+#[cfg(test)]
+mod domain_tests {
+    use super::domain_of;
+    #[test]
+    fn kinds_and_tools_map_to_the_same_domains() {
+        assert_eq!(domain_of("army_front"), "army");
+        assert_eq!(domain_of("hoi4_army_move"), "army");
+        assert_eq!(domain_of("division_disband"), "army");
+        assert_eq!(domain_of("research_start"), "research");
+        assert_eq!(domain_of("hoi4_production_set"), "production");
+        assert_eq!(domain_of("design_set_production"), "production");
+        assert_eq!(domain_of("event_choose"), "*");
+        assert_eq!(domain_of("peace_take"), "*");
+        assert_eq!(domain_of("hoi4_time"), "*");
+        assert_eq!(domain_of("something_new"), "*");
     }
 }

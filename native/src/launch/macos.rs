@@ -1398,12 +1398,13 @@ impl MacClock {
         }
         let mut state = crate::daily_worker::input_state(&self.state, || self.daily.input_check())?;
         if input_gate::applies(name, args) {
-            input_gate::check(
+            input_gate::check_in(
                 &state.journal,
                 &state.actions,
                 &state.guard.epoch.game,
                 name == "hoi4_time",
                 args.get("request_id").and_then(Value::as_str),
+                journal::domain_of(name),
             )?;
         }
         let Control {
