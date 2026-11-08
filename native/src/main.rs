@@ -138,12 +138,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let (server, stop) = (&server, &stop);
                     scope.spawn(move || watch_loop(server, commands, stop));
                 }
-                let served = hoi4_live_native::framing::serve_lanes(
+                let served = hoi4_live_native::framing::serve_lanes_idle(
                     stdin.lock(),
                     io::stdout(),
                     |m| hoi4_live_native::framing::is_read_call(m, &reads),
                     |message| server.handle_with_commands(message, Some(commands)),
                     4,
+                    || autopilot_step(&server, commands),
                 );
                 stop.store(true, std::sync::atomic::Ordering::SeqCst);
                 Ok(served?)
@@ -213,4 +214,49 @@ fn watch_loop(
         tick += 1;
         std::thread::sleep(std::time::Duration::from_millis(300));
     }
+}
+
+/// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
+#[cfg(target_os = "macos")]
+fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Commands) -> bool {
+    use hoi4_live_native::{autopilot::autopilot, watch::feed};
+    let Some(token) = autopilot().due() else {
+        return false;
+    };
+    let reply = server.handle_with_commands(
+        serde_json::json!({"jsonrpc":"2.0","id":0,"method":"tools/call",
+            "params":{"name":"hoi4_plan_run","arguments":{"seconds":1,"lease_token":token}}}),
+        Some(commands),
+    );
+    let result = reply
+        .as_ref()
+        .map(|r| r["result"].clone())
+        .unwrap_or_default();
+    let body: serde_json::Value = result["content"][0]["text"]
+        .as_str()
+        .and_then(|t| serde_json::from_str(t).ok())
+        .unwrap_or_default();
+    if result["isError"] == serde_json::json!(true) {
+        // A refused step (lease gone, plan unreadable) stops the executor visibly.
+        autopilot().disable();
+        feed().note(
+            "autopilot_stopped",
+            true,
+            serde_json::json!({"reason": body}),
+        );
+        return true;
+    }
+    let actions: Vec<String> = body["actions"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    for a in &actions {
+        feed().note("autopilot_action", false, serde_json::json!({"action": a}));
+    }
+    autopilot().ran(actions.len(), actions.last().cloned());
+    true
 }

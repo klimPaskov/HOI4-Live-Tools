@@ -504,6 +504,30 @@ impl Feed {
         }
     }
 
+    /// A change that did not come from sampling (e.g. what the executor did).
+    pub fn note(&self, kind: &'static str, urgent: bool, detail: Value) {
+        let Ok(mut s) = self.inner.lock() else {
+            return;
+        };
+        let seq = s.next;
+        s.next += 1;
+        let (hour, date) = s
+            .last
+            .as_ref()
+            .map_or((None, None), |l| (l.hour, l.date.clone()));
+        s.entries.push_back(Entry {
+            seq,
+            hour,
+            date,
+            change: change(kind, urgent, detail),
+        });
+        if s.entries.len() > KEEP {
+            s.entries.pop_front();
+        }
+        drop(s);
+        self.changed.notify_all();
+    }
+
     pub fn running(&self) -> bool {
         self.inner.lock().map(|s| s.samples > 0).unwrap_or(false)
     }

@@ -94,11 +94,25 @@ pub fn is_read_call(message: &Value, reads: &std::collections::HashSet<String>) 
 /// in arrival order, to one worker thread. A memory read therefore never waits behind an
 /// input action or a plan run, and actions keep their order and their single input owner.
 pub fn serve_lanes<R: BufRead, W: Write + Send>(
+    input: R,
+    output: W,
+    is_read: impl Fn(&Value) -> bool + Sync,
+    handler: impl Fn(Value) -> Option<Value> + Sync,
+    max_reads: usize,
+) -> io::Result<()> {
+    serve_lanes_idle(input, output, is_read, handler, max_reads, || false)
+}
+
+/// `serve_lanes` with background work for the input lane: whenever no message waits, the
+/// worker calls `idle` (one bounded step, e.g. one autopilot action; true when it did work).
+/// A queued message always goes first, so it waits at most for the step in progress.
+pub fn serve_lanes_idle<R: BufRead, W: Write + Send>(
     mut input: R,
     output: W,
     is_read: impl Fn(&Value) -> bool + Sync,
     handler: impl Fn(Value) -> Option<Value> + Sync,
     max_reads: usize,
+    idle: impl Fn() -> bool + Sync,
 ) -> io::Result<()> {
     use std::sync::{atomic::AtomicUsize, atomic::Ordering, mpsc, Mutex};
     let output = Mutex::new(output);
@@ -115,13 +129,28 @@ pub fn serve_lanes<R: BufRead, W: Write + Send>(
     std::thread::scope(|scope| -> io::Result<()> {
         let write = &write;
         let handler = &handler;
+        let idle = &idle;
         let worker = scope.spawn(move || -> io::Result<()> {
-            for message in worker_in {
+            use std::sync::mpsc::{RecvTimeoutError, TryRecvError};
+            loop {
+                let message = match worker_in.try_recv() {
+                    Ok(m) => m,
+                    Err(TryRecvError::Disconnected) => return Ok(()),
+                    Err(TryRecvError::Empty) => {
+                        if idle() {
+                            continue;
+                        }
+                        match worker_in.recv_timeout(std::time::Duration::from_millis(200)) {
+                            Ok(m) => m,
+                            Err(RecvTimeoutError::Timeout) => continue,
+                            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+                        }
+                    }
+                };
                 if let Some(reply) = handler(message) {
                     write(reply)?;
                 }
             }
-            Ok(())
         });
         let result = (|| -> io::Result<()> {
             while let Some(line) = read(&mut input)? {
@@ -234,6 +263,50 @@ mod lane_tests {
         assert!(!is_read_call(&call("hoi4_plan", json!({})), &reads));
         assert!(!is_read_call(&json!({"method":"tools/list"}), &reads));
     }
+    #[test]
+    fn idle_work_runs_between_messages_and_never_ahead_of_one() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let steps = AtomicUsize::new(0);
+        let order = std::sync::Mutex::new(Vec::<&str>::new());
+        // the reader pauses so the worker is idle for a while before the action arrives
+        struct Slow(Vec<u8>, usize);
+        impl io::Read for Slow {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                if self.1 == 0 {
+                    std::thread::sleep(Duration::from_millis(150));
+                }
+                let n = (self.0.len() - self.1).min(buf.len());
+                buf[..n].copy_from_slice(&self.0[self.1..self.1 + n]);
+                self.1 += n;
+                Ok(n)
+            }
+        }
+        let input = io::BufReader::new(Slow(request(1, "act").into_bytes(), 0));
+        serve_lanes_idle(
+            input,
+            io::sink(),
+            |_| false,
+            |m| {
+                order.lock().unwrap().push("act");
+                Some(json!({"jsonrpc":"2.0","id":m["id"],"result":{}}))
+            },
+            4,
+            || {
+                if steps.fetch_add(1, Ordering::SeqCst) < 3 {
+                    order.lock().unwrap().push("idle");
+                    std::thread::sleep(Duration::from_millis(20));
+                    true
+                } else {
+                    false
+                }
+            },
+        )
+        .unwrap();
+        let order = order.into_inner().unwrap();
+        assert!(order.contains(&"act"));
+        assert!(order.iter().filter(|o| **o == "idle").count() >= 1);
+    }
+
     #[test]
     fn a_read_returns_while_an_action_runs() {
         let lines = request(1, "act") + &request(2, "read");

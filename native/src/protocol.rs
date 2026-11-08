@@ -80,6 +80,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     ]});
     if let Some(list) = value["tools"].as_array_mut() {
         list.push(json!({"name":"hoi4_observe","description":"What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}}));
+        list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
         list.push(json!({"name":"hoi4_wait_change","description":"Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":30},"limit":{"type":"integer","minimum":1,"maximum":200}},"required":["since"],"additionalProperties":false}}));
     }
     value["tools"].as_array_mut().unwrap().push(json!({"name":"hoi4_focus_input_probe","description":"Read-only Mac preview: witness the exact unfinished own Focus node in an already-open idle tree using the input binding. Optional include_pan also verifies complete obstacle geometry. Reports bounded logical payload-read counts and whole-observation time, with no controller, navigation, cursor movement, pause, eligibility or input authority. Other platforms explicitly refuse.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"include_pan":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
@@ -464,6 +465,40 @@ impl Server {
                 json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
+            "hoi4_autopilot" => {
+                let known = ["enabled", "interval_ms", "request_id", "lease_token"];
+                if object.keys().any(|k| !known.contains(&k.as_str())) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Unknown autopilot argument",
+                    ));
+                }
+                if commands.and_then(|c| c.plan_path()).is_none() {
+                    return Err(Error::new(
+                        "autopilot_unavailable",
+                        "No standing plan in this server (needs the owned input session)",
+                    ));
+                }
+                let pilot = crate::autopilot::autopilot();
+                match object.get("enabled").and_then(Value::as_bool) {
+                    Some(true) => {
+                        let token = object
+                            .get("lease_token")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| {
+                                Error::new("invalid_arguments", "lease_token required")
+                            })?;
+                        let ms = object
+                            .get("interval_ms")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(1000);
+                        pilot.enable(token, Duration::from_millis(ms.clamp(250, 10_000)));
+                    }
+                    Some(false) => pilot.disable(),
+                    None => {}
+                }
+                Ok(pilot.status())
+            }
             "hoi4_observe" | "hoi4_wait_change" => {
                 let known = ["since", "kinds", "urgent_only", "limit", "timeout_seconds"];
                 if object.keys().any(|k| !known.contains(&k.as_str()))
