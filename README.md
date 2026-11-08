@@ -1,12 +1,26 @@
-# HOI4 Live Tools
+<h1 align="center">HOI4 Live Tools</h1>
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-7289da?logo=discord&logoColor=white)](https://discord.gg/rAXesGcT2t)
-[![YouTube](https://img.shields.io/badge/YouTube-Chaos%20Redux-ff0000?logo=youtube&logoColor=white)](https://www.youtube.com/@ChaosRedux)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20Project-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/klimpaskov)
-[![Download](https://img.shields.io/github/v/release/klimPaskov/HOI4-Live-Tools?label=Download&logo=github&color=2ea44f)](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
-[![Issues](https://img.shields.io/badge/Bugs%20%26%20Ideas-Issues-24292f?logo=github&logoColor=white)](https://github.com/klimPaskov/HOI4-Live-Tools/issues)
+<p align="center">
+  An <a href="https://modelcontextprotocol.io/">MCP</a> server that lets your coding agent play and test <em>Hearts of Iron IV</em>.
+</p>
 
-An MCP server that lets your coding agent play and test **Hearts of Iron IV**.
+<p align="center">
+  <a href="https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/klimPaskov/HOI4-Live-Tools?label=Download&logo=github&color=2ea44f"></a>
+  <a href="https://discord.gg/rAXesGcT2t"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20Community-7289da?logo=discord&logoColor=white"></a>
+  <a href="https://www.youtube.com/@ChaosRedux"><img alt="YouTube" src="https://img.shields.io/badge/YouTube-Chaos%20Redux-ff0000?logo=youtube&logoColor=white"></a>
+  <a href="https://ko-fi.com/klimpaskov"><img alt="Ko-fi" src="https://img.shields.io/badge/Ko--fi-Support%20the%20Project-ff5e5b?logo=kofi&logoColor=white"></a>
+  <a href="https://github.com/klimPaskov/HOI4-Live-Tools/issues"><img alt="Issues" src="https://img.shields.io/badge/Bugs%20%26%20Ideas-Issues-24292f?logo=github&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="#which-version-should-i-use">Which version</a> ·
+  <a href="#what-works-where">What works where</a> ·
+  <a href="#quick-start-windows-release">Quick start</a> ·
+  <a href="#launch-order-for-a-mod-test">Launch order</a> ·
+  <a href="#native-rust-preview">Native preview</a> ·
+  <a href="docs/tools.md">Tool reference</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 - **Test mods** without sitting at the keyboard: launch the game, load a save,
   fire events, answer popups, run time forward and read the error log.
@@ -56,9 +70,8 @@ Things every modder should know:
 - **Test mode.** The server starts in campaign mode, which refuses the console,
   events and effects. Set `HOI4_LIVE_MODE=test` (or `"mode": "test"` in
   `config.json`) before you start it. A campaign session cannot go back to test mode.
-- **Steam.** On every system the game is never started while Steam, `steamwebhelper`
-  or `steamcmd` runs. Follow the [launch order](#launch-order-for-a-mod-test) so the
-  DLC still loads. Career Profile and Awards need the Steam client.
+- **DLC and Steam.** A scratch user folder needs `hoi4_prepare` for the DLC to load: follow the
+  [launch order](#launch-order-for-a-mod-test). Career Profile and Awards need the Steam client.
 - **Windows setup.** Windowed or borderless game, UI scale 1, English Windows OCR,
   console key on the `` ` `` key of a US layout. A 1920×1080 borderless window is
   what the live runs used.
@@ -109,8 +122,7 @@ every tool and argument.
 
 ## Launch order for a mod test
 
-Live Tools never starts the game while Steam can see it, so a test run is a game
-without the Steam client. Without Steam the game finds no DLC in a user folder that
+A game started without the Steam client finds no DLC in a user folder that
 lacks two files the Paradox launcher keeps there, `launcher-v2.sqlite` and
 `dlc_signature`. Your normal user folder has them. A scratch folder (set with
 `HOI4_LIVE_USER_DIR`, or a `gameDataPath` redirect) does not, and the game then
@@ -118,17 +130,14 @@ loads 0 DLC. Mod testing needs the server in test mode (`HOI4_LIVE_MODE=test`, o
 `"mode": "test"` in `config.json`): the default is campaign mode, which refuses the
 console, events and `hoi4_prepare`. The order is:
 
-1. **Close Steam and the Paradox launcher** completely: quit them from the tray
-   icon, not just the window. `steamwebhelper` and `steamcmd` count too.
-   `hoi4_launch` refuses while any of them runs.
-2. **`hoi4_prepare`** copies the two DLC files from your normal user folder into the
+1. **`hoi4_prepare`** copies the two DLC files from your normal user folder into the
    run's folder. Every file it replaces is backed up byte for byte first. When the
    run's folder is your normal one it reports that there is nothing to copy.
    `hoi4_prepare {"action": "status"}` shows what each folder holds.
-3. **`hoi4_launch`** starts the game (`debug: true` for the console tools).
-   `hoi4_launch {"prepare_dlc": true}` does steps 2 and 3 in one call.
-4. **Test.** Fire events, run effects, read `error.log`.
-5. **`hoi4_shutdown`** quits through the game's own menu and puts the run's folder
+2. **`hoi4_launch`** starts the game (`debug: true` for the console tools).
+   `hoi4_launch {"prepare_dlc": true}` does steps 1 and 2 in one call.
+3. **Test.** Fire events, run effects, read `error.log`.
+4. **`hoi4_shutdown`** quits through the game's own menu and puts the run's folder
    back as it was. If the server was restarted in between, run
    `hoi4_prepare {"action": "restore"}` once the game has exited. A file that
    changed after the copy is never overwritten; it is reported instead, and
@@ -170,10 +179,8 @@ The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memor
 access still needs Developer Tools access for the running user; see
 [native setup](native/README.md).
 
-Steam never sees a run: every launcher refuses to start the game while a Steam
-client, `steamwebhelper` or `steamcmd` runs (on WSL the Windows host is checked too),
-and no Steam variable or overlay reaches the game. The native Linux launcher also
-gives the game an empty private `HOME`.
+No Steam variable or overlay reaches the game, and the native Linux launcher gives
+it an empty private `HOME`.
 
 The macOS and Linux builds have the same management toolset (about 120 tools: armies,
 fronts and encirclement planning, air, navy and naval invasions, designers, doctrine,

@@ -12,13 +12,13 @@ tool list is [TOOLS_MACOS.md](TOOLS_MACOS.md).
 | Game | HOI4 1.19.4.1 Linux x86_64, GNU build ID `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082`, SHA-256 `36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da` |
 | Content | 10 DLCs as on macOS (NSB, BBA, AAT, NCNS, LaR, Gotterdammerung and the packs); AAT, LaR and BBA were active in play |
 | Host | Ubuntu 24.04 under WSL2 on Windows 11, an isolated copy of the game used only for this work |
-| Launch | `hoi4-live-native --serve` with the owned Linux launcher: private `HOME` and user folder per run, no Steam client, `steamcmd` or Steam variables, the Steam check before every launch |
+| Launch | `hoi4-live-native --serve` with the owned Linux launcher: private `HOME` and user folder per run, no Steam variables |
 | Display | Xvfb 1920x1080x24 with its own Xauthority, `openbox` as the window manager (the game needs `_NET_ACTIVE_WINDOW`), the game window undecorated at the top left |
 | Renderer | `llvm_pipe` (Mesa software). The d3d12 (WSLg) path crashed when the map loaded (`D3D12: Removing Device`). The settings seed turns off terrain, water, trees, rivers, sky and building models, which brought a key's round trip from about 1.5 s to 0.07 s |
 | Binding | `hoi4-live-native --bind-management RUN_DIRECTORY BINDING` (the full management toolset) |
 | Layout | the generated table `native/layouts/linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json` with the live entries of `scripts/data/xlayout-live-1.19.4.1.json` |
 
-Rules kept throughout: the game was never started while Steam ran, no console, no save editing and no
+Rules kept throughout: no console, no save editing and no
 memory writes (the memory checks were read-only, through the owning process). Process ownership was
 checked by start time, executable and user. One game instance ran at a time.
 

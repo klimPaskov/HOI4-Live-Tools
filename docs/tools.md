@@ -80,7 +80,7 @@ _lock: acting_
 
 ### `hoi4_prepare`
 
-Prepare the run's user folder for a launch without the Steam client, which keeps the DLC. Live Tools never launches while Steam runs, and a game started without Steam finds no DLC in a user folder that lacks launcher-v2.sqlite and dlc_signature. action=apply copies those two files from the normal user folder (config dlc_source_dir) into the run's folder (user_dir, e.g. a scratch folder set by HOI4_LIVE_USER_DIR) after backing up what they replace. action=restore puts the original state back once the game has exited (hoi4_shutdown does that by itself). action=status only reports. Nothing is copied when the run's folder is the normal one. Launch order: close Steam, hoi4_prepare, hoi4_launch, test, hoi4_shutdown.
+Prepare the run's user folder for a launch without the Steam client, which keeps the DLC. A game started without the Steam client finds no DLC in a user folder that lacks launcher-v2.sqlite and dlc_signature. action=apply copies those two files from the normal user folder (config dlc_source_dir) into the run's folder (user_dir, e.g. a scratch folder set by HOI4_LIVE_USER_DIR) after backing up what they replace. action=restore puts the original state back once the game has exited (hoi4_shutdown does that by itself). action=status only reports. Nothing is copied when the run's folder is the normal one. Launch order: hoi4_prepare, hoi4_launch, test, hoi4_shutdown.
 
 _lock: none_
 
@@ -90,7 +90,7 @@ _lock: none_
 | `source_dir` | string |  |  | folder to copy the two files from (default: config dlc_source_dir, the normal Paradox user folder) |
 | `force` | boolean |  | false | restore: also restore a file that changed after the copy (the changed file is kept next to the backup as <name>.after-run), and restore while a game still runs |
 
-- `hoi4_prepare {}` (copy the DLC files (Steam closed))
+- `hoi4_prepare {}` (copy the DLC files)
 - `hoi4_prepare {"action": "status"}` (what each folder holds and whether a prepare is needed)
 - `hoi4_prepare {"action": "restore"}` (after the game exited, if hoi4_shutdown was not used)
 
