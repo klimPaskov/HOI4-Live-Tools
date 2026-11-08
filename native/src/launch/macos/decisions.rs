@@ -4,7 +4,7 @@
 //! a timed entry for it appears, its entry disappears or its button turns
 //! disabled. Lists the offered decisions with the game's enabled state.
 use super::glide::{glide, span_y, Glide, Glided};
-use super::ui::{accept_command, clear_notices, decline_stale, read, settled, wait};
+use super::ui::{clear_notices, decline_stale, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,

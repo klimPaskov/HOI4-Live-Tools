@@ -2,7 +2,7 @@
 //! category slot, then the idea in the selection window. Success is the slot
 //! holding the idea in memory. A listing mode opens the slot and returns its
 //! options (with the game's enabled state) without choosing anything.
-use super::ui::{accept_command, clear_notices, decline_stale, dismiss, read, settled, wait};
+use super::ui::{clear_notices, decline_stale, dismiss, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
