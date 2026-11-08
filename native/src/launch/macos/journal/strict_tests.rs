@@ -373,3 +373,13 @@ mod retry_settle_tests {
         assert_eq!(calls, 3);
     }
 }
+
+#[test]
+fn compound_step_request_ids_are_valid() {
+    // hoi4_army_attack journals its steps as <id>:front, :offensive, :execute
+    // (a '/' separator was refused by every live call, 8 Nov 2026).
+    for flag in ["front", "offensive", "execute"] {
+        assert!(valid_id(&format!("player-17:{flag}")).is_ok());
+    }
+    assert!(valid_id("player-17/front").is_err());
+}

@@ -77,6 +77,14 @@ pub(super) fn camera_height(r: &Reader<'_>, image: u64) -> Result<f64> {
     Ok(view[13])
 }
 
+/// Highest camera at which the game draws the highlighted front lines (and unit counters):
+/// fronts were drawn at 750 and none showed at 932 (live 8 Nov 2026). Above it, aiming orders
+/// go through the Find view, which brings the camera in.
+pub(super) const AIM_MAX: f64 = 760.0;
+/// Whether the camera is low enough to aim front and offensive orders where it is.
+pub(super) fn aim_height_ok(process: &dyn crate::platform::Process) -> bool {
+    super::ui::read(process, camera_height).is_ok_and(|h| h <= AIM_MAX)
+}
 /// Zoomed in closer than this, the camera is brought back out after a map action.
 const CLOSE: f64 = 500.0;
 /// Strategic view height (the game starts at 800; 50 is fully in, 3000 fully out).

@@ -1574,6 +1574,17 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
 /// Select exactly `army` with its card: the selection must hold all of its
 /// divisions, not a selection left over from before.
 pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
+    let card = select_army_quick(process, keys, army)?;
+    // The army panel slides in after the selection; callers click its division rows next.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(card)
+}
+/// `select_army` without the wait for the army panel, for orders that go to the map next.
+pub(super) fn select_army_quick(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+) -> Result<Rect> {
     let size = read(process, |r, i| {
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
@@ -1591,10 +1602,7 @@ pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &st
         match wait(process, "select army", |r, i| {
             Ok(selection_size(r, i)? & 0xffff_ffff == size)
         }) {
-            Ok(()) => {
-                std::thread::sleep(std::time::Duration::from_millis(300));
-                return Ok(card);
-            }
+            Ok(()) => return Ok(card),
             Err(e) => last = Some(e),
         }
         std::thread::sleep(std::time::Duration::from_millis(400));
@@ -1868,7 +1876,9 @@ pub(super) fn front(
     army: &str,
     state: i32,
 ) -> Result<()> {
+    let t0 = std::time::Instant::now();
     clear_notices(process, keys)?;
+    super::ui::trace("front: notices", t0);
     let own = read(process, own_states)?;
     if own.contains(&state) {
         return Err(Error::new(
@@ -1877,7 +1887,8 @@ pub(super) fn front(
         ));
     }
     let before = read(process, |r, i| orders(r, i, army))?;
-    let card = select_army(process, keys, army)?;
+    let card = select_army_quick(process, keys, army)?;
+    super::ui::trace("front: selected", t0);
     // Centre on the target state's province nearest the army: valid fronts are highlighted
     // only along the army's own line, which the state's centre can be far from (seen live:
     // an army in Bale facing Hararghe).
@@ -1886,15 +1897,20 @@ pub(super) fn front(
         .flatten()
         .or_else(|| front_point_province(process, army, state).ok().flatten());
     // The Find view is only needed when the border point is not already in the usable area.
-    let visible = near.is_some_and(|(x, z)| {
-        read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
-            .ok()
-            .flatten()
-            .is_some_and(|(sx, sy)| (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy))
-    });
+    let visible = super::screenmap::aim_height_ok(process)
+        && near.is_some_and(|(x, z)| {
+            read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
+                .ok()
+                .flatten()
+                .is_some_and(|(sx, sy)| {
+                    (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy)
+                })
+        });
+    super::ui::trace("front: border point", t0);
     if !visible {
         find_state(process, keys, state)?;
     }
+    super::ui::trace("front: find", t0);
     if let Some((x, z)) = near {
         // Zoom out (at most four wheel steps, as before) until the point lies in the usable
         // area: the steps it needs, sized from its screen offset, go in one smooth flick.
@@ -1919,14 +1935,30 @@ pub(super) fn front(
     // The fronts this army can take are highlighted only in front-line
     // drawing, in a colour that varies by army and lighting; compare one
     // capture before Z with one after it, at the same camera position.
+    super::ui::trace("front: zoom", t0);
     let plain = keys.capture(GAME)?;
+    super::ui::trace("front: capture 1", t0);
     keys.press(Key::letter('z')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let drawing = keys.capture(GAME)?;
     // The card's tooltip may change under the resting cursor.
     let tooltip =
         |x: f64, y: f64| x > f64::from(card.x) - 60.0 && x < f64::from(card.x) + 460.0 && y > 680.0;
+    // Capture until the highlighted fronts are drawn (about 100-300 ms after Z) instead of
+    // a fixed 300 ms.
+    let mut drawing = keys.capture(GAME)?;
     let mut candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    for _ in 0..6 {
+        if !candidates.is_empty() {
+            // One more frame: the highlight fades in, and a later frame holds all of it.
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            drawing = keys.capture(GAME)?;
+            candidates = highlighted(&plain, &drawing, &tooltip, 4);
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        drawing = keys.capture(GAME)?;
+        candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    }
+    super::ui::trace("front: capture 2", t0);
     // Highlighted border pixels nearest the projected border point first (thin dashed lines).
     if let Some((x, z)) = near {
         if let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
@@ -1939,6 +1971,7 @@ pub(super) fn front(
             candidates = nearby;
         }
     }
+    super::ui::trace("front: candidates", t0);
     for (x, y) in candidates {
         keys.click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
@@ -2092,8 +2125,8 @@ pub(super) fn offensive(
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     // The target state's centre where the camera already is; the Find view (it centres the
     // state on screen) when it is not in the usable area, or when a drag there drew nothing.
-    let projected = state_screen_centre(process, state)
-        .ok()
+    let projected = super::screenmap::aim_height_ok(process)
+        .then(|| state_screen_centre(process, state).ok().flatten())
         .flatten()
         .filter(|(x, y)| (520.0..1500.0).contains(x) && (160.0..800.0).contains(y));
     let draw = |(cx, cy): (f64, f64)| -> Result<()> {
