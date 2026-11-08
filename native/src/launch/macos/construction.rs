@@ -380,10 +380,24 @@ pub(super) fn add(
     })
     .map_err(|e| with_selection(process, select_failed(e, key)))?;
     let result = (|| {
-        find_state(process, keys, state)?;
-        // let the camera settle before projecting provinces
-        thread::sleep(Duration::from_millis(350));
-        let points = aim_points(process, key, state, province)?;
+        // The state already in the open map (right of the construction panel) at aiming
+        // height: click where the camera is. Otherwise the Find view centres it (it waits for
+        // the camera to come to rest).
+        let open_map =
+            |p: &(f64, f64)| (740.0..1700.0).contains(&p.0) && (120.0..900.0).contains(&p.1);
+        let visible: Vec<(f64, f64)> = if super::screenmap::aim_height_ok(process) {
+            province_points(process, state, province)
+                .map(|v| v.into_iter().filter(open_map).collect())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let points = if visible.is_empty() {
+            find_state(process, keys, state)?;
+            aim_points(process, key, state, province)?
+        } else {
+            visible
+        };
         let mut point = 0;
         for click in 0..count.min(20) {
             if click > 0 {
