@@ -174,6 +174,22 @@ pub(crate) fn require_target(
         if w.id == id && w.owner == owner {
             return Ok(());
         }
+        // Notification Center keeps an untitled full-display window above normal windows
+        // that does not take pointer events (live 8 Nov 2026: with it on screen, a click on
+        // the game's decisions button opened the decisions view). Only that exact shape is
+        // passed: owned by Notification Center, untitled, above normal level and covering the
+        // whole game window. Banners and the open Notification Center panel are smaller and
+        // still block.
+        if w.owner_name.as_deref() == Some("Notification Center")
+            && w.name.as_deref().is_none_or(str::is_empty)
+            && w.layer > 0
+            && w.bounds[0] <= bounds[0]
+            && w.bounds[1] <= bounds[1]
+            && w.bounds[0] + w.bounds[2] >= bounds[0] + bounds[2]
+            && w.bounds[1] + w.bounds[3] >= bounds[1] + bounds[3]
+        {
+            continue;
+        }
         return Err(Error::new(
             "input_point_occluded",
             format!(

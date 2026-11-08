@@ -232,7 +232,14 @@ pub(super) fn require(target: Window, point: Point) -> Result<()> {
             }
             let onscreen = value(item, kCGWindowIsOnscreen, CFBooleanGetTypeID())?;
             let item_level = integer(item, super::kCGWindowLayer)?;
-            let (owner_name, name) = candidate_names(item_level, level, rect(bounds), p, || {
+            // Names are read for every window at the point: the cursor rule and the
+            // Notification Center overlay rule in require_target both need them.
+            let at_point = {
+                let b = rect(bounds);
+                p[0] >= b[0] && p[1] >= b[1] && p[0] < b[0] + b[2] && p[1] < b[1] + b[3]
+            };
+            let read_level = if at_point { level } else { item_level };
+            let (owner_name, name) = candidate_names(read_level, level, rect(bounds), p, || {
                 Ok((
                     optional_text(item, kCGWindowOwnerName)?,
                     optional_text(item, kCGWindowName)?,
