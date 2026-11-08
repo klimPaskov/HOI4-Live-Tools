@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 
 import helpers  # noqa: F401
 
@@ -23,6 +24,12 @@ class RegistrationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="hoi4live_inst_")
         self.addCleanup(shutil.rmtree, self.tmp, True)
+        # CLAUDE_CONFIG_DIR and CODEX_HOME win over `home`, so a test run inside a Claude Code or Codex
+        # session would otherwise register the temporary launcher in the real client configuration.
+        clean = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CONFIG_DIR", "CODEX_HOME")}
+        patcher = mock.patch.dict(os.environ, clean, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def path(self, name):
         return os.path.join(self.tmp, name)
