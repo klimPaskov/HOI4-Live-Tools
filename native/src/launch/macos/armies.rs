@@ -1885,8 +1885,16 @@ pub(super) fn front(
         .ok()
         .flatten()
         .or_else(|| front_point_province(process, army, state).ok().flatten());
-    find_state(process, keys, state)?;
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // The Find view is only needed when the border point is not already in the usable area.
+    let visible = near.is_some_and(|(x, z)| {
+        read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
+            .ok()
+            .flatten()
+            .is_some_and(|(sx, sy)| (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy))
+    });
+    if !visible {
+        find_state(process, keys, state)?;
+    }
     if let Some((x, z)) = near {
         // Zoom out (at most four wheel steps, as before) until the point lies in the usable
         // area: the steps it needs, sized from its screen offset, go in one smooth flick.
@@ -1900,7 +1908,8 @@ pub(super) fn front(
                 break;
             }
             keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
-            std::thread::sleep(std::time::Duration::from_millis(400));
+            std::thread::sleep(std::time::Duration::from_millis(80));
+            super::screenmap::wait_camera_still(process, 600);
             left -= events;
             if left == 0 {
                 break;
@@ -1912,7 +1921,7 @@ pub(super) fn front(
     // capture before Z with one after it, at the same camera position.
     let plain = keys.capture(GAME)?;
     keys.press(Key::letter('z')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(600));
+    std::thread::sleep(std::time::Duration::from_millis(300));
     let drawing = keys.capture(GAME)?;
     // The card's tooltip may change under the resting cursor.
     let tooltip =

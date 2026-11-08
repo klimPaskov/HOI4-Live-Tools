@@ -43,6 +43,33 @@ pub(super) fn to_screen(r: &Reader<'_>, image: u64, x: f64, z: f64) -> Result<Op
     Ok(project(&proj, &view, x, z))
 }
 
+/// The camera's view matrix (moves while the camera pans or zooms).
+pub(super) fn view_matrix(r: &Reader<'_>, image: u64) -> Result<[f64; 16]> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let abi = r.string_abi();
+    let camera = r.u64(idler + fld(abi, &IDLER, 0x718)?)?;
+    floats(r, camera + fld(abi, &CAMERA, 0xd0)?)
+}
+
+/// Wait until the camera has stopped moving: the view matrix is the same in two reads 45 ms
+/// apart (at most `max_ms`). Replaces fixed sleeps after Find, zoom and pan inputs.
+pub(super) fn wait_camera_still(process: &dyn crate::platform::Process, max_ms: u64) {
+    let started = std::time::Instant::now();
+    let read = |p: &dyn crate::platform::Process| {
+        super::ui::read(p, |r, i| view_matrix(r, i)).ok()
+    };
+    let mut last = read(process);
+    while started.elapsed().as_millis() < u128::from(max_ms) {
+        std::thread::sleep(std::time::Duration::from_millis(45));
+        let now = read(process);
+        if now.is_some() && now == last {
+            break;
+        }
+        last = now;
+    }
+    super::ui::trace("camera still", started);
+}
+
 /// Camera eye height above the map (larger = zoomed out).
 pub(super) fn camera_height(r: &Reader<'_>, image: u64) -> Result<f64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;

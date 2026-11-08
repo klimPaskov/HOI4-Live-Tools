@@ -98,6 +98,23 @@ pub trait Tools {
     fn call(&self, name: &str, args: &Value) -> Result<Value>;
 }
 
+/// Times every call of the run (tool -> (calls, milliseconds)), reported as `timing`.
+struct Timed<'a> {
+    inner: &'a dyn Tools,
+    spent: std::cell::RefCell<std::collections::BTreeMap<String, (u32, u128)>>,
+}
+impl Tools for Timed<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        let t = std::time::Instant::now();
+        let out = self.inner.call(name, args);
+        let mut spent = self.spent.borrow_mut();
+        let e = spent.entry(name.to_string()).or_insert((0, 0));
+        e.0 += 1;
+        e.1 += t.elapsed().as_millis();
+        out
+    }
+}
+
 /// What one tick did.
 #[derive(Debug, PartialEq)]
 pub enum Tick {
@@ -2367,6 +2384,11 @@ pub fn run(
     lease: &str,
     seconds: u64,
 ) -> Result<Value> {
+    let timed = Timed {
+        inner: tools,
+        spent: Default::default(),
+    };
+    let tools: &dyn Tools = &timed;
     let start = std::time::Instant::now();
     let deadline = start + Duration::from_secs(seconds);
     let mut actions: Vec<String> = Vec::new();
@@ -2398,7 +2420,13 @@ pub fn run(
         let pause = match step {
             Tick::Acted(what) => {
                 actions.push(what);
-                Duration::from_secs(4)
+                // Never sleep while holding the game: the player's calls wait behind a run
+                // (w17: plan runs held the broker 63% of the wall time, 4 s sleeps included).
+                // After 3 s of work the run returns so the next caller gets the input.
+                if start.elapsed() >= Duration::from_secs(3) {
+                    break json!("yield");
+                }
+                Duration::ZERO
             }
             Tick::Stop(why) => break json!({"stopped": why}),
             Tick::Waiting { event, new } => {
@@ -2459,6 +2487,18 @@ pub fn run(
         "alarms": alarms,
         "game_hour": state.last_hour,
         "elapsed_seconds": start.elapsed().as_secs_f64()});
+    let mut timing: Vec<(String, u32, u128)> = timed
+        .spent
+        .borrow()
+        .iter()
+        .map(|(k, v)| (k.clone(), v.0, v.1))
+        .collect();
+    timing.sort_by(|a, b| b.2.cmp(&a.2));
+    result["timing_ms"] = json!(timing
+        .iter()
+        .take(8)
+        .map(|(k, n, ms)| format!("{k} x{n} {ms}"))
+        .collect::<Vec<_>>());
     if let Some(digest) = construction {
         result["construction"] = json!(digest);
     }

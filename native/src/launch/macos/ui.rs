@@ -44,15 +44,26 @@ pub(super) fn read<T>(
     }
 }
 
+/// HOI4_TRACE=1: every named wait and settle logs its duration to stderr (finding where an
+/// action spends its time).
+pub(super) fn trace(stage: &str, since: Instant) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("HOI4_TRACE").is_some()) {
+        eprintln!("[trace] {stage} {} ms", since.elapsed().as_millis());
+    }
+}
+
 /// Bounded wait for a memory predicate after an input.
 pub(super) fn wait(
     process: &dyn Process,
     stage: &str,
     f: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) -> Result<()> {
-    let deadline = Instant::now() + STAGE_WAIT;
+    let started = Instant::now();
+    let deadline = started + STAGE_WAIT;
     loop {
         if read(process, &f)? {
+            trace(stage, started);
             return Ok(());
         }
         if Instant::now() >= deadline {
@@ -186,6 +197,12 @@ fn blocked_error(count: usize, shown: &[u64], events: &[String]) -> Error {
 /// a click counts when any notice closes (a covered OK lands harmlessly on the
 /// covering pop-up's body).
 pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
+    let started = Instant::now();
+    let out = clear_notices_inner(process, keys);
+    trace("clear_notices", started);
+    out
+}
+fn clear_notices_inner(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
     close_menu(process, keys)?;
     let _ = super::panelkit::close_focus_tree(process, keys);
     close_state_view(process, keys)?;
@@ -696,12 +713,12 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     // 1.19.4 rebound the Find view from F to Ctrl+F.
     keys.press_control(FIND_KEY)?;
     wait(process, "open find", find_open)?;
-    thread::sleep(Duration::from_millis(150));
+    thread::sleep(Duration::from_millis(80));
     // The box keeps the previous query; erase it before typing.
     let previous = read(process, |r, i| Ok(find_result(r, i)?.0.chars().count()))?;
     for _ in 0..previous.min(64) {
         keys.press_code(BACKSPACE)?;
-        thread::sleep(Duration::from_millis(30));
+        thread::sleep(Duration::from_millis(15));
     }
     wait(process, "find query cleared", |r, i| {
         Ok(find_result(r, i)?.0.is_empty())
@@ -709,7 +726,7 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     let query = state.to_string();
     for digit in query.bytes() {
         keys.press_code(DIGITS[(digit - b'0') as usize])?;
-        thread::sleep(Duration::from_millis(60));
+        thread::sleep(Duration::from_millis(25));
     }
     let matched = wait(process, "find result", |r, i| {
         let (text, id) = find_result(r, i)?;
@@ -724,7 +741,9 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     }
     keys.press(Key::Return)?;
     wait(process, "find closes", |r, i| Ok(!find_open(r, i)?))?;
-    thread::sleep(Duration::from_millis(400));
+    // The camera glides to the state: wait for it to stop instead of a fixed 400 ms.
+    thread::sleep(Duration::from_millis(60));
+    super::screenmap::wait_camera_still(process, 700);
     Ok(())
 }
 /// Press Escape (at most three times) until `closed` holds; best effort, used
@@ -775,11 +794,13 @@ pub(super) fn settled<T: PartialEq>(
             result => return result,
         }
     };
+    let started = Instant::now();
     let mut last = attempt()?;
     loop {
         thread::sleep(Duration::from_millis(60));
         let now = attempt()?;
         if now == last {
+            trace(stage, started);
             return Ok(now);
         }
         if Instant::now() >= deadline {

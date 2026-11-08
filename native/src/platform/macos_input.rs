@@ -338,19 +338,21 @@ fn click_sequence_checked(
 ) -> Result<()> {
     check()?;
     post(MOUSE_MOVED, point)?;
-    pause(std::time::Duration::from_millis(60));
+    // About two game frames each: the hover lands before the press, the press before the
+    // release (shortened from 60/50/40 ms for play speed, 6 Nov 2026).
+    pause(std::time::Duration::from_millis(35));
     check()?;
     before_down()?;
     check()?;
     let dispatched = post(down, point);
     if dispatched.is_ok() {
-        pause(std::time::Duration::from_millis(50));
+        pause(std::time::Duration::from_millis(35));
     }
     let released = post(up, point);
     if released.is_err() {
         let _ = post(up, point);
     }
-    pause(std::time::Duration::from_millis(40));
+    pause(std::time::Duration::from_millis(25));
     dispatched.and(released)
 }
 
@@ -1034,7 +1036,7 @@ impl<'p> MacKeys<'p> {
                 CGEventPost(HID_EVENT_TAP, event);
                 CFRelease(event);
             }
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            std::thread::sleep(std::time::Duration::from_millis(25));
         }
         Ok(())
     }
