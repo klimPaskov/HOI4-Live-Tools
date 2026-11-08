@@ -74,10 +74,10 @@ impl Fixture {
             fault_reads: Cell::new(0),
         };
         let base = 0x10000;
-        f.word(base + 0x44086a8, 0x30000);
-        f.word(base + 0x44085f8, 0x32000);
-        f.word(base + 0x439f450, 0x36000);
-        f.word(base + 0x43f3eb8, 0x37000);
+        f.word(base + 0x459e9f0, 0x30000);
+        f.word(base + 0x459e908, 0x32000);
+        f.word(base + 0x45353b0, 0x36000);
+        f.word(base + 0x458a088, 0x37000);
         for (a, n) in [
             (0x30000, 0x700),
             (0x32000, 0x700),
@@ -87,8 +87,8 @@ impl Fixture {
         ] {
             f.region(a, n);
         }
-        f.word(0x30000, base + 0x42c7598);
-        f.word(0x32000, base + 0x42c9a88);
+        f.word(0x30000, base + 0x445e068);
+        f.word(0x32000, base + 0x4460048);
         f.number(0x30460, 60759371);
         f.number(0x304b4, 4);
         f.number(0x30518, 1);
@@ -180,13 +180,13 @@ impl Process for Fixture {
 
 impl Fixture {
     fn army(&mut self) {
-        self.object(0x20000, "CCountry", 0x10000 + 0x41fafb0);
+        self.object(0x20000, "CCountry", 0x10000 + 0x438fe10);
         self.number(0x20008, 1);
         self.array(0x20290, 0x70000, 2);
         self.region(0x70000, 16);
         for (i, a) in [0x71000u64, 0x72000].into_iter().enumerate() {
             self.region(a, 0x430);
-            self.word(a, 0x10000 + 0x4277fe8);
+            self.word(a, 0x10000 + 0x440e880);
             self.number(a + 0x1d8, 1);
             self.number(a + 0x1dc, 999);
             self.put(a + 0x18, &u32::MAX.to_le_bytes());
@@ -197,7 +197,7 @@ impl Fixture {
         }
         self.word(0x711f0, 0x73000);
         self.region(0x73000, 0xa8);
-        self.word(0x73000, 0x10000 + 0x41fb728);
+        self.word(0x73000, 0x10000 + 0x4390588);
         self.number(0x730a4, 2);
         self.array(0x302b0, 0x74000, 3);
         self.region(0x74000, 24);
@@ -236,7 +236,7 @@ fn own_complete_handles_and_selected_location_are_pointer_free() {
 fn foreign_owner_alternate_controller_and_wrong_primary_never_expand_scope() {
     for (a, n, code, blocked) in [
         (0x20008, 2, "invalid_army_owner", 0x20290),
-        (0x71000, 0x10000 + 0x4278270, "invalid_army_type", 0x711d8),
+        (0x71000, 0x10000 + 0x440eb08, "invalid_army_type", 0x711d8),
         (0x711d8, 2, "invalid_army_owner", 0x71018),
     ] {
         let mut f = Fixture::new();

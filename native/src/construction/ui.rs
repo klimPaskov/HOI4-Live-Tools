@@ -13,7 +13,7 @@ fn exact(r: &Reader<'_>, address: u64, primary: u64) -> Result<()> {
     Ok(())
 }
 fn window(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Result<Value> {
-    exact(r, window, base + 0x4347d58)?;
+    exact(r, window, base + 0x44de2b0)?;
     if r.u64(window + 0x98)? != registry {
         return Err(invalid("Construction window must belong to own registry"));
     }
@@ -38,7 +38,7 @@ fn location_text(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Resul
     let Some(textbox) = selected else {
         return Ok(None);
     };
-    exact(r, textbox, base + 0x434c8a0)?;
+    exact(r, textbox, base + 0x44e2b10)?;
     if r.u64(textbox + 0x68)? != registry {
         return Err(invalid("Construction text must belong to own registry"));
     }
@@ -47,10 +47,10 @@ fn location_text(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Resul
 pub(super) fn observe(r: &Reader<'_>, base: u64, lines: &[Value]) -> Result<Value> {
     // Caller already proved positive own player and own production. Exact idler
     // virtual+c0 reads that positive player; no observer-country fallback here.
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(r, idler, base + 0x42c9a88)?;
+    let idler = r.u64(base + 0x459e908)?;
+    exact(r, idler, base + 0x4460048)?;
     let registry = r.u64(idler + 0x4f8)?;
-    exact(r, registry, base + 0x42736f8)?;
+    exact(r, registry, base + 0x4409f68)?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -69,7 +69,7 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, lines: &[Value]) -> Result<Valu
     if panel == 0 {
         return Ok(out);
     }
-    exact(r, panel, base + 0x43101d8)?;
+    exact(r, panel, base + 0x44a5e20)?;
     if r.u64(panel + 0x2f0)? != idler {
         return Err(invalid("Construction panel must belong to own idler"));
     }
@@ -101,7 +101,7 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, lines: &[Value]) -> Result<Valu
     let mut unsupported = 0;
     let mut unjoined = 0;
     for item in &items {
-        if r.u64(*item)? != base + 0x4265548 {
+        if r.u64(*item)? != base + 0x43fba78 {
             unsupported += 1;
             continue;
         }

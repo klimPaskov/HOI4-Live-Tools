@@ -8,13 +8,13 @@ use crate::{
 use serde_json::{json, Value};
 use std::time::Instant;
 
-const FIND_VIEW: u64 = 0x4318868;
-const RESULT_ROW: u64 = 0x4318b08;
-const CONTAINER: u64 = 0x4347d58;
+const FIND_VIEW: u64 = 0x44ae730;
+const RESULT_ROW: u64 = 0x44ae9d8;
+const CONTAINER: u64 = 0x44de2b0;
 /// CEditBox embedded text receiver, as in the live-verified Focus search box.
-const TEXT_RECEIVER: u64 = 0x4349be8;
-const STATE: u64 = 0x41fba98;
-const STATE_TEMPLATE: u64 = 0x41fc068;
+const TEXT_RECEIVER: u64 = 0x44e0110;
+const STATE: u64 = 0x43908f8;
+const STATE_TEMPLATE: u64 = 0x4390ec8;
 const STATE_KIND: i32 = 2;
 /// Reviewed camera setter writes this look-at height for every centring.
 const LOOK_AT_HEIGHT: f32 = 9.5;
@@ -276,7 +276,7 @@ pub fn snapshot_with_options(
     let [gs, idler, _] = campaign.anchors;
     witnesses.section("interface");
     let registry = r.u64(idler + 0x4f8)?;
-    typed(&r, base, registry, 0x42736f8, "registry")?;
+    typed(&r, base, registry, 0x4409f68, "registry")?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {

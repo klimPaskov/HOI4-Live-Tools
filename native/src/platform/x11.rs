@@ -179,8 +179,7 @@ pub(super) fn connect_owned(
         return Err(Error::new("transport_timeout", "X11 deadline expired"));
     }
     verify_display_server(display_server)?;
-    let socket =
-        super::connect_socket_until(Path::new(&format!("/tmp/.X11-unix/X{display}")), until)?;
+    let socket = super::connect_display(display, Some(until))?;
     verify_display_peer(&socket, display_server)?;
     let (stream, (family, address)) = DefaultStream::from_unix_stream(socket).map_err(xerror)?;
     if family != x11rb_protocol::xauth::Family::LOCAL {

@@ -770,9 +770,10 @@ pub(super) fn auto_import_enabled(r: &Reader<'_>, image: u64) -> Result<Option<b
     let Some(text) = find(r, image, root, "auto_import_budget_txt", 0)? else {
         return Ok(None);
     };
-    Ok(enabled_from_budget_text(
-        &r.string_bounded(text + TEXT, 64)?,
-    ))
+    Ok(enabled_from_budget_text(&r.string_bounded(
+        text + fld(r.string_abi(), &TEXT_BOX, TEXT)?,
+        64,
+    )?))
 }
 pub(super) fn enabled_from_budget_text(raw: &str) -> Option<bool> {
     let digits = clean(raw);

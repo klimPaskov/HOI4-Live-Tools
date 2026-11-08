@@ -10,11 +10,21 @@ use std::{
 };
 
 pub(crate) fn connect(path: &Path) -> Result<UnixStream> {
-    connect_inner(path, None)
+    connect_inner(path, None, false)
 }
 
-pub(crate) fn connect_until(path: &Path, deadline: Instant) -> Result<UnixStream> {
-    connect_inner(path, Some(deadline))
+/// The local socket of X11 display `number`. When the pathname socket is absent
+/// on Linux, the server's abstract socket of the same name is used: WSLg mounts
+/// `/tmp/.X11-unix` read-only, so a private Xvfb listens only there. Callers
+/// verify the peer's process identity either way.
+pub(crate) fn connect_display(number: u16, deadline: Option<Instant>) -> Result<UnixStream> {
+    let path = format!("/tmp/.X11-unix/X{number}");
+    match connect_inner(Path::new(&path), deadline, false) {
+        Err(e) if cfg!(target_os = "linux") && e.message.contains("os error 2") => {
+            connect_inner(Path::new(&path), deadline, true)
+        }
+        other => other,
+    }
 }
 
 fn address() -> libc::sockaddr_un {
@@ -44,7 +54,13 @@ pub(crate) fn validate_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
+/// `abstract_name`: connect to the Linux abstract socket named by `path` (a
+/// leading NUL, then the name, with the exact name length as address size).
+fn connect_inner(
+    path: &Path,
+    absolute: Option<Instant>,
+    abstract_name: bool,
+) -> Result<UnixStream> {
     if absolute.is_some_and(|deadline| Instant::now() >= deadline) {
         return Err(Error::new(
             "transport_timeout",
@@ -55,9 +71,15 @@ fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
     let mut address = address();
     let bytes = path.as_os_str().as_bytes();
     address.sun_family = libc::AF_UNIX as libc::sa_family_t;
-    for (target, byte) in address.sun_path.iter_mut().zip(bytes) {
+    let skip = usize::from(abstract_name);
+    for (target, byte) in address.sun_path.iter_mut().skip(skip).zip(bytes) {
         *target = *byte as libc::c_char;
     }
+    let length = if abstract_name {
+        std::mem::size_of::<libc::sa_family_t>() + 1 + bytes.len()
+    } else {
+        std::mem::size_of_val(&address)
+    };
     // SAFETY: new local socket, atomically nonblocking and close-on-exec.
     let raw = unsafe {
         libc::socket(
@@ -77,7 +99,7 @@ fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
         libc::connect(
             fd.as_raw_fd(),
             (&address as *const libc::sockaddr_un).cast(),
-            std::mem::size_of_val(&address) as libc::socklen_t,
+            length as libc::socklen_t,
         )
     };
     if result < 0 {

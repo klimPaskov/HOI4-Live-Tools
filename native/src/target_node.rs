@@ -15,8 +15,8 @@ pub(crate) struct Catalog {
 }
 impl Catalog {
     pub(crate) fn load(r: &Reader<'_>, base: u64, status: u64, key: &str) -> Result<Self> {
-        let db = r.u64(base + 0x439f450)?;
-        exact(r, db, base + 0x42110c8)?;
+        let db = r.u64(base + 0x45353b0)?;
+        exact(r, db, base + 0x43a5fc0)?;
         let templates = array(r, db + 0x48, 8192)?;
         let own = array(r, status + 0x88, 8192)?;
         if templates.is_empty() || own.len() != templates.len() - 1 {
@@ -28,18 +28,18 @@ impl Catalog {
         // This build's constructor appends a nonnull TNullObject singleton at
         // reserved index zero. It is not a usable positive definition. Validate
         // its exact identity/type without reading its template payload.
-        let reserved = r.u64(base + 0x439f560)?;
+        let reserved = r.u64(base + 0x45354c0)?;
         if reserved == 0 || templates[0] != reserved {
             return Err(Error::new(
                 "research_unavailable",
                 "Reserved technology singleton join required",
             ));
         }
-        exact(r, reserved, base + 0x4201c78)?;
+        exact(r, reserved, base + 0x4396b48)?;
         let mut keys = vec![String::new()];
         let mut matches = Vec::new();
         for (index, &template) in templates.iter().enumerate().skip(1) {
-            exact(r, template, base + 0x4211038)?;
+            exact(r, template, base + 0x43a5f30)?;
             if r.i32(template + 0x30)? != index as i32 {
                 return Err(Error::new(
                     "invalid_research_join",
@@ -86,7 +86,7 @@ impl Catalog {
         status: u64,
         technology: u64,
     ) -> Result<usize> {
-        exact(r, technology, base + 0x42107f8)?;
+        exact(r, technology, base + 0x43a5650)?;
         if r.u64(technology + 0x158)? != status {
             return Err(Error::new(
                 "invalid_research_owner",
@@ -94,7 +94,7 @@ impl Catalog {
             ));
         }
         let template = r.u64(technology + 0x160)?;
-        exact(r, template, base + 0x4211038)?;
+        exact(r, template, base + 0x43a5f30)?;
         let id = r.i32(template + 0x30)?;
         if id <= 0
             || self.templates.get(id as usize) != Some(&template)
@@ -142,7 +142,7 @@ pub(crate) fn observe(
         if !seen.insert(item) {
             continue;
         }
-        exact(r, item, base + 0x424e2e0)?;
+        exact(r, item, base + 0x43e4038)?;
         if r.u64(item + 0x30)? != tree {
             return Err(Error::new(
                 "invalid_gui_owner",

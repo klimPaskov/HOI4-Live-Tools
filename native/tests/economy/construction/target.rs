@@ -3,7 +3,7 @@ use hoi4_live_native::construction::target_snapshot::snapshot as target;
 
 fn complete() -> Fixture {
     let mut f = locations::located();
-    f.word(SENTINEL, BASE + 0x41b40a8);
+    f.word(SENTINEL, BASE + 0x4348678);
     f.put(SENTINEL + 0x18, &[0]);
     f
 }
@@ -40,7 +40,7 @@ fn construction_target_checks_entire_queue_beyond_public_page_limit() {
     let v = target(&f, "infrastructure", 1).unwrap();
     assert_eq!(v["queued"]["in_state"], 135);
     assert_eq!(v["line_count"], 129);
-    f.word(0x108000 + 0x70, 0);
+    f.word(0x108000 + 0x78, 0);
     let v = target(&f, "infrastructure", 1).unwrap();
     assert_eq!(v["complete"], false);
     assert!(v["queued"].is_null());
@@ -63,7 +63,7 @@ fn construction_target_empty_queue_needs_public_template_and_own_state() {
 }
 #[test]
 fn construction_target_unknown_building_and_unproven_location_are_not_zero() {
-    for field in [0x80070, 0x82070] {
+    for field in [0x80078, 0x82078] {
         let mut f = complete();
         f.word(field, 0);
         let v = target(&f, "infrastructure", 1).unwrap();
@@ -78,7 +78,8 @@ fn construction_target_unknown_building_and_unproven_location_are_not_zero() {
 }
 #[test]
 fn construction_target_foreign_state_refuses_before_id_catalog_or_queue_payload() {
-    for field in [0xe00cc] {
+    {
+        let field = 0xe00cc;
         let mut f = complete();
         f.number(field, 2);
         assert_eq!(
@@ -118,9 +119,9 @@ fn construction_target_duplicate_keys_wrong_ordinal_and_torn_membership_refuse()
 #[test]
 fn construction_target_null_template_requires_exact_type_slot_and_inactive_flag() {
     for (field, bytes) in [
-        (SENTINEL, (BASE + 0x41b40b0).to_le_bytes().to_vec()),
+        (SENTINEL, (BASE + 0x4348680).to_le_bytes().to_vec()),
         (SENTINEL + 0x18, vec![1]),
-        (OTHER, (BASE + 0x41b40a8).to_le_bytes().to_vec()),
+        (OTHER, (BASE + 0x4348678).to_le_bytes().to_vec()),
     ] {
         let mut f = complete();
         f.put(field, &bytes);

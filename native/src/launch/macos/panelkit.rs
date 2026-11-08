@@ -405,7 +405,8 @@ const SLOT_PATHS: &[(&str, u64, &[u64], u64)] = &[
 ];
 const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
     (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
-    // Name and insignia window, mapped live 6 Nov 2026 (dbg_find_root e8: 0x498 -> 0x48).
+    // Name and insignia window (the logo window Create Agency opens): Linux +0x340, root +0x50 (live
+    // 5 Nov 2026); macOS +0x498 -> 0x48 (dbg_find_root e8, live 6 Nov 2026).
     (AGENCY_LOGO, AGENCY_VIEW, 0x498, 0x48),
     (MIO_LIST, POLITICS_VIEW, 0x3958, 0xf0),
 ];

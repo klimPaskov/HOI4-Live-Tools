@@ -19,7 +19,7 @@ pub(crate) fn observe(
         out["reason"] = json!("gui_unmaterialized");
         return Ok(out);
     }
-    if r.u64(gui)? != base + 0x4347d58 {
+    if r.u64(gui)? != base + 0x44de2b0 {
         return Ok(out);
     }
     if r.u64(gui + 0x98)? != registry {
@@ -34,7 +34,7 @@ pub(crate) fn observe(
         return Ok(out);
     };
     out["control_type_encoding"] = reuse.nullable_type(r, button)?;
-    if button == 0 || r.u64(button)? != base + 0x4346b10 {
+    if button == 0 || r.u64(button)? != base + 0x44dcf10 {
         return Ok(out);
     }
     // Exact Drag -> CGuiElement constructor preserves the registry at +0x68.
@@ -53,7 +53,7 @@ pub(crate) fn observe(
         ));
     }
     // Exact Drag embedded observer table. Unknown secondary layouts stay unavailable.
-    if r.u64(button + 0x80)? != base + 0x4346ea8 {
+    if r.u64(button + 0x80)? != base + 0x44dd2c8 {
         return Ok(out);
     }
     if r.u64(button + 0xa0)? != 0 {
@@ -88,7 +88,7 @@ pub(crate) fn observe(
         if removed != 0 {
             unknown = true;
         }
-        if [tree + 0x5e0, tree + 0x868].contains(&target) && r.u64(target)? == base + 0x424e0a8 {
+        if [tree + 0x5e0, tree + 0x868].contains(&target) && r.u64(target)? == base + 0x43e3df8 {
             if reuse.callback(r, target)? {
                 if removed == 0 {
                     matched = true;

@@ -59,8 +59,9 @@ def crash_dirs(user_dir):
         return set()
 
 
-# Steam must never see or register a run: no launch while a Steam client or steamcmd runs, and no Steam variables
-# (SteamAppId, SteamGameId, STEAM_COMPAT_*, the overlay preload ...) reach the game.
+# No Steam variables (SteamAppId, SteamGameId, STEAM_COMPAT_*, the overlay preload ...) reach the game. Refusing to
+# launch while a Steam client or steamcmd runs is opt-in: set HOI4_LIVE_REQUIRE_STEAM_CLOSED=1.
+REQUIRE_STEAM_CLOSED_ENV = "HOI4_LIVE_REQUIRE_STEAM_CLOSED"
 WINDOWS_STEAM = ("steam.exe", "steamcmd.exe", "steamwebhelper.exe")
 POSIX_STEAM = ("steam", "steamcmd", "steamwebhelper", "steam_osx", "steam.sh", "steamcmd.sh")
 
@@ -72,12 +73,21 @@ def steam_processes(plat=None, windows=None):
     return [(n, pid) for n in (WINDOWS_STEAM if windows else POSIX_STEAM) for pid in plat.find_processes(n)]
 
 
-def refuse_running_steam(plat=None, windows=None):
+def steam_check_required(env=None):
+    """True when the environment asks for launches to be refused while Steam runs (off by default)."""
+    value = (os.environ if env is None else env).get(REQUIRE_STEAM_CLOSED_ENV, "")
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def refuse_running_steam(plat=None, windows=None, env=None):
+    """Raise when Steam runs and HOI4_LIVE_REQUIRE_STEAM_CLOSED asks for that check; otherwise do nothing."""
+    if not steam_check_required(env):
+        return
     found = steam_processes(plat, windows)
     if found:
         names = ", ".join(sorted({n for n, _ in found}))
-        raise ToolError(f"Steam is running ({names}); close Steam and steamcmd before launching the game. "
-                        "The game is never started while Steam can see it.")
+        raise ToolError(f"Steam is running ({names}) and {REQUIRE_STEAM_CLOSED_ENV} is set; "
+                        "close Steam and steamcmd, or unset it, before launching the game.")
 
 
 def launch_env(base=None):

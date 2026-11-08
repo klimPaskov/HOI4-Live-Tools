@@ -526,7 +526,7 @@ fn pause(ms: u64) {
     thread::sleep(Duration::from_millis(ms));
 }
 fn icons_shown(r: &crate::memory::Reader<'_>, image: u64) -> Result<bool> {
-    Ok(!airui::base_icons(r, image)?.is_empty())
+    Ok(airui::base_icons(r, image)?.iter().any(|i| i.strategic))
 }
 /// Make sure the strategic air map (F3) is on; returns whether it was switched on here.
 /// Air mode is seen through the air base icons, which the game draws only near the camera
@@ -564,7 +564,17 @@ fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
         return Ok(true);
     }
     keys.press_code(F3)?;
-    wait(process, "strategic air map mode", icons_shown)?;
+    if wait(process, "strategic air map mode", icons_shown).is_err() {
+        // Far out, the game draws no air base icons: come in to the strategic height.
+        super::screenmap::zoom_in_to_strategic(process, keys)?;
+        if wait(process, "strategic air map mode", icons_shown).is_err() {
+            // F3 toggles: when air mode was already on (far out, no icons drawn), the press
+            // above switched it off (seen live 6 Nov 2026 after the Air Forces Overview). Press
+            // it once more at the strategic height.
+            keys.press_code(F3)?;
+            wait(process, "strategic air map mode", icons_shown)?;
+        }
+    }
     pause(300);
     Ok(true)
 }
@@ -976,7 +986,9 @@ pub(super) fn probe_region(
         let _ = air::deselect(process, keys);
         find_state(process, keys, state)?;
         pause(300);
-        click(keys, 960.0, 540.0)?;
+        // Below the centre: the camera centres on the state, where a capital's victory point
+        // star takes the click and no region window opens (Berlin, state 64, Linux live).
+        click(keys, 960.0, 620.0)?;
         let view = {
             wait(process, "air region window", |r, i| {
                 Ok(airui::region_view(r, i)?.is_some())

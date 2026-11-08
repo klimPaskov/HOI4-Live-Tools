@@ -410,7 +410,8 @@ fn retained_edges_reject_replacement_before_foreign_object_payload() {
 
 #[test]
 fn retained_ownership_loss_refuses_before_state_template_and_view_payload() {
-    for field in [STATE + 0xc4] {
+    {
+        let field = STATE + 0xc4;
         let mut f = fixture();
         let anchor = observe(&f, Some(1)).unwrap().anchor().unwrap();
         f.int(field, 7);

@@ -8,17 +8,17 @@ const SENTINEL: u64 = 0xc4000;
 const INTERN: u32 = 0x123456;
 fn fixture() -> Fixture {
     let mut f = production_fixture();
-    f.word(BASE + 0x439f440, DB);
-    f.word(DB, BASE + 0x41f72d8);
+    f.word(BASE + 0x45353a0, DB);
+    f.word(DB, BASE + 0x438c1f8);
     f.array(DB + 0x60, ARRAY, 2);
     f.word(ARRAY, SENTINEL);
     f.word(ARRAY + 8, TYPE);
-    f.word(TYPE, BASE + 0x41f8810);
+    f.word(TYPE, BASE + 0x438d730);
     f.put(TYPE + 8, &INTERN.to_le_bytes());
     f.string(TYPE + 0x10, "infantry_eq_1");
     for (line, variant) in [(0x80000, 0xd0000), (0x81000, 0xe0000), (0x82000, 0xf0000)] {
         f.word(line + 0x88, variant);
-        f.word(variant, BASE + 0x41fa1a0);
+        f.word(variant, BASE + 0x438f000);
         f.put(variant + 0x14, &INTERN.to_le_bytes());
         f.word(variant + 0x3f0, TYPE);
     }
@@ -60,7 +60,7 @@ fn foreign_owner_prevents_every_variant_and_catalog_read() {
             0x80088,
             0xd0000,
             0xd03f0,
-            BASE + 0x439f440,
+            BASE + 0x45353a0,
             DB,
             TYPE,
             TYPE + 8,
@@ -92,14 +92,14 @@ fn nulls_and_unknown_primary_types_are_explicit_and_never_assume_payload() {
         (0x80088, 0, "no_variant", 0xd0000),
         (
             0xd0000,
-            BASE + 0x41fa1a8,
+            BASE + 0x438f008,
             "unsupported_variant_type",
             0xd03f0,
         ),
         (0xd03f0, 0, "no_type", 0xd0014),
         (
             TYPE,
-            BASE + 0x41f8818,
+            BASE + 0x438d738,
             "unsupported_equipment_type",
             TYPE + 8,
         ),
@@ -144,7 +144,7 @@ fn catalog_header_pointer_and_duplicate_bounds_precede_selected_payload() {
         production_not_read(&f, &[TYPE, TYPE + 0x10, SENTINEL]);
     }
     let mut f = fixture();
-    f.word(DB, BASE + 0x41f72e0);
+    f.word(DB, BASE + 0x438c200);
     assert_eq!(
         hoi4_live_native::production_lines::snapshot(&f)
             .unwrap_err()
@@ -191,7 +191,7 @@ fn malformed_names_and_duplicate_selected_keys_never_become_equipment_identity()
     );
     let mut f = fixture();
     f.word(ARRAY, OTHER);
-    f.word(OTHER, BASE + 0x41f8810);
+    f.word(OTHER, BASE + 0x438d730);
     f.put(OTHER + 8, &(INTERN + 1).to_le_bytes());
     f.string(OTHER + 0x10, "infantry_eq_1");
     f.word(0xf03f0, OTHER);
@@ -210,7 +210,7 @@ fn every_join_catalog_and_key_byte_is_witnessed_before_any_page_returns() {
         (0xd0000, 8),
         (0xd03f0, 8),
         (0xd0014, 4),
-        (BASE + 0x439f440, 8),
+        (BASE + 0x45353a0, 8),
         (DB, 8),
         (DB + 0x60, 16),
         (ARRAY, 16),

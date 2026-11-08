@@ -1,0 +1,7597 @@
+{
+ "macho": {
+  "file": "hoi4-macos-1.19.4.1-DFA875A5",
+  "uuid": "DFA875A5-25BA-35E0-9736-627F8A5C4396"
+ },
+ "elf": {
+  "file": "hoi4",
+  "build_id": "2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082"
+ },
+ "accepted_confidence": [
+  "high",
+  "medium"
+ ],
+ "image": {
+  "0x27b8910": {
+   "kind": "function",
+   "rtti": null,
+   "status": "unresolved",
+   "elf": null,
+   "confidence": null,
+   "notes": [
+    "no ELF counterpart found by vtable slots, unique strings or callee propagation"
+   ],
+   "used": [
+    "launch/macos/construction_place/point.rs:77"
+   ]
+  },
+  "0x27bc4c0": {
+   "kind": "function",
+   "rtti": null,
+   "status": "unresolved",
+   "elf": null,
+   "confidence": null,
+   "notes": [
+    "no ELF counterpart found by vtable slots, unique strings or callee propagation"
+   ],
+   "used": [
+    "launch/macos/construction_place/point.rs:77"
+   ]
+  },
+  "0x27bcdc0": {
+   "kind": "function",
+   "rtti": null,
+   "status": "unresolved",
+   "elf": null,
+   "confidence": null,
+   "notes": [
+    "no ELF counterpart found by vtable slots, unique strings or callee propagation"
+   ],
+   "used": [
+    "launch/macos/construction_place/point.rs:77"
+   ]
+  },
+  "0x34ac5f8": {
+   "kind": "vtable",
+   "rtti": "8CAirWing",
+   "status": "mapped",
+   "elf": "0x440e200",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAirWing",
+    "launch/macos/airread.rs:35",
+    "launch/macos/airui.rs:331"
+   ]
+  },
+  "0x34ac6c0": {
+   "kind": "vtable",
+   "rtti": "12CAirWingPool",
+   "status": "mapped",
+   "elf": "0x440e2c8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAirWingPool",
+    "launch/macos/airread.rs:33"
+   ]
+  },
+  "0x34ace60": {
+   "kind": "vtable",
+   "rtti": "5CArmy",
+   "status": "mapped",
+   "elf": "0x440e880",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CArmy",
+    "launch/macos/armies.rs:101",
+    "launch/macos/armies.rs:133",
+    "launch/macos/armies.rs:61"
+   ]
+  },
+  "0x34b2928": {
+   "kind": "vtable",
+   "rtti": "18CCountryFuelStatus",
+   "status": "mapped",
+   "elf": "0x4412fc8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryFuelStatus",
+    "launch/macos/economy_detail.rs:314",
+    "launch/macos/economy_detail.rs:46",
+    "launch/macos/resources.rs:198"
+   ]
+  },
+  "0x34fb310": {
+   "kind": "vtable",
+   "rtti": "21CDivisionTemplateData",
+   "status": "mapped",
+   "elf": "0x4457c18",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CDivisionTemplateData",
+    "launch/macos/units.rs:106",
+    "launch/macos/units.rs:208",
+    "launch/macos/units.rs:252"
+   ]
+  },
+  "0x34fb370": {
+   "kind": "vtable",
+   "rtti": "27CReferencedDivisionTemplate",
+   "status": "mapped",
+   "elf": "0x4457c78",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CReferencedDivisionTemplate",
+    "launch/macos/units.rs:102",
+    "launch/macos/units.rs:207",
+    "launch/macos/units.rs:248"
+   ]
+  },
+  "0x34fbb48": {
+   "kind": "vtable",
+   "rtti": "6CEvent",
+   "status": "mapped",
+   "elf": "0x44583e0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEvent",
+    "launch/macos/events.rs:74"
+   ]
+  },
+  "0x34fc2e8": {
+   "kind": "vtable",
+   "rtti": "6CFleet",
+   "status": "mapped",
+   "elf": "0x44588e0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CFleet",
+    "launch/macos/naval.rs:22"
+   ]
+  },
+  "0x35044e8": {
+   "kind": "vtable",
+   "rtti": "17CCurrentGameState",
+   "status": "mapped",
+   "elf": "0x445e068",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCurrentGameState",
+    "launch/macos/diplomacy_state.rs:96",
+    "launch/macos/doctrines.rs:64",
+    "launch/macos/fleetmem.rs:57"
+   ]
+  },
+  "0x35089d8": {
+   "kind": "vtable",
+   "rtti": "12CInGameIdler",
+   "status": "mapped",
+   "elf": "0x4460048",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CInGameIdler",
+    "launch/macos/agency_act.rs:162",
+    "launch/macos/air.rs:58",
+    "launch/macos/airui.rs:52"
+   ]
+  },
+  "0x350ad90": {
+   "kind": "vtable",
+   "rtti": "16CCountryManpower",
+   "status": "mapped",
+   "elf": "0x4461888",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/economy_detail.rs:305",
+    "launch/macos/economy_detail.rs:44"
+   ]
+  },
+  "0x350cdc0": {
+   "kind": "vtable",
+   "rtti": "9CModifier",
+   "status": "mapped",
+   "elf": "0x4463448",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CModifier",
+    "launch/macos/economy_detail.rs:263",
+    "launch/macos/economy_detail.rs:42"
+   ]
+  },
+  "0x3512bf0": {
+   "kind": "vtable",
+   "rtti": "14COrderInstance",
+   "status": "mapped",
+   "elf": "0x4468ed0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class COrderInstance",
+    "launch/macos/armies.rs:108",
+    "launch/macos/armies.rs:149",
+    "launch/macos/armies.rs:76"
+   ]
+  },
+  "0x3519a20": {
+   "kind": "vtable",
+   "rtti": "5CShip",
+   "status": "mapped",
+   "elf": "0x446f4f0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CShip",
+    "launch/macos/naval.rs:46"
+   ]
+  },
+  "0x3519c88": {
+   "kind": "vtable",
+   "rtti": "20CCountryAirContainer",
+   "status": "mapped",
+   "elf": "0x446f758",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryAirContainer",
+    "launch/macos/airread.rs:31"
+   ]
+  },
+  "0x3519d08": {
+   "kind": "vtable",
+   "rtti": "8CAirBase",
+   "status": "mapped",
+   "elf": "0x446f7d8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAirBase",
+    "launch/macos/airread.rs:25"
+   ]
+  },
+  "0x3519d70": {
+   "kind": "vtable",
+   "rtti": "13CStrategicAir",
+   "status": "mapped",
+   "elf": "0x446f840",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CStrategicAir",
+    "launch/macos/airread.rs:23"
+   ]
+  },
+  "0x351cf18": {
+   "kind": "vtable",
+   "rtti": "10CNavalBase",
+   "status": "mapped",
+   "elf": "0x4471e38",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CNavalBase",
+    "launch/macos/naval.rs:61"
+   ]
+  },
+  "0x351e438": {
+   "kind": "vtable",
+   "rtti": "18CStrategicResource",
+   "status": "mapped",
+   "elf": "0x4472e08",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CStrategicResource",
+    "launch/macos/resources.rs:176",
+    "launch/macos/resources.rs:301",
+    "launch/macos/resources.rs:45"
+   ]
+  },
+  "0x351e498": {
+   "kind": "vtable",
+   "rtti": "22CStrategicResourcePool",
+   "status": "mapped",
+   "elf": "0x4472e68",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/resources.rs:190",
+    "launch/macos/resources.rs:44"
+   ]
+  },
+  "0x351e5e0": {
+   "kind": "vtable",
+   "rtti": "26CStrategicResourceDatabase",
+   "status": "mapped",
+   "elf": "0x4472f28",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CStrategicResourceDatabase",
+    "launch/macos/resources.rs:162",
+    "launch/macos/resources.rs:47"
+   ]
+  },
+  "0x351e958": {
+   "kind": "vtable",
+   "rtti": "18CSubUnitDefinition",
+   "status": "mapped",
+   "elf": "0x4473160",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSubUnitDefinition",
+    "launch/macos/units.rs:114",
+    "launch/macos/units.rs:210",
+    "launch/macos/units.rs:260"
+   ]
+  },
+  "0x351f208": {
+   "kind": "vtable",
+   "rtti": "10CTaskForce",
+   "status": "mapped",
+   "elf": "0x4473778",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CTaskForce",
+    "launch/macos/naval.rs:41",
+    "launch/macos/navalui.rs:62"
+   ]
+  },
+  "0x3525bf8": {
+   "kind": "vtable",
+   "rtti": "8CWarGoal",
+   "status": "mapped",
+   "elf": "0x4477d88",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CWarGoal",
+    "launch/macos/diplomacy_state.rs:400",
+    "launch/macos/diplomacy_state.rs:82"
+   ]
+  },
+  "0x352ee30": {
+   "kind": "vtable",
+   "rtti": "9CBuilding",
+   "status": "mapped",
+   "elf": "0x4348430",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CBuilding",
+    "launch/macos/supplymem.rs:100",
+    "launch/macos/units.rs:218"
+   ]
+  },
+  "0x352f828": {
+   "kind": "vtable",
+   "rtti": "15CBuildingStatus",
+   "status": "mapped",
+   "elf": "0x4348d38",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CBuildingStatus",
+    "launch/macos/supplymem.rs:99",
+    "launch/macos/units.rs:217"
+   ]
+  },
+  "0x352fa88": {
+   "kind": "vtable",
+   "rtti": "17CBuildingTemplate",
+   "status": "mapped",
+   "elf": "0x4348f98",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CBuildingTemplate",
+    "launch/macos/construction.rs:58",
+    "launch/macos/supplymem.rs:101"
+   ]
+  },
+  "0x3530150": {
+   "kind": "vtable",
+   "rtti": "10CCharacter",
+   "status": "mapped",
+   "elf": "0x4349390",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCharacter",
+    "launch/macos/politics.rs:97",
+    "launch/macos/special_projects.rs:71"
+   ]
+  },
+  "0x3530728": {
+   "kind": "vtable",
+   "rtti": "18CCountryCharacters",
+   "status": "mapped",
+   "elf": "0x4349800",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryCharacters",
+    "launch/macos/naval.rs:71",
+    "launch/macos/special_projects.rs:69",
+    "launch/macos/units.rs:213"
+   ]
+  },
+  "0x3530f20": {
+   "kind": "vtable",
+   "rtti": "10CScientist",
+   "status": "mapped",
+   "elf": "0x4349d28",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CScientist",
+    "launch/macos/special_projects.rs:70"
+   ]
+  },
+  "0x3531290": {
+   "kind": "vtable",
+   "rtti": "15CScientistTrait",
+   "status": "mapped",
+   "elf": "0x434a128",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CScientistTrait",
+    "launch/macos/special_projects.rs:72"
+   ]
+  },
+  "0x3536180": {
+   "kind": "vtable",
+   "rtti": "N9NFactions3NUi19CCountryFactionViewE",
+   "status": "mapped",
+   "elf": "0x434e260",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/faction.rs:55"
+   ]
+  },
+  "0x353a060": {
+   "kind": "vtable",
+   "rtti": "N9NFactions3NUi19CFactionSetupWindowE",
+   "status": "mapped",
+   "elf": "0x4350df8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/faction.rs:56"
+   ]
+  },
+  "0x353e188": {
+   "kind": "vtable",
+   "rtti": "N9NFactions8CFactionE",
+   "status": "mapped",
+   "elf": "0x4353758",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NFactions::CFaction",
+    "launch/macos/diplomacy_state.rs:450",
+    "launch/macos/diplomacy_state.rs:76",
+    "launch/macos/research_extras.rs:55"
+   ]
+  },
+  "0x3540478": {
+   "kind": "vtable",
+   "rtti": "N9NFactions14CFactionSystemE",
+   "status": "mapped",
+   "elf": "0x4355368",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NFactions::CFactionSystem",
+    "launch/macos/diplomacy_state.rs:447",
+    "launch/macos/diplomacy_state.rs:74"
+   ]
+  },
+  "0x35438d8": {
+   "kind": "vtable",
+   "rtti": "22CAirBaseAccessRelation",
+   "status": "mapped",
+   "elf": "0x447e810",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:125",
+    "launch/macos/diplomacy_state.rs:142"
+   ]
+  },
+  "0x35439a8": {
+   "kind": "vtable",
+   "rtti": "27COfferAirBaseAccessRelation",
+   "status": "mapped",
+   "elf": "0x447e8e0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:126",
+    "launch/macos/diplomacy_state.rs:142"
+   ]
+  },
+  "0x3543b30": {
+   "kind": "vtable",
+   "rtti": "22CDockingRightsRelation",
+   "status": "mapped",
+   "elf": "0x447ea68",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:127",
+    "launch/macos/diplomacy_state.rs:142"
+   ]
+  },
+  "0x3543c00": {
+   "kind": "vtable",
+   "rtti": "27COfferDockingRightsRelation",
+   "status": "mapped",
+   "elf": "0x447eb38",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:128",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x3543d00": {
+   "kind": "vtable",
+   "rtti": "22CNavalBlockadeRelation",
+   "status": "mapped",
+   "elf": "0x447ec38",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:129",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x3544048": {
+   "kind": "vtable",
+   "rtti": "16CAutonomousState",
+   "status": "mapped",
+   "elf": "0x4358830",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAutonomousState",
+    "launch/macos/diplomacy_state.rs:357",
+    "launch/macos/diplomacy_state.rs:72"
+   ]
+  },
+  "0x3544268": {
+   "kind": "vtable",
+   "rtti": "16CDiplomacyStatus",
+   "status": "mapped",
+   "elf": "0x4358a50",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CDiplomacyStatus",
+    "launch/macos/diplomacy_state.rs:322",
+    "launch/macos/diplomacy_state.rs:62"
+   ]
+  },
+  "0x354a170": {
+   "kind": "vtable",
+   "rtti": "12CWarRelation",
+   "status": "mapped",
+   "elf": "0x435e6b8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:120",
+    "launch/macos/diplomacy_state.rs:142",
+    "launch/macos/diplomacy_state.rs:146",
+    "launch/macos/diplomacy_state.rs:490"
+   ]
+  },
+  "0x354a240": {
+   "kind": "vtable",
+   "rtti": "32CLicenceProductionAccessRelation",
+   "status": "mapped",
+   "elf": "0x435e788",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:130",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x354a310": {
+   "kind": "vtable",
+   "rtti": "23CMilitaryAccessRelation",
+   "status": "mapped",
+   "elf": "0x435e858",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:124",
+    "launch/macos/diplomacy_state.rs:142"
+   ]
+  },
+  "0x354a3e0": {
+   "kind": "vtable",
+   "rtti": "28COfferMilitaryAccessRelation",
+   "status": "mapped",
+   "elf": "0x435e928",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:131",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x354a4b0": {
+   "kind": "vtable",
+   "rtti": "25CImproveRelationsRelation",
+   "status": "mapped",
+   "elf": "0x435e9f8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:132",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x354a580": {
+   "kind": "vtable",
+   "rtti": "16CAttacheRelation",
+   "status": "mapped",
+   "elf": "0x435eac8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:133",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x354a650": {
+   "kind": "vtable",
+   "rtti": "29CBoostPartyPopularityRelation",
+   "status": "mapped",
+   "elf": "0x435eb98",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:134",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x354a720": {
+   "kind": "vtable",
+   "rtti": "18CGuaranteeRelation",
+   "status": "mapped",
+   "elf": "0x435ec68",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:121",
+    "launch/macos/diplomacy_state.rs:142"
+   ]
+  },
+  "0x354a7f0": {
+   "kind": "vtable",
+   "rtti": "26CNonAggressionPactRelation",
+   "status": "mapped",
+   "elf": "0x435ed38",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:123",
+    "launch/macos/diplomacy_state.rs:142"
+   ]
+  },
+  "0x354a8c0": {
+   "kind": "vtable",
+   "rtti": "18CLendLeaseRelation",
+   "status": "mapped",
+   "elf": "0x435ee08",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:135",
+    "launch/macos/diplomacy_state.rs:143"
+   ]
+  },
+  "0x354aa60": {
+   "kind": "vtable",
+   "rtti": "16CSubjectRelation",
+   "status": "mapped",
+   "elf": "0x435efa8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSubjectRelation",
+    "launch/macos/diplomacy_state.rs:122",
+    "launch/macos/diplomacy_state.rs:142",
+    "launch/macos/diplomacy_state.rs:94"
+   ]
+  },
+  "0x354abc0": {
+   "kind": "vtable",
+   "rtti": "16CEmbargoRelation",
+   "status": "mapped",
+   "elf": "0x435f108",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/diplomacy_state.rs:136",
+    "launch/macos/diplomacy_state.rs:144"
+   ]
+  },
+  "0x354b628": {
+   "kind": "vtable",
+   "rtti": "12CWorldThreat",
+   "status": "mapped",
+   "elf": "0x435fcb0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CWorldThreat",
+    "launch/macos/diplomacy_state.rs:480",
+    "launch/macos/diplomacy_state.rs:80"
+   ]
+  },
+  "0x354e610": {
+   "kind": "vtable",
+   "rtti": "N10NDoctrines20CCountryDoctrineViewE",
+   "status": "mapped",
+   "elf": "0x4362230",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NDoctrines::CCountryDoctrineView",
+    "launch/macos/doctrine_act.rs:383",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x354e920": {
+   "kind": "vtable",
+   "rtti": "N10NDoctrines22CDoctrineSelectionListE",
+   "status": "mapped",
+   "elf": "0x447f848",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NDoctrines::CDoctrineSelectionList",
+    "launch/macos/doctrine_act.rs:391",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x357bad8": {
+   "kind": "vtable",
+   "rtti": "14CEquipmentType",
+   "status": "mapped",
+   "elf": "0x438d730",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentType",
+    "launch/macos/fleetmem.rs:46",
+    "launch/macos/production.rs:66",
+    "launch/macos/resources.rs:74"
+   ]
+  },
+  "0x357ccd8": {
+   "kind": "vtable",
+   "rtti": "16CEquipmentModule",
+   "status": "mapped",
+   "elf": "0x438e9f8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentModule",
+    "launch/macos/design_ui.rs:122",
+    "launch/macos/fleetmem.rs:50"
+   ]
+  },
+  "0x357ce80": {
+   "kind": "vtable",
+   "rtti": "20CEquipmentModuleSlot",
+   "status": "mapped",
+   "elf": "0x438ec40",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentModuleSlot",
+    "launch/macos/design_ui.rs:120"
+   ]
+  },
+  "0x357d1b8": {
+   "kind": "vtable",
+   "rtti": "17CEquipmentVariant",
+   "status": "mapped",
+   "elf": "0x438f000",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentVariant",
+    "launch/macos/fleetmem.rs:15",
+    "launch/macos/production.rs:65",
+    "launch/macos/resources.rs:73"
+   ]
+  },
+  "0x357e388": {
+   "kind": "vtable",
+   "rtti": "8CCountry",
+   "status": "mapped",
+   "elf": "0x438fe10",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountry",
+    "launch/macos/armies.rs:100",
+    "launch/macos/deployment.rs:73",
+    "launch/macos/diplomacy_state.rs:91"
+   ]
+  },
+  "0x357f020": {
+   "kind": "vtable",
+   "rtti": "9CProvince",
+   "status": "mapped",
+   "elf": "0x4390588",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CProvince",
+    "launch/macos/fleetmem.rs:52"
+   ]
+  },
+  "0x357f410": {
+   "kind": "vtable",
+   "rtti": "6CState",
+   "status": "mapped",
+   "elf": "0x43908f8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CState",
+    "launch/macos/fleetmem.rs:53",
+    "launch/macos/units.rs:216"
+   ]
+  },
+  "0x3587fd0": {
+   "kind": "vtable",
+   "rtti": "12CWarGoalType",
+   "status": "mapped",
+   "elf": "0x43965b0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CWarGoalType",
+    "launch/macos/diplomacy_state.rs:401",
+    "launch/macos/diplomacy_state.rs:86"
+   ]
+  },
+  "0x35882b8": {
+   "kind": "vtable",
+   "rtti": "5CIdea",
+   "status": "mapped",
+   "elf": "0x4396898",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CIdea",
+    "launch/macos/economy_detail.rs:280",
+    "launch/macos/economy_detail.rs:48",
+    "launch/macos/mios.rs:57"
+   ]
+  },
+  "0x3589e48": {
+   "kind": "vtable",
+   "rtti": "16CPoliticalStatus",
+   "status": "mapped",
+   "elf": "0x4397cf0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CPoliticalStatus",
+    "launch/macos/economy_detail.rs:64",
+    "launch/macos/mios.rs:56"
+   ]
+  },
+  "0x358c220": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation21COrganisationDatabaseE",
+   "status": "mapped",
+   "elf": "0x4399a48",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NIndustrialOrganisation::COrganisationDatabase",
+    "launch/macos/mios.rs:55"
+   ]
+  },
+  "0x358ca80": {
+   "kind": "vtable",
+   "rtti": "23CMilitaryProductionLine",
+   "status": "mapped",
+   "elf": "0x4483480",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CMilitaryProductionLine",
+    "launch/macos/designs.rs:29",
+    "launch/macos/resources.rs:298",
+    "launch/macos/resources.rs:49"
+   ]
+  },
+  "0x358cc00": {
+   "kind": "vtable",
+   "rtti": "20CNavalProductionLine",
+   "status": "mapped",
+   "elf": "0x4483600",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/resources.rs:299",
+    "launch/macos/resources.rs:50"
+   ]
+  },
+  "0x358ce80": {
+   "kind": "vtable",
+   "rtti": "15CProductionLine",
+   "status": "mapped",
+   "elf": "0x439a6a0",
+   "confidence": "medium",
+   "notes": [
+    "slot count differs (macho 11, elf 24)"
+   ],
+   "used": [
+    "class CProductionLine",
+    "launch/macos/resources.rs:72"
+   ]
+  },
+  "0x358d580": {
+   "kind": "vtable",
+   "rtti": "22CConsumerGoodsConsumer",
+   "status": "mapped",
+   "elf": "0x4483ba0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CConsumerGoodsConsumer",
+    "launch/macos/economy_detail.rs:55",
+    "launch/macos/economy_detail.rs:69"
+   ]
+  },
+  "0x358d5c0": {
+   "kind": "vtable",
+   "rtti": "24CSpecialProjectsConsumer",
+   "status": "mapped",
+   "elf": "0x4483be0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/economy_detail.rs:56"
+   ]
+  },
+  "0x358d600": {
+   "kind": "vtable",
+   "rtti": "27CLicensedProductionConsumer",
+   "status": "mapped",
+   "elf": "0x4483c20",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/economy_detail.rs:57"
+   ]
+  },
+  "0x358d640": {
+   "kind": "vtable",
+   "rtti": "14CTradeConsumer",
+   "status": "mapped",
+   "elf": "0x4483c60",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/economy_detail.rs:58"
+   ]
+  },
+  "0x358d680": {
+   "kind": "vtable",
+   "rtti": "24CContractPaymentConsumer",
+   "status": "mapped",
+   "elf": "0x439a980",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/economy_detail.rs:59"
+   ]
+  },
+  "0x358d850": {
+   "kind": "vtable",
+   "rtti": "17CDeploymentStatus",
+   "status": "mapped",
+   "elf": "0x439ab50",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CDeploymentStatus",
+    "launch/macos/deployment.rs:75"
+   ]
+  },
+  "0x358dff8": {
+   "kind": "vtable",
+   "rtti": "27CMilitaryDeploymentConveyor",
+   "status": "mapped",
+   "elf": "0x439b238",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CMilitaryDeploymentConveyor",
+    "launch/macos/deployment.rs:76"
+   ]
+  },
+  "0x358e0c8": {
+   "kind": "vtable",
+   "rtti": "17CProductionStatus",
+   "status": "mapped",
+   "elf": "0x439b308",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CProductionStatus",
+    "launch/macos/designs.rs:28",
+    "launch/macos/economy_detail.rs:66",
+    "launch/macos/resources.rs:71"
+   ]
+  },
+  "0x358e878": {
+   "kind": "vtable",
+   "rtti": "23CProductionResourceCost",
+   "status": "mapped",
+   "elf": "0x439b670",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CProductionResourceCost",
+    "launch/macos/resources.rs:300",
+    "launch/macos/resources.rs:48"
+   ]
+  },
+  "0x358ff80": {
+   "kind": "vtable",
+   "rtti": "38CGenericDefaultConfirmationPopUpWindow",
+   "status": "mapped",
+   "elf": "0x4350930",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CGenericDefaultConfirmationPopUpWindow",
+    "launch/macos/kit.rs:347",
+    "launch/macos/kit.rs:359",
+    "launch/macos/special_projects.rs:1636"
+   ]
+  },
+  "0x359c918": {
+   "kind": "vtable",
+   "rtti": "N8NProject8CProgramE",
+   "status": "mapped",
+   "elf": "0x439f830",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CProgram",
+    "launch/macos/special_projects.rs:62"
+   ]
+  },
+  "0x359ca08": {
+   "kind": "vtable",
+   "rtti": "N8NProject8CProjectE",
+   "status": "mapped",
+   "elf": "0x439f9a0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CProject",
+    "launch/macos/special_projects.rs:64"
+   ]
+  },
+  "0x359d7f8": {
+   "kind": "vtable",
+   "rtti": "N8NProject16CProjectTemplateE",
+   "status": "mapped",
+   "elf": "0x4487978",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CProjectTemplate",
+    "launch/macos/special_projects.rs:66"
+   ]
+  },
+  "0x359f820": {
+   "kind": "vtable",
+   "rtti": "N8NProject15SProjectHistoryE",
+   "status": "mapped",
+   "elf": "0x43a1940",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::SProjectHistory",
+    "launch/macos/special_projects.rs:330",
+    "launch/macos/special_projects.rs:65"
+   ]
+  },
+  "0x359f8b0": {
+   "kind": "vtable",
+   "rtti": "N8NProject12CProjectPoolE",
+   "status": "mapped",
+   "elf": "0x43a19d0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CProjectPool",
+    "launch/macos/special_projects.rs:63"
+   ]
+  },
+  "0x359f990": {
+   "kind": "vtable",
+   "rtti": "N8NProject19CSimpleProjectStateE",
+   "status": "mapped",
+   "elf": "0x43a1c80",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CSimpleProjectState",
+    "launch/macos/special_projects.rs:411",
+    "launch/macos/special_projects.rs:68"
+   ]
+  },
+  "0x359fa60": {
+   "kind": "vtable",
+   "rtti": "N8NProject20CProjectStateMachineE",
+   "status": "mapped",
+   "elf": "0x43a1b18",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CProjectStateMachine",
+    "launch/macos/special_projects.rs:67"
+   ]
+  },
+  "0x359fdb0": {
+   "kind": "vtable",
+   "rtti": "N8NProject14CProgramStatusE",
+   "status": "mapped",
+   "elf": "0x43a1d00",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::CProgramStatus",
+    "launch/macos/special_projects.rs:61"
+   ]
+  },
+  "0x35a0300": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi18CFacilitiesTabViewE",
+   "status": "mapped",
+   "elf": "0x4487c30",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::NUi::CFacilitiesTabView",
+    "launch/macos/special_projects.rs:46"
+   ]
+  },
+  "0x35a1018": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi12CProgramItemE",
+   "status": "mapped",
+   "elf": "0x43a2218",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::NUi::CProgramItem",
+    "launch/macos/special_projects.rs:86",
+    "launch/macos/special_projects.rs:940"
+   ]
+  },
+  "0x35a1970": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi14CScientistItemE",
+   "status": "mapped",
+   "elf": "0x4488350",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/special_projects.rs:1070",
+    "launch/macos/special_projects.rs:1973",
+    "launch/macos/special_projects.rs:87"
+   ]
+  },
+  "0x35a1b08": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi16CScientistRosterE",
+   "status": "mapped",
+   "elf": "0x43a2550",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::NUi::CScientistRoster",
+    "launch/macos/special_projects.rs:56"
+   ]
+  },
+  "0x35a1cb8": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi12CProgramViewE",
+   "status": "mapped",
+   "elf": "0x43a2620",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::NUi::CProgramView",
+    "launch/macos/special_projects.rs:1036",
+    "launch/macos/special_projects.rs:55"
+   ]
+  },
+  "0x35a2910": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi12CProjectItemE",
+   "status": "mapped",
+   "elf": "0x43a2a28",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::NUi::CProjectItem",
+    "launch/macos/special_projects.rs:1125",
+    "launch/macos/special_projects.rs:88"
+   ]
+  },
+  "0x35a3908": {
+   "kind": "vtable",
+   "rtti": "N8NProject3NUi23CRecruitScientistWindowE",
+   "status": "mapped",
+   "elf": "0x43a32c0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NProject::NUi::CRecruitScientistWindow",
+    "launch/macos/special_projects.rs:1682",
+    "launch/macos/special_projects.rs:1946",
+    "launch/macos/special_projects.rs:52"
+   ]
+  },
+  "0x35a4000": {
+   "kind": "vtable",
+   "rtti": "20CCountrySupplySystem",
+   "status": "mapped",
+   "elf": "0x43a3878",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountrySupplySystem",
+    "launch/macos/supplymem.rs:363",
+    "launch/macos/supplymem.rs:60"
+   ]
+  },
+  "0x35a4748": {
+   "kind": "vtable",
+   "rtti": "20CProvinceRailwayInfo",
+   "status": "mapped",
+   "elf": "0x43a4368",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CProvinceRailwayInfo",
+    "launch/macos/supplymem.rs:299",
+    "launch/macos/supplymem.rs:81"
+   ]
+  },
+  "0x35a47a8": {
+   "kind": "vtable",
+   "rtti": "15CRailwayManager",
+   "status": "mapped",
+   "elf": "0x43a43c8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CRailwayManager",
+    "launch/macos/supplymem.rs:146",
+    "launch/macos/supplymem.rs:59"
+   ]
+  },
+  "0x35a4838": {
+   "kind": "vtable",
+   "rtti": "13CSupplySystem",
+   "status": "mapped",
+   "elf": "0x43a4458",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSupplySystem",
+    "launch/macos/supplymem.rs:144",
+    "launch/macos/supplymem.rs:58"
+   ]
+  },
+  "0x35a8b50": {
+   "kind": "vtable",
+   "rtti": "17CCountryResources",
+   "status": "mapped",
+   "elf": "0x43a6e18",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/resources.rs:188",
+    "launch/macos/resources.rs:42"
+   ]
+  },
+  "0x35d8db0": {
+   "kind": "vtable",
+   "rtti": "11CArmyLeader",
+   "status": "mapped",
+   "elf": "0x43d5890",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CArmyLeader",
+    "launch/macos/units.rs:125",
+    "launch/macos/units.rs:214",
+    "launch/macos/units.rs:268"
+   ]
+  },
+  "0x35e5c88": {
+   "kind": "vtable",
+   "rtti": "12CEventWindow",
+   "status": "mapped",
+   "elf": "0x448e538",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEventWindow",
+    "launch/macos/events.rs:48",
+    "launch/macos/events.rs:73",
+    "launch/macos/events.rs:90"
+   ]
+  },
+  "0x35e77d8": {
+   "kind": "vtable",
+   "rtti": "15CAirBaseMapIcon",
+   "status": "mapped",
+   "elf": "0x43d7cb0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAirBaseMapIcon",
+    "launch/macos/airui.rs:30",
+    "launch/macos/airui.rs:68"
+   ]
+  },
+  "0x360b170": {
+   "kind": "vtable",
+   "rtti": "24CEquipmentModuleSlotView",
+   "status": "mapped",
+   "elf": "0x44c0760",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentModuleSlotView",
+    "launch/macos/design_ui.rs:119"
+   ]
+  },
+  "0x360b818": {
+   "kind": "vtable",
+   "rtti": "22CEquipmentDesignerView",
+   "status": "mapped",
+   "elf": "0x4496240",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentDesignerView",
+    "launch/macos/design_ui.rs:117"
+   ]
+  },
+  "0x360db18": {
+   "kind": "vtable",
+   "rtti": "21CEquipmentModuleEntry",
+   "status": "mapped",
+   "elf": "0x44c0bf8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentModuleEntry",
+    "launch/macos/design_ui.rs:121"
+   ]
+  },
+  "0x36106d8": {
+   "kind": "vtable",
+   "rtti": "24CNationalFocusInfoWindow",
+   "status": "mapped",
+   "elf": "0x4497b30",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CNationalFocusInfoWindow",
+    "launch/macos/focus.rs:102",
+    "launch/macos/focus.rs:64",
+    "launch/macos/focus.rs:75"
+   ]
+  },
+  "0x3611108": {
+   "kind": "vtable",
+   "rtti": "22CNationalFocusTreeItem",
+   "status": "mapped",
+   "elf": "0x43df668",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CNationalFocusTreeItem",
+    "launch/macos/focus.rs:59",
+    "launch/macos/focus.rs:74",
+    "launch/macos/focus.rs:97"
+   ]
+  },
+  "0x3611298": {
+   "kind": "vtable",
+   "rtti": "18CNationalFocusView",
+   "status": "mapped",
+   "elf": "0x43df748",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CNationalFocusView",
+    "launch/macos/focus.rs:55",
+    "launch/macos/focus.rs:73",
+    "launch/macos/focus.rs:93"
+   ]
+  },
+  "0x3613100": {
+   "kind": "vtable",
+   "rtti": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+   "status": "mapped",
+   "elf": "0x44980e0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryInternationalMarketView",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215",
+    "launch/macos/panelkit.rs:94"
+   ]
+  },
+  "0x3621f70": {
+   "kind": "vtable",
+   "rtti": "26CAgencyLogoSelectionWindow",
+   "status": "mapped",
+   "elf": "0x449c928",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAgencyLogoSelectionWindow",
+    "launch/macos/panelkit.rs:104",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x3622a70": {
+   "kind": "vtable",
+   "rtti": "21CAgencyUpgradesWindow",
+   "status": "mapped",
+   "elf": "0x43e1920",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAgencyUpgradesWindow",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215",
+    "launch/macos/panelkit.rs:99"
+   ]
+  },
+  "0x36249c0": {
+   "kind": "vtable",
+   "rtti": "30CCountryIntelligenceAgencyView",
+   "status": "mapped",
+   "elf": "0x43e2098",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryIntelligenceAgencyView",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215",
+    "launch/macos/panelkit.rs:87"
+   ]
+  },
+  "0x36257e8": {
+   "kind": "vtable",
+   "rtti": "19COperativeBottomBar",
+   "status": "mapped",
+   "elf": "0x449dc28",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class COperativeBottomBar",
+    "launch/macos/panelkit.rs:109",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x3626830": {
+   "kind": "vtable",
+   "rtti": "18COperativeOrderBar",
+   "status": "mapped",
+   "elf": "0x449e600",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class COperativeOrderBar",
+    "launch/macos/panelkit.rs:114",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x362a5b8": {
+   "kind": "vtable",
+   "rtti": "22CPeaceConferenceWindow",
+   "status": "mapped",
+   "elf": "0x43e2990",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CPeaceConferenceWindow",
+    "launch/macos/events.rs:80"
+   ]
+  },
+  "0x362c958": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation25COrganisationDetailWindowE",
+   "status": "mapped",
+   "elf": "0x44c42b0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NIndustrialOrganisation::COrganisationDetailWindow",
+    "launch/macos/panelkit.rs:129",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x362d5b0": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation23COrganisationListWindowE",
+   "status": "mapped",
+   "elf": "0x44a06f0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NIndustrialOrganisation::COrganisationListWindow",
+    "launch/macos/panelkit.rs:124",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x362de58": {
+   "kind": "vtable",
+   "rtti": "N23NIndustrialOrganisation13CPolicyWindowE",
+   "status": "mapped",
+   "elf": "0x44c4958",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class NIndustrialOrganisation::CPolicyWindow",
+    "launch/macos/panelkit.rs:134",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x3632080": {
+   "kind": "vtable",
+   "rtti": "21CTechnologyInfoWindow",
+   "status": "mapped",
+   "elf": "0x44a17b0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CTechnologyInfoWindow",
+    "launch/macos/research.rs:59",
+    "launch/macos/research.rs:77",
+    "launch/macos/research.rs:97"
+   ]
+  },
+  "0x3633588": {
+   "kind": "vtable",
+   "rtti": "23CTechnologyTreeTechItem",
+   "status": "mapped",
+   "elf": "0x43e4038",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CTechnologyTreeTechItem",
+    "launch/macos/research.rs:54",
+    "launch/macos/research.rs:74",
+    "launch/macos/research.rs:92"
+   ]
+  },
+  "0x3633a80": {
+   "kind": "vtable",
+   "rtti": "17CResearchSlotItem",
+   "status": "mapped",
+   "elf": "0x43e4530",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/research.rs:52",
+    "launch/macos/research.rs:90"
+   ]
+  },
+  "0x363b690": {
+   "kind": "vtable",
+   "rtti": "20CAcceptCommandDialog",
+   "status": "mapped",
+   "elf": "0x43e4c70",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CAcceptCommandDialog",
+    "launch/macos/kit.rs:347",
+    "launch/macos/kit.rs:356",
+    "launch/macos/ui.rs:504"
+   ]
+  },
+  "0x363b9d8": {
+   "kind": "vtable",
+   "rtti": "32CConfirmCancelNavyActivityDialog",
+   "status": "mapped",
+   "elf": "0x43e4fb8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/kit.rs:347",
+    "launch/macos/kit.rs:357"
+   ]
+  },
+  "0x3643990": {
+   "kind": "vtable",
+   "rtti": "24CChangeGroupLeaderDialog",
+   "status": "mapped",
+   "elf": "0x44a3b58",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CChangeGroupLeaderDialog",
+    "launch/macos/ui.rs:507"
+   ]
+  },
+  "0x3643ac0": {
+   "kind": "vtable",
+   "rtti": "23CChangeNavyLeaderDialog",
+   "status": "mapped",
+   "elf": "0x44a3c88",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CChangeNavyLeaderDialog",
+    "launch/macos/ui.rs:510"
+   ]
+  },
+  "0x3647398": {
+   "kind": "vtable",
+   "rtti": "36CCountryConstructionViewBuildingItem",
+   "status": "mapped",
+   "elf": "0x44a5d40",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryConstructionViewBuildingItem",
+    "launch/macos/construction.rs:43",
+    "launch/macos/construction.rs:57",
+    "launch/macos/construction.rs:67"
+   ]
+  },
+  "0x364a878": {
+   "kind": "vtable",
+   "rtti": "22CCountryDeploymentView",
+   "status": "mapped",
+   "elf": "0x44a7ed0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryDeploymentView",
+    "launch/macos/deployment.rs:70"
+   ]
+  },
+  "0x364aa18": {
+   "kind": "vtable",
+   "rtti": "21CCountryDiplomacyView",
+   "status": "mapped",
+   "elf": "0x43e7b00",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryDiplomacyView",
+    "launch/macos/diplomacy.rs:69"
+   ]
+  },
+  "0x36511f0": {
+   "kind": "vtable",
+   "rtti": "20CCountryPoliticsView",
+   "status": "mapped",
+   "elf": "0x43ea4f8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryPoliticsView",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215",
+    "launch/macos/panelkit.rs:77"
+   ]
+  },
+  "0x365b4d0": {
+   "kind": "vtable",
+   "rtti": "25CDiplomacyPopupWindowBase",
+   "status": "mapped",
+   "elf": "0x44acfc0",
+   "confidence": "medium",
+   "notes": [
+    "slot count differs (macho 13, elf 19)"
+   ],
+   "used": [
+    "launch/macos/kit.rs:351",
+    "launch/macos/kit.rs:362"
+   ]
+  },
+  "0x365b5f8": {
+   "kind": "vtable",
+   "rtti": "23CStandardDiplomacyPopup",
+   "status": "mapped",
+   "elf": "0x44ad0e8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/faction.rs:501",
+    "launch/macos/kit.rs:351",
+    "launch/macos/kit.rs:363"
+   ]
+  },
+  "0x365b720": {
+   "kind": "vtable",
+   "rtti": "26CScriptedGUIDiplomacyPopup",
+   "status": "mapped",
+   "elf": "0x44ad210",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/faction.rs:502",
+    "launch/macos/kit.rs:351",
+    "launch/macos/kit.rs:364"
+   ]
+  },
+  "0x365b848": {
+   "kind": "vtable",
+   "rtti": "32CIncomingLendLeaseDiplomacyPopup",
+   "status": "mapped",
+   "elf": "0x44ad338",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/faction.rs:503",
+    "launch/macos/kit.rs:351",
+    "launch/macos/kit.rs:365"
+   ]
+  },
+  "0x365b970": {
+   "kind": "vtable",
+   "rtti": "30CForeignManpowerDiplomacyPopup",
+   "status": "mapped",
+   "elf": "0x44ad460",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/faction.rs:504",
+    "launch/macos/kit.rs:351",
+    "launch/macos/kit.rs:366"
+   ]
+  },
+  "0x3661350": {
+   "kind": "vtable",
+   "rtti": "23CDismantleFactionDialog",
+   "status": "mapped",
+   "elf": "0x43f06b0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/kit.rs:347",
+    "launch/macos/kit.rs:360"
+   ]
+  },
+  "0x36634f0": {
+   "kind": "vtable",
+   "rtti": "29CEquipmentUpgradeDesignerView",
+   "status": "mapped",
+   "elf": "0x44ade50",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentUpgradeDesignerView",
+    "launch/macos/design_ui.rs:116"
+   ]
+  },
+  "0x3663518": {
+   "kind": "vtable",
+   "rtti": "31CEquipmentUpgradeDesignerWindow",
+   "status": "mapped",
+   "elf": "0x44ade78",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEquipmentUpgradeDesignerWindow",
+    "launch/macos/design_ui.rs:115"
+   ]
+  },
+  "0x3665308": {
+   "kind": "vtable",
+   "rtti": "9CFindView",
+   "status": "mapped",
+   "elf": "0x44ae730",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CFindView",
+    "launch/macos/construction_place/point.rs:213",
+    "launch/macos/construction_place/point.rs:25"
+   ]
+  },
+  "0x3670a20": {
+   "kind": "vtable",
+   "rtti": "16CLeaderGroupView",
+   "status": "mapped",
+   "elf": "0x43f3588",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CLeaderGroupView",
+    "launch/macos/armies.rs:106",
+    "launch/macos/armies.rs:139",
+    "launch/macos/armies.rs:67"
+   ]
+  },
+  "0x367efa0": {
+   "kind": "vtable",
+   "rtti": "18CPoliticalIdeaItem",
+   "status": "mapped",
+   "elf": "0x43f81d8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CPoliticalIdeaItem",
+    "launch/macos/politics.rs:115",
+    "launch/macos/politics.rs:61",
+    "launch/macos/politics.rs:92"
+   ]
+  },
+  "0x367f050": {
+   "kind": "vtable",
+   "rtti": "28CPoliticalSelectableIdeaItem",
+   "status": "mapped",
+   "elf": "0x43f8288",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CPoliticalSelectableIdeaItem",
+    "launch/macos/politics.rs:121",
+    "launch/macos/politics.rs:67",
+    "launch/macos/politics.rs:94"
+   ]
+  },
+  "0x367f210": {
+   "kind": "vtable",
+   "rtti": "26CPoliticsIdeaCategoryEntry",
+   "status": "mapped",
+   "elf": "0x43f8448",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CPoliticsIdeaCategoryEntry",
+    "launch/macos/politics.rs:111",
+    "launch/macos/politics.rs:56",
+    "launch/macos/politics.rs:90"
+   ]
+  },
+  "0x367fd40": {
+   "kind": "vtable",
+   "rtti": "31CDefaultConfirmationPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f8b48",
+   "confidence": "medium",
+   "notes": [
+    "slot count differs (macho 17, elf 21)"
+   ],
+   "used": [
+    "launch/macos/kit.rs:347",
+    "launch/macos/kit.rs:358"
+   ]
+  },
+  "0x3680170": {
+   "kind": "vtable",
+   "rtti": "28CResearchFinishedPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f8f78",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CResearchFinishedPopUpWindow",
+    "launch/macos/ui.rs:79"
+   ]
+  },
+  "0x3680288": {
+   "kind": "vtable",
+   "rtti": "31CIntelAgencyFinishedPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f9090",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CIntelAgencyFinishedPopUpWindow",
+    "launch/macos/ui.rs:156",
+    "launch/macos/ui.rs:87"
+   ]
+  },
+  "0x36803a0": {
+   "kind": "vtable",
+   "rtti": "34CSpecialProjectFinishedPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f91a8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSpecialProjectFinishedPopUpWindow",
+    "launch/macos/ui.rs:155",
+    "launch/macos/ui.rs:85"
+   ]
+  },
+  "0x36804b8": {
+   "kind": "vtable",
+   "rtti": "34CSpecialProjectCapturedPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f92c0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSpecialProjectCapturedPopUpWindow",
+    "launch/macos/ui.rs:157",
+    "launch/macos/ui.rs:86"
+   ]
+  },
+  "0x36805d0": {
+   "kind": "vtable",
+   "rtti": "24CConfirmationPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f93d8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CConfirmationPopUpWindow",
+    "launch/macos/ui.rs:153",
+    "launch/macos/ui.rs:83"
+   ]
+  },
+  "0x36806e8": {
+   "kind": "vtable",
+   "rtti": "25CFocusFinishedPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f94f0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CFocusFinishedPopUpWindow",
+    "launch/macos/ui.rs:80"
+   ]
+  },
+  "0x3680800": {
+   "kind": "vtable",
+   "rtti": "24CPeaceSummaryPopUpWindow",
+   "status": "mapped",
+   "elf": "0x43f9608",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CPeaceSummaryPopUpWindow",
+    "launch/macos/ui.rs:81"
+   ]
+  },
+  "0x3685b58": {
+   "kind": "vtable",
+   "rtti": "26CProductionEquipmentWindow",
+   "status": "mapped",
+   "elf": "0x44b72c0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CProductionEquipmentWindow",
+    "launch/macos/design_ui.rs:113"
+   ]
+  },
+  "0x3686b08": {
+   "kind": "vtable",
+   "rtti": "27CProductionLineMilitaryItem",
+   "status": "mapped",
+   "elf": "0x43fb478",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CProductionLineMilitaryItem",
+    "launch/macos/production.rs:44",
+    "launch/macos/production.rs:60",
+    "launch/macos/production.rs:76"
+   ]
+  },
+  "0x3686c50": {
+   "kind": "vtable",
+   "rtti": "24CProductionLineNavalItem",
+   "status": "mapped",
+   "elf": "0x43fb5c0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/production.rs:45",
+    "launch/macos/production.rs:77"
+   ]
+  },
+  "0x368b8a8": {
+   "kind": "vtable",
+   "rtti": "30CReassignFullOrdersGroupDialog",
+   "status": "mapped",
+   "elf": "0x43fe2f0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/ui.rs:513",
+    "launch/macos/ui.rs:561"
+   ]
+  },
+  "0x3695460": {
+   "kind": "vtable",
+   "rtti": "23CSurrenderedPopupWindow",
+   "status": "mapped",
+   "elf": "0x4401f98",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSurrenderedPopupWindow",
+    "launch/macos/ui.rs:154",
+    "launch/macos/ui.rs:84"
+   ]
+  },
+  "0x3697918": {
+   "kind": "vtable",
+   "rtti": "7CTopBar",
+   "status": "mapped",
+   "elf": "0x4402bc0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CTopBar",
+    "launch/macos/agency_act.rs:164"
+   ]
+  },
+  "0x3698030": {
+   "kind": "vtable",
+   "rtti": "17CTradeOfferWindow",
+   "status": "mapped",
+   "elf": "0x44b9b70",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CTradeOfferWindow",
+    "launch/macos/trade.rs:34",
+    "launch/macos/trade.rs:96"
+   ]
+  },
+  "0x36998b0": {
+   "kind": "vtable",
+   "rtti": "19CConfirmDeleteUnits",
+   "status": "mapped",
+   "elf": "0x44030b8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "launch/macos/kit.rs:347",
+    "launch/macos/kit.rs:361"
+   ]
+  },
+  "0x369bd60": {
+   "kind": "vtable",
+   "rtti": "33COperativeLeaderRecruitmentWindow",
+   "status": "mapped",
+   "elf": "0x44048f0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class COperativeLeaderRecruitmentWindow",
+    "launch/macos/panelkit.rs:119",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215"
+   ]
+  },
+  "0x36a1f88": {
+   "kind": "vtable",
+   "rtti": "24CWorldTensionPopUpWindow",
+   "status": "mapped",
+   "elf": "0x4408768",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CWorldTensionPopUpWindow",
+    "launch/macos/ui.rs:82"
+   ]
+  },
+  "0x36a2a78": {
+   "kind": "vtable",
+   "rtti": "27CCountryArmyOfficerCorpView",
+   "status": "mapped",
+   "elf": "0x4408e78",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryArmyOfficerCorpView",
+    "launch/macos/panelkit.rs:181",
+    "launch/macos/panelkit.rs:215",
+    "launch/macos/panelkit.rs:82"
+   ]
+  },
+  "0x36a40e8": {
+   "kind": "vtable",
+   "rtti": "30CCountryCharacterSelectionItem",
+   "status": "mapped",
+   "elf": "0x4409698",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCountryCharacterSelectionItem",
+    "launch/macos/politics.rs:132",
+    "launch/macos/politics.rs:78",
+    "launch/macos/politics.rs:96"
+   ]
+  },
+  "0x36a4d00": {
+   "kind": "vtable",
+   "rtti": "27CCommandStructureLeaderView",
+   "status": "mapped",
+   "elf": "0x4409ca0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CCommandStructureLeaderView",
+    "launch/macos/politics.rs:124",
+    "launch/macos/politics.rs:70",
+    "launch/macos/politics.rs:95"
+   ]
+  },
+  "0x36b6880": {
+   "kind": "vtable",
+   "rtti": "5CIcon",
+   "status": "mapped",
+   "elf": "0x44dad90",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CIcon",
+    "gui_tree.rs:55",
+    "gui_tree.rs:95",
+    "launch/macos/air.rs:66"
+   ]
+  },
+  "0x36b9738": {
+   "kind": "vtable",
+   "rtti": "15CButtonStandard",
+   "status": "mapped",
+   "elf": "0x44dd4f0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CButtonStandard",
+    "gui_tree.rs:55",
+    "gui_tree.rs:86",
+    "gui_tree.rs:96"
+   ]
+  },
+  "0x36ba080": {
+   "kind": "vtable",
+   "rtti": "9CCheckBox",
+   "status": "mapped",
+   "elf": "0x44dde38",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "gui_tree.rs:55"
+   ]
+  },
+  "0x36ba978": {
+   "kind": "vtable",
+   "rtti": "16CContainerWindow",
+   "status": "mapped",
+   "elf": "0x44de2b0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CContainerWindow",
+    "gui_tree.rs:108",
+    "gui_tree.rs:47",
+    "gui_tree.rs:80"
+   ]
+  },
+  "0x36bc6a0": {
+   "kind": "vtable",
+   "rtti": "8CEditBox",
+   "status": "mapped",
+   "elf": "0x44dfdd0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CEditBox",
+    "launch/macos/design_ui.rs:118",
+    "launch/macos/navalui.rs:64"
+   ]
+  },
+  "0x36be530": {
+   "kind": "vtable",
+   "rtti": "20CFrameAnimatedSprite",
+   "status": "mapped",
+   "elf": "0x44e15e0",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "gui_tree.rs:57"
+   ]
+  },
+  "0x36c04b8": {
+   "kind": "vtable",
+   "rtti": "18CInstantTextObject",
+   "status": "mapped",
+   "elf": "0x44e2ee8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CInstantTextObject",
+    "launch/macos/navalui.rs:219",
+    "launch/macos/navalui.rs:240"
+   ]
+  },
+  "0x36cc528": {
+   "kind": "vtable",
+   "rtti": "7CSprite",
+   "status": "mapped",
+   "elf": "0x44ed1d8",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CSprite",
+    "gui_tree.rs:57",
+    "gui_tree.rs:83",
+    "launch/macos/air.rs:67"
+   ]
+  },
+  "0x36cca80": {
+   "kind": "vtable",
+   "rtti": "16CStandardGridBox",
+   "status": "mapped",
+   "elf": "0x44ed730",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class CStandardGridBox",
+    "launch/macos/air.rs:63",
+    "launch/macos/armies.rs:111",
+    "launch/macos/construction.rs:55"
+   ]
+  },
+  "0x36cee08": {
+   "kind": "vtable",
+   "rtti": "11CTextSprite",
+   "status": "mapped",
+   "elf": "0x44ef818",
+   "confidence": "high",
+   "notes": [],
+   "used": [
+    "class gui.text_sprite",
+    "gui_tree.rs:117",
+    "gui_tree.rs:58",
+    "gui_tree.rs:85"
+   ]
+  },
+  "0x3704b10": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x4535060",
+   "confidence": "high",
+   "notes": [
+    "13 referencing Mach-O functions, 13 matched, 0 unmatched",
+    "0x4535060:11"
+   ],
+   "used": [
+    "launch/macos/intelligence.rs:100",
+    "launch/macos/intelligence.rs:46"
+   ]
+  },
+  "0x3705890": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x4536e38",
+   "confidence": "high",
+   "notes": [
+    "25 referencing Mach-O functions, 20 matched, 5 unmatched",
+    "0x4536e38:18"
+   ],
+   "used": [
+    "launch/macos/mios.rs:307",
+    "launch/macos/mios.rs:46"
+   ]
+  },
+  "0x37058c0": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x4535390",
+   "confidence": "high",
+   "notes": [
+    "148 referencing Mach-O functions, 122 matched, 26 unmatched",
+    "0x4535390:112"
+   ],
+   "used": [
+    "launch/macos/resources.rs:161",
+    "launch/macos/resources.rs:46"
+   ]
+  },
+  "0x3705fe0": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x4535a88",
+   "confidence": "high",
+   "notes": [
+    "46 referencing Mach-O functions, 42 matched, 4 unmatched",
+    "0x4535a88:41"
+   ],
+   "used": [
+    "launch/macos/special_projects.rs:259",
+    "launch/macos/special_projects.rs:74"
+   ]
+  },
+  "0x372c530": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x453b130",
+   "confidence": "high",
+   "notes": [
+    "68 referencing Mach-O functions, 55 matched, 13 unmatched",
+    "0x453b130:55"
+   ],
+   "used": [
+    "launch/macos/airui.rs:29",
+    "launch/macos/airui.rs:65"
+   ]
+  },
+  "0x384b480": {
+   "kind": "global",
+   "rtti": null,
+   "status": "mapped",
+   "elf": "0x47d2bd8",
+   "confidence": "high",
+   "notes": [
+    "131 referencing Mach-O functions, 58 matched, 73 unmatched",
+    "0x47d2bd8:57"
+   ],
+   "used": [
+    "launch/macos/construction_place/point.rs:107",
+    "launch/macos/construction_place/point.rs:76"
+   ]
+  }
+ },
+ "classes": {
+  "CAcceptCommandDialog": {
+   "vtable": "0x363b690",
+   "rtti": "20CAcceptCommandDialog",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 0,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "CAgencyLogoSelectionWindow": {
+   "vtable": "0x3621f70",
+   "rtti": "26CAgencyLogoSelectionWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 10,
+   "mapped": 0,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "CAgencyUpgrade": {
+   "vtable": null,
+   "rtti": "14CAgencyUpgrade",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 0,
+   "extra_offsets": 6,
+   "unresolved": {
+    "0x10": "only low confidence (2 matched pairs use it on the object register; 0x20:1)"
+   }
+  },
+  "CAgencyUpgradeBranch": {
+   "vtable": null,
+   "rtti": "20CAgencyUpgradeBranch",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x10": "only low confidence (3 matched pairs use it on the object register; 0x20:1)"
+   }
+  },
+  "CAgencyUpgradeDatabase": {
+   "vtable": null,
+   "rtti": "22CAgencyUpgradeDatabase",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 16,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x70": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CAgencyUpgradesWindow": {
+   "vtable": "0x3622a70",
+   "rtti": "21CAgencyUpgradesWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 0,
+   "extra_offsets": 4,
+   "unresolved": {}
+  },
+  "CAirBase": {
+   "vtable": "0x3519d08",
+   "rtti": "8CAirBase",
+   "rtti_from": "vtable",
+   "keys_needed": 5,
+   "filled": {
+    "0xc": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 5,
+   "extra_offsets": 15,
+   "unresolved": {}
+  },
+  "CAirBaseMapIcon": {
+   "vtable": "0x35e77d8",
+   "rtti": "15CAirBaseMapIcon",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 23,
+   "mapped": 0,
+   "extra_offsets": 6,
+   "unresolved": {
+    "0x10": "4 matched pairs use it on the object register; ambiguous: 0x10:2, 0x8:2",
+    "0x48": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CAirWing": {
+   "vtable": "0x34ac5f8",
+   "rtti": "8CAirWing",
+   "rtti_from": "vtable",
+   "keys_needed": 8,
+   "filled": {
+    "0x44": "bracketed",
+    "0x78": "low-consistent",
+    "0x938": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 5,
+   "extra_offsets": 49,
+   "unresolved": {
+    "0x98": "no matched class/anchor/context function uses this offset on the object register",
+    "0xb8": "no matched class/anchor/context function uses this offset on the object register",
+    "0x320": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CAirWingPool": {
+   "vtable": "0x34ac6c0",
+   "rtti": "12CAirWingPool",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 16,
+   "mapped": 1,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "CArmiesView": {
+   "vtable": null,
+   "rtti": "11CArmiesView",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "filled": {
+    "0x480": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "CArmy": {
+   "vtable": "0x34ace60",
+   "rtti": "5CArmy",
+   "rtti_from": "vtable",
+   "keys_needed": 14,
+   "filled": {
+    "0x18": "low-consistent",
+    "0x30": "bracketed",
+    "0x50": "bracketed",
+    "0x78": "bracketed",
+    "0x2ac": "bracketed",
+    "0x4e8": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 70,
+   "mapped": 14,
+   "extra_offsets": 42,
+   "unresolved": {}
+  },
+  "CArmyLeader": {
+   "vtable": "0x35d8db0",
+   "rtti": "11CArmyLeader",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 38,
+   "mapped": 0,
+   "extra_offsets": 31,
+   "unresolved": {
+    "0x18": "no matched class/anchor/context function uses this offset on the object register",
+    "0x20": "1 matched pairs use it on the object register; no evidence",
+    "0x38": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CArmyLeaderWindow": {
+   "vtable": null,
+   "rtti": "17CArmyLeaderWindow",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 20,
+   "mapped": 1,
+   "extra_offsets": 16,
+   "unresolved": {}
+  },
+  "CAutonomousState": {
+   "vtable": "0x3544048",
+   "rtti": "16CAutonomousState",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 0,
+   "extra_offsets": 10,
+   "unresolved": {
+    "0x8": "3 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CBuilding": {
+   "vtable": "0x352ee30",
+   "rtti": "9CBuilding",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x40": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 10,
+   "unresolved": {
+    "0x1b0": "only low confidence (1 matched pairs use it on the object register; 0x1c0:1)"
+   }
+  },
+  "CBuildingStatus": {
+   "vtable": "0x352f828",
+   "rtti": "15CBuildingStatus",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CBuildingTemplate": {
+   "vtable": "0x352fa88",
+   "rtti": "17CBuildingTemplate",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x228": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 1,
+   "extra_offsets": 2,
+   "unresolved": {}
+  },
+  "CButtonStandard": {
+   "vtable": "0x36b9738",
+   "rtti": "15CButtonStandard",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 109,
+   "mapped": 1,
+   "extra_offsets": 30,
+   "unresolved": {}
+  },
+  "CChangeGroupLeaderDialog": {
+   "vtable": "0x3643990",
+   "rtti": "24CChangeGroupLeaderDialog",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 0,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CChangeNavyLeaderDialog": {
+   "vtable": "0x3643ac0",
+   "rtti": "23CChangeNavyLeaderDialog",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 26,
+   "mapped": 0,
+   "extra_offsets": 4,
+   "unresolved": {}
+  },
+  "CCharacter": {
+   "vtable": "0x3530150",
+   "rtti": "10CCharacter",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 1,
+   "extra_offsets": 11,
+   "unresolved": {
+    "0x20": "only low confidence (2 matched pairs use it on the object register; 0x20:1)",
+    "0x38": "3 matched pairs use it on the object register; ambiguous: 0x50:1, 0x30:1, 0x40:1"
+   }
+  },
+  "CCommandStructureLeaderView": {
+   "vtable": "0x36a4d00",
+   "rtti": "27CCommandStructureLeaderView",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "dropped_non_monotonic": [
+    "0x4a0",
+    "0x4a8",
+    "0x4d0",
+    "0x518",
+    "0x528"
+   ],
+   "status": "mapped",
+   "functions": 26,
+   "mapped": 1,
+   "extra_offsets": 9,
+   "unresolved": {
+    "0x28": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CConfirmationPopUpWindow": {
+   "vtable": "0x36805d0",
+   "rtti": "24CConfirmationPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 18,
+   "mapped": 0,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "CConsumerGoodsConsumer": {
+   "vtable": "0x358d580",
+   "rtti": "22CConsumerGoodsConsumer",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 3,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x10": "only low confidence (1 matched pairs use it on the object register; 0x10:1)"
+   }
+  },
+  "CContainerWindow": {
+   "vtable": "0x36ba978",
+   "rtti": "16CContainerWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 6,
+   "filled": {
+    "0x1390": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 110,
+   "mapped": 6,
+   "extra_offsets": 81,
+   "unresolved": {}
+  },
+  "CConvoys": {
+   "vtable": null,
+   "rtti": "8CConvoys",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x88": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CCountry": {
+   "vtable": "0x357e388",
+   "rtti": "8CCountry",
+   "rtti_from": "vtable",
+   "keys_needed": 16,
+   "filled": {
+    "0x2e8": "low-consistent",
+    "0xd68": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 13,
+   "extra_offsets": 37,
+   "unresolved": {
+    "0x8": "no matched class/anchor/context function uses this offset on the object register",
+    "0x10": "1 matched pairs use it on the object register; no evidence",
+    "0x550": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CCountryAirContainer": {
+   "vtable": "0x3519c88",
+   "rtti": "20CCountryAirContainer",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 18,
+   "mapped": 1,
+   "extra_offsets": 15,
+   "unresolved": {}
+  },
+  "CCountryArmyOfficerCorpView": {
+   "vtable": "0x36a2a78",
+   "rtti": "27CCountryArmyOfficerCorpView",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 26,
+   "mapped": 0,
+   "extra_offsets": 42,
+   "unresolved": {}
+  },
+  "CCountryCharacterSelectionItem": {
+   "vtable": "0x36a40e8",
+   "rtti": "30CCountryCharacterSelectionItem",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x28": "only low confidence (1 matched pairs use it on the object register; 0x28:1)"
+   }
+  },
+  "CCountryCharacters": {
+   "vtable": "0x3530728",
+   "rtti": "18CCountryCharacters",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0x70": "low-consistent",
+    "0x88": "low-consistent",
+    "0xa0": "low-consistent",
+    "0xe8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 4,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CCountryConstructionViewBuildingItem": {
+   "vtable": "0x3647398",
+   "rtti": "36CCountryConstructionViewBuildingItem",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "CCountryDeploymentView": {
+   "vtable": "0x364a878",
+   "rtti": "22CCountryDeploymentView",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 1,
+   "extra_offsets": 8,
+   "unresolved": {
+    "0x490": "only low confidence (1 matched pairs use it on the object register; 0x338:1)"
+   }
+  },
+  "CCountryDiplomacyView": {
+   "vtable": "0x364aa18",
+   "rtti": "21CCountryDiplomacyView",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 27,
+   "mapped": 1,
+   "extra_offsets": 15,
+   "unresolved": {
+    "0x1608": "no matched class/anchor/context function uses this offset on the object register",
+    "0x35e8": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CCountryExperienceStatus": {
+   "vtable": null,
+   "rtti": "24CCountryExperienceStatus",
+   "rtti_from": "name",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 0,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CCountryFuelStatus": {
+   "vtable": "0x34b2928",
+   "rtti": "18CCountryFuelStatus",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x10": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 2,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "CCountryIntelligenceAgencyView": {
+   "vtable": "0x36249c0",
+   "rtti": "30CCountryIntelligenceAgencyView",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 0,
+   "extra_offsets": 22,
+   "unresolved": {}
+  },
+  "CCountryInternationalMarketView": {
+   "vtable": "0x3613100",
+   "rtti": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 0,
+   "extra_offsets": 13,
+   "unresolved": {}
+  },
+  "CCountryNavalRegionView": {
+   "vtable": null,
+   "rtti": "23CCountryNavalRegionView",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 1,
+   "extra_offsets": 17,
+   "unresolved": {}
+  },
+  "CCountryPoliticsView": {
+   "vtable": "0x36511f0",
+   "rtti": "20CCountryPoliticsView",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 2,
+   "extra_offsets": 55,
+   "unresolved": {}
+  },
+  "CCountrySupplySystem": {
+   "vtable": "0x35a4000",
+   "rtti": "20CCountrySupplySystem",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x78": "low-consistent",
+    "0xa0": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 2,
+   "extra_offsets": 13,
+   "unresolved": {}
+  },
+  "CCountryTradeView": {
+   "vtable": null,
+   "rtti": "17CCountryTradeView",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 2,
+   "extra_offsets": 11,
+   "unresolved": {}
+  },
+  "CCurrentGameState": {
+   "vtable": "0x35044e8",
+   "rtti": "17CCurrentGameState",
+   "rtti_from": "vtable",
+   "keys_needed": 5,
+   "status": "mapped",
+   "functions": 4222,
+   "mapped": 5,
+   "extra_offsets": 104,
+   "unresolved": {}
+  },
+  "CDecision": {
+   "vtable": null,
+   "rtti": "9CDecision",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "filled": {
+    "0x108": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 37,
+   "unresolved": {}
+  },
+  "CDecisionViewDecisionItem": {
+   "vtable": null,
+   "rtti": "25CDecisionViewDecisionItem",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 30,
+   "mapped": 1,
+   "extra_offsets": 2,
+   "unresolved": {}
+  },
+  "CDecisionViewTargetedDecisionItem": {
+   "vtable": null,
+   "rtti": "33CDecisionViewTargetedDecisionItem",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 30,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "CDecisionViewTimedDecisionItem": {
+   "vtable": null,
+   "rtti": "30CDecisionViewTimedDecisionItem",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 30,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "CDeploymentStatus": {
+   "vtable": "0x358d850",
+   "rtti": "17CDeploymentStatus",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 4,
+   "unresolved": {}
+  },
+  "CDesignerSubUnitItem": {
+   "vtable": null,
+   "rtti": "20CDesignerSubUnitItem",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CDiplomacyStatus": {
+   "vtable": "0x3544268",
+   "rtti": "16CDiplomacyStatus",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x20": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 28,
+   "unresolved": {}
+  },
+  "CDivisionDesignerView": {
+   "vtable": null,
+   "rtti": "21CDivisionDesignerView",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 2,
+   "extra_offsets": 98,
+   "unresolved": {}
+  },
+  "CDivisionTemplateData": {
+   "vtable": "0x34fb310",
+   "rtti": "21CDivisionTemplateData",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0x17c": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x8": "only low confidence (1 matched pairs use it on the object register; 0x8:1)",
+    "0x40": "only low confidence (1 matched pairs use it on the object register; 0x50:1)",
+    "0x60": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CDropDownBox": {
+   "vtable": null,
+   "rtti": "12CDropDownBox",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 60,
+   "mapped": 2,
+   "extra_offsets": 13,
+   "unresolved": {}
+  },
+  "CEditBox": {
+   "vtable": "0x36bc6a0",
+   "rtti": "8CEditBox",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 65,
+   "mapped": 1,
+   "extra_offsets": 21,
+   "unresolved": {
+    "0x3c8": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CEquipmentDesignerView": {
+   "vtable": "0x360b818",
+   "rtti": "22CEquipmentDesignerView",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 2,
+   "extra_offsets": 16,
+   "unresolved": {
+    "0x178": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CEquipmentModule": {
+   "vtable": "0x357ccd8",
+   "rtti": "16CEquipmentModule",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 0,
+   "extra_offsets": 2,
+   "unresolved": {
+    "0x10": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CEquipmentModuleEntry": {
+   "vtable": "0x360db18",
+   "rtti": "21CEquipmentModuleEntry",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "CEquipmentModuleSlot": {
+   "vtable": "0x357ce80",
+   "rtti": "20CEquipmentModuleSlot",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x28": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 2,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "CEquipmentModuleSlotView": {
+   "vtable": "0x360b170",
+   "rtti": "24CEquipmentModuleSlotView",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 5,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0xb0": "only low confidence (2 matched pairs use it on the object register; 0x78:1)"
+   }
+  },
+  "CEquipmentType": {
+   "vtable": "0x357bad8",
+   "rtti": "14CEquipmentType",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x10": "only low confidence (1 matched pairs use it on the object register; 0x10:1)",
+    "0x60": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CEquipmentType.slot": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source",
+    "0x28": "owner has no evidence source"
+   }
+  },
+  "CEquipmentType.slot.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x40": "owner has no evidence source"
+   }
+  },
+  "CEquipmentUpgrade": {
+   "vtable": null,
+   "rtti": "17CEquipmentUpgrade",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 0,
+   "extra_offsets": 4,
+   "unresolved": {
+    "0x10": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CEquipmentUpgradeDesignerView": {
+   "vtable": "0x36634f0",
+   "rtti": "29CEquipmentUpgradeDesignerView",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x8a0": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 5,
+   "mapped": 2,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CEquipmentUpgradeDesignerWindow": {
+   "vtable": "0x3663518",
+   "rtti": "31CEquipmentUpgradeDesignerWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 2,
+   "extra_offsets": 2,
+   "unresolved": {}
+  },
+  "CEquipmentVariant": {
+   "vtable": "0x357d1b8",
+   "rtti": "17CEquipmentVariant",
+   "rtti_from": "vtable",
+   "keys_needed": 10,
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0xc": "1 matched pairs use it on the object register; no evidence",
+    "0x28": "only low confidence (1 matched pairs use it on the object register; 0x28:1)",
+    "0x40": "only low confidence (1 matched pairs use it on the object register; 0x48:1)",
+    "0x60": "no matched class/anchor/context function uses this offset on the object register",
+    "0xa8": "only low confidence (1 matched pairs use it on the object register; 0xb8:1)",
+    "0x2d8": "no matched class/anchor/context function uses this offset on the object register",
+    "0x3e0": "no matched class/anchor/context function uses this offset on the object register",
+    "0x3e8": "only low confidence (1 matched pairs use it on the object register; 0x3f8:1)",
+    "0x410": "only low confidence (1 matched pairs use it on the object register; 0x420:1)",
+    "0x414": "only low confidence (1 matched pairs use it on the object register; 0x424:1)"
+   }
+  },
+  "CEvent": {
+   "vtable": "0x34fbb48",
+   "rtti": "6CEvent",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 0,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x18": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CEventWindow": {
+   "vtable": "0x35e5c88",
+   "rtti": "12CEventWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x28": "low-consistent",
+    "0x40": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 2,
+   "extra_offsets": 21,
+   "unresolved": {}
+  },
+  "CFindView": {
+   "vtable": "0x3665308",
+   "rtti": "9CFindView",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 7,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0xd50": "no matched class/anchor/context function uses this offset on the object register",
+    "0xd58": "only low confidence (1 matched pairs use it on the object register; 0x928:1)"
+   }
+  },
+  "CFleet": {
+   "vtable": "0x34fc2e8",
+   "rtti": "6CFleet",
+   "rtti_from": "vtable",
+   "keys_needed": 5,
+   "filled": {
+    "0xb0": "bracketed",
+    "0xd8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 18,
+   "mapped": 5,
+   "extra_offsets": 22,
+   "unresolved": {}
+  },
+  "CFleetsBottomBar": {
+   "vtable": null,
+   "rtti": "16CFleetsBottomBar",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x910": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CFocusFinishedPopUpWindow": {
+   "vtable": "0x36806e8",
+   "rtti": "25CFocusFinishedPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "CGenericDefaultConfirmationPopUpWindow": {
+   "vtable": "0x358ff80",
+   "rtti": "38CGenericDefaultConfirmationPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 1,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "CIcon": {
+   "vtable": "0x36b6880",
+   "rtti": "5CIcon",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0xfc": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 103,
+   "mapped": 2,
+   "extra_offsets": 22,
+   "unresolved": {
+    "0x184": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CIdea": {
+   "vtable": "0x35882b8",
+   "rtti": "5CIdea",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0x60": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 1,
+   "extra_offsets": 24,
+   "unresolved": {
+    "0x18": "2 matched pairs use it on the object register; no evidence",
+    "0x6c": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CIdeaResearchBonus": {
+   "vtable": null,
+   "rtti": "18CIdeaResearchBonus",
+   "rtti_from": "name",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x10": "3 matched pairs use it on the object register; no evidence",
+    "0x30": "no matched class/anchor/context function uses this offset on the object register",
+    "0x38": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CInGameIdler": {
+   "vtable": "0x35089d8",
+   "rtti": "12CInGameIdler",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0x540": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 1480,
+   "mapped": 4,
+   "extra_offsets": 101,
+   "unresolved": {}
+  },
+  "CInGameMenu": {
+   "vtable": null,
+   "rtti": "11CInGameMenu",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 2,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "CInstantTextObject": {
+   "vtable": "0x36c04b8",
+   "rtti": "18CInstantTextObject",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 69,
+   "mapped": 1,
+   "extra_offsets": 19,
+   "unresolved": {}
+  },
+  "CIntelAgencyFinishedPopUpWindow": {
+   "vtable": "0x3680288",
+   "rtti": "31CIntelAgencyFinishedPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 16,
+   "mapped": 0,
+   "extra_offsets": 5,
+   "unresolved": {}
+  },
+  "CIntelligenceAgency": {
+   "vtable": null,
+   "rtti": "19CIntelligenceAgency",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "filled": {
+    "0x80": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 11,
+   "unresolved": {
+    "0x10": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CLeaderGroupView": {
+   "vtable": "0x3670a20",
+   "rtti": "16CLeaderGroupView",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 1,
+   "extra_offsets": 11,
+   "unresolved": {}
+  },
+  "CLimitedUseTechBonus": {
+   "vtable": null,
+   "rtti": "20CLimitedUseTechBonus",
+   "rtti_from": "name",
+   "keys_needed": 5,
+   "filled": {
+    "0x28": "low-consistent",
+    "0x68": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 10,
+   "mapped": 3,
+   "extra_offsets": 7,
+   "unresolved": {
+    "0x8": "only low confidence (1 matched pairs use it on the object register; 0x8:1)",
+    "0x10": "only low confidence (3 matched pairs use it on the object register; 0x10:1)"
+   }
+  },
+  "CLimitedUseTechCostReduction": {
+   "vtable": null,
+   "rtti": "28CLimitedUseTechCostReduction",
+   "rtti_from": "name",
+   "keys_needed": 3,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x28": "low-consistent",
+    "0x30": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 10,
+   "mapped": 3,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "CMapIconManagerImpl": {
+   "vtable": null,
+   "rtti": "19CMapIconManagerImpl",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "filled": {
+    "0x8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 101,
+   "mapped": 1,
+   "extra_offsets": 12,
+   "unresolved": {}
+  },
+  "CMapIconManagerImpl.array.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x18": "owner has no evidence source"
+   }
+  },
+  "CMilitaryDeploymentConveyor": {
+   "vtable": "0x358dff8",
+   "rtti": "27CMilitaryDeploymentConveyor",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0x70": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 3,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "CMilitaryProductionLine": {
+   "vtable": "0x358ca80",
+   "rtti": "23CMilitaryProductionLine",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0xe8": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 34,
+   "mapped": 3,
+   "extra_offsets": 10,
+   "unresolved": {}
+  },
+  "CModifier": {
+   "vtable": "0x350cdc0",
+   "rtti": "9CModifier",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x1c": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 2,
+   "extra_offsets": 2,
+   "unresolved": {}
+  },
+  "CNationalFocusInfoWindow": {
+   "vtable": "0x36106d8",
+   "rtti": "24CNationalFocusInfoWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0xcc8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 2,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "CNationalFocusTreeItem": {
+   "vtable": "0x3611108",
+   "rtti": "22CNationalFocusTreeItem",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {
+    "0x20": "only low confidence (1 matched pairs use it on the object register; 0x20:1)"
+   }
+  },
+  "CNationalFocusView": {
+   "vtable": "0x3611298",
+   "rtti": "18CNationalFocusView",
+   "rtti_from": "vtable",
+   "keys_needed": 5,
+   "filled": {
+    "0x2e34": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 28,
+   "mapped": 5,
+   "extra_offsets": 60,
+   "unresolved": {}
+  },
+  "CNavalBase": {
+   "vtable": "0x351cf18",
+   "rtti": "10CNavalBase",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x14": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 2,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "CNaviesView": {
+   "vtable": null,
+   "rtti": "11CNaviesView",
+   "rtti_from": "name",
+   "keys_needed": 7,
+   "filled": {
+    "0x30": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {
+    "0x4ca8": "only low confidence (1 matched pairs use it on the object register; 0x3368:1)",
+    "0x7b00": "only low confidence (1 matched pairs use it on the object register; 0x52c0:1)",
+    "0x7b10": "no matched class/anchor/context function uses this offset on the object register",
+    "0x7b18": "no matched class/anchor/context function uses this offset on the object register",
+    "0x7cb8": "only low confidence (1 matched pairs use it on the object register; 0x5478:1)",
+    "0x7cd0": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CNavyLeader": {
+   "vtable": null,
+   "rtti": "11CNavyLeader",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 38,
+   "mapped": 0,
+   "extra_offsets": 23,
+   "unresolved": {
+    "0x8": "no matched class/anchor/context function uses this offset on the object register",
+    "0x38": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CNavyLeaderWindow": {
+   "vtable": null,
+   "rtti": "17CNavyLeaderWindow",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 19,
+   "mapped": 1,
+   "extra_offsets": 14,
+   "unresolved": {}
+  },
+  "COperativeBottomBar": {
+   "vtable": "0x36257e8",
+   "rtti": "19COperativeBottomBar",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "COperativeLeaderRecruitmentWindow": {
+   "vtable": "0x369bd60",
+   "rtti": "33COperativeLeaderRecruitmentWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 21,
+   "mapped": 0,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "COperativeOrderBar": {
+   "vtable": "0x3626830",
+   "rtti": "18COperativeOrderBar",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 5,
+   "mapped": 0,
+   "extra_offsets": 14,
+   "unresolved": {}
+  },
+  "COrderInstance": {
+   "vtable": "0x3512bf0",
+   "rtti": "14COrderInstance",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0x1c8": "low-consistent",
+    "0x2a0": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 2,
+   "extra_offsets": 21,
+   "unresolved": {}
+  },
+  "CPeaceConferenceWindow": {
+   "vtable": "0x362a5b8",
+   "rtti": "22CPeaceConferenceWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x43a0": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "CPeaceSummaryPopUpWindow": {
+   "vtable": "0x3680800",
+   "rtti": "24CPeaceSummaryPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 5,
+   "unresolved": {}
+  },
+  "CPoliticalIdeaItem": {
+   "vtable": "0x367efa0",
+   "rtti": "18CPoliticalIdeaItem",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 7,
+   "mapped": 1,
+   "extra_offsets": 2,
+   "unresolved": {
+    "0x40": "only low confidence (1 matched pairs use it on the object register; 0x38:1)"
+   }
+  },
+  "CPoliticalSelectableIdeaItem": {
+   "vtable": "0x367f050",
+   "rtti": "28CPoliticalSelectableIdeaItem",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 2,
+   "extra_offsets": 2,
+   "unresolved": {}
+  },
+  "CPoliticalStatus": {
+   "vtable": "0x3589e48",
+   "rtti": "16CPoliticalStatus",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 9,
+   "unresolved": {}
+  },
+  "CPoliticsIdeaCategoryEntry": {
+   "vtable": "0x367f210",
+   "rtti": "26CPoliticsIdeaCategoryEntry",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 23,
+   "mapped": 2,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "CProductionEquipmentWindow": {
+   "vtable": "0x3685b58",
+   "rtti": "26CProductionEquipmentWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 5,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0xcf8": "no matched class/anchor/context function uses this offset on the object register",
+    "0xd00": "only low confidence (1 matched pairs use it on the object register; 0x8c8:1)"
+   }
+  },
+  "CProductionLine": {
+   "vtable": "0x358ce80",
+   "rtti": "15CProductionLine",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x14": "only low confidence (1 matched pairs use it on the object register; 0x14:1)",
+    "0x20": "only low confidence (1 matched pairs use it on the object register; 0x20:1)",
+    "0x58": "no matched class/anchor/context function uses this offset on the object register",
+    "0x88": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CProductionLineMilitaryItem": {
+   "vtable": "0x3686b08",
+   "rtti": "27CProductionLineMilitaryItem",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x898": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 30,
+   "mapped": 1,
+   "extra_offsets": 16,
+   "unresolved": {}
+  },
+  "CProductionResourceCost": {
+   "vtable": "0x358e878",
+   "rtti": "23CProductionResourceCost",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 2,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "CProductionResourceCost.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "CProductionStatus": {
+   "vtable": "0x358e0c8",
+   "rtti": "17CProductionStatus",
+   "rtti_from": "vtable",
+   "keys_needed": 6,
+   "filled": {
+    "0x2c8": "bracketed",
+    "0x328": "bracketed",
+    "0x388": "bracketed",
+    "0x448": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 6,
+   "extra_offsets": 29,
+   "unresolved": {}
+  },
+  "CProvince": {
+   "vtable": "0x357f020",
+   "rtti": "9CProvince",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0xc8": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 18,
+   "mapped": 2,
+   "extra_offsets": 2,
+   "unresolved": {
+    "0x9c": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CProvinceRailwayInfo": {
+   "vtable": "0x35a4748",
+   "rtti": "20CProvinceRailwayInfo",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x10": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 13,
+   "unresolved": {}
+  },
+  "CRailwayManager": {
+   "vtable": "0x35a47a8",
+   "rtti": "15CRailwayManager",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CReferencedDivisionTemplate": {
+   "vtable": "0x34fb370",
+   "rtti": "27CReferencedDivisionTemplate",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 0,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x18": "no matched class/anchor/context function uses this offset on the object register",
+    "0x20": "no matched class/anchor/context function uses this offset on the object register",
+    "0x58": "no matched class/anchor/context function uses this offset on the object register",
+    "0x78": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CResearchFinishedPopUpWindow": {
+   "vtable": "0x3680170",
+   "rtti": "28CResearchFinishedPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 5,
+   "unresolved": {}
+  },
+  "CScientist": {
+   "vtable": "0x3530f20",
+   "rtti": "10CScientist",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 3,
+   "extra_offsets": 9,
+   "unresolved": {}
+  },
+  "CScientistTrait": {
+   "vtable": "0x3531290",
+   "rtti": "15CScientistTrait",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "dropped_non_monotonic": [
+    "0x48",
+    "0x4c"
+   ],
+   "filled": {
+    "0x18": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 1,
+   "extra_offsets": 8,
+   "unresolved": {
+    "0x90": "only low confidence (1 matched pairs use it on the object register; 0x98:1)"
+   }
+  },
+  "CShip": {
+   "vtable": "0x3519a20",
+   "rtti": "5CShip",
+   "rtti_from": "vtable",
+   "keys_needed": 9,
+   "filled": {
+    "0x60": "low-consistent",
+    "0x6c0": "low-consistent",
+    "0x6c8": "low-consistent",
+    "0x6d8": "low-consistent",
+    "0x6e8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 20,
+   "mapped": 7,
+   "extra_offsets": 7,
+   "unresolved": {
+    "0x90": "no matched class/anchor/context function uses this offset on the object register",
+    "0x7d0": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CSpecialProjectCapturedPopUpWindow": {
+   "vtable": "0x36804b8",
+   "rtti": "34CSpecialProjectCapturedPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "CSpecialProjectFinishedPopUpWindow": {
+   "vtable": "0x36803a0",
+   "rtti": "34CSpecialProjectFinishedPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 5,
+   "unresolved": {}
+  },
+  "CSprite": {
+   "vtable": "0x36cc528",
+   "rtti": "7CSprite",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0x8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 73,
+   "mapped": 3,
+   "extra_offsets": 30,
+   "unresolved": {}
+  },
+  "CStandardGridBox": {
+   "vtable": "0x36cca80",
+   "rtti": "16CStandardGridBox",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0x70": "low-consistent",
+    "0xd4": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 59,
+   "mapped": 3,
+   "extra_offsets": 26,
+   "unresolved": {
+    "0x334": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CState": {
+   "vtable": "0x357f410",
+   "rtti": "6CState",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 1,
+   "extra_offsets": 22,
+   "unresolved": {
+    "0x40": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CStrategicAir": {
+   "vtable": "0x3519d70",
+   "rtti": "13CStrategicAir",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x10": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 1,
+   "extra_offsets": 25,
+   "unresolved": {}
+  },
+  "CStrategicRegion": {
+   "vtable": null,
+   "rtti": "16CStrategicRegion",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x20": "no matched class/anchor/context function uses this offset on the object register",
+    "0x40": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CStrategicResource": {
+   "vtable": "0x351e438",
+   "rtti": "18CStrategicResource",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x8": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CStrategicResourceDatabase": {
+   "vtable": "0x351e5e0",
+   "rtti": "26CStrategicResourceDatabase",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 127,
+   "mapped": 1,
+   "extra_offsets": 10,
+   "unresolved": {}
+  },
+  "CSubUnitDefinition": {
+   "vtable": "0x351e958",
+   "rtti": "18CSubUnitDefinition",
+   "rtti_from": "vtable",
+   "keys_needed": 20,
+   "filled": {
+    "0x558": "low-consistent",
+    "0x56c": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 2,
+   "extra_offsets": 4,
+   "unresolved": {
+    "0x10": "1 matched pairs use it on the object register; no evidence",
+    "0x48": "no matched class/anchor/context function uses this offset on the object register",
+    "0x88": "no matched class/anchor/context function uses this offset on the object register",
+    "0x90": "no matched class/anchor/context function uses this offset on the object register",
+    "0x98": "no matched class/anchor/context function uses this offset on the object register",
+    "0xa8": "no matched class/anchor/context function uses this offset on the object register",
+    "0xb0": "no matched class/anchor/context function uses this offset on the object register",
+    "0xb8": "no matched class/anchor/context function uses this offset on the object register",
+    "0xe0": "no matched class/anchor/context function uses this offset on the object register",
+    "0xe8": "no matched class/anchor/context function uses this offset on the object register",
+    "0x208": "no matched class/anchor/context function uses this offset on the object register",
+    "0x268": "no matched class/anchor/context function uses this offset on the object register",
+    "0x270": "no matched class/anchor/context function uses this offset on the object register",
+    "0x280": "no matched class/anchor/context function uses this offset on the object register",
+    "0x288": "no matched class/anchor/context function uses this offset on the object register",
+    "0x2a0": "no matched class/anchor/context function uses this offset on the object register",
+    "0x300": "1 matched pairs use it on the object register; no evidence",
+    "0x568": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CSubjectRelation": {
+   "vtable": "0x354aa60",
+   "rtti": "16CSubjectRelation",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 4,
+   "unresolved": {}
+  },
+  "CSupplySystem": {
+   "vtable": "0x35a4838",
+   "rtti": "13CSupplySystem",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0x130": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 3,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CSurrenderedPopupWindow": {
+   "vtable": "0x3695460",
+   "rtti": "23CSurrenderedPopupWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 14,
+   "unresolved": {}
+  },
+  "CTaskForce": {
+   "vtable": "0x351f208",
+   "rtti": "10CTaskForce",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0x36c": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 69,
+   "mapped": 4,
+   "extra_offsets": 24,
+   "unresolved": {}
+  },
+  "CTaskForceViewEntry": {
+   "vtable": null,
+   "rtti": "19CTaskForceViewEntry",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 5,
+   "mapped": 1,
+   "extra_offsets": 32,
+   "unresolved": {}
+  },
+  "CTechnology": {
+   "vtable": null,
+   "rtti": "11CTechnology",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "filled": {
+    "0x160": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 57,
+   "unresolved": {}
+  },
+  "CTechnology.template": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source"
+   }
+  },
+  "CTechnologyInfoWindow": {
+   "vtable": "0x3632080",
+   "rtti": "21CTechnologyInfoWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 3,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "CTechnologyStatus": {
+   "vtable": null,
+   "rtti": "17CTechnologyStatus",
+   "rtti_from": "name",
+   "keys_needed": 6,
+   "filled": {
+    "0xb8": "low-consistent",
+    "0x118": "low-consistent",
+    "0x130": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 5,
+   "extra_offsets": 6,
+   "unresolved": {
+    "0x320": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "CTechnologyTreeTechItem": {
+   "vtable": "0x3633588",
+   "rtti": "23CTechnologyTreeTechItem",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 12,
+   "unresolved": {}
+  },
+  "CTopBar": {
+   "vtable": "0x3697918",
+   "rtti": "7CTopBar",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "CTradeOfferWindow": {
+   "vtable": "0x3698030",
+   "rtti": "17CTradeOfferWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0xd60": "only low confidence (1 matched pairs use it on the object register; 0x928:1)"
+   }
+  },
+  "CUnitLeaderTemplate": {
+   "vtable": null,
+   "rtti": "19CUnitLeaderTemplate",
+   "rtti_from": "name",
+   "keys_needed": 2,
+   "filled": {
+    "0x20": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 2,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "CWarGoal": {
+   "vtable": "0x3525bf8",
+   "rtti": "8CWarGoal",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "filled": {
+    "0x3c": "low-consistent",
+    "0x40": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 18,
+   "mapped": 3,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "CWarGoalType": {
+   "vtable": "0x3587fd0",
+   "rtti": "12CWarGoalType",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x10": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "CWorldTensionPopUpWindow": {
+   "vtable": "0x36a1f88",
+   "rtti": "24CWorldTensionPopUpWindow",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 17,
+   "mapped": 0,
+   "extra_offsets": 9,
+   "unresolved": {}
+  },
+  "CWorldThreat": {
+   "vtable": "0x354b628",
+   "rtti": "12CWorldThreat",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 13,
+   "mapped": 1,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "NDoctrines::CCountryDoctrineStatus": {
+   "vtable": null,
+   "rtti": "N10NDoctrines22CCountryDoctrineStatusE",
+   "rtti_from": "hint",
+   "keys_needed": 4,
+   "filled": {
+    "0x8": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 4,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "NDoctrines::CCountryDoctrineStatus.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0xa0": "owner has no evidence source"
+   }
+  },
+  "NDoctrines::CCountryDoctrineView": {
+   "vtable": "0x354e610",
+   "rtti": "N10NDoctrines20CCountryDoctrineViewE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 26,
+   "mapped": 1,
+   "extra_offsets": 10,
+   "unresolved": {}
+  },
+  "NDoctrines::CDoctrineSelectionList": {
+   "vtable": "0x354e920",
+   "rtti": "N10NDoctrines22CDoctrineSelectionListE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 4,
+   "mapped": 0,
+   "extra_offsets": 5,
+   "unresolved": {
+    "0x20": "only low confidence (1 matched pairs use it on the object register; 0x20:1)"
+   }
+  },
+  "NDoctrines::CDoctrineSystem": {
+   "vtable": null,
+   "rtti": "N10NDoctrines15CDoctrineSystemE",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "NDoctrines::CDoctrineTemplate": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 3,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x18": "owner has no evidence source",
+    "0x1c": "owner has no evidence source",
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "NDoctrines::CFolderStatus": {
+   "vtable": null,
+   "rtti": "N10NDoctrines13CFolderStatusE",
+   "rtti_from": "name",
+   "keys_needed": 4,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x30": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 10,
+   "mapped": 4,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "NDoctrines::CFolderStatus.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x50": "owner has no evidence source"
+   }
+  },
+  "NDoctrines::CTrackStatus": {
+   "vtable": null,
+   "rtti": "N10NDoctrines12CTrackStatusE",
+   "rtti_from": "name",
+   "keys_needed": 6,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x10": "low-consistent",
+    "0x18": "low-consistent",
+    "0x20": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 10,
+   "mapped": 4,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x50": "no matched class/anchor/context function uses this offset on the object register",
+    "0x58": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "NDoctrines::CTrackStatus.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x60": "owner has no evidence source"
+   }
+  },
+  "NDoctrines::STemporaryCostReduction": {
+   "vtable": null,
+   "rtti": "N10NDoctrines23STemporaryCostReductionE",
+   "rtti_from": "name",
+   "keys_needed": 4,
+   "status": "mapped",
+   "functions": 10,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x8": "only low confidence (1 matched pairs use it on the object register; 0x8:1)",
+    "0x10": "only low confidence (3 matched pairs use it on the object register; 0x10:1)",
+    "0x28": "only low confidence (1 matched pairs use it on the object register; 0x30:1)",
+    "0x30": "only low confidence (1 matched pairs use it on the object register; 0x38:1)"
+   }
+  },
+  "NDoctrines::STemporaryCostReduction.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x38": "owner has no evidence source"
+   }
+  },
+  "NFactions::CFaction": {
+   "vtable": "0x353e188",
+   "rtti": "N9NFactions8CFactionE",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {
+    "0x18": "only low confidence (2 matched pairs use it on the object register; 0x18:1)"
+   }
+  },
+  "NFactions::CFactionSystem": {
+   "vtable": "0x3540478",
+   "rtti": "N9NFactions14CFactionSystemE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 12,
+   "unresolved": {}
+  },
+  "NFactions::CTechnologySharingFaction": {
+   "vtable": null,
+   "rtti": "N9NFactions25CTechnologySharingFactionE",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 22,
+   "mapped": 0,
+   "extra_offsets": 8,
+   "unresolved": {
+    "0x48": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "NIndustrialOrganisation::COrganisationDatabase": {
+   "vtable": "0x358c220",
+   "rtti": "N23NIndustrialOrganisation21COrganisationDatabaseE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 29,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "NIndustrialOrganisation::COrganisationDetailWindow": {
+   "vtable": "0x362c958",
+   "rtti": "N23NIndustrialOrganisation25COrganisationDetailWindowE",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 0,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "NIndustrialOrganisation::COrganisationListWindow": {
+   "vtable": "0x362d5b0",
+   "rtti": "N23NIndustrialOrganisation23COrganisationListWindowE",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 8,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "NIndustrialOrganisation::CPolicyWindow": {
+   "vtable": "0x362de58",
+   "rtti": "N23NIndustrialOrganisation13CPolicyWindowE",
+   "rtti_from": "vtable",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 6,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "NProject::CProgram": {
+   "vtable": "0x359c918",
+   "rtti": "N8NProject8CProgramE",
+   "rtti_from": "vtable",
+   "keys_needed": 6,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x18": "low-consistent",
+    "0x48": "low-consistent",
+    "0x50": "low-consistent",
+    "0x170": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 6,
+   "extra_offsets": 9,
+   "unresolved": {}
+  },
+  "NProject::CProgramStatus": {
+   "vtable": "0x359fdb0",
+   "rtti": "N8NProject14CProgramStatusE",
+   "rtti_from": "vtable",
+   "keys_needed": 3,
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 2,
+   "extra_offsets": 1,
+   "unresolved": {
+    "0x60": "only low confidence (1 matched pairs use it on the object register; 0x68:1)"
+   }
+  },
+  "NProject::CProject": {
+   "vtable": "0x359ca08",
+   "rtti": "N8NProject8CProjectE",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0x60": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 3,
+   "extra_offsets": 4,
+   "unresolved": {
+    "0x20": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "NProject::CProject.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x1b8": "owner has no evidence source"
+   }
+  },
+  "NProject::CProjectPool": {
+   "vtable": "0x359f8b0",
+   "rtti": "N8NProject12CProjectPoolE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "NProject::CProjectStateMachine": {
+   "vtable": "0x359fa60",
+   "rtti": "N8NProject20CProjectStateMachineE",
+   "rtti_from": "vtable",
+   "keys_needed": 5,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 0,
+   "extra_offsets": 1,
+   "unresolved": {
+    "0x8": "2 matched pairs use it on the object register; ambiguous: 0x50:1, 0x8:1",
+    "0x8c": "no matched class/anchor/context function uses this offset on the object register",
+    "0x90": "no matched class/anchor/context function uses this offset on the object register",
+    "0x94": "no matched class/anchor/context function uses this offset on the object register",
+    "0x98": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "NProject::CProjectTemplate": {
+   "vtable": "0x359d7f8",
+   "rtti": "N8NProject16CProjectTemplateE",
+   "rtti_from": "vtable",
+   "keys_needed": 4,
+   "filled": {
+    "0xc": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 3,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x208": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "NProject::CSimpleProjectState": {
+   "vtable": "0x359f990",
+   "rtti": "N8NProject19CSimpleProjectStateE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x48": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "NProject::CSpecializationDatabase": {
+   "vtable": null,
+   "rtti": "N8NProject23CSpecializationDatabaseE",
+   "rtti_from": "name",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 48,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x58": "only low confidence (1 matched pairs use it on the object register; 0x58:1)"
+   }
+  },
+  "NProject::NUi::CFacilitiesTabView": {
+   "vtable": "0x35a0300",
+   "rtti": "N8NProject3NUi18CFacilitiesTabViewE",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 16,
+   "mapped": 2,
+   "extra_offsets": 12,
+   "unresolved": {}
+  },
+  "NProject::NUi::CProgramItem": {
+   "vtable": "0x35a1018",
+   "rtti": "N8NProject3NUi12CProgramItemE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 40,
+   "mapped": 1,
+   "extra_offsets": 7,
+   "unresolved": {}
+  },
+  "NProject::NUi::CProgramView": {
+   "vtable": "0x35a1cb8",
+   "rtti": "N8NProject3NUi12CProgramViewE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 1,
+   "extra_offsets": 4,
+   "unresolved": {}
+  },
+  "NProject::NUi::CProjectItem": {
+   "vtable": "0x35a2910",
+   "rtti": "N8NProject3NUi12CProjectItemE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x28": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 21,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "NProject::NUi::CRecruitScientistWindow": {
+   "vtable": "0x35a3908",
+   "rtti": "N8NProject3NUi23CRecruitScientistWindowE",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {
+    "0x20": "only low confidence (1 matched pairs use it on the object register; 0x28:1)"
+   }
+  },
+  "NProject::NUi::CScientistRoster": {
+   "vtable": "0x35a1b08",
+   "rtti": "N8NProject3NUi16CScientistRosterE",
+   "rtti_from": "vtable",
+   "keys_needed": 2,
+   "filled": {
+    "0xe88": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x20": "only low confidence (2 matched pairs use it on the object register; 0x28:1)"
+   }
+  },
+  "NProject::SProjectHistory": {
+   "vtable": "0x359f820",
+   "rtti": "N8NProject15SProjectHistoryE",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x18": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 15,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "air.overview.view": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x490": "owner has no evidence source"
+   }
+  },
+  "air.selection.view": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x28": "owner has no evidence source",
+    "0x60": "owner has no evidence source"
+   }
+  },
+  "air.strategic.view": {
+   "vtable": null,
+   "rtti": "17CStrategicAirView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 21,
+   "mapped": 1,
+   "extra_offsets": 45,
+   "unresolved": {}
+  },
+  "breakthrough.map_node": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 4,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x0": "owner has no evidence source",
+    "0x8": "owner has no evidence source",
+    "0x18": "owner has no evidence source",
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "characters.recruit_pool": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source"
+   }
+  },
+  "civilian.consumer": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source",
+    "0xc": "owner has no evidence source"
+   }
+  },
+  "construction.view": {
+   "vtable": null,
+   "rtti": "25CCountryConstructionsView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 28,
+   "mapped": 1,
+   "extra_offsets": 21,
+   "unresolved": {}
+  },
+  "decision.instance": {
+   "vtable": null,
+   "rtti": "17CDecisionInstance",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 12,
+   "mapped": 1,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "decision.view": {
+   "vtable": null,
+   "rtti": "20CCountryDecisionView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 32,
+   "unresolved": {}
+  },
+  "deployment.template_row": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source"
+   }
+  },
+  "deployment.template_window": {
+   "vtable": null,
+   "rtti": "25CTemplateDeploymentWindow",
+   "rtti_from": "hint",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 0,
+   "extra_offsets": 1,
+   "unresolved": {
+    "0xcb0": "only low confidence (1 matched pairs use it on the object register; 0x870:1)",
+    "0xd20": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "diplomacy.action_controller": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8d8": "owner has no evidence source"
+   }
+  },
+  "diplomacy.relation": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 4,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0xc": "owner has no evidence source",
+    "0x10": "owner has no evidence source",
+    "0x20": "owner has no evidence source",
+    "0x38": "owner has no evidence source"
+   }
+  },
+  "division.pool": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source"
+   }
+  },
+  "division.pool.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x18": "owner has no evidence source"
+   }
+  },
+  "division.variant": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source"
+   }
+  },
+  "division.variant.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source"
+   }
+  },
+  "division_template": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "find.result_row": {
+   "vtable": null,
+   "rtti": "22CSearchableGridBoxItem",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 20,
+   "mapped": 0,
+   "extra_offsets": 2,
+   "unresolved": {
+    "0x458": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "grid.item": {
+   "vtable": null,
+   "rtti": "20CStandardGridBoxItem",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 23,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "gs.air_manager": {
+   "vtable": null,
+   "rtti": "20CStrategicAirManager",
+   "rtti_from": "hint",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 9,
+   "mapped": 0,
+   "extra_offsets": 26,
+   "unresolved": {}
+  },
+  "gs.navy_manager": {
+   "vtable": null,
+   "rtti": "21CStrategicNavyManager",
+   "rtti_from": "hint",
+   "keys_needed": 0,
+   "status": "mapped",
+   "functions": 7,
+   "mapped": 0,
+   "extra_offsets": 3,
+   "unresolved": {}
+  },
+  "gui.button": {
+   "vtable": null,
+   "rtti": "15CButtonStandard",
+   "rtti_from": "hint",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 109,
+   "mapped": 2,
+   "extra_offsets": 29,
+   "unresolved": {}
+  },
+  "gui.gfx": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x1e0": "owner has no evidence source"
+   }
+  },
+  "gui.object": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x50": "owner has no evidence source",
+    "0x65": "owner has no evidence source"
+   }
+  },
+  "gui.popup": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x490": "owner has no evidence source"
+   }
+  },
+  "gui.sprite_type": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x78": "owner has no evidence source",
+    "0x8c": "owner has no evidence source"
+   }
+  },
+  "gui.text": {
+   "vtable": null,
+   "rtti": "15CInstantTextBox",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 62,
+   "mapped": 1,
+   "extra_offsets": 13,
+   "unresolved": {}
+  },
+  "gui.text_sprite": {
+   "vtable": "0x36cee08",
+   "rtti": "11CTextSprite",
+   "rtti_from": "vtable",
+   "keys_needed": 1,
+   "filled": {
+    "0x1b0": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 73,
+   "mapped": 1,
+   "extra_offsets": 33,
+   "unresolved": {}
+  },
+  "gui.type": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x28": "owner has no evidence source"
+   }
+  },
+  "idea.category": {
+   "vtable": null,
+   "rtti": "13CIdeaCategory",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0x10": "1 matched pairs use it on the object register; no evidence"
+   }
+  },
+  "idler.manager.view": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 0,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {}
+  },
+  "leader.trait.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "leader_group.portrait": {
+   "vtable": null,
+   "rtti": "20CLeaderGroupPortrait",
+   "rtti_from": "hint",
+   "keys_needed": 2,
+   "filled": {
+    "0x28": "low-consistent",
+    "0x30": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 6,
+   "mapped": 2,
+   "extra_offsets": 17,
+   "unresolved": {}
+  },
+  "manager.air_region_view": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 0,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {}
+  },
+  "manager.diplomacy_view": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 0,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {}
+  },
+  "manager.find_view": {
+   "vtable": null,
+   "rtti": "9CFindView",
+   "rtti_from": "hint",
+   "keys_needed": 4,
+   "status": "mapped",
+   "functions": 7,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0xd50": "no matched class/anchor/context function uses this offset on the object register",
+    "0xd58": "only low confidence (1 matched pairs use it on the object register; 0x928:1)",
+    "0xd68": "1 matched pairs use it on the object register; no evidence",
+    "0xda8": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "manager.state_view": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 0,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {}
+  },
+  "manager.tech_view": {
+   "vtable": null,
+   "rtti": "22CCountryTechnologyView",
+   "rtti_from": "hint",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 26,
+   "mapped": 2,
+   "extra_offsets": 12,
+   "unresolved": {}
+  },
+  "manager.topbar": {
+   "vtable": null,
+   "rtti": "7CTopBar",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "manager.tree_view": {
+   "vtable": null,
+   "rtti": "20CCountryTechTreeView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 21,
+   "unresolved": {}
+  },
+  "modifier.entry.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source"
+   }
+  },
+  "orders.group": {
+   "vtable": null,
+   "rtti": "12COrdersGroup",
+   "rtti_from": "hint",
+   "keys_needed": 5,
+   "filled": {
+    "0x8": "low-consistent",
+    "0x160": "low-consistent"
+   },
+   "status": "mapped",
+   "functions": 19,
+   "mapped": 5,
+   "extra_offsets": 19,
+   "unresolved": {}
+  },
+  "politics.selection_window": {
+   "vtable": null,
+   "rtti": "21CPoliticalIdeasWindow",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 7,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "production.selection.row": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0xd50": "owner has no evidence source"
+   }
+  },
+  "production.selection.window": {
+   "vtable": null,
+   "rtti": "26CProductionEquipmentWindow",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 5,
+   "mapped": 0,
+   "extra_offsets": 0,
+   "unresolved": {
+    "0xcf8": "no matched class/anchor/context function uses this offset on the object register"
+   }
+  },
+  "production.selection_row": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source",
+    "0xd50": "owner has no evidence source"
+   }
+  },
+  "production.view": {
+   "vtable": null,
+   "rtti": "26CCountryProductionLineView",
+   "rtti_from": "hint",
+   "keys_needed": 2,
+   "status": "mapped",
+   "functions": 28,
+   "mapped": 2,
+   "extra_offsets": 56,
+   "unresolved": {}
+  },
+  "research.tree_view": {
+   "vtable": null,
+   "rtti": "20CCountryTechTreeView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 25,
+   "mapped": 1,
+   "extra_offsets": 21,
+   "unresolved": {}
+  },
+  "research.view": {
+   "vtable": null,
+   "rtti": "22CCountryTechnologyView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 26,
+   "mapped": 1,
+   "extra_offsets": 13,
+   "unresolved": {}
+  },
+  "scientist.skill_level": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x0": "owner has no evidence source",
+    "0x18": "owner has no evidence source"
+   }
+  },
+  "scientist.skill_level.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "spec.template": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source"
+   }
+  },
+  "state.slot_item": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x28": "owner has no evidence source"
+   }
+  },
+  "state.view": {
+   "vtable": null,
+   "rtti": "17CCountryStateView",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 24,
+   "mapped": 1,
+   "extra_offsets": 43,
+   "unresolved": {}
+  },
+  "strategic.navy": {
+   "vtable": null,
+   "rtti": "14CStrategicNavy",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 11,
+   "mapped": 1,
+   "extra_offsets": 29,
+   "unresolved": {}
+  },
+  "subunit.need": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source"
+   }
+  },
+  "subunit.need.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source"
+   }
+  },
+  "supply_flow.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x10": "owner has no evidence source"
+   }
+  },
+  "supply_node": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 6,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x8": "owner has no evidence source",
+    "0xc": "owner has no evidence source",
+    "0x10": "owner has no evidence source",
+    "0x14": "owner has no evidence source",
+    "0x18": "owner has no evidence source",
+    "0x20": "owner has no evidence source"
+   }
+  },
+  "supply_node.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x60": "owner has no evidence source"
+   }
+  },
+  "supply_province": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 3,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x0": "owner has no evidence source",
+    "0x8": "owner has no evidence source",
+    "0x30": "owner has no evidence source"
+   }
+  },
+  "supply_province.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0xd8": "owner has no evidence source"
+   }
+  },
+  "supply_state.size": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x28": "owner has no evidence source"
+   }
+  },
+  "topbar": {
+   "vtable": null,
+   "rtti": "7CTopBar",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "topbar.view": {
+   "vtable": null,
+   "rtti": "7CTopBar",
+   "rtti_from": "hint",
+   "keys_needed": 1,
+   "status": "mapped",
+   "functions": 14,
+   "mapped": 1,
+   "extra_offsets": 6,
+   "unresolved": {}
+  },
+  "unit.leader": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "no vtable/RTTI and no anchor, context or via hint",
+   "unresolved": {
+    "0x38": "owner has no evidence source"
+   }
+  },
+  "CFolderView": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "via": "NDoctrines::CCountryDoctrineView+0x498 (derived)",
+   "status": "mapped",
+   "functions": 29,
+   "mapped": 1,
+   "extra_offsets": 0,
+   "unresolved": {}
+  },
+  "CStrategicRegion.template": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "via": "CStrategicRegion+0x20 (derived)",
+   "status": "needs-owner",
+   "mapped": 0,
+   "reason": "parent field CStrategicRegion+0x20 is not mapped",
+   "unresolved": {
+    "0x20": "parent field unmapped",
+    "0x38": "parent field unmapped"
+   }
+  },
+  "designer.draft_holder": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 1,
+   "via": "CDivisionDesignerView+0x2410 (derived)",
+   "status": "mapped",
+   "functions": 20,
+   "mapped": 1,
+   "extra_offsets": 1,
+   "unresolved": {}
+  },
+  "idler.camera": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 2,
+   "via": "CInGameIdler+0x718 (derived)",
+   "filled": {
+    "0xd0": "bracketed",
+    "0x110": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 1473,
+   "mapped": 2,
+   "extra_offsets": 8,
+   "unresolved": {}
+  },
+  "idler.gui": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 3,
+   "via": "CInGameIdler+0x4c0 (derived)",
+   "status": "mapped",
+   "functions": 1493,
+   "mapped": 1,
+   "extra_offsets": 3,
+   "unresolved": {
+    "0x140": "no matched class/anchor/context function uses this offset on the object register",
+    "0xa70": "only low confidence (1 matched pairs use it on the object register; 0x7c0:1)"
+   }
+  },
+  "idler.manager": {
+   "vtable": null,
+   "rtti": null,
+   "rtti_from": null,
+   "keys_needed": 24,
+   "via": "CInGameIdler+0x670 (hint)",
+   "filled": {
+    "0xd8": "bracketed",
+    "0xe0": "bracketed",
+    "0xf0": "bracketed",
+    "0xf8": "bracketed",
+    "0x108": "bracketed",
+    "0x110": "bracketed",
+    "0x128": "bracketed",
+    "0x130": "bracketed",
+    "0x138": "bracketed",
+    "0x140": "bracketed",
+    "0x150": "bracketed",
+    "0x158": "bracketed",
+    "0x3b8": "bracketed",
+    "0x3c0": "bracketed"
+   },
+   "status": "mapped",
+   "functions": 1491,
+   "mapped": 24,
+   "extra_offsets": 40,
+   "unresolved": {}
+  }
+ },
+ "unresolved_static_keys": [
+  {
+   "kind": "image",
+   "where": "gui_tree.rs:99",
+   "expr": "*vt",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "gui_tree.rs:99",
+   "cls": "&Class::new(name, *vt)",
+   "expr": "*off",
+   "reason": "Class::new(name, *vt) not constant"
+  },
+  {
+   "kind": "image",
+   "where": "gui_tree.rs:105",
+   "expr": "*vt",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/design_ui.rs:212",
+   "cls": "&PRODUCTION",
+   "expr": "offset",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/design_ui.rs:311",
+   "cls": "&PRODUCTION",
+   "expr": "offset",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/design_ui.rs:328",
+   "cls": "&MANAGER_OBJ",
+   "expr": "slot",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/design_ui.rs:600",
+   "cls": "&EDV",
+   "expr": "array",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/diplomacy_state.rs:150",
+   "expr": "mac",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/diplomacy_state.rs:404",
+   "cls": "&DIPLOMACY_STATUS",
+   "expr": "array",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/doctrines.rs:420",
+   "cls": "&EXPERIENCE_STATUS",
+   "expr": "mac",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/doctrines.rs:710",
+   "cls": "&FOLDER",
+   "expr": "land",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/doctrines.rs:710",
+   "cls": "&REDUCTION",
+   "expr": "availability triggers are not evaluated",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/economy_detail.rs:293",
+   "cls": "&PRODUCTION",
+   "expr": "CONSUMERS + off",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/economy_detail.rs:294",
+   "expr": "vt",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/faction.rs:73",
+   "cls": "&IFACE_MANAGER",
+   "expr": "slot",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/fleetmem.rs:129",
+   "expr": "vtable",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/fleetmem.rs:196",
+   "cls": "&VARIANT",
+   "expr": "offset",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/fleetmem.rs:319",
+   "cls": "&GAME_STATE",
+   "expr": "manager_field",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/fleetmem.rs:321",
+   "cls": "&manager_class(manager_field)",
+   "expr": "table_field",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/kit.rs:389",
+   "expr": "*kind",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/kit.rs:398",
+   "cls": "&popup_class(kind)",
+   "expr": "POPUP_ROOT",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/naval.rs:210",
+   "cls": "&fleetmem::REGION_TEMPLATE_CLASS",
+   "expr": "off",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/navalui.rs:87",
+   "cls": "&MANAGER_CLASS",
+   "expr": "slot",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/navalui.rs:544",
+   "cls": "&view_class(slot)",
+   "expr": "field",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/panelkit.rs:173",
+   "cls": "&owner",
+   "expr": "VIEW_ROOT",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/panelkit.rs:173",
+   "cls": "&owner",
+   "expr": "*o",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/panelkit.rs:216",
+   "cls": "&owner_class.owner()",
+   "expr": "*offset",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/panelkit.rs:217",
+   "cls": "&child.owner()",
+   "expr": "*root_at",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/special_projects.rs:234",
+   "expr": "vtable",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/ui.rs:122",
+   "expr": "class.vtable",
+   "reason": "no struct-literal table in this file has field `vtable`"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/ui.rs:131",
+   "cls": "class",
+   "expr": "POPUP_ROOT",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/ui.rs:475",
+   "cls": "&IFACE_MANAGER",
+   "expr": "slot",
+   "reason": "runtime value"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/ui.rs:476",
+   "cls": "class",
+   "expr": "0x490",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "image",
+   "where": "launch/macos/ui.rs:537",
+   "expr": "class.vtable",
+   "reason": "no struct-literal table in this file has field `vtable`"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/ui.rs:545",
+   "cls": "class",
+   "expr": "POPUP_ROOT",
+   "reason": "runtime class"
+  },
+  {
+   "kind": "field",
+   "where": "launch/macos/units.rs:728",
+   "cls": "&VARIANT",
+   "expr": "*off",
+   "reason": "runtime value"
+  }
+ ],
+ "summary": {
+  "image_keys": 184,
+  "image_mapped": 181,
+  "classes": 256,
+  "classes_with_vtable": 134,
+  "classes_needing_owner": [
+   "CEquipmentType.slot",
+   "CEquipmentType.slot.size",
+   "CMapIconManagerImpl.array.size",
+   "CProductionResourceCost.size",
+   "CStrategicRegion.template",
+   "CTechnology.template",
+   "NDoctrines::CCountryDoctrineStatus.size",
+   "NDoctrines::CDoctrineTemplate",
+   "NDoctrines::CFolderStatus.size",
+   "NDoctrines::CTrackStatus.size",
+   "NDoctrines::STemporaryCostReduction.size",
+   "NProject::CProject.size",
+   "air.overview.view",
+   "air.selection.view",
+   "breakthrough.map_node",
+   "characters.recruit_pool",
+   "civilian.consumer",
+   "deployment.template_row",
+   "diplomacy.action_controller",
+   "diplomacy.relation",
+   "division.pool",
+   "division.pool.size",
+   "division.variant",
+   "division.variant.size",
+   "division_template",
+   "gui.gfx",
+   "gui.object",
+   "gui.popup",
+   "gui.sprite_type",
+   "gui.type",
+   "idler.manager.view",
+   "leader.trait.size",
+   "manager.air_region_view",
+   "manager.diplomacy_view",
+   "manager.state_view",
+   "modifier.entry.size",
+   "production.selection.row",
+   "production.selection_row",
+   "scientist.skill_level",
+   "scientist.skill_level.size",
+   "spec.template",
+   "state.slot_item",
+   "subunit.need",
+   "subunit.need.size",
+   "supply_flow.size",
+   "supply_node",
+   "supply_node.size",
+   "supply_province",
+   "supply_province.size",
+   "supply_state.size",
+   "unit.leader"
+  ],
+  "field_keys": 524,
+  "field_keys_mapped": 315,
+  "field_entries_written": 2825,
+  "static_keys_unresolved": 36
+ },
+ "live": [
+  [
+   "image 0x36998b0",
+   "0x44030b8",
+   "0x44030b8"
+  ],
+  [
+   "image 0x3680288",
+   "0x43f9090",
+   "0x43f9090"
+  ],
+  [
+   "image 0x36424c8",
+   null,
+   "0x44a35c8"
+  ],
+  [
+   "CAcceptCommandDialog+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CAgencyLogoSelectionWindow+0x48",
+   "0x50",
+   "0x50"
+  ],
+  [
+   "CAgencyUpgrade+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CAgencyUpgradeBranch+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CAgencyUpgradeDatabase+0x70",
+   null,
+   "0x70"
+  ],
+  [
+   "CAirBaseMapIcon+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CAirBaseMapIcon+0x48",
+   null,
+   "0x48"
+  ],
+  [
+   "CAirBaseMapIcon+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "CAirWing+0x74",
+   "0x74",
+   "0x74"
+  ],
+  [
+   "CAirWing+0x78",
+   "0x78",
+   "0x78"
+  ],
+  [
+   "CAirWing+0x98",
+   null,
+   "0x98"
+  ],
+  [
+   "CAirWing+0xb8",
+   null,
+   "0xb8"
+  ],
+  [
+   "CAirWing+0x320",
+   null,
+   "0x338"
+  ],
+  [
+   "CAirWing+0x938",
+   "0x968",
+   "0x968"
+  ],
+  [
+   "CArmyLeader+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CArmyLeader+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CArmyLeader+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CAutonomousState+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CBuilding+0x1a8",
+   null,
+   "0x1b8"
+  ],
+  [
+   "CBuilding+0x1b0",
+   null,
+   "0x1c0"
+  ],
+  [
+   "CBuildingTemplate+0x228",
+   "0x258",
+   "0x248"
+  ],
+  [
+   "CChangeGroupLeaderDialog+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CChangeNavyLeaderDialog+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CCharacter+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CCharacter+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CCheckBox+0xa8",
+   null,
+   "0xb8"
+  ],
+  [
+   "CCommandStructureLeaderView+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "CConfirmDeleteUnits+0x490",
+   null,
+   "0x330"
+  ],
+  [
+   "CConfirmationPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CConsumerGoodsConsumer+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CContainerWindow+0x30",
+   "0x30",
+   "0x30"
+  ],
+  [
+   "CContainerWindow+0x95",
+   "0xa5",
+   "0xa5"
+  ],
+  [
+   "CContainerWindow+0xe50",
+   "0xa30",
+   "0xa30"
+  ],
+  [
+   "CConvoys+0x88",
+   null,
+   "0x88"
+  ],
+  [
+   "CCountry+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CCountry+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CCountry+0x550",
+   null,
+   "0x5a0"
+  ],
+  [
+   "CCountryArmyOfficerCorpView+0x488",
+   null,
+   "0x330"
+  ],
+  [
+   "CCountryCharacterSelectionItem+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "CCountryDeploymentView+0x488",
+   null,
+   "0x330"
+  ],
+  [
+   "CCountryDeploymentView+0x490",
+   null,
+   "0x338"
+  ],
+  [
+   "CCountryDiplomacyView+0x488",
+   null,
+   "0x330"
+  ],
+  [
+   "CCountryDiplomacyView+0x1608",
+   null,
+   "0xf00"
+  ],
+  [
+   "CCountryDiplomacyView+0x35e8",
+   null,
+   "0x2ce0"
+  ],
+  [
+   "CCountryExperienceStatus+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CCountryExperienceStatus+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "CCountryExperienceStatus+0x40",
+   null,
+   "0x40"
+  ],
+  [
+   "CCountryIntelligenceAgencyView+0x498",
+   "0x340",
+   "0x340"
+  ],
+  [
+   "CCountryPoliticsView+0x3958",
+   null,
+   "0x2698"
+  ],
+  [
+   "CDecision+0x108",
+   "0x108",
+   "0x118"
+  ],
+  [
+   "CDiplomacyStatus+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "CDiplomacyStatus+0x80",
+   null,
+   "0x80"
+  ],
+  [
+   "CDiplomacyStatus+0x98",
+   null,
+   "0x98"
+  ],
+  [
+   "CDivisionTemplateData+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CDivisionTemplateData+0x40",
+   null,
+   "0x50"
+  ],
+  [
+   "CDivisionTemplateData+0x58",
+   "0x48",
+   "0x68"
+  ],
+  [
+   "CDivisionTemplateData+0x60",
+   null,
+   "0x70"
+  ],
+  [
+   "CEquipmentModule+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CEquipmentType+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CEquipmentType+0x60",
+   null,
+   "0x68"
+  ],
+  [
+   "CEquipmentType.slot+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CEquipmentType.slot+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "CEquipmentType.slot.size+0x40",
+   null,
+   "0x48"
+  ],
+  [
+   "CEquipmentUpgrade+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CEquipmentVariant+0xc",
+   null,
+   "0xc"
+  ],
+  [
+   "CEquipmentVariant+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "CEquipmentVariant+0x40",
+   null,
+   "0x48"
+  ],
+  [
+   "CEquipmentVariant+0x60",
+   null,
+   "0x70"
+  ],
+  [
+   "CEquipmentVariant+0xa8",
+   null,
+   "0xb8"
+  ],
+  [
+   "CEquipmentVariant+0xf8",
+   null,
+   "0x108"
+  ],
+  [
+   "CEquipmentVariant+0x100",
+   null,
+   "0x110"
+  ],
+  [
+   "CEquipmentVariant+0x108",
+   null,
+   "0x118"
+  ],
+  [
+   "CEquipmentVariant+0x110",
+   null,
+   "0x120"
+  ],
+  [
+   "CEquipmentVariant+0x118",
+   null,
+   "0x128"
+  ],
+  [
+   "CEquipmentVariant+0x188",
+   null,
+   "0x198"
+  ],
+  [
+   "CEquipmentVariant+0x190",
+   null,
+   "0x1a0"
+  ],
+  [
+   "CEquipmentVariant+0x198",
+   null,
+   "0x1a8"
+  ],
+  [
+   "CEquipmentVariant+0x1a0",
+   null,
+   "0x1b0"
+  ],
+  [
+   "CEquipmentVariant+0x1b8",
+   null,
+   "0x1c8"
+  ],
+  [
+   "CEquipmentVariant+0x1c0",
+   null,
+   "0x1d0"
+  ],
+  [
+   "CEquipmentVariant+0x1c8",
+   null,
+   "0x1d8"
+  ],
+  [
+   "CEquipmentVariant+0x1d0",
+   null,
+   "0x1e0"
+  ],
+  [
+   "CEquipmentVariant+0x1d8",
+   null,
+   "0x1e8"
+  ],
+  [
+   "CEquipmentVariant+0x1e0",
+   null,
+   "0x1f0"
+  ],
+  [
+   "CEquipmentVariant+0x1e8",
+   null,
+   "0x1f8"
+  ],
+  [
+   "CEquipmentVariant+0x1f8",
+   null,
+   "0x208"
+  ],
+  [
+   "CEquipmentVariant+0x200",
+   null,
+   "0x210"
+  ],
+  [
+   "CEquipmentVariant+0x260",
+   null,
+   "0x270"
+  ],
+  [
+   "CEquipmentVariant+0x268",
+   null,
+   "0x278"
+  ],
+  [
+   "CEquipmentVariant+0x270",
+   null,
+   "0x280"
+  ],
+  [
+   "CEquipmentVariant+0x278",
+   null,
+   "0x288"
+  ],
+  [
+   "CEquipmentVariant+0x280",
+   null,
+   "0x290"
+  ],
+  [
+   "CEquipmentVariant+0x290",
+   null,
+   "0x2a0"
+  ],
+  [
+   "CEquipmentVariant+0x298",
+   null,
+   "0x2a8"
+  ],
+  [
+   "CEquipmentVariant+0x2a0",
+   null,
+   "0x2b0"
+  ],
+  [
+   "CEquipmentVariant+0x2d8",
+   null,
+   "0x2e8"
+  ],
+  [
+   "CEquipmentVariant+0x2e0",
+   null,
+   "0x2f0"
+  ],
+  [
+   "CEquipmentVariant+0x2e8",
+   null,
+   "0x2f8"
+  ],
+  [
+   "CEquipmentVariant+0x2f0",
+   null,
+   "0x300"
+  ],
+  [
+   "CEquipmentVariant+0x2f8",
+   null,
+   "0x308"
+  ],
+  [
+   "CEquipmentVariant+0x318",
+   null,
+   "0x328"
+  ],
+  [
+   "CEquipmentVariant+0x358",
+   null,
+   "0x368"
+  ],
+  [
+   "CEquipmentVariant+0x3c0",
+   null,
+   "0x3d0"
+  ],
+  [
+   "CEquipmentVariant+0x3e0",
+   null,
+   "0x3f0"
+  ],
+  [
+   "CEquipmentVariant+0x3e8",
+   null,
+   "0x3f8"
+  ],
+  [
+   "CEquipmentVariant+0x410",
+   null,
+   "0x420"
+  ],
+  [
+   "CEquipmentVariant+0x414",
+   null,
+   "0x424"
+  ],
+  [
+   "CEvent+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CEventWindow+0x28",
+   "0x30",
+   "0x28"
+  ],
+  [
+   "CEventWindow+0x40",
+   "0x48",
+   "0x40"
+  ],
+  [
+   "CFleetsBottomBar+0x910",
+   null,
+   "0x648"
+  ],
+  [
+   "CGenericDefaultConfirmationPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CIcon+0x184",
+   null,
+   "0x194"
+  ],
+  [
+   "CIdea+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CIdea+0x6c",
+   null,
+   "0x7c"
+  ],
+  [
+   "CIdeaResearchBonus+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CIdeaResearchBonus+0x30",
+   null,
+   "0x38"
+  ],
+  [
+   "CIdeaResearchBonus+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CInGameMenu+0x2a38",
+   "0x1c30",
+   "0x1c30"
+  ],
+  [
+   "CInGameMenu+0x2a48",
+   "0x1c40",
+   "0x1c40"
+  ],
+  [
+   "CIntelAgencyFinishedPopUpWindow+0x490",
+   "0x330",
+   "0x330"
+  ],
+  [
+   "CIntelligenceAgency+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CLimitedUseTechBonus+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CLimitedUseTechBonus+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CMapIconManagerImpl+0x8",
+   "0x8",
+   "0x8"
+  ],
+  [
+   "CMapIconManagerImpl.array.size+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CNationalFocusTreeItem+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CNationalFocusView+0x2d70",
+   "0x2078",
+   "0x2078"
+  ],
+  [
+   "CNationalFocusView+0x2db8",
+   "0x20c0",
+   "0x20c0"
+  ],
+  [
+   "CNationalFocusView+0x2e10",
+   "0x2118",
+   "0x2118"
+  ],
+  [
+   "CNationalFocusView+0x2e34",
+   "0x213c",
+   "0x213c"
+  ],
+  [
+   "CNaviesView+0x4ca8",
+   null,
+   "0x3368"
+  ],
+  [
+   "CNaviesView+0x7b00",
+   null,
+   "0x52c0"
+  ],
+  [
+   "CNaviesView+0x7b10",
+   null,
+   "0x52d0"
+  ],
+  [
+   "CNaviesView+0x7b18",
+   null,
+   "0x52d8"
+  ],
+  [
+   "CNaviesView+0x7cb8",
+   null,
+   "0x5478"
+  ],
+  [
+   "CNaviesView+0x7cd0",
+   null,
+   "0x5490"
+  ],
+  [
+   "CNavyLeader+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CNavyLeader+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CPeaceSummaryPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CPoliticalIdeaItem+0x20",
+   "0x20",
+   "0x20"
+  ],
+  [
+   "CPoliticalIdeaItem+0x40",
+   null,
+   "0x38"
+  ],
+  [
+   "CPoliticsIdeaCategoryEntry+0x30",
+   "0x30",
+   "0x30"
+  ],
+  [
+   "CProductionEquipmentWindow+0xcf8",
+   null,
+   "0x8c0"
+  ],
+  [
+   "CProductionEquipmentWindow+0xd00",
+   null,
+   "0x8c8"
+  ],
+  [
+   "CProductionLine+0x14",
+   null,
+   "0x14"
+  ],
+  [
+   "CProductionLine+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CProductionLine+0x58",
+   null,
+   "0x58"
+  ],
+  [
+   "CProductionLine+0x88",
+   null,
+   "0x88"
+  ],
+  [
+   "CProductionLineMilitaryItem+0x898",
+   "0x5c0",
+   "0x5c0"
+  ],
+  [
+   "CProductionResourceCost.size+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CProductionStatus+0x448",
+   "0x448",
+   "0x448"
+  ],
+  [
+   "CProductionStatus+0x460",
+   null,
+   "0x460"
+  ],
+  [
+   "CProductionStatus+0x478",
+   null,
+   "0x478"
+  ],
+  [
+   "CProductionStatus+0x490",
+   null,
+   "0x490"
+  ],
+  [
+   "CProductionStatus+0x4a8",
+   null,
+   "0x4a8"
+  ],
+  [
+   "CProvince+0x9c",
+   null,
+   "0xa4"
+  ],
+  [
+   "CReassignFullOrdersGroupDialog+0x490",
+   null,
+   "0x330"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x58",
+   null,
+   "0x68"
+  ],
+  [
+   "CReferencedDivisionTemplate+0x78",
+   null,
+   "0x88"
+  ],
+  [
+   "CResearchFinishedPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CScientistTrait+0x90",
+   null,
+   "0x98"
+  ],
+  [
+   "CShip+0x90",
+   null,
+   "0x90"
+  ],
+  [
+   "CShip+0x7d0",
+   null,
+   "0x7f8"
+  ],
+  [
+   "CSpecialProjectCapturedPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CSpecialProjectFinishedPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CStandardGridBox+0x190",
+   "0x1a0",
+   "0x1a0"
+  ],
+  [
+   "CStandardGridBox+0x334",
+   null,
+   "0x344"
+  ],
+  [
+   "CState+0x40",
+   null,
+   "0x48"
+  ],
+  [
+   "CStrategicRegion+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CStrategicRegion+0x40",
+   null,
+   "0x48"
+  ],
+  [
+   "CStrategicRegion.template+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "CStrategicRegion.template+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "CStrategicResource+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CSubUnitDefinition+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CSubUnitDefinition+0x48",
+   null,
+   "0x50"
+  ],
+  [
+   "CSubUnitDefinition+0x88",
+   null,
+   "0x98"
+  ],
+  [
+   "CSubUnitDefinition+0x90",
+   null,
+   "0xa0"
+  ],
+  [
+   "CSubUnitDefinition+0x98",
+   null,
+   "0xa8"
+  ],
+  [
+   "CSubUnitDefinition+0xa8",
+   null,
+   "0xb8"
+  ],
+  [
+   "CSubUnitDefinition+0xb0",
+   null,
+   "0xc0"
+  ],
+  [
+   "CSubUnitDefinition+0xb8",
+   null,
+   "0xc8"
+  ],
+  [
+   "CSubUnitDefinition+0xe0",
+   null,
+   "0xf0"
+  ],
+  [
+   "CSubUnitDefinition+0xe8",
+   null,
+   "0xf8"
+  ],
+  [
+   "CSubUnitDefinition+0x208",
+   null,
+   "0x218"
+  ],
+  [
+   "CSubUnitDefinition+0x268",
+   null,
+   "0x278"
+  ],
+  [
+   "CSubUnitDefinition+0x270",
+   null,
+   "0x280"
+  ],
+  [
+   "CSubUnitDefinition+0x280",
+   null,
+   "0x290"
+  ],
+  [
+   "CSubUnitDefinition+0x288",
+   null,
+   "0x298"
+  ],
+  [
+   "CSubUnitDefinition+0x2a0",
+   null,
+   "0x2b0"
+  ],
+  [
+   "CSubUnitDefinition+0x300",
+   null,
+   "0x310"
+  ],
+  [
+   "CSubUnitDefinition+0x558",
+   "0x578",
+   "0x578"
+  ],
+  [
+   "CSubUnitDefinition+0x568",
+   null,
+   "0x588"
+  ],
+  [
+   "CSubUnitDefinition+0x56c",
+   "0x58c",
+   "0x58c"
+  ],
+  [
+   "CSurrenderedPopupWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CTechnology+0x160",
+   "0x160",
+   "0x160"
+  ],
+  [
+   "CTechnology.template+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "CTechnologyStatus+0x320",
+   null,
+   "0x8c0"
+  ],
+  [
+   "CTradeOfferWindow+0xd60",
+   null,
+   "0x928"
+  ],
+  [
+   "CUnitLeaderTemplate+0x8",
+   "0x8",
+   "0x8"
+  ],
+  [
+   "CWarGoalType+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "CWorldTensionPopUpWindow+0x488",
+   null,
+   "0x328"
+  ],
+  [
+   "CWorldThreat+0x8",
+   "0x8",
+   "0x8"
+  ],
+  [
+   "NDoctrines::CCountryDoctrineStatus+0x10",
+   "0x10",
+   "0x10"
+  ],
+  [
+   "NDoctrines::CCountryDoctrineStatus.size+0xa0",
+   null,
+   "0xa0"
+  ],
+  [
+   "NDoctrines::CDoctrineTemplate+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "NDoctrines::CDoctrineTemplate+0x1c",
+   null,
+   "0x1c"
+  ],
+  [
+   "NDoctrines::CDoctrineTemplate+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "NDoctrines::CFolderStatus.size+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "NDoctrines::CTrackStatus+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "NDoctrines::CTrackStatus+0x58",
+   null,
+   "0x58"
+  ],
+  [
+   "NDoctrines::CTrackStatus.size+0x60",
+   null,
+   "0x60"
+  ],
+  [
+   "NDoctrines::STemporaryCostReduction+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "NDoctrines::STemporaryCostReduction+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "NDoctrines::STemporaryCostReduction+0x28",
+   null,
+   "0x30"
+  ],
+  [
+   "NDoctrines::STemporaryCostReduction+0x30",
+   null,
+   "0x38"
+  ],
+  [
+   "NDoctrines::STemporaryCostReduction.size+0x38",
+   null,
+   "0x40"
+  ],
+  [
+   "NFactions::CFaction+0x18",
+   null,
+   "0x38"
+  ],
+  [
+   "NFactions::CTechnologySharingFaction+0x48",
+   null,
+   "0x48"
+  ],
+  [
+   "NIndustrialOrganisation::COrganisationListWindow+0xf0",
+   null,
+   "0xb0"
+  ],
+  [
+   "NProject::CProgramStatus+0x60",
+   null,
+   "0x68"
+  ],
+  [
+   "NProject::CProject+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "NProject::CProject.size+0x1b8",
+   null,
+   "0x1b8"
+  ],
+  [
+   "NProject::CProjectPool+0x10",
+   "0x10",
+   "0x10"
+  ],
+  [
+   "NProject::CProjectStateMachine+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "NProject::CProjectStateMachine+0x8c",
+   null,
+   "0x74"
+  ],
+  [
+   "NProject::CProjectStateMachine+0x90",
+   null,
+   "0x78"
+  ],
+  [
+   "NProject::CProjectStateMachine+0x94",
+   null,
+   "0x7c"
+  ],
+  [
+   "NProject::CProjectStateMachine+0x98",
+   null,
+   "0x80"
+  ],
+  [
+   "NProject::CProjectTemplate+0x208",
+   null,
+   "0x230"
+  ],
+  [
+   "NProject::CSpecializationDatabase+0x58",
+   null,
+   "0x58"
+  ],
+  [
+   "NProject::NUi::CRecruitScientistWindow+0x20",
+   null,
+   "0x28"
+  ],
+  [
+   "NProject::NUi::CScientistRoster+0x20",
+   null,
+   "0x28"
+  ],
+  [
+   "air.overview.view+0x490",
+   null,
+   "0x338"
+  ],
+  [
+   "air.selection.view+0x28",
+   null,
+   "0x30"
+  ],
+  [
+   "air.selection.view+0x60",
+   null,
+   "0x68"
+  ],
+  [
+   "breakthrough.map_node+0x0",
+   null,
+   "0x10"
+  ],
+  [
+   "breakthrough.map_node+0x8",
+   null,
+   "0x18"
+  ],
+  [
+   "breakthrough.map_node+0x18",
+   null,
+   "0x1c"
+  ],
+  [
+   "breakthrough.map_node+0x20",
+   null,
+   "0x24"
+  ],
+  [
+   "characters.recruit_pool+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "civilian.consumer+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "civilian.consumer+0xc",
+   null,
+   "0xc"
+  ],
+  [
+   "deployment.template_row+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "deployment.template_window+0xcb0",
+   null,
+   "0x870"
+  ],
+  [
+   "deployment.template_window+0xd20",
+   null,
+   "0x8e8"
+  ],
+  [
+   "diplomacy.action_controller+0x8d8",
+   null,
+   "0x610"
+  ],
+  [
+   "diplomacy.relation+0xc",
+   null,
+   "0xc"
+  ],
+  [
+   "diplomacy.relation+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "diplomacy.relation+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "diplomacy.relation+0x38",
+   null,
+   "0x38"
+  ],
+  [
+   "diplomacy.relation+0x50",
+   null,
+   "0x50"
+  ],
+  [
+   "division.pool+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "division.pool.size+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "division.variant+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "division.variant.size+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "division_template+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "find.result_row+0x458",
+   null,
+   "0x2e8"
+  ],
+  [
+   "gs.air_manager+0x30",
+   "0x30",
+   "0x30"
+  ],
+  [
+   "gs.navy_manager+0x8",
+   "0x8",
+   "0x8"
+  ],
+  [
+   "gui.object+0x50",
+   null,
+   "0x60"
+  ],
+  [
+   "gui.object+0x65",
+   null,
+   "0x75"
+  ],
+  [
+   "gui.popup+0x490",
+   null,
+   "0x330"
+  ],
+  [
+   "gui.sprite_type+0x78",
+   null,
+   "0x90"
+  ],
+  [
+   "gui.sprite_type+0x8c",
+   null,
+   "0xa4"
+  ],
+  [
+   "gui.type+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "idea.category+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "idler.gui+0x140",
+   null,
+   "0x160"
+  ],
+  [
+   "idler.gui+0xa70",
+   null,
+   "0x7c0"
+  ],
+  [
+   "idler.manager+0x3b8",
+   "0x3e8",
+   "0x3e8"
+  ],
+  [
+   "idler.manager+0x3c0",
+   "0x3f0",
+   "0x3f0"
+  ],
+  [
+   "leader.trait.size+0x20",
+   null,
+   "0x28"
+  ],
+  [
+   "manager.air_region_view+0x490",
+   null,
+   "0x330"
+  ],
+  [
+   "manager.diplomacy_view+0x490",
+   null,
+   "0x338"
+  ],
+  [
+   "manager.find_view+0xd50",
+   null,
+   "0x920"
+  ],
+  [
+   "manager.find_view+0xd58",
+   null,
+   "0x928"
+  ],
+  [
+   "manager.find_view+0xd68",
+   null,
+   "0x938"
+  ],
+  [
+   "manager.find_view+0xda8",
+   null,
+   "0x980"
+  ],
+  [
+   "manager.state_view+0x490",
+   null,
+   "0x338"
+  ],
+  [
+   "modifier.entry.size+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "orders.group+0x160",
+   "0x160",
+   "0x160"
+  ],
+  [
+   "production.selection.row+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "production.selection.row+0xd50",
+   null,
+   "0x918"
+  ],
+  [
+   "production.selection.window+0xcf8",
+   null,
+   "0x8c0"
+  ],
+  [
+   "production.selection_row+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "production.selection_row+0xd50",
+   null,
+   "0x918"
+  ],
+  [
+   "scientist.skill_level+0x0",
+   null,
+   "0x0"
+  ],
+  [
+   "scientist.skill_level+0x18",
+   null,
+   "0x18"
+  ],
+  [
+   "scientist.skill_level.size+0x20",
+   null,
+   "0x20"
+  ],
+  [
+   "spec.template+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "state.slot_item+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "subunit.need+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "subunit.need.size+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "supply_flow.size+0x10",
+   null,
+   "0x10"
+  ],
+  [
+   "supply_province+0x0",
+   null,
+   "0x0"
+  ],
+  [
+   "supply_province+0x8",
+   null,
+   "0x8"
+  ],
+  [
+   "supply_province+0x30",
+   null,
+   "0x30"
+  ],
+  [
+   "supply_province.size+0xd8",
+   null,
+   "0xd8"
+  ],
+  [
+   "supply_state.size+0x28",
+   null,
+   "0x28"
+  ],
+  [
+   "unit.leader+0x38",
+   null,
+   "0x40"
+  ]
+ ]
+}

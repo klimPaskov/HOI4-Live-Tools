@@ -10,12 +10,19 @@ use std::{
 
 type Positions = HashMap<i32, (f64, f64)>;
 
-/// Game install directory of an executable at `<dir>/hoi4.app/Contents/MacOS/hoi4`.
+/// Game install directory of an executable at `<dir>/hoi4.app/Contents/MacOS/hoi4`
+/// (macOS) or `<dir>/hoi4` (Linux).
 pub(super) fn install_dir(exe: &str) -> Result<PathBuf> {
-    Path::new(exe)
-        .ancestors()
-        .nth(4)
-        .filter(|d| d.join("map").is_dir() && d.join("history").is_dir())
+    let levels: &[usize] = if cfg!(target_os = "linux") {
+        &[1]
+    } else {
+        &[4]
+    };
+    let ancestors: Vec<&Path> = Path::new(exe).ancestors().collect();
+    levels
+        .iter()
+        .filter_map(|&n| ancestors.get(n).copied())
+        .find(|d| d.join("map").is_dir() && d.join("history").is_dir())
         .map(Path::to_path_buf)
         .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))
 }

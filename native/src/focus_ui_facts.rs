@@ -99,7 +99,7 @@ fn window(r: &Reader<'_>, base: u64, p: u64, registry: u64) -> Result<Option<Loc
     if p == 0 {
         return Ok(None);
     }
-    exact(r, p, base + 0x4347d58)?;
+    exact(r, p, base + 0x44de2b0)?;
     if r.u64(p + 0x98)? != registry {
         return Err(Error::new(
             "invalid_focus_owner",
@@ -166,7 +166,7 @@ pub(crate) fn observe(
     let research_panel = if panel == 0 {
         None
     } else {
-        exact(r, panel, base + 0x424dc38)?;
+        exact(r, panel, base + 0x43e3978)?;
         if r.u64(panel + 0x2f0)? != idler {
             return Err(Error::new(
                 "invalid_focus_owner",
@@ -180,7 +180,7 @@ pub(crate) fn observe(
     let research = if tree == 0 {
         None
     } else {
-        exact(r, tree, base + 0x424de40)?;
+        exact(r, tree, base + 0x43e3b88)?;
         if r.u64(tree + 0x2f0)? != idler {
             return Err(Error::new(
                 "invalid_focus_owner",
@@ -195,7 +195,7 @@ pub(crate) fn observe(
             let infos = array(r, tree + 0xdc0, 64)?;
             let mut windows = vec![];
             for info in infos {
-                exact(r, info, base + 0x430bbf0)?;
+                exact(r, info, base + 0x44a17b0)?;
                 if r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
                     return Err(Error::new(
                         "invalid_focus_owner",

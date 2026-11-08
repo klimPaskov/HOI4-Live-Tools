@@ -299,7 +299,7 @@ summary every week as `HOI4LIVE` lines in `game.log`, which the server reads inc
   memory-mapped only for the duration of one query, so the game can always overwrite them.
 - **Settings and playset.** `settings.txt` is never edited. `dlc_load.json` changes only through
   `hoi4_telemetry enable|disable|restore` (backed up first); `hoi4_launch` starts the game with whatever it enables.
-- **Modes.** `test` (default) allows console commands, events and effects; `campaign` refuses them so an agent
+- **Modes.** `test` allows console commands, events and effects; `campaign` (the default in `config.json`) refuses them so an agent
   plays with human-equivalent actions. Switch with `hoi4_lock action=set_mode`.
 - **Shared machine.** The server starts nothing heavy until used: the OCR host (one PowerShell process) stops
   after 10 idle minutes, ffmpeg runs only for a fallback capture. The game is never quit or relaunched unless a
@@ -309,13 +309,15 @@ summary every week as `HOI4LIVE` lines in `game.log`, which the server reads inc
 ## Configuration
 
 `config.json` (every key optional; environment overrides `HOI4_LIVE_GAME_DIR`, `HOI4_LIVE_USER_DIR`,
-`HOI4_LIVE_ARTIFACTS`, `HOI4_LIVE_MODE`, `HOI4_LIVE_CONFIG`):
+`HOI4_LIVE_DLC_SOURCE_DIR`, `HOI4_LIVE_ARTIFACTS`, `HOI4_LIVE_MODE`, `HOI4_LIVE_CONFIG`):
 
 | key | default | meaning |
 |---|---|---|
 | `game_dir`, `user_dir` | `auto` | install folder (Steam registry and libraries) and Documents/Paradox Interactive/Hearts of Iron IV |
+| `dlc_source_dir` | `auto` | the folder `hoi4_prepare` copies `launcher-v2.sqlite` and `dlc_signature` from (your normal user folder) |
 | `artifacts_dir` | `artifacts` | screenshots, popup crops, scenario reports and the server log (`artifacts/logs/hoi4_live.log`) |
-| `mode` | `test` | initial session mode |
+| `mode` | `campaign` | initial session mode; set `test` (or `HOI4_LIVE_MODE=test`) for mod testing, because a campaign session cannot return to test mode |
+| `HOI4_LIVE_REQUIRE_STEAM_CLOSED` (environment only) | unset | set to `1` to refuse a launch while a Steam client or steamcmd runs (also read by the native Linux supervisor) |
 | `save_prefix` | `hoi4live_` | prefix of every save the server writes |
 | `lock.path`, `lock.stale_seconds` | `%TEMP%/hoi4_live_desktop.lock`, 600 | the shared desktop lock |
 | `window.pin_client_to_origin` | true | keep a windowed game's client area at the screen's top-left (as other desktop tools on the machine expect) |

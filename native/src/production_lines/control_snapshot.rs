@@ -157,7 +157,7 @@ pub(crate) fn observe(
         let idler = campaign.anchors[1];
         let registry = reader.u64(idler + 0x4f8)?;
         let manager = reader.u64(idler + 0x6b8)?;
-        if reader.u64(base + 0x45778e0)? != registry {
+        if reader.u64(base + 0x470e6d8)? != registry {
             return Err(Error::new(
                 "invalid_production_controls",
                 "Input GUI must equal own production registry",
@@ -438,7 +438,7 @@ mod mac_canonical_tests {
             .reads
             .borrow()
             .iter()
-            .any(|(address, _)| *address == IMAGE + 0x44086a8 || *address == IMAGE + 0x45778e0));
+            .any(|(address, _)| *address == IMAGE + 0x459e9f0 || *address == IMAGE + 0x470e6d8));
         assert!(observed.scope.is_empty() && observed.geometry.is_empty());
     }
     #[test]

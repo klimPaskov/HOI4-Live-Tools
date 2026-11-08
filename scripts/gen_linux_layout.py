@@ -4,7 +4,7 @@
 usage:
   gen_linux_layout.py keys [--src native/src] [--out keys.json]
       static scan only: Class tags, image addresses and (class, offset) field keys the sources use
-  gen_linux_layout.py generate MACHO ELF [--src native/src] [--hints hints.json] [--include-low]
+  gen_linux_layout.py generate MACHO ELF [--src native/src] [--hints hints.json] [--include-low] [--no-fill]
                       [--out native/layouts/linux-<build-id>.json] [--report coverage.json] [--cache DIR]
   gen_linux_layout.py --check-table TABLE.json [--keys keys.json]
 
@@ -623,7 +623,70 @@ def mangle_class_name(name):
     return enc if len(parts) == 1 else f'N{enc}E'
 
 
-def generate(mac_path, elf_path, src, hints=None, include_low=False, cache=None, log=print):
+def monotone(out):
+    """Members keep their order on both ABIs: drop both entries of every adjacent pair whose ELF offsets
+    do not increase (one of them is wrong and the votes cannot tell which). Returns the dropped keys."""
+    dropped = []
+    while True:
+        pts = sorted((int(k, 16), int(v, 16)) for k, v in out.items())
+        bad = {p for (a, x), (b, y) in zip(pts, pts[1:]) if y <= x for p in (a, b)}
+        if not bad:
+            return sorted(dropped)
+        for p in bad:
+            dropped.append(hex(p))
+            del out[hex(p)]
+
+
+def fill_gaps(out, need, res):
+    """Fill needed offsets from their mapped neighbours. libc++ and libstdc++ differ only in the size of
+    standard-library members, so the ELF-minus-Mach-O delta is constant between two members that bracket
+    no such member: an offset between neighbours with the same delta gets that delta ('bracketed'). A
+    single-vote ('low') result is accepted when its delta lies between its neighbours' deltas
+    ('low-consistent'). Returns {key: how}."""
+    known = {int(k, 16): int(v, 16) - int(k, 16) for k, v in out.items()}
+    pts = sorted(known)
+    filled = {}
+    for x in need:
+        if hex(x) in out:
+            continue
+        lo = [p for p in pts if p < x]
+        hi = [p for p in pts if p > x]
+        da = known[lo[-1]] if lo else None
+        db = known[hi[0]] if hi else None
+        r = res.get(x)
+        d = r['elf'] - x if r and r.get('status') == 'mapped' and r.get('confidence') == 'low' else None
+        if d is not None and r['elf'] >= 0 and (
+                (da is not None and db is not None and da <= d <= db)
+                or (da is None) != (db is None) and d == (da if da is not None else db)):
+            out[hex(x)] = hex(r['elf'])
+            filled[hex(x)] = 'low-consistent'
+        elif da is not None and da == db:
+            out[hex(x)] = hex(x + da)
+            filled[hex(x)] = 'bracketed'
+    return filled
+
+
+def apply_live(table, live):
+    """Entries measured on the running Linux game override the static result:
+    {"image": {"0xmac": {"elf": "0x..", "evidence": ".."}},
+     "fields": {"Class": {"0xmac": {"elf": "0x..", "evidence": ".."}}}}.
+    Every entry must name its evidence. Returns [(key, static value, live value)] for the report."""
+    changes = []
+    for k, e in live.get('image', {}).items():
+        if not e.get('evidence'):
+            raise SystemExit(f'live image {k}: evidence required')
+        changes.append((f'image {k}', table['image'].get(k), e['elf']))
+        table['image'][k] = e['elf']
+    for cls, m in live.get('fields', {}).items():
+        for k, e in m.items():
+            if not e.get('evidence'):
+                raise SystemExit(f'live field {cls}+{k}: evidence required')
+            changes.append((f'{cls}+{k}', table['fields'].get(cls, {}).get(k), e['elf']))
+            table['fields'].setdefault(cls, {})[k] = e['elf']
+    return changes
+
+
+def generate(mac_path, elf_path, src, hints=None, include_low=False, cache=None, log=print, fill=True):
     accept = ACCEPT | ({'low'} if include_low else set())
     hints = hints or {}
     sc = scan(src)
@@ -738,6 +801,12 @@ def generate(mac_path, elf_path, src, hints=None, include_low=False, cache=None,
             # negative displacements belong to a secondary base or the allocation header, not a field key
             if x >= 0 and r['status'] == 'mapped' and r['confidence'] in accept and r['elf'] >= 0:
                 out[hex(x)] = hex(r['elf'])
+        dropped = monotone(out)
+        filled = fill_gaps(out, need, res) if fill else {}
+        if dropped:
+            entry['dropped_non_monotonic'] = dropped
+        if filled:
+            entry['filled'] = filled
         unresolved = {}
         for x in need:
             if hex(x) in out:
@@ -795,6 +864,8 @@ def main(argv=None):
     g.add_argument('--src', default='native/src')
     g.add_argument('--hints')
     g.add_argument('--include-low', action='store_true')
+    g.add_argument('--no-fill', action='store_true', help='skip the bracketed and low-consistent gap fill')
+    g.add_argument('--live', help='live-measured entries applied over the generated table (see apply_live)')
     g.add_argument('--out', help='default native/layouts/linux-<build-id>.json')
     g.add_argument('--report', help='default: <out without .json>.coverage.json')
     g.add_argument('--cache', default=os.environ.get('XMAP_CACHE', str(pathlib.Path.home() / '.cache' / 'hoi4-xmap')))
@@ -813,7 +884,9 @@ def main(argv=None):
         return
     hints = json.loads(pathlib.Path(a.hints).read_text()) if a.hints else None
     table, report = generate(a.macho, a.elf, a.src, hints, a.include_low, a.cache,
-                             log=lambda s: print(s, file=sys.stderr))
+                             log=lambda s: print(s, file=sys.stderr), fill=not a.no_fill)
+    if a.live:
+        report['live'] = apply_live(table, json.loads(pathlib.Path(a.live).read_text()))
     out = a.out or f'native/layouts/linux-{table["build_id"]}.json'
     rep = a.report or re.sub(r'\.json$', '', out) + '.coverage.json'
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)

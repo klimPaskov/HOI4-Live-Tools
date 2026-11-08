@@ -62,8 +62,8 @@ fn current_nodes_impl(
     registry: u64,
     requested: Option<&str>,
 ) -> Result<Value> {
-    exact(r, tree, base + 0x424de40)?;
-    exact(r, own_status, base + 0x42108f8)?;
+    exact(r, tree, base + 0x43e3b88)?;
+    exact(r, own_status, base + 0x43a5750)?;
     let mut records = Vec::new();
     // Current inline records, NOT the embedded callback objects at 5e0/868.
     // The factory item is saved then reloaded into +0x10. +0x20 stores
@@ -98,7 +98,7 @@ fn current_nodes_impl(
         if !items.insert(item) {
             continue;
         }
-        stage_type(r, base, item, 0x424e2e0, "node_item_type_unavailable")?;
+        stage_type(r, base, item, 0x43e4038, "node_item_type_unavailable")?;
         if r.u64(item + 0x30)? != tree {
             return Err(Error::new(
                 "invalid_gui_owner",
@@ -110,7 +110,7 @@ fn current_nodes_impl(
             r,
             base,
             technology,
-            0x42107f8,
+            0x43a5650,
             "node_technology_type_unavailable",
         )?;
         // Foreign ownership refused before reading template or GUI payload.
@@ -121,8 +121,8 @@ fn current_nodes_impl(
             ));
         }
         if catalog.is_none() {
-            let db = r.u64(base + 0x439f450)?;
-            exact(r, db, base + 0x42110c8)?;
+            let db = r.u64(base + 0x45353b0)?;
+            exact(r, db, base + 0x43a5fc0)?;
             let templates = array(r, db + 0x48, 8192)?;
             let own = array(r, own_status + 0x88, 8192)?;
             if templates.is_empty() || own.len() != templates.len() - 1 {
@@ -138,7 +138,7 @@ fn current_nodes_impl(
             r,
             base,
             template,
-            0x4211038,
+            0x43a5f30,
             "node_template_type_unavailable",
         )?;
         let id = r.i32(template + 0x30)?;

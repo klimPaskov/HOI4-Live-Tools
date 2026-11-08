@@ -1,12 +1,26 @@
-# HOI4 Live Tools
+<h1 align="center">HOI4 Live Tools</h1>
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-7289da?logo=discord&logoColor=white)](https://discord.gg/rAXesGcT2t)
-[![YouTube](https://img.shields.io/badge/YouTube-Chaos%20Redux-ff0000?logo=youtube&logoColor=white)](https://www.youtube.com/@ChaosRedux)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20Project-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/klimpaskov)
-[![Download](https://img.shields.io/github/v/release/klimPaskov/HOI4-Live-Tools?label=Download&logo=github&color=2ea44f)](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
-[![Issues](https://img.shields.io/badge/Bugs%20%26%20Ideas-Issues-24292f?logo=github&logoColor=white)](https://github.com/klimPaskov/HOI4-Live-Tools/issues)
+<p align="center">
+  An <a href="https://modelcontextprotocol.io/">MCP</a> server that lets your coding agent play and test <em>Hearts of Iron IV</em>.
+</p>
 
-An MCP server that lets your coding agent play and test **Hearts of Iron IV**.
+<p align="center">
+  <a href="https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/klimPaskov/HOI4-Live-Tools?label=Download&logo=github&color=2ea44f"></a>
+  <a href="https://discord.gg/rAXesGcT2t"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20Community-7289da?logo=discord&logoColor=white"></a>
+  <a href="https://www.youtube.com/@ChaosRedux"><img alt="YouTube" src="https://img.shields.io/badge/YouTube-Chaos%20Redux-ff0000?logo=youtube&logoColor=white"></a>
+  <a href="https://ko-fi.com/klimpaskov"><img alt="Ko-fi" src="https://img.shields.io/badge/Ko--fi-Support%20the%20Project-ff5e5b?logo=kofi&logoColor=white"></a>
+  <a href="https://github.com/klimPaskov/HOI4-Live-Tools/issues"><img alt="Issues" src="https://img.shields.io/badge/Bugs%20%26%20Ideas-Issues-24292f?logo=github&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="#which-version-should-i-use">Which version</a> ·
+  <a href="#what-works-where">What works where</a> ·
+  <a href="#quick-start-windows-release">Quick start</a> ·
+  <a href="#launch-order-for-a-mod-test">Launch order</a> ·
+  <a href="#native-rust-preview">Native preview</a> ·
+  <a href="docs/tools.md">Tool reference</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 - **Test mods** without sitting at the keyboard: launch the game, load a save,
   fire events, answer popups, run time forward and read the error log.
@@ -22,9 +36,9 @@ builds and previews mod content.
 
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
-| Test mods and try agent play today | **`hoi4-live-tools-1.2.0.zip`** from the [1.2.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
-| Agent play with the full management toolset | **`hoi4-live-native-1.2.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
-| The native runtime on Linux | **`hoi4-live-native-1.2.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 **1.19.3 only** | Experimental |
+| Test mods and try agent play today | **`hoi4-live-tools-1.3.0.zip`** from the [1.3.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
+| Agent play with the full management toolset | **`hoi4-live-native-1.3.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
+| Agent play on Linux | **`hoi4-live-native-1.3.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 1.19.4.1 | Experimental |
 
 The Windows native game adapter is unfinished. An internal read-only foundation
 is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
@@ -32,12 +46,58 @@ No full campaign has been accepted on any runtime yet. Earlier Mac campaign
 defeats remain preserved alongside the later qualification tests. Status details
 are below.
 
+## What works where
+
+Mod testing (launch the game, fire events, run effects, read `error.log`) is a
+feature of the **Python package on Windows**. The native Linux and macOS builds
+read the game's memory to play a campaign. They have no console, no events and no
+`error.log` tools, and they start the game without your mods. Use this table to
+pick:
+
+| What you want to do | Windows, Python package | Linux | macOS |
+| --- | --- | --- | --- |
+| Install | `python install.py`, registers your coding client | Native `.tar.gz`; the Python installer refuses | Native `.tar.gz` (Apple silicon); the Python installer refuses |
+| Launch with your mods, `-debug`, new game, load, save, quit | **Works** (tested live on 1.19.4.1) | No. The Python package refuses; the native launcher starts the game with an empty playset | Not accepted. The Python code exists but has no live run; the native build has no launcher |
+| Console, `hoi4_eval_effect`, `hoi4_fire_event`, answer popups | **Works** in test mode | No | Not tested |
+| Smoke tests, trigger and focus checks, localisation sweep (they use the console) | In test mode. Offline-tested on recorded fixtures; the first live run is pending | No | Not tested |
+| Read `error.log` and `game.log`, query plain-text saves | **Works** | Plain file reads that should work; not tested live | Plain file reads that should work; not tested live |
+| Screenshots, OCR, click and type in the game window | **Works** (needs the English Windows OCR component) | No in Python | Not tested |
+| Play a campaign through the interface | Python tools, recorded attempts only | Native, about 104 tools tested live, experimental | Native, about 120 tools tested live, experimental |
+| Game builds accepted | No build gate; tested on 1.19.4.1 | HOI4 1.19.4.1 x86_64 only | HOI4 1.19.4.1 x86_64 under Rosetta only |
+
+Things every modder should know:
+
+- **Test mode.** The server starts in campaign mode, which refuses the console,
+  events and effects. Set `HOI4_LIVE_MODE=test` (or `"mode": "test"` in
+  `config.json`) before you start it. A campaign session cannot go back to test mode.
+- **DLC and Steam.** A scratch user folder needs `hoi4_prepare` for the DLC to load: follow the
+  [launch order](#launch-order-for-a-mod-test). Career Profile and Awards need the Steam client.
+- **Windows setup.** Windowed or borderless game, UI scale 1, English Windows OCR,
+  console key on the `` ` `` key of a US layout. A 1920×1080 borderless window is
+  what the live runs used.
+- **Mods and `-debug`.** The Python package launches the game with whatever your
+  playset enables. The native Linux launcher starts it with no mods.
+- **Not working yet.** The Windows native adapter, ARM64 Linux, and a clean
+  two-year campaign on any system. The status section below keeps the details.
+
+### Mod checks (Windows, test mode)
+
+With the game running in test mode, an agent can run these. They are new: tested
+on fakes and recorded log lines, with the first run in the live game still pending.
+
+| Tool | What it answers |
+| --- | --- |
+| `hoi4_smoke_namespace` | Fires every event of a namespace through the console, answers each option (one firing per option), takes the decisions of a category or prefix, and reads `error.log` after each step. One report. |
+| `hoi4_check_trigger` | Is this trigger true for this country? True or false, and the condition that is not met. |
+| `hoi4_check_focus` | Can this country take this focus? Names the unmet prerequisite, exclusive focus, `available` or `allow_branch` condition. |
+| `hoi4_sweep_loc` | Visits the map and each panel, reads the screen with OCR and lists `[missing_key]`, raw keys, unresolved `$VARIABLES$` and colour codes shown as text, plus localisation warnings in the logs. |
+
 ## Quick start: Windows release
 
 You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
 Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
 
-1. Download `hoi4-live-tools-1.2.0.zip` from the
+1. Download `hoi4-live-tools-1.3.0.zip` from the
    [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
    and unpack it anywhere.
 2. In that folder, run:
@@ -59,6 +119,32 @@ To uninstall, run `python install.py uninstall`. See
 [Windows setup and usage](docs/LEGACY_WINDOWS_USAGE.md) for manual registration,
 configuration and the command line, and [the tool reference](docs/tools.md) for
 every tool and argument.
+
+## Launch order for a mod test
+
+A game started without the Steam client finds no DLC in a user folder that
+lacks two files the Paradox launcher keeps there, `launcher-v2.sqlite` and
+`dlc_signature`. Your normal user folder has them. A scratch folder (set with
+`HOI4_LIVE_USER_DIR`, or a `gameDataPath` redirect) does not, and the game then
+loads 0 DLC. Mod testing needs the server in test mode (`HOI4_LIVE_MODE=test`, or
+`"mode": "test"` in `config.json`): the default is campaign mode, which refuses the
+console, events and `hoi4_prepare`. The order is:
+
+1. **`hoi4_prepare`** copies the two DLC files from your normal user folder into the
+   run's folder. Every file it replaces is backed up byte for byte first. When the
+   run's folder is your normal one it reports that there is nothing to copy.
+   `hoi4_prepare {"action": "status"}` shows what each folder holds.
+2. **`hoi4_launch`** starts the game (`debug: true` for the console tools).
+   `hoi4_launch {"prepare_dlc": true}` does steps 1 and 2 in one call.
+3. **Test.** Fire events, run effects, read `error.log`.
+4. **`hoi4_shutdown`** quits through the game's own menu and puts the run's folder
+   back as it was. If the server was restarted in between, run
+   `hoi4_prepare {"action": "restore"}` once the game has exited. A file that
+   changed after the copy is never overwritten; it is reported instead, and
+   `force: true` restores the original and keeps the changed file next to the backup.
+
+Career Profile and Awards need the Steam client, so achievement checks cannot run
+this way. Everything in the journal stays under `artifacts/dlc_backups/`.
 
 ## Native Rust preview
 
@@ -85,45 +171,38 @@ GitHub build attestations, so nothing needs to be built from source:
 
 ```sh
 sha256sum -c SHA256SUMS.txt --ignore-missing      # macOS: shasum -a 256 -c
-gh attestation verify hoi4-live-native-1.2.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
-tar -xzf hoi4-live-native-1.2.0-linux-x86_64.tar.gz
+gh attestation verify hoi4-live-native-1.3.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
+tar -xzf hoi4-live-native-1.3.0-linux-x86_64.tar.gz
 ```
 
 The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memory
 access still needs Developer Tools access for the running user; see
 [native setup](native/README.md).
 
-Steam never sees a run: every launcher refuses to start the game while a Steam
-client, `steamwebhelper` or `steamcmd` runs (on WSL the Windows host is checked too),
-and no Steam variable or overlay reaches the game. The native Linux launcher also
-gives the game an empty private `HOME`.
+No Steam variable or overlay reaches the game, and the native Linux launcher gives
+it an empty private `HOME`.
 
-The macOS and Linux builds do not have the same tools. macOS has the full management
-toolset (about 120 tools: armies, fronts and encirclement planning, air, navy and
-naval invasions, designers, doctrine, intelligence, peace conferences, decisions,
-events and the plan runner; see [the macOS tool index](docs/TOOLS_MACOS.md)).
-Linux has about 30 tools for telemetry, focus, research, production and construction.
+The macOS and Linux builds have the same management toolset (about 120 tools: armies,
+fronts and encirclement planning, air, navy and naval invasions, designers, doctrine,
+intelligence, peace conferences, decisions, events and the plan runner; see
+[the tool index](docs/TOOLS_MACOS.md)) on HOI4 1.19.4.1.
 
 ### Linux
 
-The tested native Linux game is HOI4 1.19.3 x86_64 (1.19.4 is not yet validated on Linux;
-the build gate refuses an unknown build). The
+The tested native Linux game is HOI4 1.19.4.1 x86_64 (GNU build ID `2265e6e7...`); the
+build gate refuses any other build, including 1.19.3. The
 [owned launcher](docs/OWNED_LINUX_LAUNCHER.md) verifies process ownership and never
-takes over an unrelated game. Recorded tests cover:
+takes over an unrelated game. `--bind-management` binds the full management toolset to
+the owned X11 window. The tools read the game through a per-build address table
+(`native/layouts/`), generated from the macOS build and checked live
+([Linux port](docs/LINUX_PORT.md)).
 
-- Structured country, Research, Focus, production and construction reads.
-- Verified clock control, Research and Focus assignments, natural Research
-  refill, and durable daily plans that preserve completed work across restart.
-- One-factory changes on an existing own production line, panel transitions,
-  per-day budgets and completed-plan restart without repeated input.
-- Construction-panel selection, state search, and verified arms-factory and
-  dockyard placement in owned states.
-
-The combined production/Research worker remains an opt-in preview with an
-unfinished advancing-time acceptance gate. Provincial buildings, new production
-lines, bulk allocation and combat control remain open. An internal durable
-Research-navigation adapter now passes offline Linux fixtures; it has no public
-command or mixed-worker permission and still needs its own live qualification.
+[Live verification on Linux](docs/LIVE_VERIFICATION_LINUX_1_19_4.md) records 104 tools run
+against the game (economy, research, focus, politics, trade, armies and fronts in a war,
+air, navy, special projects, the intelligence agency, events, diplomacy and the plan
+runner), the refusals reached for the rest, and the fixes the Linux build needed. Peace
+conferences and the operative tools were not reached on Linux. The older Linux-only GUI
+diagnostics written for 1.19.3 refuse on 1.19.4.1.
 
 ARM64 Linux through FEX has verified own-state reads and lower-level stationary
 Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
@@ -230,7 +309,7 @@ and cannot be reached by campaign automation.
 | --- | --- | --- |
 | Python / Windows (1.2.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
-| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
+| Rust / Linux | Owned 1080p runs on 1.19.4.1: 104 live-tested tools of the management toolset, including a declared war with fronts, offensives and plans | Peace conferences, operatives, the two-year acceptance run and campaigns ([live verification](docs/LIVE_VERIFICATION_LINUX_1_19_4.md)) |
 | Rust / macOS | Owned 1080p runs on 1.19.4.1: about 120 live-tested tools (economy, armies and fronts, air, navy, invasions, designers, doctrine, intelligence, peace conferences, plan runner) and short training wars | Open defects in [live verification](docs/LIVE_VERIFICATION_1_19_4.md), the two-year acceptance run and campaigns |
 | Rust / Windows | Portable protocol and dormant owned-reader fixtures | Native game adapter, input and live tests |
 

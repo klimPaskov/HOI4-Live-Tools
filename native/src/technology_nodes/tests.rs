@@ -46,9 +46,9 @@ impl Memory {
     }
     fn unknown_gui(&mut self) -> u64 {
         let object = 0x29000000;
-        let table = BASE + 0x4250000;
-        let info = BASE + 0x4260000;
-        let name = BASE + 0x3600000;
+        let table = BASE + 0x43e5d58;
+        let info = BASE + 0x43f63e0;
+        let name = BASE + 0x3778000;
         self.u64(object, table);
         self.u64(table - 16, 0);
         self.u64(table - 8, info);
@@ -60,12 +60,12 @@ impl Memory {
     fn fixture() -> Self {
         let mut m = Self::default();
         for (p, v) in [
-            (TREE, 0x424de40),
-            (STATUS, 0x42108f8),
-            (ITEM, 0x424e2e0),
-            (TECH, 0x42107f8),
-            (TEMPLATE, 0x4211038),
-            (DB, 0x42110c8),
+            (TREE, 0x43e3b88),
+            (STATUS, 0x43a5750),
+            (ITEM, 0x43e4038),
+            (TECH, 0x43a5650),
+            (TEMPLATE, 0x43a5f30),
+            (DB, 0x43a5fc0),
         ] {
             m.u64(p, BASE + v);
         }
@@ -81,7 +81,7 @@ impl Memory {
         m.u64(TEMPLATE + 8, TEMPLATE + 24);
         m.u64(TEMPLATE + 16, 11);
         m.put(TEMPLATE + 24, b"basic_tools");
-        m.u64(BASE + 0x439f450, DB);
+        m.u64(BASE + 0x45353b0, DB);
         m.header(DB + 0x48, 0x27000000, 2);
         m.u64(0x27000000, 0);
         m.u64(0x27000008, TEMPLATE);
@@ -213,7 +213,7 @@ fn conflicting_gui_for_same_canonical_id_refused() {
     let mut m = Memory::fixture();
     let other = ITEM + 0x1000;
     let gui = m.unknown_gui();
-    m.u64(other, BASE + 0x424e2e0);
+    m.u64(other, BASE + 0x43e4038);
     m.u64(other + 0x30, TREE);
     m.u64(other + 0xc8, TECH);
     m.u64(other + 0x10, gui);
@@ -231,14 +231,14 @@ fn public_node_keys_refuse_control_bytes_and_ambiguous_canonical_definitions() {
     let tech = TECH + 0x1000;
     let template = TEMPLATE + 0x1000;
     m.records(&[ITEM, item]);
-    m.u64(item, BASE + 0x424e2e0);
+    m.u64(item, BASE + 0x43e4038);
     m.u64(item + 0x30, TREE);
     m.u64(item + 0xc8, tech);
     m.u64(item + 0x10, 0);
-    m.u64(tech, BASE + 0x42107f8);
+    m.u64(tech, BASE + 0x43a5650);
     m.u64(tech + 0x158, STATUS);
     m.u64(tech + 0x160, template);
-    m.u64(template, BASE + 0x4211038);
+    m.u64(template, BASE + 0x43a5f30);
     m.i32(template + 0x30, 2);
     m.put(template + 8, &[0; 32]);
     m.u64(template + 8, template + 24);

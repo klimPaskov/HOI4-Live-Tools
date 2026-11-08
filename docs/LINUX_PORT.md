@@ -15,51 +15,49 @@ Tools drive the game only through `platform::game_input::GameInput`:
 
 Keys are platform-neutral `vk` codes (numerically the macOS ANSI codes);
 `X11Input` maps them to keysyms. Wheel scrolling converts macOS pixel scrolls to one
-notch per 120 pixels; this needs live calibration on Linux.
+notch per 120 pixels (verified live on 1.19.4.1). Modifiers are held 150 ms around a key
+or click and presses last 60 ms, because the game samples modifiers once per frame.
 
 `MacClock::bind_with_input` builds the full tool server from any `GameInput`, so the
 Linux server can host the same tools.
 
-## 2. Memory layout (code done, table pending)
+## 2. Memory layout (done for 1.19.4.1)
 
 The tools hard-code about 340 Mach-O image addresses (vtables, globals) and many
 struct field offsets for the macOS 1.19.4.1 build (Mach-O UUID DFA875A5). The Linux
 executable has different addresses, and libstdc++ types (`std::string` 32 bytes,
 containers) shift some field offsets relative to libc++.
 
-Plan:
+1. `scripts/gen_linux_layout.py` maps Mach-O items to the ELF (`scripts/cross_platform_map.py`):
+   vtables by RTTI name, globals and functions by matched code, field offsets by matched
+   instruction displacements, plus owner hints in `scripts/data/xlayout-hints-1.19.4.1.json`.
+   A gap between two neighbours with the same shift is filled with that shift.
+2. `scripts/data/xlayout-live-1.19.4.1.json` holds every entry checked or found in the
+   running game, each with its evidence; `--live` applies it over the static result.
+3. The result ships as `native/layouts/linux-<build id>.json` (`xlayout::LINUX_TABLE`). The
+   Linux server binds the tools only for exactly that build; an entry missing from it fails
+   that read with `layout_unmapped`, never a guess.
 
-1. `scripts/cross_platform_map.py` maps Mach-O items to the ELF: vtables by RTTI
-   name, globals and functions by matched code, field offsets by matched instruction
-   displacements. Validated on 1.19.3, where both platforms' values are known.
-2. Every Mach-O constant in the tools moves into a per-build table selected by the
-   process string ABI, as `game::Layout` already does for the core reads.
-3. The Linux server binds the tools only when a table for exactly the running build
-   ships (`xlayout::require_linux`); an entry missing from it fails that read with
-   `layout_unmapped`, never a guess.
-
-Status (2 November 2026): every tool module reads through `xlayout`
-(`img` for image addresses, `fld` with an owning `Class` for field offsets); the
-GUI widget tree (`gui_tree`) translates its layout the same way. About 200 owner
-classes are tagged, 73 with a macOS vtable (mapped automatically by RTTI and
-matched code) and about 127 without one (records, strides and owners named from
-code comments; these need an anchor function or a live check on Linux).
-
-Known ABI-specific spots needing a live check: the special-projects breakthrough
-map walks a libc++ tree node (libstdc++ nodes keep colour, parent, left, right,
-then the value); `construction_place` reads SDL/Cocoa window internals and stays
-macOS-only.
+Every tool module reads through `xlayout` (`img` for image addresses, `fld` with an owning
+`Class` for field offsets); the GUI widget tree (`gui_tree`) translates its layout the same
+way. Edit boxes have no UTF-8 text copy on Linux; their text is the editor's UTF-32
+`std::wstring`. The special-projects breakthrough map is a libstdc++ red-black tree on
+Linux. `construction_place`'s macOS window internals stay macOS-only.
 
 Core modules (`game`, `research`, `own_focus`, `production_lines`, `construction`,
-`army`, `gui_registry`, `research_ui`) keep their own verified Linux 1.19.3 layouts.
-They move to 1.19.4.1 by a same-platform migration (as macOS did from 1.19.3),
-not through the cross-platform table.
+`army`, `gui_registry`, `research_ui`) moved from Linux 1.19.3 to 1.19.4.1 by a
+same-platform migration (`scripts/linux_build_migrate.py`). Linux 1.19.3 is no longer
+accepted. The older Linux-only GUI diagnostics written for 1.19.3 fail closed on 1.19.4.1
+(classes they use were removed); the management tools replace them.
 
-## 3. Live verification (blocked)
+A developer build with `--features dev-table` reads a table from `HOI4_LIVE_DEV_TABLE`
+(reloaded when it changes) and logs unmapped keys to `HOI4_LIVE_DEV_MISSING`; release
+builds always use the embedded table.
 
-Needs the Linux HOI4 1.19.4.1 executable (and the `.so` files beside it). The game
-data can come from the macOS install. Each tool is then verified live on Linux, as
-on macOS (`docs/LIVE_VERIFICATION_1_19_4.md`).
+## 3. Live verification (done)
+
+[LIVE_VERIFICATION_LINUX_1_19_4.md](LIVE_VERIFICATION_LINUX_1_19_4.md) records every tool
+run against the Linux 1.19.4.1 game and the fixes it needed.
 
 ## Launch rules
 
@@ -67,5 +65,4 @@ Binding: `hoi4-live-native --bind-management RUN_DIRECTORY BINDING` with
 `{"window": <X11 id>, "window_class": "<exact WM_CLASS bytes>", "client": [1920, 1080]}`
 and the run directory's `input.json` (controller, player) as on macOS.
 
-Unchanged: never start the game while Steam or steamcmd runs, no Steam variables,
-private `HOME`, owned display, owned process identity.
+Unchanged: no Steam variables, private `HOME`, owned display, owned process identity.

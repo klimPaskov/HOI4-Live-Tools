@@ -47,7 +47,7 @@ impl Fake {
         f.put(0xa0000, b"factories_add_1x");
         f.zero(ROW + 0x1000, 0x30);
         f.word(ROW + 0x1018, BUTTON);
-        f.word(BUTTON, BASE + 0x43470c8);
+        f.word(BUTTON, BASE + 0x44dd4f0);
         f.word(BUTTON + 0x68, REG);
         f.word(BUTTON + 0x1a8, 0);
         f.word(WINDOW + 0xe78, 0);
@@ -55,7 +55,7 @@ impl Fake {
         f.word(BUTTON + 0xd0, 0);
         f.number(BUTTON + 0xac, 0);
         f.number(BUTTON + 0x74, 0x800);
-        f.word(BUTTON + 0x80, BASE + 0x4347488);
+        f.word(BUTTON + 0x80, BASE + 0x44dd8d0);
         f.word(BUTTON + 0xa0, 0);
         f.number(BUTTON + 0x98, 1);
         f.word(BUTTON + 0x88, LINK);
@@ -63,13 +63,13 @@ impl Fake {
         f.zero(LINK, 0x19);
         f.word(LINK, ROW + 0xaa8);
         f.zero(ROW + 0xaa8, 0x288);
-        f.word(ROW + 0xaa8, BASE + 0x4266748);
+        f.word(ROW + 0xaa8, BASE + 0x43fcc90);
         f.word(ROW + 0xaa8 + 0x18, 0);
         f.word(ROW + 0xaa8 + 0x1d8, 0);
         f.word(ROW + 0xaa8 + 0x38, BASE + 0x18157d0);
         f.word(ROW + 0xaa8 + 0x40, BASE + 0x18157a0);
         f.word(ROW + 0xaa8 + 0x28, CAPTURE);
-        f.word(CAPTURE, BASE + 0x17e0c60);
+        f.word(CAPTURE, BASE + 0x18aafe0);
         f.word(CAPTURE + 8, 0);
         f.word(CAPTURE + 16, ROW);
         f
@@ -158,7 +158,7 @@ fn absent_modal_never_means_hidden() {
 fn positive_modal_requires_exact_owner_before_root() {
     let mut f = Fake::default();
     let dialog = 0xb0000;
-    f.word(dialog, BASE + 0x4321298);
+    f.word(dialog, BASE + 0x44b72c0);
     f.word(dialog + 0x7f0, ROW + 8);
     assert_eq!(
         modal(
@@ -180,7 +180,7 @@ fn positive_modal_requires_exact_owner_before_root() {
 fn only_zero_transition_states_can_supply_hidden() {
     for state in [0, 1, 2, 7] {
         let mut f = Fake::default();
-        f.word(WINDOW, BASE + 0x4347d58);
+        f.word(WINDOW, BASE + 0x44de2b0);
         f.word(WINDOW + 0x98, REG);
         f.put(WINDOW + 0xa5, &[0]);
         f.number(WINDOW + 0xeb0, state);
@@ -218,7 +218,7 @@ fn factory_parent_gate_requires_exact_owned_position_and_literal_true() {
         let mut f = Fake::fixture();
         f.word(BUTTON + 0x1a8, gate);
         f.word(WINDOW + 0xe78, gate);
-        f.word(gate, BASE + 0x43484f0);
+        f.word(gate, BASE + 0x44dea58);
         f.put(gate + 0x128, &[flag]);
         let mut scope = Vec::new();
         let result = super::control(
@@ -258,7 +258,7 @@ fn unbound_factory_gate_never_reads_payload_or_renderer() {
         f.word(BUTTON + 0x1a8, gate);
         if own {
             f.word(WINDOW + 0xe78, gate);
-            f.word(gate, BASE + 0x43484f8); // Unknown owned position type.
+            f.word(gate, BASE + 0x44dea60); // Unknown owned position type.
         }
         let v = f.control(true).unwrap();
         assert_eq!(v["binding_available"], true);
@@ -284,7 +284,7 @@ fn owned_factory_gate_never_bypasses_other_local_blockers() {
         let gate = 0xb0000;
         f.word(BUTTON + 0x1a8, gate);
         f.word(WINDOW + 0xe78, gate);
-        f.word(gate, BASE + 0x43484f0);
+        f.word(gate, BASE + 0x44dea58);
         f.put(gate + 0x128, &[1]);
         f.put(field, &value.to_le_bytes()[..width]);
         assert_eq!(f.control(true).unwrap()["local_dispatch_ready"], false);

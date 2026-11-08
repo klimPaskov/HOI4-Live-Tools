@@ -59,7 +59,7 @@ pub(crate) fn observe(
                 "Duplicate current focus item",
             ));
         }
-        exact(r, *item, base + 0x4249b90)?;
+        exact(r, *item, base + 0x43df668)?;
         if r.u64(item + 0x2b0)? != view {
             return Err(Error::new(
                 "foreign_focus_scope",
@@ -89,7 +89,7 @@ pub(crate) fn observe(
     };
     out["materialized"] = json!(true);
     let window = r.u64(item + 0x10)?;
-    exact(r, window, base + 0x4347d58)?;
+    exact(r, window, base + 0x44de2b0)?;
     if r.u64(window + 0x98)? != registry {
         return Err(Error::new(
             "invalid_focus_owner",
@@ -128,7 +128,7 @@ pub(crate) fn observe(
             continue;
         }
         c["type_encoding"] = metadata(r, &mut reuse, *child)?;
-        if r.u64(*child)? != base + 0x43470c8 {
+        if r.u64(*child)? != base + 0x44dd4f0 {
             controls.push(c);
             continue;
         }
@@ -163,7 +163,7 @@ pub(crate) fn observe(
             c["renderer_type_encoding"] = metadata(r, &mut reuse, render)?;
             let primary = if render == 0 { 0 } else { r.u64(render)? };
             if render != 0
-                && [0x4356e08, 0x434b370, 0x434c5b0, 0x43593d8]
+                && [0x44ed1d8, 0x44e15e0, 0x44e2820, 0x44ef818]
                     .iter()
                     .any(|p| primary == base + p)
             {
@@ -194,7 +194,7 @@ fn metadata(r: &Reader<'_>, reuse: &mut Reuse, p: u64) -> Result<Value> {
     }
 }
 fn callback(r: &Reader<'_>, base: u64, item: u64, button: u64) -> Result<bool> {
-    if r.u64(button + 0x80)? != base + 0x4347488 || r.u64(button + 0xa0)? != 0 {
+    if r.u64(button + 0x80)? != base + 0x44dd8d0 || r.u64(button + 0xa0)? != 0 {
         return Ok(false);
     }
     let count = r.i32(button + 0x98)?;
@@ -232,11 +232,11 @@ fn callback(r: &Reader<'_>, base: u64, item: u64, button: u64) -> Result<bool> {
         return Ok(false);
     }
     let glue = item + 0x28;
-    if r.u64(glue)? != base + 0x424a860 {
+    if r.u64(glue)? != base + 0x43e0388 {
         return Ok(false);
     }
     // Exact constructor first VOID +8 and UI-state VOID +148, distinct roles.
-    for (off, member) in [(8, 0x150b440), (0x148, 0x150b5f0)] {
+    for (off, member) in [(8, 0x15d9440), (0x148, 0x15d9680)] {
         if r.u64(glue + off + 0x10)? != base + 0x1527740
             || r.u64(glue + off + 0x18)? != base + 0x1527710
         {

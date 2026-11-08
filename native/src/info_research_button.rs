@@ -34,8 +34,8 @@ pub(crate) fn observe(
     registry: u64,
 ) -> Result<Value> {
     // Caller has already proved own Info/canonical selection/local visibility.
-    exact(r, info, base + 0x430bbf0)?;
-    exact(r, container, base + 0x4347d58)?;
+    exact(r, info, base + 0x44a17b0)?;
+    exact(r, container, base + 0x44de2b0)?;
     if r.u64(container + 0x98)? != registry {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -64,7 +64,7 @@ pub(crate) fn observe(
     }
     let mut reuse = Reuse::new(base, 0);
     out["control_type_encoding"] = metadata(r, &mut reuse, button)?;
-    if r.u64(button)? != base + 0x43470c8 {
+    if r.u64(button)? != base + 0x44dd4f0 {
         out["reason"] = json!("control_layout_unavailable");
         return Ok(out);
     }
@@ -87,7 +87,7 @@ pub(crate) fn observe(
     out["flags_raw"] = json!(u32::from_le_bytes(
         r.read(button + 0x74, 4)?.try_into().unwrap()
     ));
-    if r.u64(button + 0x80)? != base + 0x4347488 {
+    if r.u64(button + 0x80)? != base + 0x44dd8d0 {
         out["reason"] = json!("observer_layout_unavailable");
         return Ok(out);
     }
@@ -139,7 +139,7 @@ pub(crate) fn observe(
         out["reason"] = json!("callback_unavailable");
         return Ok(out);
     }
-    if r.u64(expected)? != base + 0x430bd18 {
+    if r.u64(expected)? != base + 0x44a18e8 {
         out["reason"] = json!("callback_layout_unavailable");
         return Ok(out);
     }
@@ -169,10 +169,10 @@ pub(crate) fn observe(
     out["renderer_type_encoding"] = metadata(r, &mut reuse, render)?;
     let primary = if render == 0 { 0 } else { r.u64(render)? };
     if ![
-        base + 0x4356e08,
-        base + 0x434b370,
-        base + 0x434c5b0,
-        base + 0x43593d8,
+        base + 0x44ed1d8,
+        base + 0x44e15e0,
+        base + 0x44e2820,
+        base + 0x44ef818,
     ]
     .contains(&primary)
     {
@@ -188,14 +188,14 @@ pub(crate) fn observe(
         ));
     }
     out["renderer_control_join_verified"] = json!(true);
-    if primary == base + 0x43593d8 {
+    if primary == base + 0x44ef818 {
         out["text_raw_diagnostic"] = text_raw(r, &mut reuse, render, container, registry)?;
         out["available"] = out["text_raw_diagnostic"]["raw_fields_available"].clone();
         out["reason"] = json!("ordinary_void_callback_and_text_renderer_join");
         return Ok(out);
     }
-    if primary != base + 0x4356e08 {
-        let (resource_offset, alias_offset) = if primary == base + 0x434b370 {
+    if primary != base + 0x44ed1d8 {
+        let (resource_offset, alias_offset) = if primary == base + 0x44e15e0 {
             (0x1b0, 0x168)
         } else {
             (0x160, 8)
@@ -208,7 +208,7 @@ pub(crate) fn observe(
             return Ok(out);
         }
         out["resource_type_encoding"] = metadata(r, &mut reuse, resource)?;
-        if resource == 0 || r.u64(resource)? != base + 0x434b668 {
+        if resource == 0 || r.u64(resource)? != base + 0x44e18d8 {
             out["reason"] = json!("resource_layout_unavailable");
             return Ok(out);
         }
@@ -240,7 +240,7 @@ pub(crate) fn observe(
             out["resource_cache"]["texture_height_raw"] = json!(height);
         }
     }
-    if primary == base + 0x434b370 {
+    if primary == base + 0x44e15e0 {
         out["frame_raw_geometry"] = frame_raw_geometry(r, &mut reuse, render, container, registry)?;
     }
     out["available"] = json!(true);
@@ -312,7 +312,7 @@ pub(crate) fn text_raw(
         "hit_projection_available":false,"frame_unwrapping_verified":false,
         "hierarchy_status":"unavailable_text_leaf_not_reviewed","client_rectangle_available":false,
         "current_frame_verified":false,"effective_routing_verified":false,"input_authorized":false});
-    if resource == 0 || r.u64(resource)? != reuse.base() + 0x4359740 {
+    if resource == 0 || r.u64(resource)? != reuse.base() + 0x44efb80 {
         return Ok(out);
     }
     pointer(resource)?;

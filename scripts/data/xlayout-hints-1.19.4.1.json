@@ -1,10 +1,163 @@
 {
- "CCurrentGameState": {"context": ["0x372b040"], "_source": "game.rs MACOS gs_global"},
- "CInGameIdler": {"context": ["0x372afc0"], "_source": "game.rs MACOS idler_global"},
- "idler.manager": {"via": {"parent": "CInGameIdler", "offset": "0x670"}, "_source": "country_status.rs MANAGER (idler + 0x670)"},
- "CAgencyUpgradeDatabase": {"context": ["0x3704b10"], "_source": "intelligence.rs UPGRADE_DB"},
- "NIndustrialOrganisation::COrganisationDatabase": {"context": ["0x3705890"], "_source": "mios.rs ORGANISATION_DB"},
- "CStrategicResourceDatabase": {"context": ["0x37058c0"], "_source": "resources.rs RESOURCE_DB_GLOBAL"},
- "NProject::CSpecializationDatabase": {"context": ["0x3705fe0"], "_source": "special_projects.rs SPEC_DB_GLOBAL"},
- "CMapIconManagerImpl": {"context": ["0x372c530"], "_source": "airui.rs ICON_GLOBAL"}
+ "CCurrentGameState": {
+  "context": [
+   "0x372b040"
+  ],
+  "_source": "game.rs MACOS gs_global"
+ },
+ "CInGameIdler": {
+  "context": [
+   "0x372afc0"
+  ],
+  "_source": "game.rs MACOS idler_global"
+ },
+ "idler.manager": {
+  "via": {
+   "parent": "CInGameIdler",
+   "offset": "0x670"
+  },
+  "_source": "country_status.rs MANAGER (idler + 0x670)"
+ },
+ "CAgencyUpgradeDatabase": {
+  "context": [
+   "0x3704b10"
+  ],
+  "_source": "intelligence.rs UPGRADE_DB"
+ },
+ "NIndustrialOrganisation::COrganisationDatabase": {
+  "context": [
+   "0x3705890"
+  ],
+  "_source": "mios.rs ORGANISATION_DB"
+ },
+ "CStrategicResourceDatabase": {
+  "context": [
+   "0x37058c0"
+  ],
+  "_source": "resources.rs RESOURCE_DB_GLOBAL"
+ },
+ "NProject::CSpecializationDatabase": {
+  "context": [
+   "0x3705fe0"
+  ],
+  "_source": "special_projects.rs SPEC_DB_GLOBAL"
+ },
+ "CMapIconManagerImpl": {
+  "context": [
+   "0x372c530"
+  ],
+  "_source": "airui.rs ICON_GLOBAL"
+ },
+ "research.view": {
+  "rtti": "22CCountryTechnologyView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "manager.tech_view": {
+  "rtti": "22CCountryTechnologyView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "research.tree_view": {
+  "rtti": "20CCountryTechTreeView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "manager.tree_view": {
+  "rtti": "20CCountryTechTreeView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "construction.view": {
+  "rtti": "25CCountryConstructionsView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "decision.view": {
+  "rtti": "20CCountryDecisionView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "state.view": {
+  "rtti": "17CCountryStateView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "topbar": {
+  "rtti": "7CTopBar",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "topbar.view": {
+  "rtti": "7CTopBar",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "manager.topbar": {
+  "rtti": "7CTopBar",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "manager.find_view": {
+  "rtti": "9CFindView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "production.view": {
+  "rtti": "26CCountryProductionLineView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "production.selection.window": {
+  "rtti": "26CProductionEquipmentWindow",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "deployment.template_window": {
+  "rtti": "25CTemplateDeploymentWindow",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "grid.item": {
+  "rtti": "20CStandardGridBoxItem",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "find.result_row": {
+  "rtti": "22CSearchableGridBoxItem",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "gui.text": {
+  "rtti": "15CInstantTextBox",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "gui.button": {
+  "rtti": "15CButtonStandard",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "air.strategic.view": {
+  "rtti": "17CStrategicAirView",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "politics.selection_window": {
+  "rtti": "21CPoliticalIdeasWindow",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "idea.category": {
+  "rtti": "13CIdeaCategory",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "decision.instance": {
+  "rtti": "17CDecisionInstance",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "leader_group.portrait": {
+  "rtti": "20CLeaderGroupPortrait",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "orders.group": {
+  "rtti": "12COrdersGroup",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "gs.air_manager": {
+  "rtti": "20CStrategicAirManager",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "gs.navy_manager": {
+  "rtti": "21CStrategicNavyManager",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "strategic.navy": {
+  "rtti": "14CStrategicNavy",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ },
+ "NDoctrines::CCountryDoctrineStatus": {
+  "rtti": "N10NDoctrines22CCountryDoctrineStatusE",
+  "_source": "tag named after its class; class checked live by RTTI of the object"
+ }
 }

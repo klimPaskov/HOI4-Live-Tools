@@ -8,15 +8,15 @@ fn owned_scene(mode: i32) -> Fake {
     let mut f = Fake::new();
     f.own_focus_ui_fixture();
     f.int(GS + 0x620, 2);
-    f.word(0x42c9a88 + 0xc0, 0x20811a0);
+    f.word(0x4460048 + 0xc0, 0x20811a0);
     f.word(MAN + 0x128, POLITICS);
     f.region(POLITICS, 0x600);
-    f.word(POLITICS, 0x42546e8);
+    f.word(POLITICS, 0x43ea4f8);
     f.word(POLITICS + 0x2f0, ID);
     f.word(POLITICS + 0x38, MAN);
     f.word(POLITICS + 0x2f8, POLITICS_WINDOW);
     f.region(POLITICS_WINDOW, 0xf00);
-    f.word(POLITICS_WINDOW, 0x4347d58);
+    f.word(POLITICS_WINDOW, 0x44de2b0);
     f.word(POLITICS_WINDOW + 0x98, GUI);
     f.int(MAN + 0x3d8, mode);
     f.put(POLITICS_WINDOW + 0xa5, &[if mode == 12 { 8 } else { 0 }]);

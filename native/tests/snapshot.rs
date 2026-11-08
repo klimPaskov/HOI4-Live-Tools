@@ -24,21 +24,21 @@ fn politics_focus_fixture() -> Fixture {
     let mut f = owned_node_fixture();
     let b = 0x10000;
     f.number(0x20008, 1);
-    f.word(b + 0x42c9a88 + 0xc0, b + 0x20811a0);
+    f.word(b + 0x4460048 + 0xc0, b + 0x20811a0);
     f.number(0x903d8, 12);
     f.word(0x90128, POLITICS);
     f.word(0x90130, FOCUS);
     f.region(POLITICS, 0x600);
-    f.word(POLITICS, b + 0x42546e8);
+    f.word(POLITICS, b + 0x43ea4f8);
     f.word(POLITICS + 0x38, 0x90000);
     f.word(POLITICS + 0x2f0, 0x32000);
     f.word(POLITICS + 0x2f8, POLITICS_WINDOW);
     f.region(FOCUS, 0x1200);
-    f.word(FOCUS, b + 0x4249c70);
+    f.word(FOCUS, b + 0x43df748);
     f.word(FOCUS + 0x2f0, 0x32000);
     f.word(FOCUS + 0x11d8, 0x20000);
     f.region(POLITICS_WINDOW, 0xf00);
-    f.word(POLITICS_WINDOW, b + 0x4347d58);
+    f.word(POLITICS_WINDOW, b + 0x44de2b0);
     f.word(POLITICS_WINDOW + 0x98, 0x70000);
     f.put(POLITICS_WINDOW + 0xa5, &[8]);
     f.array(POLITICS_WINDOW + 0xbb0, CHILD_VALUES, 1);
@@ -57,8 +57,8 @@ fn politics_focus_fixture() -> Fixture {
     f.word(OPENER_NAMES + 8, name.len() as u64);
     f.word(OPENER_NAMES + 16, name.len() as u64);
     f.put(OPENER_NAME_TEXT, name);
-    f.word(0xd5000, b + 0x43470c8);
-    f.word(0xd5080, b + 0x4347488);
+    f.word(0xd5000, b + 0x44dd4f0);
+    f.word(0xd5080, b + 0x44dd8d0);
     f.word(0xd5088, OPENER_LINK);
     f.word(0xd5090, OPENER_LINK);
     f.number(0xd5098, 1);
@@ -68,12 +68,12 @@ fn politics_focus_fixture() -> Fixture {
     f.word(0xd50e8, 0xf0000);
     f.region(OPENER_LINK, 32);
     f.word(OPENER_LINK, POLITICS + 0x300);
-    f.word(POLITICS + 0x300, b + 0x4254880);
+    f.word(POLITICS + 0x300, b + 0x43ea698);
     f.word(POLITICS + 0x308, OPENER_CAPTURE);
     f.word(POLITICS + 0x318, b + 0x1693160);
     f.word(POLITICS + 0x320, b + 0x1693130);
     f.region(OPENER_CAPTURE, 24);
-    f.word(OPENER_CAPTURE, b + 0x1686aa0);
+    f.word(OPENER_CAPTURE, b + 0x1756a00);
     f.word(OPENER_CAPTURE + 0x10, POLITICS);
     // Standard association cannot depend on Drag renderer110 or tech data+8.
     for a in (0xd5008..0xd5010).chain(0xd5110..0xd5118) {
@@ -97,25 +97,25 @@ fn politics_typed_geometry_fixture(text: bool) -> Fixture {
     for (object, table, info, name, string) in [
         (
             0xf0000,
-            if text { 0x43593d8 } else { 0x434b370 },
-            0x435a800,
+            if text { 0x44ef818 } else { 0x44e15e0 },
+            0x44f0c40,
             if text {
                 "11CTextSprite"
             } else {
                 "20CFrameAnimatedSprite"
             },
-            0x3516000,
+            0x368e000,
         ),
         (
             0xf1000,
-            if text { 0x4359740 } else { 0x434b668 },
-            0x435a900,
+            if text { 0x44efb80 } else { 0x44e18d8 },
+            0x44f0d40,
             if text {
                 "15CTextSpriteType"
             } else {
                 "24CFrameAnimatedSpriteType"
             },
-            0x3516100,
+            0x368e100,
         ),
     ] {
         f.word(object, b + table);
@@ -316,9 +316,9 @@ fn politics_focus_foreign_joins_refuse_before_names_or_renderer() {
 #[test]
 fn politics_focus_unverified_callback_variants_skip_renderer() {
     for (address, value) in [
-        (0xd5080, 0x10000 + 0x4346ea8),
+        (0xd5080, 0x10000 + 0x44dd2c8),
         (0xd50a0, OPENER_CAPTURE),
-        (POLITICS + 0x300, 0x10000 + 0x424e0a8),
+        (POLITICS + 0x300, 0x10000 + 0x43e3df8),
         (POLITICS + 0x318, 0x10000 + 0x1693168),
         (POLITICS + 0x320, 0x10000 + 0x1693138),
         (POLITICS + 0x328, OPENER_CAPTURE),
@@ -421,15 +421,15 @@ fn politics_focus_unknown_types_never_read_guessed_payload() {
         let mut f = politics_focus_fixture();
         match case {
             0 => {
-                f.word(0xd5000, 0x10000 + 0x4346b10);
+                f.word(0xd5000, 0x10000 + 0x44dcf10);
                 politics_forbid(&mut f, 0xd5068, 8);
             }
             1 => {
-                f.word(0xf0000, 0x10000 + 0x4346b10);
+                f.word(0xf0000, 0x10000 + 0x44dcf10);
                 politics_forbid(&mut f, 0xf0138, 8);
             }
             _ => {
-                f.word(0xf1000, 0x10000 + 0x4346b10);
+                f.word(0xf1000, 0x10000 + 0x44dcf10);
                 politics_forbid(&mut f, 0xf1090, 8);
             }
         }
@@ -462,7 +462,7 @@ fn politics_focus_positive_tag_and_accessor_precede_all_ui_payload() {
         "player_unavailable"
     );
     let mut f = politics_focus_fixture();
-    f.word(0x10000 + 0x42c9a88 + 0xc0, 0x10000 + 0x20811a8);
+    f.word(0x10000 + 0x4460048 + 0xc0, 0x10000 + 0x20811a8);
     politics_forbid(&mut f, 0x30340, 16);
     assert_eq!(
         hoi4_live_native::politics_focus::owned_snapshot(&f, true)
@@ -475,8 +475,8 @@ fn politics_focus_positive_tag_and_accessor_precede_all_ui_payload() {
 #[test]
 fn politics_focus_final_witnesses_cover_scope_names_glue_and_geometry() {
     for (a, n) in [
-        (0x10000 + 0x44086a8, 8),
-        (0x10000 + 0x42c9a88 + 0xc0, 8),
+        (0x10000 + 0x459e9f0, 8),
+        (0x10000 + 0x4460048 + 0xc0, 8),
         (0x30518, 4),
         (0x3a010, 8),
         (0x326b8, 8),
@@ -575,16 +575,16 @@ fn owned_research_fixture() -> Fixture {
     f.own_research();
     let base = 0x10000;
     for (i, (table, name)) in [
-        (0x42108f8, "CTechnologyStatus"),
-        (0x4210898, "CResearchSlot"),
-        (0x42107f8, "CTechnology"),
-        (0x4211038, "CTechnologyTemplate"),
+        (0x43a5750, "CTechnologyStatus"),
+        (0x43a56f0, "CResearchSlot"),
+        (0x43a5650, "CTechnology"),
+        (0x43a5f30, "CTechnologyTemplate"),
     ]
     .iter()
     .enumerate()
     {
-        let info = base + 0x435d000 + i as u64 * 0x100;
-        let text = base + 0x350d000 + i as u64 * 0x100;
+        let info = base + 0x44f3058 + i as u64 * 0x100;
+        let text = base + 0x3685000 + i as u64 * 0x100;
         f.word(base + table - 8, info);
         f.region(info, 16);
         f.word(info + 8, text);
@@ -607,16 +607,16 @@ fn owned_node_fixture() -> Fixture {
     let mut f = Fixture::new();
     f.node_render_detail();
     for (i, (table, name)) in [
-        (0x42108f8, "CTechnologyStatus"),
-        (0x4210898, "CResearchSlot"),
-        (0x42107f8, "CTechnology"),
-        (0x4211038, "CTechnologyTemplate"),
+        (0x43a5750, "CTechnologyStatus"),
+        (0x43a56f0, "CResearchSlot"),
+        (0x43a5650, "CTechnology"),
+        (0x43a5f30, "CTechnologyTemplate"),
     ]
     .iter()
     .enumerate()
     {
-        let info = 0x10000 + 0x435f000 + i as u64 * 0x100;
-        let text = 0x10000 + 0x350f000 + i as u64 * 0x100;
+        let info = 0x10000 + 0x44f5090 + i as u64 * 0x100;
+        let text = 0x10000 + 0x3687000 + i as u64 * 0x100;
         f.word(0x10000 + table - 8, info);
         f.region(info, 16);
         f.word(info + 8, text);
@@ -811,7 +811,7 @@ fn research_public_page_does_not_require_new_context_payloads() {
         (0x30620, 4),
         (0x30628, 4),
         (0x30460, 4),
-        (0x10000 + 0x43f3eb8, 8),
+        (0x10000 + 0x458a088, 8),
     ] {
         for a in address..address + size {
             f.data.remove(&a);
@@ -1001,10 +1001,10 @@ impl Fixture {
             split_context_roots: false,
         };
         let base = 0x10000;
-        f.word(base + 0x44086a8, 0x30000);
-        f.word(base + 0x44085f8, 0x32000);
-        f.word(base + 0x439f450, 0x36000);
-        f.word(base + 0x43f3eb8, 0x37000);
+        f.word(base + 0x459e9f0, 0x30000);
+        f.word(base + 0x459e908, 0x32000);
+        f.word(base + 0x45353b0, 0x36000);
+        f.word(base + 0x458a088, 0x37000);
         for (a, n) in [
             (0x30000, 0x700),
             (0x32000, 0x700),
@@ -1014,8 +1014,8 @@ impl Fixture {
         ] {
             f.region(a, n);
         }
-        f.word(0x30000, base + 0x42c7598);
-        f.word(0x32000, base + 0x42c9a88);
+        f.word(0x30000, base + 0x445e068);
+        f.word(0x32000, base + 0x4460048);
         f.number(0x30460, 60759371);
         f.number(0x304b4, 4);
         f.number(0x30518, 1);
@@ -1060,20 +1060,20 @@ impl Fixture {
     fn catalog(&mut self) {
         let base = 0x10000;
         self.region(0x36000, 0x100);
-        self.word(0x36000, base + 0x42110c8);
+        self.word(0x36000, base + 0x43a5fc0);
         self.array(0x36048, 0x62000, 4);
         self.region(0x62000, 32);
         // Actual constructor: slot zero is a typed nonnull reserved singleton,
         // not a zero pointer or positive technology definition.
         self.word(0x62000, 0x62500);
-        self.word(base + 0x439f560, 0x62500);
-        self.word(0x62500, base + 0x4201c78);
+        self.word(base + 0x45354c0, 0x62500);
+        self.word(0x62500, base + 0x4396b48);
         // Canonical indices are independent of copied template+0x34 values.
         for (i, name) in ["tools1", "tools2", "construction1"].iter().enumerate() {
             let ptr = 0x63000 + i as u64 * 0x100;
             self.region(ptr, 0x80);
             self.word(0x62008 + i as u64 * 8, ptr);
-            self.word(ptr, base + 0x4211038);
+            self.word(ptr, base + 0x43a5f30);
             self.string(ptr + 8, name);
             self.number(ptr + 0x30, i as i32 + 1);
             self.number(ptr + 0x34, 999);
@@ -1083,11 +1083,11 @@ impl Fixture {
         let base = 0x10000;
         self.word(0x324f8, 0x70000);
         self.region(0x70000, 0xc0);
-        self.word(0x70000, base + 0x42736f8);
+        self.word(0x70000, base + 0x4409f68);
         self.word(0x700b8, 0x71000);
-        self.word(base + 0x4577890, 0x71000);
+        self.word(base + 0x470e688, 0x71000);
         self.region(0x71000, 0x200);
-        self.word(0x71000, base + 0x42417f8);
+        self.word(0x71000, base + 0x43d7220);
         for (i, v) in [512, 288, 1280, 720].iter().enumerate() {
             self.number(0x71178 + i as u64 * 4, *v);
         }
@@ -1100,7 +1100,7 @@ impl Fixture {
     fn own_research(&mut self) {
         self.catalog();
         let base = 0x10000;
-        self.word(0x28000, base + 0x42108f8);
+        self.word(0x28000, base + 0x43a5750);
         self.word(0x28130, 0x20000);
         self.number(0x28138, 1);
         self.array(0x28088, 0x82000, 3);
@@ -1111,7 +1111,7 @@ impl Fixture {
             let pointer = 0x80000 + i as u64 * 0x1000;
             let template = 0x63000 + i as u64 * 0x100;
             self.region(pointer, 0x1a0);
-            self.word(pointer, base + 0x42107f8);
+            self.word(pointer, base + 0x43a5650);
             self.word(pointer + 0x158, 0x28000);
             self.word(pointer + 0x160, template);
             self.number(pointer + 0x174, *level);
@@ -1121,7 +1121,7 @@ impl Fixture {
         self.put(0x80198, &(-0x1234_5678_9abci64).to_le_bytes());
         for i in 0..4 {
             let slot = 0x2c000 + i * 0x100;
-            self.word(slot, base + 0x4210898);
+            self.word(slot, base + 0x43a56f0);
             self.word(slot + 0x10, 0x28000);
             self.word(slot + 0x20, 999999);
         }
@@ -1139,8 +1139,8 @@ impl Fixture {
         self.number(0x903d8, 5);
         self.region(0x91000, 0x400);
         self.region(0x92000, 0xe30);
-        self.word(0x91000, base + 0x424dc38);
-        self.word(0x92000, base + 0x424de40);
+        self.word(0x91000, base + 0x43e3978);
+        self.word(0x92000, base + 0x43e3b88);
         self.word(0x912f0, 0x32000);
         self.word(0x922f0, 0x32000);
         self.number(0x92e24, 6);
@@ -1151,14 +1151,14 @@ impl Fixture {
             let widget = 0x94000 + i * 0x1000;
             let container = 0xa0000 + i * 0x2000;
             self.region(widget, 0x300);
-            self.word(widget, base + 0x424e7d8);
+            self.word(widget, base + 0x43e4530);
             self.word(widget + 0x2a8, 0x70000);
             self.word(widget + 0x2b0, 0x91000);
             self.word(widget + 0x2b8, 0x2c000 + i * 0x100);
             self.word(widget + 0x10, container);
             self.word(0x93000 + i * 8, widget);
             self.region(container, 0xf00);
-            self.word(container, base + 0x4347d58);
+            self.word(container, base + 0x44de2b0);
             self.word(container + 0x98, 0x70000);
             self.put(container + 0xa5, &[8]);
         }
@@ -1176,23 +1176,23 @@ impl Fixture {
             (
                 0xb1000,
                 "CButtonStandard",
-                base + 0x43470c8,
-                base + 0x4350000,
-                base + 0x38afd74,
+                base + 0x44dd4f0,
+                base + 0x44e6280,
+                base + 0x3a27d74,
             ),
             (
                 0xb2000,
                 "CFrameAnimatedSprite",
-                base + 0x434b370,
-                base + 0x4351000,
-                base + 0x38b4750,
+                base + 0x44e15e0,
+                base + 0x44e7280,
+                base + 0x3a2c750,
             ),
             (
                 0xb3000,
                 "CFrameAnimatedSpriteType",
-                base + 0x434b668,
-                base + 0x4352000,
-                base + 0x3507000,
+                base + 0x44e18d8,
+                base + 0x44e83b0,
+                base + 0x367f000,
             ),
         ] {
             self.word(object, vptr);
@@ -1208,11 +1208,11 @@ impl Fixture {
         self.research_ui();
         let base = 0x10000;
         self.region(0xb1000, 0x120);
-        self.word(0xb1000, base + 0x4346b10);
-        self.word(base + 0x4346b10 - 16, 0);
-        self.word(base + 0x4346b10 - 8, base + 0x4350000);
-        self.region(base + 0x38afd74, 128);
-        self.put(base + 0x38afd74, b"11CButtonDrag");
+        self.word(0xb1000, base + 0x44dcf10);
+        self.word(base + 0x44dcf10 - 16, 0);
+        self.word(base + 0x44dcf10 - 8, base + 0x44e6280);
+        self.region(base + 0x3a27d74, 128);
+        self.put(base + 0x3a27d74, b"11CButtonDrag");
         self.word(0xb1110, 0xb2000);
         self.number(0xb10ac, 4);
         // Position data is deliberately unreadable as a pointer. The exact
@@ -1225,8 +1225,8 @@ impl Fixture {
         self.research_drag();
         let base = 0x10000;
         for (object, table, info, text, name) in [
-            (0xb2000, 0x4356e08, 0x4351000, 0x38b4750, "7CSprite"),
-            (0xb3000, 0x4357160, 0x4352000, 0x3507000, "11CSpriteType"),
+            (0xb2000, 0x44ed1d8, 0x44e7280, 0x3a2c750, "7CSprite"),
+            (0xb3000, 0x44ed530, 0x44e83b0, 0x367f000, "11CSpriteType"),
         ] {
             self.word(object, base + table);
             self.word(base + table - 16, 0);
@@ -1246,7 +1246,7 @@ impl Fixture {
         self.array(0x92dc0, 0xc0000, 1);
         self.word(0xc0000, 0xc1000);
         self.region(0xc1000, 0xb00);
-        self.word(0xc1000, base + 0x430bbf0);
+        self.word(0xc1000, base + 0x44a17b0);
         self.word(0xc1a78, 0x32000);
         self.word(0xc1a80, 0x92000);
         self.word(0xc1a98, 0x80000);
@@ -1254,7 +1254,7 @@ impl Fixture {
         self.word(0xc1ac0, 0xc5000);
         self.word(0xc1ab0, 0xc5000);
         self.region(0xc3000, 0xf00);
-        self.word(0xc3000, base + 0x4347d58);
+        self.word(0xc3000, base + 0x44de2b0);
         self.word(0xc3098, 0x70000);
         self.put(0xc30a5, &[8]);
         self.array(0xc39a0, 0xc7000, 2);
@@ -1264,7 +1264,7 @@ impl Fixture {
         self.string(0xc6000, "close");
         self.string(0xc6020, "research");
         self.region(0xc5000, 0x120);
-        self.word(0xc5000, base + 0x43470c8);
+        self.word(0xc5000, base + 0x44dd4f0);
         self.word(0xc5068, 0x70000); // Exact Standard constructor owner.
         self.number(0xc50ac, 3);
         self.put(0xc5074, &0x1234_0800u32.to_le_bytes());
@@ -1281,7 +1281,7 @@ impl Fixture {
         self.put(0xa00a5, &[0]);
         self.word(0x922f8, 0xd0000);
         self.region(0xd0000, 0xf00);
-        self.word(0xd0000, base + 0x4347d58);
+        self.word(0xd0000, base + 0x44de2b0);
         self.word(0xd0098, 0x70000);
         self.put(0xd00a5, &[8]);
         self.array(0x92dd8, 0xd2000, 2);
@@ -1292,7 +1292,7 @@ impl Fixture {
         self.word(0xd2048, 0xdead0000); // Unreadable context, never dereferenced.
         self.array(0x92df0, 0, 0);
         self.region(0xd3000, 0xd0);
-        self.word(0xd3000, base + 0x424e2e0);
+        self.word(0xd3000, base + 0x43e4038);
         self.word(0xd3030, 0x92000);
         self.word(0xd30c8, 0x80000);
     }
@@ -1302,19 +1302,19 @@ impl Fixture {
         // Real tables are near each other. Keep synthetic RTTI/names separate
         // rather than placing fake name buffers inside another real table.
         for (i, (a, name, vt)) in [
-            (0x28000, "CTechnologyStatus", 0x42108f8),
-            (0x2c000, "CResearchSlot", 0x4210898),
-            (0x2c100, "CResearchSlot", 0x4210898),
-            (0x2c200, "CResearchSlot", 0x4210898),
-            (0x2c300, "CResearchSlot", 0x4210898),
-            (0x80000, "CTechnology", 0x42107f8),
-            (0x63000, "CTechnologyTemplate", 0x4211038),
+            (0x28000, "CTechnologyStatus", 0x43a5750),
+            (0x2c000, "CResearchSlot", 0x43a56f0),
+            (0x2c100, "CResearchSlot", 0x43a56f0),
+            (0x2c200, "CResearchSlot", 0x43a56f0),
+            (0x2c300, "CResearchSlot", 0x43a56f0),
+            (0x80000, "CTechnology", 0x43a5650),
+            (0x63000, "CTechnologyTemplate", 0x43a5f30),
         ]
         .iter()
         .enumerate()
         {
-            let info = base + 0x4353000 + i as u64 * 0x100;
-            let text = base + 0x3508000 + i as u64 * 0x100;
+            let info = base + 0x44e93b0 + i as u64 * 0x100;
+            let text = base + 0x3680000 + i as u64 * 0x100;
             self.word(*a, base + vt);
             self.word(base + vt - 16, 0);
             self.word(base + vt - 8, info);
@@ -1328,7 +1328,7 @@ impl Fixture {
 impl ReadMemory for Fixture {
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
         *self.tracked_reads.borrow_mut().entry(a).or_default() += 1;
-        if a == 0x10000 + 0x44086a8 {
+        if a == 0x10000 + 0x459e9f0 {
             self.root_reads.set(self.root_reads.get() + 1);
             if self.split_context_roots && (2..=3).contains(&self.root_reads.get()) {
                 return Ok(0x90000u64.to_le_bytes().to_vec());
@@ -1548,7 +1548,7 @@ fn research_retains_final_process_check_and_refuses_wrong_primary_type() {
     );
     let mut f = Fixture::new();
     f.own_research();
-    f.word(0x80000, 0x10000 + 0x4210868);
+    f.word(0x80000, 0x10000 + 0x43a56c0);
     assert_eq!(research::snapshot(&f).unwrap_err().code, "invalid_type");
 }
 #[test]
@@ -1769,19 +1769,19 @@ fn input_source_metadata_never_implies_receiver_payload_layout() {
     fixture.geometry();
     let base = 0x10000;
     fixture.word(0x32500, 0xe0000);
-    fixture.word(0xe0000, base + 0x435cee0);
-    fixture.word(base + 0x435cee0 - 16, 0);
-    fixture.word(base + 0x435cee0 - 8, base + 0x435c100);
-    fixture.word(base + 0x435c108, base + 0x350c000);
-    fixture.region(base + 0x350c000, 128);
-    fixture.put(base + 0x350c000, b"9CPdxMouse");
-    fixture.word(base + 0x435cee0 + 0xc8, 0); // explicitly unsupported getter
+    fixture.word(0xe0000, base + 0x44f2f38);
+    fixture.word(base + 0x44f2f38 - 16, 0);
+    fixture.word(base + 0x44f2f38 - 8, base + 0x44f2158);
+    fixture.word(base + 0x44f2160, base + 0x3684000);
+    fixture.region(base + 0x3684000, 128);
+    fixture.put(base + 0x3684000, b"9CPdxMouse");
+    fixture.word(base + 0x44f2f38 + 0xc8, 0); // explicitly unsupported getter
     let value = gui::input_geometry(&fixture).unwrap();
     assert_eq!(value["input_source"]["type_encoding"], "9CPdxMouse");
     assert_eq!(value["input_source"]["field_layout_verified"], false);
     assert_eq!(value["input_source"]["client_origin_verified"], false);
     fixture.assert_not_read(&[0xe0008, 0xe00c8, 0xe014a]);
-    fixture.word(base + 0x435cee0 - 16, 8); // secondary primary is not accepted
+    fixture.word(base + 0x44f2f38 - 16, 8); // secondary primary is not accepted
     let value = gui::input_geometry(&fixture).unwrap();
     assert_eq!(value["input_source"]["type_metadata_available"], false);
     assert_eq!(
@@ -1793,19 +1793,19 @@ fn input_source_metadata_never_implies_receiver_payload_layout() {
 
 #[test]
 fn input_source_identity_and_metadata_are_final_snapshot_witnesses() {
-    for address in [0x32500, 0xe0000, 0x10000 + 0x350c000] {
+    for address in [0x32500, 0xe0000, 0x10000 + 0x3684000] {
         let mut fixture = Fixture::new();
         fixture.geometry();
         let base = 0x10000;
         fixture.word(0x32500, 0xe0000);
-        fixture.word(0xe0000, base + 0x435cee0);
-        fixture.word(base + 0x435cee0 - 16, 0);
-        fixture.word(base + 0x435cee0 - 8, base + 0x435c100);
-        fixture.word(base + 0x435c108, base + 0x350c000);
-        fixture.region(base + 0x350c000, 128);
-        fixture.put(base + 0x350c000, b"9CPdxMouse");
-        fixture.word(base + 0x435cee0 + 0xc8, 0); // explicitly unsupported getter
-        let mut bytes: Vec<_> = (0..if address == base + 0x350c000 { 128 } else { 8 })
+        fixture.word(0xe0000, base + 0x44f2f38);
+        fixture.word(base + 0x44f2f38 - 16, 0);
+        fixture.word(base + 0x44f2f38 - 8, base + 0x44f2158);
+        fixture.word(base + 0x44f2160, base + 0x3684000);
+        fixture.region(base + 0x3684000, 128);
+        fixture.put(base + 0x3684000, b"9CPdxMouse");
+        fixture.word(base + 0x44f2f38 + 0xc8, 0); // explicitly unsupported getter
+        let mut bytes: Vec<_> = (0..if address == base + 0x3684000 { 128 } else { 8 })
             .map(|i| fixture.data[&(address + i)])
             .collect();
         bytes[0] ^= 1;
@@ -1819,17 +1819,17 @@ impl Fixture {
         self.geometry();
         let base = 0x10000;
         self.word(0x32500, 0xe0000);
-        self.word(0xe0000, base + 0x435cee0);
-        self.word(base + 0x435cee0 - 16, 0);
-        self.word(base + 0x435cee0 - 8, base + 0x435c100);
-        self.word(base + 0x435c108, base + 0x350c000);
-        self.region(base + 0x350c000, 128);
-        self.put(base + 0x350c000, b"9CPdxMouse");
-        self.word(base + 0x435cee0 + 0xc8, base + 0x2fad780);
-        self.word(base + 0x4391098, base + 0x301a3a0);
-        self.number(base + 0x463b960, 256);
-        self.number(base + 0x463b964, 8);
-        self.word(base + 0x463bbf8, 0); // no inferred window association
+        self.word(0xe0000, base + 0x44f2f38);
+        self.word(base + 0x44f2f38 - 16, 0);
+        self.word(base + 0x44f2f38 - 8, base + 0x44f2158);
+        self.word(base + 0x44f2160, base + 0x3684000);
+        self.region(base + 0x3684000, 128);
+        self.put(base + 0x3684000, b"9CPdxMouse");
+        self.word(base + 0x44f2f38 + 0xc8, base + 0x3119a20);
+        self.word(base + 0x4527008, base + 0x3186960);
+        self.number(base + 0x47d2940, 256);
+        self.number(base + 0x47d2944, 8);
+        self.word(base + 0x47d2bd8, 0); // no inferred window association
     }
 
     fn builtin_mouse_window(&mut self) {
@@ -1837,11 +1837,11 @@ impl Fixture {
         // Constructor/accessor-proved fields only. Sparse objects intentionally
         // have no SDL display, list links or unrelated window payload.
         let base = 0x10000;
-        self.word(base + 0x463bbf8, MOUSE_VIDEO);
-        self.word(MOUSE_VIDEO + 0x48, base + 0x307d430);
+        self.word(base + 0x47d2bd8, MOUSE_VIDEO);
+        self.word(MOUSE_VIDEO + 0x48, base + 0x31e99f0);
         self.word(MOUSE_VIDEO + 0x58, base + 0x307e0d0);
-        self.word(MOUSE_VIDEO + 0x228, base + 0x30f5d30);
-        self.word(base + 0x463b958, MOUSE_WINDOW);
+        self.word(MOUSE_VIDEO + 0x228, base + 0x32622f0);
+        self.word(base + 0x47d2938, MOUSE_WINDOW);
         self.word(MOUSE_WINDOW, MOUSE_VIDEO + 0x2d8);
         self.number(MOUSE_WINDOW + 0x28, 512);
         self.number(MOUSE_WINDOW + 0x2c, 288);
@@ -1856,8 +1856,8 @@ impl Fixture {
         self.word(MOUSE_ENTRIES, 0xdead0000);
         self.word(MOUSE_ENTRIES + 8, MOUSE_DATA);
         self.word(MOUSE_ENTRIES + 16, u64::MAX);
-        self.number(base + 0x463b984, 0);
-        self.number(base + 0x463b988, 0);
+        self.number(base + 0x47d2964, 0);
+        self.number(base + 0x47d2968, 0);
     }
 
     fn forbid_bytes(&mut self, address: u64, size: usize) {
@@ -1919,8 +1919,8 @@ fn builtin_mouse_window_preserves_raw_relative_flags_and_dimension_mismatch() {
     for flags in [[1, 0], [0, 1], [-7, i32::MAX]] {
         let mut f = Fixture::new();
         f.builtin_mouse_window();
-        f.number(0x10000 + 0x463b984, flags[0]);
-        f.number(0x10000 + 0x463b988, flags[1]);
+        f.number(0x10000 + 0x47d2964, flags[0]);
+        f.number(0x10000 + 0x47d2968, flags[1]);
         f.number(MOUSE_WINDOW + 0x28, 513);
         let v = gui::input_geometry(&f).unwrap();
         let window = &v["input_source"]["point_diagnostic"]["window_association"];
@@ -1935,18 +1935,18 @@ fn builtin_mouse_window_preserves_raw_relative_flags_and_dimension_mismatch() {
 
 #[test]
 fn builtin_mouse_window_is_not_read_for_an_unaccepted_point_getter() {
-    for address in [0x10000 + 0x435cee0 + 0xc8, 0x10000 + 0x4391098] {
+    for address in [0x10000 + 0x44f2f38 + 0xc8, 0x10000 + 0x4527008] {
         let mut f = Fixture::new();
         f.builtin_mouse_window();
         f.word(address, 0xdead0000);
-        f.forbid_bytes(0x10000 + 0x463bbf8, 8);
+        f.forbid_bytes(0x10000 + 0x47d2bd8, 8);
         let v = gui::input_geometry(&f).unwrap();
         let point = &v["input_source"]["point_diagnostic"];
         assert_eq!(point["getter_source_layout_verified"], false);
         assert!(point.get("window_association").is_none());
         f.assert_not_read(&[
-            0x10000 + 0x463bbf8,
-            0x10000 + 0x463b958,
+            0x10000 + 0x47d2bd8,
+            0x10000 + 0x47d2938,
             MOUSE_VIDEO + 0x48,
             MOUSE_WINDOW,
             MOUSE_DRIVER + 0x2c,
@@ -1962,7 +1962,7 @@ fn unsupported_mouse_window_driver_does_not_read_window_or_driver_payload() {
         let mut f = Fixture::new();
         f.builtin_mouse_window();
         f.word(MOUSE_VIDEO + offset, 0xdead0000);
-        f.forbid_bytes(0x10000 + 0x463b958, 8);
+        f.forbid_bytes(0x10000 + 0x47d2938, 8);
         f.forbid_bytes(MOUSE_VIDEO + 0x5a8, 8);
         let v = gui::input_geometry(&f).unwrap();
         let window = &v["input_source"]["point_diagnostic"]["window_association"];
@@ -1971,7 +1971,7 @@ fn unsupported_mouse_window_driver_does_not_read_window_or_driver_payload() {
         assert_eq!(window["owned_os_window_verified"], false);
         assert!(window.get("native_window_id").is_none());
         f.assert_not_read(&[
-            0x10000 + 0x463b958,
+            0x10000 + 0x47d2938,
             MOUSE_VIDEO + 0x5a8,
             MOUSE_WINDOW,
             MOUSE_DATA,
@@ -1983,8 +1983,8 @@ fn unsupported_mouse_window_driver_does_not_read_window_or_driver_payload() {
 #[test]
 fn absent_mouse_window_focus_or_video_is_unavailable_without_payload_reads() {
     for (address, reason) in [
-        (0x10000 + 0x463bbf8, "active_video_unavailable"),
-        (0x10000 + 0x463b958, "input_window_focus_unavailable"),
+        (0x10000 + 0x47d2bd8, "active_video_unavailable"),
+        (0x10000 + 0x47d2938, "input_window_focus_unavailable"),
     ] {
         let mut f = Fixture::new();
         f.builtin_mouse_window();
@@ -1995,8 +1995,8 @@ fn absent_mouse_window_focus_or_video_is_unavailable_without_payload_reads() {
         assert_eq!(window["association_available"], false);
         assert_eq!(window["reason"], reason);
         f.assert_not_read(&[MOUSE_WINDOW, MOUSE_DATA, MOUSE_ENTRIES]);
-        if address == 0x10000 + 0x463bbf8 {
-            f.assert_not_read(&[MOUSE_VIDEO + 0x48, 0x10000 + 0x463b958]);
+        if address == 0x10000 + 0x47d2bd8 {
+            f.assert_not_read(&[MOUSE_VIDEO + 0x48, 0x10000 + 0x47d2938]);
         }
     }
 }
@@ -2061,8 +2061,8 @@ fn mouse_window_registry_oversize_is_unavailable_without_array_or_id_reads() {
         f.assert_not_read(&[
             MOUSE_ENTRIES,
             MOUSE_DATA + 8,
-            0x10000 + 0x463b984,
-            0x10000 + 0x463b988,
+            0x10000 + 0x47d2964,
+            0x10000 + 0x47d2968,
         ]);
     }
 }
@@ -2142,12 +2142,12 @@ fn mouse_window_dimensions_and_native_xid_enforce_their_observation_bounds() {
         let mut f = Fixture::new();
         f.builtin_mouse_window();
         f.word(MOUSE_DATA + 8, xid);
-        f.forbid_bytes(0x10000 + 0x463b984, 4);
+        f.forbid_bytes(0x10000 + 0x47d2964, 4);
         assert_eq!(
             gui::input_geometry(&f).unwrap_err().code,
             "invalid_input_source"
         );
-        f.assert_not_read(&[0x10000 + 0x463b984, 0x10000 + 0x463b988]);
+        f.assert_not_read(&[0x10000 + 0x47d2964, 0x10000 + 0x47d2968]);
     }
     for dimension in [1, 16384] {
         let mut f = Fixture::new();
@@ -2167,8 +2167,8 @@ fn mouse_window_dimensions_and_native_xid_enforce_their_observation_bounds() {
 #[test]
 fn mouse_window_pointers_refuse_noncanonical_and_overflowing_dereferences() {
     for address in [
-        0x10000 + 0x463bbf8,
-        0x10000 + 0x463b958,
+        0x10000 + 0x47d2bd8,
+        0x10000 + 0x47d2938,
         MOUSE_VIDEO + 0x5a8,
         MOUSE_WINDOW + 0xd8,
         MOUSE_DRIVER + 0x30,
@@ -2190,11 +2190,11 @@ fn mouse_window_pointers_refuse_noncanonical_and_overflowing_dereferences() {
 #[test]
 fn mouse_window_revalidates_every_required_association_field_and_array_byte() {
     for (address, size) in [
-        (0x10000 + 0x463bbf8, 8),
+        (0x10000 + 0x47d2bd8, 8),
         (MOUSE_VIDEO + 0x48, 8),
         (MOUSE_VIDEO + 0x58, 8),
         (MOUSE_VIDEO + 0x228, 8),
-        (0x10000 + 0x463b958, 8),
+        (0x10000 + 0x47d2938, 8),
         (MOUSE_WINDOW, 8),
         (MOUSE_WINDOW + 0x28, 4),
         (MOUSE_WINDOW + 0x2c, 4),
@@ -2206,8 +2206,8 @@ fn mouse_window_revalidates_every_required_association_field_and_array_byte() {
         (MOUSE_DRIVER + 0x30, 8),
         (MOUSE_DRIVER + 0x38, 4),
         (MOUSE_DATA + 8, 8),
-        (0x10000 + 0x463b984, 4),
-        (0x10000 + 0x463b988, 4),
+        (0x10000 + 0x47d2964, 4),
+        (0x10000 + 0x47d2968, 4),
     ] {
         let mut f = Fixture::new();
         f.builtin_mouse_window();
@@ -2258,11 +2258,11 @@ fn builtin_point_source_proves_arithmetic_but_never_origin_or_fresh_event() {
     assert_eq!(p["fresh_event_verified"], false);
     assert_eq!(v["input_source"]["client_origin_verified"], false);
     assert_eq!(v["input_mapping_verified"], false);
-    f.assert_not_read(&[0xe014a, 0xe00c8, 0x10000 + 0x463b958]);
+    f.assert_not_read(&[0xe014a, 0xe00c8, 0x10000 + 0x47d2938]);
     // Signed source coordinates and float32 truncation, rather than integer
     // products or config-only scale, follow the independently decoded consumer.
-    f.number(0x10000 + 0x463b960, -3);
-    f.number(0x10000 + 0x463b964, 7);
+    f.number(0x10000 + 0x47d2940, -3);
+    f.number(0x10000 + 0x47d2944, 7);
     let v = gui::input_geometry(&f).unwrap();
     assert_eq!(
         v["input_source"]["point_diagnostic"]["source_logical_point"],
@@ -2277,8 +2277,8 @@ fn builtin_point_source_proves_arithmetic_but_never_origin_or_fresh_event() {
 fn unsupported_point_getter_or_dynamic_replacement_never_reads_global_payload() {
     let base = 0x10000;
     for (address, reason) in [
-        (base + 0x435cee0 + 0xc8, "receiver_getter_unavailable"),
-        (base + 0x4391098, "builtin_point_source_unavailable"),
+        (base + 0x44f2f38 + 0xc8, "receiver_getter_unavailable"),
+        (base + 0x4527008, "builtin_point_source_unavailable"),
     ] {
         let mut f = Fixture::new();
         f.builtin_mouse_point();
@@ -2289,15 +2289,15 @@ fn unsupported_point_getter_or_dynamic_replacement_never_reads_global_payload() 
             false
         );
         assert_eq!(v["input_source"]["point_diagnostic"]["reason"], reason);
-        f.assert_not_read(&[base + 0x463b960, base + 0x463b964]);
+        f.assert_not_read(&[base + 0x47d2940, base + 0x47d2944]);
     }
 }
 #[test]
 fn builtin_point_source_witnesses_slot_and_both_coordinates() {
     for (address, length) in [
-        (0x10000 + 0x4391098, 8),
-        (0x10000 + 0x463b960, 4),
-        (0x10000 + 0x463b964, 4),
+        (0x10000 + 0x4527008, 8),
+        (0x10000 + 0x47d2940, 4),
+        (0x10000 + 0x47d2944, 4),
     ] {
         let mut f = Fixture::new();
         f.builtin_mouse_point();
@@ -2308,7 +2308,7 @@ fn builtin_point_source_witnesses_slot_and_both_coordinates() {
     }
     let mut f = Fixture::new();
     f.builtin_mouse_point();
-    f.number(0x10000 + 0x463b960, i32::MIN);
+    f.number(0x10000 + 0x47d2940, i32::MIN);
     assert_eq!(
         gui::input_geometry(&f).unwrap_err().code,
         "invalid_gui_geometry"
@@ -2319,13 +2319,13 @@ fn builtin_point_source_witnesses_slot_and_both_coordinates() {
 fn wrong_gui_type_inconsistent_scales_and_torn_geometry_fail() {
     let mut fixture = Fixture::new();
     fixture.geometry();
-    fixture.word(0x70000, 0x10000 + 0x434c068);
+    fixture.word(0x70000, 0x10000 + 0x44e22c8);
     let refusal = gui::input_geometry(&fixture).unwrap_err();
     assert_eq!(refusal.code, "gui_unavailable");
     assert!(refusal.message.contains("CGameGui"));
     let mut fixture = Fixture::new();
     fixture.geometry();
-    fixture.word(0x71000, 0x10000 + 0x43608e0);
+    fixture.word(0x71000, 0x10000 + 0x44f6970);
     assert_eq!(
         gui::input_geometry(&fixture).unwrap_err().code,
         "gui_unavailable"
@@ -2430,16 +2430,16 @@ fn research_ui_checks_counts_before_payload_and_rejects_secondary_metadata() {
     for (address, value, code) in [
         (0x91310, 33, "invalid_array"),
         (0xa0960, 65, "invalid_array"),
-        (0x10000 + 0x43470c8 - 16, 8, "invalid_gui_type"),
-        (0x10000 + 0x4350000 + 8, 0x90000, "invalid_gui_type"),
+        (0x10000 + 0x44dd4f0 - 16, 8, "invalid_gui_type"),
+        (0x10000 + 0x44e6280 + 8, 0x90000, "invalid_gui_type"),
         (
-            0x10000 + 0x43470c8 - 8,
-            0x10000 + 0x439e7a0,
+            0x10000 + 0x44dd4f0 - 8,
+            0x10000 + 0x45347a0,
             "invalid_gui_type",
         ),
         (
-            0x10000 + 0x4350000 + 8,
-            0x10000 + 0x436f150,
+            0x10000 + 0x44e6280 + 8,
+            0x10000 + 0x4505150,
             "invalid_gui_type",
         ),
     ] {
@@ -2468,7 +2468,7 @@ fn research_ui_checks_final_headers_payload_owners_visibility_and_types() {
         (0xb2034, 4, 1u32.to_le_bytes().to_vec()),
         (0xb2168, 8, 0u64.to_le_bytes().to_vec()),
         (0xb21b0, 8, 0u64.to_le_bytes().to_vec()),
-        (0x10000 + 0x38b4750, 128, vec![0; 128]),
+        (0x10000 + 0x3a2c750, 128, vec![0; 128]),
     ] {
         let mut f = Fixture::new();
         f.research_ui();
@@ -2493,10 +2493,10 @@ fn research_ui_checks_final_headers_payload_owners_visibility_and_types() {
 fn research_ui_unknown_primary_table_never_implies_button_layout() {
     let mut f = Fixture::new();
     f.research_ui();
-    let table = 0x10000 + 0x4347400;
+    let table = 0x10000 + 0x44dd848;
     f.word(0xb1000, table);
     f.word(table - 16, 0);
-    f.word(table - 8, 0x10000 + 0x4350000);
+    f.word(table - 8, 0x10000 + 0x44e6280);
     for (address, size) in [(0xb10ac, 4), (0xb10e8, 8)] {
         for n in 0..size {
             f.data.remove(&(address + n));
@@ -2542,10 +2542,10 @@ fn research_ui_drag_end_witnesses_refuse_state_or_renderer_changes() {
     }
     let mut f = Fixture::new();
     f.research_drag();
-    let table = 0x10000 + 0x4347400;
+    let table = 0x10000 + 0x44dd848;
     f.word(0xb1000, table);
     f.word(table - 16, 0);
-    f.word(table - 8, 0x10000 + 0x4350000);
+    f.word(table - 8, 0x10000 + 0x44e6280);
     for (address, size) in [(0xb10ac, 4), (0xb1110, 8)] {
         for n in 0..size {
             f.data.remove(&(address + n));
@@ -2563,10 +2563,10 @@ fn research_ui_instant_and_unknown_renderers_do_not_borrow_frame_layout() {
     let mut f = Fixture::new();
     f.research_drag();
     let base = 0x10000;
-    let table = base + 0x434c5b0;
+    let table = base + 0x44e2820;
     f.word(0xb2000, table);
     f.word(table - 16, 0);
-    f.word(table - 8, base + 0x4351000);
+    f.word(table - 8, base + 0x44e7280);
     f.word(0xb2160, 0xb3000);
     for address in (0xb2168..0xb2170).chain(0xb21b0..0xb21b8) {
         f.data.remove(&address);
@@ -2579,10 +2579,10 @@ fn research_ui_instant_and_unknown_renderers_do_not_borrow_frame_layout() {
         "24CFrameAnimatedSpriteType"
     );
     assert!(details.get("resources_same").is_none());
-    let table = base + 0x434b400;
+    let table = base + 0x44e1670;
     f.word(0xb2000, table);
     f.word(table - 16, 0);
-    f.word(table - 8, base + 0x4351000);
+    f.word(table - 8, base + 0x44e7280);
     for (address, size) in [(0xb2034, 4), (0xb2160, 8)] {
         for n in 0..size {
             f.data.remove(&(address + n));
@@ -2630,10 +2630,10 @@ fn research_ui_plain_sprite_witnesses_changes_and_rejects_name_only_layouts() {
     }
     let mut f = Fixture::new();
     f.research_plain_sprite();
-    let table = 0x10000 + 0x4356e80;
+    let table = 0x10000 + 0x44ed250;
     f.word(0xb2000, table);
     f.word(table - 16, 0);
-    f.word(table - 8, 0x10000 + 0x4351000);
+    f.word(table - 8, 0x10000 + 0x44e7280);
     for (address, size) in [(0xb2034, 4), (0xb2168, 8)] {
         for n in 0..size {
             f.data.remove(&(address + n));
@@ -2691,7 +2691,7 @@ fn research_info_retained_empty_selection_and_unmaterialized_window_are_explicit
     // Empty retained objects require neither a database nor a guessed control.
     for address in (0xc1ab0..0xc1ab8)
         .chain(0xc1ac0..0xc1ac8)
-        .chain((0x10000 + 0x439f450)..(0x10000 + 0x439f458))
+        .chain((0x10000 + 0x45353b0)..(0x10000 + 0x45353b8))
     {
         f.data.remove(&address);
     }
@@ -2714,7 +2714,7 @@ fn research_info_refuses_foreign_objects_wrong_catalog_and_misbound_controls() {
         (0xc1a98, 0x63000, "invalid_gui_type"),
         (0xc7008, 0xc8000, "invalid_gui_registry"),
         (0xc1ac0, 0xc8000, "invalid_gui_registry"),
-        (0xc5000, 0x10000 + 0x4346b10, "invalid_gui_type"),
+        (0xc5000, 0x10000 + 0x44dcf10, "invalid_gui_type"),
     ] {
         let mut f = Fixture::new();
         f.research_info();
@@ -3077,33 +3077,33 @@ impl Fixture {
         let base = 0x10000;
         self.word(0xd3010, 0xd4000);
         self.region(0xd4000, 0x980);
-        self.word(0xd4000, base + 0x4347d58);
+        self.word(0xd4000, base + 0x44de2b0);
         self.word(0xd4098, 0x70000);
-        self.word(base + 0x4347d58 - 16, 0);
-        self.word(base + 0x4347d58 - 8, base + 0x4355100);
-        self.region(base + 0x4355100, 16);
-        self.word(base + 0x4355108, base + 0x350d100);
-        self.region(base + 0x350d100, 128);
-        self.put(base + 0x350d100, b"16CContainerWindow");
+        self.word(base + 0x44de2b0 - 16, 0);
+        self.word(base + 0x44de2b0 - 8, base + 0x44eb4b0);
+        self.region(base + 0x44eb4b0, 16);
+        self.word(base + 0x44eb4b8, base + 0x3685100);
+        self.region(base + 0x3685100, 128);
+        self.put(base + 0x3685100, b"16CContainerWindow");
         self.array(0xd4958, 0xd4800, 1);
         self.word(0xd4800, 0xd5000);
         self.region(0xd5000, 0x120);
-        self.word(0xd5000, base + 0x4346b10);
-        self.word(base + 0x4346b10 - 16, 0);
-        self.word(base + 0x4346b10 - 8, base + 0x4355000);
-        self.region(base + 0x4355000, 16);
-        self.word(base + 0x4355008, base + 0x350d000);
-        self.region(base + 0x350d000, 128);
-        self.put(base + 0x350d000, b"11CButtonDrag");
+        self.word(0xd5000, base + 0x44dcf10);
+        self.word(base + 0x44dcf10 - 16, 0);
+        self.word(base + 0x44dcf10 - 8, base + 0x44eb3b0);
+        self.region(base + 0x44eb3b0, 16);
+        self.word(base + 0x44eb3b8, base + 0x3685000);
+        self.region(base + 0x3685000, 128);
+        self.put(base + 0x3685000, b"11CButtonDrag");
         self.word(0xd5008, 0x80000);
         self.word(0xd5068, 0x70000);
-        self.word(0xd5080, base + 0x4346ea8);
+        self.word(0xd5080, base + 0x44dd2c8);
         self.word(0xd5088, 0xd6000);
         self.word(0xd5090, 0xd6000);
         self.number(0xd5098, 1);
         self.region(0xd6000, 32);
         self.word(0xd6000, 0x925e0);
-        self.word(0x925e0, base + 0x424e0a8);
+        self.word(0x925e0, base + 0x43e3df8);
         self.word(0x92608, 0xd7000);
         self.word(0x92618, base + 0x15a5710);
         self.word(0x92620, base + 0x15a56e0);
@@ -3163,7 +3163,7 @@ fn node_null_and_unknown_layout_are_diagnostic_only() {
     );
     let mut f = Fixture::new();
     f.node_binding();
-    f.word(0xd4000, 0x10000 + 0x4346b10);
+    f.word(0xd4000, 0x10000 + 0x44dcf10);
     for a in 0xd4958..0xd4968 {
         f.data.remove(&a);
     }
@@ -3208,7 +3208,7 @@ fn repeated_key_controls_retain_separate_binding_observations() {
     let mut f = Fixture::new();
     f.node_binding();
     f.region(0xd8000, 0xd0);
-    f.word(0xd8000, 0x10000 + 0x424e2e0);
+    f.word(0xd8000, 0x10000 + 0x43e4038);
     f.word(0xd8030, 0x92000);
     f.word(0xd80c8, 0x80000);
     f.word(0xd8010, 0xd4000);
@@ -3250,14 +3250,14 @@ fn corrected_record_offset_and_stage_diagnostics_do_not_relax_types() {
         research_ui::nodes(&f).unwrap()["current_nodes"]["node_count"],
         1
     );
-    f.word(0xd3000, 0x10000 + 0x4347d58);
+    f.word(0xd3000, 0x10000 + 0x44de2b0);
     let error = research_ui::nodes(&f).unwrap_err();
     assert_eq!(error.code, "node_item_type_unavailable");
     assert!(error.message.contains("CContainerWindow"));
     assert!(!error.message.contains("0xd3000"));
     let mut f = Fixture::new();
     f.node_binding();
-    f.word(0x80000, 0x10000 + 0x4347d58);
+    f.word(0x80000, 0x10000 + 0x44de2b0);
     // Existing Info observation may refuse first; isolate current node helper
     // by an empty Info list, preserving production owner/snapshot guards.
     f.array(0x92dc0, 0, 0);
@@ -3302,7 +3302,7 @@ fn request_reuse_backend_read_measurement() {
     let mut f = Fixture::new();
     f.node_binding();
     f.region(0xd8000, 0xd0);
-    f.word(0xd8000, 0x10000 + 0x424e2e0);
+    f.word(0xd8000, 0x10000 + 0x43e4038);
     f.word(0xd8030, 0x92000);
     f.word(0xd80c8, 0x80000);
     f.word(0xd8010, 0xd4000);
@@ -3310,9 +3310,9 @@ fn request_reuse_backend_read_measurement() {
     let value = research_ui::nodes(&f).unwrap();
     assert_eq!(value["current_nodes"]["node_count"], 1);
     let reads = f.tracked_reads.borrow();
-    println!("metadata_table_reads={} callback_manager_reads={} object_control_reads={} rpc_read_calls={}",reads[&(0x10000+0x4346b10-16)],reads[&0x92618],reads[&0xd5000],value["freshness"]["read_calls"]);
+    println!("metadata_table_reads={} callback_manager_reads={} object_control_reads={} rpc_read_calls={}",reads[&(0x10000+0x44dcf10-16)],reads[&0x92618],reads[&0xd5000],value["freshness"]["read_calls"]);
     // Measured unmodified baseline on this fixture: 3/3/5/404.
-    assert_eq!(reads[&(0x10000 + 0x4346b10 - 16)], 2);
+    assert_eq!(reads[&(0x10000 + 0x44dcf10 - 16)], 2);
     assert_eq!(reads[&0x92618], 2);
     assert_eq!(reads[&0xd5000], 5);
     assert!(value["freshness"]["read_calls"].as_u64().unwrap() < 404);
@@ -3334,7 +3334,7 @@ impl Fixture {
         self.word(0xda088, 0xdb000);
         self.word(0xda090, 0xdb000);
         self.region(0xd8000, 0xd0);
-        self.word(0xd8000, 0x10000 + 0x424e2e0);
+        self.word(0xd8000, 0x10000 + 0x43e4038);
         self.word(0xd8030, 0x92000);
         self.word(0xd80c8, 0x80000);
         self.word(0xd8010, 0xd9000);
@@ -3344,9 +3344,9 @@ impl Fixture {
 #[test]
 fn reused_metadata_and_capture_keep_final_production_witnesses() {
     for (a, n) in [
-        (0x10000 + 0x4346b10 - 16, 8),
-        (0x10000 + 0x4355008, 8),
-        (0x10000 + 0x350d000, 128),
+        (0x10000 + 0x44dcf10 - 16, 8),
+        (0x10000 + 0x44eb3b8, 8),
+        (0x10000 + 0x3685000, 128),
         (0x92618, 8),
         (0x92620, 8),
         (0x92608, 8),
@@ -3373,7 +3373,7 @@ fn reused_proof_never_reuses_later_object_owner_or_control_data() {
         (0xd9098, 0xdead0000, "invalid_gui_owner"),
         (0xda068, 0xdead0000, "invalid_gui_owner"),
         (0xda008, 0x80008, "invalid_research_join"),
-        (0xd8000, 0x10000 + 0x4347d58, "node_item_type_unavailable"),
+        (0xd8000, 0x10000 + 0x44de2b0, "node_item_type_unavailable"),
     ] {
         let mut f = Fixture::new();
         f.reused_two_controls();
@@ -3382,7 +3382,7 @@ fn reused_proof_never_reuses_later_object_owner_or_control_data() {
     }
     let mut f = Fixture::new();
     f.reused_two_controls();
-    f.word(0xda000, 0x10000 + 0x4347d58);
+    f.word(0xda000, 0x10000 + 0x44de2b0);
     let v = research_ui::nodes(&f).unwrap();
     assert_eq!(
         v["current_nodes"]["nodes"][0]["ordinary_control_bindings"][1]["binding_verified"],
@@ -3412,8 +3412,8 @@ impl Fixture {
         self.region(0xf0000, 0x180);
         self.region(0xf1000, 0x1f0);
         for (object, table, info, name, text) in [
-            (0xf0000, 0x4356e08, 0x4356000, "7CSprite", 0x350e000),
-            (0xf1000, 0x4357160, 0x4356100, "11CSpriteType", 0x350e100),
+            (0xf0000, 0x44ed1d8, 0x44ec3b0, "7CSprite", 0x3686000),
+            (0xf1000, 0x44ed530, 0x44ec4b0, "11CSpriteType", 0x3686100),
         ] {
             self.word(object, base + table);
             self.word(base + table - 16, 0);
@@ -3475,7 +3475,7 @@ fn full_own_model_checked_before_requested_geometry() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.region(0xd8000, 0xd0);
-    f.word(0xd8000, 0x10000 + 0x424e2e0);
+    f.word(0xd8000, 0x10000 + 0x43e4038);
     f.word(0xd8030, 0x92008);
     f.word(0xd2038, 0xd8000);
     for address in 0xf0138..0xf0140 {
@@ -3503,7 +3503,7 @@ fn detail_exact_key_and_unavailable_branch_do_not_guess() {
         research_ui::node_detail(&f, "tools").unwrap_err().code,
         "node_unavailable"
     );
-    f.word(0xf0000, 0x10000 + 0x4346b10);
+    f.word(0xf0000, 0x10000 + 0x44dcf10);
     for a in 0xf0138..0xf0180 {
         f.data.remove(&a);
     }
@@ -3578,7 +3578,7 @@ fn ancestor_metadata_never_supplies_ownership_or_payload_layout() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.word(0xf0108, 0xf2000);
-    f.word(0xf2000, 0x10000 + 0x4346b10);
+    f.word(0xf2000, 0x10000 + 0x44dcf10);
     let v = research_ui::node_detail(&f, "tools1").unwrap();
     assert_eq!(
         v["detail"]["render_diagnostic"]["parent_chain"]["status"],
@@ -3618,7 +3618,7 @@ fn cached_dimension_two_rounds_and_finite_policy_are_explicit() {
 fn unknown_resource_is_metadata_only_without_geometry_payload_reads() {
     let mut f = Fixture::new();
     f.node_render_detail();
-    f.word(0xf1000, 0x10000 + 0x4346b10);
+    f.word(0xf1000, 0x10000 + 0x44dcf10);
     for a in 0xf1090..0xf11f0 {
         f.data.remove(&a);
     }
@@ -3639,13 +3639,13 @@ fn unknown_resource_is_metadata_only_without_geometry_payload_reads() {
 impl Fixture {
     fn hierarchy_fixture(&mut self) {
         let base = 0x10000;
-        let table = 0x43484f0;
+        let table = 0x44dea58;
         self.word(base + table - 16, 0);
-        self.word(base + table - 8, base + 0x4356200);
-        self.region(base + 0x4356200, 16);
-        self.word(base + 0x4356208, base + 0x350e200);
-        self.region(base + 0x350e200, 128);
-        self.put(base + 0x350e200, b"17C2dPositionObject");
+        self.word(base + table - 8, base + 0x44ec5b0);
+        self.region(base + 0x44ec5b0, 16);
+        self.word(base + 0x44ec5b8, base + 0x3686200);
+        self.region(base + 0x3686200, 128);
+        self.put(base + 0x3686200, b"17C2dPositionObject");
         for node in [0xf3000, 0xf4000, 0x711f0, 0x71350] {
             self.region(node, 0x160);
             self.word(node, base + table);
@@ -3688,7 +3688,7 @@ fn v2_hierarchy_refuses_position_root_registry_and_reciprocal_defects() {
         (0xd4e78, 0xf3000, "invalid_gui_position"),
         (0xf4108, 0x71350, "invalid_gui_position"),
         (0x700b8, 0x71008, "invalid_gui_owner"),
-        (0x711f0, 0x10000 + 0x4356e08, "invalid_gui_type"),
+        (0x711f0, 0x10000 + 0x44ed1d8, "invalid_gui_type"),
         (0xf5100, 0xdead0000, "invalid_gui_hierarchy"),
     ] {
         let mut f = Fixture::new();
@@ -3705,7 +3705,7 @@ fn v2_unknown_ancestor_stops_before_all_payload() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.word(0xf0108, 0xf2000);
-    f.word(0xf2000, 0x10000 + 0x4346b10);
+    f.word(0xf2000, 0x10000 + 0x44dcf10);
     let v = research_ui::node_detail(&f, "tools1").unwrap();
     let h = &v["detail"]["render_diagnostic"]["parent_chain"];
     assert_eq!(h["status"], "unknown_ancestor");
@@ -3742,7 +3742,7 @@ fn v2_hierarchy_end_witnesses_cover_all_typed_links_and_anchors() {
         (0xf3108, 8),
         (0x712b0, 16),
         (0xf5200, 8),
-        (0x10000 + 0x4577890, 8),
+        (0x10000 + 0x470e688, 8),
         (0x700b8, 8),
         (0x711f0, 8),
     ] {
@@ -3766,7 +3766,7 @@ fn v2_depth_limit_never_projects_or_reads_seventeenth_payload() {
     for i in 0..16u64 {
         let node = 0x100000 + i * 0x200;
         f.region(node, 0x160);
-        f.word(node, 0x10000 + 0x43484f0);
+        f.word(node, 0x10000 + 0x44dea58);
         f.word(child + 0x108, node);
         let data = 0x110000 + i * 0x20;
         f.array(node + 0xc0, data, 1);
@@ -3784,20 +3784,20 @@ fn v2_depth_limit_never_projects_or_reads_seventeenth_payload() {
 #[test]
 fn v2_known_renderer_ancestors_read_only_proved_base_links() {
     for (table, name) in [
-        (0x4356e08, "7CSprite"),
-        (0x434b370, "20CFrameAnimatedSprite"),
-        (0x434c5b0, "14CInstantSprite"),
+        (0x44ed1d8, "7CSprite"),
+        (0x44e15e0, "20CFrameAnimatedSprite"),
+        (0x44e2820, "14CInstantSprite"),
     ] {
         let mut f = Fixture::new();
         f.node_render_detail();
         let base = 0x10000;
         let node = 0xf8000;
         f.word(base + table - 16, 0);
-        f.word(base + table - 8, base + 0x4356400);
-        f.region(base + 0x4356400, 16);
-        f.word(base + 0x4356408, base + 0x350e400);
-        f.region(base + 0x350e400, 128);
-        f.put(base + 0x350e400, name.as_bytes());
+        f.word(base + table - 8, base + 0x44ec7b0);
+        f.region(base + 0x44ec7b0, 16);
+        f.word(base + 0x44ec7b8, base + 0x3686400);
+        f.region(base + 0x3686400, 128);
+        f.put(base + 0x3686400, name.as_bytes());
         f.region(node, 0x138);
         f.put(node + 0x144, &[0]);
         f.word(node, base + table);
@@ -3933,7 +3933,7 @@ fn policy_unavailable_hierarchy_still_witnesses_the_refused_header_and_owner() {
 impl Fixture {
     fn target_later_item(&mut self) {
         self.region(0xd8000, 0xd0);
-        self.word(0xd8000, 0x10000 + 0x424e2e0);
+        self.word(0xd8000, 0x10000 + 0x43e4038);
         self.word(0xd8030, 0x92000);
         self.word(0xd80c8, 0x81000);
         self.word(0xd8010, 0xdead0000); // unrelated GUI intentionally unreadable
@@ -3943,13 +3943,13 @@ impl Fixture {
         self.array(0x92dc0, 0xc0000, 1);
         self.word(0xc0000, 0xc1000);
         self.region(0xc1000, 0xb00);
-        self.word(0xc1000, 0x10000 + 0x430bbf0);
+        self.word(0xc1000, 0x10000 + 0x44a17b0);
         self.word(0xc1a78, 0x32000);
         self.word(0xc1a80, 0x92000);
         self.word(0xc1a98, selected);
         self.word(0xc1a88, 0xc3000);
         self.region(0xc3000, 0xf00);
-        self.word(0xc3000, 0x10000 + 0x4347d58);
+        self.word(0xc3000, 0x10000 + 0x44de2b0);
         self.word(0xc3098, 0x70000);
         self.put(0xc30a5, &[8]);
     }
@@ -4020,7 +4020,7 @@ fn target_global_duplicate_key_outside_current_records_refused() {
 fn target_catalog_sentinel_and_unrelated_definition_must_be_valid() {
     for (a, value, code) in [
         (0x62000, 0x63000, "research_unavailable"),
-        (0x63200, 0x10000 + 0x42107f8, "invalid_gui_type"),
+        (0x63200, 0x10000 + 0x43a5650, "invalid_gui_type"),
     ] {
         let mut f = Fixture::new();
         f.node_render_detail();
@@ -4047,9 +4047,9 @@ fn target_reserved_singleton_is_typed_and_never_reads_template_payload() {
     f.assert_not_read(&[0x62508, 0x62530, 0x62538]);
     for (address, replacement, code) in [
         (0x62000, 0, "research_unavailable"),
-        (0x10000 + 0x439f560, 0, "research_unavailable"),
-        (0x10000 + 0x439f560, 0x63000, "research_unavailable"),
-        (0x62500, 0x10000 + 0x4211038, "invalid_gui_type"),
+        (0x10000 + 0x45354c0, 0, "research_unavailable"),
+        (0x10000 + 0x45354c0, 0x63000, "research_unavailable"),
+        (0x62500, 0x10000 + 0x43a5f30, "invalid_gui_type"),
     ] {
         let mut f = Fixture::new();
         f.node_render_detail();
@@ -4064,7 +4064,7 @@ fn target_reserved_singleton_is_typed_and_never_reads_template_payload() {
 
 #[test]
 fn target_reserved_global_pointer_and_primary_are_final_witnesses() {
-    for address in [0x10000 + 0x439f560, 0x62500] {
+    for address in [0x10000 + 0x45354c0, 0x62500] {
         let mut f = Fixture::new();
         f.node_render_detail();
         let mut bytes: Vec<_> = (0..8).map(|i| f.data[&(address + i)]).collect();
@@ -4278,7 +4278,7 @@ fn target_later_exact_types_checked_before_ownership_payload() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.target_later_item();
-    f.word(0xd8000, 0x10000 + 0x4347d58);
+    f.word(0xd8000, 0x10000 + 0x44de2b0);
     assert_eq!(
         research_ui::node_detail(&f, "tools1").unwrap_err().code,
         "invalid_gui_type"
@@ -4287,7 +4287,7 @@ fn target_later_exact_types_checked_before_ownership_payload() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.target_later_item();
-    f.word(0x81000, 0x10000 + 0x4211038);
+    f.word(0x81000, 0x10000 + 0x43a5f30);
     assert_eq!(
         research_ui::node_detail(&f, "tools1").unwrap_err().code,
         "invalid_gui_type"
@@ -4387,7 +4387,7 @@ fn same_primary_foreign_position_never_gets_root_policy() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.region(0x170000, 0x160);
-    f.word(0x170000, 0x10000 + 0x43484f0);
+    f.word(0x170000, 0x10000 + 0x44dea58);
     f.word(0xf3108, 0x170000);
     f.array(0x1700c0, 0x180000, 4142);
     let v = research_ui::node_detail(&f, "tools1").unwrap();
@@ -4554,15 +4554,15 @@ impl Fixture {
         self.word(0xc1ac0, 0xc5000);
         self.word(0xc1ab0, 0xc5000);
         self.region(0xc5000, 0x110);
-        self.word(0xc5000, 0x10000 + 0x43470c8);
+        self.word(0xc5000, 0x10000 + 0x44dd4f0);
         self.word(0xc5068, 0x70000);
-        self.word(0xc5080, 0x10000 + 0x4347488);
+        self.word(0xc5080, 0x10000 + 0x44dd8d0);
         self.word(0xc5088, 0xc6000);
         self.word(0xc5090, 0xc6000);
         self.number(0xc5098, 1);
         self.region(0xc6000, 32);
         self.word(0xc6000, 0xc12c8);
-        self.word(0xc12c8, 0x10000 + 0x430bd18);
+        self.word(0xc12c8, 0x10000 + 0x44a18e8);
         self.word(0xc12d0, 0xc9000); // FIRST VOID capture +8
         self.word(0xc12e0, 0x10000 + 0x2916700); // manager +18
         self.word(0xc12e8, 0x10000 + 0x29166d0); // invoker +20
@@ -4570,7 +4570,7 @@ impl Fixture {
         self.word(0xc9000, 0x10000 + 0x290cce0);
         self.word(0xc9010, 0xc1000);
         self.word(0xc50e8, 0xc8000);
-        self.word(0xc8000, 0x10000 + 0x4356e08);
+        self.word(0xc8000, 0x10000 + 0x44ed1d8);
         self.word(0xc8138, 0xc5000);
         // NO button+110, CSprite resource/local/geometry fields or Ctrl capture.
         self.word(0xc12f0, 0xdead0000); // Ctrl capture +28: never dereferenced
@@ -4661,7 +4661,7 @@ fn ordinary_info_duplicate_name_and_wrong_ac0_are_structural_refusals() {
 fn ordinary_info_unknown_control_does_not_borrow_drag_or_standard_fields() {
     let mut f = Fixture::new();
     f.ordinary_info_research();
-    f.word(0xc5000, 0x10000 + 0x4346b10);
+    f.word(0xc5000, 0x10000 + 0x44dcf10);
     let v = ordinary_info_value(&f);
     assert_eq!(v["reason"], "control_layout_unavailable");
     f.assert_not_read(&[0xc5068, 0xc50ac, 0xc50e8, 0xc5110, 0xc5088]);
@@ -4726,7 +4726,7 @@ fn ordinary_info_listener_structure_and_unknown_target_stop_before_callback() {
 fn ordinary_info_wrong_callback_primary_and_ctrl_variant_are_unavailable() {
     let mut f = Fixture::new();
     f.ordinary_info_research();
-    f.word(0xc12c8, 0x10000 + 0x424e0a8);
+    f.word(0xc12c8, 0x10000 + 0x43e3df8);
     assert_eq!(
         ordinary_info_value(&f)["reason"],
         "callback_layout_unavailable"
@@ -4774,7 +4774,7 @@ fn ordinary_info_wrong_member_extra_callback_and_unknown_renderer_are_unavailabl
     f.assert_not_read(&[0xc12d0, 0xc9010]);
     let mut f = Fixture::new();
     f.ordinary_info_research();
-    f.word(0xc8000, 0x10000 + 0x4346b10);
+    f.word(0xc8000, 0x10000 + 0x44dcf10);
     let v = ordinary_info_value(&f);
     assert_eq!(v["callback_binding_verified"], true);
     assert_eq!(v["reason"], "renderer_layout_unavailable");
@@ -4866,21 +4866,21 @@ impl Fixture {
         self.ordinary_info_research();
         self.word(
             0xc8000,
-            0x10000 + if instant { 0x434c5b0 } else { 0x434b370 },
+            0x10000 + if instant { 0x44e2820 } else { 0x44e15e0 },
         );
         if instant {
-            let table = 0x10000 + 0x434c5b0;
+            let table = 0x10000 + 0x44e2820;
             self.word(table - 16, 0);
-            self.word(table - 8, 0x10000 + 0x4356400);
-            self.region(0x10000 + 0x4356400, 16);
-            self.word(0x10000 + 0x4356408, 0x10000 + 0x350e400);
-            self.region(0x10000 + 0x350e400, 128);
-            self.put(0x10000 + 0x350e400, b"14CInstantSprite");
+            self.word(table - 8, 0x10000 + 0x44ec7b0);
+            self.region(0x10000 + 0x44ec7b0, 16);
+            self.word(0x10000 + 0x44ec7b8, 0x10000 + 0x3686400);
+            self.region(0x10000 + 0x3686400, 128);
+            self.put(0x10000 + 0x3686400, b"14CInstantSprite");
         }
         self.word(0xc8000 + if instant { 0x160 } else { 0x1b0 }, 0xcb000);
         self.word(0xc8000 + if instant { 8 } else { 0x168 }, 0xcb000);
         self.region(0xcb000, 0x1d4);
-        self.word(0xcb000, 0x10000 + 0x434b668);
+        self.word(0xcb000, 0x10000 + 0x44e18d8);
         self.number(0xcb090, 3);
         self.number(0xcb094, 1);
         self.number(0xcb0a4, 369);
@@ -4941,7 +4941,7 @@ fn ordinary_info_v2_foreign_control_precedes_resources() {
 fn ordinary_info_v2_other_resource_class_metadata_only() {
     let mut f = Fixture::new();
     f.ordinary_info_cache_v2(true);
-    f.word(0xcb000, 0x10000 + 0x4357160);
+    f.word(0xcb000, 0x10000 + 0x44ed530);
     assert_eq!(
         ordinary_info_value(&f)["reason"],
         "resource_layout_unavailable"
@@ -5142,7 +5142,7 @@ fn ordinary_info_geometry_bad_alias_and_resource_precede_raw_inputs() {
         if alias {
             f.word(0xc8168, 0xdead0000);
         } else {
-            f.word(0xcb000, 0x10000 + 0x4357160);
+            f.word(0xcb000, 0x10000 + 0x44ed530);
         }
         assert!(ordinary_info_value(&f)["frame_raw_geometry"].is_null());
         f.assert_not_read(&[0xc8114, 0xc80b0, 0xcb111, 0xc3e70]);
@@ -5225,13 +5225,13 @@ impl Fixture {
     fn ordinary_info_text_raw(&mut self) {
         self.ordinary_info_research();
         for (object, table, ti, name, text) in [
-            (0xc8000, 0x43593d8, 0x435a100, "11CTextSprite", 0x3511000),
+            (0xc8000, 0x44ef818, 0x44f0540, "11CTextSprite", 0x3689000),
             (
                 0xcc000,
-                0x4359740,
-                0x435a200,
+                0x44efb80,
+                0x44f0640,
                 "15CTextSpriteType",
-                0x3511100,
+                0x3689100,
             ),
         ] {
             self.word(object, 0x10000 + table);
@@ -5281,7 +5281,7 @@ fn ordinary_info_text_foreign_owner_stops_before_resource() {
 fn ordinary_info_text_wrong_resource_metadata_only() {
     let mut f = Fixture::new();
     f.ordinary_info_text_raw();
-    f.word(0xcc000, 0x10000 + 0x434b668);
+    f.word(0xcc000, 0x10000 + 0x44e18d8);
     assert_eq!(
         ordinary_info_value(&f)["text_raw_diagnostic"]["resource_layout_verified"],
         false
@@ -5375,7 +5375,7 @@ fn ordinary_info_text_v2_base_fields_and_typed_leaf_not_ancestor_whitelist() {
     let mut f = Fixture::new();
     f.ordinary_info_text_raw();
     f.word(0xc8108, 0xf6000);
-    f.word(0xf6000, 0x10000 + 0x43593d8);
+    f.word(0xf6000, 0x10000 + 0x44ef818);
     let t = &ordinary_info_value(&f)["text_raw_diagnostic"];
     assert_eq!(t["parent_chain"]["status"], "unknown_ancestor");
     f.assert_not_read(&[0xf6070, 0xf6138, 0xf60c0]);
@@ -5433,19 +5433,19 @@ impl Fixture {
         self.research_plain_sprite();
         let b = 0x10000;
         self.word(0xb1068, 0x70000);
-        self.word(0xb1080, b + 0x4346ea8);
+        self.word(0xb1080, b + 0x44dd2c8);
         self.word(0xb1088, 0xe0000);
         self.word(0xb1090, 0xe0000);
         self.number(0xb1098, 1);
         self.word(0xb10a0, 0);
         self.region(0xe0000, 0x20);
         self.word(0xe0000, 0x94020);
-        self.word(0x94020, b + 0x424ea18);
+        self.word(0x94020, b + 0x43e4770);
         self.word(0x94028, 0xe1000);
         self.word(0x94038, b + 0x15b7be0);
         self.word(0x94040, b + 0x15b7bb0);
         self.region(0xe1000, 0x18);
-        self.word(0xe1000, b + 0x15b35e0);
+        self.word(0xe1000, b + 0x168a260);
         self.word(0xe1010, 0x94000);
         self.word(0xb2138, 0xb1000);
     }
@@ -5604,16 +5604,16 @@ fn owned_category_fixture() -> Fixture {
     let mut f = owned_node_fixture();
     let b = 0x10000;
     for (p, t, n) in [
-        (0x210000, 0x42113f0, 0x10),
-        (0x211000, 0x42112c0, 0xd0),
-        (0x212000, 0x4347d58, 0xf00),
-        (0x213000, 0x4347d58, 0xf00),
-        (0x214000, 0x43470c8, 0x160),
+        (0x210000, 0x43a63d0, 0x10),
+        (0x211000, 0x43a6290, 0xd0),
+        (0x212000, 0x44de2b0, 0xf00),
+        (0x213000, 0x44de2b0, 0xf00),
+        (0x214000, 0x44dd4f0, 0x160),
     ] {
         f.region(p, n);
         f.word(p, b + t);
     }
-    f.word(b + 0x43a40e0, 0x210000);
+    f.word(b + 0x453a120, 0x210000);
     f.array(0x360a8, 0x215000, 2);
     f.word(0x215000, 0x210000);
     f.word(0x215008, 0x211000);
@@ -5645,13 +5645,13 @@ fn owned_category_fixture() -> Fixture {
     f.array(0x92d90, 0x21b000, 1);
     f.word(0x21b000, 0x214000);
     f.number(0x92e10, 0);
-    f.word(0x214080, b + 0x4347488);
+    f.word(0x214080, b + 0x44dd8d0);
     f.word(0x214088, 0x21c000);
     f.word(0x214090, 0x21c000);
     f.number(0x214098, 1);
     f.region(0x21c000, 0x20);
     f.word(0x21c000, 0x92358);
-    f.word(0x92358, b + 0x424e0a8);
+    f.word(0x92358, b + 0x43e3df8);
     f.word(0x92380, 0x21d000);
     f.word(0x92390, b + 0x15a5710);
     f.word(0x92398, b + 0x15a56e0);
@@ -5710,8 +5710,8 @@ fn category_geometry_preserves_context_and_unknown_layout_limits() {
         "renderer_layout_unavailable"
     );
     f.assert_not_read(&[0x214110]);
-    f.word(0x214000, 0x10000 + 0x4346b10);
-    f.word(0x214080, 0x10000 + 0x4346ea8);
+    f.word(0x214000, 0x10000 + 0x44dcf10);
+    f.word(0x214080, 0x10000 + 0x44dd2c8);
     let (v, _) = research_ui::category_with_geometry_owned(&f, "industry_folder", true).unwrap();
     assert_eq!(
         v["category"]["sprite_diagnostic"]["field_layout_verified"],
@@ -5723,8 +5723,8 @@ fn category_geometry_preserves_context_and_unknown_layout_limits() {
 #[test]
 fn category_geometry_final_witness_refuses_changed_renderer_identity() {
     let mut f = owned_category_fixture();
-    f.word(0x214000, 0x10000 + 0x4346b10);
-    f.word(0x214080, 0x10000 + 0x4346ea8);
+    f.word(0x214000, 0x10000 + 0x44dcf10);
+    f.word(0x214080, 0x10000 + 0x44dd2c8);
     f.fault = Some((0x214110, 1, 0x21f000u64.to_le_bytes().to_vec()));
     assert_eq!(
         research_ui::category_with_geometry_owned(&f, "industry_folder", true)
@@ -5822,7 +5822,7 @@ fn unified_category_late_info_slot_and_root_mutations_prevent_dispatch() {
     for (i, (a, bytes)) in [
         (0xc1a78, 0xdead0000u64.to_le_bytes().to_vec()),
         (0x2c118, 0x81000u64.to_le_bytes().to_vec()),
-        (0x10000 + 0x44085f8, 0x32008u64.to_le_bytes().to_vec()),
+        (0x10000 + 0x459e908, 0x32008u64.to_le_bytes().to_vec()),
     ]
     .into_iter()
     .enumerate()
@@ -5915,7 +5915,7 @@ include!("support/daily_observation_cases.rs");
 // overview fixture; reserved and folder primaries are constructed separately.
 fn folder_catalog_key(f: &mut Fixture, pointer: u64, key: &str, heap: u64) {
     f.region(pointer, 40);
-    f.word(pointer, 0x10000 + 0x42112c0);
+    f.word(pointer, 0x10000 + 0x43a6290);
     if key.len() <= 15 {
         f.string(pointer + 8, key);
     } else {
@@ -5928,8 +5928,8 @@ fn folder_catalog_key(f: &mut Fixture, pointer: u64, key: &str, heap: u64) {
 fn folder_catalog_fixture() -> Fixture {
     let mut f = Fixture::new();
     f.catalog();
-    f.word(0x10000 + 0x43a40e0, 0x210000);
-    f.word(0x210000, 0x10000 + 0x42113f0); // No readable sentinel payload.
+    f.word(0x10000 + 0x453a120, 0x210000);
+    f.word(0x210000, 0x10000 + 0x43a63d0); // No readable sentinel payload.
     for (pointer, key, heap) in [
         (0x211000, "industry_folder", 0),
         (0x211100, "infantry_folder", 0),
@@ -6056,11 +6056,11 @@ fn research_folders_accept_complete_policy_boundary_and_known_empty_catalog() {
 #[test]
 fn research_folders_require_exact_database_folder_and_first_reserved_singleton() {
     for (address, value, code, forbidden) in [
-        (0x36000, 0x10000 + 0x42112c0, "invalid_gui_type", 0x215000),
-        (0x210000, 0x10000 + 0x42112c0, "invalid_gui_type", 0x211008),
+        (0x36000, 0x10000 + 0x43a6290, "invalid_gui_type", 0x215000),
+        (0x210000, 0x10000 + 0x43a6290, "invalid_gui_type", 0x211008),
         (0x215000, 0x211000, "invalid_category_ui", 0x211008),
         (0x215008, 0x210000, "invalid_gui_type", 0x210008),
-        (0x211000, 0x10000 + 0x42113f0, "invalid_gui_type", 0x211008),
+        (0x211000, 0x10000 + 0x43a63d0, "invalid_gui_type", 0x211008),
         (0x215008, 0x211001, "invalid_gui_type", 0x211001),
         (0x215008, 0, "read_bound", 0),
     ] {
@@ -6124,16 +6124,16 @@ fn research_folders_key_limit_is_checked_before_heap_payload() {
 #[test]
 fn research_folders_final_witnesses_cover_catalog_and_bound_own_campaign() {
     for (address, width) in [
-        (0x10000 + 0x439f450, 8),
+        (0x10000 + 0x45353b0, 8),
         (0x36000, 8),
         (0x360a8, 16),
         (0x215000, 32),
-        (0x10000 + 0x43a40e0, 8),
+        (0x10000 + 0x453a120, 8),
         (0x210000, 8),
         (0x211000, 8),
         (0x211008, 32),
         (0x216000, 18),
-        (0x10000 + 0x44086a8, 8),
+        (0x10000 + 0x459e9f0, 8),
         (0x39004, 4),
         (0x28130, 8),
         (0x28138, 4),

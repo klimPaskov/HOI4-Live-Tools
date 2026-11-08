@@ -12,7 +12,7 @@ const WINDOW: u64 = 0x260000;
 
 fn window(f: &mut Fixture, address: u64, shown: bool) {
     f.region(address, 0xf00);
-    f.word(address, BASE + 0x4347d58);
+    f.word(address, BASE + 0x44de2b0);
     f.word(address + 0x98, REGISTRY);
     f.put(address + 0xa5, &[if shown { 8 } else { 0 }]);
 }
@@ -22,14 +22,14 @@ fn materialized_view() -> Fixture {
     f.number(MANAGER + 0x3d8, 2);
     f.word(MANAGER + 0xd8, VIEW);
     f.region(VIEW, 0x1600);
-    f.word(VIEW, BASE + 0x4314180);
+    f.word(VIEW, BASE + 0x44a9ea8);
     f.word(VIEW + 0x2f0, 0x32000);
     f.word(VIEW + 0x2f8, ROOT);
     window(&mut f, ROOT, true);
     for (offset, dialog, root) in [(0x1530, 0x270000, 0x280000), (0x1538, 0x290000, 0x2a0000)] {
         f.word(VIEW + offset, dialog);
         f.region(dialog, 0x808);
-        f.word(dialog, BASE + 0x4321298);
+        f.word(dialog, BASE + 0x44b72c0);
         f.word(dialog + 0x7f0, 0x32000);
         f.word(dialog + 0x7f8, VIEW);
         f.word(dialog + 0x800, root);
@@ -38,7 +38,7 @@ fn materialized_view() -> Fixture {
     f.array(VIEW + 0x14f0, ROWS, 1);
     f.word(ROWS, ROW);
     f.region(ROW, 0x1030);
-    f.word(ROW, BASE + 0x4264f48);
+    f.word(ROW, BASE + 0x43fb478);
     f.word(ROW + 0x538, REGISTRY);
     f.word(ROW + 0x590, VIEW);
     f.word(ROW + 0xfd0, 0xffff000100000038);
@@ -50,7 +50,7 @@ fn materialized_view() -> Fixture {
 fn unavailable_view() -> Fixture {
     let mut f = fixture();
     f.word(0x324f8, REGISTRY);
-    f.word(REGISTRY, BASE + 0x42736f8);
+    f.word(REGISTRY, BASE + 0x4409f68);
     f.word(0x326b8, MANAGER);
     f.word(MANAGER + 0x180, 0x32000);
     f.number(MANAGER + 0x3d8, 0);
@@ -103,7 +103,7 @@ fn unmaterialized_view_is_fresh_read_only_unavailability_after_full_line_join() 
     assert_eq!(value["collection_count"], 3);
     assert_eq!(value["line_kind"], "military");
     assert!(!value.to_string().contains("2097152"));
-    production_not_read(&f, &[BASE + 0x45778e0]);
+    production_not_read(&f, &[BASE + 0x470e6d8]);
 }
 
 #[test]
@@ -192,7 +192,7 @@ fn production_uses_manager_mode_two_not_view_constructor_argument_five() {
 
 #[test]
 fn unjoined_ui_handle_or_unknown_row_type_cannot_traverse_row_window() {
-    for (field, value) in [(ROW + 0xfd0, 0xffff000200000038), (ROW, BASE + 0x4264f50)] {
+    for (field, value) in [(ROW + 0xfd0, 0xffff000200000038), (ROW, BASE + 0x43fb480)] {
         let mut f = materialized_view();
         f.word(field, value);
         let value = controls(&f, HANDLE, KEY, false).unwrap();

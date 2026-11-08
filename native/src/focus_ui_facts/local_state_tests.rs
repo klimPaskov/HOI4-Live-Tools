@@ -13,7 +13,7 @@ impl Fixture {
             data: RefCell::new(BTreeMap::new()),
             reads: RefCell::new(vec![]),
         };
-        f.put(WIN, &0x4347d58u64.to_le_bytes());
+        f.put(WIN, &0x44de2b0u64.to_le_bytes());
         f.put(WIN + 0x98, &GUI.to_le_bytes());
         f.put(WIN + 0xa5, &[if visible { 8 } else { 0 }]);
         f.put(WIN + 0xeb0, &animation[0].to_le_bytes());

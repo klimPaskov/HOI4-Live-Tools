@@ -449,40 +449,6 @@ pub(super) fn add(
     result
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn select_readback_timeout_is_typed_and_says_nothing_was_placed() {
-        let e = select_failed(
-            Error::new(
-                "input_readback_failed",
-                "select building: expected game change not observed",
-            ),
-            "arms_factory",
-        );
-        assert_eq!(e.code, "building_select_failed");
-        assert!(e.message.contains("arms_factory"));
-        assert!(e.message.contains("no map click was sent"));
-        assert!(e.message.contains("do not assume"));
-    }
-    #[test]
-    fn other_select_failures_keep_their_cause() {
-        for code in ["ownership_changed", "torn_read", "input_lease_required"] {
-            assert_eq!(select_failed(Error::new(code, "x"), "dockyard").code, code);
-        }
-    }
-    #[test]
-    fn centre_click_without_growth_is_typed_with_the_limits_of_the_evidence() {
-        let e = no_slot_or_not_allowed("industrial_complex", 64);
-        assert_eq!(e.code, "no_free_slot_or_not_allowed");
-        assert!(e.message.contains("state 64"));
-        assert!(e.message.contains("hoi4_state_slots"));
-        assert!(e.message.contains("not excluded"));
-        assert!(e.message.contains("nothing was retried"));
-    }
-}
-
 /// Shown widgets named `name` anywhere in the open construction view (child windows and grid
 /// items), top to bottom.
 fn row_buttons(r: &Reader<'_>, image: u64, name: &str) -> Result<Vec<Rect>> {
@@ -648,4 +614,38 @@ pub(super) fn reorder(
     })();
     leave(process, keys);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn select_readback_timeout_is_typed_and_says_nothing_was_placed() {
+        let e = select_failed(
+            Error::new(
+                "input_readback_failed",
+                "select building: expected game change not observed",
+            ),
+            "arms_factory",
+        );
+        assert_eq!(e.code, "building_select_failed");
+        assert!(e.message.contains("arms_factory"));
+        assert!(e.message.contains("no map click was sent"));
+        assert!(e.message.contains("do not assume"));
+    }
+    #[test]
+    fn other_select_failures_keep_their_cause() {
+        for code in ["ownership_changed", "torn_read", "input_lease_required"] {
+            assert_eq!(select_failed(Error::new(code, "x"), "dockyard").code, code);
+        }
+    }
+    #[test]
+    fn centre_click_without_growth_is_typed_with_the_limits_of_the_evidence() {
+        let e = no_slot_or_not_allowed("industrial_complex", 64);
+        assert_eq!(e.code, "no_free_slot_or_not_allowed");
+        assert!(e.message.contains("state 64"));
+        assert!(e.message.contains("hoi4_state_slots"));
+        assert!(e.message.contains("not excluded"));
+        assert!(e.message.contains("nothing was retried"));
+    }
 }

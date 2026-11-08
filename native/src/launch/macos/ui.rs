@@ -84,7 +84,9 @@ pub(super) fn wait(
 /// 0x36803a0 CSpecialProjectFinishedPopUpWindow (title "Special Project Completed", Details and
 /// OK, seen live 4 October 1938), 0x36804b8 CSpecialProjectCapturedPopUpWindow (same family; its
 /// `ok_button` is not seen live, a window without one is skipped).
-const NOTICES: [xlayout::Class; 8] = [
+/// 0x3680288 CIntelAgencyFinishedPopUpWindow ("Agency Created!", Details and Ok; seen on Linux on
+/// 5 November 2026 after hoi4_agency_create).
+const NOTICES: [xlayout::Class; 9] = [
     xlayout::Class::new("CResearchFinishedPopUpWindow", 0x3680170),
     xlayout::Class::new("CFocusFinishedPopUpWindow", 0x36806e8),
     xlayout::Class::new("CPeaceSummaryPopUpWindow", 0x3680800),
@@ -93,6 +95,7 @@ const NOTICES: [xlayout::Class; 8] = [
     xlayout::Class::new("CSurrenderedPopupWindow", 0x3695460),
     xlayout::Class::new("CSpecialProjectFinishedPopUpWindow", 0x36803a0),
     xlayout::Class::new("CSpecialProjectCapturedPopUpWindow", 0x36804b8),
+    xlayout::Class::new("CIntelAgencyFinishedPopUpWindow", 0x3680288),
 ];
 const GUI_FROM_IDLER: u64 = 0x4c0;
 const POPUP_LIST: u64 = 0xa70;
@@ -161,6 +164,7 @@ fn notice_kind_name(vtable: u64) -> String {
         0x36805d0 => "confirmation pop-up (CConfirmationPopUpWindow, e.g. a doctrine milestone)".into(),
         0x3695460 => "surrendered pop-up (CSurrenderedPopupWindow, seized equipment)".into(),
         0x36803a0 => "special project completed pop-up (CSpecialProjectFinishedPopUpWindow)".into(),
+        0x3680288 => "agency created pop-up (CIntelAgencyFinishedPopUpWindow)".into(),
         0x36804b8 => "special project captured pop-up (CSpecialProjectCapturedPopUpWindow)".into(),
         other => format!("notice window class +{other:#x} (research/focus finished, peace summary or world tension)"),
     }

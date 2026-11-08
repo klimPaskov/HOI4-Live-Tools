@@ -242,6 +242,8 @@ fn pan_to(
         format!("Province {province} could not be brought on screen with the arrow keys"),
     ))
 }
+/// A screen point (game pixels).
+type Point = (f64, f64);
 /// Screen points of both railway ends once both lie in the open map, bringing them there with
 /// at most one Find (of the start state) and one zoom-out burst; None when they still do not
 /// fit (the caller pans with the arrow keys).
@@ -252,14 +254,14 @@ fn aim_both(
     from_state: i32,
     from: i32,
     to: i32,
-) -> Result<Option<((f64, f64), (f64, f64))>> {
+) -> Result<Option<(Point, Point)>> {
     let positions = mapdata::positions(dir)?;
     let (Some(&a), Some(&b)) = (positions.get(&from), positions.get(&to)) else {
         return Ok(None);
     };
     let area = (MAP_LEFT, 120.0, 1700.0, 900.0);
     let inside = |p: (f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
-    let project = || -> Result<(Option<(f64, f64)>, Option<(f64, f64)>)> {
+    let project = || -> Result<(Option<Point>, Option<Point>)> {
         read(process, |r, i| {
             Ok((
                 super::screenmap::to_screen(r, i, a.0, a.1)?,
