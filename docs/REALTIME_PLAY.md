@@ -126,6 +126,16 @@ Army orders now leave the camera at unit level (the maintainer watches the units
 view returns before the next non-army action. Front and offensive aim without the Find view only at
 camera height 760 or below: the game draws no highlighted fronts at 932.
 
+### The executor at speed 3 (Italy, August-December 1937)
+
+| Run | Actions | Failures | Notes |
+|---|---|---|---|
+| 3 min, before the liberation fix | 31 | 2 refusals (an army assignment whose box selection was not exact; nothing done) | the same liberation move sent 13 times |
+| 2.5 min, after it | 13 | 0 | no repeats; research, focus, production, events, war rest/resume, offensive and execute |
+
+The change feed's `hoi4_wait_change` answered with the new changes in a p50 of 1.8 s round trip
+(10 s timeout, woken by the first change).
+
 Open: moving a fighter wing already assigned elsewhere into the region of its own base did not take
 (three tries); the commander list sometimes closes while scrolling (the retry recovers, about 3 s).
 
