@@ -2264,6 +2264,13 @@ fn war_step(
             if next_stage == 3 {
                 state.war_since.insert(name.clone(), (target, here, now));
             }
+            // A liberation move is a direct move: wait for progress, and let the stall check
+            // (with its backoff) re-issue it (live 8 Nov 2026: the same move to an occupied own
+            // state went out 13 times in three minutes).
+            if label == "move" {
+                state.war_move.insert(name.clone());
+                state.war_since.insert(name.clone(), (target, here, now));
+            }
             return Ok(Some(format!("war {label} {name} -> state {target}: ok")));
         }
         // No foothold for a front line yet: step into the state first.
@@ -3724,6 +3731,33 @@ mod tests {
             "the front faces the nearest enemy state"
         );
         assert_eq!(state.war_guard.get("Army 1"), Some(&42));
+    }
+
+    #[test]
+    fn a_liberation_move_is_not_repeated_while_the_army_travels() {
+        let w = War {
+            liberate: true,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_stage.insert("Army 1".into(), 3);
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [[28]], "stall_days": 4, "cooldown_hours": 1}});
+        let moves = |w: &War| {
+            w.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .count()
+        };
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert_eq!(moves(&w), 1);
+        // a day later, still on the way: no second order
+        for h in 1..24 {
+            tick(&mut state, &w, &plan, "l", START + h * DAY / 24 * 2).unwrap();
+        }
+        assert_eq!(moves(&w), 1);
     }
 
     #[test]
