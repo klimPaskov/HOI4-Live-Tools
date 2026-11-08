@@ -494,10 +494,36 @@ pub fn tick(
             }
         }
         let busy: HashSet<String> = slots.iter().flatten().cloned().collect();
-        let priority = strings(plan, "research_priority");
+        let year = game_year(now);
+        // Techs startable now (prerequisites done, from the game files); None when the server
+        // cannot say (then every key is tried as before).
+        let available = tools
+            .call("hoi4_technology_list", &json!({"available": true}))
+            .ok()
+            .filter(|v| v["available_only"] == json!(true));
+        let startable: Option<HashSet<String>> = available
+            .as_ref()
+            .map(|v| strings(v, "technologies").into_iter().collect());
+        let start_year = |t: &str| -> Option<i64> {
+            available
+                .as_ref()
+                .and_then(|v| v["start_years"][t].as_i64())
+        };
+        // `research_path`: [{"year":1936,"techs":[...]}, ...] in order; an entry counts from its
+        // year on (the plan's forward view: industry first, nothing ahead of its time).
+        let mut priority: Vec<String> = Vec::new();
+        if let Some(path) = plan["research_path"].as_array() {
+            for step in path {
+                if year.is_none_or(|y| step["year"].as_i64().unwrap_or(0) <= y) {
+                    priority.extend(strings(step, "techs"));
+                }
+            }
+        }
+        priority.extend(strings(plan, "research_priority"));
         let open: Vec<&String> = priority
             .iter()
             .filter(|t| !done.contains(*t) && !busy.contains(*t))
+            .filter(|t| startable.as_ref().is_none_or(|s| s.contains(*t)))
             .collect();
         let waiting = open
             .iter()
@@ -527,7 +553,12 @@ pub fn tick(
                 ));
                 return Ok(Tick::Acted(format!("research {tech} slot {empty}")));
             }
-            state.skip(now, "tech", &tech, skip_hours(plan, "tech", 3 * DAY));
+            state.skip(
+                now,
+                "tech",
+                &tech,
+                tech_skip(&why, skip_hours(plan, "tech", 3 * DAY)),
+            );
             refused.push(format!("{tech}:{}", why.split(':').next().unwrap_or("")));
         }
         // Nothing from the priority list is startable: never leave a slot idle.
@@ -563,7 +594,52 @@ pub fn tick(
                     || prefixes.iter().any(|p| tech.starts_with(p.as_str()))
                     || categories.iter().any(|c| tech.contains(c.as_str())))
         };
-        if fallback_on {
+        if fallback_on && startable.is_some() {
+            // From the techs startable now, never ahead of their year, in the plan's order of
+            // interest (research_fallback_prefixes: industry first in the plans), oldest first.
+            let rank = |t: &str| {
+                prefixes
+                    .iter()
+                    .position(|p| t.starts_with(p.as_str()))
+                    .unwrap_or(prefixes.len())
+            };
+            let mut pool: Vec<String> = startable
+                .iter()
+                .flatten()
+                .filter(|t| !busy.contains(*t) && wanted(t) && !state.skipped(now, "tech", t))
+                .filter(|t| match (year, start_year(t)) {
+                    (Some(y), Some(sy)) => sy <= y,
+                    _ => true,
+                })
+                .cloned()
+                .collect();
+            pool.sort_by_key(|t| (rank(t), start_year(t).unwrap_or(0), t.clone()));
+            for tech in pool.into_iter().take(3) {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_research_start",
+                    json!({"technology": tech, "slot": empty}),
+                    "rf",
+                )?;
+                if ok {
+                    state.stages.fallback_used.push(tech.clone());
+                    state.stages.research = Some((
+                        format!("research: started {tech} slot {empty} (available, in time, plan order)"),
+                        false,
+                    ));
+                    return Ok(Tick::Acted(format!(
+                        "research {tech} slot {empty} (fallback)"
+                    )));
+                }
+                state.skip(
+                    now,
+                    "tech",
+                    &tech,
+                    tech_skip(&why, skip_hours(plan, "tech_fallback", 7 * DAY)),
+                );
+            }
+        } else if fallback_on {
             let mut tried = 0;
             let mut offset = 0;
             'catalog: loop {
@@ -1121,6 +1197,28 @@ fn armies_step(
         }
     }
     Ok(None)
+}
+
+/// Calendar year of a raw game hour (1936.01.01 is about 6936 * 8760: the engine counts from
+/// year -5000); None for test clocks and other implausible values.
+fn game_year(now: GameHour) -> Option<i64> {
+    let y = now / 8760 - 5000;
+    (1900..2100).contains(&y).then_some(y)
+}
+/// How long to leave a refused tech alone: for the rest of the run when the game will never
+/// take it (not in this country's tree, an inactive variant, disabled), else `default`.
+fn tech_skip(why: &str, default: GameHour) -> GameHour {
+    let never = [
+        "no tile",
+        "not active",
+        "disables Research",
+        "already researched",
+    ];
+    if never.iter().any(|w| why.contains(w)) {
+        365 * DAY * 20
+    } else {
+        default
+    }
 }
 
 /// The first supply line (supply hub or railway) that stands behind a line of another kind, by
@@ -2788,8 +2886,20 @@ mod tests {
             replies: replies.into_iter().collect(),
         }
     }
+    /// Tool names called; the cheap available-techs query is labelled apart from the catalogue
+    /// walk (only the walk is what the priority-only tests forbid).
     fn names(f: &Fake) -> Vec<String> {
-        f.calls.borrow().iter().map(|(n, _)| n.clone()).collect()
+        f.calls
+            .borrow()
+            .iter()
+            .map(|(n, a)| {
+                if a["available"] == json!(true) {
+                    format!("{n}(available)")
+                } else {
+                    n.clone()
+                }
+            })
+            .collect()
     }
 
     struct ActionReplies<'a> {
@@ -4724,6 +4834,44 @@ mod tests {
             .unwrap()
             .0
             .contains("catalogue fallback"));
+    }
+
+    #[test]
+    fn research_takes_available_in_time_techs_in_the_plans_order() {
+        struct Avail(RefCell<Vec<(String, Value)>>);
+        impl Tools for Avail {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                Ok(match name {
+                    "hoi4_research" => idle_research(),
+                    "hoi4_technology_list" if args["available"] == json!(true) => json!({
+                        "available_only": true,
+                        "technologies": ["artillery1", "industrial_complex_expansion1", "jet_engines"],
+                        "start_years": {"artillery1": 1936, "industrial_complex_expansion1": 1936, "jet_engines": 1939}}),
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let tools = Avail(RefCell::new(vec![]));
+        let mut state = State::default();
+        // 1936.03.01: raw hours count from year -5000
+        let now = (6936 * 8760 + 60 * 24) as GameHour;
+        let plan = json!({"research_priority": ["artillery2"],
+            "research_fallback_prefixes": ["industr", "artillery", "jet"]});
+        tick(&mut state, &tools, &plan, "l", now).unwrap();
+        let started: Vec<Value> = tools
+            .0
+            .borrow()
+            .iter()
+            .filter(|(n, _)| n == "hoi4_research_start")
+            .map(|(_, a)| a["technology"].clone())
+            .collect();
+        // artillery2 is not available (prerequisite missing); industry first; jet_engines is
+        // ahead of its time in 1936.
+        assert_eq!(started, vec![json!("industrial_complex_expansion1")]);
     }
 
     #[test]

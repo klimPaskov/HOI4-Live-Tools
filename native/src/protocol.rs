@@ -75,7 +75,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_focus_search_state","description":"Read-only current own Focus search highlight and match counts for an exact canonical focus_id. Validates all search-cache/current-item joins before returning the selected key. A highlight is not an open detail, assignment or eligibility proof. Optional include_control adds exact own query text, listener and renderer diagnostics. Independent keyboard/text receiver identities are diagnostic; effective delivery and input authority remain unavailable.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_control":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_focus_node_detail","description":"Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. Optional raw Sprite/Text/Frame diagnostics; no input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false}},
         {"name":"hoi4_focus_selected_detail","description":"Compact fresh exact own selected focus detail window. Start binding is window.start.ordinary_binding; the node symbol is a separate control. Refuses missing, different or multiple selected details. Optional existing raw renderer diagnostics; no client point, input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
-        {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
+        {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility; available:true lists only techs not yet researched whose prerequisites are all researched. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"available":{"type":"boolean"},"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     if let Some(list) = value["tools"].as_array_mut() {
@@ -1126,9 +1126,66 @@ impl Server {
             "hoi4_technology_list" => {
                 if object
                     .keys()
-                    .any(|k| !["filter", "offset", "limit"].contains(&k.as_str()))
+                    .any(|k| !["filter", "offset", "limit", "available"].contains(&k.as_str()))
                 {
                     return Err(Error::new("invalid_arguments", "Unknown catalog argument"));
+                }
+                // `available`: only techs not done whose prerequisites (the game's technology
+                // files) are all done; w24's executor tried artillery2-5 before artillery1 and each
+                // try opened the research tree.
+                if object.get("available") == Some(&json!(true)) {
+                    let process = self.process()?;
+                    let exe = process.identity().map(|i| i.exe.clone()).ok_or_else(|| {
+                        Error::new("map_data_unavailable", "Game identity unavailable")
+                    })?;
+                    let dir = crate::tech_tree::install_dir(&exe).ok_or_else(|| {
+                        Error::new("map_data_unavailable", "Technology files not found")
+                    })?;
+                    let prereqs = crate::tech_tree::prerequisites(&dir)?;
+                    let mut done: std::collections::HashSet<String> = Default::default();
+                    let mut offset = 0;
+                    loop {
+                        let page = research::page(process, offset, 100)?;
+                        done.extend(
+                            page["researched"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|t| t["id"].as_str().map(str::to_string)),
+                        );
+                        match page["next_offset"].as_u64() {
+                            Some(next) if next as usize > offset => offset = next as usize,
+                            _ => break,
+                        }
+                    }
+                    let mut all = Vec::new();
+                    let mut off = 0;
+                    loop {
+                        let page = technology::catalog(process, "", off, 100)?;
+                        all.extend(
+                            page["technologies"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|t| t.as_str().map(str::to_string)),
+                        );
+                        match page["next_offset"].as_u64() {
+                            Some(next) if next as usize > off => off = next as usize,
+                            _ => break,
+                        }
+                    }
+                    let open: Vec<String> = all
+                        .into_iter()
+                        .filter(|t| crate::tech_tree::startable(&prereqs, &done, t))
+                        .collect();
+                    let years = crate::tech_tree::years(&dir).unwrap_or_default();
+                    let start_years: serde_json::Map<String, Value> = open
+                        .iter()
+                        .filter_map(|t| years.get(t).map(|y| (t.clone(), json!(y))))
+                        .collect();
+                    return Ok(json!({"technologies": open, "available_only": true,
+                        "start_years": start_years,
+                        "note": "not researched and every prerequisite researched (game files); the game may still refuse one (exclusive branch, DLC variant)"}));
                 }
                 let filter = object
                     .get("filter")
