@@ -134,6 +134,12 @@ pub enum Tick {
 
 pub struct State {
     stop_on_failure: bool,
+    /// The game hour of the current step (for the failure ledger).
+    clock: GameHour,
+    /// Failed orders by signature (tool + arguments): when they failed. The same order is not
+    /// sent again after 3 failures in 10 game days (w24: the same selection and research orders
+    /// failed again and again).
+    failures: HashMap<String, Vec<GameHour>>,
     boot: u64,
     bad: HashMap<String, GameHour>,
     last_hour: GameHour,
@@ -223,6 +229,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             stop_on_failure: false,
+            clock: 0,
+            failures: HashMap::new(),
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -275,6 +283,18 @@ impl State {
         args: Value,
         tag: &str,
     ) -> Result<(bool, String)> {
+        let signature = format!("{name} {args}");
+        let window = 10 * DAY;
+        let clock = self.clock;
+        if let Some(times) = self.failures.get_mut(&signature) {
+            times.retain(|t| clock - *t < window);
+            if times.len() >= 3 {
+                return Ok((
+                    false,
+                    "skipped: the same order failed 3 times in 10 game days".into(),
+                ));
+            }
+        }
         self.seq += 1;
         let mut args = args;
         if let Some(object) = args.as_object_mut() {
@@ -286,6 +306,18 @@ impl State {
         }
         let id = args["request_id"].as_str().unwrap_or("").to_string();
         self.sent.insert(id, (name.to_string(), args.clone()));
+        let result = self.dispatch(tools, name, &args);
+        match &result {
+            Ok((false, _)) => self.failures.entry(signature).or_default().push(clock),
+            Ok((true, _)) => {
+                self.failures.remove(&signature);
+            }
+            Err(_) => {}
+        }
+        result
+    }
+    fn dispatch(&mut self, tools: &dyn Tools, name: &str, args: &Value) -> Result<(bool, String)> {
+        let args = args.clone();
         let mut result = tools.call(name, &args);
         if matches!(&result, Err(e) if e.code == "action_uncertain") {
             // Another dispatch of this run is unresolved and blocks input: settle
@@ -358,6 +390,7 @@ pub fn tick(
     lease: &str,
     now: GameHour,
 ) -> Result<Tick> {
+    state.clock = now;
     if plan["active"] == json!(false) {
         return Ok(Tick::Idle);
     }
@@ -4160,6 +4193,57 @@ mod tests {
         assert_eq!(moves(&w), 1);
         tick(&mut state, &w, &war_plan(), "l", START + 6).unwrap();
         assert_eq!(moves(&w), 1, "no second fall-back order within 3 days");
+    }
+
+    #[test]
+    fn the_same_failing_order_is_not_sent_a_fourth_time_within_ten_days() {
+        struct Refuse(RefCell<usize>);
+        impl Tools for Refuse {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                *self.0.borrow_mut() += 1;
+                Ok(json!({"receipt": {"status": "NotApplied"}}))
+            }
+        }
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State {
+            clock: START,
+            ..State::default()
+        };
+        for _ in 0..5 {
+            let (ok, _) = state
+                .act(
+                    &tools,
+                    "l",
+                    "hoi4_army_move",
+                    json!({"army": "Army 1", "state_id": 5}),
+                    "t",
+                )
+                .unwrap();
+            assert!(!ok);
+        }
+        assert_eq!(*tools.0.borrow(), 3);
+        // another order still goes out, and the first one again after the window
+        state
+            .act(
+                &tools,
+                "l",
+                "hoi4_army_move",
+                json!({"army": "Army 1", "state_id": 6}),
+                "t",
+            )
+            .unwrap();
+        assert_eq!(*tools.0.borrow(), 4);
+        state.clock = START + 11 * DAY;
+        state
+            .act(
+                &tools,
+                "l",
+                "hoi4_army_move",
+                json!({"army": "Army 1", "state_id": 5}),
+                "t",
+            )
+            .unwrap();
+        assert_eq!(*tools.0.borrow(), 5);
     }
 
     /// The war fake with a validated war list at peace.
