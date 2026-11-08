@@ -22,10 +22,10 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
-- **Test mods** without sitting at the keyboard: launch the game, load a save,
-  fire events, answer popups, run time forward and read the error log.
-- **Play campaigns** through the real game interface: focuses, research,
-  production, construction, politics, diplomacy and armies.
+Your agent can test mods without you sitting at the keyboard: it launches the game,
+loads a save, fires events, answers popups, runs time forward and reads the error
+log. It can also play campaigns through the real game interface, from focuses,
+research and production to construction, politics, diplomacy and armies.
 
 Part of the HOI4 modding toolkit: [HOI4 Mod Setup](https://github.com/klimPaskov/HOI4-Mod-Setup)
 installs it for you, [Agentic HOI4 Modding](https://github.com/klimPaskov/Agentic-HOI4-Modding)
