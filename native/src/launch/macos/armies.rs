@@ -2740,11 +2740,13 @@ fn assign_commander_once(
         f64::from(rect.x) + 34.0,
         f64::from(bottom - PORTRAIT_DRAWN / 2),
     )?;
-    // Moving a commander who leads another army asks for confirmation.
-    super::ui::accept_command(process, keys)?;
-    wait(process, "commander assigned", |r, i| {
+    // Moving a commander who leads another army asks for confirmation; without one the
+    // assignment shows at once.
+    let assigned = |r: &Reader<'_>, i: u64| {
         Ok(commander(r, i, army)?.is_some_and(|c| c.to_lowercase() == wanted))
-    })
+    };
+    super::ui::accept_command_until(process, keys, assigned)?;
+    wait(process, "commander assigned", assigned)
 }
 
 /// Group own armies `names` into a new army group: the first army's card,

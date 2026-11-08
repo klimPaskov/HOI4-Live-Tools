@@ -635,6 +635,15 @@ pub(super) fn decline_stale(process: &dyn Process, keys: &dyn GameInput) -> Resu
 /// After the requested click: accept the game's confirmation of exactly that
 /// command if it appears within a short bound. Returns whether one was accepted.
 pub(super) fn accept_command(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
+    accept_command_until(process, keys, |_, _| Ok(false))
+}
+/// `accept_command` that stops waiting for a dialog as soon as `done` holds (the order took
+/// effect without one), instead of the full 1.2 s.
+pub(super) fn accept_command_until(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    done: impl Fn(&Reader<'_>, u64) -> Result<bool>,
+) -> Result<bool> {
     let deadline = Instant::now() + Duration::from_millis(1200);
     loop {
         if let Some(rect) = read(process, |r, i| command_dialog(r, i, "accept_button"))? {
@@ -650,7 +659,7 @@ pub(super) fn accept_command(process: &dyn Process, keys: &dyn GameInput) -> Res
             })?;
             return Ok(true);
         }
-        if Instant::now() >= deadline {
+        if Instant::now() >= deadline || read(process, &done)? {
             return Ok(false);
         }
         thread::sleep(Duration::from_millis(40));

@@ -454,10 +454,9 @@ pub(super) fn choose(
     clear_notices(process, keys)?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
-    accept_command(process, keys)?;
     // An advisor goes to the category's first free advisor slot, not always the one clicked
     // (gates 1 and 2, 1 Nov 2026), so the pick counts when any slot of the category holds it.
-    wait(process, "idea taken", |r, i| {
+    let taken = |r: &crate::memory::Reader<'_>, i: u64| -> Result<bool> {
         if slot(r, i, category, index)?.0.as_deref() == Some(idea) {
             return Ok(true);
         }
@@ -470,7 +469,10 @@ pub(super) fn choose(
             }
         }
         Ok(false)
-    })?;
+    };
+    // A confirmation appears only for some picks: stop waiting for it once the idea shows.
+    super::ui::accept_command_until(process, keys, taken)?;
+    wait(process, "idea taken", taken)?;
     dismiss(process, keys, |r, i| Ok(!window_open(r, i)?));
     Ok(())
 }
