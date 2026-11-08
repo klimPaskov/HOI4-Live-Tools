@@ -52,7 +52,7 @@ game memory --> WATCHER (own situation sampled every 0.3-2 s -> typed changes, s
 
 ## Not changed, on purpose
 
-- **The remaining post-success sleeps** (army selection, scroll bursts, the Find view stages). They need live tuning against misclicks.
+- **Sleeps that guard against lost clicks** (400 ms after opening the air overview, 250 ms after selecting a wing or an army for a panel, 600 ms between repeated construction clicks). Each was added after a click the game dropped.
 - **Reads.** They are already 0–30 ms, so caching them or porting them to faster code gains nothing.
 
 ## How an agent should play in real time
@@ -101,10 +101,29 @@ The full research report (both the main investigation and an independent review)
 | Event report (`hoi4_events`: title, description, options) | title and options | adds full description and leader, 0.7 ms |
 | Executor with an action it cannot complete | (no executor) | 346 attempts in 50 steps, now 4 in 40 s (backoff) |
 
-Map actions (army orders, fronts, construction placement) were not measured: a macOS screen-recording
-permission prompt covered the centre of the screen, and the occlusion check rightly refused clicks
-under it.
+### Map and panel actions (8 November 2026, Italy 1936-37, same game; server time per call)
+
+| Action | w17 / baseline build | Now | What changed |
+|---|---|---|---|
+| `hoi4_event_choose` (plain, news, leader) | 345-370 ms, news and leader by screen scan | 250-590 ms, no capture for any layout | Option centres from the options grid's screen transform (validated against the layout's anchor sprite) |
+| `hoi4_army_move` | 3.0-3.4 s | 0.6 s when the target shows, 1.4-2.0 s otherwise | Right-click a projected province of the target; Find view only when none shows |
+| `hoi4_army_front` | 3.75-4.9 s | 2.9-3.2 s | Find only when the camera is too high or the border point is off screen; no 300 ms panel wait; highlight captured when drawn |
+| `hoi4_army_offensive` | 4.0-4.9 s | 1.9 s | Drawn at the state's projected centre, Find as fallback |
+| `hoi4_army_attack` (offensive + execute) | never ran (sub-request ids refused) | 2.3 s | `<id>:front` ids |
+| `hoi4_railway_build` | 11.6-13.6 s | 1.9 s (both ends on screen), 4.7 s (from far) | One Find and one zoom burst instead of the arrow-key crawl |
+| `hoi4_construction_add` | 3.6 s | 1.2 s on screen, 3.2 s otherwise | Placement where the camera is; no 350 ms after Find |
+| `hoi4_production_set` | 0.7-1.75 s | 0.08-0.4 s | Empty notice check is one read (was a 60 ms settle before nearly every action) |
+| `hoi4_research_start` | 1.5-1.8 s | about 1.5 s | (the research panel's slide-in dominates) |
+| `hoi4_air_mission` | 5-8 s, some false successes | 3.9-4.3 s; 25-80 ms when already assigned | Region-checked readback, no Find on entering air mode, clicks off the base icons |
+| `hoi4_army_create` | 39.9 s (10 + 18 divisions) | 10.5 s (5 + 6 divisions) | (earlier selection and journal changes) |
+
+Army orders now leave the camera at unit level (the maintainer watches the units); the strategic
+view returns before the next non-army action. Front and offensive aim without the Find view only at
+camera height 760 or below: the game draws no highlighted fronts at 932.
+
+Open: moving a fighter wing already assigned elsewhere into the region of its own base did not take
+(three tries); the commander list sometimes closes while scrolling (the retry recovers, about 3 s).
 
 ## Status (8 November 2026)
 
-Everything above passes the unit tests (2,711). Live: two lanes, change feed, executor, event reports and the overlay rule are validated; map-action benchmarks are pending.
+Everything above passes the unit tests (2,713). Live: two lanes, change feed, executor, event reports, the overlay rule and the map and panel actions in the table are validated.
