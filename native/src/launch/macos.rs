@@ -926,8 +926,9 @@ impl Commands for MacClock {
         let result = (if journaled {
             Ok(())
         } else {
-            army_names_exist(process, name, arguments)
-                .and_then(|()| self.army_screen_ready(process, name))
+            army_names_exist(process, name, arguments).and_then(|()| {
+                self.army_screen_ready(process, name, arguments.get("lease_token").is_some())
+            })
         })
         .and_then(|()| self.call_inner(process, name, arguments))
         .and_then(not_applied_is_error);
@@ -958,8 +959,11 @@ impl MacClock {
             .ok()
             .map(|s| s.paused)
     }
-    fn army_screen_ready(&self, process: &dyn Process, name: &str) -> Result<()> {
-        let army_tool = name.starts_with("hoi4_army_") || name == "hoi4_division_disband";
+    fn army_screen_ready(&self, process: &dyn Process, name: &str, leased: bool) -> Result<()> {
+        // Input (panel closing, F1) only for actions: a lease-free read such as
+        // hoi4_army_assign_plan runs on the read lane, beside an action, and must send nothing.
+        let army_tool =
+            (name.starts_with("hoi4_army_") || name == "hoi4_division_disband") && leased;
         if !army_tool || process.identity() != self.process.identity() {
             return Ok(());
         }
