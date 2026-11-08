@@ -1,0 +1,731 @@
+{
+  "_comment": "Ethiopia FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone). Goal: survive Italy's 1936 offensive, then take Eritrea 550, Italian Somaliland 559 and Jubaland 844 and end the war with the decision ETH_defeat_italy (Italy's AI always accepts). Explained in ethiopia-plan.md; mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner; keys marked NEW in ethiopia-plan.md section 0 are not read by the current executor yet.",
+  "_validator": {
+    "tag": "ETH",
+    "start_date": "1936.1.1",
+    "stop_date": "1938.1.1",
+    "history_file": "history/countries/ETH - Ethiopia.txt",
+    "dlcs": [
+      "Anniversary Pack",
+      "Arms Against Tyranny",
+      "By Blood Alone",
+      "Gotterdammerung",
+      "Historical German Portraits",
+      "La Resistance",
+      "No Compromise, No Surrender",
+      "No Step Back",
+      "Poland: United and Ready",
+      "Rocket Launcher Unit Pack"
+    ]
+  },
+  "active": true,
+  "auto_events": true,
+  "wait_events_days": 0,
+  "event_options": {
+    "BBA_italy_second_italo_ethiopian_war.1": 1
+  },
+  "event_rules": [
+    {
+      "event": "BBA_italy_second_italo_ethiopian_war.1",
+      "option_name": "BBA_italy_second_italo_ethiopian_war.1.a",
+      "condition": "Ethiopia has full control of state 550 AND state 559",
+      "else_option_name": "BBA_italy_second_italo_ethiopian_war.1.b",
+      "why": "Italy's withdrawal offer (decision ITA_withdraw_from_ethiopia, fire_only_once, AI from 1937-03-01) transfers only the states Ethiopia fully controls"
+    },
+    {
+      "event": "BBA_italo_ethiopian_war_events.100",
+      "note": "arrives at the host country, not at Ethiopia"
+    }
+  ],
+  "focus_path": [
+    "ETH_the_second_italo-ethiopian_war",
+    "ETH_renewed_offensive",
+    "ETH_ecole_militaire_haile_selassie_1er",
+    "ETH_scavenging_tactics",
+    "ETH_northern_thrust",
+    "ETH_mercenaries",
+    "ETH_rally_around_the_emperor",
+    "ETH_the_emperor_stays",
+    "ETH_the_lion_stands_firm",
+    "ETH_the_lessons_of_war",
+    "ETH_learning_from_the_enemy",
+    "ETH_volunteers",
+    "ETH_fait_accompli"
+  ],
+  "focus_fallback": [
+    "ETH_the_abuna",
+    "ETH_keep_the_chitet",
+    "ETH_regional_training_centers",
+    "ETH_regional_supply_depots",
+    "ETH_expand_the_levy",
+    "ETH_develop_the_capital_region",
+    "ETH_university_of_capital"
+  ],
+  "research_priority": [
+    "tech_support",
+    "basic_machine_tools",
+    "tech_engineers",
+    "gw_artillery",
+    "construction1",
+    "infantry_weapons1",
+    "support_weapons",
+    "tech_recon",
+    "interwar_artillery"
+  ],
+  "research_fallback": false,
+  "research_fallback_prefixes": [
+    "tech_",
+    "construction",
+    "basic_machine_tools",
+    "support_weapons"
+  ],
+  "research_path": [
+    {
+      "year": 1936,
+      "not_before": "1936.01.01",
+      "techs": [
+        "tech_support",
+        "basic_machine_tools",
+        "tech_engineers",
+        "gw_artillery",
+        "construction1",
+        "infantry_weapons1",
+        "support_weapons",
+        "tech_recon",
+        "interwar_artillery"
+      ]
+    },
+    {
+      "year": 1937,
+      "not_before": "1937.01.01",
+      "techs": [
+        "improved_machine_tools",
+        "construction2",
+        "tech_military_police",
+        "interwar_antitank",
+        "excavation1",
+        "concentrated_industry"
+      ]
+    },
+    {
+      "year": 1938,
+      "not_before": "1938.01.01",
+      "techs": [
+        "infantry_weapons2",
+        "support_weapons2"
+      ]
+    }
+  ],
+  "construction": [
+    {
+      "building": "infrastructure",
+      "count": 1,
+      "states": [
+        271,
+        842
+      ]
+    }
+  ],
+  "construction_fallback_any_own_state": false,
+  "construction_min_idle": 1,
+  "construction_queue_depth": 1,
+  "construction_plan": [
+    {
+      "order": 1,
+      "building": "infrastructure",
+      "state": 271,
+      "when": "1936.01.01",
+      "why": "the only state with a hub and railway; infrastructure is the only building Ethiopia can afford (2 civilian factories, no free slots)"
+    },
+    {
+      "order": 2,
+      "building": "arms_factory",
+      "state": 271,
+      "when": "focus ETH_develop_the_capital_region completed or a free slot shows in 271"
+    },
+    {
+      "order": 3,
+      "building": "supply_node",
+      "state": 842,
+      "province": 13238,
+      "when": "never before Eritrea is taken; only if 5+ civilian factories are free",
+      "priority": "low"
+    }
+  ],
+  "production_priority": [
+    "infantry_equipment"
+  ],
+  "production": [
+    {
+      "equipment": "infantry_equipment_0",
+      "factories": 2
+    }
+  ],
+  "production_min_idle": 0,
+  "training": {
+    "template": "Chitet Sefari",
+    "queue": 1,
+    "batch": 1,
+    "deploy_state": 271
+  },
+  "training_rules": {
+    "only_if_stockpile": {
+      "infantry_equipment": 600
+    },
+    "cap_template": "Chitet Sefari",
+    "cap": 20,
+    "why": "a Chitet Sefari needs 480 rifles (6 irregular battalions x 80); never train into an empty stockpile"
+  },
+  "politics": [
+    {
+      "category": "government",
+      "slot": 2,
+      "idea": "partial_economic_mobilisation",
+      "cost": 150
+    }
+  ],
+  "decisions": [
+    "ETH_defeat_italy"
+  ],
+  "doctrines": [
+    {
+      "folder": "land",
+      "grand_doctrine": "mass_assault",
+      "when": "army_xp >= 150"
+    },
+    {
+      "folder": "land",
+      "track": "infantry",
+      "subdoctrine": "irregulars",
+      "when": "army_xp >= 75"
+    }
+  ],
+  "armies": {
+    "states": [
+      842,
+      841,
+      843,
+      271,
+      835,
+      836,
+      837
+    ],
+    "max": 24,
+    "min_for_general": 2,
+    "absorb": "assign",
+    "consolidate": false,
+    "generals": [
+      "Seyoum Mengesha",
+      "Mulugeta Yeggazu of Illubabor",
+      "Kassa Haile Darge",
+      "Imru Haile Selassie",
+      "Desta Damtew",
+      "Nasibu Zeamanuel",
+      "Beyene Merid",
+      "Balcho Safo",
+      "Ayalew Birru"
+    ]
+  },
+  "army_layout": [
+    {
+      "name_hint": "Army of Tigray",
+      "state": 842,
+      "divisions": "2 Mountain Division, 3 Mehal Sefari, 2 Chitet Sefari",
+      "general": "Seyoum Mengesha",
+      "hold": [
+        13237,
+        13238,
+        2072
+      ],
+      "role": "hold then strike Eritrea"
+    },
+    {
+      "name_hint": "Army of Begemder",
+      "state": 841,
+      "divisions": "1 Mehal Sefari, 1 Chitet Sefari at Gondar 1984",
+      "general": "Ayalew Birru",
+      "hold": [
+        1984
+      ],
+      "role": "hold"
+    },
+    {
+      "name_hint": "Army of Wello",
+      "state": 843,
+      "divisions": "3 Mehal Sefari, 2 Chitet Sefari",
+      "general": "Mulugeta Yeggazu of Illubabor",
+      "hold": [
+        5097,
+        7944
+      ],
+      "role": "hold, reserve for Tigray"
+    },
+    {
+      "name_hint": "Imperial reserve",
+      "state": 271,
+      "divisions": "Kebur Zabagna plus every new Chitet Sefari",
+      "general": "Kassa Haile Darge",
+      "hold": [
+        5010,
+        13239
+      ],
+      "role": "reserve"
+    },
+    {
+      "name_hint": "Army of the Ogaden",
+      "state": 835,
+      "divisions": "1 Mehal Sefari (Dire Dawa), 2 Chitet Sefari (Wal Wal 12812, 12757)",
+      "general": "Nasibu Zeamanuel",
+      "hold": [
+        12812,
+        13249,
+        7980
+      ],
+      "role": "hold then strike Somaliland"
+    },
+    {
+      "name_hint": "Army of Bale and Sidamo",
+      "state": 836,
+      "divisions": "2 Chitet Sefari (4995), 1 Chitet Sefari (Sidamo 8062)",
+      "general": "Desta Damtew",
+      "hold": [
+        4995,
+        8062,
+        10775,
+        13247
+      ],
+      "role": "hold then strike Jubaland"
+    }
+  ],
+  "army_group": [
+    {
+      "name_hint": "Northern front",
+      "field_marshal": "Hailu Tekle Haymanot",
+      "fallback_field_marshal": "Haile Selassie",
+      "members": [
+        "Army of Tigray",
+        "Army of Begemder",
+        "Army of Wello"
+      ]
+    },
+    {
+      "name_hint": "Southern front",
+      "field_marshal": "Abba Jofir",
+      "members": [
+        "Army of the Ogaden",
+        "Army of Bale and Sidamo"
+      ]
+    }
+  ],
+  "air": {
+    "war_missions": false
+  },
+  "war": {
+    "enemies": [
+      "ITA"
+    ],
+    "min_army": 2,
+    "per_target": 2,
+    "cooldown_hours": 12,
+    "reserve": [],
+    "axes": [],
+    "theatre": [
+      842,
+      841,
+      843,
+      271,
+      835,
+      836,
+      837,
+      550,
+      559,
+      844,
+      908
+    ],
+    "guard_states": [
+      842,
+      841,
+      843,
+      835,
+      836,
+      837
+    ],
+    "guards": {},
+    "motorization": 0,
+    "stall_days": 10,
+    "rest_below": 15,
+    "resume_above": 30,
+    "supply_floor": 20,
+    "direct_moves": true,
+    "supply_first": false
+  },
+  "war_by_phase": {
+    "P1_hold": {
+      "axes": [],
+      "guard_states": [
+        842,
+        841,
+        843,
+        835,
+        836,
+        837
+      ]
+    },
+    "P3_eritrea": {
+      "axes": [
+        [
+          550
+        ]
+      ],
+      "guard_states": [
+        841,
+        843,
+        835,
+        836,
+        837
+      ]
+    },
+    "P4_south": {
+      "axes": [
+        [
+          559,
+          844
+        ],
+        [
+          844
+        ]
+      ],
+      "guard_states": [
+        550,
+        842,
+        841,
+        843
+      ]
+    },
+    "P5_finish": {
+      "axes": [
+        [
+          559
+        ],
+        [
+          844
+        ],
+        [
+          550
+        ]
+      ],
+      "guard_states": [
+        842,
+        843,
+        835
+      ]
+    }
+  },
+  "hold_targets": [
+    {
+      "mission": "ETH_hold_the_north_mission",
+      "provinces": [
+        1984,
+        2072,
+        5097
+      ],
+      "keep_at_least": 2,
+      "until": "mission ends (about 1936-05-15 if Italy chose option a, 1936-07-14 if b)"
+    },
+    {
+      "mission": "ETH_hold_the_south_mission",
+      "provinces": [
+        12812,
+        10775,
+        13247
+      ],
+      "keep_at_least": 2,
+      "until": "same date as the north mission"
+    },
+    {
+      "mission": "ETH_hold_addis_ababa_mission",
+      "state": 271,
+      "until": "180 days after it activates"
+    }
+  ],
+  "vp_targets": [
+    {
+      "order": 1,
+      "province": 13250,
+      "name": "Asmara (VP 3, supply hub)",
+      "state": 550,
+      "from": [
+        13237,
+        13238
+      ]
+    },
+    {
+      "order": 2,
+      "province": 12766,
+      "name": "Massaua (VP 1, port)",
+      "state": 550,
+      "from": [
+        13238,
+        13250
+      ]
+    },
+    {
+      "order": 3,
+      "province": 12723,
+      "name": "Biscia (VP 1)",
+      "state": 550,
+      "from": [
+        13237,
+        13250
+      ]
+    },
+    {
+      "order": 4,
+      "province": 13251,
+      "name": "Eritrea west",
+      "state": 550,
+      "from": [
+        13237,
+        12723
+      ]
+    },
+    {
+      "order": 5,
+      "province": 8043,
+      "name": "Eritrea south coast (desert)",
+      "state": 550,
+      "from": [
+        13238,
+        12766
+      ]
+    },
+    {
+      "order": 6,
+      "province": 5091,
+      "name": "Eritrea north",
+      "state": 550,
+      "from": [
+        13250,
+        12766,
+        12723
+      ]
+    },
+    {
+      "order": 7,
+      "province": 5017,
+      "name": "Eritrea north-west",
+      "state": 550,
+      "from": [
+        12723,
+        5091
+      ]
+    },
+    {
+      "order": 8,
+      "province": 5047,
+      "name": "Eritrea far north",
+      "state": 550,
+      "from": [
+        5091,
+        5017
+      ]
+    },
+    {
+      "order": 9,
+      "province": 2020,
+      "name": "Somaliland, gate to Mogadishu",
+      "state": 559,
+      "from": [
+        12812,
+        4995
+      ]
+    },
+    {
+      "order": 10,
+      "province": 12991,
+      "name": "Mogadiscio (VP 3, port)",
+      "state": 559,
+      "from": [
+        2020,
+        2063
+      ]
+    },
+    {
+      "order": 11,
+      "province": 11014,
+      "name": "Jubaland inland",
+      "state": 844,
+      "from": [
+        8062,
+        4995
+      ]
+    },
+    {
+      "order": 12,
+      "province": 12941,
+      "name": "Kismaayo (VP 1, port)",
+      "state": 844,
+      "from": [
+        11014
+      ]
+    },
+    {
+      "order": 13,
+      "province": 2063,
+      "name": "Somaliland centre",
+      "state": 559,
+      "from": [
+        4995,
+        2020,
+        11014
+      ]
+    },
+    {
+      "order": 14,
+      "province": 1964,
+      "name": "Somaliland north-west",
+      "state": 559,
+      "from": [
+        12812
+      ]
+    },
+    {
+      "order": 15,
+      "province": 12840,
+      "name": "Somaliland",
+      "state": 559,
+      "from": [
+        1964,
+        2020
+      ]
+    },
+    {
+      "order": 16,
+      "province": 5065,
+      "name": "Somaliland coast",
+      "state": 559,
+      "from": [
+        2020,
+        12991
+      ]
+    },
+    {
+      "order": 17,
+      "province": 10928,
+      "name": "Somaliland coast",
+      "state": 559,
+      "from": [
+        2063,
+        12991
+      ]
+    },
+    {
+      "order": 18,
+      "province": 8164,
+      "name": "Somaliland south coast",
+      "state": 559,
+      "from": [
+        2063,
+        11014
+      ]
+    },
+    {
+      "order": 19,
+      "province": 10818,
+      "name": "Somaliland north",
+      "state": 559,
+      "from": [
+        1964,
+        12840
+      ]
+    },
+    {
+      "order": 20,
+      "province": 4909,
+      "name": "Somaliland north",
+      "state": 559,
+      "from": [
+        1964,
+        10818
+      ]
+    },
+    {
+      "order": 21,
+      "province": 10891,
+      "name": "Somaliland north",
+      "state": 559,
+      "from": [
+        4909,
+        10818
+      ]
+    },
+    {
+      "order": 22,
+      "province": 1966,
+      "name": "Somaliland, Cape Guardafui",
+      "state": 559,
+      "from": [
+        10891
+      ]
+    }
+  ],
+  "win_condition": {
+    "decision": "ETH_defeat_italy",
+    "needs": "has_full_control_of_state 550, 559 and 844, at war with ITA, ITA not in a faction"
+  },
+  "retake_rules": [
+    {
+      "if": "an Ethiopian province of a guard state is Italian-held",
+      "do": "the guard army of that state retakes it at once if it has at least as many divisions there as Italy (visible units)"
+    },
+    {
+      "if": "Addis Ababa 5010 or 13239 is threatened (Italian unit adjacent)",
+      "do": "Imperial reserve moves into 5010 and digs in; never leave 5010 empty"
+    },
+    {
+      "if": "a taken Eritrean or Somali province is lost again",
+      "do": "stop the next attack and retake it first"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P0_setup",
+      "from": "1936-01-01",
+      "until": "unpause",
+      "goal": "research, production, focus, armies and generals, defensive fronts on hills and mountains"
+    },
+    {
+      "id": "P1_hold",
+      "from": "1936-01-01",
+      "until": "the Hold the North/South missions end",
+      "goal": "keep 2 of Gondar/Macalle/Dessie and 2 of Wal Wal/Gaba/Moyale; no attack into Eritrea except the opportunity rule"
+    },
+    {
+      "id": "P2_counterattack",
+      "from": "mission end",
+      "until": "focus ETH_northern_thrust completed (about 1936-06-25)",
+      "goal": "retake Tigray provinces Italy holds, rest and refill, train Chitet"
+    },
+    {
+      "id": "P3_eritrea",
+      "from": "1936-06-25",
+      "until": "state 550 fully controlled",
+      "goal": "Asmara, Massaua, then every Eritrean province inside the 90-day Northern Thrust window (+25% attack, +50% breakthrough in 550/841/842/843)"
+    },
+    {
+      "id": "P4_south",
+      "from": "state 550 fully controlled",
+      "until": "states 559 and 844 fully controlled",
+      "goal": "Wal Wal -> 2020 -> Mogadiscio; Sidamo 8062 -> 11014 -> Kismaayo"
+    },
+    {
+      "id": "P5_finish",
+      "goal": "take decision ETH_defeat_italy the day 550+559+844 are fully controlled"
+    }
+  ],
+  "alarms": {
+    "political_power": 160,
+    "idle_military_factories": 0,
+    "unassigned_divisions": 1
+  }
+}

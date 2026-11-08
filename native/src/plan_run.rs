@@ -134,6 +134,12 @@ pub enum Tick {
 
 pub struct State {
     stop_on_failure: bool,
+    /// The game hour of the current step (for the failure ledger).
+    clock: GameHour,
+    /// Failed orders by signature (tool + arguments): when they failed. The same order is not
+    /// sent again after 3 failures in 10 game days (w24: the same selection and research orders
+    /// failed again and again).
+    failures: HashMap<String, Vec<GameHour>>,
     boot: u64,
     bad: HashMap<String, GameHour>,
     last_hour: GameHour,
@@ -154,6 +160,12 @@ pub struct State {
     war_guard: HashMap<String, i32>,
     /// Direct moves issued without the army changing state since: (target, state, count).
     war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
+    /// The enemy-held province of an own state last ordered for an army, and when.
+    war_province: HashMap<String, (i32, GameHour)>,
+    /// `construction_plan` items already queued (by `order`).
+    plan_built: HashSet<i64>,
+    /// `army_layout`: name_hint -> the army that plays that role.
+    layout: HashMap<String, String>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -221,6 +233,8 @@ impl Default for State {
     fn default() -> Self {
         Self {
             stop_on_failure: false,
+            clock: 0,
+            failures: HashMap::new(),
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -238,6 +252,9 @@ impl Default for State {
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
             war_repeat: HashMap::new(),
+            war_province: HashMap::new(),
+            plan_built: HashSet::new(),
+            layout: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -272,6 +289,18 @@ impl State {
         args: Value,
         tag: &str,
     ) -> Result<(bool, String)> {
+        let signature = format!("{name} {args}");
+        let window = 10 * DAY;
+        let clock = self.clock;
+        if let Some(times) = self.failures.get_mut(&signature) {
+            times.retain(|t| clock - *t < window);
+            if times.len() >= 3 {
+                return Ok((
+                    false,
+                    "skipped: the same order failed 3 times in 10 game days".into(),
+                ));
+            }
+        }
         self.seq += 1;
         let mut args = args;
         if let Some(object) = args.as_object_mut() {
@@ -283,6 +312,18 @@ impl State {
         }
         let id = args["request_id"].as_str().unwrap_or("").to_string();
         self.sent.insert(id, (name.to_string(), args.clone()));
+        let result = self.dispatch(tools, name, &args);
+        match &result {
+            Ok((false, _)) => self.failures.entry(signature).or_default().push(clock),
+            Ok((true, _)) => {
+                self.failures.remove(&signature);
+            }
+            Err(_) => {}
+        }
+        result
+    }
+    fn dispatch(&mut self, tools: &dyn Tools, name: &str, args: &Value) -> Result<(bool, String)> {
+        let args = args.clone();
         let mut result = tools.call(name, &args);
         if matches!(&result, Err(e) if e.code == "action_uncertain") {
             // Another dispatch of this run is unresolved and blocks input: settle
@@ -355,6 +396,7 @@ pub fn tick(
     lease: &str,
     now: GameHour,
 ) -> Result<Tick> {
+    state.clock = now;
     if plan["active"] == json!(false) {
         return Ok(Tick::Idle);
     }
@@ -454,7 +496,13 @@ pub fn tick(
     // the war executive acts before everything else unless the plan says "war": {"first": false}.
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
     if war_on && plan["war"]["first"] != json!(false) {
+        if let Some(step) = layout_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
         if let Some(step) = war_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+        if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
         if let Some(step) = armies_step(state, tools, plan, lease, now)? {
@@ -491,10 +539,40 @@ pub fn tick(
             }
         }
         let busy: HashSet<String> = slots.iter().flatten().cloned().collect();
-        let priority = strings(plan, "research_priority");
+        let year = game_year(now);
+        // Techs startable now (prerequisites done, from the game files); None when the server
+        // cannot say (then every key is tried as before).
+        let available = tools
+            .call("hoi4_technology_list", &json!({"available": true}))
+            .ok()
+            .filter(|v| v["available_only"] == json!(true));
+        let startable: Option<HashSet<String>> = available
+            .as_ref()
+            .map(|v| strings(v, "technologies").into_iter().collect());
+        let start_year = |t: &str| -> Option<i64> {
+            available
+                .as_ref()
+                .and_then(|v| v["start_years"][t].as_i64())
+        };
+        // `research_path`: [{"year":1936,"techs":[...]}, ...] in order; an entry counts from its
+        // year on (the plan's forward view: industry first, nothing ahead of its time).
+        let mut priority: Vec<String> = Vec::new();
+        if let Some(path) = plan["research_path"].as_array() {
+            for step in path {
+                let due = match step["not_before"].as_str().and_then(date_hour) {
+                    Some(at) if year.is_some() => now >= at,
+                    _ => year.is_none_or(|y| step["year"].as_i64().unwrap_or(0) <= y),
+                };
+                if due {
+                    priority.extend(strings(step, "techs"));
+                }
+            }
+        }
+        priority.extend(strings(plan, "research_priority"));
         let open: Vec<&String> = priority
             .iter()
             .filter(|t| !done.contains(*t) && !busy.contains(*t))
+            .filter(|t| startable.as_ref().is_none_or(|s| s.contains(*t)))
             .collect();
         let waiting = open
             .iter()
@@ -524,7 +602,12 @@ pub fn tick(
                 ));
                 return Ok(Tick::Acted(format!("research {tech} slot {empty}")));
             }
-            state.skip(now, "tech", &tech, skip_hours(plan, "tech", 3 * DAY));
+            state.skip(
+                now,
+                "tech",
+                &tech,
+                tech_skip(&why, skip_hours(plan, "tech", 3 * DAY)),
+            );
             refused.push(format!("{tech}:{}", why.split(':').next().unwrap_or("")));
         }
         // Nothing from the priority list is startable: never leave a slot idle.
@@ -560,7 +643,55 @@ pub fn tick(
                     || prefixes.iter().any(|p| tech.starts_with(p.as_str()))
                     || categories.iter().any(|c| tech.contains(c.as_str())))
         };
-        if fallback_on {
+        if fallback_on && startable.is_some() {
+            // From the techs startable now, never ahead of their year, in the plan's order of
+            // interest (research_fallback_prefixes: industry first in the plans), oldest first.
+            let rank = |t: &str| {
+                prefixes
+                    .iter()
+                    .position(|p| t.starts_with(p.as_str()))
+                    .unwrap_or(prefixes.len())
+            };
+            let mut pool: Vec<String> = startable
+                .iter()
+                .flatten()
+                .filter(|t| !busy.contains(*t) && wanted(t) && !state.skipped(now, "tech", t))
+                .filter(|t| match (year, start_year(t)) {
+                    (Some(y), Some(sy)) => sy <= y,
+                    _ => true,
+                })
+                .cloned()
+                .collect();
+            pool.sort_by_key(|t| (rank(t), start_year(t).unwrap_or(0), t.clone()));
+            for tech in pool.into_iter().take(3) {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_research_start",
+                    json!({"technology": tech, "slot": empty}),
+                    "rf",
+                )?;
+                if ok {
+                    state.stages.fallback_used.push(tech.clone());
+                    state.stages.research = Some((
+                        format!("research: started {tech} slot {empty} (available, in time, plan order)"),
+                        false,
+                    ));
+                    return Ok(Tick::Acted(format!(
+                        "research {tech} slot {empty} (fallback)"
+                    )));
+                }
+                state.skip(
+                    now,
+                    "tech",
+                    &tech,
+                    tech_skip(&why, skip_hours(plan, "tech_fallback", 7 * DAY)),
+                );
+            }
+        } else if fallback_on && plan["research_blind_catalogue"] == json!(true) {
+            // The old catalogue walk (every key tried by input) only on request: without the
+            // available list it opened the research tree for techs the game could never take
+            // (w24: 26 refusals). A server without the list leaves the slot to the player.
             let mut tried = 0;
             let mut offset = 0;
             'catalog: loop {
@@ -659,19 +790,25 @@ pub fn tick(
                 state.stages.focus = Some((format!("focus: started {key}"), false));
                 return Ok(Tick::Acted(format!("focus {key}")));
             }
-            // A focus the game disables (requirements, exclusive branch) is
-            // retried soon and does not hold up the next key in the path.
+            // A focus the game disables (requirements, exclusive branch) waits 10 game days
+            // (6 game hours was under a second at speed 3) and does not hold up the next key.
+            // Anything else (a torn read, a readback) ends the focus step for this tick: going on
+            // to the next key started focuses out of plan order (w24).
             let blocked = why.contains("focus_not_available")
                 || why.contains("prerequisite")
-                || why.contains("exclusive");
+                || why.contains("exclusive")
+                || why.contains("invalid_target");
             let hours = if blocked {
-                skip_hours(plan, "focus_blocked", 6)
+                skip_hours(plan, "focus_blocked", 10 * DAY)
             } else {
                 skip_hours(plan, "focus", DAY)
             };
             state.skip(now, "focus", &key, hours);
             let code = why.split(':').next().unwrap_or("refused").to_string();
             state.stages.focus_why.insert(key, code);
+            if !blocked {
+                break;
+            }
         }
         if !path.is_empty() || !fallback.is_empty() {
             let left = startable(state, &path).len() + startable(state, &fallback).len();
@@ -1120,6 +1257,305 @@ fn armies_step(
     Ok(None)
 }
 
+/// Calendar year of a raw game hour (1936.01.01 is about 6936 * 8760: the engine counts from
+/// year -5000); None for test clocks and other implausible values.
+fn game_year(now: GameHour) -> Option<i64> {
+    let y = now / 8760 - 5000;
+    (1900..2100).contains(&y).then_some(y)
+}
+/// The game hour at the start of date `text` ("1936.03.05" or "1936-03-05"); the game's calendar
+/// has 365 days and the raw hour counts from year -5000.
+fn date_hour(text: &str) -> Option<GameHour> {
+    let parts: Vec<i64> = text
+        .split(['.', '-'])
+        .filter_map(|p| p.trim().parse().ok())
+        .collect();
+    let (y, m, d) = (*parts.first()?, *parts.get(1)?, *parts.get(2)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    const DAYS: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let before: i64 = DAYS[..(m - 1) as usize].iter().sum();
+    Some(((y + 5000) * 365 + before + d - 1) * 24)
+}
+
+/// How long to leave a refused tech alone: for the rest of the run when the game will never
+/// take it (not in this country's tree, an inactive variant, disabled), else `default`.
+fn tech_skip(why: &str, default: GameHour) -> GameHour {
+    let never = [
+        "no tile",
+        "not active",
+        "disables Research",
+        "already researched",
+    ];
+    if never.iter().any(|w| why.contains(w)) {
+        365 * DAY * 20
+    } else {
+        default
+    }
+}
+
+/// `army_layout`: split the armies by role on day one, as the plan says (strike armies attack,
+/// guard armies hold): `[{name_hint, state, templates, count, role, general?,
+/// guard_states_in_order?, when?}]`. The first strike entry of a state takes the army standing
+/// there; every other entry gets up to `count` divisions of its templates detached from it. One
+/// action per step; guards are bound to their first post (they hold, never attack).
+fn layout_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some(entries) = plan["army_layout"].as_array() else {
+        return Ok(None);
+    };
+    if state.skipped(now, "layout", "all") {
+        return Ok(None);
+    }
+    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let armies = list(&roster, "armies");
+    let present: HashSet<String> = armies
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .collect();
+    state
+        .layout
+        .retain(|_, a| a.is_empty() || present.contains(a));
+    let taken: HashSet<String> = state.layout.values().cloned().collect();
+    for (index, e) in entries.iter().enumerate() {
+        let hint = text(&e["name_hint"]).to_string();
+        let home = e["state"].as_i64().unwrap_or(0);
+        if hint.is_empty() || state.layout.contains_key(&hint) {
+            continue;
+        }
+        if let Some(rest) = text(&e["when"]).strip_prefix("owner:") {
+            let (id, tag) = rest.split_once('=').unwrap_or(("0", ""));
+            let row = tools
+                .call("hoi4_states", &json!({"query": id.trim()}))
+                .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                .unwrap_or_default();
+            if text(&row["owner"]) != tag.trim() {
+                continue;
+            }
+        }
+        // The army standing in the entry's state that no other role holds yet.
+        let base = armies
+            .iter()
+            .filter(|a| a["main_state"].as_i64() == Some(home))
+            .map(|a| text(&a["army"]).to_string())
+            .find(|n| !taken.contains(n));
+        let first_strike = text(&e["role"]) == "strike"
+            && !entries[..index]
+                .iter()
+                .any(|x| x["state"].as_i64() == Some(home) && text(&x["role"]) == "strike");
+        if first_strike {
+            let Some(base) = base else { continue };
+            state.layout.insert(hint.clone(), base.clone());
+            return Ok(Some(format!("layout: {base} is {hint}")));
+        }
+        // Detach from the state's first strike army (or any army standing there).
+        let parent = entries[..index]
+            .iter()
+            .filter(|x| x["state"].as_i64() == Some(home) && text(&x["role"]) == "strike")
+            .filter_map(|x| state.layout.get(text(&x["name_hint"])))
+            .find(|a| present.contains(*a))
+            .cloned()
+            .or(base);
+        let Some(parent) = parent else { continue };
+        let detail = tools.call("hoi4_supply", &json!({"army": parent}))?;
+        let templates: Vec<String> = strings(e, "templates");
+        let count = e["count"].as_u64().unwrap_or(1) as usize;
+        let pick: Vec<String> = list(&detail, "divisions")
+            .iter()
+            .filter(|d| text(&d["army"]) == parent)
+            .filter(|d| templates.iter().any(|t| t == text(&d["template"])))
+            .filter_map(|d| d["id"].as_str().map(str::to_string))
+            .take(count)
+            .collect();
+        if pick.is_empty() {
+            // Nothing of those templates here: the role stays empty (never retried).
+            state.layout.insert(hint.clone(), String::new());
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_detach",
+            json!({"army": parent, "divisions": pick}),
+            "la",
+        )?;
+        if !ok {
+            state.skip(now, "layout", "all", 2 * DAY);
+            return Ok(Some(format!(
+                "layout: detach for {hint} from {parent}: {ok} {why}"
+            )));
+        }
+        let after = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        let new = list(&after, "armies")
+            .iter()
+            .map(|a| text(&a["army"]).to_string())
+            .find(|n| !present.contains(n));
+        let Some(new) = new else {
+            state.skip(now, "layout", "all", DAY);
+            return Ok(Some(format!(
+                "layout: detach for {hint} from {parent}: no new army seen"
+            )));
+        };
+        state.layout.insert(hint.clone(), new.clone());
+        if text(&e["role"]) == "guard" {
+            if let Some(post) = list(e, "guard_states_in_order")
+                .first()
+                .and_then(Value::as_i64)
+            {
+                state.war_guard.insert(new.clone(), post as i32);
+            }
+        }
+        return Ok(Some(format!(
+            "layout: {} divisions of {parent} -> {new} ({hint}): {ok} {why}",
+            pick.len()
+        )));
+    }
+    // Generals named by the layout, only where the army has none (no reassignment churn).
+    for e in entries {
+        let hint = text(&e["name_hint"]);
+        let general = text(&e["general"]);
+        let Some(army) = state.layout.get(hint).filter(|a| !a.is_empty()).cloned() else {
+            continue;
+        };
+        if general.is_empty() || state.skipped(now, "layoutgen", &army) {
+            continue;
+        }
+        let row = armies.iter().find(|a| text(&a["army"]) == army);
+        if row.is_some_and(|a| a["commander"].is_null()) {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_commander",
+                json!({"army": army, "general": general}),
+                "lg",
+            )?;
+            state.skip(
+                now,
+                "layoutgen",
+                &army,
+                if ok { 365 * DAY } else { 5 * DAY },
+            );
+            return Ok(Some(format!(
+                "layout general {general} -> {army}: {ok} {why}"
+            )));
+        }
+    }
+    Ok(None)
+}
+
+/// `construction_plan`: ordered items `{order, building, state, province?, path?, from_state?,
+/// to_state?, when, priority?}` queued once each when `when` holds: a date ("1936.01.01"),
+/// `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`. Supply
+/// lines are then raised by the supply-first rule. One item per step.
+fn construction_plan_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some(items) = plan["construction_plan"].as_array() else {
+        return Ok(None);
+    };
+    let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
+    let mut provinces_of: HashMap<i64, Value> = HashMap::new();
+    let mut detail = |state_id: i64| -> Value {
+        provinces_of
+            .entry(state_id)
+            .or_insert_with(|| {
+                tools
+                    .call("hoi4_states", &json!({"query": state_id.to_string()}))
+                    .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                    .unwrap_or_default()
+            })
+            .clone()
+    };
+    for item in items {
+        let order = item["order"].as_i64().unwrap_or(-1);
+        let key = order.to_string();
+        if state.plan_built.contains(&order) || state.skipped(now, "cplan", &key) {
+            continue;
+        }
+        let home = item["state"]
+            .as_i64()
+            .or_else(|| item["to_state"].as_i64())
+            .unwrap_or(0);
+        let when = text(&item["when"]);
+        let due = if let Some(p) = when.strip_prefix("province_controlled:") {
+            let p: i64 = p.trim().parse().unwrap_or(0);
+            list(&detail(home), "provinces")
+                .iter()
+                .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me)
+        } else if let Some(id) = when.strip_prefix("state_fully_controlled:") {
+            let row = detail(id.trim().parse().unwrap_or(0));
+            let all = list(&row, "provinces");
+            !all.is_empty() && all.iter().all(|r| text(&r["controller"]) == me)
+        } else if let Some(rest) = when.strip_prefix("owner:") {
+            let (id, tag) = rest.split_once('=').unwrap_or(("0", ""));
+            text(&detail(id.trim().parse().unwrap_or(0))["owner"]) == tag.trim()
+        } else if let Some(at) = date_hour(when) {
+            now >= at
+        } else {
+            when.is_empty()
+        };
+        if !due {
+            continue;
+        }
+        let building = text(&item["building"]);
+        let (tool, args) = if building == "rail_way" || building == "railway" {
+            let path: Vec<i64> = list(item, "path")
+                .iter()
+                .filter_map(Value::as_i64)
+                .collect();
+            let mut a = json!({
+                "from_state": item["from_state"].as_i64().unwrap_or(home),
+                "to_state": item["to_state"].as_i64().unwrap_or(home)});
+            if let (Some(f), Some(t)) = (path.first(), path.last()) {
+                a["from_province"] = json!(f);
+                a["to_province"] = json!(t);
+            }
+            ("hoi4_railway_build", a)
+        } else {
+            let mut a = json!({"building": building, "state_id": home});
+            if let Some(p) = item["province"].as_i64() {
+                a["province_id"] = json!(p);
+            }
+            ("hoi4_construction_add", a)
+        };
+        let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
+        if ok {
+            state.plan_built.insert(order);
+        } else {
+            state.skip(now, "cplan", &key, 2 * DAY);
+        }
+        return Ok(Some(format!(
+            "construction plan #{order} {building} in {home}: {ok} {why}"
+        )));
+    }
+    Ok(None)
+}
+
+/// The first supply line (supply hub or railway) that stands behind a line of another kind, by
+/// its 0-based queue index.
+fn supply_line_to_raise(lines: &[Value]) -> Option<usize> {
+    let supply = |l: &Value| {
+        l["line_kind"] == json!("railway") || l["building"]["building_id"] == json!("supply_node")
+    };
+    let first_other = lines.iter().position(|l| !supply(l))?;
+    lines
+        .iter()
+        .enumerate()
+        .skip(first_other + 1)
+        .find(|(_, l)| supply(l))
+        .map(|(i, _)| i)
+}
+
 /// `disband`: {"templates":["Camicie Nere",..],"keep_states":[ids],"max":N}: divisions of these
 /// templates in an army, standing outside `keep_states` (default: war.theatre), are disbanded
 /// one army at a time so their men and equipment refill the fighting armies (Ethiopia run 10:
@@ -1314,19 +1750,40 @@ fn own_states(state: &mut State, tools: &dyn Tools, tag: &str, now: GameHour) ->
             return ids.clone();
         }
     }
-    let ids: Vec<i64> = tools
+    // Best places first: highest infrastructure, fully held, away from any enemy (w24 built in
+    // low-infrastructure states and on the front).
+    let front: HashSet<i64> = tools
+        .call("hoi4_wars", &json!({}))
+        .map(|w| {
+            list(&w, "borders")
+                .iter()
+                .filter(|b| b["hostile"] == json!(true))
+                .flat_map(|b| list(b, "own_border_states"))
+                .filter_map(|v| v.as_i64())
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut rows: Vec<(i64, i64)> = tools
         .call("hoi4_states", &json!({"query": tag}))
         .map(|found| {
             list(&found, "states")
                 .iter()
                 .filter(|r| {
                     let ok = |k: &str| r[k].as_str().is_none_or(|o| o == tag);
-                    ok("owner") && ok("controller")
+                    ok("owner")
+                        && ok("controller")
+                        && list(r, "provinces_held_by_others").is_empty()
                 })
-                .filter_map(|r| r["state_id"].as_i64())
+                .filter_map(|r| {
+                    let id = r["state_id"].as_i64()?;
+                    Some((id, r["infrastructure_start"].as_i64().unwrap_or(0)))
+                })
+                .filter(|(id, _)| !front.contains(id))
                 .collect()
         })
         .unwrap_or_default();
+    rows.sort_by_key(|(id, infra)| (std::cmp::Reverse(*infra), *id));
+    let ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
     if !ids.is_empty() {
         state.con.own = Some((now, ids.clone()));
     }
@@ -1446,6 +1903,7 @@ fn construction_step(
             .copied()
             .filter(|id| usable(state, *id))
             .collect();
+        let listed = !eligible.is_empty();
         if eligible.is_empty()
             && (fallback_all || job["fallback_any_own_state"] == json!(true))
             && !tag.is_empty()
@@ -1469,9 +1927,11 @@ fn construction_step(
         if eligible.is_empty() {
             continue;
         }
-        // take turns between the listed states
-        let turn = state.con.rr % eligible.len();
-        eligible.rotate_left(turn);
+        // take turns between the listed states; the fallback keeps its best-first order
+        if listed {
+            let turn = state.con.rr % eligible.len();
+            eligible.rotate_left(turn);
+        }
         // read free slots where they are unknown or stale
         if probe && SHARED_SLOT_BUILDINGS.contains(&building.as_str()) {
             let unknown: Vec<i64> = eligible
@@ -1832,6 +2292,18 @@ fn war_step(
             if text(&row["owner"]) == me && text(&row["controller"]) != me {
                 enemies.insert(text(&row["controller"]).to_string());
                 targets.push((id as i32, true));
+            } else if text(&row["owner"]) == me {
+                // Part of an own state an enemy holds (w22: Ethiopia took Eritrea province by
+                // province around an army standing in it): retake it like an occupied state.
+                let held: Vec<String> = list(row, "provinces_held_by_others")
+                    .iter()
+                    .map(|p| text(&p["controller"]).to_string())
+                    .filter(|c| !c.is_empty() && *c != me)
+                    .collect();
+                if let Some(c) = held.first() {
+                    enemies.insert(c.clone());
+                    targets.push((id as i32, true));
+                }
             }
         }
     }
@@ -1856,7 +2328,44 @@ fn war_step(
     if targets.is_empty() {
         return Ok(None);
     }
+    // Fully held own states with their positions: where an army in a pocket falls back to.
+    let safe: Vec<(i32, (f64, f64))> = list(&mine, "states")
+        .iter()
+        .filter(|r| {
+            text(&r["owner"]) == me
+                && text(&r["controller"]) == me
+                && list(r, "provinces_held_by_others").is_empty()
+        })
+        .filter_map(|r| {
+            Some((
+                r["state_id"].as_i64()? as i32,
+                (r["x"].as_f64()?, r["z"].as_f64()?),
+            ))
+        })
+        .collect();
+    // At war, supply comes first in the construction queue: a hub or railway behind another
+    // line gets no factories (w23: the Tigray and Wello hubs sat behind industrial complexes
+    // with none and the army starved in Wello).
+    if cfg["supply_first"] != json!(false) && !state.skipped(now, "supplyfirst", "queue") {
+        let queue = tools.call("hoi4_construction_queue", &json!({"limit": 32}))?;
+        if let Some(line) = supply_line_to_raise(list(&queue, "lines")) {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_construction_order",
+                json!({"line": line, "action": "top"}),
+                "sq",
+            )?;
+            if !ok {
+                state.skip(now, "supplyfirst", "queue", DAY);
+            }
+            return Ok(Some(format!(
+                "supply first: construction line {line} to the top: {ok} {why}"
+            )));
+        }
+    }
     let roster = tools.call("hoi4_armies", &json!({}))?;
+    let mut vp_rows: HashMap<i64, Value> = HashMap::new();
     let mut load: HashMap<i32, usize> = HashMap::new();
     for target in state.war_assign.values() {
         *load.entry(*target).or_default() += 1;
@@ -1933,11 +2442,14 @@ fn war_step(
         if state.war_guard.values().any(|p| *p == post) {
             continue;
         }
+        // An army the plan's layout gave a role (a strike army) is never taken as a guard here.
+        let laid_out: HashSet<&String> = state.layout.values().collect();
         let standing = list(&roster, "armies").iter().find(|a| {
             let n = text(&a["army"]);
             a["main_state"].as_i64() == Some(post as i64)
                 && !guards.contains_key(n)
                 && !state.war_guard.contains_key(n)
+                && !laid_out.contains(&n.to_string())
         });
         if let Some(a) = standing {
             let n = text(&a["army"]).to_string();
@@ -2139,7 +2651,11 @@ fn war_step(
             }
         }
         let Some(target) = target else { continue };
-        let liberate = targets.iter().any(|t| t.0 == target && t.1);
+        // `direct_moves`: attack with direct moves, state then province by province, instead of
+        // battle plans (w11 and w23: the plans stalled for weeks in the Ethiopian mountains and a
+        // direct move broke each stall).
+        let direct = cfg["direct_moves"] == json!(true);
+        let liberate = direct || targets.iter().any(|t| t.0 == target && t.1);
         let stage = state.war_stage.get(&name).copied().unwrap_or(0);
         let executing = army["plan_executing"] == json!(true);
         let standing_in_target = here == Some(target);
@@ -2152,6 +2668,120 @@ fn war_step(
                 now
             }
         };
+        // A pocket forming: most land around the army is held by others. Fall back to the
+        // nearest fully held own state once, then re-check (w24: armies were encircled).
+        if army["threat"]["encirclement_risk"] == json!(true)
+            && cfg["avoid_pockets"] != json!(false)
+            && !state.skipped(now, "pocket", &name)
+        {
+            let (ax, az) = position.unwrap_or((0.0, 0.0));
+            if let Some((safe_id, _)) = safe
+                .iter()
+                .filter(|(id, _)| Some(*id) != here)
+                .min_by(|a, b| {
+                    let d = |p: &(f64, f64)| (p.0 - ax).powi(2) + (p.1 - az).powi(2);
+                    d(&a.1).total_cmp(&d(&b.1))
+                })
+                .copied()
+            {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": safe_id}),
+                    "wp",
+                )?;
+                state.skip(now, "pocket", &name, 3 * DAY);
+                state.war_move.remove(&name);
+                state.war_province.remove(&name);
+                state.war_cool.insert(name.clone(), now + cooldown * 2);
+                return Ok(Some(format!(
+                    "war pocket {name}: {:.0}% of the land around it is held by others -> back to state {safe_id}: {ok} {why}",
+                    army["threat"]["share"].as_f64().unwrap_or(0.0) * 100.0
+                )));
+            }
+        }
+        // Direct moves have no plan to stop: an exhausted or starving army gets no new attack
+        // order until it recovers (w24 kept pushing at 22-28% supply and organisation 17-27).
+        // (Retaking an own state is how a starving army gets its supply back: never held.)
+        let own_target = targets.iter().any(|t| t.0 == target && t.1);
+        if direct && !own_target {
+            if let Some((org, supply)) = org {
+                if org < rest_below || supply < supply_floor {
+                    let recovered = org >= resume_above && supply >= supply_floor;
+                    if !recovered {
+                        state.war_cool.insert(name.clone(), now + cooldown);
+                        continue;
+                    }
+                }
+            }
+        }
+        // `vp_targets`: the plan's victory-point provinces in order, each for a named army or any
+        // army. The army goes for the first one not yet held (own land to retake comes first).
+        if !own_target {
+            if let Some(vp) = plan["vp_targets"].as_array() {
+                let names: Vec<String> = list(&roster, "armies")
+                    .iter()
+                    .map(|a| text(&a["army"]).to_string())
+                    .collect();
+                let by_layout = |t: &Value| state.layout.get(text(&t["army"])).cloned();
+                let mine_now = |t: &Value| {
+                    by_layout(t).is_some_and(|a| a == name)
+                        || (by_layout(t).is_none() && text(&t["army"]).contains(name.as_str()))
+                };
+                let unowned = |t: &Value| {
+                    by_layout(t).is_none_or(|a| a.is_empty())
+                        && !names.iter().any(|n| text(&t["army"]).contains(n.as_str()))
+                };
+                let mut chosen: Option<(i64, i64)> = None;
+                for t in vp {
+                    if !(mine_now(t) || unowned(t)) {
+                        continue;
+                    }
+                    let (Some(p), Some(st)) = (t["province"].as_i64(), t["state"].as_i64()) else {
+                        continue;
+                    };
+                    let row = vp_rows
+                        .entry(st)
+                        .or_insert_with(|| {
+                            tools
+                                .call("hoi4_states", &json!({"query": st.to_string()}))
+                                .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                                .unwrap_or_default()
+                        })
+                        .clone();
+                    let held = list(&row, "provinces")
+                        .iter()
+                        .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
+                    if !held {
+                        chosen = Some((st, p));
+                        break;
+                    }
+                }
+                if let Some((st, p)) = chosen {
+                    let on_way = state
+                        .war_province
+                        .get(&name)
+                        .is_some_and(|(q, at)| i64::from(*q) == p && now - at < 3 * DAY);
+                    if on_way {
+                        state.war_cool.insert(name.clone(), now + cooldown);
+                        continue;
+                    }
+                    state.war_province.insert(name.clone(), (p as i32, now));
+                    let (ok, why) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_army_move",
+                        json!({"army": name, "state_id": st, "province_id": p}),
+                        "wv",
+                    )?;
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    return Ok(Some(format!(
+                        "war vp target {name} -> province {p} (state {st}): {ok} {why}"
+                    )));
+                }
+            }
+        }
         // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
         // recovers or after `rest_max_days` (supply where the army stands may never recover).
         if let Some((org, supply)) = org {
@@ -2234,21 +2864,64 @@ fn war_step(
                 (now - since) / DAY
             )));
         }
-        if state.war_move.contains(&name) {
-            // Moving: wait for progress (the stall check above re-issues the move).
+        if state.war_move.contains(&name) && !(liberate && standing_in_target) {
+            // Moving: wait for progress (the stall check above re-issues the move). Inside a
+            // state to retake or take, go on province by province below.
             continue;
         }
         let (tool, args, label, next_stage) = if liberate {
             if standing_in_target {
-                state.war_cool.insert(name.clone(), now + cooldown * 3);
-                continue;
+                // Inside the state: go for the nearest province the enemy holds in it (w22: the
+                // army waited inside Eritrea while it was taken around it and starved).
+                let detail = tools.call("hoi4_states", &json!({"query": target.to_string()}))?;
+                let (ax, az) = position.unwrap_or((0.0, 0.0));
+                let nearest = list(&detail, "states")
+                    .first()
+                    .map(|row| list(row, "provinces"))
+                    .unwrap_or_default()
+                    .iter()
+                    .filter(|p| {
+                        let c = text(&p["controller"]);
+                        !c.is_empty() && c != me
+                    })
+                    .filter_map(|p| {
+                        let id = p["province"].as_i64()? as i32;
+                        let (x, z) = (p["x"].as_f64()?, p["z"].as_f64()?);
+                        // Victory points first, largest first, then nearest (w24 held four
+                        // provinces of Shewa but never Addis Abeba's own, so Ethiopia never
+                        // came near capitulation).
+                        let vp = p["victory_points"].as_f64().unwrap_or(0.0);
+                        Some((id, (x - ax).powi(2) + (z - az).powi(2) - vp * 1.0e9))
+                    })
+                    .min_by(|a, b| a.1.total_cmp(&b.1));
+                let Some((province, _)) = nearest else {
+                    state.war_cool.insert(name.clone(), now + cooldown * 3);
+                    continue;
+                };
+                // Still on the way to the same province: let it arrive (no repeated orders).
+                if state
+                    .war_province
+                    .get(&name)
+                    .is_some_and(|(p, at)| *p == province && now - at < 3 * DAY)
+                {
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    continue;
+                }
+                state.war_province.insert(name.clone(), (province, now));
+                (
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": target, "province_id": province}),
+                    "move",
+                    0,
+                )
+            } else {
+                (
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": target}),
+                    "move",
+                    0,
+                )
             }
-            (
-                "hoi4_army_move",
-                json!({"army": name, "state_id": target}),
-                "move",
-                0,
-            )
         } else if stage == 0 && !executing {
             (
                 "hoi4_army_front",
@@ -2274,6 +2947,7 @@ fn war_step(
             state.war_cool.insert(name.clone(), now + cooldown);
             continue;
         };
+        let one_province = args.get("province_id").is_some();
         let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
         if ok {
             state.war_stage.insert(name.clone(), next_stage);
@@ -2284,7 +2958,7 @@ fn war_step(
             // A liberation move is a direct move: wait for progress, and let the stall check
             // (with its backoff) re-issue it (live 8 Nov 2026: the same move to an occupied own
             // state went out 13 times in three minutes).
-            if label == "move" {
+            if label == "move" && !one_province {
                 state.war_move.insert(name.clone());
                 state.war_since.insert(name.clone(), (target, here, now));
             }
@@ -2689,8 +3363,20 @@ mod tests {
             replies: replies.into_iter().collect(),
         }
     }
+    /// Tool names called; the cheap available-techs query is labelled apart from the catalogue
+    /// walk (only the walk is what the priority-only tests forbid).
     fn names(f: &Fake) -> Vec<String> {
-        f.calls.borrow().iter().map(|(n, _)| n.clone()).collect()
+        f.calls
+            .borrow()
+            .iter()
+            .map(|(n, a)| {
+                if a["available"] == json!(true) {
+                    format!("{n}(available)")
+                } else {
+                    n.clone()
+                }
+            })
+            .collect()
     }
 
     struct ActionReplies<'a> {
@@ -2950,7 +3636,7 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_focus_is_retried_after_a_game_day_not_before() {
+    fn a_focus_the_game_refuses_is_retried_after_ten_game_days() {
         struct Refusing;
         impl Tools for Refusing {
             fn call(&self, name: &str, _: &Value) -> Result<Value> {
@@ -2967,13 +3653,13 @@ mod tests {
         let first = tick(&mut state, &Refusing, &plan, "l", START).unwrap();
         assert_eq!(first, Tick::Nothing);
         assert!(state.skipped(START, "focus", "F1"));
-        // same game hour or any time within the day: untouched
+        // any time within ten game days: untouched
         assert_eq!(
-            tick(&mut state, &Refusing, &plan, "l", START + DAY - 1).unwrap(),
+            tick(&mut state, &Refusing, &plan, "l", START + 10 * DAY - 1).unwrap(),
             Tick::Nothing
         );
-        // a day later it is tried again
-        assert!(!state.skipped(START + DAY, "focus", "F1"));
+        // then it is tried again
+        assert!(!state.skipped(START + 10 * DAY, "focus", "F1"));
     }
 
     #[test]
@@ -3704,6 +4390,382 @@ mod tests {
             .find(|(n, _)| n.starts_with("hoi4_army_"))
             .cloned()
             .unwrap()
+    }
+
+    #[test]
+    fn a_supply_line_behind_factories_is_raised_first() {
+        let ic =
+            json!({"line_kind": "building", "building": {"building_id": "industrial_complex"}});
+        let hub = json!({"line_kind": "building", "building": {"building_id": "supply_node"}});
+        let rail = json!({"line_kind": "railway", "building": null});
+        assert_eq!(
+            super::supply_line_to_raise(&[ic.clone(), ic.clone(), hub.clone(), rail.clone()]),
+            Some(2)
+        );
+        assert_eq!(
+            super::supply_line_to_raise(&[hub.clone(), rail.clone(), ic.clone()]),
+            None
+        );
+        assert_eq!(
+            super::supply_line_to_raise(&[hub.clone(), ic.clone(), rail.clone()]),
+            Some(2)
+        );
+        assert_eq!(super::supply_line_to_raise(std::slice::from_ref(&ic)), None);
+    }
+
+    #[test]
+    fn direct_moves_attack_with_a_move_instead_of_a_front() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "direct_moves": true}});
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let (name, args) = last_action(&w);
+        assert_eq!(name, "hoi4_army_move", "{:?}", w.calls.borrow());
+        assert!(args["state_id"] == 28 || args["state_id"] == 18, "{args}");
+        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_front"));
+    }
+
+    /// An army standing in an own state an enemy holds part of.
+    struct Inside(RefCell<Vec<(String, Value)>>);
+    impl Tools for Inside {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.0.borrow_mut().push((name.to_string(), args.clone()));
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0})),
+                "hoi4_overview" => Ok(json!({"player": "GER"})),
+                "hoi4_wars" => Ok(json!({"wars": {"validated": true, "enemies": ["POL"]}})),
+                "hoi4_states" => match args["query"].as_str().unwrap() {
+                    "GER" => Ok(
+                        json!({"states": [{"state_id": 42, "owner": "GER", "controller": "GER",
+                        "x": 0.0, "z": 0.0,
+                        "provinces_held_by_others": [{"province": 7, "controller": "POL"}]}]}),
+                    ),
+                    "POL" => Ok(json!({"states": []})),
+                    "42" => Ok(json!({"states": [{"state_id": 42, "provinces": [
+                        {"province": 6, "controller": "GER", "x": 0.0, "z": 0.0},
+                        {"province": 8, "controller": "POL", "x": 50.0, "z": 0.0},
+                        {"province": 7, "controller": "POL", "x": 5.0, "z": 0.0}]}]})),
+                    other => panic!("unexpected query {other}"),
+                },
+                "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                    {"army": "Army 1", "division_count": 10, "main_state": 42,
+                     "battle_plan_orders": 0, "plan_executing": false, "commander": "X"}]})),
+                _ if args.get("request_id").is_some() => {
+                    Ok(json!({"receipt": {"status": "Verified"}}))
+                }
+                _ => Ok(json!({})),
+            }
+        }
+    }
+    #[test]
+    fn an_army_inside_a_partly_taken_own_state_retakes_the_nearest_province_once() {
+        let w = Inside(RefCell::new(vec![]));
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["POL"], "cooldown_hours": 1}});
+        let moves = |w: &Inside| -> Vec<Value> {
+            w.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .map(|(_, a)| a.clone())
+                .collect()
+        };
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let m = moves(&w);
+        assert_eq!(m.len(), 1, "{:?}", w.0.borrow());
+        assert_eq!(m[0]["province_id"], 7);
+        assert_eq!(m[0]["state_id"], 42);
+        // a few hours later, still on the way: no second order
+        tick(&mut state, &w, &plan, "l", START + 6).unwrap();
+        assert_eq!(moves(&w).len(), 1);
+    }
+
+    #[test]
+    fn a_victory_point_province_comes_before_a_nearer_one() {
+        struct Vp(RefCell<Vec<(String, Value)>>);
+        impl Tools for Vp {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                if name == "hoi4_states" && args["query"] == "42" {
+                    return Ok(json!({"states": [{"state_id": 42, "provinces": [
+                        {"province": 7, "controller": "POL", "x": 5.0, "z": 0.0},
+                        {"province": 8, "controller": "POL", "x": 50.0, "z": 0.0, "victory_points": 5.0}]}]}));
+                }
+                Inside(RefCell::new(vec![])).call(name, args)
+            }
+        }
+        let w = Vp(RefCell::new(vec![]));
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["POL"], "cooldown_hours": 1}});
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let moves: Vec<Value> =
+            w.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .map(|(_, a)| a.clone())
+                .collect();
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0]["province_id"], 8);
+    }
+
+    #[test]
+    fn an_army_in_a_forming_pocket_falls_back_once() {
+        struct Pocket(RefCell<Vec<(String, Value)>>);
+        impl Tools for Pocket {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                if name == "hoi4_armies" {
+                    return Ok(json!({"unassigned_by_state": [], "armies": [
+                        {"army": "Army 1", "division_count": 10, "main_state": 28,
+                         "battle_plan_orders": 0, "plan_executing": false, "commander": "X",
+                         "threat": {"share": 0.8, "encirclement_risk": true}}]}));
+                }
+                War {
+                    liberate: false,
+                    front_ok: true,
+                    calls: RefCell::new(vec![]),
+                }
+                .call(name, args)
+            }
+        }
+        let w = Pocket(RefCell::new(vec![]));
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &war_plan(), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war pocket Army 1")),
+            "{step:?}"
+        );
+        let moves = |w: &Pocket| {
+            w.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_move")
+                .count()
+        };
+        assert_eq!(moves(&w), 1);
+        tick(&mut state, &w, &war_plan(), "l", START + 6).unwrap();
+        assert_eq!(moves(&w), 1, "no second fall-back order within 3 days");
+    }
+
+    #[test]
+    fn the_same_failing_order_is_not_sent_a_fourth_time_within_ten_days() {
+        struct Refuse(RefCell<usize>);
+        impl Tools for Refuse {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                *self.0.borrow_mut() += 1;
+                Ok(json!({"receipt": {"status": "NotApplied"}}))
+            }
+        }
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State {
+            clock: START,
+            ..State::default()
+        };
+        for _ in 0..5 {
+            let (ok, _) = state
+                .act(
+                    &tools,
+                    "l",
+                    "hoi4_army_move",
+                    json!({"army": "Army 1", "state_id": 5}),
+                    "t",
+                )
+                .unwrap();
+            assert!(!ok);
+        }
+        assert_eq!(*tools.0.borrow(), 3);
+        // another order still goes out, and the first one again after the window
+        state
+            .act(
+                &tools,
+                "l",
+                "hoi4_army_move",
+                json!({"army": "Army 1", "state_id": 6}),
+                "t",
+            )
+            .unwrap();
+        assert_eq!(*tools.0.borrow(), 4);
+        state.clock = START + 11 * DAY;
+        state
+            .act(
+                &tools,
+                "l",
+                "hoi4_army_move",
+                json!({"army": "Army 1", "state_id": 5}),
+                "t",
+            )
+            .unwrap();
+        assert_eq!(*tools.0.borrow(), 5);
+    }
+
+    #[test]
+    fn dates_map_to_raw_game_hours() {
+        // 1936.01.01.12 read live as 60759371 (hour 11 of the day, counted from 0)
+        assert_eq!(super::date_hour("1936.01.01"), Some(60759360));
+        assert_eq!(
+            super::date_hour("1936-03-05"),
+            Some(60759360 + (31 + 28 + 4) * 24)
+        );
+        assert_eq!(super::date_hour("1936.13.01"), None);
+        assert_eq!(super::game_year(60759371), Some(1936));
+    }
+
+    #[test]
+    fn construction_plan_items_wait_for_their_trigger_and_go_once() {
+        struct Plan(RefCell<Vec<(String, Value)>>, RefCell<&'static str>);
+        impl Tools for Plan {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "ITA"}),
+                    "hoi4_states" => json!({"states": [{"state_id": 842, "owner": "ETH",
+                        "provinces": [{"province": 13238, "controller": *self.1.borrow()},
+                                      {"province": 2072, "controller": "ETH"}]}]}),
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [
+            {"order": 3, "building": "rail_way", "from_state": 550, "to_state": 842,
+             "path": [13250, 13238], "when": "province_controlled:13238"},
+            {"order": 5, "building": "supply_node", "state": 842, "province": 2072,
+             "when": "state_fully_controlled:842"}]});
+        let tools = Plan(RefCell::new(vec![]), RefCell::new("ETH"));
+        let mut state = State::default();
+        let built = |t: &Plan| {
+            t.0.borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_railway_build" || n == "hoi4_construction_add")
+                .count()
+        };
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        *tools.1.borrow_mut() = "ITA";
+        let step = construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(step.unwrap().starts_with("construction plan #3"));
+        let rail = tools
+            .0
+            .borrow()
+            .iter()
+            .find(|(n, _)| n == "hoi4_railway_build")
+            .cloned()
+            .unwrap();
+        assert_eq!(rail.1["from_province"], 13250);
+        assert_eq!(rail.1["to_province"], 13238);
+        // #3 done, #5 waits for all of 842
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(built(&tools), 1);
+    }
+
+    #[test]
+    fn vp_targets_send_the_army_to_the_first_province_not_yet_held() {
+        struct Vp(RefCell<Vec<(String, Value)>>);
+        impl Tools for Vp {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                if name == "hoi4_states" && args["query"] == "28" {
+                    return Ok(json!({"states": [{"state_id": 28, "provinces": [
+                        {"province": 70, "controller": "GER"}, {"province": 71, "controller": "FRA"}]}]}));
+                }
+                War {
+                    liberate: false,
+                    front_ok: true,
+                    calls: RefCell::new(vec![]),
+                }
+                .call(name, args)
+            }
+        }
+        let w = Vp(RefCell::new(vec![]));
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "direct_moves": true},
+            "vp_targets": [{"province": 70, "state": 28, "army": "strike (Army 1)"},
+                           {"province": 71, "state": 28, "army": "strike (Army 1)"}]});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war vp target Army 1 -> province 71")),
+            "{step:?}"
+        );
+    }
+
+    #[test]
+    fn army_layout_takes_the_strike_army_and_detaches_a_guard_by_template() {
+        struct L(RefCell<Vec<(String, Value)>>, RefCell<bool>);
+        impl Tools for L {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                let split = *self.1.borrow();
+                Ok(match name {
+                    "hoi4_armies" => {
+                        let mut a =
+                            vec![json!({"army": "Army 1", "main_state": 550, "commander": null})];
+                        if split {
+                            a.push(json!({"army": "Army 2", "main_state": 550, "commander": null}));
+                        }
+                        json!({"armies": a})
+                    }
+                    "hoi4_supply" => json!({"divisions": [
+                        {"army": "Army 1", "id": "d1", "template": "Divisione di Fanteria"},
+                        {"army": "Army 1", "id": "d2", "template": "Camicie Nere"},
+                        {"army": "Army 1", "id": "d3", "template": "Camicie Nere"},
+                        {"army": "Army 1", "id": "d4", "template": "Camicie Nere"}]}),
+                    "hoi4_army_detach" => {
+                        *self.1.borrow_mut() = true;
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"army_layout": [
+            {"name_hint": "North strike (Army 1)", "state": 550, "role": "strike", "general": "Giovanni Messe"},
+            {"name_hint": "North guard", "state": 550, "role": "guard", "templates": ["Camicie Nere"],
+             "count": 2, "guard_states_in_order": [550]}]});
+        let tools = L(RefCell::new(vec![]), RefCell::new(false));
+        let mut state = State::default();
+        let s1 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert_eq!(s1, "layout: Army 1 is North strike (Army 1)");
+        let s2 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(s2.contains("-> Army 2 (North guard)"), "{s2}");
+        let detach = tools
+            .0
+            .borrow()
+            .iter()
+            .find(|(n, _)| n == "hoi4_army_detach")
+            .cloned()
+            .unwrap();
+        assert_eq!(detach.1["divisions"], json!(["d2", "d3"]));
+        assert_eq!(state.war_guard.get("Army 2"), Some(&550));
+        let s3 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            s3.starts_with("layout general Giovanni Messe -> Army 1"),
+            "{s3}"
+        );
+        assert_eq!(
+            layout_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
     }
 
     /// The war fake with a validated war list at peace.
@@ -4486,7 +5548,7 @@ mod tests {
         let step = tick(
             &mut state,
             &tools,
-            &json!({"research_priority": ["radio"]}),
+            &json!({"research_blind_catalogue": true, "research_priority": ["radio"]}),
             "l",
             START,
         )
@@ -4503,6 +5565,44 @@ mod tests {
             .unwrap()
             .0
             .contains("catalogue fallback"));
+    }
+
+    #[test]
+    fn research_takes_available_in_time_techs_in_the_plans_order() {
+        struct Avail(RefCell<Vec<(String, Value)>>);
+        impl Tools for Avail {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                Ok(match name {
+                    "hoi4_research" => idle_research(),
+                    "hoi4_technology_list" if args["available"] == json!(true) => json!({
+                        "available_only": true,
+                        "technologies": ["artillery1", "industrial_complex_expansion1", "jet_engines"],
+                        "start_years": {"artillery1": 1936, "industrial_complex_expansion1": 1936, "jet_engines": 1939}}),
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let tools = Avail(RefCell::new(vec![]));
+        let mut state = State::default();
+        // 1936.03.01: raw hours count from year -5000
+        let now = (6936 * 8760 + 60 * 24) as GameHour;
+        let plan = json!({"research_priority": ["artillery2"],
+            "research_fallback_prefixes": ["industr", "artillery", "jet"]});
+        tick(&mut state, &tools, &plan, "l", now).unwrap();
+        let started: Vec<Value> = tools
+            .0
+            .borrow()
+            .iter()
+            .filter(|(n, _)| n == "hoi4_research_start")
+            .map(|(_, a)| a["technology"].clone())
+            .collect();
+        // artillery2 is not available (prerequisite missing); industry first; jet_engines is
+        // ahead of its time in 1936.
+        assert_eq!(started, vec![json!("industrial_complex_expansion1")]);
     }
 
     #[test]
@@ -4531,14 +5631,16 @@ mod tests {
             ("hoi4_research", idle_research()),
             ("hoi4_technology_list", catalogue()),
         ]);
-        let plan = json!({"research_fallback_prefixes": ["infantry"]});
+        let plan =
+            json!({"research_blind_catalogue": true, "research_fallback_prefixes": ["infantry"]});
         tick(&mut State::default(), &tools, &plan, "l", START).unwrap();
         assert_eq!(started(&tools), ["infantry_weapons1"]);
         let tools = fake(vec![
             ("hoi4_research", idle_research()),
             ("hoi4_technology_list", catalogue()),
         ]);
-        let plan = json!({"research_fallback_categories": ["armor"]});
+        let plan =
+            json!({"research_blind_catalogue": true, "research_fallback_categories": ["armor"]});
         tick(&mut State::default(), &tools, &plan, "l", START).unwrap();
         assert_eq!(started(&tools), ["armor_basic"]);
         // nothing in the catalogue matches: nothing is started and the plan is exhausted
@@ -4547,7 +5649,8 @@ mod tests {
             ("hoi4_technology_list", catalogue()),
         ]);
         let mut state = State::default();
-        let plan = json!({"research_fallback_prefixes": ["air_"]});
+        let plan =
+            json!({"research_blind_catalogue": true, "research_fallback_prefixes": ["air_"]});
         assert_eq!(
             tick(&mut state, &tools, &plan, "l", START).unwrap(),
             Tick::Nothing
@@ -4585,7 +5688,7 @@ mod tests {
     }
 
     #[test]
-    fn a_blocked_focus_is_skipped_briefly_and_the_next_key_starts_in_the_same_tick() {
+    fn a_blocked_focus_waits_ten_days_and_the_next_key_starts_in_the_same_tick() {
         let reads = focus_reads();
         let tools = ActionReplies {
             reads: &reads,
@@ -4607,14 +5710,14 @@ mod tests {
         assert_eq!(tried, ["A", "B"]);
         assert!(state.skipped(START + 5, "focus", "A"));
         assert!(
-            !state.skipped(START + 6, "focus", "A"),
-            "default blocked window is 6 game hours, not a day"
+            !state.skipped(START + 10 * DAY, "focus", "A"),
+            "default blocked window is 10 game days (6 hours was under a second at speed 3)"
         );
         assert_eq!(
             focus_blocked(&state, &plan, START + 1),
             ["A:focus_not_available"]
         );
-        assert!(focus_blocked(&state, &plan, START + 6).is_empty());
+        assert!(focus_blocked(&state, &plan, START + 10 * DAY).is_empty());
     }
 
     #[test]
@@ -4752,7 +5855,8 @@ mod tests {
             ("hoi4_technology_list", catalogue()),
             ("hoi4_focus_completed", json!({"active_key": "Busy"})),
         ]);
-        let path = plan_file(&json!({"research_priority": ["radio"]}));
+        let path =
+            plan_file(&json!({"research_blind_catalogue": true, "research_priority": ["radio"]}));
         let mut state = State::default();
         let result = run(&mut state, &tools, &path, "l", 1).unwrap();
         let alarm = result["alarms"]

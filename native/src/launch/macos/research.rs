@@ -336,6 +336,15 @@ pub(super) fn start(
     key: &str,
     slot: usize,
 ) -> Result<()> {
+    let result = start_inner(process, keys, key, slot);
+    // Every exit leaves the full-screen tree closed: early refusals used to return with it open
+    // and the next actions ran under it (research.rs early returns, w24 audit).
+    if result.is_err() {
+        close_tree(process, keys);
+    }
+    result
+}
+fn start_inner(process: &dyn Process, keys: &dyn GameInput, key: &str, slot: usize) -> Result<()> {
     let image = process.image_base();
     let click = |rect: Rect| {
         clear_notices(process, keys)?;

@@ -490,6 +490,7 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_hex:") => occupation::debug_hex(process, &n[8..]),
         n if n.starts_with("dbg_country:") => occupation::debug_country(process, &n[12..]),
         "dbg_states" => occupation::debug_states(process),
+        n if n.starts_with("dbg_provinces:") => occupation::debug_provinces(process, &n[14..]),
         "dbg_event" => events::debug_event(process),
         "hoi4_war_stats" => war_stats::stats(process, &serde_json::Map::new()),
         "hoi4_alerts" => alerts::alerts(process),
@@ -683,9 +684,9 @@ impl Commands for MacClock {
             json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_armies","description":"Own armies (name, division ids) and unassigned division ids. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
             json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
@@ -918,6 +919,7 @@ impl Commands for MacClock {
             && process.identity() == self.process.identity();
         let was_paused = if guard_pause { self.paused_now() } else { None };
         let menus_before = ui::menus_closed();
+        let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
         if name.starts_with("hoi4_army_") && !crate::autopilot::autopilot().in_step() {
             if let Some(army) = arguments.get("army").and_then(Value::as_str) {
@@ -951,6 +953,26 @@ impl Commands for MacClock {
         if MAP_TOOLS.contains(&name) && !army_tool && process.identity() == self.process.identity()
         {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
+        }
+        // One context line per action for the run report: which actions leave the game paused
+        // (w24: pauses coincided with army creation and disbanding; cause unknown).
+        if guard_pause {
+            let after = self.paused_now();
+            eprintln!(
+                "[action] {}",
+                json!({"unix_ms": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0),
+                    "tool": name,
+                    "request_id": arguments.get("request_id"),
+                    "ms": started.elapsed().as_millis() as u64,
+                    "ok": result.is_ok(),
+                    "error": result.as_ref().err().map(|e| e.code),
+                    "paused_before": was_paused,
+                    "paused_after": after,
+                    "executor": crate::autopilot::autopilot().in_step()})
+            );
         }
         if was_paused == Some(false) {
             // Undo only a pause our own input caused: the game menu (a stray Escape) pauses the
@@ -1312,8 +1334,19 @@ impl MacClock {
             );
         }
         if name == "hoi4_armies" {
-            allowed(args, &[])?;
-            return armies::armies(process);
+            allowed(args, &["threat"])?;
+            let mut view = armies::armies(process)?;
+            if args.get("threat") == Some(&json!(false)) {
+                return Ok(view);
+            }
+            // Pocket warning per army: the share of the land provinces around its divisions that
+            // another country holds (w24: armies were encircled with no warning).
+            if let Some(exe) = process.identity().map(|i| i.exe.clone()) {
+                if let Ok(dir) = mapdata::game_dir(&exe) {
+                    let _ = armies::add_threats(process, &dir, &mut view);
+                }
+            }
+            return Ok(view);
         }
         if name == "hoi4_war_risk" {
             allowed(args, &["country"])?;
@@ -4768,7 +4801,16 @@ impl MacClock {
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_army_move" {
-            allowed(args, &["army", "state_id", "request_id", "lease_token"])?;
+            allowed(
+                args,
+                &[
+                    "army",
+                    "state_id",
+                    "province_id",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
             let army = string(args, "army")?;
             let state = args
                 .get("state_id")
@@ -4776,19 +4818,62 @@ impl MacClock {
                 .filter(|v| (1..4096).contains(v))
                 .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
                 as i32;
+            // A single province of the state (an enemy-held one inside an own state, a port):
+            // the order goes there and the readback watches that province.
+            let province =
+                match args.get("province_id") {
+                    None => None,
+                    Some(v) => Some(v.as_i64().filter(|v| (1..30000).contains(v)).ok_or_else(
+                        || Error::new("invalid_arguments", "province_id must be 1..29999"),
+                    )? as i32),
+                };
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
             let observed = guard.observe(process)?;
             let epoch = observed.epoch;
             authority.authorize(token, &epoch)?;
             let game_dir = mapdata::game_dir(&epoch.game.exe)?;
-            let wanted = mapdata::state_provinces(&game_dir, state)?;
+            let wanted = match province {
+                Some(p) => {
+                    if !mapdata::state_provinces(&game_dir, state)?.contains(&p) {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            format!("Province {p} is not in state {state}"),
+                        ));
+                    }
+                    vec![p]
+                }
+                None => mapdata::state_provinces(&game_dir, state)?,
+            };
             let heading = || ui::read(process, |r, i| armies::heading_for(r, i, army, &wanted));
             let retry = actions.receipt_exists(id);
+            let action =
+                json!({"kind":"army_move","army":army,"state_id":state,"province_id":province});
+            // Already on its way there, or already standing there (half the divisions or more):
+            // no input at all (w24: the same three Somaliland provinces were ordered 17 times,
+            // each a card click, a Find view and a right click).
             if !retry {
+                let (on_way, total) = heading().unwrap_or((0, 0));
+                let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
+                    .unwrap_or_default();
+                let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                let standing = ids
+                    .iter()
+                    .filter(|d| {
+                        at.get(*d)
+                            .copied()
+                            .flatten()
+                            .is_some_and(|p| wanted.contains(&p))
+                    })
+                    .count();
+                if total > 0 && (on_way + standing) * 2 >= total {
+                    return Ok(json!({"receipt": {"status": "Verified", "action": action,
+                        "detail": {"army": army, "divisions": total, "divisions_heading": on_way,
+                            "divisions_there": standing,
+                            "note": "already heading or standing there: nothing was sent"}}}));
+                }
                 self.keys.preflight()?;
             }
-            let action = json!({"kind":"army_move","army":army,"state_id":state});
             let keys = &self.keys;
             // A move by sea or a long route first heads for the embarkation port or the next
             // leg, not the target state (seen live: home divisions sailed while the receipt said
@@ -4846,7 +4931,7 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                armies::move_to(process, keys, army, state)
+                armies::move_to(process, keys, army, state, province)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));

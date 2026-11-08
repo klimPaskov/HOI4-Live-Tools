@@ -181,6 +181,28 @@ fn build_adjacency(dir: &Path) -> Result<Adjacency> {
     Ok(fold_states(&edges, &province_states(dir)?))
 }
 
+/// Land province -> its land neighbours (provinces.bmp + definition.csv), once per install.
+pub(super) type Neighbours = Arc<HashMap<i32, Vec<i32>>>;
+pub(super) fn province_neighbours(dir: &Path) -> Result<Neighbours> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Neighbours>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let definition = std::fs::read_to_string(dir.join("map/definition.csv"))
+        .map_err(|_| Error::new("map_data_unavailable", "definition.csv unreadable"))?;
+    let bmp = std::fs::read(dir.join("map/provinces.bmp"))
+        .map_err(|_| Error::new("map_data_unavailable", "provinces.bmp unreadable"))?;
+    let mut map: HashMap<i32, Vec<i32>> = HashMap::new();
+    for (a, b) in land_edges(&bmp, &parse_definition(&definition))? {
+        map.entry(a).or_default().push(b);
+        map.entry(b).or_default().push(a);
+    }
+    let map = Arc::new(map);
+    cache.lock().unwrap().insert(dir.to_path_buf(), map.clone());
+    Ok(map)
+}
+
 /// State adjacency of the install, built once per install directory.
 fn adjacency(dir: &Path) -> Result<Arc<Adjacency>> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, Arc<Adjacency>>>> = OnceLock::new();

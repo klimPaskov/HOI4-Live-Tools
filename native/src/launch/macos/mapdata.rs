@@ -89,6 +89,117 @@ pub(super) fn parse_state_provinces(text: &str) -> Vec<i32> {
         .collect()
 }
 
+/// Every state's land provinces (history/states), read once per install.
+/// State id -> its starting infrastructure level (history/states `infrastructure = N`), read
+/// once per install. Construction places factories where infrastructure is high.
+pub(super) type LevelIndex = std::sync::Arc<HashMap<i32, i32>>;
+pub(super) fn state_infrastructure(dir: &Path) -> Result<LevelIndex> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, LevelIndex>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let entries = std::fs::read_dir(dir.join("history/states"))
+        .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let mut index = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(id) = name
+            .split('-')
+            .next()
+            .and_then(|n| n.trim().parse::<i32>().ok())
+        else {
+            continue;
+        };
+        if let Ok(text) = std::fs::read_to_string(entry.path()) {
+            let level = text.lines().find_map(|l| {
+                let l = l.split('#').next().unwrap_or("").trim();
+                let rest = l
+                    .strip_prefix("infrastructure")?
+                    .trim_start()
+                    .strip_prefix('=')?;
+                rest.trim().parse::<i32>().ok()
+            });
+            if let Some(level) = level {
+                index.insert(id, level);
+            }
+        }
+    }
+    let index = std::sync::Arc::new(index);
+    cache
+        .lock()
+        .unwrap()
+        .insert(dir.to_path_buf(), index.clone());
+    Ok(index)
+}
+/// State id -> its victory point provinces (province, value), read once per install.
+pub(super) type VictoryIndex = std::sync::Arc<HashMap<i32, Vec<(i32, f64)>>>;
+pub(super) fn state_victory_points(dir: &Path) -> Result<VictoryIndex> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, VictoryIndex>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let entries = std::fs::read_dir(dir.join("history/states"))
+        .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let mut index = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(id) = name
+            .split('-')
+            .next()
+            .and_then(|n| n.trim().parse::<i32>().ok())
+        else {
+            continue;
+        };
+        if let Ok(text) = std::fs::read_to_string(entry.path()) {
+            let found = super::railway::parse_victory_points(&text);
+            if !found.is_empty() {
+                index.insert(id, found);
+            }
+        }
+    }
+    let index = std::sync::Arc::new(index);
+    cache
+        .lock()
+        .unwrap()
+        .insert(dir.to_path_buf(), index.clone());
+    Ok(index)
+}
+/// State id -> its land provinces.
+pub(super) type StateIndex = std::sync::Arc<HashMap<i32, Vec<i32>>>;
+pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, StateIndex>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let entries = std::fs::read_dir(dir.join("history/states"))
+        .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let mut index = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(id) = name
+            .split('-')
+            .next()
+            .and_then(|n| n.trim().parse::<i32>().ok())
+        else {
+            continue;
+        };
+        if let Ok(text) = std::fs::read_to_string(entry.path()) {
+            let found = parse_state_provinces(&text);
+            if !found.is_empty() {
+                index.insert(id, found);
+            }
+        }
+    }
+    let index = std::sync::Arc::new(index);
+    cache
+        .lock()
+        .unwrap()
+        .insert(dir.to_path_buf(), index.clone());
+    Ok(index)
+}
 pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
     let prefix = format!("{state}-");
     let entries = std::fs::read_dir(dir.join("history/states"))

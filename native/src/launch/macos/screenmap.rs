@@ -153,6 +153,58 @@ pub(super) fn zoom_in_to_strategic(
     Ok(())
 }
 
+/// Screen points of map points `a` and `b` once both lie in `area` (x0, y0, x1, y1): as they are
+/// when the camera already shows both at aiming height, otherwise after `find` (a Find view that
+/// centres one of them) and at most two zoom-out bursts. None when they still do not fit.
+#[allow(clippy::type_complexity)]
+pub(super) fn frame_two(
+    process: &dyn crate::platform::Process,
+    keys: &dyn crate::platform::game_input::GameInput,
+    a: (f64, f64),
+    b: (f64, f64),
+    area: (f64, f64, f64, f64),
+    find: impl Fn() -> Result<()>,
+) -> Result<Option<((f64, f64), (f64, f64))>> {
+    let inside = |p: (f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
+    let project = || -> Result<(Option<(f64, f64)>, Option<(f64, f64)>)> {
+        super::ui::read(process, |r, i| {
+            Ok((to_screen(r, i, a.0, a.1)?, to_screen(r, i, b.0, b.1)?))
+        })
+    };
+    let both = |pa: Option<(f64, f64)>, pb: Option<(f64, f64)>| match (pa, pb) {
+        (Some(x), Some(y)) if inside(x) && inside(y) => Some((x, y)),
+        _ => None,
+    };
+    if aim_height_ok(process) {
+        let (pa, pb) = project()?;
+        if let Some(found) = both(pa, pb) {
+            return Ok(Some(found));
+        }
+    }
+    find()?;
+    let mut left = 24;
+    for _ in 0..2 {
+        let (pa, pb) = project()?;
+        if let Some(found) = both(pa, pb) {
+            return Ok(Some(found));
+        }
+        let need = |p: Option<(f64, f64)>| match p {
+            Some(p) => super::glide::zoom_out_events(p, area, left),
+            None => left.min(6),
+        };
+        let events = need(pa).max(need(pb));
+        if events == 0 || left == 0 {
+            break;
+        }
+        keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), -240, events)?;
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        wait_camera_still(process, 700);
+        left = left.saturating_sub(events);
+    }
+    let (pa, pb) = project()?;
+    Ok(both(pa, pb))
+}
+
 pub(super) fn project(proj: &[f64; 16], view: &[f64; 16], x: f64, z: f64) -> Option<(f64, f64)> {
     let (tx, ty) = (proj[0], proj[5]);
     if tx <= 0.0 || ty <= 0.0 {

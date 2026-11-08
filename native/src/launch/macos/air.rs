@@ -447,15 +447,32 @@ pub(super) fn assign(
     }
     select_wing(process, keys, name)?;
     let buttons = settled(process, "mission buttons", mission_buttons)?;
-    let (_, button, enabled, _) = buttons
-        .into_iter()
-        .find(|(f, _, _, _)| *f == wanted)
-        .ok_or_else(|| Error::new("invalid_target", "Mission not offered for this wing"))?;
+    // The missions this wing can fly, for the refusals (w23: a fighter wing was sent on CAS and
+    // a CAS wing on air superiority, and the bare refusal did not say what would work).
+    let can_fly: Vec<&str> = buttons
+        .iter()
+        .filter(|(_, _, enabled, _)| *enabled)
+        .filter_map(|(f, _, _, _)| mission_name(*f))
+        .collect();
+    let Some((_, button, enabled, _)) = buttons.iter().find(|(f, _, _, _)| *f == wanted).cloned()
+    else {
+        let _ = deselect(process, keys);
+        return Err(Error::new(
+            "invalid_target",
+            format!(
+                "Mission not offered for this wing; it can fly: {}",
+                can_fly.join(", ")
+            ),
+        ));
+    };
     if !enabled {
         let _ = deselect(process, keys);
         return Err(Error::new(
             "invalid_target",
-            "The game disables this mission for this wing",
+            format!(
+                "The game disables {mission} for this wing; it can fly: {}",
+                can_fly.join(", ")
+            ),
         ));
     }
     // A mission button flips the wing's mission bit at once (a held wing keeps its last bit, and the
