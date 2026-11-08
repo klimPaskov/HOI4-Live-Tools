@@ -394,7 +394,7 @@ fn original_non_queue_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<
     if !location::own_state(r, b.base, b.state, b.own_tag)? {
         return Err(Error::new(
             "construction_target_unavailable",
-            "Requested state must remain owned and controlled by the current player",
+            "Requested state must remain controlled by the current player",
         ));
     }
     exact(r, b.base, b.catalog.database, l.database_vtable)?;
@@ -492,7 +492,7 @@ fn canonical_with_queue(
     if !location::own_state(&r, base, state, own_tag)? {
         return Err(Error::new(
             "construction_target_unavailable",
-            "Requested state must remain owned and controlled by the current player",
+            "Requested state must remain controlled by the current player",
         ));
     }
     if r.i32(state + l.state_id)? != state_id {

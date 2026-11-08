@@ -63,16 +63,29 @@ fn read_agency(r: &Reader<'_>, i: u64) -> Result<AgencyGui> {
     let root = pk::open_root(r, i, &pk::AGENCY_VIEW)?;
     let before = pk::need(r, i, root, "before_creation_panel", 2)?;
     let created = !gui_tree::shown(r, before)?;
+    // The creation progress bar counts as shown under the Create Agency button even when
+    // nothing runs (live 6 Nov 2026: 'already being created' with the button on screen), so a
+    // creation is in progress only while the bar is shown and the button cannot be pressed.
     let (creating, creation_button_enabled) = match gui_tree::container(r, before, i)? {
-        // The creation progress bar is drawn before creation too, showing the cost (5 factories,
-        // 30 days; Linux live, 5 November 2026); only the cancel button tells creation is running.
-        Some(panel) if !created => (
-            pk::shown(r, i, panel, "cancel_creation_button", 2)?,
-            match pk::find(r, i, panel, "creation_button", 2)? {
-                Some(button) => gui_tree::shown(r, button)? && !gui_tree::disabled(r, button)?,
+        Some(panel) if !created => {
+            let button = pk::find(r, i, panel, "creation_button", 2)?;
+            let button_shown = match button {
+                Some(b) => gui_tree::shown(r, b)?,
                 None => false,
-            },
-        ),
+            };
+            let enabled = match button {
+                Some(b) => button_shown && !gui_tree::disabled(r, b)?,
+                None => false,
+            };
+            // While the agency forms ('Agency being formed... N days') the button stays on
+            // screen but disabled.
+            // The cancel button (the X on the bar) is shown only while it forms.
+            let cancel = pk::shown(r, i, panel, "cancel_creation_button", 2).unwrap_or(false);
+            (
+                cancel || (pk::shown(r, i, panel, "creation_progressbar", 2)? && !button_shown),
+                enabled,
+            )
+        }
         _ => (false, false),
     };
     // The progress bars stay shown when idle, with STATUS_NO_AGENCY_UPGRADE /
@@ -82,7 +95,11 @@ fn read_agency(r: &Reader<'_>, i: u64) -> Result<AgencyGui> {
             Some(bar) if gui_tree::shown(r, bar)? => match gui_tree::container(r, bar, i)? {
                 Some(window) => {
                     let text = pk::text(r, i, window, "progressbar_desc", 2)?.unwrap_or_default();
-                    (!idle_text(&text, idle)).then_some(text)
+                    // A running bar counts days ('18 days'); a slot waiting for a pick shows
+                    // 'Ready!' there with the description still 'Recruiting operative'.
+                    let days = pk::text(r, i, window, "progressbar_days", 2)?.unwrap_or_default();
+                    let counting = days.chars().any(|c| c.is_ascii_digit());
+                    (counting && !idle_text(&text, idle)).then_some(text)
                 }
                 None => Some(String::new()),
             },
@@ -125,7 +142,11 @@ pub(super) fn create_refusal(g: &AgencyGui) -> Option<(&'static str, String)> {
 /// A progress text that says nothing is running (English localisation; the run uses l_english).
 fn idle_text(text: &str, idle: &str) -> bool {
     let t = text.trim();
-    t.is_empty() || t.eq_ignore_ascii_case(idle) || t.to_ascii_lowercase().starts_with("no ")
+    // 'Ready!' on the recruiting bar means a slot waits for a pick, not a recruitment running.
+    t.is_empty()
+        || t.eq_ignore_ascii_case(idle)
+        || t.to_ascii_lowercase().starts_with("no ")
+        || t.trim_end_matches('!').eq_ignore_ascii_case("ready")
 }
 /// Refusal for the agency actions that need an existing agency.
 pub(super) fn needs_agency_refusal(g: &AgencyGui) -> Option<(&'static str, String)> {
@@ -505,9 +526,44 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
             let mut grids = Vec::new();
             pk::grids(r, i, root, 6, &mut grids)?;
             let mut out = Vec::new();
+            // The shared leader-selection layout (leaders / leaders_grid, as the admiral list).
+            if let Some(list) = pk::find(r, i, root, "leaders", 2)? {
+                if let Some(inner) = gui_tree::container(r, list, i)? {
+                    if let Some(grid) = gui_tree::child(r, i, inner, "leaders_grid")? {
+                        let items = super::navalui::grid_items(r, grid)?;
+                        for item in items.into_iter().take(64) {
+                            let Some(frame) =
+                                gui_tree::container(r, super::navalui::item_window(r, item)?, i)?
+                            else {
+                                continue;
+                            };
+                            // 1.19.4.1 rows: portrait_overlay_bg, title, name, skill, traits_grid
+                            // (no button of their own; a click on the portrait picks the row).
+                            let icon = match gui_tree::child(r, i, frame, "leader_icon")? {
+                                Some(w) => Some(w),
+                                None => gui_tree::child(r, i, frame, "portrait_overlay_bg")?,
+                            };
+                            if let Some(icon) = icon {
+                                if let Ok(rect) = gui_tree::rect_unclipped(r, i, icon, pk::GAME) {
+                                    out.push(rect);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !out.is_empty() {
+                return Ok(out);
+            }
             for grid in grids {
                 for item in pk::items(r, i, grid)? {
-                    if let Some(button) = pk::find(r, i, item.frame, "portrait_btn", 2)? {
+                    // The candidate rows use the shared leader-row layout (leader_icon, as the
+                    // admiral list) on 1.19.4.1; older layouts named it portrait_btn.
+                    let button = match pk::find(r, i, item.frame, "portrait_btn", 2)? {
+                        Some(b) => Some(b),
+                        None => pk::find(r, i, item.frame, "leader_icon", 2)?,
+                    };
+                    if let Some(button) = button {
                         if let Ok(rect) = pk::rect(r, i, button) {
                             out.push(rect);
                         }
@@ -708,12 +764,9 @@ fn assign(
                 ),
             ));
         };
-        if slot.on_mission {
-            return Err(refuse(
-                "operative_busy",
-                "That operative is already on a mission or operation",
-            ));
-        }
+        // A new operative starts on counter-intelligence at home; the game lets the order bar
+        // switch any operative to another mission, so a running mission is no refusal.
+        let was_on_mission = slot.on_mission;
         let position = plan.operative;
         pk::click(process, keys, "operative portrait", |r, i| {
             let slot = bar_slots(r, i)?
@@ -721,7 +774,20 @@ fn assign(
                 .filter(|s| s.recruited)
                 .nth(position)
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Operative left the bar"))?;
-            pk::rect_of(r, i, slot.frame, "portrait_btn", 2)
+            // portrait_btn is drawn at scale 0.4 inside an 84x150 slot window anchored to the
+            // screen bottom (operativeleader.gui: origo center_down); its rectangle reads
+            // unscaled with the bottom anchor missing (929,851 156x210 for a portrait drawn at
+            // about 929..991 x 977..1061; live 6 Nov 2026). Click the drawn portrait's centre.
+            let rect = pk::rect_of(r, i, slot.frame, "portrait_btn", 2)?;
+            let w = (f64::from(rect.w) * 0.4).round() as i32;
+            let h = (f64::from(rect.h) * 0.4).round() as i32;
+            let top = pk::GAME.1 as i32 - 150 + 47;
+            Ok(gui_tree::Rect {
+                x: rect.x,
+                y: top,
+                w,
+                h,
+            })
         })?;
         wait(process, "open operative order bar", |r, i| {
             pk::is_open(r, i, &pk::OPERATIVE_ORDERS)
@@ -769,6 +835,7 @@ fn assign(
         .unwrap_or(false);
         Ok(json!({
             "on_mission": on_mission,
+            "replaced_running_mission": was_on_mission,
             "mission": plan.mission,
             "confirmation_accepted": confirmed,
             "verification": "gui_only",

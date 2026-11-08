@@ -176,6 +176,18 @@ pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     });
 }
 
+/// Append what the construction manager selected instead (mode and building) to a
+/// selection failure, so an intermittent refusal explains itself.
+fn with_selection(process: &dyn Process, mut e: Error) -> Error {
+    if let Ok((mode, key)) = read(process, selection) {
+        let open = read(process, open).unwrap_or(false);
+        e.message = format!(
+            "{} [observed afterwards: panel open {open}, selection mode {mode}, selected {:?}]",
+            e.message, key
+        );
+    }
+    e
+}
 /// The building button click was sent but the manager's selection never named
 /// the building. Other codes (ownership, lease, torn reads) keep their cause.
 fn select_failed(error: Error, key: &str) -> Error {
@@ -208,13 +220,129 @@ fn no_slot_or_not_allowed(key: &str, state: i32) -> Error {
 }
 
 /// Queue `count` more of building `key` in own state `state`.
+/// Buildings placed on one province (the panel's province grid): a click must land on a
+/// province the game allows, so the state centre is not enough.
+pub(super) const PROVINCE_BUILDINGS: [&str; 4] =
+    ["supply_node", "naval_base", "bunker", "coastal_bunker"];
+
+/// Screen points to click for a building: the given province, or every province of the state
+/// that projects on screen (nearest the centre first). State buildings fall back to the screen
+/// centre when the map data is unavailable. A state's centre can lie outside the state (long
+/// coastal states such as Eritrea: an infrastructure click there was refused live, 6 Nov 2026),
+/// while a click on any of its own provinces places a state building in it.
+fn aim_points(
+    process: &dyn Process,
+    key: &str,
+    state: i32,
+    province: Option<i32>,
+) -> Result<Vec<(f64, f64)>> {
+    let wants_province = province.is_some() || PROVINCE_BUILDINGS.contains(&key);
+    if !wants_province {
+        return Ok(match province_points(process, state, None) {
+            Ok(points) if !points.is_empty() => points,
+            _ => vec![(960.0, 540.0)],
+        });
+    }
+    province_points(process, state, province)
+}
+
+fn province_points(
+    process: &dyn Process,
+    state: i32,
+    province: Option<i32>,
+) -> Result<Vec<(f64, f64)>> {
+    let dir = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))?;
+    let positions = super::mapdata::positions(&dir)?;
+    let provinces = match province {
+        Some(p) => vec![p],
+        None => super::mapdata::state_provinces(&dir, state)?,
+    };
+    let mut points: Vec<(f64, f64)> = Vec::new();
+    for p in provinces {
+        let Some(&(x, z)) = positions.get(&p) else {
+            continue;
+        };
+        if let Some(point) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+            // keep clear of the top bar, the panels on the left and the map controls
+            if (380.0..1800.0).contains(&point.0) && (90.0..1000.0).contains(&point.1) {
+                points.push(point);
+            }
+        }
+    }
+    if points.is_empty() {
+        return Err(Error::new(
+            "invalid_target",
+            match province {
+                Some(p) => format!("Province {p} is not on screen after centring state {state} (is it in that state?)"),
+                None => format!("No province of state {state} projects on screen"),
+            },
+        ));
+    }
+    // nearest to the screen centre first
+    points.sort_by(|a, b| {
+        let d = |p: &(f64, f64)| (p.0 - 960.0).powi(2) + (p.1 - 540.0).powi(2);
+        d(a).total_cmp(&d(b))
+    });
+    points.truncate(10);
+    Ok(points)
+}
+
+/// Open the construction panel and select building `key` (also railway mode for `rail_way`),
+/// verified from the construction manager's selection.
+pub(super) fn select_building(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    key: &str,
+) -> Result<()> {
+    if !read(process, open)? {
+        keys.press(Key::letter('t')?)?;
+        wait(process, "open construction", open)?;
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while read(process, |r, i| button(r, i, key))?.is_none() {
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::new(
+                "invalid_target",
+                "This building is not offered in the construction panel",
+            ));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    let rect = settled(process, "building button", |r, i| {
+        button(r, i, key)?.ok_or_else(|| {
+            Error::new(
+                "invalid_target",
+                "This building is not offered in the construction panel",
+            )
+        })
+    })?;
+    super::ui::dismiss_notices(process, keys)?;
+    let (x, y) = rect.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select building", |r, i| {
+        Ok(selection(r, i)?.1.as_deref() == Some(key))
+    })
+    .map_err(|e| with_selection(process, select_failed(e, key)))
+}
+
 pub(super) fn add(
     process: &dyn Process,
     keys: &dyn GameInput,
     key: &str,
     state: i32,
     count: i64,
+    province: Option<i32>,
 ) -> Result<()> {
+    if key == "rail_way" || key == "railway" {
+        return Err(Error::new(
+            "use_railway_tool",
+            "Railways run between provinces, not in one state: use hoi4_railway_build \
+             (from_state/from_province to to_state/to_province). Nothing was clicked.",
+        ));
+    }
     clear_notices(process, keys)?;
     let start = queued(process, key, state)?;
     if !read(process, open)? {
@@ -250,9 +378,13 @@ pub(super) fn add(
     wait(process, "select building", |r, i| {
         Ok(selection(r, i)?.1.as_deref() == Some(key))
     })
-    .map_err(|e| select_failed(e, key))?;
+    .map_err(|e| with_selection(process, select_failed(e, key)))?;
     let result = (|| {
         find_state(process, keys, state)?;
+        // let the camera settle before projecting provinces
+        thread::sleep(Duration::from_millis(350));
+        let points = aim_points(process, key, state, province)?;
+        let mut point = 0;
         for click in 0..count.min(20) {
             if click > 0 {
                 // A click right after a placement was ignored by 1.19.4 (gate1194, 1 Nov 2026):
@@ -266,17 +398,29 @@ pub(super) fn add(
                 ));
             }
             let before = queued(process, key, state)?;
-            super::ui::dismiss_notices(process, keys)?;
-            keys.click(GAME, 960.0, 540.0)?;
-            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            // Province buildings: try the next province when a click is refused.
             loop {
-                if queued(process, key, state)? > before {
+                super::ui::dismiss_notices(process, keys)?;
+                let (x, y) = points[point];
+                keys.click(GAME, x, y)?;
+                let wait_for = if points.len() > 1 { 1200 } else { 3000 };
+                let deadline = std::time::Instant::now() + Duration::from_millis(wait_for);
+                let grew = loop {
+                    if queued(process, key, state)? > before {
+                        break true;
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        break false;
+                    }
+                    thread::sleep(Duration::from_millis(40));
+                };
+                if grew {
                     break;
                 }
-                if std::time::Instant::now() >= deadline {
+                point += 1;
+                if point >= points.len() || read(process, selection)?.1.as_deref() != Some(key) {
                     return Err(no_slot_or_not_allowed(key, state));
                 }
-                thread::sleep(Duration::from_millis(40));
             }
             if queued(process, key, state)? >= start + count {
                 return Ok(());
@@ -286,6 +430,173 @@ pub(super) fn add(
             "input_readback_failed",
             "Requested amount not reached",
         ))
+    })();
+    leave(process, keys);
+    result
+}
+
+/// Shown widgets named `name` anywhere in the open construction view (child windows and grid
+/// items), top to bottom.
+fn row_buttons(r: &Reader<'_>, image: u64, name: &str) -> Result<Vec<Rect>> {
+    fn walk(
+        r: &Reader<'_>,
+        image: u64,
+        object: u64,
+        name: &str,
+        depth: u32,
+        out: &mut Vec<Rect>,
+    ) -> Result<()> {
+        for child in gui_tree::children(r, object)? {
+            if gui_tree::name(r, child, image)?.as_deref() == Some(name)
+                && gui_tree::shown(r, child)?
+            {
+                let rect = gui_tree::rect(r, image, child, GAME)?;
+                if rect.w > 0 && rect.h > 0 {
+                    out.push(rect);
+                }
+            }
+            if depth == 0 {
+                continue;
+            }
+            if let Some(inner) = gui_tree::container(r, child, image)? {
+                walk(r, image, inner, name, depth - 1, out)?;
+            }
+            if let Some(frames) = super::panelkit::grid_frames(r, image, child)? {
+                for frame in frames {
+                    walk(r, image, frame, name, depth - 1, out)?;
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    walk(r, image, root(r, image)?, name, 10, &mut out)?;
+    out.sort_by_key(|rect| (rect.y, rect.x));
+    out.dedup();
+    Ok(out)
+}
+
+/// Handles of the own construction lines in queue order.
+fn queue_handles(process: &dyn Process) -> Result<Vec<String>> {
+    let page = construction::page(process, 0, 128)?;
+    Ok(page["lines"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|l| l["line_handle"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Move construction line `line` (0-based queue index) to the top, one up, one down, to the
+/// bottom, or remove it, with the row's own buttons (countryconstructionsview.gui:
+/// increase_priority, decrease_priority, close_production_line). Verified by the line's new
+/// position in the own queue (or its absence after a removal).
+pub(super) fn reorder(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    line: usize,
+    action: &str,
+) -> Result<serde_json::Value> {
+    let button = match action {
+        "top" | "up" => "increase_priority",
+        "down" | "bottom" => "decrease_priority",
+        "remove" => "close_production_line",
+        _ => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "action must be top, up, down, bottom or remove",
+            ))
+        }
+    };
+    let before = queue_handles(process)?;
+    let n = before.len();
+    let handle = before.get(line).cloned().ok_or_else(|| {
+        Error::new(
+            "invalid_target",
+            format!("No construction line {line}: the queue has {n} (hoi4_construction_queue lists them in order)"),
+        )
+    })?;
+    let wanted = match action {
+        "top" => Some(0),
+        "up" => Some(line.saturating_sub(1)),
+        "down" => Some((line + 1).min(n - 1)),
+        "bottom" => Some(n - 1),
+        _ => None,
+    };
+    if wanted == Some(line) {
+        return Ok(
+            serde_json::json!({"line_handle": handle, "position": line, "unchanged": "already there"}),
+        );
+    }
+    clear_notices(process, keys)?;
+    if !read(process, open)? {
+        keys.press(Key::letter('t')?)?;
+        wait(process, "open construction", open)?;
+    }
+    let result = (|| -> Result<serde_json::Value> {
+        let rows = settled(process, "construction rows", |r, i| {
+            row_buttons(r, i, button)
+        })?;
+        if rows.len() != n {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                format!("The construction panel shows {} {button} buttons for {n} queue lines; nothing was clicked", rows.len()),
+            ));
+        }
+        let (x, y) = rows[line].center();
+        let position = |process: &dyn Process| -> Result<Option<usize>> {
+            Ok(queue_handles(process)?.iter().position(|h| *h == handle))
+        };
+        match action {
+            "remove" => {
+                keys.click(GAME, x, y)?;
+                if !super::ui::accept_command(process, keys)? {
+                    // no confirmation pop-up was found: the removal may already be done
+                }
+                wait(process, "line removed", |_, _| {
+                    Ok(position(process)?.is_none())
+                })?;
+                Ok(serde_json::json!({"line_handle": handle, "removed": true, "lines_before": n}))
+            }
+            _ => {
+                // Shift moves a line to the top or bottom in one click; without effect the
+                // single steps follow.
+                if matches!(action, "top" | "bottom") {
+                    keys.shift_click(GAME, x, y)?;
+                } else {
+                    keys.click(GAME, x, y)?;
+                }
+                let target = wanted.unwrap_or(line);
+                let moved = wait(process, "line moved", |_, _| {
+                    Ok(position(process)? == Some(target))
+                });
+                if moved.is_err() && matches!(action, "top" | "bottom") {
+                    for _ in 0..n {
+                        let Some(at) = position(process)? else { break };
+                        if at == target {
+                            break;
+                        }
+                        let rows = read(process, |r, i| row_buttons(r, i, button))?;
+                        let Some(rect) = rows.get(at) else { break };
+                        let (x, y) = rect.center();
+                        keys.click(GAME, x, y)?;
+                        thread::sleep(Duration::from_millis(400));
+                    }
+                }
+                let now = position(process)?;
+                if now != Some(target) {
+                    return Err(Error::new(
+                        "input_readback_failed",
+                        format!(
+                            "Line {handle} is at {now:?} after the {button} click, not at {target}"
+                        ),
+                    ));
+                }
+                Ok(serde_json::json!({"line_handle": handle, "from": line, "to": target}))
+            }
+        }
     })();
     leave(process, keys);
     result

@@ -288,23 +288,42 @@ pub(super) fn reveal_named(
     name: &str,
     min_visible: i32,
 ) -> Result<()> {
-    for _ in 0..40 {
-        // Never scroll unless the list is on screen; the wheel zooms the map.
-        if !read(process, open)? {
-            return Err(Error::new(
-                "input_readback_failed",
-                "Production panel closed while adjusting a line",
-            ));
-        }
-        let rect = read(process, |r, i| button(r, i, handle, name))?;
-        match rect {
-            Some(r) if r.y >= LIST.0 && r.y + r.h.min(min_visible) <= LIST.1 => return Ok(()),
-            Some(r) => {
-                let pixels = if r.y < LIST.0 { 240 } else { -240 };
-                keys.scroll(GAME, (260.0, 700.0), pixels)?;
+    let closed = || {
+        Error::new(
+            "input_readback_failed",
+            "Production panel closed while adjusting a line",
+        )
+    };
+    // Never scroll unless the list is on screen; the wheel zooms the map.
+    if !read(process, open)? {
+        return Err(closed());
+    }
+    // One glide (a row not laid out yet is searched downwards one event at a time).
+    let outcome = super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (260.0, 700.0),
+            pixels: 240,
+            band: (f64::from(LIST.0), f64::from(LIST.1)),
+            search: -1,
+        },
+        || {
+            if read(process, open)? {
+                Ok(())
+            } else {
+                Err(closed())
             }
-            None => keys.scroll(GAME, (260.0, 700.0), -240)?,
-        }
+        },
+        |r, i| {
+            Ok(button(r, i, handle, name)?.map(|b| {
+                let top = f64::from(b.y);
+                (top, top + f64::from(b.h.min(min_visible)))
+            }))
+        },
+    )?;
+    if matches!(outcome, super::glide::Glided::InBand(_)) {
+        return Ok(());
     }
     Err(Error::new(
         "gui_target_unavailable",
@@ -385,29 +404,33 @@ pub(super) fn add(
                     .any(|x| x.shown && x.equipment_button.is_some()))
             });
             // The ship list is long: scroll the wanted row into the visible band.
-            let mut target = None;
-            let mut last_y: Option<i32> = None;
-            for _ in 0..40 {
-                let Some(rect) = read(process, |r, i| naval_row(r, i, key, design))? else {
-                    break;
-                };
-                // The first row (the convoy) sits right under the class filter header.
-                if rect.y >= 230 && rect.y + rect.h <= 1040 {
-                    target = Some(rect);
-                    break;
-                }
-                if last_y == Some(rect.y) {
-                    break;
-                }
-                last_y = Some(rect.y);
-                keys.scroll(GAME, (780.0, 700.0), if rect.y < 230 { 240 } else { -240 })?;
-                std::thread::sleep(std::time::Duration::from_millis(250));
-            }
-            match target {
-                Some(_) => settled(process, "equipment row", |r, i| {
+            // The first row (the convoy) sits right under the class filter header.
+            let outcome = super::glide::glide(
+                process,
+                keys,
+                &super::glide::Glide {
+                    at: (780.0, 700.0),
+                    pixels: 240,
+                    band: (230.0, 1040.0),
+                    search: 0,
+                },
+                || {
+                    if read(process, super::design_ui::selection_open)? {
+                        Ok(())
+                    } else {
+                        Err(Error::new(
+                            "input_readback_failed",
+                            "The equipment selection list closed",
+                        ))
+                    }
+                },
+                |r, i| Ok(naval_row(r, i, key, design)?.map(|x| super::glide::span_y(&x))),
+            )?;
+            match outcome {
+                super::glide::Glided::InBand(_) => settled(process, "equipment row", |r, i| {
                     naval_row(r, i, key, design)
                 })?,
-                None => None,
+                _ => None,
             }
         } else {
             settled(process, "equipment row", |r, i| {

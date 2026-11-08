@@ -386,7 +386,16 @@ pub(super) fn precheck(
 pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let snap = snapshot(process)?;
     let list_open = snap.rows.is_some();
-    let commanders = entries(&snap);
+    // While the panel list is fresh, leaders it does not list (not recruited, foreign,
+    // retired) cannot be assigned: name them apart so a player does not pick them (Ethiopia
+    // run 10 tried an unlisted general and Ethiopian leaders).
+    let (commanders, not_assignable): (Vec<Value>, Vec<Value>) = entries(&snap)
+        .into_iter()
+        .partition(|c| !list_open || c["listed_in_panel_or_assigned"] == json!(true));
+    let not_assignable: Vec<Value> = not_assignable
+        .into_iter()
+        .map(|c| c["name"].clone())
+        .collect();
     let targets: Vec<Value> = snap
         .targets
         .iter()
@@ -411,6 +420,7 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     };
     Ok(json!({
         "commanders":commanders,
+        "not_assignable":not_assignable,
         "armies_and_groups":targets,
         "without_commander":unled,
         "commander_list_open":list_open,
@@ -424,7 +434,7 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); not-yet-recruited or foreign leaders are included with listed_in_panel_or_assigned false. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 #[cfg(test)]

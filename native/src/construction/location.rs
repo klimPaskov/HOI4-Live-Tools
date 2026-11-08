@@ -51,8 +51,12 @@ pub(super) fn catalog_pointer(r: &Reader<'_>, header: u64, id: i32, bound: usize
 pub(super) fn own_state(r: &Reader<'_>, base: u64, state: u64, tag: i32) -> Result<bool> {
     let l = super::layout(r);
     exact(r, state, base + l.state_vtable)?;
-    // Authorization fields precede state ID or any reciprocal building data.
-    Ok(r.i32(state + l.state_owner)? == tag && r.i32(state + l.state_controller)? == tag)
+    // Authorization fields precede state ID or any reciprocal building data. The game lets a
+    // country build in states it controls without owning them (occupied territory: supply
+    // hubs, railways, infrastructure); what a building allows there is the game's call, and
+    // every order is verified by the queue readback.
+    let _owner = r.i32(state + l.state_owner)?;
+    Ok(r.i32(state + l.state_controller)? == tag)
 }
 pub(super) fn observe(
     r: &Reader<'_>,

@@ -46,7 +46,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_mio_trait` (A): UNVALIDATED (no live test yet): queue a trait of an organisation's trait tree:
 - `hoi4_mios` (R): Military-industrial organisations and designers for the own country, read-only (no input, no lease, never pauses).
 - `hoi4_research_extras` (R): Own research bonuses that the research panel only shows as tooltips, read from game memory (no input, no lease, never pauses):
-- `hoi4_research_start` (A): Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory;
+- `hoi4_research_start` (A): Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage 
 - `hoi4_special_project_assign` (A): Put a scientist and/or a project into one own research facility with ordinary input:
 - `hoi4_special_project_recruit` (A): Recruit one scientist the Recruit Scientist window offers (names under recruitable.candidates of hoi4_special_projects) for political power (25/50/75/100 by how many scientists are idle).
 - `hoi4_special_project_stop` (A): Stop the running project of one own facility:
@@ -81,9 +81,11 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_army_assign_plan` (R): Pure read:
 - `hoi4_army_commander` (A): Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list.
 - `hoi4_army_create` (A): (optional absorb_existing:
+- `hoi4_army_detach` (A): Move chosen divisions out of an army:
 - `hoi4_army_front` (A): Give an own army a front-line order along the border nearest a state:
 - `hoi4_army_group_create` (A): Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card).
 - `hoi4_army_merge` (A): Move every division of army `source` into army `target` with the game's own controls:
+- `hoi4_army_motorization` (A): Set an army's supply motorization:
 - `hoi4_army_move` (A): Order an own army to move to the centre of a state with one right click (army card, Find view, right click);
 - `hoi4_army_offensive` (A): Draw an offensive line for an own army that already holds a front line, into a target state:
 - `hoi4_army_plan` (A): Execute or stop an own army's battle plan with the army card's play or stop button.
@@ -94,6 +96,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_design_obsolete` (A): Decommission (obsolete:
 - `hoi4_design_options` (A): What the equipment designers offer, read from the game's own designer windows (Production panel, equipment selection list, the row's Create variant button;
 - `hoi4_designs` (R): Own equipment designs (ship, plane, tank and other variants) read from game memory;
+- `hoi4_division_disband` (A): Disband own divisions of one army (the division list's delete button;
 - `hoi4_division_templates` (R): Own division template names (for hoi4_train) and how many training lines each has queued.
 - `hoi4_supply` (R): Own divisions, the provinces and states they stand in and the supply system, read from game memory (no input, no lease, no pause).
 - `hoi4_template_create` (A): Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save).
@@ -136,7 +139,10 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 - `hoi4_agency_create` (A): UNVALIDATED (no live test yet): create the intelligence agency with ordinary input:
 - `hoi4_agency_upgrade` (A): Start an agency upgrade:
+- `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
+- `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
+- `hoi4_occupation` (R): Read-only (memory, no input, no pause):
 - `hoi4_operative_assign` (A): UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
 - `hoi4_operative_recruit` (A): UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar:
 - `hoi4_peace_exit` (A): Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation);
@@ -147,4 +153,5 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
 - `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
+- `hoi4_war_stats` (R): Read-only (memory, no input, no pause):
 

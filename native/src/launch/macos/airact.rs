@@ -533,8 +533,42 @@ fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
     if read(process, icons_shown)? {
         return Ok(false);
     }
+    // Base icons are only drawn near the camera: a camera left over the Sahara or far out
+    // showed none, so every air action failed to see air mode (live 6 Nov 2026). Centre an
+    // own air base state first; the caller moves the camera to its target afterwards.
+    if let Some(state) = own(process)
+        .ok()
+        .and_then(|(bases, _)| bases.iter().find_map(|b| b.state))
+    {
+        let _ = super::ui::find_state(process, keys, state);
+        pause(350);
+        if read(process, icons_shown)? {
+            return Ok(false);
+        }
+    }
+    if read(process, |r, i| {
+        Ok(airui::base_icons(r, i)
+            .map(|v| v.is_empty())
+            .unwrap_or(true))
+    })? {
+        // Already in air mode but too far out to show icons.
+        let _ = super::screenmap::zoom_in_to_strategic(process, keys);
+        if read(process, icons_shown)? {
+            return Ok(false);
+        }
+    }
     keys.press_code(F3)?;
-    wait(process, "strategic air map mode", icons_shown)?;
+    if wait(process, "strategic air map mode", icons_shown).is_err() {
+        // Far out, the game draws no air base icons: come in to the strategic height.
+        super::screenmap::zoom_in_to_strategic(process, keys)?;
+        if wait(process, "strategic air map mode", icons_shown).is_err() {
+            // F3 toggles: when air mode was already on (far out, no icons drawn), the press
+            // above switched it off (seen live 6 Nov 2026 after the Air Forces Overview). Press
+            // it once more at the strategic height.
+            keys.press_code(F3)?;
+            wait(process, "strategic air map mode", icons_shown)?;
+        }
+    }
     pause(300);
     Ok(true)
 }
@@ -562,20 +596,47 @@ fn release(process: &dyn Process, keys: &dyn GameInput, entered: bool) {
 fn base_point(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<(f64, f64)> {
     let pos = base_position(process, state)?;
     find_state(process, keys, state)?;
-    for step in 0..8 {
+    // At most eight zoom-out wheel steps in all, as before, but sized and sent as one flick.
+    let mut left: u32 = 8;
+    loop {
         let found = settled(process, "air base icon", |r, i| {
-            Ok(airui::icon_at(&airui::base_icons(r, i)?, pos).cloned())
+            Ok(airui::icon_at(&airui::base_icons(r, i)?, pos).map(|icon| icon.center()))
         })?;
-        if let Some(icon) = found {
-            let p = icon.center();
-            if airui::clickable(p) {
-                return Ok(p);
-            }
+        if let Some(p) = found.filter(|p| airui::clickable(*p)) {
+            return Ok(p);
         }
-        // The base lies off the usable map area: zoom out one notch around the screen centre.
-        let _ = step;
-        keys.scroll(GAME, (960.0, 540.0), -240)?;
+        if left == 0 {
+            break;
+        }
+        // No icon drawn: where the base projects on screen.
+        let at = found.or_else(|| {
+            read(process, |r, i| {
+                super::screenmap::to_screen(r, i, pos.0, pos.1)
+            })
+            .ok()
+            .flatten()
+        });
+        // The base lies off the usable map area: zoom out around the screen centre by the
+        // steps its offset needs (one when it sits in a toolbar corner or is not projected).
+        let events = at
+            .map(|p| super::glide::zoom_out_events(p, (660.0, 160.0, 1740.0, 960.0), left))
+            .unwrap_or(0)
+            .clamp(1, left);
+        keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
+        left -= events;
         pause(450);
+    }
+    // Last try from a known height: the strategic zoom, centred again (the zoom-out search
+    // missed Eritrea's base once and found it on the next call, live 6 Nov 2026).
+    let _ = super::screenmap::zoom_in_to_strategic(process, keys);
+    find_state(process, keys, state)?;
+    pause(450);
+    if let Some(p) = settled(process, "air base icon", |r, i| {
+        Ok(airui::icon_at(&airui::base_icons(r, i)?, pos).map(|icon| icon.center()))
+    })?
+    .filter(|p| airui::clickable(*p))
+    {
+        return Ok(p);
     }
     Err(Error::new(
         "base_icon_unavailable",
@@ -1044,13 +1105,38 @@ pub(super) fn pick_region(
     Err(Error::new(
         "region_unknown",
         format!(
-            "No unique strategic air region {wanted:?}; examples: {}",
-            names
-                .values()
-                .take(8)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(" | ")
+            "No unique strategic region {wanted:?} in this game's map files; {}",
+            {
+                // Names sharing a word with the request first (the full list is long).
+                let words: Vec<String> = wanted
+                    .to_lowercase()
+                    .split_whitespace()
+                    .filter(|w| w.len() > 3)
+                    .map(str::to_string)
+                    .collect();
+                let close: Vec<String> = names
+                    .values()
+                    .filter(|n| {
+                        let n = n.to_lowercase();
+                        words.iter().any(|w| n.contains(w.as_str()))
+                    })
+                    .take(12)
+                    .cloned()
+                    .collect();
+                if close.is_empty() {
+                    format!(
+                        "examples: {}",
+                        names
+                            .values()
+                            .take(8)
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    )
+                } else {
+                    format!("close names: {}", close.join(" | "))
+                }
+            }
         ),
     ))
 }

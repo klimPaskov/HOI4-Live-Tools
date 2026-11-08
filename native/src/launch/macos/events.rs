@@ -420,6 +420,14 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
         "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout})).collect::<Vec<_>>()}),
     )
 }
+/// The event drawn on top when it offers exactly one option (news events: "OK"-style
+/// acknowledgements with nothing to decide).
+pub(super) fn single_option_top(r: &Reader<'_>, image: u64) -> Result<Option<String>> {
+    Ok(open_events(r, image)?
+        .pop()
+        .filter(|e| e.options.len() == 1)
+        .map(|e| e.id))
+}
 /// Ids of the open events, in list order.
 pub(super) fn open_ids(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
     Ok(open_events(r, image)?.into_iter().map(|e| e.id).collect())
@@ -488,8 +496,7 @@ pub(super) fn choose(
         .ok_or_else(|| Error::new("invalid_arguments", "No such event option"))?;
     let event = top.event;
     let others: Vec<u64> = open[..open.len() - 1].iter().map(|e| e.event).collect();
-    keys.click(GAME, x, y)?;
-    wait(process, "event answered", |r, i| {
+    let answered = |r: &crate::memory::Reader<'_>, i: u64| {
         let now = open_events(r, i)?;
         if others.iter().any(|o| !now.iter().any(|e| e.event == *o)) {
             return Err(Error::new(
@@ -498,7 +505,23 @@ pub(super) fn choose(
             ));
         }
         Ok(!now.iter().any(|e| e.event == event))
-    })
+    };
+    keys.click(GAME, x, y)?;
+    match wait(process, "event answered", answered) {
+        Ok(()) => Ok(()),
+        // A news window still fading in can drop the first click (the plan loop's retry always
+        // worked, live 6 Nov 2026): click the same option once more while it is still open.
+        Err(e) if e.code == "input_readback_failed" && top.scan.is_some() => {
+            if !read(process, |r, i| {
+                Ok(open_events(r, i)?.iter().any(|x| x.event == event))
+            })? {
+                return Ok(());
+            }
+            keys.click(GAME, x, y)?;
+            wait(process, "event answered", answered)
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]

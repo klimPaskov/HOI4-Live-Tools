@@ -114,7 +114,7 @@ fn unjoined_full_handles_foreign_locations_and_unknown_rows_never_read_text_payl
         production_not_read(&f, &[ROW + 0x10, WINDOW, TEXT]);
     }
     let mut f = fixture_ui();
-    f.number(0xe00c8, 2);
+    f.number(0xe00cc, 2);
     assert_eq!(observe(&f).unwrap()["ui"]["unjoined_row_count"], 1);
     production_not_read(&f, &[ROW + 0x10, WINDOW, TEXT]);
     let mut f = fixture_ui();

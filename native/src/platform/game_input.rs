@@ -215,6 +215,19 @@ pub(crate) trait GameInput: Send + Sync {
     fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()>;
     /// Wheel scroll at a point; positive `pixels` scrolls content up.
     fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()>;
+    /// `count` wheel events in one quick flick (one smooth camera movement in the game).
+    fn scroll_burst(
+        &self,
+        game: (u32, u32),
+        at: (f64, f64),
+        pixels: i32,
+        count: u32,
+    ) -> Result<()> {
+        for _ in 0..count {
+            self.scroll(game, at, pixels)?;
+        }
+        Ok(())
+    }
     fn press_code(&self, code: u16) -> Result<()>;
     fn press_shifted(&self, code: u16) -> Result<()>;
     fn press_control(&self, code: u16) -> Result<()>;
@@ -281,6 +294,9 @@ macro_rules! delegate_game_input {
             }
             fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
                 (**self).scroll(game, at, pixels)
+            }
+            fn scroll_burst(&self, game: (u32, u32), at: (f64, f64), pixels: i32, count: u32) -> Result<()> {
+                (**self).scroll_burst(game, at, pixels, count)
             }
             fn press_code(&self, code: u16) -> Result<()> {
                 (**self).press_code(code)

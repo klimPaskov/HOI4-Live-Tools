@@ -1090,10 +1090,28 @@ impl Server {
                     return self.wait_ui(target, Duration::from_secs(timeout));
                 }
                 let target = if let Some(v) = object.get("until_date") {
-                    let v = v.as_array().filter(|a| a.len() == 3).ok_or_else(|| {
+                    // Also "1940.10.01" / "1940-10-01" and {year, month, day}.
+                    let converted = match v {
+                        Value::String(text) => {
+                            let parts: Vec<Value> = text
+                                .split(['.', '-', '/'])
+                                .filter_map(|p| p.trim().parse::<i64>().ok())
+                                .map(Value::from)
+                                .collect();
+                            Value::Array(parts)
+                        }
+                        Value::Object(o) => Value::Array(
+                            ["year", "month", "day"]
+                                .iter()
+                                .filter_map(|k| o.get(*k).cloned())
+                                .collect(),
+                        ),
+                        other => other.clone(),
+                    };
+                    let v = converted.as_array().filter(|a| a.len() == 3).ok_or_else(|| {
                         Error::new(
                             "invalid_arguments",
-                            "until_date must contain year,month,day",
+                            "until_date must be [year, month, day], \"YYYY.MM.DD\" or {year, month, day}",
                         )
                     })?;
                     let numbers: Vec<_> = v
@@ -1125,8 +1143,13 @@ impl Server {
                 let commands = commands.unwrap();
                 let path = commands.plan_path().unwrap();
                 if name == "hoi4_plan" {
+                    // request_id / lease_token are ignored like everywhere else.
+                    let given = object
+                        .keys()
+                        .filter(|k| !matches!(k.as_str(), "request_id" | "lease_token"))
+                        .count();
                     return match object.get("op").and_then(Value::as_str) {
-                        Some("get") if object.len() == 1 => {
+                        Some("get") if given == 1 => {
                             let mut plan = crate::plan_run::read_plan(&path)?;
                             // A pending date stop reports whether the server can act on it.
                             if plan.get("stop_on_date").is_some_and(|v| !v.is_null()) {
@@ -1146,7 +1169,7 @@ impl Server {
                             }
                             Ok(plan)
                         }
-                        Some("set") if object.len() == 2 => {
+                        Some("set") if given == 2 => {
                             let changes = object
                                 .get("plan")
                                 .and_then(Value::as_object)

@@ -57,7 +57,7 @@ fn observe_with_map_point(
     if key == "rail_way" {
         return Err(Error::new(
             "capability_unavailable",
-            "Railway path amounts are not building queue evidence",
+            "Railways run between provinces: queue them with hoi4_railway_build (from_state/from_province, to_state/to_province)",
         ));
     }
     if include_map_point && process.string_abi() != StringAbi::LibCxx {
@@ -81,7 +81,7 @@ fn observe_with_map_point(
     if !location::own_state(&r, base, state, own_tag).map_err(|e| phase("target_state", e))? {
         return Err(Error::new(
             "construction_target_unavailable",
-            "Requested state must be owned and controlled by the current player",
+            "Requested state must be controlled by the current player",
         ));
     }
     if r.i32(state + l.state_id)? != state_id {

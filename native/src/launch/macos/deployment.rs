@@ -1,6 +1,7 @@
 //! Train own divisions with ordinary input: deployment panel (U) and the
 //! template's Train button, once per division. Each click must add one
 //! training line for that template to the own deployment queue in memory.
+use super::glide::{glide, span_y, Glide, Glided, Span};
 use super::ui::{clear_notices, find_state, read, settled, wait};
 use crate::{
     error::{Error, Result},
@@ -198,6 +199,7 @@ pub(super) fn row_button(
         rows[names.iter().position(|n| n == name).unwrap()]
     } else {
         let mut found = None;
+        let mut shown = Vec::new();
         for &candidate in &rows {
             let Some(frame) = gui_tree::container(r, r.u64(candidate + u.row_container)?, image)?
             else {
@@ -206,15 +208,21 @@ pub(super) fn row_button(
             let Some(label) = gui_tree::child(r, image, frame, "name")? else {
                 continue;
             };
-            if r.string_bounded(label + u.text, 128)?.trim() == name {
+            let drawn = r.string_bounded(label + u.text, 128)?.trim().to_string();
+            if drawn == name {
                 found = Some(candidate);
                 break;
             }
+            shown.push(drawn);
         }
         found.ok_or_else(|| {
             Error::new(
-                "gui_target_unavailable",
-                "Template row not shown (decommissioned templates are hidden)",
+                "template_not_trainable",
+                format!(
+                    "Template {name} is decommissioned (hidden from the training list). Trainable \
+                     templates: {}. Nothing was queued.",
+                    shown.join(", ")
+                ),
             )
         })?
     };
@@ -222,6 +230,21 @@ pub(super) fn row_button(
         .ok_or_else(|| Error::new("invalid_gui", "Template row window required"))?;
     let widget = gui_tree::child(r, image, frame, button)?
         .ok_or_else(|| Error::new("gui_target_unavailable", format!("{button} not found")))?;
+    if button == "edit_button" {
+        // Locked templates (event or focus templates such as Camicie Nere and the irregulars)
+        // show View on this button instead of Edit; the designer then ignores every change.
+        let label = super::navalui::label_at(r, widget).unwrap_or_default();
+        if label.trim().eq_ignore_ascii_case("view") {
+            return Err(Error::new(
+                "template_locked",
+                format!(
+                    "Template {name} is locked by the game (its button reads View, not Edit): it \
+                     cannot be renamed or edited. Edit another template, or create a new one \
+                     with hoi4_template_create. Nothing was changed."
+                ),
+            ));
+        }
+    }
     Ok((
         gui_tree::rect(r, image, widget, GAME)?,
         gui_tree::disabled(r, widget)?,
@@ -331,6 +354,35 @@ fn conveyor_button(r: &Reader<'_>, image: u64, index: usize, name: &str) -> Resu
     }
     Ok(None)
 }
+/// Glide the deployment list (only while the panel is open) until the measured span lies in the
+/// list area, in one smooth movement.
+fn glide_list(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    position: impl Fn(&Reader<'_>, u64) -> Result<Option<Span>>,
+) -> Result<Glided> {
+    glide(
+        process,
+        keys,
+        &Glide {
+            at: (180.0, 700.0),
+            pixels: 240,
+            band: (f64::from(LIST.0), f64::from(LIST.1)),
+            search: 0,
+        },
+        || {
+            if read(process, open)? {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    "input_readback_failed",
+                    "Recruit & Deploy panel closed",
+                ))
+            }
+        },
+        position,
+    )
+}
 /// Click button `name` of conveyor `index` once it rests inside the list area (scrolling it there).
 fn click_conveyor(
     process: &dyn Process,
@@ -338,27 +390,18 @@ fn click_conveyor(
     index: usize,
     name: &str,
 ) -> Result<()> {
-    for _ in 0..80 {
-        match read(process, |r, i| conveyor_button(r, i, index, name))? {
-            Some(r) if r.y >= LIST.0 && r.y + r.h.min(40) <= LIST.1 => break,
-            // Long queue lists (seen live: 15 queues) need big steps.
-            Some(r) => {
-                let far = (r.y - 700).abs() > 1500;
-                let step = if far { 720 } else { 240 };
-                keys.scroll(
-                    GAME,
-                    (180.0, 700.0),
-                    if r.y < LIST.0 { step } else { -step },
-                )?
-            }
-            None => {
-                return Err(Error::new(
-                    "gui_target_unavailable",
-                    format!("Training queue {name} button not found"),
-                ))
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(150));
+    // Long queue lists (seen live: 15 queues) glide the button in with one burst.
+    let outcome = glide_list(process, keys, |r, i| {
+        Ok(conveyor_button(r, i, index, name)?.map(|b| {
+            let top = f64::from(b.y);
+            (top, top + f64::from(b.h.min(40)))
+        }))
+    })?;
+    if outcome == Glided::Unknown {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!("Training queue {name} button not found"),
+        ));
     }
     let rect = settled(process, "queue button", |r, i| {
         conveyor_button(r, i, index, name)?
@@ -522,22 +565,10 @@ pub(super) fn set_locations(
             break;
         }
         // Scroll the first unlocated line's button into the list area.
-        let mut rect = None;
-        for _ in 0..40 {
-            let found = read(process, location_buttons)?.first().copied();
-            match found {
-                Some(r) if r.y >= LIST.0 && r.y + r.h <= LIST.1 => {
-                    rect = Some(r);
-                    break;
-                }
-                Some(r) => {
-                    let pixels = if r.y < LIST.0 { 240 } else { -240 };
-                    keys.scroll(GAME, (180.0, 700.0), pixels)?;
-                }
-                None => break,
-            }
-        }
-        if rect.is_none() {
+        let outcome = glide_list(process, keys, |r, i| {
+            Ok(location_buttons(r, i)?.first().map(span_y))
+        })?;
+        if !matches!(outcome, Glided::InBand(_)) {
             return Err(Error::new(
                 "gui_target_unavailable",
                 "Training line location button not in view",
@@ -563,7 +594,7 @@ pub(super) fn set_locations(
         .map_err(|_| {
             Error::new(
                 "input_readback_failed",
-                "No location was set (the state must be own and able to receive divisions)",
+                "No location was set: the game does not let these divisions deploy in that state (shown red on the deployment map, e.g. a colony or non-core state). Deploy in a core state (green), then move them by sea or land",
             )
         })?;
         done += 1;

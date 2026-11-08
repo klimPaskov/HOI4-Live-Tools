@@ -77,7 +77,7 @@ fn view_class(slot: u64) -> xlayout::Class {
         _ => xlayout::Class::new("idler.manager.view", 0),
     }
 }
-fn item_window(r: &Reader<'_>, item: u64) -> Result<u64> {
+pub(super) fn item_window(r: &Reader<'_>, item: u64) -> Result<u64> {
     r.u64(item + fld(r.string_abi(), &GRID_ITEM, ITEM_CONTAINER)?)
 }
 pub(super) fn view(r: &Reader<'_>, image: u64, slot: u64) -> Result<u64> {

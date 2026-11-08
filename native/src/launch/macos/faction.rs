@@ -136,6 +136,43 @@ fn open_from_topbar(process: &dyn Process, keys: &dyn GameInput, window_name: &s
     })
 }
 
+fn open_from_politics(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    let find = |r: &Reader<'_>, i: u64| {
+        Ok(super::panelkit::widget_anywhere(r, i, "new_faction_button")?.map(|(_, rect)| rect))
+    };
+    if read(process, find)?.is_none() {
+        keys.press(crate::platform::game_input::Key::letter('q')?)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while read(process, find)?.is_none() {
+            if std::time::Instant::now() >= deadline {
+                return Err(Error::new(
+                    "capability_unavailable",
+                    "Neither the top bar faction button nor the political view's Create Faction \
+                     button is available (the country may not be allowed to create a faction)",
+                ));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+    let rect = settled(process, "create faction button", |r, i| {
+        find(r, i)?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Create Faction button gone"))
+    })?;
+    kit::click(keys, rect)?;
+    wait(process, "new_faction_window", |r, i| {
+        Ok(open_window(r, i, "new_faction_window")?.is_some())
+    })
+    .map_err(|_| {
+        Error::new(
+            "faction_creation_not_allowed",
+            "The political view's Create Faction button opened no window: the game lets a country \
+             create a faction only while a national spirit allows it (its tooltip: 'You can not \
+             create factions without having the national spirit to do so'); a focus or decision \
+             grants it. Nothing was created",
+        )
+    })
+}
+
 // ---- templates ------------------------------------------------------------------------------------
 #[derive(Clone, Debug, PartialEq)]
 struct Template {
@@ -299,23 +336,40 @@ fn invite_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect, bool)>> 
 fn drive_create(process: &dyn Process, keys: &dyn GameInput, plan: &CreatePlan) -> Result<Value> {
     clear_notices(process, keys)?;
     let result = (|| -> Result<Value> {
-        open_from_topbar(process, keys, "new_faction_window")?;
+        // Outside a faction the top bar's faction button is locked ('Unlock faction button by
+        // creating one in the political menu', 1.19.4.1): the political view's
+        // new_faction_button (countrypoliticsview.gui) opens the same window.
+        if open_from_topbar(process, keys, "new_faction_window").is_err() {
+            open_from_politics(process, keys)?;
+        }
         pause(500);
-        let mut list = settled(process, "faction templates", templates)?;
+        let list = settled(process, "faction templates", templates)?;
         let pairs: Vec<(String, String)> = list
             .iter()
             .map(|t| (t.name.clone(), t.manifest.clone()))
             .collect();
         let index = pick_template(&pairs, plan.template.as_deref())?;
-        for _ in 0..4 {
-            if on_screen(list[index].select) {
-                break;
-            }
-            let down = list[index].select.y > 500;
-            keys.scroll(kit::GAME, (700.0, 450.0), if down { -240 } else { 240 })?;
-            pause(300);
-            list = settled(process, "faction templates", templates)?;
+        if !on_screen(list[index].select) {
+            // One glide brings the card into view (the template grid errors once the window
+            // is gone, which stops the glide).
+            super::glide::glide(
+                process,
+                keys,
+                &super::glide::Glide {
+                    at: (700.0, 450.0),
+                    pixels: 240,
+                    band: (150.0, 960.0),
+                    search: 0,
+                },
+                || Ok(()),
+                |r, i| {
+                    Ok(templates(r, i)?
+                        .get(index)
+                        .map(|t| super::glide::span_y(&t.select)))
+                },
+            )?;
         }
+        let list = settled(process, "faction templates", templates)?;
         let chosen = list[index].clone();
         if !on_screen(chosen.select) {
             return Err(Error::new(

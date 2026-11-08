@@ -760,6 +760,25 @@ pub(super) fn typable(name: &str) -> bool {
 /// Backspace proves the box has the keyboard focus), then type the new name one key at a time,
 /// each verified against the working copy. A space is typed only after focus is proven, since
 /// a stray Space would toggle the game's pause.
+/// The template name as typed: the name edit box's own text (inside the `divisions` dropdown),
+/// else the designer's working copy. In the designer opened from a template's Edit button the
+/// working copy does not follow the edit box while typing (live 6 Nov 2026), so the box is read.
+fn typed_name(r: &Reader<'_>, image: u64) -> Result<String> {
+    let from_box = (|| -> Result<Option<String>> {
+        let dd = dropdown_widget(r, image)?;
+        let Some(frame) = gui_tree::container(r, dd, image)? else {
+            return Ok(None);
+        };
+        let Some(edit) = super::panelkit::find(r, image, frame, "name", 3)? else {
+            return Ok(None);
+        };
+        Ok(Some(super::navalui::edit_text(r, image, edit)?))
+    })();
+    match from_box {
+        Ok(Some(text)) => Ok(text),
+        _ => Ok(draft(r, image)?.name),
+    }
+}
 pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     if !typable(name) {
         return Err(Error::new(
@@ -767,35 +786,102 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
             "Template names may use letters, digits, space and - _ . , / ' ( )",
         ));
     }
-    let current = read(process, draft)?.name;
+    let current = read(process, typed_name)?;
     if current == name {
         return Ok(());
     }
     let dd = settled(process, "name box", |r, i| Ok(dropdown(r, i)?.expand))?;
     let (x, y) = dd.center();
-    // The name box is the left part of the dropdown; the expand arrow sits at its right end.
-    keys.click(GAME, x - 110.0, y)?;
-    std::thread::sleep(Duration::from_millis(250));
-    keys.press_code(crate::platform::game_input::vk::END)?; // End
+    // The name box sits beside the template dropdown's expand arrow: left of it on some layouts,
+    // right of it in the designer opened from a template's Edit (live 6 Nov 2026). Its rectangle
+    // is not read, so try points on both sides until the first Backspace proves the focus.
     let mut length = current.chars().count();
     if length > 0 {
-        keys.press_code(crate::platform::game_input::vk::DELETE)?;
-        length -= 1;
-        wait(process, "name box focused", |r, i| {
-            Ok(draft(r, i)?.name.chars().count() == length)
+        let mut focused = false;
+        // The edit box itself (`name` inside the `divisions` dropdown, divisiondesignerview.gui)
+        // when its rectangle reads; the offsets from the arrow are the fallback.
+        let edit = read(process, |r, i| {
+            let dd = dropdown_widget(r, i)?;
+            let Some(frame) = gui_tree::container(r, dd, i)? else {
+                return Ok(None);
+            };
+            Ok(super::panelkit::find(r, i, frame, "name", 3)?
+                .and_then(|w| gui_tree::rect(r, i, w, GAME).ok()))
         })
-        .map_err(|_| {
-            Error::new(
+        .ok()
+        .flatten()
+        .filter(|rect| rect.w > 10 && rect.h > 5);
+        // The dropdown's own rectangles read wrong in the designer opened from a template's Edit
+        // (the arrow read at 721,241 while drawn near 470,294; live 6 Nov 2026), while its
+        // priority buttons read right: the name box centre lies (-250, -38) from
+        // priority_button_1's corner in divisiondesignerview.gui (name at 175,62 size 185x20;
+        // priority_button_1 at 517,110).
+        let by_priority = read(process, |r, i| {
+            Ok(
+                super::panelkit::find(r, i, root(r, i)?, "priority_button_1", 5)?
+                    .and_then(|w| gui_tree::rect(r, i, w, GAME).ok()),
+            )
+        })
+        .ok()
+        .flatten()
+        .map(|p| (f64::from(p.x) - 250.0, f64::from(p.y) - 38.0));
+        let edit = by_priority
+            .map(|(px, py)| gui_tree::Rect {
+                x: (px - 1.0) as i32,
+                y: (py - 1.0) as i32,
+                w: 2,
+                h: 2,
+            })
+            .or(edit);
+        let mut points: Vec<f64> = Vec::new();
+        if let Some(rect) = edit {
+            let (ex, _) = rect.center();
+            points.push(x - ex);
+        }
+        points.extend([110.0, -90.0, -150.0, -50.0, 60.0, 170.0]);
+        let name_y = edit.map(|rect| rect.center().1).unwrap_or(y);
+        // The first point is also tried a little lower: the estimate sits on the box's top edge
+        // (y 251 while the box spans about 249..276 on screen, live 6 Nov 2026).
+        let mut tries: Vec<(f64, f64)> = Vec::new();
+        for (n, dx) in points.into_iter().enumerate() {
+            if n == 0 && edit.is_some() {
+                tries.push((dx, name_y + 11.0));
+                tries.push((dx, name_y + 6.0));
+                tries.push((dx, name_y));
+            } else {
+                tries.push((dx, y));
+            }
+        }
+        for (dx, y) in tries {
+            keys.click(GAME, x - dx, y)?;
+            std::thread::sleep(Duration::from_millis(250));
+            keys.press_code(crate::platform::game_input::vk::END)?; // End
+            keys.press_code(crate::platform::game_input::vk::DELETE)?;
+            if wait(process, "name box focused", |r, i| {
+                Ok(typed_name(r, i)?.chars().count() == length - 1)
+            })
+            .is_ok()
+            {
+                focused = true;
+                break;
+            }
+        }
+        if !focused {
+            return Err(Error::new(
                 "input_readback_failed",
                 "The name box did not take the keyboard focus",
-            )
-        })?;
+            ));
+        }
+        length -= 1;
+    } else {
+        keys.click(GAME, x - 110.0, y)?;
+        std::thread::sleep(Duration::from_millis(250));
     }
     while length > 0 {
         keys.press_code(crate::platform::game_input::vk::DELETE)?;
         length -= 1;
         wait(process, "name erased", |r, i| {
-            Ok(draft(r, i)?.name.chars().count() == length)
+            Ok(typed_name(r, i)?.chars().count() == length)
         })?;
     }
     let mut typed = String::new();
@@ -807,7 +893,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
             keys.press_code(code)?;
         }
         typed.push(c);
-        wait(process, "name key", |r, i| Ok(draft(r, i)?.name == typed))?;
+        wait(process, "name key", |r, i| Ok(typed_name(r, i)? == typed))?;
     }
     Ok(())
 }

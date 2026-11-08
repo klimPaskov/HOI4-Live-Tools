@@ -54,7 +54,19 @@ pub(super) fn own_fleets(process: &dyn Process) -> Result<Vec<Fleet>> {
 }
 
 fn same_name(a: &str, b: &str) -> bool {
-    a.trim().eq_ignore_ascii_case(b.trim())
+    let (a, b) = (a.trim().to_lowercase(), b.trim().to_lowercase());
+    if a == b {
+        return true;
+    }
+    // The fleet panel's title box holds at most 31 characters ("Comando Navale Ionio e Basso Ad"
+    // for "Comando Navale Ionio e Basso Adriatico", live 6 Nov 2026): a cut title matches the full
+    // name it starts.
+    let (short, long) = if a.chars().count() < b.chars().count() {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    short.chars().count() >= 30 && long.starts_with(&short)
 }
 
 // ---- planning (pure, before any input) -------------------------------------------------------
@@ -258,10 +270,25 @@ pub(super) fn region_present_now(
     fleet: &str,
     region: &str,
 ) -> Result<Option<bool>> {
+    let canonical = canonical_region(process, region);
     Ok(own_fleets(process)?
         .iter()
         .find(|f| same_name(&f.name, fleet))
-        .map(|f| f.regions.iter().any(|(_, n)| same_name(n, region))))
+        .map(|f| {
+            f.regions.iter().any(|(_, n)| {
+                same_name(n, region) || canonical.as_deref().is_some_and(|c| same_name(n, c))
+            })
+        }))
+}
+/// The game's display name of the sea region `region` names (exact or a unique part), from the
+/// game's or a mod's map and localisation files.
+pub(super) fn canonical_region(process: &dyn Process, region: &str) -> Option<String> {
+    let dir = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())?;
+    let names = super::airread::region_names(&dir);
+    let id = super::airact::pick_region(&names, region).ok()?;
+    names.get(&id).cloned()
 }
 
 // ---- driving the navy UI ---------------------------------------------------------------------
@@ -360,6 +387,23 @@ pub(super) fn select_fleet(
     }
     close_region_view(process, keys)?;
     let cards = settled(process, "fleet cards", nui::cards)?;
+    let wanted_tfs: Vec<String> = own_fleets(process)
+        .ok()
+        .and_then(|fleets| {
+            fleets
+                .into_iter()
+                .find(|f| same_name(&f.name, name))
+                .map(|f| {
+                    let mut names: Vec<String> = f
+                        .task_forces
+                        .iter()
+                        .map(|t| t.name.to_lowercase())
+                        .collect();
+                    names.sort();
+                    names
+                })
+        })
+        .unwrap_or_default();
     let wanted = order
         .iter()
         .position(|n| same_name(n, name))
@@ -375,19 +419,41 @@ pub(super) fn select_fleet(
         let x = f64::from(card.frame.x) + f64::from(card.frame.w) / 2.0;
         let y = (f64::from(card.frame.y) + f64::from(card.frame.h) / 2.0).min(1040.0);
         click_at(keys, x, y)?;
-        // The panel's title edit box is filled while the panel opens; a read in that moment can see
-        // a half-written string (invalid_string, seen live on 1.19.4.1, 31 October 2026), so a failed
-        // read counts as "not open yet" here.
-        let ok = wait(process, "fleet panel", |r, i| {
-            Ok(nui::panel_fleet(r, i).ok().flatten().is_some())
-        });
-        if ok.is_ok() {
-            pause(250);
-            if read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?
-                .is_some_and(|n| same_name(&n, name))
-            {
+        // The title of a panel that was open before can still read for a moment after the
+        // click (a stale 'Italy Fleet 1' made the right card look wrong, and the second click
+        // on it closed the panel; live 6 Nov 2026): wait for the wanted title itself.
+        // A half-written title read (invalid_string) counts as not yet.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+        loop {
+            // The title edit box does not always read (long names: invalid_string, live 6 Nov
+            // 2026), so the panel also counts as the wanted fleet's when its object points at
+            // that fleet.
+            let by_title = read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?
+                .is_some_and(|n| same_name(&n, name));
+            // The panel's task forces (read from the navies view's own list, reliable) equal
+            // the wanted fleet's.
+            let by_task_forces = !wanted_tfs.is_empty()
+                && read(process, |r, i| Ok(nui::entries(r, i).ok()))
+                    .ok()
+                    .flatten()
+                    .is_some_and(|shown| {
+                        let mut names: Vec<String> =
+                            shown.iter().map(|e| e.name.to_lowercase()).collect();
+                        names.sort();
+                        names == wanted_tfs
+                    });
+            if by_title || by_task_forces {
+                pause(200);
                 return Ok(());
             }
+            if std::time::Instant::now() >= deadline {
+                eprintln!(
+                    "select_fleet5: want {name} card {index} title now {:?}",
+                    read(process, |r, i| Ok(format!("{:?}", nui::panel_fleet(r, i))))
+                );
+                break;
+            }
+            pause(60);
         }
     }
     Err(Error::new(
@@ -426,8 +492,25 @@ pub(super) fn select_task_force(
         }
         let (top, bottom) = (250, 1000);
         if entry.select.y < top || entry.select.y + entry.select.h > bottom {
-            let pixels = if entry.select.y < top { 240 } else { -240 };
-            keys.scroll(GAME, (200.0, 600.0), pixels)?;
+            // One glide brings the entry into the panel's list, then it is looked at afresh.
+            let want = name.to_string();
+            super::glide::glide(
+                process,
+                keys,
+                &super::glide::Glide {
+                    at: (200.0, 600.0),
+                    pixels: 240,
+                    band: (f64::from(top), f64::from(bottom)),
+                    search: 0,
+                },
+                || Ok(()),
+                move |r, i| {
+                    Ok(nui::entries(r, i)?
+                        .iter()
+                        .find(|e| same_name(&e.name, &want))
+                        .map(|e| super::glide::span_y(&e.select)))
+                },
+            )?;
             pause(250);
             continue;
         }
@@ -534,11 +617,86 @@ pub(super) fn find_region_point(
     keys: &dyn GameInput,
     state: i32,
     region: &str,
-) -> Result<((f64, f64), Vec<String>)> {
+) -> Result<((f64, f64), Vec<String>, String)> {
     close_panel(process, keys)?;
     close_region_view(process, keys)?;
     find_state(process, keys, state)?;
     let mut seen: Vec<String> = Vec::new();
+    let mut canonical: Option<String> = None;
+    // Direct first: the region's own sea provinces from the game's (or a mod's) map files,
+    // projected on screen. A unique part of the name is enough ("Central Mediterranean").
+    // The blind probe below took 48 s to give up on a near-miss name (live 6 Nov 2026).
+    if let Some(dir) = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())
+    {
+        let names = super::airread::region_names(&dir);
+        let picked = super::airact::pick_region(&names, region);
+        if let (Err(e), false) = (&picked, names.is_empty()) {
+            // Not a region of this game (or mod): say so at once instead of probing the map.
+            return Err(Error::new("region_unknown", e.message.clone()));
+        }
+        if let Ok(id) = picked {
+            let name_of = names
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| region.to_string());
+            canonical = Some(name_of.clone());
+            let canonical = name_of;
+            let positions = super::mapdata::positions(&dir)?;
+            let provinces: Vec<i32> = super::mapdata::province_regions(&dir)?
+                .iter()
+                .filter(|(_, r)| **r == id)
+                .map(|(p, _)| *p)
+                .collect();
+            let mut points = read(process, |r, i| {
+                let mut pts = Vec::new();
+                for p in &provinces {
+                    if let Some(&(x, z)) = positions.get(p) {
+                        if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
+                            let in_theatre = s.0 > 1450.0 && s.1 < 330.0;
+                            let in_mission_bar = (640.0..=1200.0).contains(&s.0) && s.1 > 800.0;
+                            if (360.0..1700.0).contains(&s.0)
+                                && (150.0..880.0).contains(&s.1)
+                                && !in_theatre
+                                && !in_mission_bar
+                            {
+                                pts.push(s);
+                            }
+                        }
+                    }
+                }
+                Ok(pts)
+            })?;
+            points.sort_by(|a, b| {
+                let d = |p: &(f64, f64)| (p.0 - 960.0).powi(2) + (p.1 - 500.0).powi(2);
+                d(a).total_cmp(&d(b))
+            });
+            for (x, y) in points.into_iter().take(6) {
+                click_at(keys, x, y)?;
+                let mut found = None;
+                for _ in 0..16 {
+                    pause(70);
+                    if let Some(view) = read(process, nui::region_view)? {
+                        found = Some(view);
+                        break;
+                    }
+                }
+                match found {
+                    Some((name, _)) => {
+                        if !seen.iter().any(|s| same_name(s, &name)) {
+                            seen.push(name.clone());
+                        }
+                        close_region_view(process, keys)?;
+                        if same_name(&name, &canonical) || same_name(&name, region) {
+                            return Ok(((x, y), seen, name));
+                        }
+                    }
+                    None => super::ui::close_state_view(process, keys)?,
+                }
+            }
+        }
+    }
     for (x, y) in probe_points().into_iter().take(PROBE_LIMIT) {
         click_at(keys, x, y)?;
         // The view opens within a moment for a sea region; land opens the state view instead.
@@ -556,8 +714,10 @@ pub(super) fn find_region_point(
                     seen.push(name.clone());
                 }
                 close_region_view(process, keys)?;
-                if same_name(&name, region) {
-                    return Ok(((x, y), seen));
+                if same_name(&name, region)
+                    || canonical.as_deref().is_some_and(|c| same_name(&name, c))
+                {
+                    return Ok(((x, y), seen, name));
                 }
             }
             None => {
@@ -582,7 +742,7 @@ pub(super) fn region_op(
     clear_notices(process, keys)?;
     enter_navy_mode(process, keys)?;
     let result = (|| -> Result<Value> {
-        let ((x, y), seen) = find_region_point(process, keys, plan.state, &plan.region)?;
+        let ((x, y), seen, matched) = find_region_point(process, keys, plan.state, &plan.region)?;
         select_fleet(process, keys, &plan.fleet, &plan.order)?;
         if plan.remove {
             let (rect, state) = settled(process, "remove regions button", |r, i| {
@@ -602,7 +762,7 @@ pub(super) fn region_op(
         }
         keys.right_click(GAME, x, y)?;
         let fleet = plan.fleet.clone();
-        let region = plan.region.clone();
+        let region = matched.clone();
         let remove = plan.remove;
         wait(process, "fleet area changed", move |r, i| {
             let (country, _) = economy::own_production(r, i)?;
@@ -786,7 +946,7 @@ pub(super) fn assign_admiral(
                 .into_iter()
                 .find(|a| same_name(&a.name, wanted)))
         };
-        let Some(mut row) = settled(process, "admiral list", find)? else {
+        let Some(_) = settled(process, "admiral list", find)? else {
             let names: Vec<String> = read(process, nui::leader_rows)?
                 .into_iter()
                 .map(|a| a.name)
@@ -797,19 +957,35 @@ pub(super) fn assign_admiral(
             ));
         };
         let band = read(process, nui::leader_band)?;
-        for _ in 0..40 {
-            let bottom = row.icon.y + row.icon.h;
-            let top = bottom - nui::PORTRAIT_DRAWN;
-            if top >= band.0 && bottom <= band.1 {
-                break;
-            }
-            if !read(process, |r, i| Ok(nui::leader_open(r, i).unwrap_or(false)))? {
-                return Err(Error::new("input_readback_failed", "Commander list closed"));
-            }
-            keys.scroll(GAME, (960.0, 560.0), if top < band.0 { 240 } else { -240 })?;
-            pause(250);
-            row = read(process, find)?
-                .ok_or_else(|| Error::new("gui_target_unavailable", "The admiral left the list"))?;
+        // The drawn portrait (the row's lower part) glides into the list band in one movement.
+        let outcome = super::glide::glide(
+            process,
+            keys,
+            &super::glide::Glide {
+                at: (960.0, 560.0),
+                pixels: 240,
+                band: (f64::from(band.0), f64::from(band.1)),
+                search: 0,
+            },
+            || {
+                if read(process, |r, i| Ok(nui::leader_open(r, i).unwrap_or(false)))? {
+                    Ok(())
+                } else {
+                    Err(Error::new("input_readback_failed", "Commander list closed"))
+                }
+            },
+            |r, i| {
+                Ok(find(r, i)?.map(|a| {
+                    let bottom = f64::from(a.icon.y + a.icon.h);
+                    (bottom - f64::from(nui::PORTRAIT_DRAWN), bottom)
+                }))
+            },
+        )?;
+        if outcome == super::glide::Glided::Unknown {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "The admiral left the list",
+            ));
         }
         let row = settled(process, "admiral row", |r, i| {
             find(r, i)?
@@ -988,6 +1164,23 @@ mod tests {
     use super::super::naval::{Fleet, TaskForce};
     use super::super::settle::Verdict;
     use super::*;
+    #[test]
+    fn a_fleet_title_cut_at_31_characters_matches_its_full_name_only() {
+        assert!(same_name(
+            "Comando Navale Ionio e Basso Ad",
+            "Comando Navale Ionio e Basso Adriatico"
+        ));
+        assert!(same_name(
+            "comando navale sicilia",
+            "Comando Navale Sicilia"
+        ));
+        // short names never match by prefix
+        assert!(!same_name("Comando Navale", "Comando Navale Sicilia"));
+        assert!(!same_name(
+            "Comando Navale Ionio e Basso Ad",
+            "Comando Navale Ionio e Basso Tirreno"
+        ));
+    }
 
     fn tf(name: &str, code: i32) -> TaskForce {
         TaskForce {

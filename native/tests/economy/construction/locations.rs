@@ -84,7 +84,8 @@ fn default_does_not_touch_any_location_even_when_foreign_or_invalid() {
 }
 #[test]
 fn foreign_owner_or_controller_excludes_ids_and_building_membership_payload() {
-    for offset in [0xc8, 0xcc] {
+    {
+        let offset = 0xcc;
         let mut f = located();
         f.number(STATE + offset, 2);
         let v = observe(&f).unwrap();
