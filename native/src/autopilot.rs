@@ -84,6 +84,13 @@ impl Autopilot {
             }
         }
     }
+    /// Time until the next step is due (tests).
+    #[cfg(test)]
+    fn wait_left(&self) -> Option<Duration> {
+        let on = self.on.lock().ok()?;
+        on.as_ref()
+            .map(|on| on.next.saturating_duration_since(Instant::now()))
+    }
     pub fn set_in_step(&self, on: bool) {
         self.in_step.store(on, Ordering::SeqCst);
     }
@@ -132,16 +139,18 @@ impl Autopilot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Waits are checked as durations, not by sleeping past them: a loaded CI runner overslept
+    // a 60 ms sleep into the next window (8 Nov 2026).
     #[test]
     fn quiet_steps_wait_for_the_interval_and_acting_steps_run_again() {
         let a = Autopilot::default();
         assert!(a.due().is_none());
-        a.enable("t", Duration::from_millis(80));
+        a.enable("t", Duration::from_secs(10));
         assert_eq!(a.due().as_deref(), Some("t"));
         a.ran(0, None);
         assert!(a.due().is_none());
-        std::thread::sleep(Duration::from_millis(90));
-        assert!(a.due().is_some());
+        let left = a.wait_left().unwrap();
+        assert!(left > Duration::from_secs(9) && left <= Duration::from_secs(10));
         a.ran(1, Some("x".into()));
         assert!(a.due().is_some());
         assert_eq!(a.status()["actions"], 1);
@@ -151,13 +160,20 @@ mod tests {
     #[test]
     fn failing_steps_back_off() {
         let a = Autopilot::default();
-        a.enable("t", Duration::from_millis(50));
+        a.enable("t", Duration::from_secs(1));
+        let around = |want: u64| {
+            let left = a.wait_left().unwrap();
+            left > Duration::from_millis(want * 1000 - 500) && left <= Duration::from_secs(want)
+        };
         a.ran_with(1, 0, Some("x: false".into()));
         assert!(a.due().is_none(), "a failed step does not rerun at once");
-        std::thread::sleep(Duration::from_millis(60));
-        assert!(a.due().is_none(), "the wait doubled");
-        std::thread::sleep(Duration::from_millis(60));
-        assert!(a.due().is_some());
+        assert!(around(2), "one failure doubles the wait");
+        a.ran_with(1, 0, Some("x: false".into()));
+        assert!(around(4), "two failures double it again");
+        for _ in 0..10 {
+            a.ran_with(1, 0, None);
+        }
+        assert!(around(30), "capped at 30 s");
         a.ran_with(1, 1, None);
         assert!(a.due().is_some(), "a success reruns at once");
     }

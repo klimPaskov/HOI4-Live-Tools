@@ -310,14 +310,16 @@ mod lane_tests {
     #[test]
     fn a_read_returns_while_an_action_runs() {
         let lines = request(1, "act") + &request(2, "read");
-        let (out, start) = run(&lines, 300);
+        // Wide margins: the read must answer well before the slow action ends, even on a
+        // loaded CI runner.
+        let (out, start) = run(&lines, 1000);
         let at = |id| out.iter().find(|(i, _)| *i == id).unwrap().1 - start;
         assert!(
-            at(2) < Duration::from_millis(150),
+            at(2) < Duration::from_millis(600),
             "read waited {:?}",
             at(2)
         );
-        assert!(at(1) >= Duration::from_millis(300));
+        assert!(at(1) >= Duration::from_millis(1000));
     }
     #[test]
     fn actions_keep_their_order_and_every_request_gets_one_reply() {
