@@ -273,14 +273,23 @@ class ToolLevel(Folders):
             self.assertFalse(session.dlc_prepared)
             self.assertIsNone(self.get(self.target, "dlc_signature"))
 
-    def test_steam_running_stops_the_prepare(self):
+    def test_steam_running_stops_the_prepare_when_opted_in(self):
         session = self.make_session()
         p1, p2 = self.patches(steam=[("steam.exe", 1)])
-        with p1, p2:
+        with p1, p2, mock.patch.dict(os.environ, {"HOI4_LIVE_REQUIRE_STEAM_CLOSED": "1"}):
             out = self.call(session)
         self.assertTrue(out["isError"])
         self.assertIn("Steam is running", out["content"][0]["text"])
         self.assertIsNone(self.get(self.target, "dlc_signature"))
+
+    def test_steam_running_does_not_stop_the_prepare_by_default(self):
+        session = self.make_session()
+        p1, p2 = self.patches(steam=[("steam.exe", 1)])
+        env = {k: v for k, v in os.environ.items() if k != "HOI4_LIVE_REQUIRE_STEAM_CLOSED"}
+        with p1, p2, mock.patch.dict(os.environ, env, clear=True):
+            out = self.call(session)
+        self.assertFalse(out["isError"], out)
+        self.assertEqual(self.get(self.target, "dlc_signature"), SIG)
 
     def test_a_running_game_stops_both_apply_and_restore(self):
         session = self.make_session()

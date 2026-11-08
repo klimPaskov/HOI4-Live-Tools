@@ -317,6 +317,7 @@ summary every week as `HOI4LIVE` lines in `game.log`, which the server reads inc
 | `dlc_source_dir` | `auto` | the folder `hoi4_prepare` copies `launcher-v2.sqlite` and `dlc_signature` from (your normal user folder) |
 | `artifacts_dir` | `artifacts` | screenshots, popup crops, scenario reports and the server log (`artifacts/logs/hoi4_live.log`) |
 | `mode` | `campaign` | initial session mode; set `test` (or `HOI4_LIVE_MODE=test`) for mod testing, because a campaign session cannot return to test mode |
+| `HOI4_LIVE_REQUIRE_STEAM_CLOSED` (environment only) | unset | set to `1` to refuse a launch while a Steam client or steamcmd runs (also read by the native Linux supervisor) |
 | `save_prefix` | `hoi4live_` | prefix of every save the server writes |
 | `lock.path`, `lock.stale_seconds` | `%TEMP%/hoi4_live_desktop.lock`, 600 | the shared desktop lock |
 | `window.pin_client_to_origin` | true | keep a windowed game's client area at the screen's top-left (as other desktop tools on the machine expect) |
