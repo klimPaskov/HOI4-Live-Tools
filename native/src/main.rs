@@ -216,10 +216,9 @@ fn watch_loop(
     }
 }
 
-/// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
-#[cfg(target_os = "macos")]
 /// Step errors that end the executor: its authority or its game is gone, or the plan cannot be
 /// used. Everything else is retried with backoff.
+#[cfg(target_os = "macos")]
 fn autopilot_stops_on(code: &str) -> bool {
     code.contains("lease")
         || matches!(
@@ -235,6 +234,8 @@ fn autopilot_stops_on(code: &str) -> bool {
                 | ""
         )
 }
+/// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
+#[cfg(target_os = "macos")]
 fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Commands) -> bool {
     use hoi4_live_native::{autopilot::autopilot, watch::feed};
     let Some(token) = autopilot().due() else {
@@ -294,7 +295,7 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
     true
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod autopilot_stop_tests {
     #[test]
     fn transient_errors_back_off_and_lost_authority_stops() {
