@@ -99,7 +99,8 @@ class Runner:
             return 0, ""
         e = dict(os.environ)
         e.update(env or {})
-        p = subprocess.run(argv, cwd=ROOT, env=e, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(argv, cwd=ROOT, env=e, capture_output=True, text=True, timeout=timeout,
+                           encoding="utf-8", errors="replace")
         return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 

@@ -178,7 +178,8 @@ DEFAULT_BINARY = os.path.join(ROOT, "native", "target", "release", "hoi4-live-na
 def from_binary(binary=DEFAULT_BINARY):
     """The authoritative catalogue: `hoi4-live-native --list-tools` (no game or session needed)."""
     import subprocess
-    out = subprocess.run([binary, "--list-tools"], capture_output=True, text=True, timeout=60, check=True).stdout
+    out = subprocess.run([binary, "--list-tools"], capture_output=True, text=True, timeout=60, check=True,
+                         encoding="utf-8").stdout
     tools = {}
     for t in json.loads(out)["tools"]:
         tools.setdefault(t["name"], {"description": t.get("description", ""),
