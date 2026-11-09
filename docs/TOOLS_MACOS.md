@@ -123,7 +123,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_air_wing_merge` (A): Merge own air wings of one aircraft type at one air base with the toolbar's Merge button.
 - `hoi4_air_wing_split` (A): Split one own air wing in two halves with the toolbar's Split button (shortcut D) after selecting it in the Air Forces Overview:
 - `hoi4_air_wings` (A): Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it).
-- `hoi4_convoys` (R): Own convoy count (equal to the top bar), own naval bases with level, and the convoy production lines, read from game memory (no input, never pauses).
+- `hoi4_convoys` (R): Own convoys read from game memory (no input, never pauses):
 - `hoi4_fleet_admiral` (A): Put an admiral in command of an own fleet (or unassign with unassign:true) through the fleet panel's 'Select Commander' list:
 - `hoi4_fleet_assign` (A): UNVALIDATED (no live test yet) - Move one own task force into another own fleet:
 - `hoi4_fleet_balance` (A): UNVALIDATED (no live test yet) - Rebalance the ships of one own fleet's task forces with the toolbar's Task-force-o-matic button (btn_taskforce_o_matic;
@@ -156,6 +156,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_railway_build` (A): Queue ONE railway with the game's railway construction mode:
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
 - `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.
+- `hoi4_stockpile` (R): Own equipment stockpile from game memory (no input, no lease, never pauses).
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
 - `hoi4_war_stats` (R): Read-only (memory, no input, no pause):
 

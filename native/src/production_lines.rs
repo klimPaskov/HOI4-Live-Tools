@@ -5,6 +5,7 @@
 pub mod control_snapshot;
 pub(crate) mod controls;
 mod equipment;
+pub(crate) mod output;
 use crate::{
     economy,
     error::{Error, Result},
@@ -272,6 +273,11 @@ fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collect
     let mut handles = BTreeSet::new();
     let mut anomalous = 0;
     let mut equipment_catalog = None;
+    // Country-wide efficiency inputs (cap and start); the owner join is the one own_production checks.
+    let efficiency = reader
+        .u64(production + game::layout(reader).production(0x290))
+        .and_then(|country| output::efficiency_inputs(reader, base, country))
+        .ok();
     let mut equipment_unavailable = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = reader.u64(line)?;
@@ -331,6 +337,7 @@ fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collect
             "factory_counters":{"active_factories_raw_signed":active,"damaged_factories_raw_signed":damaged,
                 "requested_factories_raw_signed":requested,"available_under_reviewed_policy":within_policy,
                 "unavailable_reason":if within_policy {Value::Null} else {json!("anomalous_counter_policy")}},
+            "output":output::observe(reader, line, kind == "naval", efficiency.as_ref()),
             "input_authorized":false}));
     }
     Ok(Collection {

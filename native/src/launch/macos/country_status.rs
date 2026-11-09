@@ -450,7 +450,24 @@ pub(super) fn status(process: &dyn Process) -> Result<Value> {
     let started = Instant::now();
     let s = read(process, snapshot)?;
     let (fields, unavailable) = build_fields(&s.texts);
+    // Memory reads beside the top-bar text: a failure leaves the field null with its reason.
+    let player = s.context.player.clone();
+    let (balances, balances_error) = match read(process, super::bop::balances) {
+        Ok(list) => (
+            json!(list.iter().map(|b| b.json(&player)).collect::<Vec<_>>()),
+            Value::Null,
+        ),
+        Err(e) => (Value::Null, json!({"code": e.code, "message": e.message})),
+    };
+    let (convoys, convoys_error) = match read(process, super::naval::convoy_counts) {
+        Ok(c) => (c.json(), Value::Null),
+        Err(e) => (Value::Null, json!({"code": e.code, "message": e.message})),
+    };
     Ok(json!({
+        "balances_of_power":balances,
+        "balances_of_power_error":balances_error,
+        "convoys":convoys,
+        "convoys_error":convoys_error,
         "source":"native own country status",
         "build_id":s.build_id,
         "owned":true,
@@ -469,7 +486,7 @@ pub(super) fn status(process: &dyn Process) -> Result<Value> {
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_country_status","description":"Own country status read from the top bar's text boxes in GUI memory: political power, stability, war support, manpower (free), fuel, supply, convoys and world tension. Pure read; no lease needed, no input, no cursor movement, never pauses. Every field is {value, unit, display, raw_text, precision, source:'topbar_text', validated:false}; values are the UI-rounded text the game shows (stability, war support and world tension as 0..1 fractions, manpower and convoys as counts). A field that cannot be read is value:null with a reason (widget_not_found, text_unreadable, text_empty, topbar_text_unparsed) and is listed in 'unavailable'. Fails with topbar_unmaterialized in menus. Unvalidated until the live checks of docs/COUNTRY_STATUS_WARS_DESIGN.md are recorded.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"hoi4_country_status","description":"Own country status read from the top bar's text boxes in GUI memory: political power, stability, war support, manpower (free), fuel, supply, convoys and world tension. Pure read; no lease needed, no input, no cursor movement, never pauses. Every field is {value, unit, display, raw_text, precision, source:'topbar_text', validated:false}; values are the UI-rounded text the game shows (stability, war support and world tension as 0..1 fractions, manpower and convoys as counts). A field that cannot be read is value:null with a reason (widget_not_found, text_unreadable, text_empty, topbar_text_unparsed) and is listed in 'unavailable'. Fails with topbar_unmaterialized in menus. Unvalidated until the live checks of docs/COUNTRY_STATUS_WARS_DESIGN.md are recorded. Beside the top bar, read from game memory: balances_of_power, every active balance of power in the world (id, owners as tags, own: true when the player owns it, value -1..1, range {min,max} the value stands in, side it leans to, left_side, right_side; ETH has one at the 1936 start, others come from focuses and events), and convoys {total, in_use, free, needed} (free is the top-bar figure).","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 #[cfg(test)]

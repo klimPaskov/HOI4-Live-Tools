@@ -326,7 +326,7 @@
    "source": "--list-tools"
   },
   "hoi4_armies": {
-   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
+   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1317,7 +1317,7 @@
    "source": "--list-tools"
   },
   "hoi4_convoys": {
-   "description": "Own convoy count (equal to the top bar), own naval bases with level, and the convoy production lines, read from game memory (no input, never pauses). Needed convoys, escorts, convoys in use, convoy routes and lost convoys are not mapped and are listed under unavailable.",
+   "description": "Own convoys read from game memory (no input, never pauses): convoys.total (in stock), in_use (trade, supply and transfers), free (total minus in use, the figure the top bar shows) and needed; own naval bases with level; the convoy production lines. Escorts, convoy routes and lost convoys are not mapped and are listed under unavailable.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -1326,7 +1326,7 @@
    "source": "--list-tools"
   },
   "hoi4_country_status": {
-   "description": "Own country status read from the top bar's text boxes in GUI memory: political power, stability, war support, manpower (free), fuel, supply, convoys and world tension. Pure read; no lease needed, no input, no cursor movement, never pauses. Every field is {value, unit, display, raw_text, precision, source:'topbar_text', validated:false}; values are the UI-rounded text the game shows (stability, war support and world tension as 0..1 fractions, manpower and convoys as counts). A field that cannot be read is value:null with a reason (widget_not_found, text_unreadable, text_empty, topbar_text_unparsed) and is listed in 'unavailable'. Fails with topbar_unmaterialized in menus. Unvalidated until the live checks of docs/COUNTRY_STATUS_WARS_DESIGN.md are recorded.",
+   "description": "Own country status read from the top bar's text boxes in GUI memory: political power, stability, war support, manpower (free), fuel, supply, convoys and world tension. Pure read; no lease needed, no input, no cursor movement, never pauses. Every field is {value, unit, display, raw_text, precision, source:'topbar_text', validated:false}; values are the UI-rounded text the game shows (stability, war support and world tension as 0..1 fractions, manpower and convoys as counts). A field that cannot be read is value:null with a reason (widget_not_found, text_unreadable, text_empty, topbar_text_unparsed) and is listed in 'unavailable'. Fails with topbar_unmaterialized in menus. Unvalidated until the live checks of docs/COUNTRY_STATUS_WARS_DESIGN.md are recorded. Beside the top bar, read from game memory: balances_of_power, every active balance of power in the world (id, owners as tags, own: true when the player owns it, value -1..1, range {min,max} the value stands in, side it leans to, left_side, right_side; ETH has one at the 1936 start, others come from focuses and events), and convoys {total, in_use, free, needed} (free is the top-bar figure).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -3463,7 +3463,7 @@
    "source": "--list-tools"
   },
   "hoi4_production_lines": {
-   "description": "Fresh own equipment-line collection only, validated in full before paging; default page 32. Exact Military/Naval snapshot-scoped opaque handles and signed active/damaged/requested factory counters. Unsupported types are metadata only, ownership unproved; completeness describes this collection's type coverage. Known owned lines can expose a base equipment type key after fresh canonical membership and variant/type checks; explicit unavailability covers unreviewed types. Custom variant identity, general production, allocation/idle capacity, eligibility and input authority unavailable. Pure reads; never pauses.",
+   "description": "Fresh own equipment-line collection only, validated in full before paging; default page 32. Exact Military/Naval snapshot-scoped opaque handles and signed active/damaged/requested factory counters. Unsupported types are metadata only, ownership unproved; completeness describes this collection's type coverage. Known owned lines can expose a base equipment type key after fresh canonical membership and variant/type checks; explicit unavailability covers unreviewed types. Custom variant identity, general production, allocation/idle capacity, eligibility and input authority unavailable. Each line also has `output` (macOS build): unit_cost (IC per unit), ic_last_day (IC put in on the last daily tick), units_per_day, progress (0..1 of the unit in progress, a ship's completion) with progress_ic and days_to_next_unit, units_left (null = runs until stopped), and for military lines efficiency (percent, mean of the working factory slots), efficiency_min, efficiency_cap (the line's cap with country modifiers and its organisation bonus), efficiency_start (a new line's start) and at_cap. Naval lines have no efficiency. Pure reads; never pauses.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3947,6 +3947,32 @@
     "required": [
      "query"
     ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_stockpile": {
+   "description": "Own equipment stockpile from game memory (no input, no lease, never pauses). Per archetype (infantry_equipment, support_equipment, artillery_equipment, motorized_equipment = trucks, light_tank_chassis, ...): stockpile (pieces in storage), variants (each design in storage: type key, design_id, amount), produced_per_day (what the own production lines put out on the last daily tick, with the lines and factories behind it), fielded_need / fielded_have / fielded_short (what the own divisions need, hold and still lack: the stockpile is drawn into them first), cover_after_shortfall (stockpile minus what the divisions lack; negative = the stockpile cannot even fill them), net_per_day (the change of the stockpile per game day measured by this server over up to 30 game days; null until it has seen two game days), consumption_per_day (produced minus net), days_of_cover (stockpile / daily loss; 0 when the divisions already lack more than is stored) with depleting (false = the stock is not falling, days_of_cover null). `equipment` limits the answer to archetypes or variant type keys (a string or a list). Stockpile amounts were checked against the history files that create them; the trend needs the game to run.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "equipment": {
+      "anyOf": [
+       {
+        "maxLength": 96,
+        "type": "string"
+       },
+       {
+        "items": {
+         "maxLength": 96,
+         "type": "string"
+        },
+        "maxItems": 32,
+        "type": "array"
+       }
+      ]
+     }
+    },
     "type": "object"
    },
    "source": "--list-tools"

@@ -53,10 +53,18 @@ const SHIP_XP: u64 = 0x6d0;
 const SHIP_MORALE: u64 = 0x6d8;
 const SHIP_XP_FACTOR: u64 = 0x6e8;
 const SHIP_NAME: u64 = 0x7d0;
-/// Own convoy count: the embedded CConvoys at country+0xf88, field +0x88
-/// (194 in memory and on the top bar on 10 April 1938).
+/// Own convoys: the embedded CConvoys at country+0xf88. Mapped live and from the top bar's
+/// code on 9 November 2026 (Italy, 1 January 1936): +0x10 is the convoy stock, a
+/// CEquipmentVariantPool (200 convoy_1); +0x78 flags and +0x80 caches its total (i64
+/// 1/100000); +0x6c are the convoys in use (32: trade); the top bar shows total - in use
+/// (168, read from its text) - the function at 0x100759815 subtracts +0x6c from the cached
+/// total. +0x68 is a second count (32, equal to in use while every demand is met; read as
+/// the convoys needed, not compared with a screen). The older +0x88 (199) is not the top-bar
+/// figure.
 const COUNTRY_CONVOYS: u64 = 0xf88;
-const CONVOYS_COUNT: u64 = 0x88;
+const CONVOYS_POOL: u64 = 0x10;
+const CONVOYS_NEEDED: u64 = 0x68;
+const CONVOYS_IN_USE: u64 = 0x6c;
 const STRATEGIC_NAVY_BASES: u64 = 0x18;
 const NAVAL_BASE_VTABLE: u64 = 0x351cf18;
 const NAVAL_BASE_PROVINCE: u64 = 0x10;
@@ -353,13 +361,11 @@ pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> 
     if !args.is_empty() {
         return Err(Error::new("invalid_arguments", "Unexpected argument"));
     }
-    let (total, bases, lines) = super::ui::read(process, |r, image| {
-        let (country, _) = economy::own_production(r, image)?;
-        let convoys = country + at(r, &COUNTRY, COUNTRY_CONVOYS)? + at(r, &CONVOYS, CONVOYS_COUNT)?;
-        let total = r.i32(convoys)?;
+    let (counts, bases, lines) = super::ui::read(process, |r, image| {
+        let counts = convoy_counts(r, image)?;
         let bases = naval_bases(r, image)?;
         let lines = production_lines::own_lines(r, image)?;
-        Ok((total, bases, lines))
+        Ok((counts, bases, lines))
     })?;
     let convoy_lines: Vec<Value> = lines
         .iter()
@@ -368,20 +374,50 @@ pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> 
             |l| json!({"line_handle":l.handle,"equipment":l.key,"requested_factories":l.requested}),
         )
         .collect();
-    let mut v = convoys_json(total, &bases, convoy_lines);
+    let mut v = convoys_json(&counts, &bases, convoy_lines);
     v["naval_lines_other"] = json!(lines
         .iter()
         .filter(|l| l.naval && !l.key.as_deref().is_some_and(|k| k.starts_with("convoy")))
         .count());
     Ok(v)
 }
-fn convoys_json(total: i32, bases: &[NavalBase], lines: Vec<Value>) -> Value {
-    json!({"convoys":{"total":total,"source":"memory:country+0xf88+0x88","validated":true,
-            "evidence":"equal to the top-bar convoy figure (194) on 10 April 1938"},
+/// Own convoys: total in stock, in use, free (what the top bar shows) and needed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ConvoyCounts {
+    pub total: i64,
+    pub in_use: i64,
+    pub needed: i64,
+}
+impl ConvoyCounts {
+    pub(super) fn free(&self) -> i64 {
+        self.total - self.in_use
+    }
+    pub(super) fn json(&self) -> Value {
+        json!({"total":self.total,"in_use":self.in_use,"free":self.free(),"needed":self.needed,
+            "source":"memory:country CConvoys (stock pool, in use +0x6c, needed +0x68)",
+            "validated":{"free":"equal to the top-bar convoy figure (168 of 200, 32 in use for trade) on 1 January 1936",
+                "total":"the convoy stock (200 = history convoys)","needed":"not compared with a screen"}})
+    }
+}
+/// The own convoy counts (see the constants).
+pub(super) fn convoy_counts(r: &Reader<'_>, image: u64) -> Result<ConvoyCounts> {
+    let (country, _) = economy::own_production(r, image)?;
+    let convoys = country + at(r, &COUNTRY, COUNTRY_CONVOYS)?;
+    let (archetypes, _) =
+        super::stockpile::pool_at(r, image, convoys + at(r, &CONVOYS, CONVOYS_POOL)?)?;
+    let total: f64 = archetypes.iter().map(|a| a.stock).sum();
+    Ok(ConvoyCounts {
+        total: total.round() as i64,
+        in_use: r.i32(convoys + at(r, &CONVOYS, CONVOYS_IN_USE)?)? as i64,
+        needed: r.i32(convoys + at(r, &CONVOYS, CONVOYS_NEEDED)?)? as i64,
+    })
+}
+fn convoys_json(counts: &ConvoyCounts, bases: &[NavalBase], lines: Vec<Value>) -> Value {
+    json!({"convoys":counts.json(),
         "naval_bases":bases.iter().map(|b| json!({"province":b.province.as_ref().map(|p| p.province),"level":b.level})).collect::<Vec<_>>(),
         "naval_bases_validated":"province and level matched history/states (241=8, 6332=5)",
         "convoy_production":lines,
-        "unavailable":{"needed":"not mapped","escorts":"not mapped","in_use":"not mapped",
+        "unavailable":{"escorts":"not mapped",
             "lost":"no stored counter found","routes":"SRegionalConvoyData is per region, layout not decoded"}})
 }
 
@@ -389,7 +425,7 @@ pub(super) fn fleets_schema() -> Value {
     json!({"name":"hoi4_fleets","description":"Own navy read from game memory (no panel, no input, never pauses): fleets, task forces (location: port province, state and strategic region; ship count by type; summed strength and percent; mission code and name: hold, patrol, strike_force, convoy_raiding, convoy_escort, training, reserve, invasion_support; admiral is per fleet) and per fleet the admiral and the assigned sea regions (fleet area of operation) and, with ships:true, every ship (id, name, type, hull, design/variant, strength, max strength, max organisation, experience, morale). Filter by fleet or task-force name with `fleet`. Morale and experience fields are validated:false; fuel, supply and current organisation are not mapped.","inputSchema":{"type":"object","properties":{"ships":{"type":"boolean","default":false},"fleet":{"type":"string","maxLength":64}},"additionalProperties":false}})
 }
 pub(super) fn convoys_schema() -> Value {
-    json!({"name":"hoi4_convoys","description":"Own convoy count (equal to the top bar), own naval bases with level, and the convoy production lines, read from game memory (no input, never pauses). Needed convoys, escorts, convoys in use, convoy routes and lost convoys are not mapped and are listed under unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"hoi4_convoys","description":"Own convoys read from game memory (no input, never pauses): convoys.total (in stock), in_use (trade, supply and transfers), free (total minus in use, the figure the top bar shows) and needed; own naval bases with level; the convoy production lines. Escorts, convoy routes and lost convoys are not mapped and are listed under unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 #[cfg(test)]
@@ -493,7 +529,11 @@ mod tests {
     #[test]
     fn convoy_json_reports_count_and_gaps() {
         let v = convoys_json(
-            194,
+            &ConvoyCounts {
+                total: 200,
+                in_use: 32,
+                needed: 32,
+            },
             &[NavalBase {
                 province: Some(Place {
                     province: 241,
@@ -504,7 +544,9 @@ mod tests {
             }],
             vec![],
         );
-        assert_eq!(v["convoys"]["total"], 194);
+        assert_eq!(v["convoys"]["total"], 200);
+        assert_eq!(v["convoys"]["free"], 168);
+        assert_eq!(v["convoys"]["in_use"], 32);
         assert_eq!(v["naval_bases"][0]["level"], 8);
         assert!(v["unavailable"]["escorts"].is_string());
     }
