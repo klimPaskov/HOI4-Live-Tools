@@ -27,10 +27,10 @@ PLAN_RUN = os.path.join(ROOT, "native", "src", "plan_run.rs")
 # The runner's child modules read plan keys too (plan_manage.rs: continuous management;
 # plan_military.rs: army groups, navy, invasions, casualty and air superiority rules;
 # plan_predicate.rs: the predicate evaluator; plan_affairs.rs: designs, diplomacy, faction, trade,
-# MIOs, intelligence, research bonuses). Missing files are skipped.
+# MIOs, intelligence, research bonuses; plan_war.rs: the war-step rules). Missing files are skipped.
 EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
                                  for name in ("plan_manage.rs", "plan_military.rs", "plan_predicate.rs",
-                                              "plan_affairs.rs")]
+                                              "plan_affairs.rs", "plan_war.rs")]
 ALARMS = os.path.join(ROOT, "native", "src", "alarms.rs")
 HAND_PLANS = [
     os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plans", name)
@@ -542,7 +542,11 @@ class CoverageKeys(unittest.TestCase):
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
                 # plan_military.rs: casualty ratio (rule 28) and air superiority (rule 27)
                 "casualty_ratio_max": 2.0, "casualty_window_days": 14, "casualty_min_losses": 1000,
-                "casualty_rest_days": 7, "enemy_air_superiority": 0.6, "air_hold_days": 10}
+                "casualty_rest_days": 7, "enemy_air_superiority": 0.6, "air_hold_days": 10,
+                # executor rules that act with or without `manage` (production, templates, invasions)
+                "rebalance_step": 3, "day0_production": True, "war_priority": True, "war_civs": False,
+                "mature_line_days": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
+                "invasion_techs": {}}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):

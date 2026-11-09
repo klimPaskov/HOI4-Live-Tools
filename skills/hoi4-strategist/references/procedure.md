@@ -669,12 +669,12 @@ the rule is a brief line (read, threshold, call) when the player must act.
 | Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`) | `alarms` |
 | Game alert row (`hoi4_alerts {}`) | any named alert → its fix; officer corps, MIO, admiral alerts wake the player | `manage` |
 | Armies and generals | ≤ 24 divisions, general on armies ≥ 8 | `armies` |
-| Rest and resume | rest at about 30% of max organisation (absolute `rest_below`, about 18 for 60-org infantry), resume at about 80% (about 48); at most 20 days. The executor defaults (12 / 30) are too low: set them | `war.rest_below`, `war.resume_above`, `war.rest_max_days` |
-| Supply floor | no new offensive below 50% supply (attrition from 35%); the executor default 25 is too low: set 50 | `war.supply_floor` |
-| Planning wait | 12-15 game days of planning before executing a new offensive | `war.plan_days` (key pending: brief line) |
-| Advance in bounds | rest after a captured hub or port until it connects (8-12 days) | key pending: brief line |
-| Stalled attack / forming pocket | 8 days / fall back at 50% hostile share or a neck of 2 own provinces (the executor's 70% is late: brief line until a key exists) | `war.stall_days`, `war.avoid_pockets` |
-| Factory rebalance | idle factories by days of cover in chunks of max(2, 20% of a line); no pulls from lines under 90 days of cover | `production_priority`, `production_min_idle` |
+| Rest and resume | rest below 30% of the army's highest organisation seen, resume at 80% and 70% supply; at most 20 days (not while supply is under 35%). These are the executor defaults; absolute `rest_below` / `resume_above` replace the shares | `war.rest_below_pct`, `war.resume_above_pct`, `war.supply_resume`, `war.rest_max_days` |
+| Supply floor | no new offensive below 50% supply; below 35% nothing attacks (attrition). Executor defaults | `war.supply_floor`, `war.supply_hold` |
+| Planning wait | the execute order waits until the planning bonus reaches 90% of its 30% cap (about 14 game days), at most 15 days; skipped near the goal deadline | `war.planning_wait`, `war.planning_cap`, `war.planning_share`, `war.planning_gain`, `war.planning_max_days`, `war.planning_skip_days` |
+| Advance in bounds | after a captured hub, port or railway the army's next advance waits until it feeds the front (rail dead about 10 days, 5 on cores), at most 12 days | `war.bound`, `war.bound_rail_days`, `war.bound_core_days`, `war.bound_max_days` |
+| Stalled attack / forming pocket | 8 days without progress: a second direction first, then the direct move; fall back at 50% of the surrounding land held by others (the neck is not read) | `war.stall_days`, `war.second_direction`, `war.pocket_share`, `war.avoid_pockets` |
+| Factory rebalance | idle military factories to the line the divisions lack most, 3 per action, re-chosen; never pulled from a line; day 0 to the kept starting lines | `production_priority`, `production_min_idle`, `manage.rebalance_step`, `manage.day0_production` |
 | Supply line first at war | supply construction ahead of other lines | `war.supply_first` |
 | Front equipment fill | army mean < 80% → disband home divisions, elite priority, factories to the short item (`strategy.md`) | `manage` |
 | Stockpile days of cover | < 7 critical, < 30 warning (`strategy.md`) | `stockpile_targets` |

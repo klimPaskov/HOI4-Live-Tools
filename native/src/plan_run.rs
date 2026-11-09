@@ -83,7 +83,16 @@
 //!   trade                  [{"resource","amount","from"?,"when"?}] manual purchases once each (plan_affairs.rs)
 //!   research_bonuses       {"<bonus category or name>":[techs]} or true: an active research bonus puts its
 //!                          techs first in the research step (plan_affairs.rs)
-//!   production_priority    equipment prefixes that receive military factories on no line
+//!   production_priority    equipment prefixes whose lines receive military factories on no line: the
+//!                          line whose archetype the fielded divisions lack most (hoi4_supply need minus
+//!                          held; no tool reads the stockpile), else the lines in turn, at most
+//!                          `manage.rebalance_step` (3) factories per action, re-chosen each action;
+//!                          factories are never taken from a line; removed equipment is never fed
+//!                          (plan_manage.rs). Day 0: while the game is still paused at the hour this
+//!                          server first saw and nothing else was done, free military factories go to
+//!                          the starting lines the plan keeps (a `production[]` entry's factories for an
+//!                          existing line first) before anything else (`manage.day0_production` false
+//!                          turns it off)
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
 //!   production             [{"equipment","factories"}] lines added once; {"equipment","remove":true,"from"?}
 //!                          removes every own line of that equipment (live entry_index, factories 0); a
@@ -93,6 +102,8 @@
 //!                          hoi4_states); states with no free slot are remembered full for
 //!                          `construction_full_days` (default 14) game days; free slots are read with
 //!                          hoi4_state_slots unless `construction_probe_slots` is false
+//!                          At war with a `war.enemies` tag an industrial_complex job is skipped unless
+//!                          `manage.war_civs` is true or the goal deadline is over a year away
 //!   construction_min_idle  idle civilian factories needed first (default 4), unless the queue
 //!                          is shorter than `construction_queue_depth` (default 3 projects)
 //!   construction_fallback_any_own_state  true: when every listed state is full, build in other own states
@@ -120,13 +131,20 @@
 //!                          Optional: "axes":[[842,843,271],[835,271]] ordered targets (an army follows the
 //!                          axis whose next enemy-held state is nearest); "theatre":[550,559] own states an
 //!                          army must stand in to be driven (armies in enemy land always are);
-//!                          "stall_days":8 without progress -> direct hoi4_army_move into the target;
-//!                          "rest_below":12 / "resume_above":30 army organisation (absolute) to stop and
-//!                          resume the plan ("rest":false turns it off); "supply_floor":25 an army below this
-//!                          supply percent rests too; "rest_max_days":20 resumes anyway; "motorization":2 sets every driven
-//!                          army's supply trucks once
+//!                          "stall_days":8 without progress -> a second direction first, then a direct
+//!                          hoi4_army_move into the target (with a back-off); an offensive executes
+//!                          only once its planning has built; "rest_below_pct":0.30 /
+//!                          "resume_above_pct":0.80 of the army's maximum organisation (or absolute
+//!                          "rest_below" / "resume_above") stop and resume the plan ("rest":false turns
+//!                          it off); "supply_floor":50 an army below this supply percent rests and gets
+//!                          no new attack, "supply_hold":35 nothing attacks, "supply_resume":70;
+//!                          "rest_max_days":20 resumes anyway above the hold; "pocket_share":0.5;
+//!                          the bound pause after a captured hub (plan_war.rs has every key);
+//!                          "motorization":2 sets every driven army's supply trucks once
 //!   disband                {"templates":["Camicie Nere"],"keep_states":[ids],"max":N} disband divisions of these
-//!                          templates outside keep_states and war.theatre, one army per tick
+//!                          templates outside keep_states and war.theatre, one army per tick; never
+//!                          overseas (the capital must reach the division over own-controlled land) nor
+//!                          in an army at encirclement risk (plan_war.rs)
 //!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
 //!                          army of at most `max`: create armies where divisions stand unassigned (folding in
 //!                          standing armies when the game refuses and "absorb" is true), split oversized ones, and give the next
@@ -205,6 +223,11 @@ mod plan_military;
 /// research bonuses).
 #[path = "plan_affairs.rs"]
 mod plan_affairs;
+
+/// War-step rules (planning before execution, supply and organisation limits, the pocket share,
+/// the stall's second direction, the bound pause, the disband land-route guard).
+#[path = "plan_war.rs"]
+mod plan_war;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -293,6 +316,8 @@ pub struct State {
     military: plan_military::Memory,
     /// State, economy and diplomacy affairs (plan_affairs.rs): wake alarms, digest lines, reads.
     affairs: plan_affairs::Memory,
+    /// War-step rules (plan_war.rs): planning, peaks, bounds, the stall response.
+    war_rules: plan_war::Memory,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
@@ -404,6 +429,7 @@ impl Default for State {
             manage: Default::default(),
             military: Default::default(),
             affairs: Default::default(),
+            war_rules: Default::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -468,6 +494,7 @@ impl State {
             }
         }
         plan_military::army_renamed(&mut self.military, old, new);
+        plan_war::army_renamed(&mut self.war_rules, old, new);
     }
     /// One action with a fresh id; an uncertain dispatch is settled by
     /// retrying its own id once. If readback remains uncertain, stop the
@@ -714,6 +741,11 @@ pub fn tick(
             )));
         }
         return Ok(Tick::Waiting { event: key, new });
+    }
+    // 1a. day 0, paused before the first unpause: free military factories to the starting lines
+    // the plan keeps, before anything else (plan_manage.rs)
+    if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
     }
     // 1a'. hold_targets (plan_military.rs): corridor posts are bound before the war step runs,
     // so it never sends a holding army elsewhere
@@ -1130,59 +1162,11 @@ pub fn tick(
             return Ok(Tick::Acted(step));
         }
     }
-    // 6b. military factories on no line go to the first priority line that exists
+    // 6b. military factories on no line go to the priority line the divisions lack most, a few
+    // at a time (plan_manage.rs)
     let economy = tools.call("hoi4_economy", &json!({}))?;
-    let total_military = economy["factory_trigger_count"]["military"]
-        .as_i64()
-        .unwrap_or(0);
-    let lines = tools.call("hoi4_production_lines", &json!({"limit": 128}))?;
-    let military: Vec<(i64, String, i64)> = list(&lines, "lines")
-        .iter()
-        .filter(|l| l["line_kind"] == json!("military"))
-        .map(|l| {
-            (
-                l["entry_index"].as_i64().unwrap_or(-1),
-                text(&l["equipment_id"]).to_string(),
-                l["factory_counters"]["requested_factories_raw_signed"]
-                    .as_i64()
-                    .unwrap_or(0),
-            )
-        })
-        .collect();
-    let idle = total_military - military.iter().map(|m| m.2).sum::<i64>();
-    if idle >= plan["production_min_idle"].as_i64().unwrap_or(2)
-        && !state.skipped(now, "prodset", "x")
-    {
-        let mut priority = strings(plan, "production_priority");
-        if priority.is_empty() {
-            priority = [
-                "infantry_equipment",
-                "support_equipment",
-                "artillery_equipment",
-            ]
-            .map(String::from)
-            .to_vec();
-        }
-        for want in priority {
-            if let Some((index, equipment, factories)) = military
-                .iter()
-                .find(|m| !m.1.is_empty() && m.1.starts_with(&want))
-            {
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_production_set",
-                    json!({"line": index, "equipment": equipment, "factories": factories + idle}),
-                    "ps",
-                )?;
-                if !ok {
-                    state.skip(now, "prodset", "x", 2 * DAY);
-                }
-                return Ok(Tick::Acted(format!(
-                    "production_set {equipment} {factories}+{idle}: {ok} {why}"
-                )));
-            }
-        }
+    if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
+        return Ok(Tick::Acted(step));
     }
     // 7. production lines added once. The done-memory is kept in plan_state.json, and a line
     // that already exists in the game counts as done too (a restart on 1 Nov 2026, before the
@@ -1277,6 +1261,9 @@ pub fn tick(
         )?;
         if ok {
             state.done.insert(format!("prod:{equipment}"), now);
+            // the line's age for the mature-line guard (plan_affairs.rs): only lines the
+            // executor added are known to be young
+            state.done.insert(format!("prodadd:{equipment}"), now);
         } else {
             state.skip(now, "prod", &equipment, 14 * DAY);
         }
@@ -1937,7 +1924,10 @@ fn supply_line_to_raise(lines: &[Value]) -> Option<usize> {
 /// `disband`: {"templates":["Camicie Nere",..],"keep_states":[ids],"max":N}: divisions of these
 /// templates in an army, standing outside `keep_states` (default: war.theatre), are disbanded
 /// one army at a time so their men and equipment refill the fighting armies (Ethiopia run 10:
-/// disbanding home divisions took the African armies from 30% to 100% equipment).
+/// disbanding home divisions took the African armies from 30% to 100% equipment). Never a
+/// division the capital does not reach over own-controlled land (overseas 75% of the equipment
+/// is lost; hoi4_wars capital_land, unreadable: nothing is disbanded) nor one of an army at
+/// encirclement risk (plan_war.rs).
 fn disband_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -1967,10 +1957,16 @@ fn disband_step(
         .filter(|row| text(&row["owner"]) == me && text(&row["controller"]) == me)
         .filter_map(|row| row["state_id"].as_i64())
         .collect();
+    let Some(home) = plan_war::home_land(state, tools) else {
+        state.skip(now, "disband", "all", 7 * DAY);
+        return Ok(None);
+    };
     let supply = tools.call("hoi4_supply", &json!({}))?;
     // Armies with a division in enemy-held land are fighting and left whole; a home army with
-    // a few divisions already in the theatre is not.
-    let mut fighting: HashSet<String> = HashSet::new();
+    // a few divisions already in the theatre is not. An army at encirclement risk is never
+    // thinned (only 20% of the manpower would return).
+    let mut fighting: HashSet<String> = plan_war::encircled(tools);
+    let mut overseas: Vec<String> = Vec::new();
     for d in list(&supply, "divisions") {
         if let (Some(army), Some(at)) = (d["army"].as_str(), d["state_id"].as_i64()) {
             if !own.contains(&at) {
@@ -1988,11 +1984,12 @@ fn disband_step(
         // Italy while the African infantry fought at 13-33% equipment).
         let standing = d["state_id"].as_i64();
         let candidate = standing.is_some_and(|at| own.contains(&at) && !keep.contains(&at));
-        if !templates.iter().any(|t| t == text(&d["template"]))
-            || !candidate
-            || fighting.contains(army)
-            || state.skipped(now, "disband", army)
-        {
+        let wanted = templates.iter().any(|t| t == text(&d["template"]));
+        if wanted && candidate && !standing.is_some_and(|at| home.contains(&at)) {
+            overseas.push(id.to_string());
+            continue;
+        }
+        if !wanted || !candidate || fighting.contains(army) || state.skipped(now, "disband", army) {
             continue;
         }
         match by_army.iter_mut().find(|(a, _)| a == army) {
@@ -2000,6 +1997,7 @@ fn disband_step(
             None => by_army.push((army.to_string(), vec![id.to_string()])),
         }
     }
+    plan_war::overseas_note(state, &overseas);
     let Some((army, mut ids)) = by_army.into_iter().next() else {
         state.skip(now, "disband", "all", 7 * DAY);
         return Ok(None);
@@ -2245,11 +2243,20 @@ fn construction_step(
         plan["construction_probe_slots"] != json!(false) && now >= state.con.probe_off_until;
     let fallback_all = plan["construction_fallback_any_own_state"] == json!(true);
     let tag = text(&economy["player"]).to_string();
+    // At war no new civilian factories unless the plan keeps them (plan_manage.rs)
+    let no_civs = jobs
+        .iter()
+        .any(|j| text(&j["building"]) == "industrial_complex")
+        && plan_manage::war_drops_civs(state, tools, plan, now);
 
     for (job_index, job) in jobs.iter().enumerate() {
         let building = text(&job["building"]).to_string();
         if building.is_empty() {
             skipped.push(format!("job{job_index}:no_building"));
+            continue;
+        }
+        if no_civs && building == "industrial_complex" {
+            skipped.push(format!("job{job_index}:industrial_complex_at_war"));
             continue;
         }
         let want = job["count"].as_i64().unwrap_or(1).clamp(1, 10);
@@ -2791,33 +2798,32 @@ fn war_step(
         .filter_map(|row| row["state_id"].as_i64().map(|v| v as i32))
         .collect();
     let stall: GameHour = cfg["stall_days"].as_i64().unwrap_or(8) * DAY;
-    let rest_below = cfg["rest_below"].as_f64().unwrap_or(12.0);
-    let resume_above = cfg["resume_above"].as_f64().unwrap_or(30.0);
-    // Organisation per army (absolute: a rested infantry division reads about 45).
-    let supply_floor = cfg["supply_floor"].as_f64().unwrap_or(25.0);
+    // Organisation (absolute, or a share of the highest seen) and supply limits (plan_war.rs).
+    let limits = plan_war::Limits::of(plan);
     let rest_max: GameHour = cfg["rest_max_days"].as_i64().unwrap_or(20) * DAY;
-    let condition: HashMap<String, (f64, f64)> = if cfg["rest"] == json!(false) {
-        HashMap::new()
+    let supply_read: Option<Value> = if cfg["rest"] == json!(false) {
+        None
     } else {
-        tools
-            .call("hoi4_supply", &json!({}))
-            .ok()
-            .map(|supply| {
-                list(&supply, "armies")
-                    .iter()
-                    .filter_map(|a| {
-                        Some((
-                            text(&a["army"]).to_string(),
-                            (
-                                a["organisation_mean"].as_f64()?,
-                                a["supply_percent_mean"].as_f64().unwrap_or(100.0),
-                            ),
-                        ))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
+        tools.call("hoi4_supply", &json!({})).ok()
     };
+    let condition: HashMap<String, (f64, f64)> = supply_read
+        .as_ref()
+        .map(|supply| {
+            list(supply, "armies")
+                .iter()
+                .filter_map(|a| {
+                    Some((
+                        text(&a["army"]).to_string(),
+                        (
+                            a["organisation_mean"].as_f64()?,
+                            a["supply_percent_mean"].as_f64().unwrap_or(100.0),
+                        ),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    plan_war::observe(state, &condition);
     // Guards: {"Army 4": 844} holds that own state: the army goes there and draws a front on
     // the nearest border, and never attacks (w15: Ethiopia walked into Eritrea and Somalia
     // after every army had left for the offensive).
@@ -2878,7 +2884,7 @@ fn war_step(
         if plan_military::holding(state, &name) {
             if cfg["avoid_pockets"] != json!(false) {
                 if let Some(line) =
-                    pocket_fall_back(state, tools, lease, army, &safe, cooldown, now)?
+                    pocket_fall_back(state, tools, plan, lease, army, &safe, cooldown, now)?
                 {
                     return Ok(Some(line));
                 }
@@ -3027,6 +3033,18 @@ fn war_step(
                 if let Some(n) = load.get_mut(&old) {
                     *n = n.saturating_sub(1);
                 }
+                // A target taken with a supply hub, port or railway: the bound pause starts.
+                plan_war::captured(
+                    state,
+                    tools,
+                    plan,
+                    &name,
+                    old,
+                    &mine,
+                    &me,
+                    supply_read.as_ref(),
+                    now,
+                );
             }
             state.war_stage.remove(&name);
             state.war_move.remove(&name);
@@ -3077,23 +3095,113 @@ fn war_step(
             }
         };
         if cfg["avoid_pockets"] != json!(false) {
-            if let Some(line) = pocket_fall_back(state, tools, lease, army, &safe, cooldown, now)? {
+            if let Some(line) =
+                pocket_fall_back(state, tools, plan, lease, army, &safe, cooldown, now)?
+            {
                 return Ok(Some(line));
             }
         }
-        // Direct moves have no plan to stop: an exhausted or starving army gets no new attack
-        // order until it recovers (w24 kept pushing at 22-28% supply and organisation 17-27).
-        // (Retaking an own state is how a starving army gets its supply back: never held.)
+        // A move round to another side of the target (the stall's second direction) runs.
+        match plan_war::relocation(state, tools, lease, &name, target, here, stall, now)? {
+            plan_war::Relocate::No => {}
+            plan_war::Relocate::Wait => {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                continue;
+            }
+            plan_war::Relocate::Acted(line) => {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(line));
+            }
+        }
         let own_target = targets.iter().any(|t| t.0 == target && t.1);
-        if direct && !own_target {
-            if let Some((org, supply)) = org {
-                if org < rest_below || supply < supply_floor {
-                    let recovered = org >= resume_above && supply >= supply_floor;
-                    if !recovered {
-                        state.war_cool.insert(name.clone(), now + cooldown);
-                        continue;
+        // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
+        // recovers, or after `rest_max_days` when the supply is above the hard hold (supply where
+        // the army stands may never recover). A direct-move army has no plan to stop: it rests by
+        // getting no new order (w24 kept pushing at 22-28% supply and organisation 17-27).
+        if let Some((org, supply)) = org {
+            let tired = limits.tired(state, &name, org);
+            let starving = limits.starving(supply);
+            if (tired || starving) && !state.war_rest.contains_key(&name) {
+                if executing {
+                    let (ok, why) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_army_plan",
+                        json!({"army": name, "execute": false}),
+                        "wr",
+                    )?;
+                    if ok {
+                        state.war_rest.insert(name.clone(), now);
                     }
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    return Ok(Some(format!(
+                        "war rest {name} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
+                    )));
                 }
+                if direct && !own_target {
+                    state.war_rest.insert(name.clone(), now);
+                }
+            }
+            if let Some(&since_rest) = state.war_rest.get(&name) {
+                let recovered = limits.fresh(state, &name, org) && limits.supplied(supply);
+                let overdue = now - since_rest >= rest_max && !limits.held(supply);
+                if !recovered && !overdue {
+                    if now - since_rest >= rest_max {
+                        plan_war::held_note(
+                            state,
+                            &name,
+                            format!("{name} stays in rest past rest_max_days: supply {supply:.0}% is below the hard hold"),
+                        );
+                    }
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    continue;
+                }
+                state.war_rest.remove(&name);
+                state.war_since.insert(name.clone(), (target, here, now));
+                let (tool, args, label) = if state.war_move.contains(&name) || direct {
+                    (
+                        "hoi4_army_move",
+                        json!({"army": name, "state_id": target}),
+                        "resume move",
+                    )
+                } else {
+                    (
+                        "hoi4_army_plan",
+                        json!({"army": name, "execute": true}),
+                        "resume",
+                    )
+                };
+                let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(format!(
+                    "war {label} {name} -> state {target} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
+                )));
+            }
+            // No new attack order below the supply floor or the rest line; below the hard hold
+            // not even a move to retake an own state.
+            let blocked = if own_target {
+                limits.held(supply)
+            } else {
+                tired || starving
+            };
+            if blocked {
+                plan_war::held_note(
+                    state,
+                    &name,
+                    format!(
+                        "{name} gets no attack order: organisation {org:.0}, supply {supply:.0}%"
+                    ),
+                );
+                state.war_cool.insert(name.clone(), now + cooldown);
+                continue;
+            }
+        }
+        // After a captured hub, port or railway a direct-move army holds its next advance.
+        if direct && !own_target {
+            let mean = org.map(|o| o.1);
+            if plan_war::bound_wait(state, plan, &name, supply_read.as_ref(), mean, now).is_some() {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                continue;
             }
         }
         // `vp_targets`: the plan's victory-point provinces in order, each for a named army or any
@@ -3162,53 +3270,6 @@ fn war_step(
                 }
             }
         }
-        // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
-        // recovers or after `rest_max_days` (supply where the army stands may never recover).
-        if let Some((org, supply)) = org {
-            let starving = supply < supply_floor;
-            if (org < rest_below || starving) && executing && !state.war_rest.contains_key(&name) {
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_army_plan",
-                    json!({"army": name, "execute": false}),
-                    "wr",
-                )?;
-                if ok {
-                    state.war_rest.insert(name.clone(), now);
-                }
-                state.war_cool.insert(name.clone(), now + cooldown);
-                return Ok(Some(format!(
-                    "war rest {name} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
-                )));
-            }
-            if let Some(&since_rest) = state.war_rest.get(&name) {
-                let recovered = org >= resume_above && !starving;
-                if !recovered && now - since_rest < rest_max {
-                    continue;
-                }
-                state.war_rest.remove(&name);
-                state.war_since.insert(name.clone(), (target, here, now));
-                let (tool, args, label) = if state.war_move.contains(&name) {
-                    (
-                        "hoi4_army_move",
-                        json!({"army": name, "state_id": target}),
-                        "resume move",
-                    )
-                } else {
-                    (
-                        "hoi4_army_plan",
-                        json!({"army": name, "execute": true}),
-                        "resume",
-                    )
-                };
-                let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
-                state.war_cool.insert(name.clone(), now + cooldown);
-                return Ok(Some(format!(
-                    "war {label} {name} -> state {target} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
-                )));
-            }
-        }
         // Stalled: no progress for `stall_days` while ordered. Direct moves into the target
         // advance where battle plans do not (seen in Ethiopia: a plan that never left the
         // start state; moves took Bale and Sidamo).
@@ -3226,6 +3287,34 @@ fn war_step(
         let stall_now = stall * (1 << repeats.min(3));
         let stuck_inside = standing_in_target && now - since >= 2 * stall_now;
         if ordered && (!standing_in_target || stuck_inside) && now - since >= stall_now {
+            // The first stall on a target brings a second direction (plan_war.rs): an idle army
+            // beside the target, else this army goes round; the next stall is the direct move.
+            if !standing_in_target && !liberate && !state.war_move.contains(&name) {
+                let flanks: HashSet<String> = list(&roster, "armies")
+                    .iter()
+                    .filter(|a| {
+                        let n = text(&a["army"]);
+                        let at = a["main_state"].as_i64().map(|s| s as i32);
+                        a["division_count"].as_u64().unwrap_or(0) >= min_army
+                            && !reserve.iter().any(|r| r == n)
+                            && !guards.contains_key(n)
+                            && !plan_military::holding(state, n)
+                            && (theatre.is_empty()
+                                || at.is_some_and(|s| {
+                                    theatre.contains(&s) || !mine_ids.contains(&s)
+                                }))
+                    })
+                    .map(|a| text(&a["army"]).to_string())
+                    .collect();
+                let foes: Vec<String> = enemies.iter().cloned().collect();
+                if let Some(line) = plan_war::second_direction(
+                    state, tools, plan, lease, &roster, &name, target, here, executing, &flanks,
+                    &foes, now,
+                )? {
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    return Ok(Some(line));
+                }
+            }
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -3317,6 +3406,14 @@ fn war_step(
                 2,
             )
         } else if stage == 2 {
+            // Planning before execution and the bound pause after a captured hub (plan_war.rs).
+            let mean = org.map(|o| o.1);
+            if plan_war::execute_gate(state, plan, &name, target, supply_read.as_ref(), mean, now)
+                .is_some()
+            {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                continue;
+            }
             (
                 "hoi4_army_plan",
                 json!({"army": name, "execute": true}),
@@ -3334,6 +3431,9 @@ fn war_step(
             state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
             if next_stage == 3 {
                 state.war_since.insert(name.clone(), (target, here, now));
+            }
+            if next_stage == 2 {
+                plan_war::drawn(state, &name, target, now);
             }
             // A liberation move is a direct move: wait for progress, and let the stall check
             // (with its backoff) re-issue it (live 8 Nov 2026: the same move to an occupied own
@@ -3370,12 +3470,14 @@ fn war_step(
     Ok(None)
 }
 
-/// A pocket forming: most land around the army is held by others. Fall back to the nearest
+/// A pocket forming: much of the land around the army is held by others. Fall back to the nearest
 /// fully held own state (`safe`) once, then re-check (w24: armies were encircled). None when
 /// the army is not at risk, fell back less than 3 game days ago, or no other state is safe.
+#[allow(clippy::too_many_arguments)]
 fn pocket_fall_back(
     state: &mut State,
     tools: &dyn Tools,
+    plan: &Value,
     lease: &str,
     army: &Value,
     safe: &[(i32, (f64, f64))],
@@ -3383,7 +3485,8 @@ fn pocket_fall_back(
     now: GameHour,
 ) -> Result<Option<String>> {
     let name = text(&army["army"]).to_string();
-    if army["threat"]["encirclement_risk"] != json!(true) || state.skipped(now, "pocket", &name) {
+    // `war.pocket_share` (0.5) outside safe own land, the game-side flag (0.7) anywhere
+    if !plan_war::pocket_risk(plan, army, safe) || state.skipped(now, "pocket", &name) {
         return Ok(None);
     }
     let here = army["main_state"].as_i64().map(|s| s as i32);
@@ -4581,6 +4684,9 @@ pub fn run(
     if let Some(affairs) = plan_affairs::digest(state) {
         result["affairs"] = affairs;
     }
+    if let Some(war) = plan_war::digest(state) {
+        result["war"] = war;
+    }
     if !state.strategy.summary.is_null() {
         result["strategy"] = state.strategy.summary.clone();
     }
@@ -5092,30 +5198,116 @@ mod tests {
     }
 
     #[test]
-    fn idle_military_factories_join_the_first_priority_line() {
-        let tools = fake(vec![
+    fn idle_military_factories_go_to_the_priority_lines_a_few_at_a_time() {
+        let lines = |inf: i64, sup: i64| {
+            json!({"lines": [
+                {"line_kind": "military", "entry_index": 3, "equipment_id": "infantry_equipment_2",
+                 "factory_counters": {"requested_factories_raw_signed": inf}},
+                {"line_kind": "military", "entry_index": 4, "equipment_id": "support_equipment_1",
+                 "factory_counters": {"requested_factories_raw_signed": sup}}]})
+        };
+        let mut tools = fake(vec![
             ("hoi4_research", json!({"slots": [{"researching": "a"}]})),
             ("hoi4_focus_completed", json!({"active_key": "f"})),
             (
                 "hoi4_economy",
-                json!({"factory_trigger_count": {"military": 20}, "civilian_factories_available_for_projects": 0}),
+                json!({"factory_trigger_count": {"military": 22}, "civilian_factories_available_for_projects": 0}),
+            ),
+            ("hoi4_production_lines", lines(12, 4)),
+        ]);
+        let mut state = State::default();
+        // 6 idle, no shortage known: 3 to the first priority line, then the next in turn
+        let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("production_set infantry_equipment_2 12+3")),
+            "{step:?}"
+        );
+        assert_eq!(
+            tools.calls.borrow().last().unwrap().1["factories"],
+            json!(15)
+        );
+        tools.replies.insert("hoi4_production_lines", lines(15, 4));
+        let step = tick(&mut state, &tools, &json!({}), "l", START + 1).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+3")),
+            "{step:?}"
+        );
+        // the divisions lack support equipment most: it gets the next step, 2 per the plan
+        tools.replies.insert("hoi4_production_lines", lines(12, 4));
+        tools.replies.insert(
+            "hoi4_supply",
+            json!({"divisions": [{"equipment": [
+                {"archetype": "infantry_equipment", "have": 90, "need": 100},
+                {"archetype": "support_equipment", "have": 0, "need": 30}]}]}),
+        );
+        let plan = json!({"manage": {"rebalance_step": 2}, "production": [
+            {"equipment": "infantry_equipment_2", "remove": true}]});
+        let mut state = State::default();
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+2")),
+            "{step:?}"
+        );
+        assert!(plan_manage::digest(&state).unwrap()["production"]
+            .as_str()
+            .unwrap()
+            .contains("lack 30"));
+    }
+
+    #[test]
+    fn on_day_zero_free_factories_go_to_the_kept_starting_lines_first() {
+        let mut tools = fake(vec![
+            ("hoi4_overview", json!({"player": "ITA", "paused": true})),
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"military": 20}}),
             ),
             (
                 "hoi4_production_lines",
                 json!({"lines": [
-                    {"line_kind": "military", "entry_index": 3, "equipment_id": "infantry_equipment_2",
-                     "factory_counters": {"requested_factories_raw_signed": 12}},
-                    {"line_kind": "military", "entry_index": 4, "equipment_id": "support_equipment_1",
+                    {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_1",
+                     "factory_counters": {"requested_factories_raw_signed": 8}},
+                    {"line_kind": "military", "entry_index": 1, "equipment_id": "cas_equipment_1",
                      "factory_counters": {"requested_factories_raw_signed": 4}}]}),
             ),
         ]);
+        let plan = json!({"production_priority": ["infantry_equipment", "cas_equipment"],
+            "production": [{"equipment": "infantry_equipment_1", "factories": 12},
+                           {"equipment": "cas_equipment_1", "remove": true}]});
         let mut state = State::default();
-        let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        // paused at the first hour: before research, focus or anything else
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("production_set infantry_equipment_2 12+4"))
+            matches!(&step, Tick::Acted(s) if s.starts_with("day 0 production_set infantry_equipment_1 8+4")),
+            "{step:?}"
         );
-        let calls = tools.calls.borrow();
-        assert_eq!(calls.last().unwrap().1["factories"], json!(16));
+        assert!(!tools
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_research"));
+        tools.replies.insert(
+            "hoi4_production_lines",
+            json!({"lines": [
+                {"line_kind": "military", "entry_index": 0, "equipment_id": "infantry_equipment_1",
+                 "factory_counters": {"requested_factories_raw_signed": 12}},
+                {"line_kind": "military", "entry_index": 1, "equipment_id": "cas_equipment_1",
+                 "factory_counters": {"requested_factories_raw_signed": 4}}]}),
+        );
+        // the plan's line is full: the priority lines take the rest, never the removed CAS line
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("day 0 production_set infantry_equipment_1 12+3")),
+            "{step:?}"
+        );
+        // once the clock runs, day 0 is over for good
+        let _ = tick(&mut state, &tools, &plan, "l", START + 1);
+        assert!(state.done.contains_key("day0prod"));
+        // a running campaign (work done) never gets a day 0
+        let mut state = State::default();
+        state.done.insert("pol:id:x".into(), START - DAY);
+        let _ = tick(&mut state, &tools, &plan, "l", START);
+        assert!(state.done.contains_key("day0prod"));
     }
 
     #[test]
@@ -5229,6 +5421,48 @@ mod tests {
             Tick::Acted(s) => s,
             other => panic!("expected an action, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn at_war_the_filler_builds_no_new_civilian_factories_unless_the_plan_keeps_them() {
+        struct AtWar(Builder);
+        impl Tools for AtWar {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_wars" {
+                    return Ok(
+                        json!({"wars": {"validated": true, "at_war": true, "enemies": ["ETH"]}}),
+                    );
+                }
+                self.0.call(name, args)
+            }
+        }
+        let mut b = Builder::new();
+        b.slots = [(51, 2), (60, 2)].into();
+        let b = AtWar(b);
+        let plan = json!({"war": {"enabled": false, "enemies": ["ETH"]},
+            "construction": [{"building": "industrial_complex", "states": [51]},
+                             {"building": "arms_factory", "states": [60]}]});
+        let mut state = State::default();
+        let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        assert!(
+            first.starts_with("construct arms_factory 60: true"),
+            "{first}"
+        );
+        assert!(state
+            .con
+            .digest
+            .clone()
+            .unwrap()
+            .contains("industrial_complex_at_war"));
+        // manage.war_civs keeps them
+        let keep = json!({"war": {"enabled": false, "enemies": ["ETH"]}, "manage": {"war_civs": true},
+            "construction": [{"building": "industrial_complex", "states": [51]}]});
+        let mut state = State::default();
+        let first = acted(tick(&mut state, &b, &keep, "l", START).unwrap());
+        assert!(
+            first.starts_with("construct industrial_complex 51: true"),
+            "{first}"
+        );
     }
 
     #[test]
@@ -6522,8 +6756,11 @@ mod tests {
         let later = now + 3;
         let second = tick(&mut state, &w, &war_plan(), "l", later).unwrap();
         assert!(matches!(&second, Tick::Acted(s) if s.starts_with("war offensive")));
+        // the planning bonus builds first (13.5 game days by the default estimate)
         let third = tick(&mut state, &w, &war_plan(), "l", later + 3).unwrap();
-        assert!(matches!(&third, Tick::Acted(s) if s.starts_with("war execute")));
+        assert_eq!(third, Tick::Nothing);
+        let fourth = tick(&mut state, &w, &war_plan(), "l", later + 14 * DAY).unwrap();
+        assert!(matches!(&fourth, Tick::Acted(s) if s.starts_with("war execute")));
     }
 
     /// A war with a configurable army (executing flag, main state) and organisation.
@@ -6605,6 +6842,7 @@ mod tests {
                         {"state_id": 158, "owner": "ITA", "controller": "ITA"},
                         {"state_id": 160, "owner": "ITA", "controller": "ITA"},
                         {"state_id": 550, "owner": "ITA", "controller": "ITA"}]})),
+                    "hoi4_wars" => Ok(json!({"capital_land": {"states": [2, 158, 160, 550]}})),
                     "hoi4_supply" => Ok(json!({"divisions": [
                         {"army": "Army 9", "id": "x", "template": "Camicie Nere", "state_id": 835},
                         {"army": "Army 9", "id": "y", "template": "Camicie Nere", "state_id": 160},
@@ -6660,7 +6898,13 @@ mod tests {
             tick(&mut state, &w, &plan, "l", START + 5 * DAY).unwrap(),
             Tick::Nothing
         );
-        let step = tick(&mut state, &w, &plan, "l", START + 11 * DAY).unwrap();
+        // past rest_max_days but below the hard hold (35%): still resting
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", START + 11 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        w.supply.set(40.0);
+        let step = tick(&mut state, &w, &plan, "l", START + 12 * DAY).unwrap();
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("war resume Army 1")),
             "{step:?}"
@@ -6698,7 +6942,7 @@ mod tests {
     #[test]
     fn a_stalled_plan_becomes_a_direct_move_into_the_target() {
         let w = War2::new();
-        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8}});
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "planning_wait": false}});
         let mut state = State::default();
         let mut now = START;
         for _ in 0..3 {
@@ -6734,7 +6978,8 @@ mod tests {
         let w = War2::new();
         w.executing.set(true);
         w.org.set(8.0);
-        let plan = json!({"war": {"enemies": ["FRA"]}});
+        // absolute organisation thresholds by key (the default is a share of the highest seen)
+        let plan = json!({"war": {"enemies": ["FRA"], "rest_below": 12, "resume_above": 30}});
         let mut state = State::default();
         let step = tick(&mut state, &w, &plan, "l", START).unwrap();
         assert!(

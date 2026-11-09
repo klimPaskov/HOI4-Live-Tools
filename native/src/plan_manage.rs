@@ -32,7 +32,11 @@
 //!                    company, 25 per extra column, the tool's costs), read from hoi4_doctrines; an
 //!                    entry short of XP waits and blocks the ones after it. `regimental_support`
 //!                    (the 1.19 row) is accepted and skipped with a note: no tool fills that row yet.
-//!                    `role` is for people. Checked once a game day while an entry waits
+//!                    `role` "strike" / "assault" / "armour" / "mobile" puts the template on elite
+//!                    reinforcement priority once a war with a `war.enemies` tag runs, "garrison" on
+//!                    reserve (hoi4_template_edit priority only; no battalion changes), and the
+//!                    entry's `priority` (else regular) returns at peace; `manage.war_priority`
+//!                    false turns this off. Checked once a game day while an entry waits
 //!   occupation       {"default_law"|"law","when"?,"ladder"?,"harsher_at_resistance":50,
 //!                    "milder_at_compliance":40,"milder_below_resistance":25,"mildest"?,"harshest"?,
 //!                    "change_days":30,"per_state"?} every 7 game days from hoi4_occupation (states
@@ -71,12 +75,22 @@
 //!                    "stockpile","trucks"] switches rules off; "wake_repeat_days":7 one wake per reason;
 //!                    "alerts_ignore":[alert names]; "alert_persist_days":14;
 //!                    "manpower_months":2 free manpower below that many months of losses (hoi4_war_stats)
-//!                    takes the next enabled law of "conscription_laws" (vanilla ladder by default) in
-//!                    government slot 0, else wakes; "stability_floor":0.5 wakes below it;
+//!                    takes the next enabled law of "conscription_laws" in government slot 0 (the next
+//!                    listed after the current law, else the first listed one harsher than it on the
+//!                    vanilla ladder); with no list (the default) it never raises conscription, which
+//!                    costs factory output, and wakes the player instead; "stability_floor":0.5 wakes below it;
 //!                    "equipment_fill_floor":0.8 an army whose divisions' mean equipment fill
 //!                    (hoi4_supply) is below it wakes the player and nudges `disband`;
 //!                    "stockpile_days_critical":7 / "stockpile_days_warning":30 and "trucks_ratio":1.5
-//!                    are reported unknown (no tool reads the stockpile); "deficit_wake_days":14
+//!                    are reported unknown (no tool reads the stockpile); "deficit_wake_days":14.
+//!                    These keys act whether or not the plan has `manage` (defaults shown):
+//!                    "rebalance_step":3 idle military factories per action to a priority line (tick
+//!                    step 6b, `production_priority` in plan_run.rs); "day0_production":false skips the
+//!                    day-0 assignment of free military factories to the kept starting lines;
+//!                    "war_priority":false (templates above); "war_civs":true keeps industrial_complex
+//!                    jobs of `construction` at war (plan_run.rs); "mature_line_days":30
+//!                    (plan_affairs.rs, the mature-line guard); "invasion_base_days":60,
+//!                    "invasion_base_divisions":4, "invasion_techs" (plan_military.rs, invasions)
 //!
 //! Standing rules without a plan key: the game's alert row (hoi4_alerts, once a game day, rule
 //! 3) nudges the step that fixes each alert by clearing its skip timer, and wakes the player for
@@ -110,6 +124,8 @@ pub(super) struct Memory {
     deficit_since: Option<GameHour>,
     /// Alert name -> the game hour it was first seen in the current unbroken run of days.
     alert_since: HashMap<String, GameHour>,
+    /// The next priority line in turn for idle factories when no shortage is known.
+    feed_turn: usize,
 }
 
 /// What the runner did in the open peace conference.
@@ -622,7 +638,63 @@ fn templates_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let entries = list(plan, "templates");
-    if entries.is_empty() || state.skipped(now, "mtpl", "x") {
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    // At war the strike templates (role strike, assault, armour, mobile) take elite
+    // reinforcement priority and the garrison templates reserve, once each; at peace again the
+    // entry's own priority (else regular) returns. A priority-only edit changes no battalion.
+    if plan["manage"]["war_priority"] != json!(false) && !state.skipped(now, "mwarprio", "x") {
+        let mut war: Option<bool> = None;
+        for entry in entries {
+            let name = text(&entry["name"]).trim().to_string();
+            let wanted = match text(&entry["role"]).trim().to_lowercase().as_str() {
+                "strike" | "assault" | "armour" | "armor" | "mobile" => "elite",
+                "garrison" => "reserve",
+                _ => continue,
+            };
+            let key = format!("warprio:{name}");
+            if name.is_empty() || state.skipped(now, "warprio", &name) {
+                continue;
+            }
+            let at_war = *war.get_or_insert_with(|| at_war(state, tools, plan, now));
+            let set = state.done.contains_key(&key);
+            let priority = match (at_war, set) {
+                (true, false) => wanted,
+                (false, true) => entry["priority"].as_str().unwrap_or("regular"),
+                _ => continue,
+            };
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_template_edit",
+                json!({"template": name, "priority": priority}),
+                "mq",
+            )?;
+            if ok || why.starts_with("nothing_to_change") {
+                if at_war {
+                    state.done.insert(key, now);
+                } else {
+                    state.done.remove(&key);
+                }
+            } else {
+                state.skip(now, "warprio", &name, 7 * DAY);
+            }
+            let when = if at_war { "at war" } else { "peace" };
+            note(
+                state,
+                "war_priority",
+                format!("{name} -> {priority} ({when}): {ok}"),
+            );
+            return Ok(Some(format!(
+                "template {name} reinforcement priority {priority}: {ok} {why}"
+            )));
+        }
+        if war.is_some() {
+            state.skip(now, "mwarprio", "x", DAY);
+        }
+    }
+    if state.skipped(now, "mtpl", "x") {
         return Ok(None);
     }
     let mut have: Option<HashSet<String>> = None;
@@ -1509,9 +1581,26 @@ fn country_rules(
         );
         return Ok(None);
     }
-    let mut ladder = strings(m, "conscription_laws");
+    // Only a law the plan lists: conscription costs factory output (-10% to -40% from Service
+    // by Requirement on), so with no `conscription_laws` the rule wakes the player instead.
+    let ladder = strings(m, "conscription_laws");
     if ladder.is_empty() {
-        ladder = CONSCRIPTION_LADDER.map(String::from).to_vec();
+        note(
+            state,
+            "manpower",
+            format!("{free} free < {need}; the plan lists no conscription law: player woken"),
+        );
+        wake(
+            state,
+            plan,
+            now,
+            13,
+            "manpower_low",
+            format!("free manpower {free} is below {months} months of losses ({need}); manage.conscription_laws lists no law the executor may take"),
+            json!({"free_manpower": free, "losses_per_day": round3(per_day),
+                "months": months, "need": need}),
+        );
+        return Ok(None);
     }
     let options = tools
         .call(
@@ -1534,11 +1623,20 @@ fn country_rules(
                 .collect()
         })
         .unwrap_or_default();
-    let next = ladder
-        .iter()
-        .position(|l| *l == current)
-        .and_then(|i| ladder[i + 1..].iter().find(|l| enabled.contains(*l)))
-        .cloned();
+    // The next listed law after the current one; when the current law is not listed, the first
+    // listed law harsher than it on the vanilla ladder (any listed law when either is unknown).
+    let rank = |l: &str| CONSCRIPTION_LADDER.iter().position(|v| *v == l);
+    let next = match ladder.iter().position(|l| *l == current) {
+        Some(i) => ladder[i + 1..].iter().find(|l| enabled.contains(*l)),
+        None => ladder.iter().find(|l| {
+            enabled.contains(*l)
+                && match (rank(l), rank(&current)) {
+                    (Some(a), Some(b)) => a > b,
+                    _ => true,
+                }
+        }),
+    }
+    .cloned();
     let evidence = json!({"free_manpower": free, "losses_per_day": round3(per_day),
         "months": months, "need": need, "law": current});
     let Some(law) = next else {
@@ -1646,6 +1744,297 @@ fn equipment_rule(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
         format!("{} army(ies) below {floor} mean equipment fill: reinforce priority, production or disbanding is needed", low.len()),
         json!({"armies": low, "floor": floor}),
     );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Production: idle military factories in small steps, and the day-0 assignment.
+
+/// Military lines (entry index, equipment, requested factories) and the military factories on
+/// no line (`hoi4_economy` total minus the lines' requested factories).
+fn military_lines(tools: &dyn Tools, economy: &Value) -> Result<(Vec<MilLine>, i64)> {
+    let total = economy["factory_trigger_count"]["military"]
+        .as_i64()
+        .unwrap_or(0);
+    let lines = tools.call("hoi4_production_lines", &json!({"limit": 128}))?;
+    let military: Vec<MilLine> = list(&lines, "lines")
+        .iter()
+        .filter(|l| l["line_kind"] == json!("military"))
+        .map(|l| {
+            (
+                l["entry_index"].as_i64().unwrap_or(-1),
+                text(&l["equipment_id"]).to_string(),
+                l["factory_counters"]["requested_factories_raw_signed"]
+                    .as_i64()
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
+    let idle = total - military.iter().map(|m| m.2).sum::<i64>();
+    Ok((military, idle))
+}
+
+/// Equipment the fielded divisions lack per archetype (hoi4_supply: need minus held). This is
+/// the stand-in for days of stockpile cover: no tool reads the stockpile.
+fn shortfall(supply: Option<&Value>) -> HashMap<String, f64> {
+    let mut out: HashMap<String, f64> = HashMap::new();
+    for d in supply.map_or(&[][..], |s| list(s, "divisions")) {
+        for e in list(d, "equipment") {
+            let (have, need) = (
+                e["have"].as_f64().unwrap_or(0.0),
+                e["need"].as_f64().unwrap_or(0.0),
+            );
+            if need > have {
+                *out.entry(text(&e["archetype"]).to_string()).or_default() += need - have;
+            }
+        }
+    }
+    out
+}
+
+/// One military line: (entry index, equipment, requested factories).
+type MilLine = (i64, String, i64);
+
+/// The line that gets the next idle factories: of the `production_priority` lines (the plan's
+/// removed equipment never), the one whose archetype the divisions lack most; with no shortage
+/// known, the priority lines in turn. The reason goes with it.
+fn feed_choice(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+    military: &[MilLine],
+) -> Option<(MilLine, String)> {
+    let mut priority = strings(plan, "production_priority");
+    if priority.is_empty() {
+        priority = [
+            "infantry_equipment",
+            "support_equipment",
+            "artillery_equipment",
+        ]
+        .map(String::from)
+        .to_vec();
+    }
+    let removed: HashSet<String> = list(plan, "production")
+        .iter()
+        .filter(|l| l["remove"] == json!(true))
+        .map(|l| text(&l["equipment"]).to_string())
+        .collect();
+    let mut lines: Vec<&MilLine> = Vec::new();
+    for want in &priority {
+        for m in military {
+            if !m.1.is_empty()
+                && m.1.starts_with(want.as_str())
+                && !removed.contains(&m.1)
+                && !lines.iter().any(|l| l.0 == m.0)
+            {
+                lines.push(m);
+            }
+        }
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    let read = supply(state, tools, now);
+    let short = shortfall(read.as_ref());
+    let lack = |l: &MilLine| -> f64 {
+        short
+            .iter()
+            .filter(|(a, _)| !a.is_empty() && l.1.starts_with(a.as_str()))
+            .map(|(_, n)| *n)
+            .sum()
+    };
+    // the first line of the largest shortfall (priority order breaks ties)
+    let mut best: Option<(&MilLine, f64)> = None;
+    for l in &lines {
+        let n = lack(l);
+        if n > 0.0 && best.is_none_or(|(_, b)| n > b) {
+            best = Some((l, n));
+        }
+    }
+    if let Some((l, n)) = best {
+        return Some((l.clone(), format!("fielded divisions lack {n:.0}")));
+    }
+    let turn = state.manage.feed_turn % lines.len();
+    state.manage.feed_turn = state.manage.feed_turn.wrapping_add(1);
+    Some((
+        lines[turn].clone(),
+        "no shortage known: priority lines in turn".into(),
+    ))
+}
+
+/// A few idle factories (`manage.rebalance_step`, default 3) to the chosen line.
+fn feed(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    military: &[MilLine],
+    idle: i64,
+) -> Result<Option<String>> {
+    let Some(((index, equipment, factories), why)) = feed_choice(state, tools, plan, now, military)
+    else {
+        return Ok(None);
+    };
+    let step = plan["manage"]["rebalance_step"]
+        .as_i64()
+        .filter(|n| *n > 0)
+        .unwrap_or(3);
+    let give = idle.min(step);
+    let (ok, result) = state.act(
+        tools,
+        lease,
+        "hoi4_production_set",
+        json!({"line": index, "equipment": equipment, "factories": factories + give}),
+        "ps",
+    )?;
+    if !ok {
+        state.skip(now, "prodset", "x", 2 * DAY);
+    }
+    note(
+        state,
+        "production",
+        format!("{idle} idle military factories: +{give} to {equipment} ({why})"),
+    );
+    Ok(Some(format!(
+        "production_set {equipment} {factories}+{give}: {ok} {result}"
+    )))
+}
+
+/// Tick step 6b: military factories on no line go to the priority lines a few at a time,
+/// re-chosen every action, once at least `production_min_idle` (2) are idle. Factories are never
+/// taken from a line.
+pub(super) fn rebalance_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    economy: &Value,
+) -> Result<Option<String>> {
+    let (military, idle) = military_lines(tools, economy)?;
+    if idle < plan["production_min_idle"].as_i64().unwrap_or(2)
+        || state.skipped(now, "prodset", "x")
+    {
+        return Ok(None);
+    }
+    feed(state, tools, plan, lease, now, &military, idle)
+}
+
+/// Before the first unpause (the game paused at the hour this server first saw, no work done
+/// yet, a plan with `production` or `production_priority`): free military factories go to the
+/// starting lines the plan keeps, first up to a `production[]` entry's factories for an existing
+/// line, then the priority lines a few at a time. Runs before everything else; once over (or
+/// `manage.day0_production` false) never again (done-memory `day0prod`).
+pub(super) fn day0_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    const KEY: &str = "day0prod";
+    if state.done.contains_key(KEY)
+        || !(plan["production"].is_array() || plan["production_priority"].is_array())
+    {
+        return Ok(None);
+    }
+    let first = state.con.baseline.is_none_or(|b| b >= now);
+    let other_work = state.done.keys().any(|k| k != KEY);
+    let paused = || {
+        tools
+            .call("hoi4_overview", &json!({}))
+            .is_ok_and(|o| o["paused"] == json!(true))
+    };
+    if plan["manage"]["day0_production"] == json!(false) || !first || other_work || !paused() {
+        state.done.insert(KEY.into(), now);
+        return Ok(None);
+    }
+    let economy = tools.call("hoi4_economy", &json!({}))?;
+    let (military, idle) = military_lines(tools, &economy)?;
+    if idle <= 0 {
+        note(state, "production", "day 0: no free military factory");
+        state.done.insert(KEY.into(), now);
+        return Ok(None);
+    }
+    for line in list(plan, "production") {
+        if line["remove"] == json!(true) {
+            continue;
+        }
+        let equipment = text(&line["equipment"]);
+        let Some(target) = line["factories"].as_i64() else {
+            continue;
+        };
+        let Some((index, have, current)) = military
+            .iter()
+            .find(|m| !equipment.is_empty() && m.1 == equipment)
+            .cloned()
+        else {
+            continue;
+        };
+        if current >= target {
+            continue;
+        }
+        let give = (target - current).min(idle);
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_production_set",
+            json!({"line": index, "equipment": have, "factories": current + give}),
+            "p0",
+        )?;
+        if !ok {
+            state.done.insert(KEY.into(), now);
+        }
+        note(
+            state,
+            "production",
+            format!("day 0: starting line {have} {current}+{give} (plan factories {target})"),
+        );
+        return Ok(Some(format!(
+            "day 0 production_set {have} {current}+{give}: {ok} {why}"
+        )));
+    }
+    match feed(state, tools, plan, lease, now, &military, idle)? {
+        Some(line) => {
+            if line.contains(": false") {
+                state.done.insert(KEY.into(), now);
+            }
+            Ok(Some(format!("day 0 {line}")))
+        }
+        None => {
+            state.done.insert(KEY.into(), now);
+            Ok(None)
+        }
+    }
+}
+
+/// At war with one of `war.enemies` (hoi4_wars through the predicate cache); unknown is no.
+fn at_war(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> bool {
+    let any: Vec<Value> = strings(&plan["war"], "enemies")
+        .iter()
+        .map(|t| json!(format!("at_war_with:{t}")))
+        .collect();
+    !any.is_empty() && super::judge(state, tools, &json!({ "any": any }), now) == Truth::True
+}
+
+/// E42: at war the `construction` filler drops new civilian factories (a civilian factory pays
+/// back in years) unless `manage.war_civs` is true or the goal deadline is more than a year away.
+pub(super) fn war_drops_civs(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+) -> bool {
+    if plan["manage"]["war_civs"] == json!(true) {
+        return false;
+    }
+    if let Some(deadline) = plan["goal"]["deadline"].as_str().and_then(super::date_hour) {
+        if deadline - now > 365 * DAY {
+            return false;
+        }
+    }
+    at_war(state, tools, plan, now)
 }
 
 /// Rules 11 and 21 need the equipment stockpile, which no tool reads: they report unknown.
@@ -1960,6 +2349,63 @@ mod tests {
         );
         assert!(state.manage.notes["training"].contains("lack infantry_equipment"));
         assert_eq!(actions(&tools).len(), 1);
+    }
+
+    #[test]
+    fn at_war_strike_templates_go_elite_and_garrisons_reserve_and_peace_restores_them() {
+        let tools = fake(vec![(
+            "hoi4_wars",
+            json!({"wars": {"validated": true, "at_war": true, "enemies": ["ETH"]}}),
+        )]);
+        let plan = json!({"war": {"enemies": ["ETH"]}, "templates": [
+            {"id": "a", "name": "Assalto", "role": "strike", "priority": "regular"},
+            {"id": "g", "name": "Presidio", "role": "garrison"},
+            {"id": "l", "name": "Linea", "role": "line"}]});
+        let mut state = State::default();
+        for id in ["a", "g", "l"] {
+            state.done.insert(format!("tpl:id:{id}"), START);
+        }
+        let out = templates_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("template Assalto reinforcement priority elite: true Verified")
+        );
+        let out = templates_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("template Presidio reinforcement priority reserve: true Verified")
+        );
+        assert_eq!(
+            templates_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 2);
+        // at peace the plan's own priority returns (regular when it names none)
+        tools.replies.borrow_mut().insert(
+            "hoi4_wars".into(),
+            json!({"wars": {"validated": true, "at_war": false, "enemies": []}}),
+        );
+        let later = START + 2 * DAY;
+        let out = templates_step(&mut state, &tools, &plan, "l", later).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("template Assalto reinforcement priority regular: true Verified")
+        );
+        let out = templates_step(&mut state, &tools, &plan, "l", later).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("template Presidio reinforcement priority regular: true Verified")
+        );
+        assert!(!state.done.contains_key("warprio:Assalto"));
+        // switched off
+        let off = json!({"war": {"enemies": ["ETH"]}, "manage": {"war_priority": false},
+            "templates": [{"id": "a", "name": "Assalto", "role": "strike"}]});
+        let mut state = State::default();
+        state.done.insert("tpl:id:a".into(), START);
+        assert_eq!(
+            templates_step(&mut state, &tools, &off, "l", START).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -2392,7 +2838,7 @@ mod tests {
     }
 
     #[test]
-    fn manpower_below_two_months_of_losses_takes_the_next_enabled_law() {
+    fn manpower_below_two_months_of_losses_takes_only_a_listed_law() {
         let tools = fake(vec![
             (
                 "hoi4_country_status",
@@ -2406,7 +2852,31 @@ mod tests {
                 {"idea": "extensive_conscription", "enabled": false}]}),
             ),
         ]);
-        let plan = json!({"manage": {"off": ["equipment_fill", "resources"]}});
+        // without manage.conscription_laws the rule never takes a law: it wakes the player
+        let unlisted = json!({"manage": {"off": ["equipment_fill", "resources"]}});
+        let mut state = State::default();
+        assert_eq!(
+            step(&mut state, &tools, &unlisted, "l", START).unwrap(),
+            None
+        );
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_war_stats".into(), war_stats(50000.0));
+        assert_eq!(
+            step(&mut state, &tools, &unlisted, "l", START + 10 * DAY).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["manpower"].contains("lists no conscription law"));
+        assert_eq!(wakes(&mut state)[0]["reason"], "manpower_low");
+        assert!(actions(&tools).is_empty());
+        // listed: the first listed law harsher than the current one
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_war_stats".into(), war_stats(10000.0));
+        let plan = json!({"manage": {"off": ["equipment_fill", "resources"],
+            "conscription_laws": ["limited_conscription", "extensive_conscription"]}});
         let mut state = State::default();
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
         assert!(state.manage.notes["manpower"].contains("collecting"));
