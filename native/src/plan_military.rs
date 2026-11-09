@@ -62,8 +62,18 @@
 //!                invasion_support on every sound task force not already on patrol or strike
 //!                force (once per invasion), the army moves to `from_state` (hoi4_army_move once),
 //!                the invasion is ordered (source_state_id `from_state`), and after `prepare_days`
-//!                (default 14) its plan is executed (hoi4_army_plan execute:true, every 5 game days
-//!                while the game answers plan_not_executable: preparation or naval dominance).
+//!                its plan is executed (hoi4_army_plan execute:true, every 5 game days while the
+//!                game answers plan_not_executable: preparation or naval dominance). Default
+//!                `prepare_days`: the game's 60 days less the researched invasion techs (Man the
+//!                Guns: transport 50, landing craft 40, tank landing craft 30; tech_done reads, an
+//!                unreadable tech counts as not researched); the same techs give the division cap
+//!                of one plan (4/6/10/15). Before its move an army with front or battle-plan orders
+//!                (hoi4_armies battle_plan_orders; an order keeps the invasion from starting) or
+//!                over the cap has its divisions (at most the cap; all but one when it only has
+//!                orders) detached into their own army without orders (hoi4_army_detach), bound
+//!                to the role name "<army> (<id>)" and driven instead (done once per army).
+//!                `manage.invasion_base_days` (60), `manage.invasion_base_divisions` (4) and
+//!                `manage.invasion_techs` {"<tech>":{"prep_days","divisions"}} override the table.
 //!                Landed when `target_province` (else any province of `target_state`) is held by
 //!                the player after the first army executed. Aborted, with a wake, on a typed
 //!                refusal (not_coastal, source_not_coastal, own_state, no_such_army,
@@ -521,14 +531,83 @@ fn active_invasion(state: &State, plan: &Value) -> Option<(String, Value)> {
         })
 }
 
+/// The role name of the army an invasion's planned army lands with (its own army, detached
+/// without front orders); bound in `State::layout` once made.
+fn landing_hint(id: &str, planned: &str) -> String {
+    format!("{planned} ({id})")
+}
+
+/// The army that lands for a planned invasion army: its own landing army once detached, else
+/// the planned army (a role name means the army playing that role).
+fn landing_army(state: &State, id: &str, planned: &str) -> String {
+    state
+        .layout
+        .get(&landing_hint(id, planned))
+        .filter(|a| !a.is_empty())
+        .cloned()
+        .unwrap_or_else(|| resolve(state, planned))
+}
+
+/// The game's invasion techs (1.19.4 files): (tech, preparation days, division cap) changes.
+/// Man the Guns' tree first, then the base tree.
+const INVASION_TECHS: [(&str, i64, i64); 6] = [
+    ("mtg_transport", -10, 2),
+    ("mtg_landing_craft", -10, 4),
+    ("mtg_tank_landing_craft", -10, 5),
+    ("transport", -30, 2),
+    ("landing_craft", -30, 2),
+    ("tank_landing_craft", -15, 8),
+];
+
+/// Preparation days and division cap of one invasion plan from the techs researched: base
+/// `manage.invasion_base_days` (60, NAVAL_INVASION_PREPARE_DAYS) and
+/// `manage.invasion_base_divisions` (4), plus each researched tech of the table (4/6/10/15
+/// divisions and 60/50/40/30 days along Man the Guns' tree); `manage.invasion_techs`
+/// {"<tech>":{"prep_days":-10,"divisions":2}} adds or replaces rows (mods). A tech that cannot be
+/// read counts as not researched. Returns (days, cap, the techs counted).
+fn invasion_capacity(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+) -> (i64, i64, Vec<String>) {
+    let m = &plan["manage"];
+    let mut table: BTreeMap<String, (i64, i64)> = INVASION_TECHS
+        .iter()
+        .map(|(t, d, c)| (t.to_string(), (*d, *c)))
+        .collect();
+    if let Some(extra) = m["invasion_techs"].as_object() {
+        for (tech, row) in extra {
+            table.insert(
+                tech.clone(),
+                (
+                    row["prep_days"].as_i64().unwrap_or(0),
+                    row["divisions"].as_i64().unwrap_or(0),
+                ),
+            );
+        }
+    }
+    let mut prep = m["invasion_base_days"].as_i64().unwrap_or(60);
+    let mut cap = m["invasion_base_divisions"].as_i64().unwrap_or(4);
+    let mut known = Vec::new();
+    for (tech, (d, c)) in table {
+        if super::judge(state, tools, &json!(format!("tech_done:{tech}")), now) == Truth::True {
+            prep += d;
+            cap += c;
+            known.push(tech);
+        }
+    }
+    (prep.max(1), cap.max(1), known)
+}
+
 /// The armies and the fleet of the running invasion (other steps leave them alone).
 fn invasion_claims(state: &State, plan: &Value) -> (HashSet<String>, Option<String>) {
-    let Some((_, entry)) = active_invasion(state, plan) else {
+    let Some((id, entry)) = active_invasion(state, plan) else {
         return (HashSet::new(), None);
     };
     let armies = strings(&entry, "armies")
         .iter()
-        .map(|h| resolve(state, h))
+        .map(|h| landing_army(state, &id, h))
         .collect();
     let fleet = entry["fleet"]
         .as_str()
@@ -714,9 +793,10 @@ fn invasion_step(
             (id, e)
         }
     };
-    let armies: Vec<String> = strings(&entry, "armies")
+    let planned = strings(&entry, "armies");
+    let armies: Vec<String> = planned
         .iter()
-        .map(|h| resolve(state, h))
+        .map(|h| landing_army(state, &id, h))
         .collect();
     // the war step leaves the invasion's armies alone while it runs
     for army in &armies {
@@ -761,7 +841,8 @@ fn invasion_step(
         .copied()
         .unwrap_or(now);
     let stage_days = days(&entry["stage_days"], 20) * DAY;
-    let prepare = days(&entry["prepare_days"], 14) * DAY;
+    let (tech_days, cap, techs) = invasion_capacity(state, tools, plan, now);
+    let prepare = days(&entry["prepare_days"], tech_days) * DAY;
     let execute_days = days(&entry["execute_days"], 60) * DAY;
     let land_days = days(&entry["land_days"], 30) * DAY;
     let me = tools
@@ -791,7 +872,7 @@ fn invasion_step(
         return Ok(None);
     }
     let mut turn = started;
-    for army in &armies {
+    for (index, army) in armies.iter().enumerate() {
         if let Some(at) = exec_at(state, army) {
             if army_row(&roster, army).is_none() {
                 abort_invasion(
@@ -894,6 +975,70 @@ fn invasion_step(
             }
             return Ok(None);
         };
+        // Its own army first: a front order keeps an invasion from starting, and one plan
+        // carries at most `cap` divisions (techs). Divisions with orders or over the cap are
+        // detached into a new army (no orders); the landing army is bound to a role name.
+        let hint = landing_hint(&id, &planned[index]);
+        let count = row["division_count"].as_i64().unwrap_or(0);
+        let orders = row["battle_plan_orders"].as_i64().unwrap_or(0);
+        if !state.layout.contains_key(&hint) && (count > cap || (orders > 0 && count > 1)) {
+            let take = if count > cap { cap } else { count - 1 };
+            let pick: Vec<String> = strings(&row, "divisions")
+                .into_iter()
+                .take(take as usize)
+                .collect();
+            if pick.len() as i64 != take {
+                note(
+                    state,
+                    &label,
+                    format!(
+                        "{army}: division ids unreadable (hoi4_armies), no landing army of its own"
+                    ),
+                );
+                state.layout.insert(hint, String::new());
+                return Ok(None);
+            }
+            let present: HashSet<String> = list(&roster, "armies")
+                .iter()
+                .map(|a| text(&a["army"]).to_string())
+                .collect();
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_detach",
+                json!({"army": army, "divisions": pick}),
+                "id",
+            )?;
+            let new = if ok {
+                tools
+                    .call("hoi4_armies", &json!({"threat": false}))
+                    .ok()
+                    .and_then(|after| {
+                        list(&after, "armies")
+                            .iter()
+                            .map(|a| text(&a["army"]).to_string())
+                            .find(|n| !present.contains(n))
+                    })
+            } else {
+                None
+            };
+            match &new {
+                Some(new) => {
+                    state.layout.insert(hint.clone(), new.clone());
+                    state.war_cool.insert(new.clone(), now + 2 * DAY);
+                    note(
+                        state,
+                        &label,
+                        format!("{} of {army}'s divisions (cap {cap}, {orders} orders) form the landing army {new}", pick.len()),
+                    );
+                }
+                None => state.skip(now, "inv", &id, DAY),
+            }
+            return Ok(Some(format!(
+                "invasion {id}: {} divisions of {army} into their own army ({hint}): {ok} {why}",
+                pick.len()
+            )));
+        }
         if let Some(line) = invasion_fleet(state, tools, plan, lease, &id, &entry, now)? {
             return Ok(Some(line));
         }
@@ -945,7 +1090,19 @@ fn invasion_step(
         let (ok, why) = state.act(tools, lease, "hoi4_naval_invasion", args, "in")?;
         if ok {
             state.done.insert(format!("inv:{id}:ordered:{army}"), now);
-            note(state, &label, format!("{army} ordered"));
+            note(
+                state,
+                &label,
+                format!(
+                    "{army} ordered; preparation {} days, cap {cap} divisions (techs: {})",
+                    prepare / DAY,
+                    if techs.is_empty() {
+                        "none known".to_string()
+                    } else {
+                        techs.join(", ")
+                    }
+                ),
+            );
         } else {
             let transient = matches!(
                 code(&why),
@@ -3285,7 +3442,81 @@ mod tests {
     }
     fn invader(state_id: i64, executing: bool) -> Value {
         json!({"armies": [{"army": "Seelöwe", "main_state": state_id, "plan_executing": executing,
-            "battle_plan_orders": 1, "division_count": 4}]})
+            "battle_plan_orders": 0, "division_count": 4}]})
+    }
+
+    #[test]
+    fn invading_divisions_get_their_own_army_up_to_the_tech_cap_and_prepare_by_tech() {
+        /// hoi4_army_detach makes "Army 9" from the picked divisions.
+        struct Detach(Fake);
+        impl Tools for Detach {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_army_detach" && args.get("request_id").is_some() {
+                    self.0.reply(
+                        "hoi4_armies",
+                        json!({"armies": [
+                            {"army": "Seelöwe", "main_state": 50, "battle_plan_orders": 2,
+                             "division_count": 2, "divisions": ["g", "h"]},
+                            {"army": "Army 9", "main_state": 50, "battle_plan_orders": 0,
+                             "division_count": 6, "divisions": ["a", "b", "c", "d", "e", "f"]}]}),
+                    );
+                }
+                self.0.call(name, args)
+            }
+        }
+        let tools = Detach(fake(vec![
+            ("hoi4_overview", json!({"player": "GER"})),
+            (
+                "hoi4_armies",
+                json!({"armies": [{"army": "Seelöwe", "main_state": 50, "battle_plan_orders": 2,
+                    "division_count": 8, "divisions": ["a", "b", "c", "d", "e", "f", "g", "h"]}]}),
+            ),
+            ("hoi4_states", landing("ENG")),
+            (
+                "hoi4_research",
+                json!({"researched": [{"id": "mtg_transport"}]}),
+            ),
+        ]));
+        let plan = json!({"invasions": [{"id": "sealion", "from_state": 59, "target_state": 120,
+            "armies": ["Seelöwe"]}]});
+        let mut state = State::default();
+        // Man the Guns' transport: cap 6, preparation 50 days
+        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("invasion sealion: 6 divisions of Seelöwe into their own army (Seelöwe (sealion)): true Verified")
+        );
+        let sent = actions(&tools.0);
+        assert_eq!(
+            sent[0].1["divisions"],
+            json!(["a", "b", "c", "d", "e", "f"])
+        );
+        assert_eq!(state.layout["Seelöwe (sealion)"], "Army 9");
+        assert_eq!(state.war_cool["Army 9"], START + 2 * DAY);
+        // the landing army moves and is ordered, not the planned one
+        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("invasion sealion: Army 9 to the port state 59: true Verified")
+        );
+        tools.0.reply(
+            "hoi4_armies",
+            json!({"armies": [{"army": "Army 9", "main_state": 59, "battle_plan_orders": 0,
+                "division_count": 6, "divisions": ["a"]}]}),
+        );
+        let out = invasion_step(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        assert!(out.unwrap().starts_with("invasion sealion: Army 9 from 59"));
+        assert!(state.military.notes["invasion:sealion"]
+            .contains("preparation 50 days, cap 6 divisions (techs: mtg_transport)"));
+        assert_eq!(
+            invasion_step(&mut state, &tools, &plan, "l", START + 50 * DAY).unwrap(),
+            None
+        );
+        let out = invasion_step(&mut state, &tools, &plan, "l", START + 51 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("invasion sealion: Army 9 executes: true Verified")
+        );
     }
 
     #[test]

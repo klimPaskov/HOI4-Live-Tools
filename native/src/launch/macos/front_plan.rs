@@ -442,7 +442,7 @@ fn read_text(dir: &Path, rel: &str) -> Result<String> {
         .map_err(|_| Error::new("map_data_unavailable", format!("{rel} unreadable")))
 }
 
-fn read_capitals(dir: &Path) -> BTreeMap<String, i32> {
+pub(super) fn read_capitals(dir: &Path) -> BTreeMap<String, i32> {
     let mut out = BTreeMap::new();
     let Ok(entries) = std::fs::read_dir(dir.join("history/countries")) else {
         return out;

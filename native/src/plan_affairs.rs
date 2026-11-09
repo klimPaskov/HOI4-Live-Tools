@@ -32,7 +32,15 @@
 //!                with 10 DLC, ship 31 Oct with 3 DLC
 //!   production[].design  a design (a `designs` id, a design name or a design id number) the line of
 //!                that `equipment` switches to, once, through hoi4_design_set_production (line index from
-//!                hoi4_production_lines, design id from hoi4_designs; `accept_progress_loss` default true);
+//!                hoi4_production_lines, design id from hoi4_designs; `accept_progress_loss` default true).
+//!                Mature-line guard: when the design's type (hoi4_designs hull_or_chassis) differs from the
+//!                line's equipment (a tier or chassis change keeps 30% or less of the line's efficiency),
+//!                a line the executor did not add in the last `manage.mature_line_days` (30) game days is
+//!                mature (no tool reads line efficiency) and is never switched: the design starts as a
+//!                separate line (hoi4_production_add with `design`, 10% of the old line's factories,
+//!                1-5) on free factories and the old line keeps building; "switch_mature": true on the
+//!                entry (or on the `designs` item) switches the whole line anyway. A same-type variant
+//!                (90% kept) switches as before;
 //!                `designs[].production` asks the same from the design's side. It waits until the design
 //!                and the line exist. The production step (tick step 7) adds lines without a design
 //!                (hoi4_production_add takes `design`, step 7 does not pass it), so a new line starts on
@@ -390,8 +398,8 @@ fn designs_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
 }
 
 /// One wanted switch: (line equipment, design label, design by name or id, the `designs` item
-/// key it waits for, accept_progress_loss).
-type Switch = (String, String, Value, Option<String>, bool);
+/// key it waits for, accept_progress_loss, switch_mature).
+type Switch = (String, String, Value, Option<String>, bool, bool);
 
 fn wanted_switches(plan: &Value) -> Vec<Switch> {
     let designs = list(plan, "designs");
@@ -403,6 +411,7 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
             continue;
         }
         let accept = line["accept_progress_loss"] != json!(false);
+        let mature = line["switch_mature"] == json!(true);
         // a `designs` id names the design that item makes
         let item = design.as_str().and_then(|d| {
             designs
@@ -416,6 +425,7 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
                 json!(text(&e["name"]).trim()),
                 item_id(e).map(|id| format!("design:id:{id}")),
                 accept,
+                mature || e["switch_mature"] == json!(true),
             )),
             (None, Value::String(name)) => out.push((
                 equipment,
@@ -423,10 +433,16 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
                 json!(name.trim()),
                 None,
                 accept,
+                mature,
             )),
-            (None, Value::Number(id)) => {
-                out.push((equipment, id.to_string(), design.clone(), None, accept))
-            }
+            (None, Value::Number(id)) => out.push((
+                equipment,
+                id.to_string(),
+                design.clone(),
+                None,
+                accept,
+                mature,
+            )),
             _ => {}
         }
     }
@@ -442,6 +458,7 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
             json!(name),
             item_id(entry).map(|id| format!("design:id:{id}")),
             entry["accept_progress_loss"] != json!(false),
+            entry["switch_mature"] == json!(true),
         ));
     }
     out
@@ -456,7 +473,7 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
     let mut lines: Option<Vec<Value>> = None;
     let mut all_designs: Option<Vec<Value>> = None;
     let mut waits: Vec<String> = Vec::new();
-    for (equipment, label, design, gate_key, accept) in wanted {
+    for (equipment, label, design, gate_key, accept, mature) in wanted {
         let key = format!("pdes:{equipment}:{label}");
         if state.done.contains_key(&key) {
             continue;
@@ -524,6 +541,51 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
             .filter(|d| d.is_u64())
             .cloned()
             .unwrap_or(design);
+        // Mature-line guard: a switch to another equipment type (a tier or chassis change keeps
+        // 30% or less of the line's efficiency, a same-type variant 90%) never takes the
+        // factories of a mature line; the new design starts as a separate line on free factories
+        // and the old line keeps building. Only `switch_mature: true` switches the whole line.
+        // No tool reads line efficiency: a line counts as young only when the executor added it
+        // less than `manage.mature_line_days` (30) game days ago.
+        let line_type = text(&line["equipment_id"]).to_string();
+        let design_type = text(&found["hull_or_chassis"]).to_string();
+        if !mature && !line_type.is_empty() && !design_type.is_empty() && line_type != design_type {
+            let mature_days = plan["manage"]["mature_line_days"]
+                .as_i64()
+                .filter(|d| *d >= 0)
+                .unwrap_or(30);
+            let added = state.done.get(&format!("prodadd:{equipment}")).copied();
+            if !added.is_some_and(|h| now - h < mature_days * DAY) {
+                let factories = line["factory_counters"]["requested_factories_raw_signed"]
+                    .as_i64()
+                    .unwrap_or(0);
+                let start = ((factories as f64 * 0.1).round() as i64).clamp(1, 5);
+                let (ok, why) = state.act(
+                    tools,
+                    run.lease,
+                    "hoi4_production_add",
+                    json!({"equipment": design_type, "design": target, "factories": start}),
+                    "dn",
+                )?;
+                if ok {
+                    state.done.insert(key, now);
+                } else {
+                    state.skip(now, "pdes", &key, 3 * DAY);
+                }
+                let age = added.map_or_else(
+                    || "not added by the executor; no line efficiency read".to_string(),
+                    |h| format!("added {} game days ago", (now - h) / DAY),
+                );
+                note(
+                    state,
+                    "production_tier_guard",
+                    format!("{equipment} -> {label}: {line_type} to {design_type} changes the type and the line is mature ({age}): it keeps its factories, the new design starts on a separate line with {start}: {ok}"),
+                );
+                return Ok(Some(format!(
+                    "production {label} on a separate line ({start} factories), mature line {equipment} kept: {ok} {why}"
+                )));
+            }
+        }
         let (ok, why) = state.act(
             tools,
             run.lease,
@@ -2028,6 +2090,62 @@ mod tests {
     }
 
     // ----- diplomacy
+
+    #[test]
+    fn a_tier_change_never_switches_a_mature_line() {
+        let tools = fake(vec![
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                {"entry_index": 2, "line_kind": "military", "equipment_id": "medium_tank_chassis_1",
+                    "line_handle": "0x10", "factory_counters": {"requested_factories_raw_signed": 20}}]}),
+            ),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 6001, "name": "Panzer IV",
+                    "hull_or_chassis": "medium_tank_chassis_2", "production_lines": []}]}),
+            ),
+        ]);
+        let plan =
+            json!({"production": [{"equipment": "medium_tank_chassis_1", "design": "Panzer IV"}]});
+        // a starting line (age unknown): the new tier starts on its own line, the old one stays
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("separate line (2 factories)"), "{out}");
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_production_add");
+        assert_eq!(sent[0].1["design"], 6001);
+        assert_eq!(sent[0].1["equipment"], "medium_tank_chassis_2");
+        assert!(state.affairs.notes["production_tier_guard"].contains("no line efficiency read"));
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 1);
+        // a line the executor added 10 days ago is young: it switches
+        let mut state = State::default();
+        state
+            .done
+            .insert("prodadd:medium_tank_chassis_1".into(), START - 10 * DAY);
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("production line medium_tank_chassis_1 -> design Panzer IV: true"),
+            "{out}"
+        );
+        // switch_mature: the whole line switches
+        let mut state = State::default();
+        let allowed = json!({"production": [{"equipment": "medium_tank_chassis_1",
+            "design": "Panzer IV", "switch_mature": true}]});
+        step(&mut state, &tools, &allowed, "l", START).unwrap();
+        assert_eq!(
+            actions(&tools).last().unwrap().0,
+            "hoi4_design_set_production"
+        );
+    }
 
     fn declare_rows(enabled: bool) -> Value {
         json!({"country": "ETH", "actions": [

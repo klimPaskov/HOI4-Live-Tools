@@ -635,6 +635,12 @@
             "x-owner": "player",
             "x-executor-planned": "W1-9",
             "description": "equipment key that replaces this line's equipment from `from`, keeping its factories (efficiency kept: same-model variant 90%, same family 70%, a tier change such as infantry_equipment_1 to _2 30%, same archetype 20%; a tier change on a mature line starts the new model on new factories first)"
+          },
+          "switch_mature": {
+            "type": "boolean",
+            "default": false,
+            "x-owner": "executor",
+            "description": "true switches a mature line to a new tier anyway (default: the design starts as a separate line and the old line keeps building)"
           }
         },
         "additionalProperties": false,
@@ -2110,7 +2116,7 @@
         "conscription_laws": {
           "type": "array",
           "default": [],
-          "description": "conscription ladder, lightest first (default: the vanilla laws)",
+          "description": "conscription laws the manpower rule may take, lightest first (default none: it never raises conscription and wakes the player instead)",
           "x-rule": "manpower"
         },
         "stability_floor": {
@@ -2229,6 +2235,72 @@
           "maximum": 1,
           "x-owner": "player",
           "x-executor-planned": "W3-10"
+        },
+        "rebalance_step": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 3,
+          "description": "idle military factories given per action to the priority line the divisions lack most, re-chosen each action (acts without manage)",
+          "x-owner": "executor"
+        },
+        "day0_production": {
+          "type": "boolean",
+          "default": true,
+          "description": "while paused at the start date, free military factories go to the starting lines the plan keeps before anything else; false turns it off",
+          "x-owner": "executor"
+        },
+        "war_priority": {
+          "type": "boolean",
+          "default": true,
+          "description": "at war, templates with a strike/assault/armour/mobile role get elite reinforcement and garrisons reserve; false turns it off",
+          "x-owner": "executor"
+        },
+        "war_civs": {
+          "type": "boolean",
+          "default": false,
+          "description": "true keeps industrial_complex construction jobs at war (default: skipped unless the goal deadline is over a year away)",
+          "x-owner": "executor"
+        },
+        "mature_line_days": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 30,
+          "description": "a production line not added by the executor within this many game days is mature: a tier change starts a new line instead of switching it (no line efficiency read)",
+          "x-owner": "executor"
+        },
+        "invasion_base_days": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 60,
+          "description": "naval invasion preparation days without invasion techs",
+          "x-owner": "executor"
+        },
+        "invasion_base_divisions": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4,
+          "description": "divisions per invasion plan without invasion techs",
+          "x-owner": "executor"
+        },
+        "invasion_techs": {
+          "type": "object",
+          "default": {},
+          "description": "{\"<tech>\": {\"prep_days\", \"divisions\"}} overrides the invasion tech table (transport 50/6, landing craft 40/10, tank landing craft 30/15)",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "prep_days": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "divisions": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "x-owner": "executor"
         },
         "why": {
           "type": "string",
@@ -2823,6 +2895,12 @@
           "note": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
+          },
+          "switch_mature": {
+            "type": "boolean",
+            "default": false,
+            "x-owner": "executor",
+            "description": "true switches a mature line to a new tier anyway (default: the design starts as a separate line and the old line keeps building)"
           }
         },
         "additionalProperties": false,
@@ -3522,7 +3600,7 @@
           "type": "integer",
           "minimum": 0,
           "x-owner": "executor",
-          "description": "days without progress before a direct move (default 8)"
+          "description": "game days without progress on a target before the stall response: a second direction first, then a direct move with a back-off (default 8)"
         },
         "rest": {
           "type": "boolean",
@@ -3532,23 +3610,24 @@
         "rest_below": {
           "type": "number",
           "x-owner": "executor",
-          "description": "organisation below which an army rests (default 12)"
+          "description": "absolute organisation below which an army rests; replaces rest_below_pct when set (no default: the share rule applies)"
         },
         "resume_above": {
           "type": "number",
           "x-owner": "executor",
-          "description": "organisation at which it resumes (default 30)"
+          "description": "absolute organisation at which a rested army resumes; replaces resume_above_pct when set (no default: the share rule applies)"
         },
         "supply_floor": {
           "type": "number",
           "x-owner": "executor",
-          "description": "supply percent below which an army rests (default 25)"
+          "description": "supply percent (50 or 0.5) below which an executing army rests and no army gets a new attack order, except a move to retake an own state (default 50)",
+          "default": 50
         },
         "rest_max_days": {
           "type": "integer",
           "minimum": 0,
           "x-owner": "executor",
-          "description": "resume anyway after this many days (default 20)"
+          "description": "a rested army resumes anyway after this many game days when its supply is above supply_hold (default 20)"
         },
         "direct_moves": {
           "type": "boolean",
@@ -3564,6 +3643,115 @@
           "type": "boolean",
           "x-owner": "executor",
           "description": "false: do not pull encircled armies back"
+        },
+        "planning_wait": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "after an offensive line is drawn, the execute order waits for the planning bonus (estimated from game days; no tool reads it); false executes the next tick"
+        },
+        "planning_cap": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.3,
+          "x-owner": "executor",
+          "description": "the army's maximum planning bonus (share, 0.30 or 30)"
+        },
+        "planning_share": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.9,
+          "x-owner": "executor",
+          "description": "share of planning_cap the bonus must reach before execution"
+        },
+        "planning_gain": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.02,
+          "x-owner": "executor",
+          "description": "planning bonus gained per game day"
+        },
+        "planning_max_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 15,
+          "x-owner": "executor",
+          "description": "longest planning wait in game days"
+        },
+        "planning_skip_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 20,
+          "x-owner": "executor",
+          "description": "no planning wait when the goal deadline is closer than this many game days"
+        },
+        "supply_hold": {
+          "type": "number",
+          "minimum": 0,
+          "default": 35,
+          "x-owner": "executor",
+          "description": "supply percent below which nothing attacks, own-state retakes included, and a rest does not end at rest_max_days"
+        },
+        "supply_resume": {
+          "type": "number",
+          "minimum": 0,
+          "default": 70,
+          "x-owner": "executor",
+          "description": "supply percent at or above which a rested army resumes (never below supply_floor)"
+        },
+        "rest_below_pct": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.3,
+          "x-owner": "executor",
+          "description": "rest below this share of the army's highest organisation seen"
+        },
+        "resume_above_pct": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.8,
+          "x-owner": "executor",
+          "description": "resume at this share of the army's highest organisation seen"
+        },
+        "pocket_share": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.5,
+          "x-owner": "executor",
+          "description": "share of the land provinces around an army held by others at which it falls back from a forming pocket (outside fully held own states)"
+        },
+        "second_direction": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "the first stall on a target brings a second direction (an idle army beside the target, else this army goes round and redraws); false goes straight to the direct move"
+        },
+        "bound": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "after a target with an own supply hub, port or railway falls, the army's next advance waits for supply there to recover; false turns it off"
+        },
+        "bound_rail_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 10,
+          "x-owner": "executor",
+          "description": "game days a captured railway is dead (the bound ends after it once supply is at the floor)"
+        },
+        "bound_core_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 5,
+          "x-owner": "executor",
+          "description": "the same in an own (core) state"
+        },
+        "bound_max_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 12,
+          "x-owner": "executor",
+          "description": "longest bound pause in game days"
         }
       },
       "additionalProperties": false

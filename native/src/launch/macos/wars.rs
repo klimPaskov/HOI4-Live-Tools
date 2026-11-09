@@ -218,6 +218,71 @@ fn adjacency(dir: &Path) -> Result<Arc<Adjacency>> {
     Ok(built)
 }
 
+/// Country capitals from `history/countries` (`capital = <state>`), read once per install.
+fn capitals(dir: &Path) -> Arc<BTreeMap<String, i32>> {
+    type Capitals = Arc<BTreeMap<String, i32>>;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Capitals>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return found.clone();
+    }
+    let read = Arc::new(super::front_plan::read_capitals(dir));
+    cache
+        .lock()
+        .unwrap()
+        .insert(dir.to_path_buf(), read.clone());
+    read
+}
+
+/// Own-controlled states the capital reaches over own-controlled land (state adjacency of the
+/// map files; sea crossings are not land). The capital is the history file's; when the player
+/// does not control it (or it is unknown) the largest connected own-controlled area stands in.
+/// Disbanding a division outside these states loses 75% of its equipment.
+fn capital_land(
+    player: &str,
+    states: &[StateRow],
+    adjacency: &Adjacency,
+    capital: Option<i32>,
+) -> Value {
+    let own: BTreeSet<i32> = states
+        .iter()
+        .filter(|s| s.controller == player)
+        .map(|s| s.id)
+        .collect();
+    let area = |start: i32| -> BTreeSet<i32> {
+        let mut seen = BTreeSet::from([start]);
+        let mut queue = vec![start];
+        while let Some(u) = queue.pop() {
+            for v in adjacency.get(&u).into_iter().flatten() {
+                if own.contains(v) && seen.insert(*v) {
+                    queue.push(*v);
+                }
+            }
+        }
+        seen
+    };
+    let (basis, states) = match capital.filter(|c| own.contains(c)) {
+        Some(c) => ("capital", area(c)),
+        None => {
+            let mut left = own.clone();
+            let mut best: BTreeSet<i32> = BTreeSet::new();
+            while let Some(&start) = left.iter().next() {
+                let found = area(start);
+                for s in &found {
+                    left.remove(s);
+                }
+                if found.len() > best.len() {
+                    best = found;
+                }
+            }
+            ("largest_own_area", best)
+        }
+    };
+    json!({"capital_state": capital, "basis": basis,
+        "states": states.into_iter().collect::<Vec<_>>(),
+        "note": "own-controlled states reached from the capital over own-controlled land (map-file state adjacency); a division elsewhere is overseas"})
+}
+
 // ---------------------------------------------------------------------------
 // Memory snapshot (same validated reads as hoi4_states / hoi4_armies).
 
@@ -618,6 +683,16 @@ pub(super) fn wars(process: &dyn Process, dir: &Path, args: &Map<String, Value>)
         wars: wars_value,
         max_states,
     });
+    match &graph {
+        Ok(g) => {
+            let capital = capitals(dir).get(&snap.player).copied();
+            out["capital_land"] = capital_land(&snap.player, &snap.states, g, capital);
+        }
+        Err(e) => {
+            out["capital_land"] = Value::Null;
+            out["capital_land_reason"] = json!(format!("{}: {}", e.code, e.message));
+        }
+    }
     out["observation_paused_game"] = json!(false);
     out["input_authorized"] = json!(false);
     out["freshness"] = json!({"elapsed_ms": started.elapsed().as_secs_f64() * 1000.0});
@@ -729,6 +804,37 @@ mod tests {
             owner: owner.into(),
             controller: controller.into(),
         }
+    }
+
+    #[test]
+    fn capital_land_follows_own_controlled_land_from_the_capital() {
+        // GER 1,2 | POL 3 | FRA 4 | GER 5: 5 is cut off from the capital 1
+        let states = [
+            row(1, "GER", "GER"),
+            row(2, "GER", "GER"),
+            row(3, "POL", "POL"),
+            row(4, "FRA", "FRA"),
+            row(5, "GER", "GER"),
+        ];
+        let v = capital_land("GER", &states, &adjacency_fixture(), Some(1));
+        assert_eq!(v["states"], json!([1, 2]));
+        assert_eq!(v["basis"], "capital");
+        // occupied POL 3 joins the land route; 5 is still apart (FRA 4)
+        let taken = [
+            row(1, "GER", "GER"),
+            row(2, "GER", "GER"),
+            row(3, "POL", "GER"),
+            row(4, "FRA", "FRA"),
+            row(5, "GER", "GER"),
+        ];
+        assert_eq!(
+            capital_land("GER", &taken, &adjacency_fixture(), Some(1))["states"],
+            json!([1, 2, 3])
+        );
+        // capital unknown: the largest own area
+        let v = capital_land("GER", &taken, &adjacency_fixture(), None);
+        assert_eq!(v["states"], json!([1, 2, 3]));
+        assert_eq!(v["basis"], "largest_own_area");
     }
 
     /// 1-2-3-4 chain: GER 1,2 | POL 3 | FRA 4 ; plus GER 5 touching FRA 4 only.

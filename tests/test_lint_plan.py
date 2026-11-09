@@ -731,9 +731,19 @@ class TacticsRules(unittest.TestCase):
         self.assertHit(self.ita, "war.planning_wait", "warning", "war.direct_moves")
         plan = self.plan()
         plan["war"]["direct_moves"] = False
-        self.assertHit(plan, "war.planning_wait", "info", "no planning-wait key yet")
-        # once the schema has the key, a plan without it fails
-        schema = self.schema_with(plan_days={"type": "integer", "minimum": 0})
+        # the executor's planning wait (default on, up to 15 days) is enough
+        self.assertNoHit(plan, "war.planning_wait")
+        plan["war"]["planning_max_days"] = 6
+        self.assertHit(plan, "war.planning_wait", "warning", "12% planning")
+        plan["war"]["planning_wait"] = False
+        self.assertHit(plan, "war.planning_wait", "error", "war.planning_wait false")
+        del plan["war"]["planning_wait"], plan["war"]["planning_max_days"]
+        # a schema without the executor keys: an info line, then a named days key
+        schema = copy.deepcopy(lint_plan.load_schema())
+        for k in [k for k in schema["definitions"]["war"]["properties"] if k.startswith("planning_")]:
+            del schema["definitions"]["war"]["properties"][k]
+        self.assertHit(plan, "war.planning_wait", "info", "no planning-wait key yet", schema=schema)
+        schema["definitions"]["war"]["properties"]["plan_days"] = {"type": "integer", "minimum": 0}
         self.assertHit(plan, "war.planning_wait", "error", "war.plan_days", schema=schema)
         plan["war"]["plan_days"] = 6
         self.assertHit(plan, "war.planning_wait", "warning", "12% planning", schema=schema)
@@ -744,7 +754,7 @@ class TacticsRules(unittest.TestCase):
         plan = self.plan()
         plan["war_by_phase"]["P2_tigray"]["avoid_pockets"] = False
         self.assertHit(plan, "war.pocket_threshold", "error", "war_by_phase.P2_tigray.avoid_pockets")
-        self.assertHit(self.ita, "war.pocket_threshold", "info", "70%")
+        self.assertNoHit(self.ita, "war.pocket_threshold")  # the executor default is 50%
         schema = self.schema_with(pocket_share={"type": "number", "description": "hostile share (default 0.7)"})
         plan = self.plan()
         self.assertHit(plan, "war.pocket_threshold", "warning", "the default 70%", schema=schema)
