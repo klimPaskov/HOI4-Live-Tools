@@ -289,9 +289,23 @@ class Calculators(unittest.TestCase):
         self.assertEqual(r["manpower_total"], 7500)
 
     def test_pp(self):
+        # the fixture has no gain_focus modifier: no focus cost, 2 PP a day
         r = calc.pp(self.w, 0, 0, 0, "1936.1.1", "1936.6.1", [("1936.1.1", 150, "law")])
+        self.assertEqual(r["focus_cost"], 0.0)
         self.assertEqual(r["rows"][0]["date"], add_days("1936.1.1", 75))
         self.assertEqual(r["rows"][0]["late_days"], 75)
+
+    def test_pp_subtracts_the_running_focus(self):
+        # a running focus costs 1 PP a day: the 150 PP law waits 150 days, not 75
+        r = calc.pp(self.w, 0, 0, 0, "1936.1.1", "1936.8.1", [("1936.1.1", 150, "law")], focus_cost=1.0)
+        self.assertEqual(r["per_day"], 1.0)
+        self.assertEqual(r["rows"][0]["late_days"], 150)
+        # the focus path ends on 1 March: 2 a day after it
+        r = calc.pp(self.w, 0, 0, 0, "1936.1.1", "1936.8.1", [("1936.1.1", 150, "law")], focus_cost=1.0,
+                    focus_until="1936.3.1")
+        self.assertEqual(r["rows"][0]["late_days"], 59 + (150 - 59) // 2 + 1)
+        # stability above 50% raises the factor, below lowers it (fixture: no stability modifiers)
+        self.assertEqual(calc.pp_rates(self.w, stability=0.8)["stability_factor"], 0.0)
 
 
 if __name__ == "__main__":
