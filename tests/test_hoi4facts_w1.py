@@ -274,7 +274,7 @@ class DecisionsLawsXp(unittest.TestCase):
 
     def test_tech_level(self):
         t = self.w.tech_level("BBB")
-        self.assertEqual(t["fair"], "aggregate")
+        self.assertEqual(t["fair"], "private")
         self.assertEqual(t["classes"]["air"], {"reached": True, "year": 1936, "kinds": ["fighter", "interceptor"]})
         self.assertFalse(t["classes"]["anti_tank"]["reached"])
         self.assertEqual(self.w.tech_level("AAA")["classes"]["armour"]["kinds"], ["light_tank_chassis"])
@@ -379,15 +379,15 @@ class DossierSections(unittest.TestCase):
         self.assertIn("- Experience at start: navy 5 [history/countries/AAA - Alpha.txt:19], army air 0", md)
         self.assertIn("army XP rewards: focuses +25 over 1 (AAA_army_focus +25)", md)
         self.assertIn("| on 10/25 |", md)
-        self.assertIn("- Tech level at start (fair aggregate", md)
-        self.assertIn("air 1936 (fighter, interceptor)", md)
+        # enemy research is private (FAIR: no hidden enemy intel): absent in fair mode
+        self.assertNotIn("- Tech level at start", md)
         self.assertIn("NEVER-TAKE decisions of AAA", md)
         self.assertIn("- Balance of power AAA_balance [common/bop/AAA.txt:1]", md)
         self.assertIn("ACTIVE at start 0.3 in AAA_right_range", md)
         self.assertIn("gained by focus AAA_army_focus", md)
         self.assertIn("war_mob 150PP (war support > 0.5)", md)
         self.assertIn("NEVER-TAKE (white_peace:BBB)", md)
-        self.assertEqual(d["enemies"][0]["tech_level"]["fair"], "aggregate")
+        self.assertNotIn("tech_level", d["enemies"][0])
 
     def test_cli_commands_run(self):
         for c in (["units"], ["weather", "1"], ["bop", "AAA"], ["occupation-laws"], ["ports", "AAA"],
@@ -474,9 +474,9 @@ class Golden(unittest.TestCase):
         self.assertLess(len(md.encode("utf-8")), 120_000)  # ~30k tokens
         for text in ("- OVERSEAS:", "NEVER-TAKE decisions of ITA", "ITA_withdraw_from_ethiopia (white_peace:ETH",
                      "Balance of power at start: ETH_centralization_balance -0.25",
-                     "- Balance of power ITA_power_balance", "| on 0/20 |", "- Experience at start:",
-                     "- Tech level at start (fair aggregate"):
+                     "- Balance of power ITA_power_balance", "| on 0/20 |", "- Experience at start:"):
             self.assertIn(text, md)
+        self.assertNotIn("- Tech level at start", md)  # enemy research is private in FAIR mode
 
 
 if __name__ == "__main__":

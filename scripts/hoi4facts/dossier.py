@@ -275,7 +275,9 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
                "capital": ec["capital"], "stability": ec["stability"], "war_support": ec["war_support"],
                "ideas": [dict(w.idea_row(i["v"], t) or {"id": i["v"]}, set_by=i["src"]) for i in ec["ideas"]],
                "oob": _enemy_oob(w, t), "fair": "public"}
-        if w.visible("aggregate"):
+        # An enemy's research is not visible to a player (FAIR: no hidden enemy intel), so its tech
+        # level is private: shown in meta mode only.
+        if w.visible("private"):
             row["tech_level"] = w.tech_level(t)
         row["bop"] = [{"id": b["id"], "value": b["start"].get("value"), "range": b["start"].get("range"),
                        "src": b["start"].get("src")} for b in scenariomod.bop(w, t) if b["start"].get("active")]
@@ -571,7 +573,7 @@ def _md_neighbours(d, s):
               + ", ".join(f"{f['name']}" for f in agg["files"]))
         tl = e.get("tech_level")
         if tl:
-            s.add("- Tech level at start (fair aggregate: classes reached and newest tech year, no tech list): "
+            s.add("- Tech level at start (meta only: classes reached and newest tech year): "
                   + "; ".join(f"{k.replace('_', '-')} " + (
                       f"{v['year']} ({', '.join(_kind(x) for x in v['kinds'][:3])})" if v["reached"] else "none")
                       for k, v in tl["classes"].items()))

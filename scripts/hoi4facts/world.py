@@ -18,7 +18,7 @@ game.Game and content.Content) for one country at one bookmark:
     sub_units()         common/units: group, template row (battalion, divisional / regimental support, hq),
                         width, manpower, equipment need, special forces, enabling techs
     experience(tag)     army/air/navy experience at the start, the cap, experience_gain spirits
-    tech_level(tag)     anti-tank / armour / anti-air / air classes reached at the start (FAIR aggregate)
+    tech_level(tag)     anti-tank / armour / anti-air / air classes reached at the start (private: meta mode only)
     occupation_start(tag)  resistance and compliance settings of the tag's states at the start
     occupation_laws(), resistance_modifiers(), resistance_activities()
     adjacency_rules(), strategic_regions() (with weather periods), weather_settings(), power_balances()
@@ -1249,7 +1249,7 @@ class World:
                     year = max(year or 0, m["year"] or 0)
                     kinds |= (ts & want) if kinds_of == "type" else {arche.get(e) or e}
             out[cls] = {"reached": hit, "year": year, "kinds": sorted(kinds)}
-        return {"tag": tag, "classes": out, "fair": "aggregate",
+        return {"tag": tag, "classes": out, "fair": "private",
                 "d": "start techs (history set_technology at the start) -> enable_equipments -> equipment type "
                      "(archetype inherited); year = newest start_year of those techs"}
 
