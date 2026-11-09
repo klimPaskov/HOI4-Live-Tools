@@ -50,7 +50,7 @@ DEFAULTS = {
                 "binary": "claude",
                 "strategist": {"model": "sonnet", "effort": "xhigh",
                                "tools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]},
-                "critic": {"model": "sonnet", "effort": "high", "tools": ["Read", "Glob", "Grep", "Bash"]},
+                "critic": {"model": "sonnet", "effort": "high", "tools": ["Read", "Write", "Glob", "Grep", "Bash"]},
                 "player": {"model": "haiku", "effort": "medium", "tools": ["Read", "Bash", "mcp__hoi4-live"]},
                 "revision": {"quick_effort": "xhigh", "full_effort": "xhigh"},
             },

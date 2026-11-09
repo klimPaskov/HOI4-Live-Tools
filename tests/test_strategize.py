@@ -43,6 +43,8 @@ class Fake(strategize.Runner):
             if role == "strategist" and prompt == "strategist.md":
                 with open(os.path.join(self.run_dir, "plan.json"), "w") as f:
                     json.dump({"focus_path": []}, f)
+            if role == "critic" and getattr(self, "silent_critic", False):
+                return 0, ""
             if role == "critic":
                 self.critics += 1
                 ok = self.critics > self.critic_fails
@@ -57,7 +59,7 @@ class Fake(strategize.Runner):
 
 def args(run_dir, **kw):
     base = dict(run=run_dir, tag="ITA", date="1936.1.1", goal="Conquer Ethiopia", mode="fair", horizon=None,
-                game=None, userdir=None, mod=None, provider=None, dry_run=False)
+                game=None, userdir=None, mod=None, provider=None, dry_run=False, from_step="dossier")
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -103,6 +105,27 @@ class StrategizeTests(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertNotIn("critic", [r[0] for r in roles(fake)])
             self.assertEqual(sum(1 for r in roles(fake) if r[1] == "fix.md"), strategize.FIX_ROUNDS)
+
+    def test_critic_without_a_review_file_is_retried_once_then_blocks(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            fake.silent_critic = True
+            report = strategize.strategize(args(d), fake)
+            self.assertFalse(report["ok"])
+            self.assertIn("no RUN/review/critic", report["failure"])
+            self.assertEqual(sum(1 for r in roles(fake) if r[0] == "critic"), 2)
+            self.assertNotIn("answer.md", [r[1] for r in roles(fake)])
+
+    def test_resume_from_the_critic_skips_strategist_and_gates(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "plan.json"), "w") as f:
+                json.dump({"focus_path": []}, f)
+            os.makedirs(os.path.join(d, "dossier"))
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d, from_step="critic"), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(roles(fake), [("critic", "critic.md")])
+            self.assertFalse(any("validate_plan.py" in " ".join(c) for c in fake.commands))
 
     def test_review_gate_rules(self):
         self.assertEqual((strategize.PASS_TOTAL, strategize.MAX_TOTAL), (22, 32))

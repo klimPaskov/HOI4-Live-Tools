@@ -59,7 +59,7 @@ class MergeAndEnv(unittest.TestCase):
             "claude": {"critic": {"effort": "max"}, "player": {"model": "sonnet"}}}}})
         s = config.load_agents(path, env={})
         self.assertEqual(s["roles"]["critic"], {"model": "sonnet", "effort": "max",
-                                                "tools": ["Read", "Glob", "Grep", "Bash"]})
+                                                "tools": ["Read", "Write", "Glob", "Grep", "Bash"]})
         self.assertEqual(s["roles"]["player"]["model"], "sonnet")
         self.assertEqual(s["roles"]["player"]["effort"], "medium")  # untouched default
         self.assertEqual(s["roles"]["strategist"]["model"], "sonnet")

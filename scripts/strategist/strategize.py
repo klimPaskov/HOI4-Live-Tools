@@ -3,7 +3,8 @@
 
 Usage:
     strategize.py --run RUN [--tag ITA --date 1936.1.1 --goal "..." --mode fair --horizon 1937.1.1]
-                  [--game DIR] [--userdir DIR] [--mod PATH ...] [--provider NAME] [--dry-run]
+                  [--game DIR] [--userdir DIR] [--mod PATH ...] [--provider NAME] [--from gates|critic]
+                  [--dry-run]
 
 RUN/run_spec.json is written from the options when it does not exist yet (an existing spec wins).
 Steps, each gated; the script owns the order so no step can be skipped or self-reviewed:
@@ -226,9 +227,10 @@ def strategize(args, runner=None):
     report = {"run": run_dir, "spec": spec, "steps": [], "ok": False}
     started = time.time()
 
+    start_at = getattr(args, "from_step", None) or "dossier"
     # 1. dossier (deterministic; the strategist re-uses it)
     dossier = os.path.join(run_dir, "dossier")
-    if runner.dry or not os.path.exists(os.path.join(dossier, "dossier.md")):
+    if start_at == "dossier" and (runner.dry or not os.path.exists(os.path.join(dossier, "dossier.md"))):
         code, out = runner.run([sys.executable, os.path.join(ROOT, "scripts", "hoi4facts", "facts.py")]
                                + game_args(args) + ["--mode", spec.get("mode", "fair"),
                                "dossier", "build", "--tag", spec["tag"], "--date", spec["start_date"],
@@ -237,15 +239,18 @@ def strategize(args, runner=None):
         if code != 0:
             return finish(run_dir, report, "dossier build failed:\n" + out[-3000:], started)
 
-    # 2. strategist
-    code, _, secs = agent(runner, "strategist", run_dir, "strategist.md", args)
-    report["steps"].append({"step": "strategist", "exit": code, "seconds": round(secs)})
-    if code != 0:
-        return finish(run_dir, report, "strategist exited %s" % code, started)
+    # 2. strategist (skipped when resuming from the gates or the critic)
+    if start_at == "dossier":
+        code, _, secs = agent(runner, "strategist", run_dir, "strategist.md", args)
+        report["steps"].append({"step": "strategist", "exit": code, "seconds": round(secs)})
+        if code != 0:
+            return finish(run_dir, report, "strategist exited %s" % code, started)
+    else:
+        report["steps"].append({"step": "resume", "from": start_at})
 
     # 3-5. gates, critic, answers
     for review_round in range(1, REVIEW_ROUNDS + 1):
-        for fix in range(FIX_ROUNDS + 1):
+        for fix in range(0 if (start_at == "critic" and review_round == 1) else FIX_ROUNDS + 1):
             ok, text, lint = gates(runner, run_dir, args)
             report["lint_summary"] = {k: lint.get(k) for k in ("errors", "warnings") if k in lint} or None
             report["steps"].append({"step": "gates", "round": review_round, "fix": fix, "ok": ok})
@@ -260,8 +265,20 @@ def strategize(args, runner=None):
             code, _, secs = agent(runner, "strategist", run_dir, "fix.md", args)
             report["steps"].append({"step": "fix", "file": os.path.basename(gate_file), "exit": code,
                                     "seconds": round(secs)})
+        before = latest(run_dir, "critic-*.json")
         code, _, secs = agent(runner, "critic", run_dir, "critic.md", args)
         critic_path = latest(run_dir, "critic-*.json")
+        if not runner.dry and critic_path == before:
+            # No new review file: a tool or permission problem, not a failed review. Run once more.
+            log("critic wrote no review file; running it once more")
+            code, _, more = agent(runner, "critic", run_dir, "critic.md", args)
+            secs += more
+            critic_path = latest(run_dir, "critic-*.json")
+            if critic_path == before:
+                report["steps"].append({"step": "critic", "round": review_round, "exit": code,
+                                        "seconds": round(secs), "detail": "no review file"})
+                return finish(run_dir, report, "the critic wrote no RUN/review/critic-<n>.json twice "
+                              "(check its tools and RUN/review/*.message.md)", started)
         critic = read_json(critic_path) if critic_path else None
         passed, why = review_passes(critic)
         report["review"] = {"round": review_round, "pass": passed, "detail": why,
@@ -305,6 +322,8 @@ def main(argv=None):
     ap.add_argument("--userdir")
     ap.add_argument("--mod", action="append")
     ap.add_argument("--provider")
+    ap.add_argument("--from", dest="from_step", choices=["dossier", "gates", "critic"], default="dossier",
+                    help="resume an existing run: gates (validate, lint, calls, then review) or critic")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
     report = strategize(args)
