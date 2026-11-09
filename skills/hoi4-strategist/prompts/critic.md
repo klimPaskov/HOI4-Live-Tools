@@ -32,3 +32,5 @@ existing `critic-*.json` files). Every finding has a severity (blocker, major, m
 In round 2 re-check only the open findings and what the answers changed, and keep the finding ids.
 
 Finish with one line: round, total of 32, pass or fail, open blockers.
+
+Files: change nothing outside RUN (the tools, skills, schema and plans in the repository are what the plan is checked with). If a tool or fact reader is wrong or missing, write the gap with evidence to `RUN/tool-gaps.md` and continue with the best sourced workaround.

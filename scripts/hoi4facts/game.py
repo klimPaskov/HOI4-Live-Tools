@@ -104,7 +104,7 @@ class Game:
             def visit(k, v):
                 if k == "set_technology" and isinstance(v, list):
                     out["techs"].update(a for a, b in v if a and b == "1")
-                elif k == "set_oob" and isinstance(v, str):
+                elif k in ("oob", "set_oob") and isinstance(v, str):
                     out["oobs"].append(v)
                 elif k == "capital" and isinstance(v, str) and v.isdigit():
                     out["capital"] = int(v)
