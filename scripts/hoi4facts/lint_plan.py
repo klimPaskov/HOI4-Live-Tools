@@ -1593,6 +1593,7 @@ class Lint:
                  self.production_changes, self.unreadable]
         for step in steps:
             step()
+        __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self
