@@ -1,5 +1,40 @@
 {
   "_comment": "Italy FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone loads the BBA Italo-Ethiopian war). Explained in italy-plan.md; game mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner. Keys marked NEW in italy-plan.md section 0 are not read by the current executor yet: the player follows them by hand until the executor is extended.",
+  "_meta": {
+    "version": 1,
+    "source": "hand"
+  },
+  "_coverage": {
+    "c1": "key:surrender_goal",
+    "c2": "md:italo-ethiopian-war.md (scenario reference; italy-ethiopia-1936.md has no situation section)",
+    "c3": "na: missing in hand plan",
+    "c4": "key:doctrines",
+    "c5": "na: missing in hand plan",
+    "c6": "na: missing in hand plan",
+    "c7": "na: missing in hand plan",
+    "c8": "key:production,production_priority,disband",
+    "c9": "na: missing in hand plan",
+    "c10": "key:construction,construction_plan",
+    "c11": "key:research_path,research_priority",
+    "c12": "key:focus_path,focus_fallback",
+    "c13": "key:politics",
+    "c14": "na: missing in hand plan",
+    "c15": "na: missing in hand plan (politics holds only war_economy)",
+    "c16": "key:armies,army_layout,army_group",
+    "c17": "na: missing in hand plan",
+    "c18": "key:war,war_by_phase,vp_targets,phases",
+    "c19": "key:construction_plan,war.motorization",
+    "c20": "key:air,air_plan",
+    "c21": "na: missing in hand plan",
+    "c22": "na: missing in hand plan",
+    "c23": "na: missing in hand plan",
+    "c24": "na: missing in hand plan",
+    "c25": "na: missing in hand plan (surrender_goal is the goal, not the peace aims)",
+    "c26": "key:event_rules,event_options",
+    "c27": "na: missing in hand plan as keys (checkpoints and contingencies are text in italy-ethiopia-1936.md sections 1 and 9; phases and retake_rules are keys)",
+    "c28": "key:alarms",
+    "c29": "md:italy-ethiopia-1936.md (FAIR tags in the text)"
+  },
   "_validator": {
     "tag": "ITA",
     "start_date": "1936.1.1",
@@ -191,16 +226,6 @@
   "construction_queue_depth": 3,
   "construction_plan": [
     {
-      "id": "cp01_supply_node_559",
-      "order": 1,
-      "building": "supply_node",
-      "state": 559,
-      "province": 2020,
-      "when": "1936.01.01",
-      "priority": "top",
-      "why": "only hub Italy can start on day one; 2020 touches Mogadishu port 12991, Wal Wal 12812 and Bale 4995"
-    },
-    {
       "id": "cp02_rail_way_559",
       "order": 2,
       "building": "rail_way",
@@ -211,7 +236,8 @@
         2020
       ],
       "when": "1936.01.01",
-      "priority": "top"
+      "priority": "top",
+      "note": "cp01_supply_node_559 (day-1 Somaliland hub at 2020) removed: 20000 points take about 286 days with Italy's 10 free civilian factories at infrastructure 2 (lint construction.hub_cost); this railway from the Mogadishu port 12991 carries the southern supply instead"
     },
     {
       "id": "cp03_rail_way_842",
@@ -237,17 +263,8 @@
         2072
       ],
       "when": "province_controlled:2072",
-      "priority": "top"
-    },
-    {
-      "id": "cp05_supply_node_842",
-      "order": 5,
-      "building": "supply_node",
-      "state": 842,
-      "province": 2072,
-      "when": "state_fully_controlled:842",
       "priority": "top",
-      "why": "Macalle hub feeds Wello, Gondar and the Afar corridor"
+      "note": "cp05_supply_node_842 (Macalle hub) removed: about 400 days at Tigray's infrastructure 0 with 10 free civilian factories, finishing after the 1937-01-01 horizon (lint construction.hub_cost); this railway from the Asmara hub 13250 reaches Macalle instead"
     },
     {
       "id": "cp06_rail_way_908",

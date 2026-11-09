@@ -2,14 +2,20 @@
 
 validate(plan, game) -> (Report, counts). Errors are things the executor (native/src/plan_run.rs)
 cannot do or will do wrongly; warnings are legal but doubtful choices, or player-only text the
-executor never reads. See validate_plan.py for the list of checks.
+executor never reads. See validate_plan.py for the list of checks. Coverage-build checks (W1-2):
+every predicate the schema types (definitions.predicate) parses with parse_predicate (the x-grammar /
+x-atoms of the schema, as native/src/plan_predicate.rs reads them) and names known provinces, states,
+tags, focuses, techs, phases, equipment and missions; templates (units in the right rows, one group a
+column, width <= 40, regimental supports under 3-battalion columns); production remove/replace; training
+lists; stockpile_targets, xp_budget refs, force_posture phases and sums, occupation laws, peace state ids,
+sea_transfer states, event_rules fallback_index.
 """
 import json
 import os
 import re
 from collections import defaultdict
 
-from . import schema_check
+from . import derive, schema_check
 from . import tech as techrule
 from .script import DEFAULT_START, Ctx, date_tuple
 
@@ -318,6 +324,12 @@ def check_production(game, plan, rep):
         k = line.get("equipment")
         if k not in equip:
             rep.error(f"production[{i}]: unknown equipment {k}")
+        if "replace" in line and line["replace"] not in equip:
+            rep.error(f"production[{i}] {k}: replace {line['replace']} is not an equipment key")
+        if line.get("remove") or "replace" in line:
+            if line.get("remove") and "replace" in line:
+                rep.error(f"production[{i}] {k}: give remove or replace, not both")
+            continue  # a change to a line, not a new line (factories optional, no duplicate)
         n = line.get("factories")
         if not isinstance(n, int) or not 1 <= n <= 150:
             rep.error(f"production[{i}] {k}: factories must be an integer 1..150")
@@ -436,43 +448,58 @@ def start_oobs(game, meta):
 
 
 def check_training(game, plan, rep, meta=None):
+    """training: one line (object) or several (list of lines; templates[] names count as known)."""
     meta = meta or {}
-    ctx = ctx_of(meta, game)
     tr = plan.get("training")
     if tr is None:
         return
-    if not isinstance(tr, dict):
-        rep.error("training must be an object")
+    if isinstance(tr, list):
+        planned_names = {t.get("name") for t in plan.get("templates") or [] if isinstance(t, dict)}
+        for i, line in enumerate(tr):
+            if not isinstance(line, dict):
+                rep.error(f"training[{i}] must be an object")
+                continue
+            _check_training_line(game, line, f"training[{i}]", rep, meta, planned_names)
         return
+    if not isinstance(tr, dict):
+        rep.error("training must be an object or a list of lines")
+        return
+    _check_training_line(game, tr, "training", rep, meta, set())
+
+
+def _check_training_line(game, tr, label, rep, meta, planned_names):
+    ctx = ctx_of(meta, game)
     for key in ("queue", "batch"):
         if key in tr and (not isinstance(tr[key], int) or tr[key] < 1):
-            rep.error(f"training.{key} must be a positive integer")
+            rep.error(f"{label}.{key} must be a positive integer")
     dep = tr.get("deploy_state")
     if dep is None:
-        rep.error("training.deploy_state is required (a line without a location never deploys)")
+        rep.error(f"{label}.deploy_state is required (a line without a location never deploys)")
     elif dep not in game.states():
-        rep.error(f"training.deploy_state: unknown state id {dep}")
+        rep.error(f"{label}.deploy_state: unknown state id {dep}")
     elif ctx:
         own = game.state_owners(ctx, start_of(meta)).get(dep)
         if own and own != ctx.tag:
-            rep.warn(f"training.deploy_state {dep} is owned by {own}, not {ctx.tag}, at the start")
+            rep.warn(f"{label}.deploy_state {dep} is owned by {own}, not {ctx.tag}, at the start")
     name = tr.get("template")
     if not isinstance(name, str) or not name:
-        rep.error("training.template is required")
+        rep.error(f"{label}.template is required")
+        return
+    if name in planned_names:
         return
     oobs = start_oobs(game, meta) if ctx else []
     if oobs:
         # only the order of battle the history file loads with these DLCs
         if not any(name in game.oob(o, ctx)["templates"] for o in oobs):
             rep.warn(
-                f"training.template {name!r} is not in the start OOB "
+                f"{label}.template {name!r} is not in the start OOB "
                 f"{', '.join(oobs)} loaded with the active DLCs (fine if you create "
                 f"it in game before the plan runs)"
             )
         return
     if name not in game.template_names():
         rep.warn(
-            f"training.template {name!r} is not a template name in history/units "
+            f"{label}.template {name!r} is not a template name in history/units "
             f"(fine if you create it in game before the plan runs)"
         )
 
@@ -861,9 +888,404 @@ def check_event_rules(game, plan, rep, good):
             name = e.get(key)
             if name is not None and name not in names:
                 rep.error(f"{label}: {key} {name} is not an option of the event (has {', '.join(names) or 'none'})")
-        if "else_option_name" in e and "condition" not in e:
-            rep.warn(f"{label}: else_option_name without a condition")
+        if "else_option_name" in e and "condition" not in e and "when" not in e:
+            rep.warn(f"{label}: else_option_name without a when")
+        if _is_int(e.get("fallback_index")) and e["fallback_index"] >= len(ev["options"]):
+            rep.error(f"{label}: fallback_index {e['fallback_index']} but the event has {len(ev['options'])} options")
     return len(entries)
+
+
+# --------------------------------------------------------------------------
+# Predicates (plan.schema.json definitions.predicate: x-grammar is the grammar, x-atoms the atoms)
+
+_TAG_RE = r"[A-Z][A-Z0-9]{2}"
+PRED_ARGS = {
+    "province": r"\d+", "state": r"\d+", "tag": _TAG_RE, "key": r"[A-Za-z0-9_.\-]+", "id": r"[A-Za-z0-9_]+",
+    "branch": r"army|air|navy|land|naval", "army": r"[^<>=!\s](?:[^<>=!]*[^<>=!\s])?", "equipment": r"[A-Za-z0-9_]+",
+    "name": r"[A-Za-z0-9_.@^:]+",
+}
+PRED_OPS = ("<=", ">=", "==", "!=", "<", ">")
+_PRED_CMP = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>.*?))?\s*(?P<op><=|>=|==|!=|=|<|>)\s*(?P<value>[^<>=!\s][^<>=!]*)$")
+_PRED_FLAG = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>[^<>=!]+))?$")
+_PRED_DATE = re.compile(r"^(?:date:)?(\d{4}[.-]\d{1,2}[.-]\d{1,2})$")
+_PRED_NUM = re.compile(r"^-?\d+(\.\d+)?%?$")
+
+
+def predicate_table(schema=None):
+    """The atom table (x-atoms of definitions.predicate) of the plan schema, or {} without one."""
+    schema = schema if schema is not None else load_schema()
+    return (((schema or {}).get("definitions") or {}).get("predicate") or {}).get("x-atoms") or {}
+
+
+def _pred_date(text):
+    m = _PRED_DATE.match(text or "")
+    d = date_tuple(m.group(1)) if m else None
+    return d if d and 1 <= d[1] <= 12 and 1 <= d[2] <= derive.MONTH_DAYS[d[1] - 1] else None
+
+
+def parse_atom(text, table):
+    """(atom, None) or (None, reason) for one predicate string or JSON boolean. atom = {"name",
+    "arg", "op", "value", "kind", "text", "readable"}; a bare date (or date:<date>) is the date atom
+    with op >=; for kind tag, = reads as ==; a ratio value above 1 or with % is a percent (/100);
+    "" and true are the constant true, false the constant false (name "const")."""
+    if isinstance(text, bool) or text in ("", "true", "false"):
+        value = text if isinstance(text, bool) else text != "false"
+        return {"name": "const", "arg": None, "op": None, "value": value, "kind": "const", "text": str(text),
+                "readable": True}, None
+    if not isinstance(text, str):
+        return None, f"expected a string, a list or an all/any/not object, got {type(text).__name__}"
+    if text != text.strip():
+        return None, f"{text!r}: no leading or trailing space"
+    if _PRED_DATE.match(text):
+        d = _pred_date(text)
+        if d is None:
+            return None, f"{text!r} is not a valid date"
+        return {"name": "date", "arg": None, "op": ">=", "value": d, "kind": "date", "text": text,
+                "readable": True}, None
+    m = _PRED_CMP.match(text) or _PRED_FLAG.match(text)
+    if not m:
+        return None, f"{text!r} is neither `atom op value` nor a bare atom"
+    name, arg = m.group("name"), m.group("arg")
+    op = m.groupdict().get("op")
+    value = m.groupdict().get("value")
+    spec = table.get(name)
+    if spec is None:
+        return None, f"{text!r}: unknown atom {name} (atoms: {', '.join(sorted(table))})"
+    want = spec.get("arg")
+    if want and arg is None:
+        return None, f"{text!r}: {name} needs an argument ({name}:<{want}>)"
+    if not want and arg is not None:
+        return None, f"{text!r}: {name} takes no argument"
+    if want and not re.fullmatch(PRED_ARGS.get(want, r".+"), arg):
+        return None, f"{text!r}: {arg!r} is not a {want}"
+    kind = spec.get("kind")
+    atom = {"name": name, "arg": arg, "op": op, "value": value, "kind": kind, "text": text,
+            "readable": spec.get("readable", True)}
+    if kind == "bool":
+        if op is not None:
+            return None, f"{text!r}: {name} is a yes/no atom; write it bare (negate with {{\"not\": ...}})"
+        return atom, None
+    if op is None:
+        return None, f"{text!r}: {name} needs a comparison ({name}{':' + arg if arg else ''} >= value)"
+    if kind == "tag":
+        if op not in ("=", "==", "!="):
+            return None, f"{text!r}: {name} compares a tag with == or !="
+        if not re.fullmatch(_TAG_RE, value):
+            return None, f"{text!r}: {value!r} is not a country tag"
+        atom["op"] = "==" if op == "=" else op
+        return atom, None
+    if op == "=":
+        return None, f"{text!r}: use == (= is only the owner:<state>=<TAG> form)"
+    if kind == "date":
+        d = _pred_date(value)
+        if d is None:
+            return None, f"{text!r}: {value!r} is not a date like 1936.05.01"
+        atom["value"] = d
+        return atom, None
+    if not _PRED_NUM.match(value):
+        return None, f"{text!r}: {value!r} is not a number"
+    percent = value.endswith("%")
+    v = float(value.rstrip("%"))
+    if percent and not spec.get("ratio"):
+        return None, f"{text!r}: {name} is not a ratio; write a plain number"
+    if spec.get("ratio") and (percent or v > 1):
+        if not 0 <= v <= 100:
+            return None, f"{text!r}: {name} as a percent runs from 0 to 100"
+        v = v / 100.0
+    lo, hi = spec.get("min"), spec.get("max")
+    if (lo is not None and v < lo) or (hi is not None and v > hi):
+        unit = f" ({spec['unit']})" if spec.get("unit") else ""
+        return None, f"{text!r}: {name} runs from {lo if lo is not None else '-inf'} to {hi if hi is not None else 'inf'}{unit}"
+    atom["value"] = v
+    return atom, None
+
+
+def parse_predicate(pred, table, path=""):
+    """([(path, atom)], [(path, problem)]) of a predicate tree (a plain list is all); NOT branches
+    included."""
+    atoms, problems = [], []
+    if isinstance(pred, list):
+        if not pred:
+            return atoms, problems  # an empty list holds (all of nothing)
+        pred = {"all": pred}
+    if isinstance(pred, dict):
+        if len(pred) != 1 or next(iter(pred)) not in ("all", "any", "not"):
+            problems.append((path, f"an object predicate has exactly one key all, any or not (got {sorted(pred)})"))
+            return atoms, problems
+        key, val = next(iter(pred.items()))
+        items = [val] if key == "not" else val
+        if key != "not" and (not isinstance(val, list) or not val):
+            problems.append((path, f"{key} needs a non-empty list"))
+            return atoms, problems
+        for i, p in enumerate(items):
+            a, b = parse_predicate(p, table, f"{path}.{key}" + ("" if key == "not" else f"[{i}]"))
+            atoms += a
+            problems += b
+        return atoms, problems
+    atom, why = parse_atom(pred, table)
+    if why:
+        problems.append((path, why))
+    else:
+        atoms.append((path, atom))
+    return atoms, problems
+
+
+def plan_predicates(plan, schema):
+    """[(path, predicate)] of every place the schema types as a predicate."""
+    return schema_check.instances_of(plan, schema, "#/definitions/predicate")
+
+
+def predicate_dates(pred, table):
+    """Dates a predicate waits for (date atoms with >= or > outside NOT), as day-tuples."""
+    out = []
+    if isinstance(pred, list):
+        pred = {"all": pred}
+    if isinstance(pred, dict):
+        for k in ("all", "any"):
+            for p in pred.get(k) or []:
+                out += predicate_dates(p, table)
+        return out
+    atom, _ = parse_atom(pred, table)
+    if atom and atom["name"] == "date" and atom["op"] in (">=", ">", "=="):
+        out.append(atom["value"])
+    return out
+
+
+def predicate_can_hold(pred, table):
+    """(can be true, can be false) of a predicate when every atom with readable: false stays
+    unknown (three-valued: all needs every part true, any one part, not swaps)."""
+    if isinstance(pred, list):
+        pred = {"all": pred}
+    if isinstance(pred, dict) and len(pred) == 1:
+        key, val = next(iter(pred.items()))
+        if key == "not":
+            t, f = predicate_can_hold(val, table)
+            return f, t
+        parts = [predicate_can_hold(p, table) for p in val or []] if isinstance(val, list) else []
+        if key == "all":
+            return all(t for t, _ in parts), any(f for _, f in parts)
+        if key == "any":
+            return any(t for t, _ in parts), all(f for _, f in parts)
+        return False, False
+    atom, _ = parse_atom(pred, table)
+    if atom is None or not atom["readable"]:
+        return False, False
+    if atom["kind"] == "const":
+        return atom["value"], not atom["value"]
+    return True, True
+
+
+def check_predicates(game, plan, rep, schema=None):
+    """Every predicate parses (x-grammar) and names known provinces, states, tags, focuses, techs,
+    phases, equipment and missions."""
+    schema = schema if schema is not None else load_schema()
+    table = predicate_table(schema)
+    if not table:
+        return 0
+    states, pstate = game.states(), game.province_state()
+    tags = game.country_tags()
+    phases = {str(p.get("id")) for p in plan.get("phases") or [] if isinstance(p, dict)}
+    focus = None
+    n = 0
+    for path, pred in plan_predicates(plan, schema):
+        atoms, problems = parse_predicate(pred, table, path)
+        for where, why in problems:
+            rep.error(f"predicate {where}: {why}")
+        for where, a in atoms:
+            n += 1
+            name, arg = a["name"], a["arg"]
+            if name == "const":
+                continue
+            want = table[name].get("arg")
+            label = f"predicate {where}: {a['text']!r}"
+            if want == "province" and int(arg) not in pstate:
+                rep.error(f"{label}: province {arg} is in no state")
+            elif want == "state" and int(arg) not in states:
+                rep.error(f"{label}: {arg} is not a state id")
+            elif want == "tag" and tags and arg not in tags:
+                rep.error(f"{label}: {arg} is not a country tag")
+            if a["kind"] == "tag" and tags and a["value"] not in tags:
+                rep.error(f"{label}: {a['value']} is not a country tag")
+            if name in ("focus_completed", "focus_done"):
+                if focus is None:
+                    focus = set().union(*game.focus_trees().values()) if game.focus_trees() else set()
+                if focus and arg not in focus:
+                    rep.error(f"{label}: no focus {arg} in common/national_focus")
+            elif name in ("tech_researched", "tech_done") and arg not in game.techs():
+                rep.error(f"{label}: no technology {arg}")
+            elif name == "phase" and arg not in phases:
+                rep.error(f"{label}: no phases[] entry with id {arg}")
+            elif name == "stockpile_days" and arg not in game.equipment() and arg not in derive.equipment_archetypes(game):
+                rep.error(f"{label}: no equipment {arg} in common/units/equipment")
+            elif name == "mission_days" and arg not in game.decisions():
+                rep.error(f"{label}: no decision or mission {arg} in common/decisions")
+    return n
+
+
+# --------------------------------------------------------------------------
+# Coverage-build keys: templates, stockpile_targets, xp_budget, force_posture, occupation, peace,
+# auto_import, garrison_template, production remove/replace
+
+
+def template_columns(regiments):
+    """Columns of a templates[].regiments value as the executor reads it (plan_manage.rs columns):
+    a list of columns as is, a flat list of keys cut into runs of one key, five per column; None
+    for a mixed or empty list."""
+    if not isinstance(regiments, list) or not regiments:
+        return None
+    if all(isinstance(c, list) for c in regiments):
+        return regiments
+    if not all(isinstance(k, str) for k in regiments):
+        return None
+    out = []
+    for k in regiments:
+        if out and len(out[-1]) < 5 and out[-1][0] == k:
+            out[-1].append(k)
+        else:
+            out.append([k])
+    return out
+
+
+def _template_columns(t):
+    return template_columns(t.get("regiments")) or []
+
+
+def check_templates(game, plan, rep):
+    """Unit keys from common/units in the right rows, one group per column, width at most 40,
+    regimental supports only under columns of 3 battalions, unique ids and names."""
+    entries = [(i, t) for i, t in enumerate(plan.get("templates") or []) if isinstance(t, dict)]
+    if not entries:
+        return 0
+    units = derive.unit_types(game)
+    need = int(derive.define(game, "REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS", 3) or 3)
+    ids, names = set(), set()
+    for i, t in entries:
+        label = f"templates[{i}] {t.get('id')}"
+        for key, seen in (("id", ids), ("name", names)):
+            v = str(t.get(key))
+            if v in seen:
+                rep.error(f"{label}: duplicate {key} {v}")
+            seen.add(v)
+        if template_columns(t.get("regiments")) is None:
+            rep.error(f"{label}: regiments is a list of columns or a flat list of battalion keys, not a mix")
+        cols = _template_columns(t)
+        if len(cols) > 5:
+            rep.error(f"{label}: {len(cols)} columns; the designer has 5")
+        for c, col in enumerate(cols):
+            groups = set()
+            for u in col:
+                info = units.get(u)
+                if info is None:
+                    rep.error(f"{label}: regiments[{c}] {u} is not a sub-unit in common/units")
+                elif info["support"]:
+                    rep.error(f"{label}: regiments[{c}] {u} is a support company (put it in support)")
+                else:
+                    groups.add(info["group"])
+            if len(groups) > 1:
+                rep.error(f"{label}: regiments[{c}] mixes groups {', '.join(sorted(groups))} (one group per column)")
+        for u in t.get("support") or []:
+            info = units.get(u)
+            if info is None:
+                rep.error(f"{label}: support {u} is not a sub-unit in common/units")
+            elif not info["support"]:
+                rep.error(f"{label}: support {u} is a battalion, not a support company")
+        dup = [u for u in set(t.get("support") or []) if (t.get("support") or []).count(u) > 1]
+        for u in dup:
+            rep.error(f"{label}: support {u} listed twice")
+        for c, u in enumerate(t.get("regimental_support") or []):
+            info = units.get(u)
+            if info is None:
+                rep.error(f"{label}: regimental_support[{c}] {u} is not a sub-unit in common/units")
+            elif not info["regimental"]:
+                rep.error(f"{label}: regimental_support[{c}] {u} is not a regimental support battalion")
+            if c >= len(cols) or len(cols[c]) < need:
+                rep.error(f"{label}: regimental_support[{c}] needs {need} battalions in regiments[{c}]")
+        width = derive.template_width(game, cols)
+        if width is not None and width > 40:
+            rep.error(f"{label}: combat width {width:g} is above 40 (the template tool refuses it)")
+    return len(entries)
+
+
+def check_coverage_keys(game, plan, meta, rep):
+    """The new player keys against the game files and the plan's own ids."""
+    equip = game.equipment()
+    arche = derive.equipment_archetypes(game)
+    tags = game.country_tags()
+    states = game.states()
+    sp = plan.get("stockpile_targets")
+    if isinstance(sp, dict):
+        for k in sp:
+            if k not in ("why", "note") and k not in equip and k not in arche:
+                rep.error(f"stockpile_targets.{k}: no equipment {k} in common/units/equipment")
+    tids = {str(t.get("id")) for t in plan.get("templates") or [] if isinstance(t, dict)}
+    tnames = {t.get("name") for t in plan.get("templates") or [] if isinstance(t, dict)}
+    dids = {str(d.get("id")) for d in plan.get("doctrines") or [] if isinstance(d, dict)}
+    xb = plan.get("xp_budget")
+    if isinstance(xb, dict):
+        for branch in ("army", "air", "navy"):
+            for j, s in enumerate(xb.get(branch) or []):
+                ref = s.get("ref") if isinstance(s, dict) else None
+                if not isinstance(ref, str) or ":" not in ref:
+                    continue
+                kind, rid = ref.split(":", 1)
+                if (kind == "template" and rid not in tids) or (kind == "doctrine" and rid not in dids):
+                    rep.error(f"xp_budget.{branch}[{j}]: ref {ref} names no {kind}s[] id of this plan")
+    fp = plan.get("force_posture")
+    if isinstance(fp, dict):
+        phases = {str(p.get("id")) for p in plan.get("phases") or [] if isinstance(p, dict)} | {"base"}
+        for j, p in enumerate(fp.get("phases") or []):
+            if not isinstance(p, dict):
+                continue
+            if p.get("phase") not in phases:
+                rep.error(f"force_posture.phases[{j}]: phase {p.get('phase')} is neither base nor a phases[] id")
+            total = sum(p.get(k, 0) for k in ("land", "air", "navy") if isinstance(p.get(k), (int, float)))
+            if abs(total - 100) > 1:
+                rep.error(f"force_posture.phases[{j}]: land + air + navy is {total:g}, not 100")
+    occ = plan.get("occupation")
+    if isinstance(occ, dict):
+        laws = derive.occupation_laws(game)
+        named = [(f"occupation.{k}", occ.get(k)) for k in ("default_law", "law", "mildest", "harshest")]
+        named += [(f"occupation.ladder[{j}]", x) for j, x in enumerate(occ.get("ladder") or [])]
+        named += [(f"occupation.per_state.{s}", x) for s, x in (occ.get("per_state") or {}).items()]
+        for where, law in named:
+            if laws and isinstance(law, str) and law not in laws:
+                rep.error(f"{where}: no occupation law {law} in common/occupation_laws")
+        ladder = occ.get("ladder") or []
+        for k in ("mildest", "harshest"):
+            if ladder and isinstance(occ.get(k), str) and occ[k] not in ladder:
+                rep.error(f"occupation.{k}: {occ[k]} is not on occupation.ladder")
+        if "default_law" in occ and "law" in occ:
+            rep.warn("occupation: default_law and law both given; the executor uses default_law")
+    gt = plan.get("garrison_template")
+    if isinstance(gt, dict) and isinstance(gt.get("template"), str):
+        name = gt["template"]
+        if name not in tids and name not in tnames and name not in game.template_names():
+            rep.warn(f"garrison_template.template {name!r} is neither a templates[] entry nor a history template "
+                     f"(fine if it is created in game first)")
+    peace = plan.get("peace")
+    if isinstance(peace, dict):
+        for key in ("take", "puppet", "liberate"):
+            for j, s in enumerate(peace.get(key) or []):
+                if _is_int(s) and s not in states:
+                    rep.error(f"peace.{key}[{j}]: {s} is not a state id")
+                elif isinstance(s, str):
+                    if tags and s not in tags:
+                        rep.error(f"peace.{key}[{j}]: {s!r} is neither a state id nor a country tag")
+                    elif key == "take":
+                        rep.error(f"peace.take[{j}]: {s} is a tag; the executor takes state ids")
+                    else:
+                        rep.warn(f"peace.{key}[{j}]: tag {s} is only noted (hoi4_peace_take takes state ids); "
+                                 f"list the states")
+    st = plan.get("sea_transfer")
+    if isinstance(st, dict):
+        for j, r in enumerate(st.get("routes") or []):
+            if isinstance(r, dict):
+                for key in ("from_state", "to_state"):
+                    if isinstance(r.get(key), int) and r[key] not in states:
+                        rep.error(f"sea_transfer.routes[{j}].{key}: {r[key]} is not a state id")
+        for s in st.get("ports") or []:
+            if s not in states:
+                rep.error(f"sea_transfer.ports: {s} is not a state id")
 
 
 # --------------------------------------------------------------------------
@@ -943,7 +1365,11 @@ def validate(plan, game, schema=None):
     check_war(game, plan, rep)
     counts["doctrines"] = check_doctrines(game, plan, meta, rep, good)
     counts["event_rules"] = check_event_rules(game, plan, rep, good)
-    for k in ("research_path", "construction_plan", "vp_targets", "army_layout", "doctrines", "event_rules"):
+    counts["predicates"] = check_predicates(game, plan, rep, schema)
+    counts["templates"] = check_templates(game, plan, rep)
+    check_coverage_keys(game, plan, meta, rep)
+    for k in ("research_path", "construction_plan", "vp_targets", "army_layout", "doctrines", "event_rules",
+              "predicates", "templates"):
         if not counts[k] and k not in plan:
             del counts[k]
     return rep, counts

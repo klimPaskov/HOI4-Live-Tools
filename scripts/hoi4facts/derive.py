@@ -14,6 +14,13 @@ or the files, so a mod's content is read the same way.
     country       start_ideas, idea_modifiers, research_slots, surrender(game, tag, ...)
     characters    commanders(game, tag, ctx, date), match_commander(name, commanders)
     missions      decision_index(game), control_states(block), scenario_timers(game, tag, ...)
+    units         unit_types(game), subunit_unlocks(game), equipment_archetypes, equipment_domains,
+                  template_width(game, regiments)
+    terrain       terrain_widths(game) (common/terrain combat_width), theatre_width_target(game, states)
+    laws, map     law_ideas(game), capital_state, coastal_states, overseas_states, resisting_states,
+                  air_base_levels, supply_hubs, coastal_provinces
+    construction  building_costs(game), construction_constants (calc.py labels),
+                  free_civilian_factories(game, ctx, tag, date), construction_days(game, building, civs, infra)
 
 The lint and the dossier builder share these; each result is memoised on the Game.
 """
@@ -22,7 +29,8 @@ import os
 import re
 from collections import deque
 
-from .script import (DEFAULT_START, Ctx, bare, date_tuple, get, get1, history_walk, parse_file, read, trigger)
+from .script import (DEFAULT_START, Ctx, bare, date_tuple, get, get1, history_walk, op_of, parse_file, read,
+                     trigger)
 
 # --------------------------------------------------------------------------- calendar
 
@@ -759,3 +767,462 @@ def scenario_timers(game, tag, ctx, date=DEFAULT_START, history_file=None, depth
     for eid, d, r in _scheduled(fx):
         follow(eid, d, d + r, [], depth)
     return sorted(out, key=lambda x: (day(x["earliest"]), x["mission"]))
+
+
+# --------------------------------------------------------------------------- units and terrain
+# Small readers for the plan lint's template, posture, air-base and occupation rules. The facts
+# commands (`facts.py terrain-width`, `units`) are built elsewhere; these stay minimal.
+
+
+def _num(v, default=None):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def terrain_widths(game):
+    """{terrain: {"width": combat_width, "support": combat_support_width}} of the land terrains in
+    common/terrain (categories with a combat_width; ocean, lakes and unknown have none)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/terrain"):
+            for k, v in parse_file(f):
+                if k != "categories" or not isinstance(v, list):
+                    continue
+                for name, body in v:
+                    if not name or not isinstance(body, list):
+                        continue
+                    if get1(body, "naval_terrain") == "yes" or get1(body, "is_water") == "yes":
+                        continue
+                    w = _num(get1(body, "combat_width"))
+                    if w is None or w <= 0:
+                        continue
+                    out[name] = {"width": w, "support": _num(get1(body, "combat_support_width"), w / 2.0)}
+        return out
+
+    return game.cached("derive:terrainwidths", load)
+
+
+def unit_types(game):
+    """{sub-unit: {"width", "group", "support", "regimental", "active", "need": {equipment: n},
+    "types": set, "categories": set}} from common/units (battalions, support companies, ships and
+    planes). support: group = support; regimental: a 1.19 regimental-support battalion
+    (category_regimental_support_battalions or `regimental = yes`)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/units"):
+            for k, v in parse_file(f):
+                if k != "sub_units" or not isinstance(v, list):
+                    continue
+                for name, body in v:
+                    if not name or not isinstance(body, list):
+                        continue
+                    cats = get1(body, "categories")
+                    cats = set(bare(cats)) if isinstance(cats, list) else set()
+                    typ = get1(body, "type")
+                    need = get1(body, "need")
+                    out[name] = {
+                        "width": _num(get1(body, "combat_width"), 0.0),
+                        "group": get1(body, "group", ""),
+                        "support": get1(body, "group") == "support",
+                        "regimental": get1(body, "regimental") == "yes"
+                        or "category_regimental_support_battalions" in cats,
+                        "active": get1(body, "active") == "yes",
+                        "need": {a: _num(b, 0.0) for a, b in need if a} if isinstance(need, list) else {},
+                        "types": set(bare(typ)) if isinstance(typ, list) else set(),
+                        "categories": cats,
+                    }
+        return out
+
+    return game.cached("derive:unittypes", load)
+
+
+def subunit_unlocks(game):
+    """{sub-unit: set(technologies whose enable_subunits lists it)}."""
+
+    def load():
+        out = {}
+        for f in game.files("common/technologies"):
+            for k, v in parse_file(f):
+                if k != "technologies" or not isinstance(v, list):
+                    continue
+                for tech, body in v:
+                    if not tech or not isinstance(body, list):
+                        continue
+                    for block in get(body, "enable_subunits"):
+                        if isinstance(block, list):
+                            for u in bare(block):
+                                out.setdefault(u, set()).add(tech)
+        return out
+
+    return game.cached("derive:subunitunlocks", load)
+
+
+def equipment_archetypes(game):
+    """{equipment key: archetype key} (an archetype maps to itself) from common/units/equipment."""
+
+    def load():
+        raw = {}
+        for f in game.files("common/units/equipment"):
+            for k, v in parse_file(f):
+                if k != "equipments" or not isinstance(v, list):
+                    continue
+                for name, body in v:
+                    if name and isinstance(body, list):
+                        raw[name] = (get1(body, "is_archetype") == "yes", get1(body, "archetype"), get1(body, "parent"))
+        out = {}
+        for name in raw:
+            seen, cur = set(), name
+            while cur in raw and cur not in seen:
+                seen.add(cur)
+                arch, a, p = raw[cur]
+                if arch or not (a or p):
+                    break
+                cur = a or p
+            out[name] = cur
+        return out
+
+    return game.cached("derive:archetypes", load)
+
+
+_NAVY_TYPES = {"screen_ship", "capital_ship", "submarine", "carrier", "support_ship", "convoy", "floating_harbor"}
+_AIR_TYPES = {"fighter", "cas", "tactical_bomber", "strategic_bomber", "naval_bomber", "air_transport", "scout_plane",
+              "suicide", "missile", "ballistic_missile", "nuclear_missile", "sam_missile"}
+
+
+def equipment_domains(game):
+    """{equipment key: "land" | "air" | "navy"} for force-posture shares: the equipment's
+    interface_category (inherited from its archetype) when it names air or ships, else its unit
+    types (ships, convoys, planes, missiles), else land."""
+
+    def load():
+        raw, dup = {}, {}
+        for f in game.files("common/units/equipment"):
+            for k, v in parse_file(f):
+                if k not in ("equipments", "duplicate_archetypes") or not isinstance(v, list):
+                    continue
+                for name, body in v:
+                    if name and isinstance(body, list):
+                        row = (get1(body, "interface_category"), get1(body, "archetype"), get1(body, "parent"))
+                        (raw if k == "equipments" else dup)[name] = row
+                        t = get1(body, "type")
+                        if k == "duplicate_archetypes":
+                            dup[name] += (set(bare(t)) if isinstance(t, list) else ({t} if isinstance(t, str) else set()),)
+        types = equipment_types(game)
+
+        def domain(cat, mine):
+            cat = (cat or "").lower()
+            if "ship" in cat or mine & _NAVY_TYPES:
+                return "navy"
+            if "air" in cat or mine & _AIR_TYPES:
+                return "air"
+            return "land"
+
+        out = {}
+        for name in raw:
+            seen, cur, cat = set(), name, None
+            while cur in raw and cur not in seen and not cat:
+                seen.add(cur)
+                cat, a, p = raw[cur]
+                cur = a or p
+            out[name] = domain(cat, types.get(name, set()))
+        for name, (cat, arch, _, typ) in dup.items():
+            out[name] = domain(cat, typ) if (cat or typ) else out.get(arch, "land")
+        return out
+
+    return game.cached("derive:equipdomains", load)
+
+
+def equipment_domain(game, key):
+    """Domain of one equipment key (a generated duplicate variant such as small_plane_cas_airframe_1
+    falls back to its family), or None when unknown."""
+    table = equipment_domains(game)
+    if key in table:
+        return table[key]
+    base = re.sub(r"_\d+$", "", key or "")
+    return table.get(base)
+
+
+def template_width(game, regiments):
+    """Combat width of a template from its regiment columns (support companies have width 0);
+    None when a unit is unknown. regiments: [[unit, ...], ...] or a flat [unit, ...]."""
+    units = unit_types(game)
+    flat = [u for col in regiments or [] for u in (col if isinstance(col, list) else [col])]
+    if any(u not in units for u in flat):
+        return None
+    return sum(units[u]["width"] for u in flat)
+
+
+def _fill(width, frontage):
+    """How well divisions of `width` fill `frontage`: the best n x width against frontage ratio
+    (1 = exact, over- and under-filling count alike)."""
+    if width <= 0 or frontage <= 0:
+        return 0.0
+    n = max(1, int(round(frontage / width)))
+    return max(min(k * width, frontage) / max(k * width, frontage) for k in (n - 1, n, n + 1) if k >= 1)
+
+
+def theatre_width_target(game, states, lo=10, hi=40, tolerance=0.02):
+    """Placeholder width target for a theatre (until facts.py terrain-width lands): the terrain mix
+    of the states' land provinces (map/definition.csv terrain) weighted by province count, each
+    terrain fought on its base width and with one extra direction (width + support width). Small
+    widths always fill well, so the target is the widest template width in [lo, hi] (40 is the
+    template tool's limit) whose fill is within `tolerance` of the best fill.
+    {"target", "mix": {terrain: share}, "fill": score} or None without terrain data."""
+    graph = game.map_graph()
+    widths = terrain_widths(game)
+    if graph is None or not widths:
+        return None
+    counts = {}
+    all_states = game.states()
+    for sid in states or []:
+        for p in all_states.get(sid, {}).get("provinces", []):
+            t = (graph["provinces"].get(p) or {}).get("terrain")
+            if t in widths:
+                counts[t] = counts.get(t, 0) + 1
+    total = sum(counts.values())
+    if not total:
+        return None
+    mix = {t: n / total for t, n in sorted(counts.items())}
+    fronts = [(share, f) for t, share in mix.items()
+              for f in (widths[t]["width"], widths[t]["width"] + widths[t]["support"])]
+    scores = {w: sum(share * _fill(w, f) for share, f in fronts) / 2.0 for w in range(lo, hi + 1)}
+    top = max(scores.values())
+    target = max(w for w, s in scores.items() if s >= top - tolerance)
+    return {"target": target, "mix": {t: round(s, 3) for t, s in mix.items()}, "fill": round(scores[target], 3)}
+
+
+# --------------------------------------------------------------------------- laws, capital, coast, resistance
+
+
+def law_ideas(game):
+    """{idea: {"category", "available": block or None, "gates": {"war_support"|"stability": (op, x)}}}
+    of the ideas in law categories (`law = yes`) of common/ideas; gates are the plain
+    has_war_support / has_stability comparisons at the top level of `available`."""
+
+    def load():
+        out = {}
+        for f in game.files("common/ideas", recursive=True):
+            for k, v in parse_file(f):
+                if k != "ideas" or not isinstance(v, list):
+                    continue
+                for cat, body in v:
+                    if not cat or not isinstance(body, list) or get1(body, "law") != "yes":
+                        continue
+                    for name, idea in body:
+                        if not name or not isinstance(idea, list):
+                            continue
+                        av = get1(idea, "available")
+                        av = av if isinstance(av, list) and av else None
+                        gates = {}
+                        for i, (a, b) in enumerate(av or []):
+                            if a in ("has_war_support", "has_stability") and _num(b) is not None:
+                                gates[a[4:]] = (op_of(av, i), _num(b))
+                        out[name] = {"category": cat, "available": av, "gates": gates}
+        return out
+
+    return game.cached("derive:lawideas", load)
+
+
+def capital_state(game, tag, ctx, date=DEFAULT_START, history_file=None):
+    """The `capital = <state>` of a country's history at date, or None."""
+    _, fx = history_effects_of(game, tag, ctx, date, history_file)
+    cap = None
+    for k, v in fx:
+        if k == "capital" and isinstance(v, str) and v.isdigit():
+            cap = int(v)
+    return cap
+
+
+def coastal_states(game, ctx, tag, date=DEFAULT_START):
+    """States owned by tag at date with a coastal province (map/definition.csv), or None without a map."""
+    graph = game.map_graph()
+    if graph is None:
+        return None
+    provs = graph["provinces"]
+    states = game.states()
+    return {sid for sid in tag_states(game, ctx, tag, date)
+            if any((provs.get(p) or {}).get("coastal") for p in states.get(sid, {}).get("provinces", []))}
+
+
+def overseas_states(game, ctx, tag, states, date=DEFAULT_START, history_file=None):
+    """The given states owned by tag that its capital cannot reach over land it controls at date
+    (straits count, foreign land does not): an army there is supplied and reinforced by sea.
+    None without a map or a capital."""
+    adj = land_adjacency(game)
+    cap = capital_state(game, tag, ctx, date, history_file)
+    if adj is None or cap is None:
+        return None
+    own = tag_provinces(game, ctx, [tag], date)
+    all_states = game.states()
+    seen = {p for p in all_states.get(cap, {}).get("provinces", []) if p in own}
+    q = deque(seen)
+    while q:
+        a = q.popleft()
+        for b in adj.get(a, ()):
+            if b in own and b not in seen:
+                seen.add(b)
+                q.append(b)
+    mine = tag_states(game, ctx, tag, date)
+    return {sid for sid in states or [] if sid in mine
+            and not any(p in seen for p in all_states.get(sid, {}).get("provinces", []))}
+
+
+def resisting_states(game, tag, ctx, date=DEFAULT_START, history_file=None):
+    """{state: {"compliance": x or None, "resistance": x or None}} of the states a country starts
+    with resistance on: `<state> = { start_resistance = yes ... }` blocks of the country history,
+    and `start_resistance` in the history of a state it owns."""
+    _, fx = history_effects_of(game, tag, ctx, date, history_file)
+    out = {}
+    for k, v in fx:
+        if k and k.isdigit() and isinstance(v, list) and get1(v, "start_resistance") not in (None, "no"):
+            out[int(k)] = {"compliance": _num(get1(v, "set_compliance")), "resistance": _num(get1(v, "set_resistance"))}
+    mine = tag_states(game, ctx, tag, date)
+    for sid, (_, st) in game._state_blocks().items():
+        hist = get1(st, "history", [])
+        if sid not in mine or sid in out or not isinstance(hist, list):
+            continue
+        found = {}
+
+        def visit(k, v, found=found):
+            if k == "start_resistance" and v != "no":
+                found["on"] = True
+            elif k in ("set_compliance", "set_resistance"):
+                found[k[4:]] = _num(v)
+
+        history_walk(hist, ctx, date, visit)
+        if found.get("on"):
+            out[sid] = {"compliance": found.get("compliance"), "resistance": found.get("resistance")}
+    return out
+
+
+def air_base_buildings(game):
+    """Building keys with `air_base = yes` (air_base when the files name none)."""
+
+    def load():
+        out = set()
+        for f in game.files("common/buildings"):
+            for k, v in parse_file(f):
+                if k == "buildings" and isinstance(v, list):
+                    out.update(n for n, b in v if n and isinstance(b, list) and get1(b, "air_base") == "yes")
+        return out or {"air_base"}
+
+    return game.cached("derive:airbases", load)
+
+
+def building_costs(game):
+    """{building: {"cost": base_cost, "per_level": per_level_extra_cost, "infra_effect": bool,
+    "port": bool, "coastal": bool, "civilian": bool, "military": bool}} from common/buildings
+    (infra_effect: infrastructure_construction_effect = yes, the state infrastructure speeds it up;
+    port: is_port; coastal: only_costal)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/buildings"):
+            for k, v in parse_file(f):
+                if k != "buildings" or not isinstance(v, list):
+                    continue
+                for name, b in v:
+                    if not name or not isinstance(b, list):
+                        continue
+                    out[name] = {"cost": _num(get1(b, "base_cost"), 0.0),
+                                 "per_level": _num(get1(b, "per_level_extra_cost"), 0.0),
+                                 "infra_effect": get1(b, "infrastructure_construction_effect") == "yes",
+                                 "port": get1(b, "is_port") == "yes",
+                                 "coastal": get1(b, "only_costal") == "yes",
+                                 "civilian": get1(b, "general_production") not in (None, "0"),
+                                 "military": get1(b, "military_production") not in (None, "0")}
+        return out
+
+    return game.cached("derive:buildingcosts", load)
+
+
+def construction_constants(game):
+    """Construction points per civ, infrastructure step and project cap as calc.py labels them
+    (the first two are not in the defines; the cap is MAX_CIV_FACTORIES_PER_CONTRACT)."""
+    from . import calc  # lazy: calc imports this module
+
+    return {"cp_per_civ": calc.CP_PER_CIV, "infra_step": calc.INFRA_STEP,
+            "project_cap": int(define(game, "MAX_CIV_FACTORIES_PER_CONTRACT", calc.PROJECT_CAP_FALLBACK))}
+
+
+def free_civilian_factories(game, ctx, tag, date=DEFAULT_START, history_file=None):
+    """{"civs", "mils", "consumer_goods", "free"} at date: the civilian and military factories of the
+    states tag owns, the consumer-goods share of its starting ideas (consumer_goods_expected_value,
+    then consumer_goods_factor, as calc.py) and the civs left for construction (no trade deducted)."""
+    costs = building_costs(game)
+    rows = state_buildings(game, ctx, date)
+    civs = mils = 0
+    for sid in tag_states(game, ctx, tag, date):
+        for b, lvl in rows.get(sid, {}).items():
+            if costs.get(b, {}).get("civilian"):
+                civs += lvl
+            elif costs.get(b, {}).get("military"):
+                mils += lvl
+    mods = idea_modifiers(game)
+    ideas = sorted(start_ideas(game, tag, ctx, date, history_file))
+    share = sum(mods.get(i, {}).get("consumer_goods_expected_value", 0.0) for i in ideas)
+    share += sum(mods.get(i, {}).get("consumer_goods_factor", 0.0) for i in ideas) * share
+    free = max(0, civs - int(math.ceil(share * (civs + mils) - 1e-9)))
+    return {"civs": civs, "mils": mils, "consumer_goods": round(share, 4), "free": free}
+
+
+def construction_days(game, building, civs, infrastructure=0, levels=1):
+    """Days one project of `levels` levels of building takes with `civs` free civilian factories:
+    cost / (min(project cap, civs) x points per civ x (1 + step x infrastructure when the building
+    has infrastructure_construction_effect)). None when the building is unknown or no civ works."""
+    b = building_costs(game).get(building)
+    k = construction_constants(game)
+    n = min(k["project_cap"], civs or 0)
+    if b is None or n <= 0:
+        return None
+    cost = b["cost"] + b["per_level"] * max(0, levels - 1)
+    mult = 1 + k["infra_step"] * (infrastructure or 0) if b["infra_effect"] else 1.0
+    return int(math.ceil(cost / (n * k["cp_per_civ"] * mult)))
+
+
+def supply_hubs(game):
+    """{province: level} of the supply hubs in map/supply_nodes.txt (the map graph), or {}."""
+    graph = game.map_graph()
+    if graph is None:
+        return {}
+    return {p: r["supply_hub"] for p, r in graph["provinces"].items() if r.get("supply_hub")}
+
+
+def coastal_provinces(game):
+    """Coastal land provinces (map/definition.csv), or an empty set without a map."""
+    graph = game.map_graph()
+    if graph is None:
+        return set()
+    return {p for p, r in graph["provinces"].items() if r.get("coastal") and r.get("type") == "land"}
+
+
+def _top_keys(game, folder, wrapper=None):
+    out = set()
+    for f in game.files(folder):
+        for k, v in parse_file(f):
+            if wrapper is None:
+                if k and isinstance(v, list):
+                    out.add(k)
+            elif k == wrapper and isinstance(v, list):
+                out.update(n for n, b in v if n and isinstance(b, list))
+    return out
+
+
+def occupation_laws(game):
+    """Occupation law keys of common/occupation_laws."""
+    return game.cached("derive:occlaws", lambda: _top_keys(game, "common/occupation_laws"))
+
+
+def air_base_levels(game, ctx, date=DEFAULT_START):
+    """{state: air base level} at date (states without an air base are absent)."""
+    kinds = air_base_buildings(game)
+    out = {}
+    for sid, row in state_buildings(game, ctx, date).items():
+        lvl = sum(v for b, v in row.items() if b in kinds)
+        if lvl:
+            out[sid] = lvl
+    return out

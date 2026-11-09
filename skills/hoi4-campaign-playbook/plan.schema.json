@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/klimPaskov/HOI4-Live-Tools/skills/hoi4-campaign-playbook/plan.schema.json",
   "title": "HOI4 Live Tools campaign plan",
-  "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief; x-planned-owner names keys the executor will take over). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
+  "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief). x-executor-planned names the build item (coverage audit section 6, W1-n / W2-n) whose executor step takes a player key over; the owner flips to executor when that step lands (x-planned-owner is the older marker). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
   "type": "object",
   "properties": {
     "_meta": {
@@ -25,7 +25,10 @@
           "minimum": 1
         },
         "dossier_hash": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "models": {
           "type": "object",
@@ -33,13 +36,19 @@
             "type": "object",
             "properties": {
               "provider": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "launcher": {
                 "type": "string"
               },
               "model": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "resolved_model": {
                 "type": [
@@ -48,13 +57,17 @@
                 ]
               },
               "effort": {
-                "type": "string",
+                "type": [
+                  "string",
+                  "null"
+                ],
                 "enum": [
                   "low",
                   "medium",
                   "high",
                   "xhigh",
-                  "max"
+                  "max",
+                  null
                 ]
               }
             },
@@ -68,7 +81,10 @@
           "type": "string"
         },
         "lint_summary": {
-          "type": "object",
+          "type": [
+            "object",
+            "null"
+          ],
           "properties": {
             "errors": {
               "type": "integer",
@@ -79,6 +95,21 @@
               "minimum": 0
             }
           }
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "hand",
+            "strategist"
+          ],
+          "description": "who wrote the plan: hand plans get the coverage-build lint rules as warnings (lint_plan.py --hand does the same)"
+        },
+        "review": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "critic verdict recorded at freeze (strategize.py)"
         }
       },
       "additionalProperties": false,
@@ -87,6 +118,159 @@
       ],
       "x-owner": "executor",
       "description": "Plan metadata for the strategist and the revision protocol (version is the compare-and-swap key)."
+    },
+    "_coverage": {
+      "type": "object",
+      "properties": {
+        "c1": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "goal reading, predicates, deadline"
+        },
+        "c2": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "situation: wars, scripted wars, enemy aggregates, months to first war"
+        },
+        "c3": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "force posture: land / air / navy shares by phase"
+        },
+        "c4": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "doctrine path"
+        },
+        "c5": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "XP budget per branch"
+        },
+        "c6": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "templates per phase and role"
+        },
+        "c7": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "equipment designs"
+        },
+        "c8": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "production by phase, removals, stockpile targets"
+        },
+        "c9": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "MIOs"
+        },
+        "c10": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "economy timing, trade and auto-import"
+        },
+        "c11": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "research by year"
+        },
+        "c12": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "focus path and balance of power"
+        },
+        "c13": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "laws with gates"
+        },
+        "c14": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "stability and war support plan"
+        },
+        "c15": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "advisors and high command"
+        },
+        "c16": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "army organisation"
+        },
+        "c17": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "manpower plan"
+        },
+        "c18": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "operations"
+        },
+        "c19": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "supply and logistics"
+        },
+        "c20": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "air plan"
+        },
+        "c21": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "naval plan"
+        },
+        "c22": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "diplomacy"
+        },
+        "c23": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "occupation"
+        },
+        "c24": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "intelligence"
+        },
+        "c25": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "peace aims"
+        },
+        "c26": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "events and decisions by name, never-take list"
+        },
+        "c27": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "checkpoints, contingencies, revision triggers"
+        },
+        "c28": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "continuous-management thresholds"
+        },
+        "c29": {
+          "type": "string",
+          "pattern": "^(key:[A-Za-z_][A-Za-z0-9_.]*(,[A-Za-z_][A-Za-z0-9_.]*)*|call(:[A-Za-z_][A-Za-z0-9_]*)?|md:\\S.*|na:\\s*\\S.*)$",
+          "description": "FAIR boundary"
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "player",
+      "description": "Strategist checklist coverage (coverage audit section 3, items c1..c29): each id maps to key:<plan key>[,<key>...] (an executor or player key of this plan holds the decision), call or call:<key> (a player item with an exact tool call), md:<plan.md section> (text only) or na:<reason> (not applicable, with the reason). Never read by the executor; lint_plan.py coverage.checklist checks it."
     },
     "active": {
       "type": "boolean",
@@ -302,8 +486,8 @@
           },
           "when": {
             "$ref": "#/definitions/predicate",
-            "x-owner": "player",
-            "description": "executor support is build item 14"
+            "x-owner": "executor",
+            "description": "buy only when this holds (gated laws: the idea's `available` gate as a predicate; lint politics.law_gates)"
           },
           "why": {
             "type": "string",
@@ -333,7 +517,10 @@
       "description": "decision keys taken whenever enabled"
     },
     "training": {
-      "type": "object",
+      "type": [
+        "object",
+        "array"
+      ],
       "properties": {
         "template": {
           "type": "string"
@@ -349,6 +536,22 @@
         "deploy_state": {
           "$ref": "#/definitions/state_id"
         },
+        "when": {
+          "$ref": "#/definitions/predicate"
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "never more than this many divisions of the template fielded plus queued"
+        },
+        "only_if_stockpile": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "archetype -> equipment the stockpile must hold (a proxy today: training waits while a fielded division lacks that archetype)"
+        },
         "why": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
@@ -362,7 +565,11 @@
       "required": [
         "template"
       ],
-      "x-owner": "executor"
+      "x-owner": "executor",
+      "items": {
+        "$ref": "#/definitions/training_line"
+      },
+      "description": "one training line or a list of them (plan_manage.rs training_step: each template kept at `queue` lines, the first one short trains `batch`)"
     },
     "production_priority": {
       "type": "array",
@@ -401,6 +608,18 @@
           "note": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
+          },
+          "remove": {
+            "type": "boolean",
+            "x-owner": "player",
+            "x-executor-planned": "W1-9",
+            "description": "true: remove the line of this equipment from `from`. Not read by the executor yet (it would add the line; lint production.remove)"
+          },
+          "replace": {
+            "type": "string",
+            "x-owner": "player",
+            "x-executor-planned": "W1-9",
+            "description": "equipment key that replaces this line's equipment from `from`, keeping its factories (a variant change keeps 90% efficiency, defines PRODUCTION_EQUIPMENT_VARIANT_CHANGE_EFFICIENCY)"
           }
         },
         "additionalProperties": false,
@@ -736,9 +955,8 @@
       "required": [
         "predicates"
       ],
-      "x-owner": "player",
-      "description": "what done means; alarms goal_reached / goal_at_risk in build item 15",
-      "x-planned-owner": "executor"
+      "x-owner": "executor",
+      "description": "what done means (plan_run.rs strategy layer): every predicate holds -> alarm goal_reached; a fail predicate, a passed deadline or one closer than alarms.goal_risk_days -> goal_at_risk"
     },
     "checkpoints": {
       "type": "array",
@@ -760,7 +978,8 @@
           },
           "else": {
             "type": "string",
-            "pattern": "^(revise|phase:[A-Za-z0-9_]+|contingency:[A-Za-z0-9_.:-]+)$"
+            "pattern": "^(revise|phase:[A-Za-z0-9_]+|contingency:[A-Za-z0-9_.:-]+|[A-Za-z0-9_]+)$",
+            "description": "phase:<id> (or a bare phase id) switches phase, contingency:<id> triggers it, revise only raises the alarm"
           },
           "why": {
             "type": "string",
@@ -778,9 +997,8 @@
           "must"
         ]
       },
-      "x-owner": "player",
-      "description": "alarm checkpoint_missed in build item 15",
-      "x-planned-owner": "executor"
+      "x-owner": "executor",
+      "description": "judged once their date is reached: a false must -> checkpoint_missed and `else`; an unknown must waits"
     },
     "phases": {
       "type": "array",
@@ -820,9 +1038,8 @@
           "id"
         ]
       },
-      "x-owner": "player",
-      "description": "ordered phases; the active phase's overrides apply over the base plan (build item 15)",
-      "x-planned-owner": "executor"
+      "x-owner": "executor",
+      "description": "ordered phases: the first whose enter holds starts, the active one's exit hands over to the next whose enter holds; its overrides apply over the plan (alarm phase_changed)"
     },
     "contingencies": {
       "type": "array",
@@ -832,8 +1049,26 @@
           "id": {
             "$ref": "#/definitions/id"
           },
-          "trigger": {
+          "when": {
             "$ref": "#/definitions/predicate"
+          },
+          "trigger": {
+            "$ref": "#/definitions/predicate",
+            "description": "older name of when"
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "phase": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]+$"
+              },
+              "overrides": {
+                "$ref": "#/definitions/overrides"
+              }
+            },
+            "additionalProperties": false,
+            "description": "what the contingency does: switch phase, override keys"
           },
           "phase": {
             "type": "string",
@@ -864,30 +1099,51 @@
         },
         "additionalProperties": false,
         "required": [
-          "id",
-          "trigger"
+          "id"
         ],
-        "anyOf": [
+        "allOf": [
           {
-            "required": [
-              "phase"
+            "anyOf": [
+              {
+                "required": [
+                  "when"
+                ]
+              },
+              {
+                "required": [
+                  "trigger"
+                ]
+              }
             ]
           },
           {
-            "required": [
-              "overrides"
-            ]
-          },
-          {
-            "required": [
-              "revise"
+            "anyOf": [
+              {
+                "required": [
+                  "then"
+                ]
+              },
+              {
+                "required": [
+                  "phase"
+                ]
+              },
+              {
+                "required": [
+                  "overrides"
+                ]
+              },
+              {
+                "required": [
+                  "revise"
+                ]
+              }
             ]
           }
         ]
       },
-      "x-owner": "player",
-      "description": "switched to at once when the trigger holds, while a revision runs",
-      "x-planned-owner": "executor"
+      "x-owner": "executor",
+      "description": "active while `when` holds (alarm contingency_triggered): its phase is switched to once and its overrides apply over the phase's"
     },
     "event_rules": {
       "type": "array",
@@ -904,14 +1160,23 @@
             "type": "string",
             "description": "option name key (localisation key) from the event file"
           },
-          "condition": {
+          "when": {
             "$ref": "#/definitions/predicate"
+          },
+          "condition": {
+            "$ref": "#/definitions/predicate",
+            "description": "older name of when"
           },
           "else_option_name": {
             "type": "string"
           },
           "fallback_option_name": {
             "type": "string"
+          },
+          "fallback_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "option index when no option name matches"
           },
           "why": {
             "type": "string",
@@ -928,9 +1193,8 @@
           "option_name"
         ]
       },
-      "x-owner": "player",
-      "description": "event choices by option name (build item 13)",
-      "x-planned-owner": "executor"
+      "x-owner": "executor",
+      "description": "event choices by option text: the first rule of the open event whose when holds; a false when takes else_option_name; an unknown when waits"
     },
     "decision_rules": {
       "type": "array",
@@ -957,7 +1221,8 @@
             "minimum": 0
           },
           "never": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "true: never take this decision (e.g. one that ends the war or cedes states)"
           },
           "why": {
             "type": "string",
@@ -974,9 +1239,8 @@
           "decision"
         ]
       },
-      "x-owner": "player",
-      "description": "guarded decisions (build item 14)",
-      "x-planned-owner": "executor"
+      "x-owner": "executor",
+      "description": "guarded decisions tried before `decisions`: when, target (targeted row), max takes, never (blocks it everywhere)"
     },
     "army_group": {
       "type": "array",
@@ -1029,10 +1293,8 @@
             "$ref": "#/definitions/id"
           },
           "wing": {
-            "type": "string"
-          },
-          "base_state": {
-            "$ref": "#/definitions/state_id"
+            "type": "string",
+            "description": "exact wing name; else every wing of airframe (and version) matches"
           },
           "airframe": {
             "type": "string"
@@ -1042,19 +1304,44 @@
           },
           "count": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "planes planned (lint air.base_capacity; not read by the executor)"
+          },
+          "base_state": {
+            "$ref": "#/definitions/state_id"
+          },
+          "base_region": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "rebase to the base of this region with the most free room when the wing's own base is outside it or over capacity"
+          },
+          "region": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "strategic region id or name"
           },
           "mission": {
             "type": "string"
           },
-          "region": {
-            "type": "integer"
-          },
-          "then_region": {
-            "type": "integer"
+          "when": {
+            "$ref": "#/definitions/predicate"
           },
           "switch_when": {
             "$ref": "#/definitions/predicate"
+          },
+          "then_region": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "strategic region id or name"
+          },
+          "then_mission": {
+            "type": "string"
           },
           "fallback_mission": {
             "type": "string"
@@ -1077,7 +1364,8 @@
         },
         "additionalProperties": false
       },
-      "x-owner": "player"
+      "x-owner": "executor",
+      "description": "air wings by region and mission every 3 game days (plan_manage.rs air_plan_step); wings it names are left out of air.war_missions"
     },
     "hold_targets": {
       "type": "array",
@@ -1120,7 +1408,8 @@
           "provinces"
         ]
       },
-      "x-owner": "player"
+      "x-owner": "player",
+      "x-executor-planned": "W1-15"
     },
     "retake_rules": {
       "type": "array",
@@ -1185,56 +1474,8 @@
         }
       },
       "additionalProperties": false,
-      "x-owner": "player",
-      "description": "stockpile guard and cap (executor support is build item 14)"
-    },
-    "templates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/definitions/id"
-          },
-          "name": {
-            "type": "string"
-          },
-          "base": {
-            "type": "string"
-          },
-          "regiments": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "support": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "when": {
-            "$ref": "#/definitions/predicate"
-          },
-          "call": {
-            "$ref": "#/definitions/call"
-          },
-          "why": {
-            "type": "string",
-            "description": "Free text for people and the player; never read by the executor."
-          },
-          "note": {
-            "type": "string",
-            "description": "Free text for people and the player; never read by the executor."
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "name"
-        ]
-      },
-      "x-owner": "player"
+      "x-owner": "executor",
+      "description": "stockpile guard and cap for every training entry (plan_manage.rs)"
     },
     "diplomacy": {
       "type": "array",
@@ -1276,14 +1517,248 @@
     "occupation": {
       "type": "object",
       "properties": {
+        "default_law": {
+          "type": "string",
+          "description": "occupation law key (common/occupation_laws) set once when `when` holds"
+        },
         "law": {
-          "type": "string"
+          "type": "string",
+          "description": "older name of default_law"
         },
         "when": {
           "$ref": "#/definitions/predicate"
         },
-        "call": {
-          "$ref": "#/definitions/call"
+        "ladder": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "occupation laws mild to harsh (default: the game's Default Law list)"
+        },
+        "harsher_at_resistance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 50,
+          "description": "a state at this resistance moves the law one step harsher"
+        },
+        "milder_at_compliance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 40,
+          "description": "every state at this compliance (and resistance below milder_below_resistance) moves it one step milder"
+        },
+        "milder_below_resistance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 25
+        },
+        "mildest": {
+          "type": "string",
+          "description": "mildest ladder law the rule may choose"
+        },
+        "harshest": {
+          "type": "string",
+          "description": "harshest ladder law the rule may choose"
+        },
+        "change_days": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "game days between two law changes"
+        },
+        "per_state": {
+          "type": "object",
+          "patternProperties": {
+            "^\\d+$": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "x-executor-planned": "W1-7",
+          "description": "state id -> law; noted, not applied (hoi4_occupation_law sets the default law only)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "executor",
+      "description": "occupation law and the resistance / compliance ladder, every 7 game days from hoi4_occupation (plan_manage.rs occupation_step)"
+    },
+    "peace": {
+      "type": "object",
+      "properties": {
+        "take": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "description": "state ids by rank, taken one per action (hoi4_peace_take)"
+        },
+        "puppet": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "description": "state ids to puppet (a tag is noted, not taken: the tool takes state ids)"
+        },
+        "liberate": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "description": "state ids to release"
+        },
+        "max_cost": {
+          "type": "number",
+          "minimum": 0,
+          "description": "skip a state costing more points"
+        },
+        "max_rounds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "executor",
+      "description": "peace aims taken when the conference opens (plan_manage.rs peace); without it the runner stops and wakes the player. lint peace.enemies: every enemy has a state here"
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "base": {
+            "type": "string",
+            "description": "existing template to edit in place (hoi4_template_edit); absent: create a new one (hoi4_template_create)"
+          },
+          "regiments": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 25,
+            "items": {
+              "type": [
+                "array",
+                "string"
+              ],
+              "minItems": 1,
+              "maxItems": 5,
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "up to 5 columns of up to 5 battalion keys from common/units, top to bottom (the hoi4_template_create layout), or a flat list of battalion keys (runs of one key fill columns of 5)"
+          },
+          "support": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            },
+            "description": "support company keys (group support in common/units)"
+          },
+          "regimental_support": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            },
+            "description": "1.19 regimental support row, one per column; a column needs 3 battalions (defines REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS); the executor skips it with a note (no tool fills the row)"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "line",
+              "assault",
+              "mobile",
+              "armour",
+              "garrison",
+              "mountain",
+              "marine",
+              "paratrooper",
+              "defence",
+              "other"
+            ],
+            "description": "for people and the lint (templates.width skips garrison)"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "reserve",
+              "regular",
+              "elite"
+            ],
+            "description": "reinforcement priority (3 levels, defines REINFORCEMENT_PRIORITY)"
+          },
+          "upgrade_fielded": {
+            "type": "boolean",
+            "description": "true: also reorganise divisions already fielded with this template (hoi4_template_edit allow_in_use)"
+          },
+          "xp": {
+            "type": "number",
+            "minimum": 0,
+            "description": "army XP needed first (default for a create: 5 per battalion, 10 per company, 25 per extra column); xp_budget.army lists the spend"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "regiments"
+        ]
+      },
+      "description": "division templates made once per id (else per name): base edits in place, else create (plan_manage.rs templates_step); width is checked against the theatre (lint templates.width)",
+      "x-owner": "executor"
+    },
+    "garrison_template": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "templates[].id or an existing template name"
         },
         "why": {
           "type": "string",
@@ -1296,20 +1771,802 @@
       },
       "additionalProperties": false,
       "required": [
-        "law"
+        "template"
       ],
-      "x-owner": "player"
+      "description": "template the occupation view uses for garrisons (garrison_template_button)",
+      "x-owner": "player",
+      "x-executor-planned": "W1-7"
     },
-    "peace": {
+    "force_posture": {
       "type": "object",
       "properties": {
-        "take": {
-          "$ref": "#/definitions/state_ids"
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "phase": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]+$",
+                "description": "a phases[].id, or base for the plan before any phase"
+              },
+              "land": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "air": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "navy": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "phase",
+              "land",
+              "air",
+              "navy"
+            ]
+          }
         },
-        "puppet": {
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "phases",
+        "reason"
+      ],
+      "description": "percent of military factories plus dockyards on land, air and navy equipment per phase (sum 100); lint posture.shares compares the production lines with it",
+      "x-owner": "player"
+    },
+    "xp_budget": {
+      "type": "object",
+      "properties": {
+        "army": {
+          "$ref": "#/definitions/xp_spends"
+        },
+        "air": {
+          "$ref": "#/definitions/xp_spends"
+        },
+        "navy": {
+          "$ref": "#/definitions/xp_spends"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp)",
+      "x-owner": "player",
+      "x-executor-planned": "W1-6"
+    },
+    "stockpile_targets": {
+      "type": "object",
+      "properties": {
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0
+      },
+      "description": "equipment (archetype or variant key) -> days of cover to keep; manage.stockpile_days acts below them",
+      "x-owner": "player",
+      "x-executor-planned": "W1-10"
+    },
+    "manage": {
+      "type": "object",
+      "properties": {
+        "off": {
+          "type": "array",
+          "default": [],
+          "description": "standing rules switched off",
+          "items": {
+            "type": "string",
+            "enum": [
+              "alerts",
+              "ledger",
+              "manpower",
+              "stability",
+              "equipment_fill",
+              "resources",
+              "stockpile",
+              "trucks"
+            ]
+          }
+        },
+        "wake_repeat_days": {
+          "type": "integer",
+          "default": 7,
+          "description": "one wake per reason per this many game days",
+          "minimum": 1
+        },
+        "alerts_ignore": {
+          "type": "array",
+          "default": [],
+          "description": "alert names the alert rule ignores",
+          "x-rule": "alerts"
+        },
+        "alert_persist_days": {
+          "type": "integer",
+          "default": 14,
+          "description": "an alert this old wakes the player",
+          "x-rule": "alerts",
+          "minimum": 1
+        },
+        "manpower_months": {
+          "type": "number",
+          "default": 2,
+          "description": "free manpower below this many months of losses (hoi4_war_stats) takes the next conscription law",
+          "x-rule": "manpower",
+          "minimum": 0
+        },
+        "conscription_laws": {
+          "type": "array",
+          "default": [],
+          "description": "conscription ladder, lightest first (default: the vanilla laws)",
+          "x-rule": "manpower"
+        },
+        "stability_floor": {
+          "type": "number",
+          "default": 0.5,
+          "description": "wake below this stability; a fraction (0.5) or a percent (50)",
+          "x-rule": "stability",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "equipment_fill_floor": {
+          "type": "number",
+          "default": 0.8,
+          "description": "an army whose divisions' mean equipment fill is below it wakes the player and nudges disband; a fraction (0.5) or a percent (50)",
+          "x-rule": "equipment_fill",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "stockpile_days_critical": {
+          "type": "integer",
+          "default": 7,
+          "description": "days of cover (reported unknown: no stockpile read)",
+          "x-rule": "stockpile",
+          "minimum": 0
+        },
+        "stockpile_days_warning": {
+          "type": "integer",
+          "default": 30,
+          "description": "days of cover (reported unknown)",
+          "x-rule": "stockpile",
+          "minimum": 0
+        },
+        "trucks_ratio": {
+          "type": "number",
+          "default": 1.5,
+          "description": "trucks in stock / wanted (reported unknown)",
+          "x-rule": "trucks",
+          "minimum": 0
+        },
+        "deficit_wake_days": {
+          "type": "integer",
+          "default": 14,
+          "description": "a deficit that outlasts this with auto_import on wakes the player",
+          "x-rule": "resources",
+          "minimum": 1
+        },
+        "convoys_free": {
+          "type": "number",
+          "default": 0.1,
+          "description": "free convoys / all convoys below which a convoy line or escort is due (audit rule 20)",
+          "minimum": 0,
+          "maximum": 1,
+          "x-owner": "player",
+          "x-executor-planned": "W1-14"
+        },
+        "air_superiority": {
+          "type": "number",
+          "default": 0.6,
+          "description": "enemy air superiority over our front above which fighters go there first (rule 27)",
+          "minimum": 0,
+          "maximum": 1,
+          "x-owner": "player",
+          "x-executor-planned": "W2-5"
+        },
+        "casualty_ratio": {
+          "type": "number",
+          "default": 1.5,
+          "description": "own / enemy losses above which an army rests or changes axis (rule 28)",
+          "minimum": 0,
+          "x-owner": "player",
+          "x-executor-planned": "W2-9"
+        },
+        "casualty_days": {
+          "type": "integer",
+          "default": 14,
+          "description": "days the casualty ratio must hold",
+          "minimum": 1,
+          "x-owner": "player",
+          "x-executor-planned": "W2-9"
+        },
+        "fuel_floor": {
+          "type": "number",
+          "default": 0.25,
+          "description": "fuel / capacity below which exercises stop and oil is imported (rule 26, FUEL_PENALTY_START_RATIO)",
+          "minimum": 0,
+          "maximum": 1,
+          "x-owner": "player",
+          "x-executor-planned": "W3-10"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "description": "thresholds of the standing rules (plan_manage.rs): the manpower, stability, equipment and stockpile rules run only when the plan has this key (write {} for every default); the alert row and the failure ledger always run. x-rule names the `off` entry that switches a threshold's rule off; keys marked x-executor-planned are not run yet. lint manage.thresholds",
+      "x-owner": "executor"
+    },
+    "auto_import": {
+      "type": [
+        "object",
+        "integer",
+        "boolean"
+      ],
+      "properties": {
+        "budget": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "civilian factories for imports (default: the game's)"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "description": "automatic importing on a resource deficit (hoi4_auto_import): {budget, enabled}, a budget number, or true (plan_manage.rs resources rule)",
+      "x-owner": "executor",
+      "minimum": 0
+    },
+    "sea_transfer": {
+      "type": "object",
+      "properties": {
+        "routes": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/tag"
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "from_state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "to_state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "from_port": {
+                "$ref": "#/definitions/province_id"
+              },
+              "to_port": {
+                "$ref": "#/definitions/province_id"
+              },
+              "templates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "call": {
+                "$ref": "#/definitions/call"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "from_state",
+              "to_state"
+            ]
+          }
+        },
+        "convoys": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "convoys the overseas supply and transfers need"
+        },
+        "ports": {
+          "$ref": "#/definitions/state_ids",
+          "description": "overseas states supplied through their port"
+        },
+        "escort": {
+          "type": "boolean"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "description": "sea transfers and overseas supply (lint navy.overseas)",
+      "x-owner": "player",
+      "x-executor-planned": "W1-14"
+    },
+    "navy": {
+      "type": "object",
+      "properties": {
+        "posture": {
+          "type": "string",
+          "enum": [
+            "none",
+            "coastal",
+            "blue_water"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fleets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "name_hint": {
+                "type": "string"
+              },
+              "ships": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "admiral": {
+                "type": "string"
+              },
+              "home_state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "call": {
+                "$ref": "#/definitions/call"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "name_hint"
+            ]
+          }
+        },
+        "missions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "fleet": {
+                "type": "string"
+              },
+              "mission": {
+                "type": "string"
+              },
+              "region": {
+                "type": "integer"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "call": {
+                "$ref": "#/definitions/call"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "mission"
+            ]
+          }
+        },
+        "convoy_escort": {
+          "type": [
+            "boolean",
+            "object"
+          ],
+          "properties": {
+            "on": {
+              "type": "boolean"
+            },
+            "fleet": {
+              "type": "string"
+            },
+            "regions": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "why": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            },
+            "note": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            }
+          },
+          "additionalProperties": false
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "posture",
+        "reason"
+      ],
+      "description": "naval plan, or posture none with the reason (lint navy.required for coastal countries)",
+      "x-owner": "player",
+      "x-executor-planned": "W2-4"
+    },
+    "intelligence": {
+      "type": "object",
+      "properties": {
+        "agency": {
+          "type": "boolean"
+        },
+        "upgrades": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "mission": {
+                "type": "string"
+              },
+              "target": {
+                "$ref": "#/definitions/tag"
+              },
+              "call": {
+                "$ref": "#/definitions/call"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "mission"
+            ]
+          }
+        },
+        "decryption_target": {
+          "$ref": "#/definitions/tag"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "agency",
+        "reason"
+      ],
+      "description": "La Resistance agency, upgrade order, operatives, decryption",
+      "x-owner": "player",
+      "x-executor-planned": "W2-7"
+    },
+    "designs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "tank",
+              "plane",
+              "ship"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string",
+            "description": "chassis, airframe or hull equipment key"
+          },
+          "modules": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "slot -> module"
+          },
+          "role": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "xp": {
+            "type": "number",
+            "minimum": 0
+          },
+          "production": {
+            "type": "string",
+            "description": "production line equipment that switches to this design"
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "name",
+          "base"
+        ]
+      },
+      "description": "equipment designer designs (NSB, BBA, MtG)",
+      "x-owner": "player",
+      "x-executor-planned": "W2-2"
+    },
+    "mio": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "organisation": {
+            "type": "string",
+            "description": "MIO key (common/military_industrial_organization)"
+          },
+          "line": {
+            "type": "string",
+            "description": "production line equipment the MIO serves"
+          },
+          "traits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "policy": {
+            "type": "string"
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "organisation"
+        ]
+      },
+      "description": "military-industrial organisations per line, trait order, policies",
+      "x-owner": "player",
+      "x-executor-planned": "W2-8"
+    },
+    "trade": {
+      "type": "object",
+      "properties": {
+        "deals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "resource": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number",
+                "minimum": 0
+              },
+              "partner": {
+                "$ref": "#/definitions/tag"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "call": {
+                "$ref": "#/definitions/call"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "resource"
+            ]
+          }
+        },
+        "market": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "equipment": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number",
+                "minimum": 0
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "buy",
+                  "sell"
+                ]
+              },
+              "call": {
+                "$ref": "#/definitions/call"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "equipment",
+              "action"
+            ]
           }
         },
         "why": {
@@ -1322,7 +2579,9 @@
         }
       },
       "additionalProperties": false,
-      "x-owner": "player"
+      "description": "manual trade deals and International Market orders",
+      "x-owner": "player",
+      "x-executor-planned": "W2-10"
     },
     "war_by_phase": {
       "type": "object",
@@ -1419,12 +2678,308 @@
       "description": "Executor trigger read today (plan_run.rs construction_plan_step): empty (always), a date, province_controlled:<province>, state_fully_controlled:<state> or owner:<state>=<TAG>."
     },
     "predicate": {
+      "x-grammar": [
+        "predicate  := string | true | false | [predicate, ...] (all) | {\"all\": [p, ...]} | {\"any\": [p, ...]} | {\"not\": p}",
+        "string     := comparison | flag | date | \"\"       (\"\" holds always)",
+        "comparison := name[:arg] op value   (spaces around op optional; op is < <= > >= == !=)",
+        "flag       := name[:arg]            (a yes/no atom: x-atoms kind bool; negate with {\"not\": ...})",
+        "date       := YYYY.MM.DD | date:YYYY.MM.DD   (reached; same as date >= YYYY.MM.DD)",
+        "value      := number -?D[.D][%] for kind number; a date for kind date; a TAG for kind tag",
+        "kind tag   := owner|controller|state_controller:<state>, province_controller:<province> with == or != TAG",
+        "              (a single = is ==: the older owner:<state>=<TAG> form)",
+        "ratio      := atoms with ratio: true are fractions 0..1; a value above 1, or written with %, is a percent",
+        "              (\"war_support >= 25\" and \"war_support >= 25%\" mean 0.25)",
+        "arg        := province|state: digits; tag: [A-Z][A-Z0-9]{2}; key: [A-Za-z0-9_.-]+; id: [A-Za-z0-9_]+;",
+        "              branch: army|air|navy (land, naval accepted); army: an army or army_layout name_hint (no < > = !",
+        "              and no edge spaces); equipment: [A-Za-z0-9_]+; name: [A-Za-z0-9_.@^:]+ (script variable)",
+        "evaluation := three-valued: an atom that cannot be read now is unknown, never true, and whatever waits on",
+        "              it waits; all is false when one part is false, else unknown when one is unknown; any is the",
+        "              mirror; not keeps unknown (native/src/plan_predicate.rs)",
+        "x-atoms    := every atom: kind, arg, min/max, ratio, unit, the read that answers it; readable: false marks",
+        "              the atoms that are always unknown today (lint predicates.unreadable); legacy_of names the",
+        "              current atom an older spelling stands for"
+      ],
+      "description": "A check on the game state, as native/src/plan_predicate.rs parses it: a string `atom op value` (ops < <= > >= == !=) or a bare yes/no atom, combined as {\"all\":[...]}, {\"any\":[...]}, {\"not\": p} (a plain list is all). x-grammar is the grammar, x-atoms the atom table; hoi4facts/validate.py parse_predicate implements both.",
+      "x-atoms": {
+        "date": {
+          "kind": "date",
+          "arg": null,
+          "read": "the caller's game clock",
+          "readable": true
+        },
+        "stability": {
+          "kind": "number",
+          "arg": null,
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent)",
+          "read": "hoi4_country_status fields.stability",
+          "readable": true
+        },
+        "war_support": {
+          "kind": "number",
+          "arg": null,
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent)",
+          "read": "hoi4_country_status fields.war_support",
+          "readable": true
+        },
+        "manpower": {
+          "kind": "number",
+          "arg": null,
+          "min": 0,
+          "unit": "men available",
+          "read": "hoi4_country_status fields.manpower",
+          "readable": true
+        },
+        "pp": {
+          "kind": "number",
+          "arg": null,
+          "unit": "political power",
+          "read": "hoi4_economy political_power",
+          "readable": true
+        },
+        "world_tension": {
+          "kind": "number",
+          "arg": null,
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent)",
+          "read": "hoi4_diplomacy_state world_tension",
+          "readable": true
+        },
+        "xp": {
+          "kind": "number",
+          "arg": "branch",
+          "min": 0,
+          "unit": "experience (land = army, naval = navy)",
+          "read": "hoi4_doctrines experience",
+          "readable": true
+        },
+        "fuel_ratio": {
+          "kind": "number",
+          "arg": null,
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent): fuel / capacity",
+          "read": "hoi4_resources fuel.ratio",
+          "readable": true
+        },
+        "resistance": {
+          "kind": "number",
+          "arg": "state",
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent)",
+          "read": "hoi4_occupation states[].resistance / 100",
+          "readable": true
+        },
+        "compliance": {
+          "kind": "number",
+          "arg": "state",
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent)",
+          "read": "hoi4_occupation states[].compliance / 100",
+          "readable": true
+        },
+        "equipment_fill": {
+          "kind": "number",
+          "arg": "army",
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent): mean of the army's divisions' lowest fill",
+          "read": "hoi4_supply",
+          "readable": true
+        },
+        "at_peace_conference": {
+          "kind": "bool",
+          "arg": null,
+          "read": "hoi4_events peace_conference_open",
+          "readable": true
+        },
+        "at_war_with": {
+          "kind": "bool",
+          "arg": "tag",
+          "read": "hoi4_wars enemies, else hoi4_diplomacy_state",
+          "readable": true
+        },
+        "vp_share": {
+          "kind": "number",
+          "arg": "tag",
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent): share of TAG's own victory points TAG still holds",
+          "read": "hoi4_states victory_points",
+          "readable": true
+        },
+        "controls_state": {
+          "kind": "bool",
+          "arg": "state",
+          "read": "hoi4_states controller == player",
+          "readable": true
+        },
+        "state_fully_controlled": {
+          "kind": "bool",
+          "arg": "state",
+          "read": "hoi4_states: every province held by the player",
+          "readable": true
+        },
+        "owner": {
+          "kind": "tag",
+          "arg": "state",
+          "read": "hoi4_states owner",
+          "readable": true
+        },
+        "controller": {
+          "kind": "tag",
+          "arg": "state",
+          "read": "hoi4_states controller",
+          "readable": true
+        },
+        "state_controller": {
+          "kind": "tag",
+          "arg": "state",
+          "read": "hoi4_states: the one tag holding every province",
+          "readable": true
+        },
+        "province_controlled": {
+          "kind": "bool",
+          "arg": "province",
+          "read": "hoi4_states victory points and provinces_held_by_others",
+          "readable": true
+        },
+        "province_controller": {
+          "kind": "tag",
+          "arg": "province",
+          "read": "hoi4_states victory points and provinces_held_by_others",
+          "readable": true
+        },
+        "exists": {
+          "kind": "bool",
+          "arg": "tag",
+          "read": "hoi4_states{query:TAG}",
+          "readable": true
+        },
+        "focus_done": {
+          "kind": "bool",
+          "arg": "key",
+          "read": "hoi4_focus_completed",
+          "readable": true
+        },
+        "tech_done": {
+          "kind": "bool",
+          "arg": "key",
+          "read": "hoi4_research researched",
+          "readable": true
+        },
+        "phase": {
+          "kind": "bool",
+          "arg": "id",
+          "read": "the plan's active phase",
+          "readable": true
+        },
+        "convoys_free": {
+          "kind": "number",
+          "arg": null,
+          "min": 0,
+          "unit": "convoys not in use",
+          "read": "hoi4_convoys (in use not mapped)",
+          "readable": false
+        },
+        "stockpile_days": {
+          "kind": "number",
+          "arg": "equipment",
+          "min": 0,
+          "unit": "days of cover",
+          "read": "no stockpile read (W1-10)",
+          "readable": false
+        },
+        "var": {
+          "kind": "number",
+          "arg": "name",
+          "unit": "script variable",
+          "read": "no read (W1-18)",
+          "readable": false
+        },
+        "bop": {
+          "kind": "number",
+          "arg": "id",
+          "min": -1,
+          "max": 1,
+          "unit": "balance of power value",
+          "read": "no read (W1-17)",
+          "readable": false
+        },
+        "mission_days": {
+          "kind": "number",
+          "arg": "key",
+          "min": 0,
+          "unit": "days left on a timed mission",
+          "read": "no timer read (W1-18)",
+          "readable": false
+        },
+        "capitulated": {
+          "kind": "bool",
+          "arg": "tag",
+          "read": "no capitulation read",
+          "readable": false
+        },
+        "at_war": {
+          "kind": "bool",
+          "arg": "tag",
+          "read": "hoi4_wars",
+          "readable": true,
+          "legacy_of": "at_war_with"
+        },
+        "not_at_war": {
+          "kind": "bool",
+          "arg": "tag",
+          "read": "hoi4_wars",
+          "readable": true,
+          "legacy_of": "not at_war_with"
+        },
+        "not_exists": {
+          "kind": "bool",
+          "arg": "tag",
+          "read": "hoi4_states",
+          "readable": true,
+          "legacy_of": "not exists"
+        },
+        "focus_completed": {
+          "kind": "bool",
+          "arg": "key",
+          "read": "hoi4_focus_completed",
+          "readable": true,
+          "legacy_of": "focus_done"
+        },
+        "tech_researched": {
+          "kind": "bool",
+          "arg": "key",
+          "read": "hoi4_research",
+          "readable": true,
+          "legacy_of": "tech_done"
+        }
+      },
       "type": [
         "string",
-        "object"
+        "object",
+        "array",
+        "boolean"
       ],
-      "pattern": "^(\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|province_controlled:\\d+|state_fully_controlled:\\d+|owner:\\d+=[A-Z][A-Z0-9]{2}|state_controller:\\d+=[A-Z][A-Z0-9]{2}|province_controller:\\d+=[A-Z][A-Z0-9]{2}|(at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|vp_share:[A-Z][A-Z0-9]{2}(<=|>=|<|>)(0(\\.\\d+)?|1(\\.0+)?)|(focus_completed|tech_researched):[A-Za-z0-9_.]+|phase:[A-Za-z0-9_]+)$",
-      "description": "A check on the game state. Atoms: a date (reached), province_controlled:<p> (by us), state_fully_controlled:<s>, owner:<s>=<TAG>, state_controller:<s>=<TAG> (TAG controls every province), province_controller:<p>=<TAG>, at_war|not_at_war|capitulated|exists|not_exists:<TAG>, vp_share:<TAG><op><0..1> (share of TAG's victory points TAG still controls, hoi4_states), focus_completed:<key>, tech_researched:<key>, phase:<id> (that phase is active). Composites: {\"all\":[...]}, {\"any\":[...]}, {\"not\":p}. The first four atoms are what the executor evaluates today; the evaluator for the rest is build item 15.",
+      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|xp:(army|air|navy|land|naval)|vp_share:[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+)\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
+      "items": {
+        "$ref": "#/definitions/predicate"
+      },
       "properties": {
         "all": {
           "type": "array",
@@ -1734,6 +3289,28 @@
             "boolean",
             "null"
           ]
+        },
+        "goal_reached": {
+          "type": "boolean"
+        },
+        "goal_at_risk": {
+          "type": "boolean"
+        },
+        "checkpoint_missed": {
+          "type": "boolean"
+        },
+        "phase_changed": {
+          "type": "boolean"
+        },
+        "contingency_triggered": {
+          "type": "boolean"
+        },
+        "goal_risk_days": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": {
@@ -1924,6 +3501,104 @@
           "building"
         ]
       }
+    },
+    "training_line": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 6
+        },
+        "batch": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2
+        },
+        "deploy_state": {
+          "$ref": "#/definitions/state_id"
+        },
+        "when": {
+          "$ref": "#/definitions/predicate"
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "never more than this many divisions of the template fielded plus queued"
+        },
+        "only_if_stockpile": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "archetype -> equipment the stockpile must hold (a proxy today: training waits while a fielded division lacks that archetype)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "template"
+      ]
+    },
+    "xp_spends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "cost": {
+            "type": "number",
+            "minimum": 0
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "template",
+              "doctrine",
+              "design",
+              "officer_corps_spirit",
+              "exercise",
+              "other"
+            ]
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^(template|doctrine|design|spirit):[A-Za-z0-9_.:-]+$",
+            "description": "the plan item paid for: template:<templates id>, doctrine:<doctrines id>, design:<id>, spirit:<idea>"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "cost",
+          "purpose"
+        ]
+      },
+      "description": "ordered spends of one experience pool (pools cap at 500)"
     }
   }
 }

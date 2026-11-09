@@ -296,7 +296,7 @@ class StrategistSkillTest(unittest.TestCase):
         schema = json.loads(read(os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")))
         player = [k for k, v in schema["properties"].items() if v.get("x-owner") == "player"
                   and "call" in ((v.get("items") or v).get("properties") or {})]
-        self.assertIn("templates", player)
+        self.assertIn("army_group", player)  # templates went to the executor (plan_manage.rs)
         for key in player:
             self.assertTrue(any(k.split(".")[0] == key for k in BRIEF_CALLS), "no brief call for " + key)
 

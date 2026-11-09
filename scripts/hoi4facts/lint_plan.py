@@ -2,7 +2,7 @@
 """Deterministic plan lint (strategist design 4.2): strategy rules a schema-valid plan can still break.
 
 Usage:
-    lint_plan.py PLAN.json [--game DIR] [--userdir DIR] [--mod PATH ...] [--front-distance K] [--json]
+    lint_plan.py PLAN.json [--game DIR] [--userdir DIR] [--mod PATH ...] [--front-distance K] [--json] [--hand]
 
 validate_plan.py checks that every key is something the game and the executor know. The lint checks
 that the plan is a sound strategy against the game files: nothing researched ahead of time, no
@@ -53,6 +53,50 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   schema.keys              schema errors (unknown keys, except _-prefixed)
   schema.player_call       player-owned items without a `call` (the tool call they stand for)
 
+Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
+  coverage.checklist       no top-level _coverage, a checklist id c1..c29 missing, a value that is not
+                           key:<plan key>[,...] | call[:<key>] | md:<plan.md section> | na:<reason>, a key
+                           the plan lacks, or na: "missing ..." (a gap, not a reason)
+  posture.shares           (warning) production factory shares of a force_posture phase more than 15
+                           points from the posture; error when a posture phase does not sum to 100
+  navy.required            a coastal country (an owned coastal province) without a navy key
+  navy.overseas            an army state the capital cannot reach over own land, without a navy key,
+                           a convoy plan (convoy production line or sea_transfer.convoys) and a port plan
+                           (sea_transfer.ports or a port building queued there)
+  supply.port_convoys      the plan builds a port or relies on one (sea_transfer.ports, an overseas army)
+                           but has no convoy item (convoy production line or manage.convoys_free);
+                           sea supply needs SUPPLY_CONVOY_FACTOR convoys per supply
+  construction.hub_cost    a supply hub (or any building of base_cost >= 15000) finishes after the goal
+                           deadline or the plan horizon: base_cost / (min(15, free civs) x points per civ
+                           x infrastructure speed); warning above 120 days, or when an existing or
+                           capturable hub within 3 steps could serve the same provinces by railway; the
+                           finding names the port alternative when an own coastal province is 3 steps away
+  air.base_capacity        (warning) air_plan planes on a base above its capacity (level at the start plus
+                           queued levels, x AIRBASE_CAPACITY_MULT)
+  templates.width          (warning) template width more than 10% from the theatre target (placeholder:
+                           derive.theatre_width_target over common/terrain combat widths)
+  templates.equipment      a template unit or its equipment unlocked by no tech at the start or in the
+                           research plan (warning when the tech comes after the template's date)
+  templates.xp             a template with xp and no xp_budget.army spend ref template:<id>
+  politics.law_gates       an economy or conscription law with an `available` gate bought without a
+                           `when` predicate (other gated laws: warning; warning when `when` skips the
+                           gate's war support / stability)
+  occupation.required      states resisting at the start, or states the plan conquers, without an
+                           occupation key
+  peace.enemies            an enemy without a peace item (one of its states, or its tag, in peace.take,
+                           puppet or liberate)
+  manage.thresholds        no manage key (plan_manage.rs runs the manpower, stability, equipment and
+                           stockpile rules only with it; {} takes every default); warning for a threshold
+                           whose rule is in manage.off or that the executor does not run yet
+  production.remove        (warning) production remove/replace entries: not read by the executor yet
+  predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
+                           hold because it rests on atoms the executor cannot read yet (x-atoms readable:
+                           false: convoys_free, stockpile_days, var, bop, mission_days, capitulated)
+
+Hand plans: with _meta.source "hand" (or --hand) every coverage-build error above is reported as a
+warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
+unchanged.
+
 Stdlib only, Python 3.9+. Exit status 1 when there are errors, 2 on usage problems.
 """
 import argparse
@@ -67,26 +111,42 @@ if __package__ in (None, ""):
     from hoi4facts import content, derive, schema_check  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
-    from hoi4facts.validate import (Report, ctx_of, load_schema, parse_when, resolve_meta,  # noqa: E402
-                                    start_of, start_oobs, start_tech_set)
+    from hoi4facts.validate import (Report, ctx_of, load_schema, parse_predicate, parse_when,  # noqa: E402
+                                    predicate_dates, predicate_table, resolve_meta, start_of, start_oobs,
+                                    start_tech_set, template_columns,
+                                    predicate_can_hold)
 else:
     from . import content, derive, schema_check
     from . import tech as techrule
     from .game import Game
-    from .validate import Report, ctx_of, load_schema, parse_when, resolve_meta, start_of, start_oobs, start_tech_set
+    from .validate import (Report, ctx_of, load_schema, parse_predicate, parse_when, predicate_dates,
+                           predicate_table, resolve_meta, start_of, start_oobs, start_tech_set, template_columns,
+                           predicate_can_hold)
 
 DEFAULT_GAME_DIR = os.path.expanduser("~/Library/Application Support/Steam/steamapps/common/Hearts of Iron IV")
 FRONT_K = 2
 MAX_STRIKE = 24
 LOW_INFRA = 2
 MAX_RIVERS = 2
+POSTURE_POINTS = 15        # posture.shares: percentage points a production share may differ
+WIDTH_TOLERANCE = 0.10     # templates.width: share of the theatre target
+HUB_COST = 15000           # construction.hub_cost: base_cost from which a building counts as a hub-sized job
+HUB_DAYS = 120             # construction.hub_cost: warning above this many days
+HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal province that could serve instead
+NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
+             "construction.hub_cost", "air.base_capacity", "templates.width", "templates.equipment", "templates.xp",
+             "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
+             "predicates.unreadable"}
 SEVERITIES = ("error", "warning", "info")
-_PRED_TAG = re.compile(r"^(capitulated|at_war|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
-_PRED_STATE = re.compile(r"^(state_controller|owner):(\d+)=([A-Z][A-Z0-9]{2})$|^state_fully_controlled:(\d+)$")
+_PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
+_PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
+                         r"|^(state_fully_controlled|controls_state):(\d+)$")
 
 
 def _atoms(pred):
-    """Atom strings of a predicate (composites flattened; NOT branches left out)."""
+    """Atom strings of a predicate (composites flattened; NOT branches left out; a list is all)."""
+    if isinstance(pred, list):
+        pred = {"all": pred}
     if isinstance(pred, str):
         return [pred]
     out = []
@@ -102,11 +162,13 @@ def _ints(v):
 
 
 class Lint:
-    def __init__(self, plan, game, k=FRONT_K, schema=None):
+    def __init__(self, plan, game, k=FRONT_K, schema=None, hand=None):
         self.plan = plan
         self.game = game
         self.k = k
         self.schema = schema if schema is not None else load_schema()
+        meta = plan.get("_meta") if isinstance(plan.get("_meta"), dict) else {}
+        self.hand = bool(hand) if hand is not None else meta.get("source") == "hand"
         self.findings = []
         self.facts = {}
         self.meta = resolve_meta(plan, game, Report())
@@ -119,6 +181,8 @@ class Lint:
 
     # ------------------------------------------------------------------ helpers
     def add(self, severity, rule, where, message):
+        if self.hand and severity == "error" and rule in NEW_RULES:
+            severity, message = "warning", message + " (hand plan: reported as a warning)"
         self.findings.append({"severity": severity, "rule": rule, "where": where, "message": message})
 
     def list_of(self, key, plan=None):
@@ -141,7 +205,7 @@ class Lint:
         for p in self.goal.get("predicates") or []:
             for a in _atoms(p):
                 m = _PRED_TAG.match(a)
-                if m and m.group(1) in ("capitulated", "at_war"):
+                if m and m.group(1) in ("capitulated", "at_war", "at_war_with"):
                     out.add(m.group(2))
         out.discard(self.tag)
         return sorted(out)
@@ -535,8 +599,7 @@ class Lint:
         start = derive.day(self.start)
         dates = sorted({start} | {derive.day(x["from"]) for x in lines if derive.day(x.get("from")) is not None})
         for d in dates:
-            active = [x for x in lines if (derive.day(x.get("from")) or start) <= d]
-            n = sum(x.get("factories", 0) for x in active if isinstance(x.get("factories"), int))
+            n = sum(self.active_lines(d).values())
             cap = mils if d == start else mils + planned
             if n > cap:
                 extra = "" if d == start else f" plus {planned} planned"
@@ -689,9 +752,9 @@ class Lint:
                 if not m:
                     continue
                 if m.group(4):
-                    out[int(m.group(4))] = "full"
+                    out[int(m.group(5))] = "full" if m.group(4) == "state_fully_controlled" else "control"
                 elif m.group(3) == self.tag:
-                    out[int(m.group(2))] = "full" if m.group(1) == "state_controller" else "owner"
+                    out[int(m.group(2))] = {"state_controller": "full", "owner": "owner"}.get(m.group(1), "control")
         sg = self.plan.get("surrender_goal")
         if isinstance(sg, dict) and isinstance(sg.get("must_control_state_at_end"), int):
             out.setdefault(sg["must_control_state_at_end"], "control")
@@ -837,15 +900,581 @@ class Lint:
                          f"{len(missing)} of {len(items)} player items have no call (the tool call they stand for): "
                          f"indexes {', '.join(map(str, missing))}")
 
+    # ------------------------------------------------------------------ coverage-build helpers
+    @property
+    def table(self):
+        return predicate_table(self.schema)
+
+    def active_lines(self, d):
+        """{equipment: factories} of the production lines in force on day d (remove and replace
+        entries applied in date order)."""
+        start = derive.day(self.start)
+        rows = sorted(enumerate(self.list_of("production")),
+                      key=lambda ix: ((derive.day(ix[1].get("from")) or start), ix[0]))
+        out = {}
+        for _, x in rows:
+            if (derive.day(x.get("from")) or start) > d:
+                continue
+            k = x.get("equipment")
+            if x.get("remove"):
+                out.pop(k, None)
+            elif "replace" in x:
+                if k in out:
+                    out[x["replace"]] = out.get(x["replace"], 0) + out.pop(k)
+            elif isinstance(x.get("factories"), int):
+                out[k] = out.get(k, 0) + x["factories"]
+        return out
+
+    def has_path(self, dotted):
+        node = self.plan
+        for part in dotted.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return False
+            node = node[part]
+        return True
+
+    def horizon(self):
+        """[(day, label)] the plan must finish by: goal.deadline and the plan horizon."""
+        out = []
+        if self.goal.get("deadline") and derive.day(self.goal["deadline"]) is not None:
+            out.append((derive.day(self.goal["deadline"]), "goal deadline"))
+        if self.stop and derive.day(self.stop) is not None:
+            out.append((derive.day(self.stop), "plan horizon"))
+        return out
+
+    def trigger_day(self, when):
+        """Day a construction trigger fires: its date, the `by` of the vp target that takes the
+        province (or the last one in the state), else the start."""
+        w = parse_when(when) if isinstance(when, str) or when is None else ("text", str(when))
+        start = derive.day(self.start)
+        if w[0] in ("date", "date_prefix"):
+            return max(start, derive.day(w[1]))
+        by = [(e, derive.day(e["by"])) for e in self.targets() if e.get("by") and derive.day(e["by"]) is not None]
+        if w[0] == "province":
+            hit = [d for e, d in by if w[1] in self.captures(e)]
+            if hit:
+                return max(start, hit[0])
+        elif w[0] == "state":
+            hit = [d for e, d in by if e.get("state") == w[1]]
+            if hit:
+                return max(start, max(hit))
+        return start
+
+    def axis_states(self):
+        out = set()
+        for war in [self.war] + [p for p in (self.plan.get("war_by_phase") or {}).values() if isinstance(p, dict)]:
+            for axis in war.get("axes") or []:
+                out.update(_ints(axis))
+        return out
+
+    def capturable(self):
+        """Provinces of the states the plan attacks (vp target states and war axes)."""
+        states = self.states()
+        out = set()
+        for sid in {e.get("state") for e in self.targets()} | self.axis_states():
+            out.update(states.get(sid, {}).get("provinces", []))
+        return out
+
+    def army_states(self):
+        """States the plan keeps armies in: army_layout, armies.states, war.theatre, training
+        deploy states, sea_transfer destinations."""
+        out = {e["state"] for e in self.list_of("army_layout") if isinstance(e.get("state"), int)}
+        armies = self.plan.get("armies") if isinstance(self.plan.get("armies"), dict) else {}
+        out.update(_ints(armies.get("states")))
+        out.update(_ints(self.war.get("theatre")))
+        tr = self.plan.get("training")
+        for line in tr if isinstance(tr, list) else [tr]:
+            if isinstance(line, dict) and isinstance(line.get("deploy_state"), int):
+                out.add(line["deploy_state"])
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        out.update(r["to_state"] for r in st.get("routes") or [] if isinstance(r, dict) and isinstance(r.get("to_state"), int))
+        return out
+
+    def overseas(self):
+        if getattr(self, "_overseas", None) is None:
+            self._overseas = derive.overseas_states(self.game, self.ctx, self.tag, self.army_states(), self.start,
+                                                    self.meta.get("history_file")) or set()
+        return self._overseas
+
+    def queued(self):
+        """[(where, building, state)] of construction_plan (base and overrides) and construction."""
+        out = []
+        for prefix, items in self.construction_lists():
+            for i, e in enumerate(items):
+                if isinstance(e.get("state"), int):
+                    out.append((f"{prefix}[{i}]", e.get("building"), e["state"]))
+        for i, e in enumerate(self.list_of("construction")):
+            for s in self.state_ids(e.get("states")):
+                out.extend([(f"construction[{i}]", e.get("building"), s)] * max(1, int(e.get("count", 1) or 1)))
+        return out
+
+    def state_ids(self, items):
+        by_name = {}
+        for sid, s in self.states().items():
+            for n in s["names"]:
+                by_name.setdefault(n, set()).add(sid)
+        out = []
+        for s in items or []:
+            if isinstance(s, int) or (isinstance(s, str) and s.isdigit()):
+                out.append(int(s))
+            elif isinstance(s, str) and len(by_name.get(s, ())) == 1:
+                out.append(next(iter(by_name[s])))
+        return out
+
+    def convoy_item(self, manage_counts=False):
+        """True when a production line builds convoys (or, with manage_counts, manage.convoys_free is set)."""
+        types = derive.equipment_types(self.game)
+        if any("convoy" in types.get(x.get("equipment"), set()) and not x.get("remove")
+               for x in self.list_of("production")):
+            return True
+        if manage_counts:
+            m = self.plan.get("manage") if isinstance(self.plan.get("manage"), dict) else {}
+            v = m.get("convoys_free")
+            return v is not None and v is not False and not (isinstance(v, dict) and v.get("on") is False)
+        return False
+
+    def planned_techs(self):
+        """{tech: year} planned in research_path (its year) and research_priority (0: at once)."""
+        out = {}
+        for e in self.list_of("research_path"):
+            y = e.get("year") if isinstance(e.get("year"), int) else 0
+            for t in e.get("techs") or []:
+                out.setdefault(t, y)
+        for t in self.plan.get("research_priority") or []:
+            if isinstance(t, str):
+                out.setdefault(t, 0)
+        return out
+
+    # ------------------------------------------------------------------ coverage-build rules
+    def coverage(self):
+        spec = ((self.schema or {}).get("properties") or {}).get("_coverage") or {}
+        names = {c: s.get("description", c) for c, s in (spec.get("properties") or {}).items()}
+        if not names:
+            return
+        cov = self.plan.get("_coverage")
+        ids = list(names)
+        if not isinstance(cov, dict):
+            self.add("error", "coverage.checklist", "_coverage",
+                     f"no _coverage object: map each checklist id {ids[0]}..{ids[-1]} to key:<plan key>, call, "
+                     f"md:<plan.md section> or na:<reason>")
+            return
+        missing = [c for c in ids if c not in cov]
+        if missing:
+            self.add("error", "coverage.checklist", "_coverage",
+                     f"checklist items without an entry: {', '.join(f'{c} ({names[c]})' for c in missing)}")
+        for cid in ids:
+            v = cov.get(cid)
+            if not isinstance(v, str):
+                continue
+            where, label = f"_coverage.{cid}", f"{cid} ({names[cid]})"
+            if v.startswith("key:"):
+                for k in (x.strip() for x in v[4:].split(",")):
+                    if not self.has_path(k):
+                        self.add("error", "coverage.checklist", where, f"{label}: key {k} is not in the plan")
+            elif v == "call" or v.startswith("call:"):
+                key = v[5:] or None
+                pool = self.plan.get(key) if key else self.plan
+                if not _has_call(pool):
+                    self.add("error", "coverage.checklist", where,
+                             f"{label}: {v} but {'plan.' + key if key else 'the plan'} has no item with a call")
+            elif v.startswith("na:"):
+                reason = v[3:].strip()
+                if not reason:
+                    self.add("error", "coverage.checklist", where, f"{label}: na needs a reason")
+                elif reason.lower().startswith("missing"):
+                    self.add("error", "coverage.checklist", where, f"{label} is a gap, not a reason: {v}")
+            elif not v.startswith("md:"):
+                self.add("error", "coverage.checklist", where, f"{label}: {v!r} is not key:, call, md: or na:")
+
+    def posture(self):
+        fp = self.plan.get("force_posture")
+        if not isinstance(fp, dict):
+            return
+        start = derive.day(self.start)
+        dates = {}
+        for p in self.list_of("phases"):
+            ds = predicate_dates(p["enter"], self.table) if p.get("enter") is not None else []
+            if ds:
+                dates[str(p.get("id"))] = derive.day(max(ds))
+        domain = lambda k: derive.equipment_domain(self.game, k) or "land"  # noqa: E731
+        rows = []
+        for j, ph in enumerate(fp.get("phases") or []):
+            if not isinstance(ph, dict):
+                continue
+            where, name = f"force_posture.phases[{j}]", ph.get("phase")
+            want = {k: ph.get(k) for k in ("land", "air", "navy") if isinstance(ph.get(k), (int, float))}
+            if len(want) < 3:
+                continue
+            if abs(sum(want.values()) - 100) > 1:
+                self.add("error", "posture.shares", where, f"land + air + navy is {sum(want.values()):g}, not 100")
+                continue
+            d = start if name == "base" else dates.get(name)
+            if d is None:
+                self.add("info", "posture.shares", where, f"phase {name} has no enter date; shares not compared")
+                continue
+            lines = self.active_lines(d)
+            total = sum(lines.values())
+            if not total:
+                continue
+            got = {k: 0.0 for k in want}
+            for eq, n in lines.items():
+                got[domain(eq)] += 100.0 * n / total
+            rows.append({"phase": name, "date": derive.fmt(derive.date_of(d)), "plan": want,
+                         "production": {k: round(v, 1) for k, v in got.items()}})
+            off = [f"{k} {got[k]:.0f}% vs {want[k]:g}%" for k in want if abs(got[k] - want[k]) > POSTURE_POINTS]
+            if off:
+                self.add("warning", "posture.shares", where,
+                         f"production on {derive.fmt(derive.date_of(d))} ({total} factories) differs from the posture "
+                         f"by more than {POSTURE_POINTS} points: {', '.join(off)}")
+        self.facts["posture"] = rows
+
+    def navy(self):
+        coastal = derive.coastal_states(self.game, self.ctx, self.tag, self.start) or set()
+        has_navy = isinstance(self.plan.get("navy"), dict)
+        if coastal and not has_navy:
+            self.add("error", "navy.required", "navy",
+                     f"{self.tag} owns {len(coastal)} coastal state(s) ({', '.join(map(str, sorted(coastal)[:8]))}"
+                     f"{' ...' if len(coastal) > 8 else ''}) and the plan has no navy key; give a naval plan or "
+                     f"{{\"posture\": \"none\", \"reason\": ...}}")
+        over = self.overseas()
+        self.facts["overseas_states"] = sorted(over)
+        if not over:
+            return
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        ports = {b for b, r in derive.building_costs(self.game).items() if r["port"]}
+        port_plan = (set(_ints(st.get("ports"))) & over) or {s for _, b, s in self.queued() if b in ports and s in over}
+        convoys = self.convoy_item() or (isinstance(st.get("convoys"), int) and st["convoys"] > 0)
+        missing = [m for m, ok in (("a navy key", has_navy),
+                                   ("a convoy plan (a convoy production line or sea_transfer.convoys)", convoys),
+                                   ("a port plan (sea_transfer.ports or a port building queued there)", port_plan))
+                   if not ok]
+        if missing:
+            self.add("error", "navy.overseas", "navy",
+                     f"armies stand in states {', '.join(map(str, sorted(over)))}, which {self.tag}'s capital cannot "
+                     f"reach over its own land (supply and reinforcements go by sea); missing: {'; '.join(missing)}")
+
+    def port_convoys(self):
+        ports = {b for b, r in derive.building_costs(self.game).items() if r["port"]}
+        built = sorted({s for _, b, s in self.queued() if b in ports})
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        relied = sorted(set(_ints(st.get("ports"))) | self.overseas())
+        if not built and not relied:
+            return
+        if self.convoy_item(manage_counts=True):
+            return
+        factor = derive.define(self.game, "SUPPLY_CONVOY_FACTOR", 0.25)
+        why = []
+        if built:
+            why.append(f"builds a port in state(s) {', '.join(map(str, built))}")
+        if relied:
+            why.append(f"supplies state(s) {', '.join(map(str, relied))} by sea")
+        self.add("error", "supply.port_convoys", "production",
+                 f"the plan {' and '.join(why)} but has no convoy item (a convoy production line or a "
+                 f"manage.convoys_free threshold); sea supply needs {factor:g} convoys per supply "
+                 f"(SUPPLY_CONVOY_FACTOR)")
+
+    def hub_cost(self):
+        game = self.game
+        costs = derive.building_costs(game)
+        kinds = derive.building_kinds(game)
+        big = {b for b, r in costs.items() if b in kinds["supply"] or r["cost"] >= HUB_COST}
+        jobs = []
+        for prefix, items in self.construction_lists():
+            for i, e in enumerate(items):
+                if e.get("building") in big and isinstance(e.get("state"), int):
+                    jobs.append((f"{prefix}[{i}] {e.get('id', e.get('order', ''))}".strip(), e["building"], e["state"],
+                                 e.get("province"), e.get("when", "")))
+        for i, e in enumerate(self.list_of("construction")):
+            if e.get("building") in big:
+                jobs += [(f"construction[{i}]", e["building"], s, None, "") for s in self.state_ids(e.get("states"))]
+        if not jobs:
+            return
+        civ = derive.free_civilian_factories(game, self.ctx, self.tag, self.start, self.meta.get("history_file"))
+        k = derive.construction_constants(game)
+        sb = derive.state_buildings(game, self.ctx, self.start)
+        states = self.states()
+        hubs = derive.supply_hubs(game)
+        coast = derive.coastal_provinces(game)
+        capt = self.capturable()
+        rail = next((b for b in sorted(kinds["railway"]) if b in costs), None)
+        port = next((b for b, r in sorted(costs.items()) if r["port"]), None)
+        horizon = self.horizon()
+        rows = []
+        for where, b, sid, prov, when in jobs:
+            if not isinstance(when, str) or parse_when(when)[0] in ("text", "bad"):
+                continue
+            t0 = self.trigger_day(when)
+            lvl = sum(v for x, v in sb.get(sid, {}).items() if x in kinds["infrastructure"])
+            days = derive.construction_days(game, b, civ["free"], lvl)
+            if days is None:
+                self.add("error", "construction.hub_cost", where,
+                         f"{b} in state {sid}: no free civilian factory builds it ({civ['civs']} civs, consumer goods "
+                         f"{civ['consumer_goods']:g})")
+                continue
+            n = min(k["project_cap"], civ["free"])
+            mult = 1 + k["infra_step"] * lvl if costs[b]["infra_effect"] else 1.0
+            finish = t0 + days
+            msg = (f"{b} in state {sid}: about {days} days ({costs[b]['cost']:g} points / ({n} civs x "
+                   f"{k['cp_per_civ']:g} x {mult:g} at infrastructure {lvl})), {derive.fmt(derive.date_of(t0))} to "
+                   f"{derive.fmt(derive.date_of(finish))}")
+            severity = None
+            late = [(d, label) for d, label in horizon if finish > d]
+            if late:
+                severity = "error"
+                msg += "; finishes after the " + " and the ".join(f"{label} {derive.fmt(derive.date_of(d))}"
+                                                               for d, label in late)
+            elif days > HUB_DAYS:
+                severity = "warning"
+                msg += f"; more than {HUB_DAYS} days"
+            src = [prov] if isinstance(prov, int) else list(states.get(sid, {}).get("provinces", []))
+            near = derive.distances(game, src, HUB_STEPS)
+            ctl = self.control_at(when)
+            if b in kinds["supply"]:
+                alt = sorted((d, p) for p, d in near.items() if p in hubs and p not in src and (p in ctl or p in capt))
+                if alt:
+                    d, p = alt[0]
+                    severity = severity or "warning"
+                    extra = (f"rail_way {costs[rail]['cost']:g} + {costs[rail]['per_level']:g} per extra level a "
+                             f"province" if rail else "a railway")
+                    msg += (f"; a railway level from the {'existing' if p in ctl else 'capturable'} hub at {p} "
+                            f"(state {game.province_state().get(p)}, {d} step(s)) could serve the same provinces "
+                            f"({extra})")
+                shore = sorted((d, p) for p, d in near.items() if p in coast and p in ctl)
+                if shore and port:
+                    d, p = shore[0]
+                    severity = severity or "warning"
+                    df = lambda n: derive.define(game, n)  # noqa: E731
+                    msg += (f"; port alternative: {port} at coastal province {p} ({d} step(s)) costs "
+                            f"{costs[port]['cost']:g} + {costs[port]['per_level']:g} per extra level vs "
+                            f"{costs[b]['cost']:g}, supply flow {df('NAVAL_BASE_INITIAL_SUPPLY_FLOW')} vs "
+                            f"{df('NODE_INITIAL_SUPPLY_FLOW')} but penalties {df('NAVAL_BASE_STARTING_PENALTY_PER_PROVINCE')}"
+                            f"/{df('NAVAL_BASE_ADDED_PENALTY_PER_PROVINCE')} vs {df('NODE_STARTING_PENALTY_PER_PROVINCE')}"
+                            f"/{df('NODE_ADDED_PENALTY_PER_PROVINCE')} per province, and sea supply needs convoys")
+            rows.append({"where": where, "building": b, "state": sid, "days": days,
+                         "finish": derive.fmt(derive.date_of(finish)), "free_civs": civ["free"], "infrastructure": lvl})
+            if severity:
+                self.add(severity, "construction.hub_cost", where, msg)
+        self.facts["hub_cost"] = {"free_civs": civ, "jobs": rows}
+
+    def air_bases(self):
+        per = Counter()
+        for e in self.list_of("air_plan"):
+            if isinstance(e.get("base_state"), int) and isinstance(e.get("count"), int):
+                per[e["base_state"]] += e["count"]
+        if not per:
+            return
+        levels = derive.air_base_levels(self.game, self.ctx, self.start)
+        kinds = derive.air_base_buildings(self.game)
+        queued = Counter(s for _, b, s in self.queued() if b in kinds)
+        mult = float(derive.define(self.game, "AIRBASE_CAPACITY_MULT", 200))
+        for sid, n in sorted(per.items()):
+            lvl = levels.get(sid, 0) + queued[sid]
+            if n > lvl * mult:
+                self.add("warning", "air.base_capacity", f"air_plan (base_state {sid})",
+                         f"{n} planes based in state {sid}, whose air bases (level {levels.get(sid, 0)} at the start plus "
+                         f"{queued[sid]} queued) hold {lvl * mult:g} (AIRBASE_CAPACITY_MULT {mult:g} per level)")
+
+    def templates(self):
+        temps = self.list_of("templates")
+        if not temps:
+            return
+        game = self.game
+        units = derive.unit_types(game)
+        theatre = _ints(self.war.get("theatre")) or sorted({e.get("state") for e in self.targets()}
+                                                           | {e.get("state") for e in self.list_of("army_layout")} - {None})
+        target = derive.theatre_width_target(game, theatre) if theatre else None
+        self.facts["width_target"] = target
+        have = start_tech_set(game, self.meta)
+        planned = self.planned_techs()
+        subs = derive.subunit_unlocks(game)
+        arche = derive.equipment_archetypes(game)
+        by_arch = defaultdict(set)
+        for eq, ts in derive.equipment_unlocks(game).items():
+            by_arch[arche.get(eq, eq)] |= ts
+        xb = self.plan.get("xp_budget") if isinstance(self.plan.get("xp_budget"), dict) else None
+        spends = {s.get("ref"): s for s in (xb or {}).get("army") or [] if isinstance(s, dict)}
+        start_year = derive.as_tuple(self.start)[0]
+        for i, t in enumerate(temps):
+            where = f"templates[{i}] {t.get('id', t.get('name'))}"
+            cols = template_columns(t.get("regiments")) or []
+            width = derive.template_width(game, cols)
+            if target and width and t.get("role") != "garrison" \
+                    and abs(width - target["target"]) > WIDTH_TOLERANCE * target["target"]:
+                mix = ", ".join(f"{k} {v:.0%}" for k, v in target["mix"].items())
+                self.add("warning", "templates.width", where,
+                         f"width {width:g} is more than {WIDTH_TOLERANCE:.0%} from the theatre target "
+                         f"{target['target']} (terrain {mix}; placeholder until facts.py terrain-width)")
+            dates = predicate_dates(t["when"], self.table) if t.get("when") is not None else []
+            year = max(dates)[0] if dates else start_year
+            flat = [u for c in cols for u in c] + list(t.get("support") or []) + list(t.get("regimental_support") or [])
+            for u in sorted(set(flat)):
+                info = units.get(u)
+                if info is None:
+                    continue  # validate_plan reports unknown units
+                self.unlocked(where, f"unit {u}", info["active"], subs.get(u), have, planned, year)
+                for eq in sorted(info["need"]):
+                    self.unlocked(where, f"{u} equipment {eq}", False, by_arch.get(eq), have, planned, year)
+            xp = t.get("xp")
+            if isinstance(xp, (int, float)) and not isinstance(xp, bool) and xp > 0:
+                ref = f"template:{t.get('id')}"
+                if xb is None:
+                    self.add("error", "templates.xp", where, f"costs {xp:g} army XP but the plan has no xp_budget")
+                elif ref not in spends:
+                    self.add("error", "templates.xp", where, f"costs {xp:g} army XP; xp_budget.army has no spend ref {ref}")
+                elif isinstance(spends[ref].get("cost"), (int, float)) and spends[ref]["cost"] < xp:
+                    self.add("warning", "templates.xp", where,
+                             f"xp_budget.army spend {spends[ref].get('id')} budgets {spends[ref]['cost']:g} XP, the "
+                             f"template costs {xp:g}")
+
+    def unlocked(self, where, what, active, techs, have, planned, year):
+        if active or not techs or techs & have:
+            return
+        hits = sorted((planned[t], t) for t in techs if t in planned)
+        if not hits:
+            self.add("error", "templates.equipment", where,
+                     f"{what} is unlocked by {', '.join(sorted(techs)[:4])}{' ...' if len(techs) > 4 else ''}, none at "
+                     f"the start or in the research plan")
+        elif hits[0][0] and hits[0][0] > year:
+            self.add("warning", "templates.equipment", where,
+                     f"{what} needs {hits[0][1]}, planned for {hits[0][0]}, after the template's year {year}")
+
+    def laws(self):
+        laws = derive.law_ideas(self.game)
+        for i, p in enumerate(self.list_of("politics")):
+            info = laws.get(p.get("idea"))
+            if not info or not info["available"]:
+                continue
+            where = f"politics[{i}] {p.get('idea')}"
+            core = re.search(r"econom|mobili[sz]|conscript|manpower", info["category"] or "")
+            gate = " and ".join(f"{k} {op} {x:g}" for k, (op, x) in sorted(info["gates"].items()))
+            if "when" not in p:
+                text = (f"{gate}{' plus other conditions' if len(info['available']) > len(info['gates']) else ''}"
+                        if gate else derive.render(info["available"])[:160])
+                self.add("error" if core else "warning", "politics.law_gates", where,
+                         f"{p['idea']} ({info['category']} law) has an `available` gate ({text}); give `when` as a "
+                         f"predicate" + (f", e.g. \"{gate}\"" if gate else ""))
+                continue
+            atoms, _ = parse_predicate(p["when"], self.table)
+            for key, (op, x) in sorted(info["gates"].items()):
+                if not any(a["name"] == key and a["op"] in (">", ">=") and a["value"] >= x - 1e-9 for _, a in atoms):
+                    self.add("warning", "politics.law_gates", where,
+                             f"`when` does not test {key} {op} {x:g}, the gate of {p['idea']}")
+
+    def occupation(self):
+        game = self.game
+        res = derive.resisting_states(game, self.tag, self.ctx, self.start, self.meta.get("history_file"))
+        owners = game.state_owners(self.ctx, self.start)
+        enemies = set(self.enemies())
+        conq = {e["state"] for e in self.targets() if isinstance(e.get("state"), int)
+                and owners.get(e["state"]) not in (None, self.tag)}
+        conq |= {s for s in self.axis_states() if owners.get(s) in enemies}
+        self.facts["occupation"] = {"resisting": sorted(res), "conquered": sorted(conq)}
+        if (res or conq) and not isinstance(self.plan.get("occupation"), dict):
+            parts = []
+            if res:
+                parts.append(f"states {', '.join(map(str, sorted(res)))} resist from the start")
+            if conq:
+                parts.append(f"the plan conquers {', '.join(map(str, sorted(conq)))}")
+            self.add("error", "occupation.required", "occupation",
+                     f"{' and '.join(parts)}, but the plan has no occupation key (default_law, ladder, "
+                     f"harsher_at_resistance, milder_at_compliance)")
+
+    def peace(self):
+        enemies = self.enemies()
+        if not enemies:
+            return
+        p = self.plan.get("peace") if isinstance(self.plan.get("peace"), dict) else {}
+        owners = self.game.state_owners(self.ctx, self.start)
+        covered = set()
+        for key in ("take", "puppet", "liberate"):
+            covered |= {owners.get(s) for s in _ints(p.get(key))}
+            covered |= {t for t in p.get(key) or [] if isinstance(t, str)}
+        for e in enemies:
+            if e not in covered:
+                self.add("error", "peace.enemies", "peace",
+                         f"no peace item for {e}: list its states by rank in peace.take (or puppet / liberate); "
+                         f"without peace the runner stops at the conference and wakes the player")
+
+    def manage(self):
+        """manage: the standing rules run only with the key; a threshold of a rule switched off in
+        `off`, or a threshold the executor does not run yet (x-executor-planned), is flagged."""
+        m = self.plan.get("manage")
+        if not isinstance(m, dict):
+            self.add("error", "manage.thresholds", "manage",
+                     "no manage key: the manpower, stability, equipment-fill and stockpile rules run only when the "
+                     "plan has it (write {} for every default, or the thresholds)")
+            return
+        spec = ((((self.schema or {}).get("properties") or {}).get("manage") or {}).get("properties") or {})
+        off = set(m.get("off") or []) if isinstance(m.get("off"), list) else set()
+        for name, v in m.items():
+            node = spec.get(name) or {}
+            if node.get("x-rule") in off:
+                self.add("warning", "manage.thresholds", f"manage.{name}",
+                         f"{name} is set but its rule {node['x-rule']} is in manage.off")
+            if node.get("x-executor-planned"):
+                self.add("warning", "manage.thresholds", f"manage.{name}",
+                         f"{name} is not run by the executor yet ({node['x-executor-planned']}); the player watches it")
+        self.facts["manage"] = {k: (m[k] if k in m else v.get("default")) for k, v in spec.items()
+                                if "default" in v and k not in ("why", "note")}
+
+    def unreadable(self):
+        """Strategy predicates that can never hold while their atoms are unreadable (always unknown)."""
+        table = self.table
+        if not table:
+            return
+        spots = [(f"goal.predicates[{i}]", p) for i, p in enumerate(self.goal.get("predicates") or [])]
+        spots += [(f"goal.fail_predicates[{i}]", p) for i, p in enumerate(self.goal.get("fail_predicates") or [])]
+        for j, c in enumerate(self.list_of("checkpoints")):
+            spots += [(f"checkpoints[{j}].must[{i}]", p) for i, p in enumerate(c.get("must") or [])]
+        for j, p in enumerate(self.list_of("phases")):
+            spots += [(f"phases[{j}].{k}", p[k]) for k in ("enter", "exit") if k in p]
+        for j, c in enumerate(self.list_of("contingencies")):
+            for k in ("when", "trigger"):
+                if k in c:
+                    spots.append((f"contingencies[{j}].{k}", c[k]))
+        for where, pred in spots:
+            if predicate_can_hold(pred, table)[0]:
+                continue
+            atoms, problems = parse_predicate(pred, table)
+            if problems:
+                continue  # validate_plan reports malformed predicates
+            names = sorted({a["text"] for _, a in atoms if not a["readable"]})
+            if names:
+                self.add("warning", "predicates.unreadable", where,
+                         f"can never hold: {', '.join(names)} cannot be read by the executor yet (always unknown); "
+                         f"use a readable atom (x-atoms readable) or an any[] with one")
+
+    def production_changes(self):
+        for i, x in enumerate(self.list_of("production")):
+            if x.get("remove") or "replace" in x:
+                self.add("warning", "production.remove", f"production[{i}]",
+                         f"{'remove' if x.get('remove') else 'replace'} of {x.get('equipment')} is not read by the "
+                         f"executor yet (W1-9): it would add this line; do it by hand until then")
+
     # ------------------------------------------------------------------
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
-                 self.conquest, self.win, self.events]
+                 self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
+                 self.hub_cost, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.production_changes, self.unreadable]
         for step in steps:
             step()
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self
+
+
+def _has_call(node, depth=0):
+    """True when a dict or list holds an item with a {"tool": ...} call."""
+    if depth > 6:
+        return False
+    if isinstance(node, dict):
+        if isinstance(node.get("call"), dict) and node["call"].get("tool"):
+            return True
+        return any(_has_call(v, depth + 1) for v in node.values())
+    if isinstance(node, list):
+        return any(_has_call(v, depth + 1) for v in node)
+    return False
 
 
 def derive_crossings(graph, path):
@@ -900,9 +1529,10 @@ def match_or_none(name, table):
     return derive.match_commander(name, table)
 
 
-def lint(plan, game, k=FRONT_K, schema=None):
-    """{"errors": n, "warnings": n, "infos": n, "findings": [...], "facts": {...}}."""
-    lt = Lint(plan, game, k, schema).run()
+def lint(plan, game, k=FRONT_K, schema=None, hand=None):
+    """{"errors": n, "warnings": n, "infos": n, "findings": [...], "facts": {...}}. hand: True reports
+    the coverage-build rules as warnings (default: when _meta.source is "hand")."""
+    lt = Lint(plan, game, k, schema, hand).run()
     count = Counter(f["severity"] for f in lt.findings)
     return {"errors": count["error"], "warnings": count["warning"], "infos": count["info"],
             "findings": lt.findings, "facts": lt.facts}
@@ -926,6 +1556,8 @@ def main(argv=None):
     ap.add_argument("--mod", action="append", default=[], help="a .mod descriptor or mod folder (repeatable)")
     ap.add_argument("--front-distance", type=int, default=FRONT_K, help="K: province steps that count as a front")
     ap.add_argument("--json", action="store_true", help="print the findings and facts as JSON")
+    ap.add_argument("--hand", action="store_true",
+                    help="hand-written plan: report the coverage-build rules as warnings (as _meta.source hand)")
     args = ap.parse_args(argv)
     try:
         with open(args.plan, encoding="utf-8") as fh:
@@ -939,7 +1571,7 @@ def main(argv=None):
     if not os.path.isdir(args.game):
         print(f"game directory not found: {args.game}", file=sys.stderr)
         return 2
-    out = lint(plan, load_game(args.game, args.userdir, args.mod), args.front_distance)
+    out = lint(plan, load_game(args.game, args.userdir, args.mod), args.front_distance, hand=args.hand or None)
     if args.json:
         print(json.dumps(out, indent=2, default=sorted))
     else:
