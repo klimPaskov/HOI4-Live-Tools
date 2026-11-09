@@ -722,10 +722,12 @@
       "properties": {
         "max": {
           "type": "integer",
+          "default": 24,
           "minimum": 1
         },
         "min_for_general": {
           "type": "integer",
+          "default": 8,
           "minimum": 0
         },
         "states": {
@@ -736,6 +738,7 @@
             "boolean",
             "string"
           ],
+          "default": false,
           "enum": [
             true,
             false,
@@ -743,7 +746,8 @@
           ]
         },
         "consolidate": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": true
         },
         "generals": {
           "type": "array",
@@ -920,7 +924,8 @@
       "type": "object",
       "properties": {
         "war_missions": {
-          "type": "boolean"
+          "type": "boolean",
+          "default": false
         },
         "why": {
           "type": "string",
@@ -2713,6 +2718,7 @@
       "properties": {
         "agency": {
           "type": "boolean",
+          "default": false,
           "description": "true: create the agency once (hoi4_agency_create)"
         },
         "upgrades": {
@@ -3511,11 +3517,13 @@
       "properties": {
         "enabled": {
           "type": "boolean",
+          "default": true,
           "x-owner": "executor",
           "description": "false switches the war executive off (default on when war is an object)"
         },
         "first": {
           "type": "boolean",
+          "default": true,
           "x-owner": "executor",
           "description": "false runs the war step after the economy steps (default: war first)"
         },
@@ -3534,18 +3542,21 @@
         },
         "min_army": {
           "type": "integer",
+          "default": 6,
           "minimum": 0,
           "x-owner": "executor",
           "description": "divisions an army needs to be driven (default 6)"
         },
         "per_target": {
           "type": "integer",
+          "default": 2,
           "minimum": 1,
           "x-owner": "executor",
           "description": "armies per target state (default 2)"
         },
         "cooldown_hours": {
           "type": "integer",
+          "default": 12,
           "minimum": 0,
           "x-owner": "executor",
           "description": "game hours between orders to one army (default 12)"
@@ -3560,6 +3571,7 @@
         },
         "player_claim_seconds": {
           "type": "integer",
+          "default": 300,
           "minimum": 0,
           "x-owner": "executor",
           "description": "an army the player ordered within this many seconds is left alone (default 300)"
@@ -3598,12 +3610,14 @@
         },
         "stall_days": {
           "type": "integer",
+          "default": 8,
           "minimum": 0,
           "x-owner": "executor",
           "description": "game days without progress on a target before the stall response: a second direction first, then a direct move with a back-off (default 8)"
         },
         "rest": {
           "type": "boolean",
+          "default": true,
           "x-owner": "executor",
           "description": "false turns resting off"
         },
@@ -3625,22 +3639,26 @@
         },
         "rest_max_days": {
           "type": "integer",
+          "default": 20,
           "minimum": 0,
           "x-owner": "executor",
           "description": "a rested army resumes anyway after this many game days when its supply is above supply_hold (default 20)"
         },
         "direct_moves": {
           "type": "boolean",
+          "default": false,
           "x-owner": "executor",
           "description": "true: direct hoi4_army_move orders instead of battle plans"
         },
         "supply_first": {
           "type": "boolean",
+          "default": true,
           "x-owner": "executor",
           "description": "false: do not raise supply lines in the construction queue"
         },
         "avoid_pockets": {
           "type": "boolean",
+          "default": true,
           "x-owner": "executor",
           "description": "false: do not pull encircled armies back"
         },

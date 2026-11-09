@@ -34,6 +34,7 @@ cheating against other players.
 
 **Conduct**
 * No exploits and no skirting the rules. The host decides doubtful cases.
+* Never switch the played country, even for a moment.
 
 **Diplomacy**
 * No military access, docking rights or airbase access, asked or offered. Only access for civil-war

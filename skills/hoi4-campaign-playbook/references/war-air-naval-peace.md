@@ -290,7 +290,7 @@ AI behaviour, or space-marine / paratrooper width tricks. Tool: `hoi4_naval_inva
 |---|---|
 | Capacity by tech (divisions / plans / prep days) | base 4/1/60; transport 6/2/50; landing craft 10/5/40; tank landing craft 15/9/30; marine subdoctrines add more |
 | Prep time | does not depend on the number of divisions: fill the cap |
-| Launch gates | 50%+ supremacy in every crossed region and 40% naval intel, checked at launch only; once launched the landing goes ahead |
+| Launch gates | Sea control (60% of the needed dominance) in every crossed region and 40% naval intel, checked at launch only; once launched the landing goes ahead |
 | Army orders | an army with a front or fallback line never starts the invasion: clear them first |
 | Landing penalty | -50% attack, reduced by landing-craft techs; worse for heavy equipment |
 | Shore bombardment | up to -33% for the defender; heavy attack counts twice light attack; split over every land tile the sea region touches (NA38) |
@@ -514,7 +514,7 @@ Checklist:
 See sections 6.3 and 7. Sea Lion only with: France down and the Channel bases
 held; air superiority over the Channel for 14 days; the Royal Navy neutralised by
 naval bombers; landing craft (10 divisions, 5 plans, 40 days prep); 60% control in
-every route region and 50%+ supremacy in every crossed region at launch; 40% naval
+every route region at launch; 40% naval
 intel; radar on the coast; a port as the objective; the Sea Lion focus for its
 bonuses. If the air war over the Channel is not won within about 2-3 months,
 postpone and keep up the naval and air pressure.
@@ -710,6 +710,7 @@ Never improvise raw input for a gap.
 | OP47 | Last stand where it decides | Since last stand costs command power per battalion, hold it for mechanised and infantry on the hubs and cities that decide the front (two mech divisions per key city), and take cheap-last-stand focuses (Japan's Senjinkun code). 2-wide last-stand divisions break the 10-width rule (BAN in FAIR) | Holding key tiles | FAIR |
 | OP48 | Undeployed reserve batches | Train about 20 batches of infantry before the war and leave them undeployed; deploy one batch onto a breakthrough the front cannot close | Defensive war start | FAIR |
 | OP49 | Special forces on fronts, not plans | Rangers and mountaineers on battle plans across rivers and through many tiles lose equipment fast; give them a front line and attack tile by tile | Rangers in forests, mountaineers inland | FAIR |
+| OP50 | Probe before the assault | A cheap preliminary attack strips a strong tile's organisation before the main assault; the Probing Attack ability keeps the prober's dig-in | Strong defended tiles | FAIR |
 
 ## 16. Tactics: air
 
@@ -740,6 +741,8 @@ Never improvise raw input for a gap.
 | AI23 | CAS factory for a landing | The cheapest CAS design on 100+ military factories by the landing year, in lines of 10 (PR41); CAS to the width cap over every landing tile with fighters above | Allied landings in France, Axis Barbarossa | FAIR |
 | AI24 | Speed wins fighter duels | A wing faster than its opponent gets top speed x 0.025 as a damage bonus (600 km/h = +15%) on top of up to +162% from the speed gap | Pick the fighter design, designer and doctrine that end faster than the enemy's main fighter | FAIR |
 | AI25 | Fighters past 3:1 are wasted | Detection needed = our fighters / (3 x enemy fighters): about 33% at equal numbers, 100% at 3:1; past that, extra fighters cannot engage | Move the surplus or add radar instead of stacking | FAIR |
+| AI26 | Agility and speed trade | About +10% agility over the enemy is worth +4.5% defence and +10% speed about +6.5% attack; rank fighter designs by attack times defence per IC | Fighter designs | FAIR |
+| AI27 | Drop tanks by distance | Fighters over own regions need no drop tank; escorts or patrols over distant regions need them, or mission efficiency falls with range | Fighter designs | FAIR |
 
 ## 17. Tactics: navy and invasions
 
@@ -767,7 +770,7 @@ Never improvise raw input for a gap.
 | NA20 | The AI sees invasion orders | Draw invasion orders only when the dominance and air gates hold; with the plan cap above 1, launch 2-3 landings on separate routes at once | Every landing against a major | FAIR |
 | NA21 | Invasion capacity by tech | Divisions / plans / prep days: base 4/1/60; transport 6/2/50; landing craft 10/5/40; tank landing craft 15/9/30; marine subdoctrines add more; prep does not depend on size, so fill the cap | Every landing | FAIR |
 | NA22 | Clear army orders first | An army with a front or fallback line never starts the invasion (dashed arrow, no divisions assigned): detach the invasion divisions into a fresh army first | Every landing | FAIR |
-| NA23 | Gates at launch only | Launch needs 50%+ supremacy in every crossed region and 40% naval intel at that moment; once launched the landing goes ahead; later troops cross through the captured port | Every landing | FAIR |
+| NA23 | Gates at launch only | Launch needs sea control (60% of the needed dominance) in every crossed region and 40% naval intel at that moment; once launched the landing goes ahead; later troops cross through the captured port | Every landing | FAIR |
 | NA24 | Land on or beside a port | First wave on the port, second wave on the next coastal tiles to widen the battle; plains ports, not urban; several landing tiles so the landing is not itself encircled | Landings | FAIR |
 | NA25 | Shore bombardment | Capitals on invasion support give the defender up to -33% | Landings | FAIR |
 | NA26 | Escort the landing's convoys | The 1.19.4 AI raids the convoys that feed a landing | After landfall | FAIR |
@@ -788,6 +791,10 @@ Never improvise raw input for a gap.
 | NA41 | Simultaneous landings | Launch every landing the same day so the defender's command power and reserves cannot answer all; 2 divisions per tile, backup waves planned, Force Attack or a commander with command power on the first wave | Big amphibious operations | FAIR |
 | NA42 | Heavy batteries for bombardment | Refit heavy cruisers' secondary slots and torpedo or plane slots to heavy cruiser batteries and build new heavy-battery cruisers; admiral and high-command bombardment bonuses (naval gunfire support subdoctrine, a Ground Pounder admiral, Naval Liaison generals) stack toward the cap | Before a landing | FAIR |
 | NA43 | Merchant-raider refit has a price | The decision costs 25 PP, 20 convoys and 10 navy experience each time and returns an early cruiser after 25 days | A screen source, not free | FAIR |
+| NA44 | Five AA on carriers and capitals | Naval bombers prefer ships with under 5 anti-air and weight carriers and capitals heavily; give every carrier and capital at least 5 AA | Ship designs | FAIR |
+| NA45 | Crew from the keel | Since 1.19.4 a ship holds its manpower from keel-laying: queue only hulls the manpower pool can crew | Naval production | FAIR |
+| NA46 | Peace patrols for XP | In peace a patrolling fleet earns navy experience; patrol only while the fuel stock allows | Navies at peace | FAIR |
+| NA47 | Strike after the big battle | Keep obsolete capital ships out of losing fights; after a big battle the AI fleet goes to repair, which is the moment to strike or land | Fleet war | FAIR |
 
 ## 18. Tactics: peace conference
 
@@ -805,3 +812,4 @@ Never improvise raw input for a gap.
 | PC10 | Puppet or annex by what the land gives | Annexation hands over the whole stockpile; puppets keep their industry for themselves until annexed (300 PP) | Every peace | FAIR |
 | PC11 | Take the fleet last | Capital ships cost 0.005 points per IC and bring their screens; ships are outside the score split, so take them after the states | After a naval enemy capitulates | FAIR |
 | PC12 | Collaboration before the kill | Finish collaboration governments before the enemy capitulates (Japan in China) | Long conquests | FAIR |
+| PC13 | Check the participation rules | Game rules can pass faction members' war score to the leader and low participants' score on; read them at setup before planning the peace | Faction wars | FAIR |

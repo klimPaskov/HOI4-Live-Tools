@@ -108,7 +108,7 @@ Rules:
 - Building infrastructure does not raise a state's category.
 - Buildings need ~50% of the state's VP controlled; occupied and bombed states rebuild only under your control.
 
-Choose states: **most free slots first** (now and after industry techs), then highest infrastructure, then a rail
+Choose states: **highest current infrastructure first**, then most free slots (now and after industry techs), then a rail
 or naval link to the capital (+20% resources). Read free slots with `hoi4_state_slots`, queue with
 `hoi4_construction_add`.
 
@@ -401,3 +401,4 @@ No tool yet:
 | EC25 | Forward bases before an overseas war | A year before the war: ports on the far shore and the stepping-stone islands, level-2 railways linking every hub and port to the network, motorised hubs, max air bases near the front; spare IC to AA and coastal forts at the exposed bases | Japan 1940 (Malaya, Taiwan, Hainan, Siam), any overseas offensive | FAIR |
 | EC26 | Never build where the front will pass | New factories go behind the planned defence line (the USSR builds east of Moscow, never in the western border states; Japan never in Korea); max infrastructure in the fuel state before the war | Countries expecting an invasion | FAIR |
 | EC27 | Re-set the auto-import budget | The budget is a factory count that shrinks when usable civilian factories fall (consumer-goods rises, spirits, lost states) and never grows back by itself; in peace it may buy from future enemies, handing them the factories | After any change in usable civilian factories | FAIR |
+| EC28 | Split long railways | Each project takes at most 15 civilian factories: when free factories exceed 15 per open project, split a long railway into segments so each gets its own 15 | Railway pushes | FAIR |

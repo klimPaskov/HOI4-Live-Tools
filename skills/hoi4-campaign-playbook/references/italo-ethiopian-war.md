@@ -200,7 +200,8 @@ Ethiopia uses `ethiopia_tree`. Two research slots; research -15% from Conservati
 corrupt bureaucracy variable. Starting techs: infantry_weapons, tech_mountaineers, tech_trucks, basic_train (no
 support, no artillery, no anti-tank). Industry: Shewa 2 arms + 1 civilian, Hararghe 1 civilian; production starts as
 2 factories of infantry_equipment_0. The international market is closed by the LoN arms embargo until focus
-`ETH_arms_purchases`. No air force, no navy (5 convoys).
+`ETH_arms_purchases`. No air force, no navy (5 convoys). Stay out of every faction until the peace: Italy
+accepting a white peace while Ethiopia is in no faction is the scripted Ethiopian victory (the achievement flag).
 
 ### 6.1 War branch (needs the war flag)
 

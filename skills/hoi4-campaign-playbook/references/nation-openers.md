@@ -21,7 +21,7 @@ change fort and faction-goal counts. Keep the battalion mix and re-fit the width
 Start laws: Germany, Italy, Japan, Poland and Hungary start on Partial Mobilisation; the USSR, UK, France and
 Romania on Civilian Economy; the USA on Undisturbed Isolation with the Great Depression and Free Trade. Research
 slots at start: Germany, Italy, UK and USA 4; USSR, Japan, France, Poland, Hungary and Romania 3; China 2.
-Balance of power exists only for BRA, CZE, DEN, ETH, FIN, ITA, PRC, SWE and SWI. Trees in this install (10 DLCs plus
+Balance of power is active only for DEN, ETH, FIN, ITA, PRC, SWE and SWI; BRA and CZE have one only with the Trials of Allegiance and Peace for Our Time trees, which this install lacks. Trees in this install (10 DLCs plus
 the integrated Together for Victory, Death or Dishonor, Waking the Tiger and Man the Guns): AFG, ARG, BRA, BUL, CHL,
 GRE, INS, IRQ, PAR, PER, SIA, TUR and URG play the generic tree (`generic_focus`), so never name a country focus for
 them; HUN plays the Götterdämmerung tree (`wuw_HUN_*`), MAN the NCNS tree (`MAN_tsr_*`); ROM, YUG, CZE, HOL, MEX and

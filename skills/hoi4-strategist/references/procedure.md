@@ -431,10 +431,11 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    `F weather <region>`); the season named per phase.
 3. **Planning wait:** per offensive, draw the front and offensive line and wait 12-15 game days (planning
    +2% a day to 30%, x0.8 without a deployed HQ) before executing; exceptions named (deadline or mission timer
-   under 20 days, an enemy about to dig in) (OP01, L13). Key `war.plan_days` when the schema has it, else a
-   brief line.
-3a. **Rest, resume, stall:** rest at about 30% of the template's max org (`war.rest_below` is absolute: about
-   18 for a 60-org infantry division) or 60% strength, resume at about 80% (`war.resume_above` about 48); at a
+   under 20 days, an enemy about to dig in) (OP01, L13). Keys `war.planning_wait` (default on, waits for 90%
+   of the 30% cap), `war.planning_max_days` (default 15) and `war.planning_skip_days` (default 20).
+3a. **Rest, resume, stall:** rest at about 30% of max org, resume at about 80% (executor defaults
+   `war.rest_below_pct` 0.3 and `war.resume_above_pct` 0.8 of the highest organisation seen; the absolute
+   `war.rest_below` / `war.resume_above` replace them when set) or rest at 60% strength; at a
    stall rest if supply or org is under 50%, else replan on the next target with two directions; a direct move
    only into an empty adjacent province with a guard behind (OP03, OP08).
 3b. **Supply floor:** `war.supply_floor` 50 (no new offensive below it); below 35% stop and pull 25-50% of the

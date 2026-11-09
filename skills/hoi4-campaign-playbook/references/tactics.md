@@ -50,6 +50,9 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PR42 Skip secondary turrets on gun tanks
 - PR43 Armour type
 - PR44 Reliability for long drives
+- PR45 Newest variant to elite templates
+- PR46 MIO-only conversion never ends
+- PR47 Convert big old stocks
 
 ## Division design, training and experience: [templates-equipment-production.md §11](templates-equipment-production.md#11-tactics-division-design-training-and-experience)
 
@@ -79,6 +82,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AR24 Regimental row on armour
 - AR25 Wide infantry against armour
 - AR26 Role battalion penalties
+- AR27 Upgrade when stock covers it
+- AR28 Flat or percentage support
 
 ## Construction, energy, trade and fuel: [economy-build-orders.md §15](economy-build-orders.md#15-tactics-construction-energy-trade-and-fuel)
 
@@ -109,6 +114,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - EC25 Forward bases before an overseas war
 - EC26 Never build where the front will pass
 - EC27 Re-set the auto-import budget
+- EC28 Split long railways
 
 ## Research, doctrines and MIOs: [research-doctrines-projects.md §10](research-doctrines-projects.md#10-tactics-research-doctrines-and-mios)
 
@@ -156,6 +162,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - LO15 Rear moves only
 - LO16 Barbarossa rail plan
 - LO17 Overdrawn supply starves armour
+- LO18 Capital pockets keep supply
+- LO19 Scorched earth on retreat
 
 ## Generals, HQs and command power: [army-organisation.md §8](army-organisation.md#8-tactics-generals-hqs-and-command-power)
 
@@ -223,6 +231,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - OP47 Last stand where it decides
 - OP48 Undeployed reserve batches
 - OP49 Special forces on fronts, not plans
+- OP50 Probe before the assault
 
 ## Air: [war-air-naval-peace.md §16](war-air-naval-peace.md#16-tactics-air)
 
@@ -251,6 +260,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AI23 CAS factory for a landing
 - AI24 Speed wins fighter duels
 - AI25 Fighters past 3:1 are wasted
+- AI26 Agility and speed trade
+- AI27 Drop tanks by distance
 
 ## Navy and invasions: [war-air-naval-peace.md §17](war-air-naval-peace.md#17-tactics-navy-and-invasions)
 
@@ -297,6 +308,10 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - NA41 Simultaneous landings
 - NA42 Heavy batteries for bombardment
 - NA43 Merchant-raider refit has a price
+- NA44 Five AA on carriers and capitals
+- NA45 Crew from the keel
+- NA46 Peace patrols for XP
+- NA47 Strike after the big battle
 
 ## Peace conference: [war-air-naval-peace.md §18](war-air-naval-peace.md#18-tactics-peace-conference)
 
@@ -312,6 +327,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PC10 Puppet or annex by what the land gives
 - PC11 Take the fleet last
 - PC12 Collaboration before the kill
+- PC13 Check the participation rules
 
 ## Political power, laws, stability and war support: [politics-diplomacy-espionage.md §11](politics-diplomacy-espionage.md#11-tactics-political-power-laws-stability-and-war-support)
 
@@ -342,6 +358,9 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PO25 Cheap one-shot decisions
 - PO26 Known event traps
 - PO27 Balance of power
+- PO28 Party popularity is stability
+- PO29 Intelligence advisor operative
+- PO30 Total Mobilisation costs manpower
 
 ## Diplomacy, factions and puppets: [politics-diplomacy-espionage.md §12](politics-diplomacy-espionage.md#12-tactics-diplomacy-factions-and-puppets)
 

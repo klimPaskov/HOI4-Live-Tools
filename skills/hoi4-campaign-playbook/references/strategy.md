@@ -160,7 +160,7 @@ Invasion capacity by tech:
 | Landing craft | 10 | 5 | 40 |
 | Tank landing craft | 15 | 9 | 30 |
 
-Prep does not depend on size, so fill the cap. Launch needs 50%+ supremacy in every
+Prep does not depend on size, so fill the cap. Launch needs sea control (60% of the needed dominance) in every
 crossed region and 40% naval intel at launch only. A transit route may include
 more regions than the visually obvious strait.
 

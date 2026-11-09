@@ -107,7 +107,7 @@ Germany, Poland and China appear only as worked examples.
   region; rebase as the front moves (`hoi4_air_rebase`).
 - **Naval invasion.** Capacity by tech (divisions / plans / prep days): base
   4/1/60, transport 6/2/50, landing craft 10/5/40, tank landing craft 15/9/30.
-  Launch needs 50%+ supremacy in every crossed region and 40% naval intel at that
+  Launch needs sea control (60% of the needed dominance) in every crossed region and 40% naval intel at that
   moment. Secure ports, escorts and air cover first (`hoi4_naval_invasion`).
 - **Orders versus manual control.** Prefer battle-plan execution to micromanaging;
   manual orders drain planning three times faster.

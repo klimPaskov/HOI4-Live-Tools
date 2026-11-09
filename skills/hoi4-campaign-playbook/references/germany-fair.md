@@ -220,7 +220,7 @@ The Allies join through the guarantee chain; expect France to attack within days
 
 ## 8. West
 
-Order: Around the Maginot (war goals vs Belgium/Netherlands), optional Weserubung (needs ENG war; Norwegian ore), War with France. Plan: pin the Maginot sector; main effort through the
+Order: Around the Maginot (war goals vs Belgium/Netherlands), optional Weserubung (needs the war with ENG and Warsaw and Danzig controlled; Norwegian ore; spend its transport research bonus on landing craft), War with France. Plan: pin the Maginot sector; main effort through the
 Netherlands/Belgium and the Ardennes toward Sedan and the Channel; air bases forward before the offensive; infantry follows tanks, pockets closed on the Somme and Channel. Lorraine frontal assaults
 grind. After each capitulation redraw fronts and check supply (target above 70% before the next bound). France capitulation and Paris control unlock `form_greater_german_reich`
 visibility but not availability.
