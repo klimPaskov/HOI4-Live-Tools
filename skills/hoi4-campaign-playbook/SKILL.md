@@ -27,17 +27,17 @@ each situation to the right file. Core files, in reading order:
 1. [Rules and modes](references/rules-and-modes.md) at campaign setup.
 2. [Operating loop](references/operating-loop.md): standing plan and daily governor.
 3. [Strategy](references/strategy.md) and the [country-agnostic playbook](references/generic-playbook.md).
-4. Domain playbooks (game-file verified for 1.19.3, rechecked for 1.19.4.1: Find is Ctrl+F,
-   Automatic Importing exists (hoi4_auto_import), manual trades are blocked while it is on; each ends with automatable
-   rules, live decisions and tool needs): [economy and build orders](references/economy-build-orders.md),
+4. Domain playbooks (each ends with its tactics table; Find is Ctrl+F; manual trades are blocked while
+   automatic importing is on): [economy and build orders](references/economy-build-orders.md),
    [research, doctrines and special projects](references/research-doctrines-projects.md),
    [templates, equipment and production](references/templates-equipment-production.md),
    [supply, logistics and deployment](references/supply-logistics-deployment.md),
    [war, air, naval and peace](references/war-air-naval-peace.md),
    [politics, diplomacy and espionage](references/politics-diplomacy-espionage.md).
-5. One country card with a dated checkpoint table: [Germany FAIR](references/germany-fair.md),
+5. [Tactics index](references/tactics.md): every tactic in one line, with the section that explains it.
+6. [Nation openers](references/nation-openers.md) for the first years of any major or strong minor, and one
+   country card with a dated checkpoint table: [Germany FAIR](references/germany-fair.md),
    [Nationalist China FAIR](references/china-fair.md) or [Poland META](references/poland-meta.md).
-6. [Sources and version checks](references/sources.md) when verifying patch-dependent mechanics.
 
 To write, review or revise a campaign plan (plan.json, plan.md, plan.brief.md) for any tag, date
 and goal, use the [strategist skill](../hoi4-strategist/SKILL.md). It reads these references as its

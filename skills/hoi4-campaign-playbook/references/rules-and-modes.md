@@ -2,7 +2,6 @@
 
 Profile revision: `campaign-house-2026-10-11`. This is a reproducible house
 profile informed by multiplayer rules, not an official universal MP standard.
-The [source ledger](sources.md) separates old examples from current evidence.
 Real multiplayer must additionally follow that host's rules; this skill does
 not authorize cheating against other players or overriding their agreement.
 
@@ -85,3 +84,52 @@ infer all strategic intent from a button click, prove no exploit exists, or
 verify the entire rules profile from a `fair=true` field. Unsupported checks
 must be reported as unknown. Preserve mode and profile in the run manifest and
 review action/journal evidence before calling a showcase FAIR.
+
+## META-only, banned and patched tricks
+
+Listed so a plan, the lint and the player can refuse them. BAN: forbidden in FAIR (META may lift a house ban, never
+the campaign boundary). META: only in a META run. Journal it: ordinary UI but uncertain; FAIR runs take the plain
+alternative and record the choice.
+
+| ID | Trick | What it is | Mode |
+|---|---|---|---|
+| MX01 | Hollow-design conversion | Produce a near-empty design to grow a line or skip resource costs, then convert to the real design (conversion has no minimum resource cost) | META |
+| MX02 | Role-swap copy | Save a variant, switch the line, then make an identical copy with only the role changed (tank to TD or SPG) to dodge the switch loss | META |
+| MX03 | Space marines | One line tank, SPG, TD or SPAA battalion in foot infantry or cavalry to lift armour above enemy piercing | BAN in FAIR, META allowed |
+| MX04 | XP, mastery and cap laundering | Empty or zero-equipment templates converted for XP, mastery or special-forces cap; 2-wide "guns off" mastery grinders | BAN |
+| MX05 | Deleting trapped units | Disbanding encircled divisions to recover 20% of their manpower | BAN in FAIR, META allowed |
+| MX06 | Trait and XP farming | Halting and re-attacking long battles to restart trait progress; endless attack-cancel loops | BAN |
+| MX07 | Fake wars and tension games | Justifications or faction churn to spike tension; baiting or working guarantees; declaring on several targets at once only to dodge a guarantor; justifying on minors just before a major falls | BAN |
+| MX08 | Civ boosting | Unneeded-resource trades that pass civilian factories to an ally with better modifiers | BAN |
+| MX09 | Puppet games | Release-and-annex spam for factories, manpower or score; lend-lease spam to crash a puppet's autonomy | BAN |
+| MX10 | Invasion or empty-port cycling | Repeated landings or port grabs to reset AI behaviour | BAN |
+| MX11 | Lend-lease and market loops | Cancel loops; fake template shortages to bait AI lend-lease | BAN |
+| MX12 | Capital snipes | Landing or paradropping on the capital VP to force a capitulation without a supportable operation | META |
+| MX13 | Planning without a front | Building planning on a garrison order, with unassigned divisions, or on a land front and then switching the army to a naval invasion | META |
+| MX14 | Volunteer manpower laundering | Volunteers used to park or recover manpower | META |
+| MX15 | Equipment-disable loopholes | Switching off support or regimental equipment to keep the bonus; training without the expensive equipment and filling it later | BAN in FAIR |
+| MX16 | Cheap-ability armies | A one-battalion army to buy Force Attack or Last Stand cheaply, then stacking the attack on it | META |
+| MX17 | AA reserve division | A line-AA division kept in reserve so it never loses its AA | META |
+| MX18 | Reserve re-order | Cancelling and re-issuing orders so every waiting reserve joins at once: once to commit reserves is ordinary, repeated to farm is META | Journal it |
+| MX19 | Allied spy-network stacking | Several allies' networks on one state to strip entrenchment and planning | FAIR in single-player |
+| MX20 | MEFO cancelled on day 1 | Germany cancels MEFO right after price controls to keep the buffs without the consumer-goods growth | META |
+| MX21 | Mission-gate spam | One-battalion divisions (Anschluss cavalry, Romanian focus gates) only to pass an army-size gate | META |
+| MX22 | Contrived own civil war | Pre-splitting the army before a scripted civil war | META |
+| MX23 | Faction-goal reveal | Dropping below a goal's threshold to make it selectable, then exceeding it again | META |
+| MX24 | One-submarine task forces | Single-sub task forces to stay undetected, drain enemy fuel or act as decoys | META |
+| MX25 | Dominance-only hulls | Empty carriers or battlecruisers built only for dominance per IC | META |
+| MX26 | Flicker bombing | Switching bomber regions whenever fighters appear | META |
+| MX27 | Neutral-territory invasion | Invading through a neutral's military access | META |
+| MX28 | Merchant-raider decision | Germany's merchant-raider refit if its cost is not charged | META candidate |
+| MX29 | Dominance tick massing | Massing at the daily recalculation to flip dominance | META candidate |
+| MX30 | Holding while the enemy repairs | Never repairing while the enemy fleet sits in port indefinitely | Journal it |
+| MX31 | Hour-zero invasion | Patrols and an invasion prepared in peace, launched the hour the war starts | Journal it |
+| MX32 | Submarines pinning fleets | Subs on always-engage patrol only to hold enemy fleets | Journal it |
+| MX33 | Stockpile flight before capitulation | Lend-leasing the whole stockpile away just before capitulating | Journal it; FAIR showcases skip it |
+| MX34 | Cancelled relations for mastery | Cancelling improve-relations right after starting it | META |
+| MX35 | Early war to end the Depression | USA provokes an early war to drop the Great Depression | META |
+| MX36 | Doctrine stacking by expeditionaries | Expeditionary forces used to stack two doctrines | META |
+| MX37 | No-garrison bleeding | Leaving non-core land ungarrisoned to wreck an invader's equipment | META |
+| MX38 | Release to skip a gate | Poland releases Lithuania to bypass a compliance requirement | META |
+| MX39 | Save copying | Copying ironman saves before a risky declaration | Unavailable (file manipulation) |
+| MX40 | Patched tricks | Faction leave-and-rejoin manpower, army-leader cost stacking, design cost below -100%, task forces in two places, HQ disband trickleback, Distribute Taskforces force-retreat, halted-wing range, the Force Attack exploit, strike-force disengage spam, tech dragging for bonuses, peacetime mines, the Hungarian capitulation path, licensed ship modules | Patched or blocked: never plan on them |

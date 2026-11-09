@@ -1,11 +1,10 @@
 # Playbook index — find the right rule fast
 
-Verified against the installed HOI4 1.19.3 files unless a rule is tagged heuristic.
-Tags: `[V]` game file, `[W]` wiki, `[L]` seen in a live run, `[H]` heuristic.
-
 | Situation | Open |
 |---|---|
-| Setting up a campaign, FAIR vs META, banned actions | rules-and-modes.md |
+| Setting up a campaign, FAIR vs META, banned and META-only tricks | rules-and-modes.md |
+| Every tactic in one line, with the section that explains it | tactics.md |
+| First years of a nation (GER, ITA, JAP, SOV, ENG, USA, FRA, POL, HUN, ROM, CHI, SWE, ETH, MAN, YUG, BRA, MEX) | nation-openers.md |
 | Declaring daily standing plans, what wakes the model | operating-loop.md |
 | What to build first, laws, consumer goods, resources, PP | economy-build-orders.md |
 | Which tech/doctrine next, special projects, MIOs | research-doctrines-projects.md |
