@@ -240,13 +240,22 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
 2. `F tech <id>` for any tech with several parents; order the path so the ALL reading holds.
 3. `F research-timeline RUN/plan.json`; every block finishes before the next block year. Copy finish
    dates into plan.md §3 as `[D research-timeline]`.
-4. `research_fallback` false, or restricted with `research_fallback_prefixes`; no naval or air folder
-   techs unless item 3 needs them.
-5. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or
+4. **Every slot busy, all the time (user rule).** Research serves the whole campaign, not only the current
+   war: the game goes on after the goal, and the economy compounds. List enough techs that no slot waits
+   until the horizon: when a block runs out before the next block year, pull the next tier forward (one year
+   ahead costs little: `F tech <id>` shows the ahead-of-time days) instead of leaving slots empty. Order:
+   industry (production, construction, industry folder: e.g. the concentrated/dispersed industry line,
+   machine tools, construction), then the equipment the planned templates use, then what the war plan
+   needs. Never cut an industry tech because "it does not help this war". Lint `research.idle` fails a
+   plan with more than 25% of slot-time unplanned, with or without a fallback.
+5. `research_fallback` false, or restricted with `research_fallback_prefixes` to the same families; it is
+   a safety net, not the plan. No naval or air folder techs unless item 3 needs them.
+6. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or
    name>": [techs]} (`F tech <id>` gives the categories), or `true` for the category word match only.
 Resolution: executor `research_path`, `research_priority`, `research_fallback*`, `research_bonuses`,
 `special_projects` (a facility at start, else not applicable with the reason). Check: lint `research.start_year`,
-`research.prerequisites`, `research.throughput`, `research.fallback`, `research.folders`; rubric row 5.
+`research.prerequisites`, `research.throughput`, `research.idle`, `research.fallback`, `research.folders`;
+rubric row 5.
 
 ### 12. Focus and balance of power
 Read: the country section of `economy-build-orders.md` §10 when it exists; dossier §5. Facts:

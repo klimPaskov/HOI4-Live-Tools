@@ -503,7 +503,8 @@ class CoverageBuildRules(unittest.TestCase):
         f = self.assertHit(plan, "research.idle", "error", "research_path")
         self.assertIn("nothing planned", f["message"])
         plan["research_fallback"] = True
-        self.assertHit(plan, "research.idle", "warning", "research_path")
+        f = self.assertHit(plan, "research.idle", "error", "research_path")
+        self.assertIn("safety net", f["message"])
         self.assertFalse(self.hits(self.ita, "research.idle", None, "research_path"))
 
     # -------------------------------------------------------------- conquest.skipped_near

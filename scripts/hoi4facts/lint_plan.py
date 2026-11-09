@@ -12,8 +12,8 @@ mods) through hoi4facts.Game and hoi4facts.derive; nothing is country specific.
 
 Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/references/lessons.jsonl):
   research.start_year      research_path tech with start_year after its block year
-  research.idle            more than 25% of the slots' time to the horizon has nothing planned: an error
-                           with research_fallback off, else a warning naming what the fallback uses
+  research.idle            more than 25% of the slots' time to the horizon has nothing planned (an error,
+                           with or without a fallback: the fallback is a safety net, not the plan)
   research.throughput      (warning) a block's base research days do not fit the slots before the
                            next block year (research_cost x BASE_TECH_COST, no speed bonus)
   research.prerequisites   prerequisite not at the start or earlier in the path under either parent
@@ -350,15 +350,16 @@ class Lint:
             idle = max(0.0, 1.0 - total / capacity)
             fallback = plan.get("research_fallback", True)
             self.facts["research"]["idle_share"] = round(idle, 3)
-            if idle > 0.25 and fallback in (False, "priority_only"):
+            if idle > 0.25:
+                # The fallback is a safety net, not the plan (user rule: every slot busy with proper,
+                # in-time techs, industry first): an unplanned quarter of the slots fails either way.
+                how = ("research_fallback is off" if fallback in (False, "priority_only") else
+                       "the fallback (%s) is a safety net, not a plan"
+                       % ", ".join(plan.get("research_fallback_prefixes") or ["the whole catalogue"]))
                 self.add("error", "research.idle", "research_path",
                          f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
-                         f"nothing planned ({total:.0f} of {capacity} slot-days) and research_fallback is off: "
-                         f"extend research_path with in-time techs or enable a restricted fallback")
-            elif idle > 0.25:
-                self.add("warning", "research.idle", "research_path",
-                         f"about {idle:.0%} of the slots' time has nothing planned; the fallback fills it from "
-                         f"{', '.join(plan.get('research_fallback_prefixes') or ['the whole catalogue'])}")
+                         f"nothing planned ({total:.0f} of {capacity} slot-days); {how}: list in-time techs "
+                         f"(industry first, then the templates' equipment) or pull the next tier forward")
         # naval / air folders
         planned = [t for b in blocks for t in b[3]] + [x for x in plan.get("research_priority") or [] if isinstance(x, str)]
         fams = defaultdict(list)
