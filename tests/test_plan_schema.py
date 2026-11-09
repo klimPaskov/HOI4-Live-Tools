@@ -1,11 +1,13 @@
 """The plan schema (skills/hoi4-campaign-playbook/plan.schema.json) stays in step with the executor.
 
 (a) every plan key native/src/plan_run.rs and its child modules (plan_manage.rs, plan_military.rs,
-    plan_predicate.rs once it lands) and the alarms read is in the schema, tagged x-owner "executor", and no executor-tagged key is
-    unread (the code is grepped for plan["..."] and helper reads, comments stripped);
+    plan_predicate.rs, plan_affairs.rs) and the alarms read is in the schema, tagged x-owner "executor", and no
+    executor-tagged key is unread except LANDING (the code is grepped for plan["..."] and helper reads,
+    comments stripped);
 (b) the schema uses only the draft-7 subset scripts/hoi4facts/schema_check.py implements;
 (c) the predicate grammar (pattern, x-grammar, x-atoms) agrees with hoi4facts/validate.py parse_predicate;
-(d) the coverage-build keys (W1-2) have their shapes, owners and x-executor-planned build items;
+(d) the coverage-build keys (W1-2) have their shapes, owners and x-executor-planned build items, and the
+    wave-2 keys (plan_military.rs, plan_affairs.rs) the shapes their module docs give;
 (e) both hand plans pass the schema.
 """
 
@@ -56,6 +58,25 @@ ENTRY_VARS = {
                    "justify_items", "dip_target"], ["item", "j", "o"]),
     "mio": (["mio_step"], ["entry"]),
     "trade": (["trade_step"], ["item"]),
+    "army_group": (["army_group_step", "marshals"], ["entry", "e"]),
+    "invasions": (["invasion_step", "invasion_fleet", "invasion_claims"], ["entry", "e"]),
+}
+# Plan objects the child modules read through a local variable in a helper: function -> {variable: key path}.
+NESTED_VARS = {
+    "fleet_plans": {"cfg": "navy", "f": "navy.fleets[]", "escort": "navy.convoy_escort"},
+    "admiral_plans": {"cfg": "navy", "f": "navy.fleets[]", "r": "navy.admirals[]"},
+    "region_spec": {"v": "navy.fleets[].missions[].regions[]"},
+    "navy_step": {"cfg": "navy", "m": "navy.fleets[].missions[]"},
+    "faction_step": {"cfg": "faction", "create": "faction.create"},
+    "intelligence_step": {"cfg": "intelligence", "op": "intelligence.operatives[]"},
+    "upgrade_ref": {"entry": "intelligence.upgrades[]"},
+    "casualty_rule": {"m": "manage"},
+    "air_superiority_rule": {"m": "manage"},
+}
+# Executor-owned keys whose step is being built in parallel to an agreed shape: tagged executor before the
+# code reads them (the unread check skips them; their fields are checked once the code lands).
+LANDING = {
+    "hold_targets": "plan_military.rs hold posts, agreed shape {id, army, provinces, when?, until?}",
 }
 # Fields the executor still reads that the schema deliberately leaves out.
 KNOWN_GAPS = {
@@ -121,12 +142,20 @@ def consumed_keys():
         for var in names:
             for k in re.findall(r"\b%s\[\"(\w+)\"\]" % var, body):
                 keys.add("%s[].%s" % (top, k))
-            for k in re.findall(r"\b(?:strings|list)\(%s, \"(\w+)\"\)" % var, body):
+            for k in re.findall(r"\b(?:strings|list)\(&?%s, \"(\w+)\"\)" % var, body):
                 keys.add("%s[].%s" % (top, k))
-            if re.search(r"\bitem_id\(&?%s\)" % var, body):
+            if re.search(r"\b(?:item_id|invasion_key)\(&?%s\b" % var, body):
                 keys.add("%s[].id" % top)
             if re.search(r"\breached\(%s\b" % var, body):
                 keys.add("%s[].from" % top)
+    for fn, paths in NESTED_VARS.items():
+        if fn not in functions:
+            raise AssertionError("NESTED_VARS is stale: no function %s" % fn)
+        for var, path in paths.items():
+            for k in re.findall(r"\b%s\[\"(\w+)\"\]" % var, functions[fn]):
+                keys.add("%s.%s" % (path, k))
+            for k in re.findall(r"\b(?:strings|list)\(&?%s, \"(\w+)\"\)" % var, functions[fn]):
+                keys.add("%s.%s" % (path, k))
     alarms = _code(ALARMS)
     for k in re.findall(r'\bplan(?:\.get\(|\[)"(\w+)"', alarms):
         keys.add(k)
@@ -202,8 +231,21 @@ class PlanSchemaCoverage(unittest.TestCase):
 
     def test_executor_tagged_keys_are_read(self):
         top = {k.split(".")[0].split("[")[0] for k in self.keys}
-        unread = sorted(k for k, o in schema_check.owners(self.schema).items() if o == "executor" and k not in top)
+        owners = schema_check.owners(self.schema)
+        unread = sorted(k for k, o in owners.items() if o == "executor" and k not in top and k not in LANDING)
         self.assertEqual(unread, [], "tagged executor but plan_run.rs never reads them")
+        for key in LANDING:
+            self.assertEqual(owners.get(key), "executor", key)
+
+    def test_nested_reads_are_found(self):
+        # the helper-variable reads of the wave-2 modules (a guard against NESTED_VARS matching nothing)
+        for k in ("army_group[].armies", "army_group[].marshal", "invasions[].from_state", "invasions[].target_province",
+                  "invasions[].id", "army_group[].id", "navy.fleets", "navy.fleets[].missions", "navy.fleets[].missions[].regions",
+                  "navy.fleets[].missions[].task_force", "navy.fleets[].missions[].regions[].region",
+                  "navy.convoy_escort.fleet", "navy.admirals", "navy.admirals[].admiral", "faction.create.invite",
+                  "intelligence.operatives[].state_id", "intelligence.upgrades[].branch", "manage.casualty_ratio_max",
+                  "manage.air_front_regions"):
+            self.assertIn(k, self.keys)
 
     def test_new_keys_exist(self):
         props = self.schema["properties"]
@@ -465,18 +507,27 @@ class CoverageKeys(unittest.TestCase):
         for k in ("goal_reached", "goal_at_risk", "goal_risk_days", "checkpoint_missed", "phase_changed",
                   "contingency_triggered"):
             self.assertIn(k, alarms)
-        for key in ("force_posture", "xp_budget", "stockpile_targets", "sea_transfer", "garrison_template", "navy",
-                    "intelligence", "designs", "mio", "trade", "_coverage"):
+        for key in ("force_posture", "xp_budget", "stockpile_targets", "sea_transfer", "garrison_template",
+                    "retake_rules", "_coverage"):
             self.assertEqual(owners[key], "player", key)
+        # wave 2: plan_military.rs and plan_affairs.rs took these over (hold_targets lands in parallel)
+        for key in ("army_group", "navy", "invasions", "designs", "diplomacy", "faction", "intelligence", "mio", "trade",
+                    "research_bonuses", "hold_targets"):
+            self.assertEqual(owners[key], "executor", key)
+        for path in ("production[].design", "production[].accept_progress_loss"):
+            self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
         for key, item in (("xp_budget", "W1-6"), ("stockpile_targets", "W1-10"), ("sea_transfer", "W1-14"),
-                          ("garrison_template", "W1-7"), ("navy", "W2-4"), ("occupation.per_state", "W1-7"),
-                          ("production[].remove", "W1-9"), ("hold_targets", "W1-15"), ("manage.fuel_floor", "W3-10")):
+                          ("garrison_template", "W1-7"), ("occupation.per_state", "W1-7"),
+                          ("production[].remove", "W1-9"), ("manage.fuel_floor", "W3-10")):
             self.assertEqual(planned.get(key), item, key)
+        for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "manage.air_superiority",
+                    "manage.casualty_ratio", "manage.casualty_days"):
+            self.assertNotIn(key, planned)  # the step landed: no planned mark, the placeholder names are gone
 
     def test_planned_marks_are_build_items_on_non_executor_nodes(self):
         planned = schema_check.planned(self.schema)
-        self.assertGreater(len(planned), 15)
+        self.assertGreater(len(planned), 5)
         for path, item in planned.items():
             self.assertRegex(item, r"^W[1-3]-\d+$", path)
             node = _lookup(self.schema, path)
@@ -486,17 +537,25 @@ class CoverageKeys(unittest.TestCase):
     def test_manage_uses_the_executor_names_with_defaults(self):
         m = self.props["manage"]["properties"]
         self.assertEqual(set(m["off"]["items"]["enum"]), {"alerts", "ledger", "manpower", "stability",
-                                                          "equipment_fill", "resources", "stockpile", "trucks"})
+                                                          "equipment_fill", "resources", "stockpile", "trucks",
+                                                          "casualties", "air_superiority"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
-                "trucks_ratio": 1.5, "deficit_wake_days": 14}
+                "trucks_ratio": 1.5, "deficit_wake_days": 14,
+                # plan_military.rs: casualty ratio (rule 28) and air superiority (rule 27)
+                "casualty_ratio_max": 2.0, "casualty_window_days": 14, "casualty_min_losses": 1000,
+                "casualty_rest_days": 7, "enemy_air_superiority": 0.6, "air_hold_days": 10}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
+        for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):
+            self.assertEqual(m[k]["x-rule"], "casualties", k)
+        for k in ("enemy_air_superiority", "air_front_regions", "air_hold_days"):
+            self.assertEqual(m[k]["x-rule"], "air_superiority", k)
         for k, node in m.items():
             if k not in ("why", "note"):
                 self.assertIn("default", node, k)  # every rule has a default
                 self.assertTrue(node.get("x-executor-planned") or k in want or k in
-                                ("off", "alerts_ignore", "conscription_laws"), k)
+                                ("off", "alerts_ignore", "conscription_laws", "air_front_regions"), k)
                 if node.get("x-rule"):
                     self.assertIn(node["x-rule"], m["off"]["items"]["enum"], k)
 
@@ -530,11 +589,10 @@ class CoverageKeys(unittest.TestCase):
             "xp_budget": {"army": [{"id": "x", "cost": 40, "purpose": "template", "ref": "template:line"}]},
             "stockpile_targets": {"infantry_equipment": 30, "why": "two months of attrition"},
             "sea_transfer": {"convoys": 40, "ports": [550], "routes": [{"id": "r", "from_state": 2, "to_state": 550}]},
-            "navy": {"posture": "none", "reason": "landlocked", "convoy_escort": False},
+            "navy": {"posture": "none", "reason": "landlocked"},
             "intelligence": {"agency": False, "reason": "minor"},
-            "designs": [{"id": "d", "type": "plane", "name": "CAS", "base": "small_plane_cas_airframe_1",
-                         "call": {"tool": "hoi4_design_create"}}],
-            "mio": [{"id": "m", "organisation": "ITA_ansaldo_organization"}],
+            "designs": [{"id": "d", "kind": "plane", "name": "CAS", "base": "small_plane_cas_airframe_1"}],
+            "mio": [{"organisation": "ITA_ansaldo_organization"}],
             "trade": {"deals": [{"id": "t", "resource": "steel", "amount": 8}]},
             "production": [{"equipment": "infantry_equipment_1", "remove": True},
                            {"equipment": "infantry_equipment_1", "replace": "infantry_equipment_2"}],
@@ -546,6 +604,95 @@ class CoverageKeys(unittest.TestCase):
                     {"manage": {"surprise": 1}}, {"templates": [{"name": "x"}]},
                     {"navy": {"posture": "big"}}, {"force_posture": {"phases": []}},
                     {"xp_budget": {"army": [{"id": "x", "cost": 1, "purpose": "template", "ref": "templates:x"}]}}):
+            self.assertNotEqual(v(bad), [], bad)
+
+    def test_wave2_executor_shapes(self):
+        """The shapes plan_military.rs and plan_affairs.rs read (module docs), every field once."""
+        v = lambda plan: schema_check.validate(plan, self.schema)  # noqa: E731
+        plan = {
+            "army_group": [{"id": "north", "name": "Northern front", "armies": ["North strike", "North guard"],
+                            "marshal": ["Rodolfo Graziani", "Pietro Badoglio"], "when": "at_war_with:ETH"},
+                           {"id": "south", "armies": ["South", "South guard"], "marshal": "Rodolfo Graziani"}],
+            "hold_targets": [{"id": "h1", "army": "North guard", "provinces": [13250, 13237, 2072],
+                              "when": "at_war_with:ETH", "until": "capitulated:ETH"}],
+            "navy": {"posture": "coastal", "repair_below": 0.4, "repair_until": 90,
+                     "fleets": [{"fleet": "Squadra 1", "state_id": 2, "admiral": "Inigo Campioni",
+                                 "missions": [{"id": "m1", "mission": "patrol",
+                                               "regions": ["Central Mediterranean",
+                                                           {"region": "Ionian Sea", "state_id": 158}],
+                                               "task_force": "TF 1", "state_id": 2, "when": "1936.3.1"},
+                                              {"mission": "hold"}]}],
+                     "convoy_escort": {"fleet": "Squadra 2", "task_force": "TF 3", "regions": ["Red Sea"],
+                                       "when": "at_war_with:ETH", "on": True},
+                     "admirals": {"Squadra 2": "Romeo Bernotti"}},
+            "invasions": [{"id": "i1", "from_state": 550, "target_state": 271, "target_province": 5010,
+                           "armies": ["Marines"], "fleet": "Squadra 2", "when": "1936.6.1", "with_harbor": False,
+                           "source_offset": [10, -20], "landing_offset": [0, 0], "stage_days": 20, "prepare_days": 14,
+                           "execute_days": 60, "land_days": 30}],
+            "designs": [{"id": "d1", "kind": "tank", "base": "medium_tank_chassis_1", "name": "M13",
+                         "modules": {"main_armament_slot": "tank_small_cannon", "special_type_slot_1": None},
+                         "when": "xp:army >= 20", "xp": 20, "production": "medium_tank_chassis_1",
+                         "accept_progress_loss": True},
+                        {"id": "d2", "type": "other", "base": 12, "upgrades": {"reliability": 2}}],
+            "production": [{"equipment": "medium_tank_chassis_1", "factories": 2, "design": "d1",
+                            "accept_progress_loss": False}, {"equipment": "x", "design": 17}],
+            "diplomacy": [{"id": "j", "action": "justify", "target": "ETH", "war_goal": "Conquer",
+                           "states": ["Tigray"], "world_tension_max": 25, "when": "1936.1.1"},
+                          {"id": "w", "action": "declare", "target": "ETH", "justify_days": 0, "joiners_ok": ["DJI"],
+                           "widen_ratio": 1.5, "accept_widening": True, "expiry_warn_days": 40, "rejustify": True,
+                           "try_anyway": False}],
+            "faction": {"join": "ANY", "create": {"name": "Pact", "template": "faction_template_x",
+                                                  "invite": ["Hungary"]}, "when": "1937.1.1"},
+            "intelligence": {"agency": True, "upgrades": ["upgrade_army_department", "branch_x:upgrade_y",
+                                                          {"branch": "branch_x", "upgrade": "upgrade_z"}],
+                             "operatives": [{"mission": "build_intel_network", "state_id": 271},
+                                            {"mission": "counter_intelligence", "target": "ETH"},
+                                            {"mission": "propaganda", "country": "ETH"}], "when": "1936.6.1",
+                             "decryption_target": "ETH"},
+            "mio": [{"organisation": "ITA_ansaldo_organization", "traits": [0, "3"], "when": "1936.2.1", "slot": 1,
+                     "design_team": True, "policy": "mio_policy_x", "line": "infantry_equipment_1"},
+                    {"organization": "ITA_fiat_organization", "design_team": 2}],
+            "trade": [{"id": "t", "resource": "steel", "amount": "needed", "from": "USA", "when": "1936.1.1"},
+                      {"resource": "oil", "amount": 4, "partner": "Romania"}],
+            "research_bonuses": {"infantry_weapons": ["infantry_weapons1"], "why": "Fiat"},
+            "manage": {"off": ["casualties"], "casualty_ratio_max": 1.5, "casualty_window_days": 14,
+                       "casualty_min_losses": 500, "casualty_rest_days": 5, "enemy_air_superiority": 60,
+                       "air_front_regions": [273, "Ethiopia"], "air_hold_days": 8},
+        }
+        self.assertEqual(v(plan), [])
+        for ok in ({"intelligence": {"agency": False, "operatives": 2}}, {"research_bonuses": True},
+                   {"trade": {"deals": [{"resource": "steel"}]}}, {"navy": {"posture": "none", "reason": "landlocked"}},
+                   {"navy": {"posture": "blue_water", "admirals": [{"fleet": "F", "admiral": "A"}]}}):
+            self.assertEqual(v(ok), [], ok)
+        # the earlier player shapes and other mistakes are refused
+        for bad in (
+                {"army_group": [{"name_hint": "x", "field_marshal": "y", "members": ["a", "b"]}]},
+                {"army_group": [{"id": "g", "armies": ["only one"]}]},
+                {"hold_targets": [{"mission": "m", "provinces": [1], "keep_at_least": 2}]},
+                {"hold_targets": [{"id": "h", "army": "A", "provinces": []}]},
+                {"navy": {"posture": "coastal", "missions": [{"id": "m", "mission": "patrol"}]}},
+                {"navy": {"posture": "none"}},
+                {"navy": {"posture": "coastal", "convoy_escort": True}},
+                {"navy": {"posture": "coastal", "fleets": [{"fleet": "F", "missions": [{"mission": "bombard"}]}]}},
+                {"invasions": [{"id": "i", "from_state": 1, "armies": ["A"]}]},
+                {"invasions": [{"id": "i", "from_state": 1, "target_state": 2, "armies": ["A"], "source_offset": [1]}]},
+                {"designs": [{"id": "d", "base": "x"}]},
+                {"designs": [{"id": "d", "kind": "gun", "base": "x"}]},
+                {"designs": [{"id": "d", "kind": "tank", "base": "x", "call": {"tool": "hoi4_design_create"}}]},
+                {"diplomacy": [{"id": "d", "action": "justify", "target": "Ethiopia"}]},
+                {"diplomacy": [{"id": "d", "action": "justify", "target": "ETH", "states": ["a"] * 6}]},
+                {"faction": {"when": "1936.1.1"}},
+                {"faction": {"join": "Allies"}},
+                {"intelligence": {"upgrades": ["x"]}},
+                {"intelligence": {"agency": True, "operatives": [{"id": "o", "mission": "x"}]}},
+                {"mio": [{"traits": [0]}]},
+                {"mio": [{"organisation": "x", "traits": ["best trait"]}]},
+                {"trade": {"market": []}},
+                {"trade": [{"amount": 3}]},
+                {"trade": [{"resource": "steel", "amount": "lots"}]},
+                {"research_bonuses": {"x": "infantry_weapons1"}},
+                {"manage": {"casualty_ratio_max": 0}},
+                {"manage": {"casualty_ratio": 1.5}}):
             self.assertNotEqual(v(bad), [], bad)
 
 

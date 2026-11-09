@@ -348,22 +348,26 @@
   ],
   "army_group": [
     {
-      "name_hint": "Northern front",
-      "field_marshal": "Hailu Tekle Haymanot",
-      "fallback_field_marshal": "Haile Selassie",
-      "members": [
+      "id": "ag_northern_front",
+      "name": "Northern front",
+      "armies": [
         "Army of Tigray",
         "Army of Begemder",
         "Army of Wello"
+      ],
+      "marshal": [
+        "Hailu Tekle Haymanot",
+        "Haile Selassie"
       ]
     },
     {
-      "name_hint": "Southern front",
-      "field_marshal": "Abba Jofir",
-      "members": [
+      "id": "ag_southern_front",
+      "name": "Southern front",
+      "armies": [
         "Army of the Ogaden",
         "Army of Bale and Sidamo"
-      ]
+      ],
+      "marshal": "Abba Jofir"
     }
   ],
   "air": {
@@ -472,35 +476,57 @@
   },
   "hold_targets": [
     {
-      "mission": "ETH_hold_the_north_mission",
+      "id": "hold_north_gondar",
+      "army": "Army of Begemder",
       "provinces": [
-        1984,
-        2072,
+        1984
+      ],
+      "until": "1936.06.25",
+      "note": "ETH_hold_the_north_mission: keep at least 2 of Gondar 1984, Macalle 2072, Dessie 5097 until the mission ends (about 1936-05-15 if Italy chose option a, 1936-07-14 if b); until is the P3_eritrea start, when the Army of Tigray strikes Eritrea"
+    },
+    {
+      "id": "hold_north_macalle",
+      "army": "Army of Tigray",
+      "provinces": [
+        2072
+      ],
+      "until": "1936.06.25",
+      "note": "ETH_hold_the_north_mission (see hold_north_gondar)"
+    },
+    {
+      "id": "hold_north_dessie",
+      "army": "Army of Wello",
+      "provinces": [
         5097
       ],
-      "keep_at_least": 2,
-      "note": "until: mission ends (about 1936-05-15 if Italy chose option a, 1936-07-14 if b)"
+      "until": "1936.06.25",
+      "note": "ETH_hold_the_north_mission (see hold_north_gondar)"
     },
     {
-      "mission": "ETH_hold_the_south_mission",
+      "id": "hold_south_wal_wal",
+      "army": "Army of the Ogaden",
       "provinces": [
-        12812,
-        10775,
-        13247
+        12812
       ],
-      "keep_at_least": 2,
-      "note": "until: same date as the north mission"
+      "until": "1936.07.14",
+      "note": "ETH_hold_the_south_mission: keep at least 2 of Wal Wal 12812, Gaba 10775, Moyale 13247 until the mission ends (same date as the north mission); Moyale is the one the plan can lose"
     },
     {
-      "mission": "ETH_hold_addis_ababa_mission",
-      "state": 271,
-      "note": "until: 180 days after it activates",
+      "id": "hold_south_gaba",
+      "army": "Army of Bale and Sidamo",
       "provinces": [
-        5010,
-        8036,
-        10734,
-        13239
-      ]
+        10775
+      ],
+      "until": "1936.07.14",
+      "note": "ETH_hold_the_south_mission (see hold_south_wal_wal)"
+    },
+    {
+      "id": "hold_addis_ababa",
+      "army": "Imperial reserve",
+      "provinces": [
+        5010
+      ],
+      "note": "ETH_hold_addis_ababa_mission: hold state 271 (5010, 8036, 10734, 13239) for 180 days after it activates; the reserve stands in Addis Ababa 5010 (retake_rules: never leave 5010 empty)"
     }
   ],
   "vp_targets": [

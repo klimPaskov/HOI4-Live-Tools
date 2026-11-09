@@ -17,9 +17,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _spec = importlib.util.spec_from_file_location("validate_plan", os.path.join(ROOT, "scripts", "validate_plan.py"))
 vp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(vp)
+from hoi4facts import validate as hv  # noqa: E402  (validate_plan put scripts/ on the path)
 
 COLOURS = {10: (10, 0, 0), 11: (11, 0, 0), 20: (20, 0, 0), 21: (21, 0, 0), 30: (30, 0, 0)}
 ROWS = [[10, 10, 11, 20], [10, 11, 21, 30]]  # top row first
+COASTAL = {21, 30}  # on sea province 40 (region "Test Sea"), which has no pixels
 
 FILES = {
     "common/country_tags/00_countries.txt": 'AAA = "countries/A.txt"\nBBB = "countries/B.txt"\n',
@@ -30,7 +32,33 @@ FILES = {
     t_late = { start_year = 1939 }
 }
 """,
-    "history/countries/AAA - Alpha.txt": 'capital = 1\nset_oob = "AAA_1936"\nset_technology = { t_a = 1 }\n',
+    "history/countries/AAA - Alpha.txt": 'capital = 1\nset_oob = "AAA_1936"\nset_naval_oob = "AAA_1936_naval"\n'
+                                         'set_technology = { t_a = 1 }\n',
+    "history/units/AAA_1936_naval.txt": 'units = { fleet = { name = "Home Fleet" naval_base = 30 task_force = {\n'
+                                        '    name = "TF 1" location = 30 ship = { name = "S1" definition = destroyer\n'
+                                        '    equipment = { ship_hull = { amount = 1 owner = AAA } } } } } }\n',
+    "map/strategicregions/1-Test.txt": 'strategic_region = { id = 1 name = "Test Sea" provinces = { 40 } }\n',
+    "common/units/equipment/tank.txt": """equipments = {
+    tank_chassis = { is_archetype = yes type = armor
+        module_slots = { main_armament_slot = { required = yes allowed_module_categories = { tank_main_armament } } } }
+    tank_chassis_1 = { archetype = tank_chassis parent = tank_chassis }
+    legacy_tank = { is_archetype = yes type = armor upgrades = { tank_reliability_upgrade } }
+}
+""",
+    "common/units/equipment/modules/m.txt": "equipment_modules = { tank_small_cannon = { category = tank_main_armament } }\n",
+    "common/units/equipment/upgrades/u.txt": "upgrades = { tank_reliability_upgrade = { max_level = 5 cost = land } }\n",
+    "common/military_industrial_organization/organizations/o.txt": """AAA_works_organization = {
+    allowed = { original_tag = AAA } equipment_type = { armor }
+    trait = { token = t1 name = t1 } trait = { token = t2 any_parent = { t1 } } }
+BBB_works_organization = { allowed = { original_tag = BBB } equipment_type = { armor } }
+""",
+    "common/military_industrial_organization/policies/p.txt": "mio_policy_fix = { cost = 25 }\n",
+    "common/intelligence_agency_upgrades/u.txt": """branch_army = {
+    upgrade_army_department = { level = { modifier = { army_intel_factor = 0.1 } }
+                                level = { modifier = { army_intel_factor = 0.1 } } } }
+""",
+    "common/factions/templates/t.txt": "faction_template_fix = { name = FIX_FACTION }\n",
+    "common/resources/r.txt": "resources = { steel = { icon_frame = 1 } oil = { icon_frame = 2 } }\n",
     "history/states/1-One.txt": """state = { id = 1 name = "STATE_1"
     history = { owner = AAA victory_points = { 10 5 } }
     provinces = { 10 11 } }
@@ -54,7 +82,9 @@ units = {
     "events/aaa.txt": "add_namespace = aaa\ncountry_event = { id = aaa.1 option = { name = aaa.1.a } "
                       "option = { name = aaa.1.b } }\n",
     "map/definition.csv": "0;0;0;0;land;false;unknown;0\n"
-    + "".join(f"{p};{r};{g};{b};land;false;plains;1\n" for p, (r, g, b) in COLOURS.items()),
+    + "".join(f"{p};{r};{g};{b};land;{'true' if p in COASTAL else 'false'};plains;1\n"
+              for p, (r, g, b) in COLOURS.items())
+    + "40;40;0;0;sea;false;ocean;0\n",
     "common/units/land.txt": """sub_units = {
     infantry = { group = infantry combat_width = 2 need = { gun = 100 } }
     cavalry = { group = mobile combat_width = 2 active = yes need = { gun = 120 } }
@@ -93,6 +123,31 @@ NEW_KEYS = {
     "peace": {"take": [3], "puppet": [], "max_rounds": 3},
     "manage": {"stability_floor": 0.4},
     "sea_transfer": {"convoys": 4, "ports": [2], "routes": [{"id": "r1", "from_state": 1, "to_state": 2}]},
+}
+
+# Wave-2 executor keys (plan_military.rs, plan_affairs.rs) on the fixture: clean as written.
+WAVE2 = {
+    "army_group": [{"id": "g", "armies": ["North", "North guard"], "marshal": ["Someone", "Someone else"]}],
+    "hold_targets": [{"id": "h", "army": "North guard", "provinces": [10, 11, 20], "until": "1937.01.01"}],
+    "navy": {"posture": "coastal", "repair_below": 0.5,
+             "fleets": [{"fleet": "Home Fleet", "state_id": 2,
+                         "missions": [{"mission": "patrol", "regions": ["Test Sea", {"region": "Test Sea", "state_id": 2}]}]}],
+             "convoy_escort": {"fleet": "home fleet", "regions": ["Test Sea"]}, "admirals": {"Home Fleet": "Someone"}},
+    "invasions": [{"id": "i", "from_state": 2, "target_state": 3, "target_province": 30, "armies": ["North"],
+                   "fleet": "Home Fleet"}],
+    "designs": [{"id": "d1", "kind": "tank", "base": "tank_chassis_1", "name": "T1",
+                 "modules": {"main_armament_slot": "tank_small_cannon"}, "production": "tank_chassis_1"},
+                {"id": "d2", "kind": "tank", "base": "legacy_tank", "upgrades": {"reliability": 2, "tank_reliability": 1}}],
+    "production": [{"equipment": "gun_1", "factories": 2}, {"equipment": "tank_chassis_1", "design": "d1"}],
+    "diplomacy": [{"id": "j", "action": "justify", "target": "BBB", "war_goal": "Conquer", "states": ["Three"]},
+                  {"id": "w", "action": "declare_war", "target": "BBB", "joiners_ok": ["BBB"], "widen_ratio": 1.0}],
+    "faction": {"join": "BBB", "create": {"name": "Pact", "template": "faction_template_fix"}},
+    "intelligence": {"agency": True, "upgrades": ["upgrade_army_department", "branch_army:upgrade_army_department"],
+                     "operatives": [{"mission": "build_intel_network", "state_id": 3},
+                                    {"mission": "propaganda", "target": "BBB"}, {"mission": "counter_intelligence"}]},
+    "mio": [{"organisation": "AAA_works_organization", "traits": [0, "2"], "policy": "mio_policy_fix"}],
+    "trade": [{"resource": "steel", "from": "BBB"}, {"resource": "oil", "partner": "Some Country"}],
+    "research_bonuses": {"cat": ["t_a"], "why": "a bonus"},
 }
 
 GOOD = {
@@ -377,6 +432,129 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("sea_transfer.ports: 88", text)
         self.assertTrue(any("peace.puppet[0]: tag BBB is only noted" in w for w in rep.warnings))
         self.assertTrue(any("garrison_template.template 'Nobody'" in w for w in rep.warnings))
+
+    # ------------------------------------------------------------------ wave-2 executor keys
+    def wave2(self, **changes):
+        plan = copy.deepcopy(WAVE2)
+        plan.update(changes)
+        return self.run_plan(**plan)
+
+    def test_wave2_keys_clean(self):
+        rep = self.wave2()
+        self.assertEqual(rep.errors, [])
+        self.assertEqual(rep.warnings, [])
+        self.assertEqual(hv.start_fleets(self.game, {"tag": "AAA"}), {"Home Fleet"})
+        self.assertEqual(hv.sea_region_names(self.game, {"tag": "AAA"}), {"Test Sea"})
+
+    def test_army_group_and_hold_targets(self):
+        rep = self.wave2(army_group=[{"id": "g", "armies": ["North", "North guard"]},
+                                     {"id": "g", "armies": ["North guard", "Army 7", "Army 7"]}],
+                         hold_targets=[{"id": "h", "army": "North guard", "provinces": [10, 20, 99]},
+                                       {"id": "h2", "army": "North", "provinces": [10, 20]},
+                                       {"id": "h3", "army": "Ghost", "provinces": [11, 11]}])
+        text, warn = "\n".join(rep.errors), "\n".join(rep.warnings)
+        self.assertIn("army_group[1] g: army 'North guard' is also in army_group[0]", text)
+        self.assertIn("army_group[1] g: army 'Army 7' is listed twice", text)
+        self.assertIn("army_group: id g is used by entries [0, 1]", text)
+        self.assertIn("hold_targets[0] h: province 99 is in no state", text)
+        self.assertNotIn("hold_targets[0] h: provinces", text)  # an unknown province skips the corridor check
+        self.assertIn("hold_targets[1] h2: provinces 10 and 20 do not touch", text)
+        self.assertIn("hold_targets[2] h3: province 11 is listed twice", text)
+        self.assertIn("'Army 7' is no army_layout name_hint", warn)
+        self.assertIn("hold_targets[2] h3: 'Ghost' is no army_layout name_hint", warn)
+        self.assertIn("hold_targets[1] h2: 'North' is a strike role in army_layout", warn)
+
+    def test_navy_and_invasions(self):
+        rep = self.wave2(navy={"posture": "coastal", "fleets": [
+                             {"fleet": "Ghost Fleet", "state_id": 77,
+                              "missions": [{"mission": "patrol", "state_id": 78,
+                                            "regions": ["Nowhere Sea", {"region": "Test Sea", "state_id": 79}]}]}]},
+                         invasions=[{"id": "i", "from_state": 1, "target_state": 3, "target_province": 20,
+                                     "armies": ["North"], "fleet": "Home Fleet"},
+                                    {"id": "i2", "from_state": 2, "target_state": 9, "armies": ["Nobody"]}])
+        text, warn = "\n".join(rep.errors), "\n".join(rep.warnings)
+        self.assertIn("navy.fleets[0].state_id: 77 is not a state id", text)
+        self.assertIn("navy.fleets[0].missions[0].state_id: 78 is not a state id", text)
+        self.assertIn("navy.fleets[0].missions[0].regions[1].state_id: 79 is not a state id", text)
+        self.assertIn("invasions[0] i: from_state 1 has no coastal province (hoi4_naval_invasion refuses "
+                      "source_not_coastal)", text)
+        self.assertIn("invasions[0] i: target_province 20 is in state 2, not target_state 3", text)
+        self.assertIn("invasions[1] i2: target_state 9 is not a state id", text)
+        self.assertIn("navy.fleets[0]: fleet 'Ghost Fleet' is not in the start OOB (fleets: Home Fleet)", warn)
+        self.assertIn("navy.fleets[0].missions[0].regions[0]: 'Nowhere Sea' is not the name of a sea strategic "
+                      "region", warn)
+        self.assertNotIn("regions[1]: 'Test Sea'", warn)
+        self.assertIn("invasions[1] i2: 'Nobody' is no army_layout name_hint", warn)
+
+    def test_designs_and_line_switches(self):
+        rep = self.wave2(designs=[{"id": "d1", "kind": "plane", "base": "tank_chassis_1",
+                                   "modules": {"bogus": "tank_small_cannon", "main_armament_slot": "no_module"}},
+                                  {"id": "d2", "kind": "tank", "base": "legacy_tank", "modules": {"x": "y"},
+                                   "upgrades": {"reliability": 9, "wings": 1}},
+                                  {"id": "d3", "kind": "tank", "type": "ship", "base": "Mystery",
+                                   "production": "no_equipment"}],
+                         production=[{"equipment": "tank_chassis_1", "design": "Unknown design"},
+                                     {"equipment": "tank_chassis_1", "design": "d3"}, {"equipment": "gun_1", "design": 4}])
+        text, warn = "\n".join(rep.errors), "\n".join(rep.warnings)
+        self.assertIn("designs[0] d1: base tank_chassis_1 is tank equipment (designer tank), not kind plane", text)
+        self.assertIn("designs[0] d1: modules.bogus is not a module slot of tank_chassis_1 (main_armament_slot)", text)
+        self.assertIn("modules.main_armament_slot: no equipment module no_module", text)
+        self.assertIn("designs[1] d2: base legacy_tank has no module slots; give upgrades instead of modules", text)
+        self.assertIn("designs[1] d2: upgrades.reliability 9 is above its max_level 5", text)
+        self.assertIn("designs[2] d3: production no_equipment is not an equipment key", text)
+        self.assertNotIn("factories must be", text)  # a design switch needs no factories
+        self.assertNotIn("duplicate key tank_chassis_1", text)
+        self.assertIn("upgrades.wings names no upgrade", warn)
+        self.assertIn("designs[2] d3: kind tank and type ship differ", warn)
+        self.assertIn("designs[2] d3: base 'Mystery' is neither an equipment key nor a start variant of AAA", warn)
+        self.assertIn("production[0].design 'Unknown design' is no designs[] id or name", warn)
+        self.assertNotIn("production[1].design", warn)  # a designs[] id
+        self.assertNotIn("production[2].design", warn)  # a design id number
+
+    def test_diplomacy_faction_intelligence_mio_trade_bonuses(self):
+        rep = self.wave2(
+            diplomacy=[{"id": "j", "action": "justify", "target": "QQQ"},
+                       {"id": "k", "action": "guarantee", "target": "AAA", "war_goal": "x", "rejustify": True},
+                       {"id": "w", "action": "declare", "target": "BBB", "joiners_ok": ["ZZZ"]}],
+            faction={"join": "QQQ", "create": {"name": "X", "template": "faction_template_none"}},
+            intelligence={"agency": True, "upgrades": ["upgrade_army_department", "branch_navy:upgrade_army_department",
+                                                       "upgrade_army_department", "upgrade_none"],
+                          "operatives": [{"mission": "root_out_resistance"}, {"mission": "control_trade"},
+                                         {"mission": "boost_ideology", "target": "QQQ", "state_id": 99}]},
+            mio=[{"organisation": "BBB_works_organization"},
+                 {"organization": "AAA_works_organization", "traits": [3], "policy": "nope"},
+                 {"organisation": "nope"}],
+            trade={"deals": [{"resource": "gold", "from": "QQQ"}, {"resource": "steel", "partner": "AAA"}]},
+            research_bonuses={"cat": ["t_none"]})
+        text, warn = "\n".join(rep.errors), "\n".join(rep.warnings)
+        for msg in ("diplomacy[0] j: target QQQ is not a country tag",
+                    "diplomacy[0] j: justify needs war_goal and states",
+                    "diplomacy[1] k: target AAA is the player's own tag",
+                    "diplomacy[2] w: joiners_ok ZZZ is not a country tag",
+                    "faction.join: QQQ is not a country tag",
+                    "intelligence.upgrades[1]: upgrade_army_department is in branch branch_army, not branch_navy",
+                    "intelligence.upgrades[2]: upgrade_army_department is listed 3 times but has 2 level(s)",
+                    "intelligence.upgrades[3]: no agency upgrade upgrade_none",
+                    "intelligence.operatives[0]: root_out_resistance is a state mission and needs state_id",
+                    "intelligence.operatives[1]: control_trade is a country mission and needs target",
+                    "intelligence.operatives[2]: QQQ is not a country tag",
+                    "intelligence.operatives[2]: state_id 99 is not a state id",
+                    "mio[0] BBB_works_organization: BBB_works_organization is not allowed for AAA",
+                    "mio[1] AAA_works_organization: no MIO policy nope",
+                    "mio[1] AAA_works_organization: trait_index 3 but the tree has 3 entries",
+                    "mio[2] nope: no organisation nope",
+                    "trade.deals[0]: no resource gold in common/resources (oil, steel)",
+                    "trade.deals[0]: partner QQQ is not a country tag",
+                    "trade.deals[1]: partner AAA is the player's own tag",
+                    "research_bonuses.cat: unknown technology t_none"):
+            self.assertIn(msg, text)
+        self.assertIn("diplomacy[1] k: war_goal and states are read only by a justify item", warn)
+        self.assertIn("diplomacy[1] k: rejustify are read only by a declare item", warn)
+        self.assertIn("faction.create.template 'faction_template_none' is not a template", warn)
+        self.assertIn("intelligence.operatives[2]: mission boost_ideology is not one hoi4_operative_assign builds", warn)
+        rep = self.wave2(intelligence={"agency": False, "upgrades": ["upgrade_army_department"]})
+        self.assertEqual(rep.errors, [])
+        self.assertTrue(any("agency false and no agency at the start" in w for w in rep.warnings))
 
     def test_when_parser(self):
         self.assertEqual(vp.parse_when(""), ("now",))

@@ -134,8 +134,7 @@ class HandPlans(unittest.TestCase):
             ("conquest.adjacency", "vp_targets[16] 13244"),  # Gambella is two steps past Yabello
             ("construction.railway", "construction_plan[5] cp08_rail_way_843"),  # 7944 not on Dessie's route
             ("construction.railway", "construction_plan[6] cp09_rail_way_835"),  # whole line queued at Wal Wal
-            ("schema.player_call", "army_group"),
-            ("schema.player_call", "retake_rules"),
+            ("schema.player_call", "retake_rules"),  # army_group is an executor key (plan_military.rs)
             ("win.goal", "goal"),  # only the deprecated surrender_goal
         ])
         _, warnings = self.findings(load(ITA), "warning")
@@ -168,8 +167,6 @@ class HandPlans(unittest.TestCase):
     def test_ethiopia(self):
         out, errors = self.findings(load(ETH), "error")
         self.assertEqual(errors, [
-            ("schema.player_call", "army_group"),
-            ("schema.player_call", "hold_targets"),
             ("schema.player_call", "retake_rules"),
             ("win.goal", "goal"),  # only the deprecated win_condition
         ])
@@ -193,7 +190,7 @@ class HandPlans(unittest.TestCase):
         with redirect_stdout(buf):
             code = lint_plan.main([os.path.join(PLANS, ETH), "--game", GAME_DIR, "--json"])
         self.assertEqual(code, 1)
-        self.assertEqual(json.loads(buf.getvalue())["errors"], 4)
+        self.assertEqual(json.loads(buf.getvalue())["errors"], 2)
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
@@ -507,6 +504,34 @@ class CoverageBuildRules(unittest.TestCase):
         lt = lint_plan.Lint(plan, self.game)
         lines = lt.active_lines(derive.day("1936.07.01"))
         self.assertEqual(lines, {"artillery_equipment_1": 4, "infantry_equipment_1": 2, "motorized_equipment_1": 5})
+
+    # -------------------------------------------------------------- wave-2 executor keys
+    def test_army_group_marshals_and_navy_admirals(self):
+        plan = copy.deepcopy(self.ita)
+        self.assertNoHit(plan, "army.generals")  # Graziani and Badoglio are field marshals of ITA
+        plan["army_group"] = [{"id": "ao", "armies": ["North strike (Army 1)", "North guard"],
+                               "marshal": ["Nobody Atall", "Ettore Bastico"]},
+                              {"id": "south", "armies": ["South (Army 2)", "South guard"], "marshal": "Giovanni Messe"}]
+        plan["navy"] = {"posture": "coastal",
+                        "fleets": [{"fleet": "Comando Navale Mar Rosso", "admiral": "Rodolfo Graziani"},
+                                   {"fleet": "Comando Navale Libia", "admiral": "Inigo Campioni"}],
+                        "admirals": {"Comando Navale Sicilia": "Inigo Campioni"}}
+        self.assertHit(plan, "army.generals", "error", "army_group[0].marshal[0] 'Nobody Atall' is not a commander")
+        f = self.assertHit(plan, "army.generals", "info", "army_group[0].marshal[1]")
+        self.assertIn("promotes him", f["message"])  # a corps commander: the tool promotes him, no error
+        self.assertFalse(self.hits(plan, "army.generals", "error", "army_group[0].marshal[1]"))
+        self.assertHit(plan, "army.generals", "error", "Giovanni Messe commands more than one army")  # layout + group
+        self.assertHit(plan, "army.generals", "error", "navy.fleets[0].admiral 'Rodolfo Graziani'")
+        self.assertHit(plan, "army.generals", "error", "Inigo Campioni commands more than one fleet")
+        self.assertFalse(self.hits(plan, "army.generals", "error", "navy.fleets[1].admiral 'Inigo Campioni' (I"))
+
+    def test_hold_post_outside_the_guard_states_warns(self):
+        plan = copy.deepcopy(self.ita)
+        plan["hold_targets"] = [{"id": "h", "army": "South guard", "provinces": [11014]}]  # Jubaland, not 559
+        f = self.assertHit(plan, "army.guards", "warning", "hold_targets[0] h")
+        self.assertIn("border state(s) 559 lose that guard", f["message"])
+        plan["hold_targets"] = [{"id": "h", "army": "South guard", "provinces": [2020, 1964]}]  # inside Somaliland
+        self.assertNoHit(plan, "army.guards", "warning")
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")

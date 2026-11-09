@@ -529,13 +529,16 @@
   ],
   "army_group": [
     {
-      "name_hint": "Africa Orientale",
-      "field_marshal": "Rodolfo Graziani",
-      "fallback_field_marshal": "Pietro Badoglio",
-      "members": [
+      "id": "ag_africa_orientale",
+      "name": "Africa Orientale",
+      "armies": [
         "North strike (Army 1)",
         "Gondar group",
         "North guard"
+      ],
+      "marshal": [
+        "Rodolfo Graziani",
+        "Pietro Badoglio"
       ]
     }
   ],

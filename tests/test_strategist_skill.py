@@ -67,15 +67,19 @@ CHECKLIST = [
 # fallback ("until available").
 PENDING_FACTS = ["terrain-width", "units", "weather", "occupation-laws", "bop", "ports"]
 
-# Player-owned plan keys and the tool the brief template gives for each.
+# Player-owned plan keys (and player items without a key) and the tool the brief template gives for each.
 BRIEF_CALLS = {
-    "templates": "hoi4_template_create", "politics.when": "hoi4_politics_choose",
-    "decision_rules": "hoi4_decision_take", "army_group": "hoi4_army_group_create",
-    "hold_targets": "hoi4_army_front", "retake_rules": "hoi4_army_move", "air_plan": "hoi4_air_mission",
-    "sea_transfer": "hoi4_army_move",
-    "navy": "hoi4_fleet_mission", "designs": "hoi4_design_create", "mio": "hoi4_mio_trait",
-    "production replace": "hoi4_production_set", "auto_import": "hoi4_auto_import",
-    "occupation": "hoi4_occupation_law", "diplomacy": "hoi4_diplomacy_act",
+    "retake_rules": "hoi4_army_move", "sea_transfer": "hoi4_army_move",
+    "production replace": "hoi4_production_set", "encirclement": "hoi4_encirclement_candidates",
+    "incoming proposals": "hoi4_diplomacy_incoming",
+}
+# Tools of executor-owned keys: the executor sends them, so the brief's "Your items" never does.
+EXECUTOR_TOOLS = {
+    "templates": "hoi4_template_create", "politics": "hoi4_politics_choose", "decision_rules": "hoi4_decision_take",
+    "army_group": "hoi4_army_group_create", "hold_targets": "hoi4_army_front", "air_plan": "hoi4_air_mission",
+    "navy": "hoi4_fleet_mission", "invasions": "hoi4_naval_invasion", "designs": "hoi4_design_create",
+    "mio": "hoi4_mio_trait", "auto_import": "hoi4_auto_import", "trade": "hoi4_trade_set",
+    "occupation": "hoi4_occupation_law", "diplomacy": "hoi4_diplomacy_act", "faction": "hoi4_faction_create",
     "intelligence": "hoi4_agency_upgrade", "peace": "hoi4_peace_take",
 }
 
@@ -276,7 +280,7 @@ class StrategistSkillTest(unittest.TestCase):
                 self.assertIsNotNone(args, "%s: arguments of %s are not JSON: %s" % (rel, tool, raw))
                 self.assertEqual(ts.check_call(catalogue, tool, args), [], "%s: %s %s" % (rel, tool, args))
                 checked += 1
-        self.assertGreater(checked, 20)
+        self.assertGreater(checked, 8)  # most domains are executor keys now: few player calls remain
 
     def test_calls_rule_in_skill_and_review(self):
         skill = read(os.path.join(SKILL, "SKILL.md"))
@@ -296,9 +300,22 @@ class StrategistSkillTest(unittest.TestCase):
         schema = json.loads(read(os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")))
         player = [k for k, v in schema["properties"].items() if v.get("x-owner") == "player"
                   and "call" in ((v.get("items") or v).get("properties") or {})]
-        self.assertIn("army_group", player)  # templates went to the executor (plan_manage.rs)
+        self.assertIn("retake_rules", player)
+        self.assertNotIn("army_group", player)  # army groups went to the executor (plan_military.rs)
         for key in player:
             self.assertTrue(any(k.split(".")[0] == key for k in BRIEF_CALLS), "no brief call for " + key)
+
+    def test_brief_leaves_executor_keys_to_the_executor(self):
+        text = read(os.path.join(SKILL, "templates", "brief.md"))
+        items = text.split("**Your items**", 1)[1].split("**Events that need judgement.**", 1)[0]
+        schema = json.loads(read(os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")))
+        for key, tool in EXECUTOR_TOOLS.items():
+            self.assertEqual(schema["properties"][key].get("x-owner"), "executor", key)
+            self.assertNotIn(tool, items, "%s is an executor key; the brief must not hand %s to the player" % (key, tool))
+        done = text.split("**The executor already does**", 1)[1].split("**Your items**", 1)[0]
+        for word in ("army groups", "hold posts", "naval invasions", "designs", "MIOs", "trade", "diplomacy",
+                     "the agency", "research bonuses", "wake_player"):
+            self.assertIn(word, done)
 
     def test_pointers(self):
         for rel in ("skills/hoi4-campaign-playbook/SKILL.md", "skills/hoi4-campaign-playbook/references/INDEX.md",

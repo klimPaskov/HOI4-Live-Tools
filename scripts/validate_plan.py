@@ -46,6 +46,15 @@ Checks (errors unless marked warning):
   * doctrines: {id, folder, grand_doctrine and/or track + subdoctrine, xp} against
     common/doctrines (folder, track of the grand doctrine, subdoctrine track, XP type and cost).
   * event_rules: the event id exists in events/ and option names are options of it.
+  * wave-2 executor keys (native/src/plan_military.rs, plan_affairs.rs): army_group, hold_targets and
+    invasions armies are army_layout name_hints (else a warning: an in-game army name), an army in one
+    group only, hold corridors whose consecutive provinces touch on the map graph; navy, convoy escort
+    and invasion fleets in the start naval OOB (warning), sea region names, invasion states with a
+    coastal province and target_province in target_state; designs kind against the base's designer,
+    module slots and modules, upgrade rows and levels; production[].design names a design (a line switch
+    needs no factories); diplomacy and faction tags, justify war_goal and states; agency upgrades (branch,
+    levels), operative missions and their targets; MIO organisations allowed for the tag, policies, trait
+    indexes; trade resources and partners; research_bonuses technologies.
 
 Stdlib only, Python 3.9+. Exit status 0 when there are no errors.
 

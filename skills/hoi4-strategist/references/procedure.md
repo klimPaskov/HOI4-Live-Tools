@@ -25,15 +25,19 @@ Every item ends in exactly one of:
 Items 1, 2 and 29 are never "not applicable". Write every resolution into the coverage table, plan.md
 §25 (all 29 rows: resolution, where it lives, the facts command used, the check).
 
-**Key or atom not in the schema yet.** Some items name keys that later build items add (`manage`,
-`xp_budget`, `stockpile_targets`, `auto_import`, `sea_transfer`, `garrison_template`,
-`production[].remove` / `replace`, `designs`, `navy`, `mio`, `trade`, `intelligence`, `commanders`) or
-predicate atoms (`stability`, `war_support`, `manpower`, `xp:<branch>`, `fuel_ratio`, `convoys_free`,
-`world_tension`, `resistance:<state>`, `bop:<id>`, `mission_days:<id>`). Check the capability list
-(SKILL.md Inputs). When the key or atom is absent, never write it into `plan.json` (lint `schema.keys`);
-write the decision in its plan.md section and put it in the brief as a player line: the trigger in
-words, the read that checks it (for example `hoi4_country_status {}`), and the exact call. The coverage
-table then says `player (key pending: <key>)`.
+**Key or atom not in the schema yet.** Some items name keys whose executor step a later build item adds
+(schema `x-executor-planned`: `xp_budget`, `stockpile_targets`, `sea_transfer`, `garrison_template`,
+`production[].remove` / `replace`, `manage.convoys_free`, `manage.fuel_floor`), keys that do not exist
+yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
+`convoys_free`, `stockpile_days:<equipment>`, `var:<name>`, `bop:<id>`, `mission_days:<id>`). Check the
+capability list (SKILL.md Inputs). When the key or atom is absent, never write it into `plan.json` (lint
+`schema.keys`); write the decision in its plan.md section and put it in the brief as a player line: the
+trigger in words, the read that checks it (for example `hoi4_country_status {}`), and the exact call.
+The coverage table then says `player (key pending: <key>)`. The wave-2 keys `army_group`, `hold_targets`,
+`navy`, `invasions`, `designs`, `production[].design`, `diplomacy`, `faction`, `intelligence`, `mio`,
+`trade`, `research_bonuses` and the casualty and air-superiority `manage` thresholds are executor keys:
+write them in the shapes below (the schema descriptions and `native/src/plan_military.rs` /
+`plan_affairs.rs` module docs are the contract), never as brief lines.
 
 ## Commands
 
@@ -154,15 +158,18 @@ land war. Check: lint `schema.player_call`, `production.equipment`; rubric rows 
 
 ### 7. Equipment designs
 Read: `research-doctrines-projects.md` §6.2; `templates-equipment-production.md` §2, §5. Facts: dossier
-§0 (NSB tank, BBA plane, MtG ship designers), `F tech <id>` (modules by date), `F units --category`
-(until available `F grep <module key> --folder common/units/equipment`).
+§0 (NSB tank, BBA plane, MtG ship designers), `F designs <TAG> [--kind tank|plane|ship]` (bases with their
+module slots, modules unlocked at the date, XP costs, start variants), `F tech <id>` (modules by date).
 1. Which designs, when, from which XP (item 5), and which existing line switches to each (a variant
    change keeps 90% efficiency; a new chassis much less).
 2. Not applicable when the plan builds no tanks, planes or ships of a designer family, or the DLC is
    not active (cite dossier §0).
-Resolution: `designs` (key pending): player `hoi4_design_create {kind, base, modules, name}`, then
-`hoi4_production_add {equipment, factories, design}` or `hoi4_design_set_production {line, design}`;
-plan.md §15. Check: rubric row 6.
+Resolution: executor `designs` (`id`, `kind` tank / plane / ship / other, `base` an equipment key from
+`F designs` or a start variant name, `name`, `modules` {slot: module} for the module designers or
+`upgrades` {row: level} without one, `xp`, `when`), made once per id with an XP guard; the line switch is
+`designs[].production` (the line's equipment) or `production[].design` (a designs id, with
+`accept_progress_loss`); plan.md §15. Check: validate_plan (kind against the base's designer, slots,
+modules, upgrade rows); rubric row 6.
 
 ### 8. Production
 Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and shortage repair";
@@ -184,14 +191,17 @@ Resolution: executor `production`, `production_priority`, `production_min_idle`,
 
 ### 9. MIOs
 Read: `research-doctrines-projects.md` §6.1; `politics-diplomacy-espionage.md` "Designers and MIOs".
-Facts: dossier §0 (Arms Against Tyranny active), `F grep <TAG> --folder common/military_industrial_organization`
-(until a MIO reader exists, audit F-13).
+Facts: dossier §0 (Arms Against Tyranny active), `F mio <TAG>` (organisations allowed for the tag, trait
+trees, policies, defines).
 1. Which organisation per big line (best efficiency trait on the biggest line), the trait order, the
-   policies (25 PP each, 180-day lock).
-2. Calls that exist: `hoi4_mio_trait {organization, trait_index}`. A line's MIO cannot be chosen by a
-   tool, and `hoi4_mio_policy` is not live-verified: write those in plan.md as "no tool (audit C7)".
+   policies (25 PP each, 180-day lock), the design-team slot.
+2. A trait is its 0-based `trait_index` as `hoi4_mio_trait {"list":true}` numbers the tree (trait entries
+   carry no text); a line's MIO cannot be chosen by a tool: `mio[].line` and plan.md say "no tool (audit
+   C7)".
 3. Not applicable when AAT is not active (dossier §0).
-Resolution: `mio` (key pending): player `hoi4_mio_trait`; plan.md §15. Check: rubric row 6.
+Resolution: executor `mio` (`organisation`, `traits` [trait_index, ...] in queue order, `policy`,
+`design_team` true or a slot, `slot`, `when`); plan.md §15. Check: validate_plan (organisation allowed for
+the tag, policy, trait index range); rubric row 6.
 
 ## D. Economy and research
 
@@ -206,10 +216,11 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 3. Slot gains (focuses, techs, decisions) before the build order needs them; energy: coal states and
    one energy or industrial keystone per state where the files offer it; refineries and fuel silos for
    an oil-poor country (item 19).
-4. Resources: per deficit on a planned line, automatic importing with a budget (`auto_import`, key
-   pending: player `hoi4_auto_import {enabled, budget}`) or a manual trade (`trade`, key pending: player
-   `hoi4_trade_set {resource, country, amount}`); International Market purchases have no tool
-   (audit B16).
+4. Resources: per deficit on a planned line, automatic importing with a budget (executor
+   `auto_import {budget}`) or manual purchases (executor `trade`: a list of `{id, resource, amount
+   (a number, "max" or "needed"), from (a tag or the name hoi4_trade lists; absent: the partner offering
+   most), when}`; automatic importing blocks manual trades while it is on); International Market
+   purchases have no tool (audit B16).
 5. Every construction item states its cost in points (`base_cost`, table in `economy-build-orders.md`
    §1.1; `F grep base_cost --folder common/buildings`) and its estimated finish date from
    `C build-order` (5 points per civilian factory per day, at most 15 factories per project,
@@ -218,7 +229,7 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
    reaches the shore, trucks, and a hub only after the cost and time check there. Idle-factory check: no date where civilian factories have no queued project
    (`construction` filler list).
 Resolution: executor `construction`, `construction_plan` (stable `id`s), `construction_min_idle`,
-`construction_queue_depth`; player calls for trade; plan.md §4. Check: lint `construction.front`,
+`construction_queue_depth`, `auto_import`, `trade`; plan.md §4. Check: lint `construction.front`,
 `construction.infrastructure`; rubric row 4.
 
 ### 11. Research
@@ -231,8 +242,10 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
    dates into plan.md §3 as `[D research-timeline]`.
 4. `research_fallback` false, or restricted with `research_fallback_prefixes`; no naval or air folder
    techs unless item 3 needs them.
-Resolution: executor `research_path`, `research_priority`, `research_fallback*`, `special_projects`
-(a facility at start, else not applicable with the reason). Check: lint `research.start_year`,
+5. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or
+   name>": [techs]} (`F tech <id>` gives the categories), or `true` for the category word match only.
+Resolution: executor `research_path`, `research_priority`, `research_fallback*`, `research_bonuses`,
+`special_projects` (a facility at start, else not applicable with the reason). Check: lint `research.start_year`,
 `research.prerequisites`, `research.throughput`, `research.fallback`, `research.folders`; rubric row 5.
 
 ### 12. Focus and balance of power
@@ -290,14 +303,17 @@ dossier §9.
    `role` strike or guard. Every own state bordering an enemy has a guard.
 2. Strike armies ≤ 24 divisions, also sized to the supply on the axis.
 3. One general per army, chosen once by traits for its role (no reassignment later). Field marshals and
-   army groups for a front with more than one army: player `army_group` with `call`
-   `hoi4_army_group_create {armies}`, then `hoi4_army_commander {army, general}` for the marshal.
+   army groups for a front with more than one army: executor `army_group` (`id`, `name`, `armies`: 2 to
+   12 army_layout name_hints, `marshal`: a name or names tried in order, `when`), grouped once and led
+   once, never churned. A marshal who is only a general is promoted by the tool for command power; one
+   who also commands a layout army is skipped (`F characters <TAG> --role marshal`).
 4. Planned trait assignments and command-power use (15 CP per trait, 20 per preferred tactic): no tool
    yet (audit G6, G8): plan.md only, `commanders` key pending.
 5. `disband`: far divisions whose equipment the front needs; keep a home guard.
-Resolution: executor `armies`, `army_layout`, `disband`, `war.guards`, `war.guard_states`; player
-`army_group`; plan.md §2 army table. Check: lint `army.templates`, `army.counts`, `army.guards`,
-`army.strike_size`, `army.generals`; rubric rows 6 and 8.
+Resolution: executor `armies`, `army_layout`, `army_group`, `disband`, `war.guards`, `war.guard_states`;
+plan.md §2 army table. Check: lint `army.templates`, `army.counts`, `army.guards`, `army.strike_size`,
+`army.generals` (marshals too); validate_plan (group armies are layout name_hints, one group per army);
+rubric rows 6 and 8.
 
 ### 17. Manpower
 Read: `politics-diplomacy-espionage.md` "Conscription law". Facts: dossier §1-2 (manpower, state
@@ -323,12 +339,16 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    thresholds (`war.rest_below`, `war.resume_above`, `war.supply_floor`, `war.stall_days`).
 4. Defence: hold targets on rivers and mountains, the corridor rule when targets run more than 2
    provinces past own land (a guard follows the strike army), encirclement opportunities from
-   `hoi4_encirclement_candidates {enemy}` at war (no executor step yet: player call).
+   `hoi4_encirclement_candidates {enemy}` at war (no executor step yet: player call). A hold post is
+   `hold_targets` {`id`, `army` (army_layout name_hint), `provinces` along the corridor, rear first, each
+   touching the one before, `when`, `until`}: the army stands in the most forward listed province the
+   player controls and follows as the corridor grows; it replaces the layout guard post of that army.
 5. Phase-specific `war` in `phases[].overrides.war`.
-Resolution: executor `war`, `vp_targets`, `phases`; player `hold_targets` (`call` `hoi4_army_front
-{army, state_id}` for the holding army), `retake_rules`; plan.md §7, §7.1, §8. Check: lint
-`conquest.threshold`, `conquest.mandatory`, `conquest.adjacency`, `conquest.by_order`,
-`conquest.rivers`; rubric rows 7 and 8.
+6. Naval invasions are item 21 (`invasions`).
+Resolution: executor `war`, `vp_targets`, `phases`, `hold_targets`; player `retake_rules`; plan.md §7,
+§7.1, §8. Check: lint `conquest.threshold`, `conquest.mandatory`, `conquest.adjacency`,
+`conquest.by_order`, `conquest.rivers`, `army.guards` (a hold post outside its army's guard states);
+validate_plan (hold corridors touch on the map graph, armies known); rubric rows 7 and 8.
 
 ### 19. Supply and logistics
 Read: `supply-logistics-deployment.md` §1, §5, §6, §10; `strategy.md` "Economy compounds only if the
@@ -380,33 +400,46 @@ state_id}`); plan.md §18. Check: lint `schema.player_call`; rubric row 14.
 Read: `war-air-naval-peace.md` §6, §7; `strategy.md` "Naval invasion state machine";
 `economy-build-orders.md` §8. Facts: `F oob <TAG>` (fleets), dossier §1 (convoys at start),
 `F ports <TAG>`, `F states <TAG>` (dockyards, naval bases).
-1. Fleets and task forces, missions per sea region (patrol, strike force, convoy escort, raiding,
-   mines, invasion support), admirals, repair rule; dockyard and hull plan (item 3).
+1. Fleets and task forces, missions per sea region (patrol, strike_force, convoy_raiding,
+   convoy_escort, mine_laying, mine_sweeping, training, invasion_support, hold), admirals, repair rule;
+   dockyard and hull plan (item 3). `navy` {`posture`, `fleets`: [{`fleet` (a start fleet name from
+   `F oob`), `admiral`, `state_id`, `missions`: [{`mission`, `regions` (sea region display names, or
+   {`region`, `state_id`}), `task_force`, `when`}]}], `convoy_escort` {`fleet`, `regions`, `when`},
+   `repair_below` / `repair_until`}: per task force the first mission entry whose `when` holds.
 2. Overseas theatres (mandatory): sea transfers of armies (player `hoi4_army_move {army, state_id}`;
    the readback reports `sea_transfer_unverified` until the troops land), convoys and escort for the
-   route, the landing ports (item 19). Naval invasions: player `hoi4_naval_invasion {state_id, army}`.
-3. Or "no navy: <reason>" (no coastline or naval base in `F states <TAG>`; no overseas theatre and
-   no naval threat in dossier §3).
-Resolution: `navy` and `sea_transfer` (keys pending): player `hoi4_fleet_mission {task_force, mission}`,
-`hoi4_fleet_region {fleet, region, state_id}`, `hoi4_fleet_admiral {fleet, admiral}`, `hoi4_army_move`,
-`hoi4_naval_invasion`; convoy lines in executor `production`; plan.md §19. Check: rubric row 14.
+   route, the landing ports (item 19). Naval invasions: `invasions` [{`id`, `from_state` (own coastal
+   state), `target_state` (`F province <id>` names the state of the landing province), `target_province`,
+   `armies`, `fleet` (its task forces get invasion_support), `when`}], one at a time; list the armies in
+   `war.reserve` too.
+3. Or "no navy: <reason>" (`{"posture": "none", "reason": ...}`; no coastline or naval base in
+   `F states <TAG>`; no overseas theatre and no naval threat in dossier §3).
+Resolution: executor `navy`, `invasions`; `sea_transfer` (player key, executor step pending W1-14):
+`hoi4_army_move`; convoy lines in executor `production`; plan.md §19. Check: lint `navy.required`,
+`navy.overseas`, `army.generals` (admirals); validate_plan (fleets in the start OOB, sea region names,
+coastal invasion states); rubric row 14.
 
 ## H. Diplomacy, occupation, intelligence, peace
 
 ### 22. Diplomacy
 Read: `politics-diplomacy-espionage.md` §6, §7; `war-air-naval-peace.md` §8. Facts: dossier §1
-(guarantees, faction, access, subjects), dossier §3, `F grep <wargoal> --folder common/wargoals`,
-`F defines TENSION_CB_WAR` and `F defines WARGOAL_WORLD_TENSION_REDUCTION` (tension and justification costs).
+(guarantees, faction, access, subjects), dossier §3, `F diplomacy <TAG>` (world tension, ideology tension
+gates, war goals), `F factions <TAG>` (templates), `F defines TENSION_CB_WAR` and
+`F defines WARGOAL_WORLD_TENSION_REDUCTION` (tension and justification costs).
 1. War goals: target, justification start and declaration dates against the world-tension gates of the
-   ideology; who joins the target (check `hoi4_war_risk {country}` before declaring).
+   ideology; who joins the target (the executor checks `hoi4_war_risk` before declaring).
 2. Factions (join, create, goals), guarantees, non-aggression pacts, access, volunteers, lend-lease;
-   the answer policy for incoming proposals (`hoi4_diplomacy_incoming` is not live-verified: the policy
-   goes in the brief).
+   the answer policy for incoming proposals (player: `hoi4_diplomacy_incoming` is not live-verified, so
+   the policy goes in the brief).
 3. Not applicable for any part only with the reason (for example "already at war on day 1 with the
    only enemy; no faction is open to the tag").
-Resolution: player `diplomacy` (`id`, `action`, `target`, `when`, `call` `hoi4_diplomacy_act {country,
-action, war_goal, states}` or `hoi4_faction_create {template, name}`); plan.md §20. Check: lint
-`schema.player_call`; rubric row 10.
+Resolution: executor `diplomacy`, in list order, once per `id`: [{`id`, `action` (justify, declare,
+guarantee, nap, access, offer_access, docking, improve_relations, send_attache, invite_to_faction, or a
+hoi4_diplomacy row), `target` (tag), `when`, `world_tension_max`; justify: `war_goal` (the type as
+hoi4_diplomacy lists it) and 1-5 `states` names; declare: `justify_days`, `joiners_ok`, `widen_ratio`,
+`accept_widening`, `expiry_warn_days`, `rejustify`}]; a declaration waits for the target's justify items
+and the widening check. Executor `faction` {`join` (tag or ANY), `create` {`name`, `template`, `invite`},
+`when`}. Plan.md §20. Check: validate_plan (tags, justify fields); rubric row 10.
 
 ### 23. Occupation
 Read: `supply-logistics-deployment.md` §7; `army-organisation.md` §6; `strategy.md` "Occupation, peace
@@ -423,14 +456,16 @@ Resolution: player `occupation` (`law`, `when`, `call` `hoi4_occupation_law {law
 
 ### 24. Intelligence
 Read: `politics-diplomacy-espionage.md` §8. Facts: dossier §0 (La Resistance active), dossier §1 (agency
-at start), `F grep <upgrade key> --folder common/intelligence_agency_upgrades`.
+at start), `F agency` (upgrades by branch with their levels, operations, defines).
 1. Agency yes or no (it costs civilian factories for about a month), the upgrade order, operatives and
-   their missions (network, counter-intelligence), the decryption target.
+   their missions (network, counter-intelligence), the decryption target (plan.md only: no tool).
 2. Not applicable: LaR inactive (dossier §0), or the goal ends before an agency pays off (state the
    dates).
-Resolution: `intelligence` (key pending): player `hoi4_agency_create {}`, `hoi4_agency_upgrade {branch,
-upgrade}`, `hoi4_operative_recruit {}`, `hoi4_operative_assign {operative, mission, country}`;
-plan.md §21. Check: rubric row 15.
+Resolution: executor `intelligence` {`agency`, `upgrades` in order ("<branch>:<upgrade>" or the key; a
+key twice is its second level), `operatives` (a count, or one entry per operative: `mission` with
+`state_id` for build_intel_network, quiet_intel_network, root_out_resistance, `target` for
+control_trade, diplomatic_pressure, propaganda, counter_intelligence), `when`}; plan.md §21. Check:
+validate_plan (upgrade keys, branch, levels, mission targets); rubric row 15.
 
 ### 25. Peace aims
 Read: `war-air-naval-peace.md` §9; `generic-playbook.md` §5. Facts: `F vp <ENEMY>`, `F hooks <TAG>`
@@ -475,9 +510,10 @@ Resolution: `checkpoints`, `contingencies`, `phases` (player keys; executor eval
 
 ### 28. Continuous management
 Read: `strategy.md` "Production and shortage repair"; `operating-loop.md`; `war-operating-loop.md` §4,
-§5b. For each rule below give the campaign's value or "default" with a reason in plan.md §24. Where the
-key column says `manage`, the key is pending (W1-2): until it exists the rule is a brief line (read,
-threshold, call) when the player must act, or "executor default" when the executor already does it.
+§5b. For each rule below give the campaign's value or "default" with a reason in plan.md §24. `manage`
+thresholds run in `plan_manage.rs` and `plan_military.rs` (the casualty and air-superiority rules); a
+threshold the schema marks `x-executor-planned` (`convoys_free`, `fuel_floor`) is not run yet: until it is,
+the rule is a brief line (read, threshold, call) when the player must act.
 
 | Rule | Default threshold (source) | Key today |
 |---|---|---|
@@ -497,22 +533,23 @@ threshold, call) when the player must act, or "executor default" when the execut
 | Resource deficit on a priority line | any → auto-import budget, else trade | `auto_import` |
 | Occupation | resistance ≥ 50% → harsher; compliance ≥ 40% and resistance < 25% → milder (`common/resistance_compliance_modifiers`) | `occupation` |
 | Air wings idle at war / air plan switch | standing-by wing; `switch_when`; base over capacity | `air.war_missions` / `air_plan` |
-| Enemy air superiority on our front | > 60% → fighters to the region, delay the offensive | `manage` |
+| Enemy air superiority on our front | > 60% → fighters to the region, delay the offensive (reported unknown until a tool maps it) | `manage.enemy_air_superiority`, `air_front_regions`, `air_hold_days` |
 | Convoys for overseas armies | free convoys < 10% of total, or overseas supply < floor | `manage` |
 | Fuel | < 25% of capacity (`defines` fuel penalty) → stop exercises, import oil | `manage` |
 | Doctrines and template edits | XP ≥ the next planned spend | `doctrines` / `templates` |
 | Scenario variable, mission timer, BoP | the plan's thresholds (escalation level, mission days < 15, BoP range edge) | `contingencies` |
 | Peace conference open | open → peace step or wake the player | `peace` |
-| Casualty ratio | own/enemy losses worse than the plan's limit for 14 days → rest or new axis | `manage` |
-| War goal expiry, world-tension gates | goal older than ~50 days; tension crosses a plan gate | `manage` |
-| Idle task forces, damaged ships | no mission; strength < 50% → mission; port | `manage` |
-| Incoming proposals | pop-up → answer by the item 22 policy | `manage` |
+| Casualty ratio | own/enemy losses above the limit (2.0) over 14 days, at least 1000 own losses → the front's attacking armies rest 7 days | `manage.casualty_ratio_max`, `casualty_window_days`, `casualty_min_losses`, `casualty_rest_days` |
+| War goal expiry, world-tension gates | goal older than ~50 days; tension crosses a plan gate | `diplomacy[].expiry_warn_days`, `rejustify`, `world_tension_max` |
+| Idle task forces, damaged ships | no mission; strength < 50% → mission; port | `navy.fleets[].missions`, `navy.repair_below` / `repair_until` |
+| Incoming proposals | pop-up → answer by the item 22 policy | brief: `hoi4_diplomacy_incoming` |
 | Command power near the cap | ≥ 70 of 80 → planned trait or ability; wake the player | `manage` |
-| Agency upgrade idle | no upgrade running → next upgrade | `manage` |
+| Agency upgrade idle | no upgrade running → next upgrade | `intelligence.upgrades` |
 | Refused action | 3 refusals in 10 days → wake the player with the evidence (failure ledger) | executor default |
 
-Resolution: executor `alarms`, `war` thresholds, `training_rules`; `manage` (key pending); plan.md §24.
-Check: rubric row 16.
+Resolution: executor `alarms`, `war` thresholds, `training_rules`, `manage`, `navy`, `diplomacy`,
+`intelligence`; brief lines for what no key runs yet; plan.md §24. Check: lint `manage.thresholds`; rubric
+row 16.
 
 ### 29. FAIR boundary
 Read: `rules-and-modes.md`. SKILL.md hard rule 3. Every enemy fact used in items 2, 3, 6, 18 and 20-22
