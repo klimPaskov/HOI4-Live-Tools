@@ -85,7 +85,9 @@
 //!                          techs first in the research step (plan_affairs.rs)
 //!   production_priority    equipment prefixes that receive military factories on no line
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
-//!   production             [{"equipment","factories"}] lines added once
+//!   production             [{"equipment","factories"}] lines added once; {"equipment","remove":true,"from"?}
+//!                          removes every own line of that equipment (live entry_index, factories 0); a
+//!                          naval line only with an explicit `from` (its ships in progress finish first)
 //!   construction           [{"building","states":[..],"count":1}] spent while civilian factories are idle;
 //!                          states are ids (or numeric strings, or exact state names, resolved with
 //!                          hoi4_states); states with no free slot are remembered full for
@@ -1186,7 +1188,64 @@ pub fn tick(
     // that already exists in the game counts as done too (a restart on 1 Nov 2026, before the
     // memory was persisted, re-added five lines).
     let mut existing: Option<HashSet<String>> = None;
+    // 7-. `remove: true` entries: the executor removes every own line of that equipment
+    // (hoi4_production_set factories 0 presses the line's close button), addressed by the live
+    // entry_index, so the player never has to look up line numbers.
+    let removals: Vec<String> = list(plan, "production")
+        .iter()
+        .filter(|l| l["remove"] == json!(true) && reached(l, now))
+        .map(|l| text(&l["equipment"]).to_string())
+        .filter(|e| {
+            !e.is_empty()
+                && !state.done.contains_key(&format!("prodrm:{e}"))
+                && !state.skipped(now, "prodrm", e)
+        })
+        .collect();
+    if !removals.is_empty() {
+        let read = tools
+            .call("hoi4_production_lines", &json!({"limit": 200}))
+            .unwrap_or(Value::Null);
+        for equipment in &removals {
+            let live = list(&read, "lines")
+                .iter()
+                .find(|l| text(&l["equipment_id"]) == equipment.as_str())
+                .cloned();
+            let Some(live) = live else {
+                state.done.insert(format!("prodrm:{equipment}"), now);
+                continue;
+            };
+            // A naval line holds a ship in progress: deleting it throws the hull away. No read
+            // gives ship progress yet, so a naval line is removed only from an explicit `from`
+            // date (the strategist's estimate of when its current ships are done).
+            let entry = list(plan, "production")
+                .iter()
+                .find(|l| text(&l["equipment"]) == equipment.as_str() && l["remove"] == json!(true))
+                .cloned()
+                .unwrap_or_default();
+            if text(&live["line_kind"]) == "naval" && entry["from"].is_null() {
+                state.skip(now, "prodrm", equipment, 30 * DAY);
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_production_set",
+                json!({"line": live["entry_index"], "equipment": equipment, "factories": 0}),
+                "prm",
+            )?;
+            if !ok {
+                state.skip(now, "prodrm", equipment, 3 * DAY);
+            }
+            return Ok(Tick::Acted(format!(
+                "production remove {equipment} (line {}): {ok} {why}",
+                live["entry_index"]
+            )));
+        }
+    }
     for line in list(plan, "production") {
+        if line["remove"] == json!(true) {
+            continue;
+        }
         let equipment = text(&line["equipment"]).to_string();
         if state.done.contains_key(&format!("prod:{equipment}"))
             || state.skipped(now, "prod", &equipment)
@@ -5605,6 +5664,54 @@ mod tests {
         assert!(!reached(&line, early));
         assert!(reached(&line, late));
         assert!(reached(&json!({"equipment": "x"}), early));
+    }
+
+    #[test]
+    fn production_remove_closes_the_live_line_by_its_index() {
+        struct Lines(RefCell<bool>, RefCell<Vec<Value>>);
+        impl Tools for Lines {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                let gone = *self.0.borrow();
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_production_lines" => Ok(if gone {
+                        json!({"lines": [{"entry_index": 0, "equipment_id": "infantry_equipment_1"}]})
+                    } else {
+                        json!({"lines": [{"entry_index": 0, "equipment_id": "infantry_equipment_1"},
+                                         {"entry_index": 4, "equipment_id": "light_tank_chassis_1"}]})
+                    }),
+                    "hoi4_production_set" => {
+                        self.1.borrow_mut().push(args.clone());
+                        *self.0.borrow_mut() = true;
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"production": [
+            {"equipment": "light_tank_chassis_1", "remove": true},
+            {"equipment": "infantry_equipment_1", "factories": 9}]});
+        let tools = Lines(RefCell::new(false), RefCell::new(vec![]));
+        let mut state = State::default();
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("production remove light_tank_chassis_1 (line 4): true")),
+            "{step:?}"
+        );
+        let sent = tools.1.borrow()[0].clone();
+        assert_eq!(
+            (sent["line"].clone(), sent["factories"].clone()),
+            (json!(4), json!(0))
+        );
+        // the line is gone: the next tick marks it done and never sends again (the infantry
+        // line already exists, so nothing is added either)
+        let _ = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.done.contains_key("prodrm:light_tank_chassis_1"));
+        assert_eq!(tools.1.borrow().len(), 1);
     }
 
     #[test]

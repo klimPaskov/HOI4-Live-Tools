@@ -95,7 +95,8 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   manage.thresholds        no manage key (plan_manage.rs runs the manpower, stability, equipment and
                            stockpile rules only with it; {} takes every default); warning for a threshold
                            whose rule is in manage.off or that the executor does not run yet
-  production.remove        (warning) production remove/replace entries: not read by the executor yet
+  production.remove        (warning) a `replace` entry (not run by the executor), or a naval line removal
+                           without a `from` date (its ships in progress must finish first)
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: convoys_free, stockpile_days, var, bop, mission_days)
@@ -1572,11 +1573,17 @@ class Lint:
                          f"use a readable atom (x-atoms readable) or an any[] with one")
 
     def production_changes(self):
+        naval = ("ship_hull", "convoy", "submarine", "destroyer", "cruiser", "battleship", "carrier", "_hull")
         for i, x in enumerate(self.list_of("production")):
-            if x.get("remove") or "replace" in x:
+            eq = str(x.get("equipment") or "")
+            if "replace" in x:
                 self.add("warning", "production.remove", f"production[{i}]",
-                         f"{'remove' if x.get('remove') else 'replace'} of {x.get('equipment')} is not read by the "
-                         f"executor yet (W1-9): it would add this line; do it by hand until then")
+                         f"replace of {eq} is not read by the executor yet: remove the line and add the new "
+                         f"equipment as two entries, or start the new line small next to it (efficiency)")
+            elif x.get("remove") and any(n in eq for n in naval) and not x.get("from"):
+                self.add("warning", "production.remove", f"production[{i}]",
+                         f"removing naval line {eq} needs a `from` date after its ships in progress finish; the "
+                         f"executor waits without one")
 
     # ------------------------------------------------------------------
     def run(self):

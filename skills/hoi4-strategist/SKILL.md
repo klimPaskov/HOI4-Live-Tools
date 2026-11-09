@@ -54,6 +54,13 @@ them. Use `--json` when you will parse the output.
    `python3 scripts/hoi4facts/tool_schemas.py show <tool>`: exact argument names, types and enums. Check a
    call with `tool_schemas.py check-call <tool> '<json>'`; `check_calls.py` checks them all in step 7.
 
+**No duplicate work (user rule: "lots of duplicate and failed actions").** The player brief never lists an
+action the executor owns in this plan: no army order to an army with a layout, group or hold role, no
+production, research, focus, construction, law, event, template, air, occupation, peace, diplomacy, MIO,
+design, trade, navy or agency call when the plan has that key. Put the work in the executor key. A
+fallback for when the executor gets stuck is written as "on `wake_player` <rule>: <call>", never as a
+timed duplicate. `check_calls.py` fails any brief call that duplicates the executor.
+
 ## Inputs
 
 * `RUN/run_spec.json` (shape: [templates/run_spec.json](templates/run_spec.json)).

@@ -17,7 +17,7 @@ agents, do not touch other apps, never enter passwords.
 ============================================================================================
 
 SETUP (game is PAUSED on day one; at most 3 batches, then unpause):
- 1. batch: {SITREP}; hoi4_armies, hoi4_events.
+ 1. batch: {SITREP} (the situation in one read), then hoi4_events '{}'.
  2. batch: answer open events the plan names; do the plan brief's day-one player items. Do NOT touch
     research, production, construction or armies the executor owns.
  3. wait (paused) until hoi4_armies shows the armies the plan's army_layout needs (hoi4_wait_change with
@@ -44,10 +44,21 @@ THE LOOP (every turn):
  C. At each checkpoint date in the brief (not more often): the brief's win check; log on track or missed.
  D. Your items from the brief, at their dates, one batch per turn.
 
+READS (exact calls; no other arguments exist — never guess one):
+    {CALL} hoi4_observe '{"since":0}'        situation now (wars, armies, events, idle slots, alerts)
+    {CALL} hoi4_armies '{"threat":false}'    armies and unassigned divisions (army names; plan role names
+                                             such as the layout name_hints also work in army tools)
+    {CALL} hoi4_events '{}'                  open events and their options
+    {CALL} hoi4_states '{"query":"<TAG or state id>"}'   ownership, control, victory points
+    {CALL} hoi4_war_stats '{}'               losses
+    Read a thing once per change, not every turn; the feed (step A) says what changed.
+
 ONE ACTION, ONE TRY: if an action returns action_uncertain, do not resend it; re-read the state after one
 game day and act only if the effect is still missing.
 
-DON'T: re-read the same state every turn; order an army the executor is moving; send a move that failed
+DON'T: re-read the same state every turn; order an army the executor is moving (the executor owns every
+army in the plan's army_layout, army_group and hold_targets, all research, focus, production, construction,
+laws, events and templates in the plan — your items are only what the brief lists); send a move that failed
 twice; start research that is not in hoi4_technology_list {"available":true}; build in front states;
 reassign a general who already has an army.
 

@@ -521,8 +521,12 @@ class CoverageBuildRules(unittest.TestCase):
         plan["production"].append({"equipment": "infantry_equipment_1", "remove": True, "from": "1936.06.01"})
         plan["production"].append({"equipment": "support_equipment_1", "replace": "infantry_equipment_1",
                                    "from": "1936.06.01"})
-        self.assertHit(plan, "production.remove", "warning", "production[4]")
+        # a land-line removal is run by the executor now: no warning; a replace still warns
+        self.assertFalse(self.hits(plan, "production.remove", None, "production[4]"))
         self.assertHit(plan, "production.remove", "warning", "production[5]")
+        naval = copy.deepcopy(self.ita)
+        naval["production"].append({"equipment": "ship_hull_light_1", "remove": True})
+        self.assertHit(naval, "production.remove", "warning", "production[%d]" % (len(naval["production"]) - 1))
         lt = lint_plan.Lint(plan, self.game)
         lines = lt.active_lines(derive.day("1936.07.01"))
         self.assertEqual(lines, {"artillery_equipment_1": 4, "infantry_equipment_1": 2, "motorized_equipment_1": 5})
