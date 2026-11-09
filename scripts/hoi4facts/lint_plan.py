@@ -91,7 +91,7 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   production.remove        (warning) production remove/replace entries: not read by the executor yet
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
-                           false: convoys_free, stockpile_days, var, bop, mission_days, capitulated)
+                           false: convoys_free, stockpile_days, var, bop, mission_days)
 
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build error above is reported as a
 warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are

@@ -148,7 +148,6 @@ class HandPlans(unittest.TestCase):
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland resist from day one
             ("peace.enemies", "peace"),
             ("politics.law_gates", "politics[0] war_economy"),  # war support > 0.5 gate, no `when`
-            ("predicates.unreadable", "phases[5].exit"),  # capitulated:ETH has no read yet
             ("research.throughput", "research_path[0]"),
             ("research.throughput", "research_path[1]"),
             ("supply.port_convoys", "production"),
@@ -480,11 +479,12 @@ class CoverageBuildRules(unittest.TestCase):
     # -------------------------------------------------------------- predicates.unreadable
     def test_goal_on_an_always_unknown_atom_warns(self):
         plan = copy.deepcopy(self.ita)
-        plan["goal"] = {"predicates": ["capitulated:ETH", {"any": ["vp_share:ETH < 0.2", "capitulated:ETH"]}],
+        plan["goal"] = {"predicates": ["mission_days:ITA_missiolini_conquer_ethiopia > 0",
+                                       {"any": ["vp_share:ETH < 0.2", "mission_days:ITA_missiolini_conquer_ethiopia > 0"]}],
                         "deadline": "1936.12.22"}
         plan["checkpoints"] = [{"id": "esc", "by": "1936.06.01", "must": ["var:ITA_escalation < 4"]}]
         f = self.assertHit(plan, "predicates.unreadable", "warning", "goal.predicates[0]")
-        self.assertIn("capitulated:ETH", f["message"])
+        self.assertIn("mission_days", f["message"])
         self.assertHit(plan, "predicates.unreadable", "warning", "checkpoints[0].must[0]")
         self.assertFalse(self.hits(plan, "predicates.unreadable", None, "goal.predicates[1]"))  # any[] with a readable atom
 

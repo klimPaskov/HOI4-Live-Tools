@@ -355,7 +355,7 @@ class PredicateGrammar(unittest.TestCase):
             "resistance", "compliance", "equipment_fill", "stockpile_days", "var", "bop", "mission_days",
             "at_peace_conference", "date", "province_controlled", "state_fully_controlled", "owner"}, True)
         self.assertEqual({k for k, a in self.table.items() if not a["readable"]},
-                         {"convoys_free", "stockpile_days", "var", "bop", "mission_days", "capitulated"})
+                         {"convoys_free", "stockpile_days", "var", "bop", "mission_days"})
         for k in ("at_war_with", "controls_state", "controller", "focus_done", "tech_done", "exists"):
             self.assertTrue(self.table[k]["readable"], k)
         for name, atom in self.table.items():
@@ -378,14 +378,16 @@ class PredicateGrammar(unittest.TestCase):
         self.assertEqual(self.v.parse_atom("resistance:550 >= 50", self.table)[0]["value"], 0.5)
         self.assertEqual(self.v.parse_atom("pp > 150", self.table)[0]["value"], 150)
         self.assertEqual(self.v.parse_atom(False, self.table)[0]["value"], False)
-        self.assertFalse(self.v.parse_atom("capitulated:ETH", self.table)[0]["readable"])
+        self.assertTrue(self.v.parse_atom("capitulated:ETH", self.table)[0]["readable"])
+        self.assertFalse(self.v.parse_atom("bop:ETH_centralization > 0.5", self.table)[0]["readable"])
 
     def test_can_hold(self):
         can = lambda p: self.v.predicate_can_hold(p, self.table)  # noqa: E731
         self.assertEqual(can("at_war_with:ETH"), (True, True))
-        self.assertEqual(can("capitulated:ETH"), (False, False))
-        self.assertEqual(can(["at_war_with:ETH", "capitulated:ETH"]), (False, True))  # all: one never true
-        self.assertEqual(can({"any": ["vp_share:ETH < 0.2", "capitulated:ETH"]}), (True, False))
+        self.assertEqual(can("capitulated:ETH"), (True, True))
+        self.assertEqual(can("mission_days:m < 5"), (False, False))
+        self.assertEqual(can(["at_war_with:ETH", "mission_days:m < 5"]), (False, True))  # all: one never true
+        self.assertEqual(can({"any": ["vp_share:ETH < 0.2", "mission_days:m < 5"]}), (True, False))
         self.assertEqual(can({"not": "bop:x > 0"}), (False, False))
         self.assertEqual(can(False), (False, True))
 

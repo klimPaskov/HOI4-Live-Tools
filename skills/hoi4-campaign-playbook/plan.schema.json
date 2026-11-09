@@ -2931,8 +2931,8 @@
         "capitulated": {
           "kind": "bool",
           "arg": "tag",
-          "read": "no capitulation read",
-          "readable": false
+          "read": "hoi4_wars + hoi4_events + hoi4_states: no longer at war with TAG and (a peace conference is open or TAG owns no state)",
+          "readable": true
         },
         "at_war": {
           "kind": "bool",

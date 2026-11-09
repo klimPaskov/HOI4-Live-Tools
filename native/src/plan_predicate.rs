@@ -53,7 +53,8 @@
 //!   var:<name>                  unknown: no tool reads scenario variables (audit W1-18)
 //!   bop:<id>                    unknown: no balance-of-power read (audit W1-17)
 //!   mission_days:<id>           unknown: hoi4_decisions_list has no mission timers (W1-18)
-//!   capitulated:<TAG>           unknown: no capitulation read
+//!   capitulated:<TAG>           hoi4_wars + hoi4_events + hoi4_states: no longer at war with TAG and
+//!                               (a peace conference is open or TAG owns no state)
 //!   anything else               unknown atom (reported, never true)
 //!
 //! API (plan_run and plan_manage):
@@ -838,7 +839,27 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
         "var" => Err("no tool reads scenario variables (audit W1-18)".into()),
         "bop" => Err("no balance-of-power read (audit W1-17)".into()),
         "mission_days" => Err("hoi4_decisions_list reports no mission timers (audit W1-18)".into()),
-        "capitulated" => Err("no capitulation read".into()),
+        "capitulated" => {
+            // What a player sees: the war with TAG is over and either the peace conference that
+            // follows a capitulation is open or TAG no longer exists (annexed). A white peace
+            // leaves TAG existing with no conference, so it does not count.
+            let tag = tag_arg(atom)?;
+            if enemies(ctx)?.contains(&tag) {
+                return Ok(Reading::Flag(false));
+            }
+            let conference = ctx
+                .read("hoi4_events", &json!({}))
+                .and_then(|e| e["peace_conference_open"].as_bool())
+                .ok_or("hoi4_events unreadable")?;
+            let read = ctx
+                .read("hoi4_states", &json!({"query": tag}))
+                .ok_or("hoi4_states unreadable")?;
+            let rows = read["states"].as_array().ok_or("hoi4_states unreadable")?;
+            let exists = rows
+                .iter()
+                .any(|r| r["owner"].as_str() == Some(tag.as_str()));
+            Ok(Reading::Flag(conference || !exists))
+        }
         "at_peace_conference" => ctx
             .read("hoi4_events", &json!({}))
             .and_then(|e| e["peace_conference_open"].as_bool())
@@ -1018,6 +1039,26 @@ mod tests {
             calls: RefCell::new(Vec::new()),
         }
     }
+    #[test]
+    fn capitulation_is_the_war_ending_in_a_conference_or_annexation() {
+        // at war: not capitulated
+        assert_eq!(eval(&game(), json!("capitulated:ETH")), Truth::False);
+        // war over, conference open: capitulated
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": false, "enemies": []}}),
+        );
+        f.replies
+            .insert("hoi4_events", json!({"peace_conference_open": true}));
+        assert_eq!(eval(&f, json!("capitulated:ETH")), Truth::True);
+        // war over, no conference, ETH still owns states: a white peace, not a capitulation
+        f.replies
+            .insert("hoi4_events", json!({"peace_conference_open": false}));
+        assert_eq!(eval(&f, json!("capitulated:ETH")), Truth::False);
+        // war over, ETH owns nothing: annexed
+        assert_eq!(eval(&f, json!("capitulated:AUS")), Truth::True);
+    }
     fn eval(f: &Fake, p: Value) -> Truth {
         let mut ctx = Ctx::new(f, date_hour("1936.05.01").unwrap());
         check(&p, &mut ctx)
@@ -1138,14 +1179,13 @@ mod tests {
             "province_controlled:999",
             "resistance:12 > 10",
             "supremacy:med > 0.5",
-            "capitulated:ETH",
         ] {
             assert_eq!(check(&json!(p), &mut ctx), Truth::Unknown, "{p}");
             // negation keeps unknown: never acts on it either way
             assert_eq!(check(&json!({"not": p}), &mut ctx), Truth::Unknown, "{p}");
         }
         let unknown = ctx.take_unknown();
-        assert_eq!(unknown.len(), 10, "{unknown:?}");
+        assert_eq!(unknown.len(), 9, "{unknown:?}");
         assert!(unknown["bop:ETH_centralization > 0.5"].contains("balance-of-power"));
         assert!(unknown["convoys_free > 10"].contains("total only"));
         assert!(unknown["world_tension > 0.5"].contains("text_empty"));
