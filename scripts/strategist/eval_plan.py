@@ -20,7 +20,8 @@ Rows (game = needs the game folder, through hoi4facts.lint_plan):
     vp_targets  cumulative_vp  VP of the targets (file values with the game, else the plan's vp)
     vp_targets  spearman       order agreement over the shared target provinces ((rho + 1) / 2)
     vp_targets  reachable      share of targets next to own land or an earlier target (game)
-    construction supply_first  share of supply items (hubs, railways) queued before the first factory
+    construction rail_first    share of railway/infrastructure items queued before the first factory
+    construction hubs          supply_node items (20000 points each; fewer is better, each must pass hub_cost)
     construction factory_infra mean infrastructure percentile of the factory states (game)
     construction front         factories on fronts (lint construction.front, game)
     production  factories      total factories on lines
@@ -345,9 +346,15 @@ def evaluate(gen, ref, game=None, schema=None):
     rho = spearman(go, ro)
     row("vp_targets", "spearman", None if rho is None else round(rho, 3), 1.0, None if rho is None else (rho + 1) / 2)
     row("vp_targets", "reachable", gv.reachable(), rv.reachable(), higher_better(gv.reachable(), rv.reachable()))
-    supply = set(kinds["supply"]) | set(kinds["railway"])
-    gs, rs = supply_first(gen, supply, kinds["factory"]), supply_first(ref, supply, kinds["factory"])
-    row("construction", "supply_first", round(gs, 3), round(rs, 3), higher_better(gs, rs))
+    # Cheap supply (railway levels, infrastructure) ahead of factories is good; supply hubs cost
+    # 20000 points (common/buildings), so they are counted separately and every one must pass
+    # the lint rule construction.hub_cost (finishes before it is needed).
+    cheap = set(kinds["railway"]) | {"infrastructure"}
+    gs, rs = supply_first(gen, cheap, kinds["factory"]), supply_first(ref, cheap, kinds["factory"])
+    row("construction", "rail_first", round(gs, 3), round(rs, 3), higher_better(gs, rs))
+    gh = sum(1 for e in construction_items(gen) if e.get("building") in kinds["supply"])
+    rh = sum(1 for e in construction_items(ref) if e.get("building") in kinds["supply"])
+    row("construction", "hubs", gh, rh, lower_better(gh, rh))
     gi, ri = gv.factory_infra(), rv.factory_infra()
     row("construction", "factory_infra", gi if gi is None else round(gi, 3), ri if ri is None else round(ri, 3),
         higher_better(gi, ri))

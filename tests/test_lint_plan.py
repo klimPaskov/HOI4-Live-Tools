@@ -105,7 +105,7 @@ class EvalWithoutGame(unittest.TestCase):
                     ("vp_targets", "cumulative_vp"), ("vp_targets", "spearman"), ("production", "factories"),
                     ("production", "mix"), ("events", "options"), ("army", "guard_states")]:
             self.assertLess(rows[key], 1.0, key)
-        self.assertEqual(rows[("construction", "supply_first")], 1.0)  # untouched
+        self.assertEqual(rows[("construction", "rail_first")], 1.0)  # untouched
         self.assertEqual(rows[("executor", "coverage")], 1.0)
 
     def test_statistics(self):
@@ -258,7 +258,7 @@ class SeededBadPlans(unittest.TestCase):
         gen["war"]["guard_states"] = [550, 559]
         gen["army_layout"] = [e for e in gen["army_layout"] if e["name_hint"] != "Jubaland guard"]
         scores = {(r["area"], r["metric"]): r["score"] for r in eval_plan.evaluate(gen, ref, game=self.game)}
-        for key in [("construction", "front"), ("construction", "supply_first"), ("construction", "factory_infra"),
+        for key in [("construction", "front"), ("construction", "rail_first"), ("construction", "factory_infra"),
                     ("research", "past_start"), ("army", "guard_cover")]:
             self.assertLess(scores[key], 1.0, key)
 
