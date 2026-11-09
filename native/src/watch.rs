@@ -6,7 +6,33 @@
 //!
 //! Only what the player's own screens show is used (own armies, own and adjacent state control,
 //! open events, the alert row, idle slots). Nothing here sends input.
+//!
+//! Besides the sampled kinds, the server notes what its executor did or judged (`Feed::note`):
+//! `autopilot_action`, `autopilot_stopped`, `autopilot_step_failed`, and from the standing plan's
+//! strategy layer (`crate::plan_run` step 0) `goal_reached` and `goal_at_risk` (urgent, when the
+//! goal status changes), `checkpoint_missed` (urgent: a dated checkpoint's musts failed),
+//! `contingency_triggered` (urgent) and `phase_changed` (urgent only when the new phase asks
+//! for a revision); [`PLAN_KINDS`] lists them.
 use serde_json::{json, Value};
+
+/// The plan's goal predicates all hold (detail: status, why, game_hour).
+pub const GOAL_REACHED: &str = "goal_reached";
+/// A goal fail predicate holds, or the deadline is near or past with the goal not reached.
+pub const GOAL_AT_RISK: &str = "goal_at_risk";
+/// A dated checkpoint came and one of its musts is false (detail: checkpoint, by, failed, else).
+pub const CHECKPOINT_MISSED: &str = "checkpoint_missed";
+/// The active plan phase changed (detail: from, to, reason, revise_on_enter).
+pub const PHASE_CHANGED: &str = "phase_changed";
+/// A contingency's trigger held (detail: contingency, reason, phase, overrides, revise).
+pub const CONTINGENCY_TRIGGERED: &str = "contingency_triggered";
+/// The change kinds the standing plan's strategy layer notes.
+pub const PLAN_KINDS: [&str; 5] = [
+    GOAL_REACHED,
+    GOAL_AT_RISK,
+    CHECKPOINT_MISSED,
+    PHASE_CHANGED,
+    CONTINGENCY_TRIGGERED,
+];
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -706,5 +732,24 @@ mod tests {
         );
         assert_eq!(v["woke_because"], "timeout");
         assert!(t.elapsed() >= Duration::from_millis(100));
+    }
+    #[test]
+    fn plan_kinds_are_noted_and_filtered_like_sampled_ones() {
+        let feed = Feed::default();
+        feed.push(sample(&[], &[], 40.0, 842), Limits::default());
+        for kind in PLAN_KINDS {
+            feed.note(kind, kind != PHASE_CHANGED, json!({"kind": kind}));
+        }
+        let kinds = vec![CHECKPOINT_MISSED.to_string()];
+        let v = feed.observe(0, &kinds, false, 50);
+        assert_eq!(v["changes"].as_array().unwrap().len(), 1);
+        assert_eq!(v["changes"][0]["urgent"], true);
+        assert_eq!(v["changes"][0]["date"], "1936.3.1");
+        let urgent = feed.observe(0, &[], true, 50);
+        assert_eq!(urgent["changes"].as_array().unwrap().len(), 4);
+        assert_eq!(
+            PLAN_KINDS.iter().collect::<BTreeSet<_>>().len(),
+            PLAN_KINDS.len()
+        );
     }
 }

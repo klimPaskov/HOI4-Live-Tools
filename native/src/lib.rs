@@ -15,6 +15,7 @@ pub mod input_lease;
 pub mod launch;
 pub mod memory;
 pub mod own_focus;
+pub mod plan_predicate;
 pub mod plan_run;
 pub mod platform;
 pub mod protocol;

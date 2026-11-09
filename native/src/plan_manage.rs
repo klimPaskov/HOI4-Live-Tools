@@ -85,9 +85,10 @@
 //! the player with the order. A wake is the alarm {"code":"wake_player","rule","reason","message",
 //! "evidence"} in the run result, once per reason per `manage.wake_repeat_days`.
 //!
-//! `when` / `switch_when` go through one function, `when_holds`: for now only a date
-//! ("date:1936.6.1" or "1936.6.1") is evaluated; any other predicate is unknown and the item waits.
-use super::{date_hour, item_id, list, strings, text, GameHour, State, Tick, Tools, DAY};
+//! `when` / `switch_when` go through one function, `when_holds`: a `crate::plan_predicate`
+//! predicate (dates, stability, war support, wars, state control, focuses, ...) judged with the
+//! tick's reads; an atom that cannot be read is unknown and the item waits.
+use super::{item_id, list, strings, text, GameHour, State, Tick, Tools, DAY};
 use crate::error::Result;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -147,29 +148,16 @@ fn peace_wait(state: &mut State, plan: &Value, now: GameHour, why: &str) -> Tick
     Tick::Stop("peace conference open: nothing to do".into())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Truth {
-    True,
-    False,
-    Unknown,
-}
+pub(super) use crate::plan_predicate::Truth;
 
-/// Whether a plan item's `when` (or `switch_when`) holds now: missing or empty holds; a date
-/// ("date:YYYY.M.D" or a bare "YYYY.M.D") holds from that day on; anything else is unknown.
-// WIRE: plan_predicate
-fn when_holds(_state: &mut State, _tools: &dyn Tools, when: &Value, now: GameHour) -> Truth {
+/// Whether a plan item's `when` (or `switch_when`) holds now: missing or empty holds; anything
+/// else is a `crate::plan_predicate` predicate judged with this tick's reads (`super::judge`):
+/// an unknown atom is Unknown (the item waits) and is listed in the run's `predicates_unknown`.
+fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour) -> Truth {
     match when {
         Value::Null => Truth::True,
         Value::String(s) if s.trim().is_empty() => Truth::True,
-        Value::String(s) => {
-            let s = s.trim();
-            match date_hour(s.strip_prefix("date:").unwrap_or(s).trim()) {
-                Some(at) if now >= at => Truth::True,
-                Some(_) => Truth::False,
-                None => Truth::Unknown,
-            }
-        }
-        _ => Truth::Unknown,
+        _ => super::judge(state, tools, when, now),
     }
 }
 
@@ -1679,7 +1667,7 @@ fn unread_rules(state: &mut State, plan: &Value) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{extras_step, tick};
+    use super::super::{date_hour, extras_step, tick};
     use super::*;
     use crate::error::Error;
     use std::cell::RefCell;
@@ -1739,8 +1727,11 @@ mod tests {
     }
 
     #[test]
-    fn when_evaluates_dates_and_leaves_other_predicates_unknown() {
-        let tools = fake(vec![]);
+    fn when_is_a_plan_predicate_and_unreadable_atoms_leave_the_item_waiting() {
+        let tools = fake(vec![(
+            "hoi4_country_status",
+            json!({"fields": {"war_support": {"value": 0.3}}}),
+        )]);
         let mut state = State::default();
         let at = date_hour("1936.6.1").unwrap();
         for (when, now, want) in [
@@ -1749,11 +1740,23 @@ mod tests {
             (json!("date:1936.6.1"), at, Truth::True),
             (json!("date:1936.6.1"), at - 1, Truth::False),
             (json!("1936.06.01"), at + DAY, Truth::True),
+            (json!("war_support >= 25"), at, Truth::True),
+            (
+                json!({"all": ["1936.6.1", "war_support > 0.5"]}),
+                at,
+                Truth::False,
+            ),
             (json!("province_controlled:5097"), at, Truth::Unknown),
-            (json!({"all": []}), at, Truth::Unknown),
+            (json!("bop:ETH_centralization > 0.5"), at, Truth::Unknown),
         ] {
             assert_eq!(when_holds(&mut state, &tools, &when, now), want, "{when}");
         }
+        // one read per tick (the same game hour) for every predicate that needs it
+        assert_eq!(reads(&tools, "hoi4_country_status"), 1);
+        assert!(state
+            .strategy
+            .unknown
+            .contains_key("bop:ETH_centralization > 0.5"));
     }
 
     #[test]
