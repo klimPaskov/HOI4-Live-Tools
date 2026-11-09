@@ -203,7 +203,7 @@ WIDTH_WARN = 0.05         # army.width_terrain: theatre fill this far below the 
 WIDTH_ERROR = 0.10        # ... and this far is an error
 ATTACK_SUPPLY = 0.5       # war.supply_floor: no new offensive below this supply (the game's low-supply alert)
 POCKET_SHARE = 0.5        # war.pocket_threshold: fall back at this hostile share around an army
-EXECUTOR_POCKET_SHARE = 0.7  # the encirclement_risk read of hoi4_armies the executor falls back on
+EXECUTOR_POCKET_SHARE = 0.5  # the encirclement_risk read of hoi4_armies the executor falls back on
 AHEAD_YEARS = 0.5         # research.ahead: warning from half a year ahead, error from one year
 PP_LATE_DAYS = 30         # politics.pp_budget: a purchase this late against its date warns
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
@@ -2081,7 +2081,10 @@ class Lint:
         return None
 
     def schema_default(self, key, fallback):
-        desc = str((self.war_schema().get(key) or {}).get("description") or "")
+        prop = self.war_schema().get(key) or {}
+        if isinstance(prop.get("default"), (int, float)) and not isinstance(prop.get("default"), bool):
+            return float(prop["default"])
+        desc = str(prop.get("description") or "")
         m = re.search(r"default\s+(-?\d+(?:\.\d+)?)", desc)
         return float(m.group(1)) if m else fallback
 
@@ -2136,6 +2139,17 @@ class Lint:
             self.add("warning", "war.planning_wait", "war.direct_moves",
                      f"offensives are direct moves, so no planning builds before an attack: {why}; use battle "
                      f"plans and wait 12-{full} days after drawing them")
+            return
+        if "planning_wait" in self.war_schema():
+            if self.war.get("planning_wait") is False:
+                self.add("error", "war.planning_wait", "war.planning_wait",
+                         f"war.planning_wait false: offensives execute the tick after drawing them; {why}")
+                return
+            days = self.war.get("planning_max_days", self.schema_default("planning_max_days", full))
+            if isinstance(days, (int, float)) and not isinstance(days, bool) and days < full * 2 / 3:
+                self.add("warning", "war.planning_wait", "war.planning_max_days",
+                         f"war.planning_max_days {days:g} builds {min(cap, days * gain):.0%} planning of "
+                         f"{cap:.0%}: {why}")
             return
         if key:
             v = self.war.get(key)
