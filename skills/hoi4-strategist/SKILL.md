@@ -49,6 +49,10 @@ them. Use `--json` when you will parse the output.
 9. **Forget nothing.** The user does not list every small decision; the plan makes all of them. Every
    item of the step 5 checklist is resolved in the coverage table, including the ones the goal's words
    do not mention (templates, XP, occupation, peace, thresholds).
+10. **Calls from the tool catalogue, never from memory.** Write every player call (`call` in plan.json,
+   every `hoi4_x {json}` in plan.brief.md and plan.md) from the output of
+   `python3 scripts/hoi4facts/tool_schemas.py show <tool>`: exact argument names, types and enums. Check a
+   call with `tool_schemas.py check-call <tool> '<json>'`; `check_calls.py` checks them all in step 7.
 
 ## Inputs
 
@@ -116,10 +120,11 @@ applicable".
 
 **7. Validate and lint.**
 `python3 scripts/validate_plan.py RUN/plan.json --strict` (add `--userdir` / `--mod` when mods are
-active) and `python3 scripts/hoi4facts/lint_plan.py RUN/plan.json --json > RUN/lint.json`. Fix and
+active), `python3 scripts/hoi4facts/lint_plan.py RUN/plan.json --json > RUN/lint.json` and
+`python3 scripts/hoi4facts/check_calls.py RUN` (every player call against the tool catalogue). Fix and
 re-run. Also `python3 scripts/hoi4facts/facts.py research-timeline RUN/plan.json` and
 `facts.py focus-timeline <TAG> --date <start_date> <focus_path ids...>` and copy their dates into
-plan.md. *Gate:* 0 errors from both; every remaining warning is in plan.md §11 with a reason.
+plan.md. *Gate:* 0 errors from all three; every remaining warning is in plan.md §11 with a reason.
 
 **8. Critic pass.** Normally `scripts/strategist/strategize.py` runs steps 1-10 in order and starts the
 critic itself (prompts `strategist.md`, `fix.md`, `critic.md`, `answer.md`). Run standalone, start the
@@ -131,9 +136,11 @@ with a source), re-run step 7, then run the critic again for round 2. At most 2 
 0 in rows 1, 2, 7 or 13. If round 2 still fails, write `RUN/strategist-blocked.md` and stop.
 
 **9. Reconcile live.** Only when the game is loaded and paused on day 1 (allowed pre-start setup) and
-the operator runs `scripts/strategist/reconcile.py` (build item 17). It compares plan references
-(templates, generals, wing names, production lines, slots, available techs) with read-only tools and
-patches one-to-one name mismatches; it lists everything else in `RUN/reconcile.json`. Fix each listed
+the operator runs `python3 scripts/strategist/reconcile.py --run RUN --call-cmd "<broker call command>"`.
+It compares plan references (templates, generals, air wings, production lines, available techs) with
+read-only tools and patches one-to-one name mismatches; it lists everything else in
+`RUN/reconcile.json`. Air wing names are made at runtime, so `air_plan[].wing` is written as
+`"<variant> at <state id>"` from the dossier OOB; reconcile expands each selector to the live wings. Fix each listed
 item in the plan, then repeat steps 7 and 10. *Gate:* 0 unresolved references. If the script is not
 available, write "reconcile: not run" in plan.md §11 and continue.
 
@@ -151,7 +158,7 @@ Time budget: steps 1 to 8 in about 30 minutes of wall time.
 |---|---|---|
 | `RUN/plan.json` | executor keys plus player items; `_meta`, `goal`, `phases`, `checkpoints`, `contingencies` | `validate_plan.py --strict`, `lint_plan.py` |
 | `RUN/plan.md` | the human plan, [templates/plan.md](templates/plan.md); §0 goal reading and alternatives; §11 warnings and critic answers; §12-§24 the checklist sections; §25 coverage table (29 items) | critic (rubric rows 1-9, 12-16) |
-| `RUN/plan.brief.md` | the player section, ≤ 60 lines, [templates/brief.md](templates/brief.md) | critic (rubric rows 10-11) |
+| `RUN/plan.brief.md` | the player section, ≤ 60 lines, [templates/brief.md](templates/brief.md) | `check_calls.py`, critic (rubric rows 10-11) |
 | `RUN/lint.json` | the last lint output | step 7 |
 | `RUN/review/critic-<n>.json`, `answers-<n>.json` | critic findings and the answers | step 8 |
 

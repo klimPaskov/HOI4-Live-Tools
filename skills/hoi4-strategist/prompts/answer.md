@@ -7,7 +7,7 @@ a 0 in rows 1, 2, 7 or 13). Answer every finding in `RUN/review/answers-<n>.json
 plan files, or rebut it with a source (facts output or file:line). "I disagree" is not an answer.
 
 A finding about a checklist item is fixed in its plan section, in the coverage table (plan.md §25) and,
-for a player item, in the brief. Then re-run procedure step 7 (validate and lint, 0 errors) and record
+for a player item, in the brief. Then re-run procedure step 7 (validate, lint and `check_calls.py`, 0 errors) and record
 every finding and its answer in plan.md §11. Do not run the critic; the orchestrator runs round 2.
 
 Finish with one line: findings fixed, rebutted, open.

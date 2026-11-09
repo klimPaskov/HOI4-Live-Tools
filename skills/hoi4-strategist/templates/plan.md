@@ -145,8 +145,8 @@ Garrison template: <name and count> (section 22).
 
 | Design or MIO | Family / line | When | XP or PP | Line that switches | Call |
 |---|---|---|---|---|---|
-| <design> | tank / plane / ship | <date> | <n> XP | <line index> | `hoi4_design_create {...}` |
-| <organisation> | <line> | <date> | traits in order | — | `hoi4_mio_trait {...}` |
+| <design> | tank / plane / ship | <date> | <n> XP | <line index> | `hoi4_design_create {"kind":"tank","base":"<base>","name":"<design>"}` |
+| <organisation> | <line> | <date> | traits in order | — | `hoi4_mio_trait {"organization":"<organisation>","trait_index":0}` |
 
 ## 16. Stability, war support, manpower and balance of power
 
@@ -168,9 +168,11 @@ plan.
 
 | Wing | Base (capacity) | Phase | Mission | Region | Switch when | Call |
 |---|---|---|---|---|---|---|
-| <wing> | <state> (<n>) [V states] | P1 | air_superiority | <region> | `<predicate>` | `hoi4_air_mission {...}` |
+| <variant> at <state id> [V oob] | <state> (<n>) [V states] | P1 | air_superiority | <region> | `<predicate>` | `hoi4_air_mission {"wing":"<wing>","mission":"air_superiority","region":"<region>"}` |
 
-Superiority target before offensives; ground AA. Or: not applicable: <reason>.
+Wings are written as "<variant> at <state id>" from the dossier OOB (live wing names are made at
+runtime); `scripts/strategist/reconcile.py` resolves them on day one. Superiority target before
+offensives; ground AA. Or: not applicable: <reason>.
 
 ## 19. Navy
 
@@ -181,7 +183,7 @@ dockyards, repair rule. Or: **no navy: <reason>** [V states / dossier §3].
 
 | Action | Target | When (gate) | Call | Why |
 |---|---|---|---|---|
-| <justify / declare / join faction / guarantee / access> | <TAG> | <date or predicate> | `hoi4_diplomacy_act {...}` | <reason> |
+| <justify / declare / join faction / guarantee / access> | <TAG> | <date or predicate> | `hoi4_diplomacy_act {"country":"<TAG>","action":"<action>"}` | <reason> |
 
 Answer policy for incoming proposals: <accept / refuse by kind>.
 

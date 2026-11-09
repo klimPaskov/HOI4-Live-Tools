@@ -318,8 +318,9 @@ Each row names the commit whose message states the result. Rows marked [?] rest 
 
 Still open after 8 November: `hoi4_mio_policy` (no live test), faction invite and leave and incoming-proposal answers
 (need a game state with an invitation or a proposal), province buildings through `hoi4_construction_add province_id`
-(live test pending, a7039cb), targeted decisions, a stockpile read, a production-line remove, the regimental-support
-row in the template tools, a garrison-template action.
+(live test pending, a7039cb), targeted decisions, a stockpile read, a verified production-line removal
+(`hoi4_production_set` with 0 factories, see the mismatches), the regimental-support row in the template tools,
+a garrison-template action.
 
 ## 2. Missing capabilities a strong player needs
 
@@ -439,6 +440,12 @@ Each needs its own live pass in A, D or G before the campaigns start.
   `hoi4_mio_trait`, `hoi4_agency_create`, `hoi4_operative_recruit`, `hoi4_operative_assign` and `hoi4_faction_create`
   (live per the rows above) and `hoi4_naval_invasion` (round notes only). These are descriptor texts in code; this
   inventory records the mismatch and does not change code.
+- `hoi4_production_set` says both "factories 0 removes the line (its close button)" and "0 keeps the line with no
+  factories"; the code accepts either outcome. No live record of a removal.
+- The tool catalogue `skills/hoi4-campaign-playbook/tools.schema.json` (9 November) has no entry for
+  `hoi4_naval_invasion`, `hoi4_faction_create`, `hoi4_diplomacy_incoming` and the `format!`-built fleet tools
+  (`hoi4_fleet_split` ...), and empty argument lists for `hoi4_army_move` and `hoi4_plan`, so `check_calls.py`
+  reports the first group as unknown and accepts any arguments for the second.
 - `docs/TOOLS_MACOS.md` was regenerated on 9 November (it gained `hoi4_construction_order`, `hoi4_army_attack` and
   `hoi4_railway_build`). The generator still marks lease-taking tools whose `lease_token` comes late in the schema as
   `R` (it looks only at the first 1500 characters after the description), misses `hoi4_occupation_law` (its

@@ -14,6 +14,7 @@
 import json
 import os
 import re
+import sys
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -76,6 +77,12 @@ BRIEF_CALLS = {
     "production replace": "hoi4_production_set", "auto_import": "hoi4_auto_import",
     "occupation": "hoi4_occupation_law", "diplomacy": "hoi4_diplomacy_act",
     "intelligence": "hoi4_agency_upgrade", "peace": "hoi4_peace_take",
+}
+
+# Calls in the templates that the tool catalogue cannot check yet, with the reason; the rest must pass.
+CATALOGUE_GAPS = {
+    "hoi4_naval_invasion": "format!-built descriptor, not in tools.schema.json",
+    "hoi4_design_create": "tool_schemas.check_call fails on the union type of `base`",
 }
 
 REPO_PATH = re.compile(r"(?<![\w./-])((?:skills|scripts|tests|docs|native|hoi4_live)/[A-Za-z0-9_./-]+"
@@ -165,7 +172,9 @@ class StrategistSkillTest(unittest.TestCase):
                     "python3 scripts/validate_plan.py RUN/plan.json --strict",
                     "python3 scripts/hoi4facts/lint_plan.py RUN/plan.json --json",
                     "scripts/strategist/run.py --role critic", "research-timeline RUN/plan.json",
-                    "focus-timeline <TAG> --date"):
+                    "focus-timeline <TAG> --date", "python3 scripts/hoi4facts/check_calls.py RUN",
+                    "tool_schemas.py show <tool>",
+                    'reconcile.py --run RUN --call-cmd "<broker call command>"'):
             self.assertIn(cmd, text)
 
     def test_run_spec_template(self):
@@ -251,6 +260,34 @@ class StrategistSkillTest(unittest.TestCase):
         for phrase in ("29-item checklist", "exactly one resolution", "executor key", "exact `call`",
                        "not applicable: <reason>", "coverage table", "all 29 items"):
             self.assertIn(phrase, step5)
+
+    def test_template_calls_match_the_tool_catalogue(self):
+        sys.path.insert(0, os.path.join(ROOT, "scripts"))
+        from hoi4facts import tool_schemas as ts
+        catalogue = ts.load()
+        checked = 0
+        for rel in ("templates/brief.md", "templates/plan.md"):
+            for tool, args, raw in ts.calls_in_text(read(os.path.join(SKILL, rel))):
+                if tool in CATALOGUE_GAPS:
+                    continue
+                if "{" not in raw:  # a tool named in prose: it must exist
+                    self.assertIn(tool, catalogue, rel)
+                    continue
+                self.assertIsNotNone(args, "%s: arguments of %s are not JSON: %s" % (rel, tool, raw))
+                self.assertEqual(ts.check_call(catalogue, tool, args), [], "%s: %s %s" % (rel, tool, args))
+                checked += 1
+        self.assertGreater(checked, 20)
+
+    def test_calls_rule_in_skill_and_review(self):
+        skill = read(os.path.join(SKILL, "SKILL.md"))
+        self.assertIn("never from memory", skill)
+        self.assertIn('"<variant> at <state id>"', skill)
+        self.assertIn("check_calls.py", read(os.path.join(SKILL, "prompts", "critic.md")))
+        rubric = read(os.path.join(SKILL, "references", "rubric.md"))
+        row10 = [line for line in rubric.splitlines() if line.startswith("| 10 |")][0]
+        self.assertIn("check_calls.py", row10)
+        self.assertIn("`check_calls.py RUN` rejects", rubric)
+        self.assertIn('"<variant> at <state id>"', read(os.path.join(SKILL, "references", "procedure.md")))
 
     def test_brief_has_a_call_per_player_key(self):
         text = read(os.path.join(SKILL, "templates", "brief.md"))

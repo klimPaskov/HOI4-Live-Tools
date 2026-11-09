@@ -18,8 +18,9 @@ Inputs:
 Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan files.
 
 Check every rubric row (16 rows, 0-2 each) against evidence: run the facts commands, `python3
-scripts/hoi4facts/lint_plan.py RUN/plan.json --json`, and compare plan dates with `facts.py
-focus-timeline` and `research-timeline`. Check the goal reading against the user's words first. Then
+scripts/hoi4facts/lint_plan.py RUN/plan.json --json` and `python3 scripts/hoi4facts/check_calls.py RUN`
+(every player call against the tool catalogue; each invalid call is a blocker finding under row 10),
+and compare plan dates with `facts.py focus-timeline` and `research-timeline`. Check the goal reading against the user's words first. Then
 walk the coverage table (plan.md §25) against `skills/hoi4-strategist/references/procedure.md`: all 29
 items present; each resolved by an executor key, a player item with an exact call that is also in the
 brief, or "not applicable" with a reason you can confirm with a facts command. A missing or unresolved

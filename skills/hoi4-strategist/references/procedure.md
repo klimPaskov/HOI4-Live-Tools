@@ -13,7 +13,11 @@ Every item ends in exactly one of:
 * **executor**: a `plan.json` key whose schema tag is `x-owner: executor` (preferred);
 * **player**: a player key in `plan.json` with `call: {tool, args}` where the schema allows it, and the
   same call as one line in the brief (`args` without `request_id` / `lease_token`, which the player
-  adds);
+  adds). Write the call from `python3 scripts/hoi4facts/tool_schemas.py show <tool>` (argument names,
+  types, enums), never from memory, and check it with `tool_schemas.py check-call <tool> '<json>'`;
+  step 7 runs `python3 scripts/hoi4facts/check_calls.py RUN` over the plan, the brief and plan.md.
+  Shorthand such as `hoi4_air_rebase {wing, state_id}` in this file lists argument names only; never
+  copy it as a call;
 * **not applicable: <reason>**, where the reason cites a fact (a facts output, a dossier line, the DLC
   list) or a missing tool (the audit row id, e.g. "no tool: production line MIO chooser"). "Later",
   "TBD" and "if needed" are not resolutions.
@@ -47,6 +51,7 @@ table then says `player (key pending: <key>)`.
 | `F hooks <TAG>` / `F event <id>` | scenario reference graph / event options with name, loc text, trigger, effects |
 | `F grep <token> [--folder <dir>]` / `F defines <KEY>` | every reference to a key with file:line and mod / define values with source |
 | `C build-order` / `C equipment` / `C pp` | factory compounding / equipment need per template and division count / PP timeline |
+| `python3 scripts/hoi4facts/tool_schemas.py show <tool>` / `check-call <tool> '<json>'` | a tool's required and allowed arguments with types and enums / one call checked against the catalogue |
 
 Fact readers being added (audit F-1 to F-11). Use them when `F --help` lists them; until then use the
 fallback named here and tag the result with the file it came from:
@@ -166,8 +171,9 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
 1. Lines by phase, sized to cover templates × divisions plus attrition; sum ≤ military factories at that
    date; equipment unlocked by then.
 2. Removals and replacements of starting lines (obsolete equipment): `production[].remove` / `replace`
-   is pending (W1-9); until then a replacement is a player `hoi4_production_set {line, equipment,
-   factories}` and a pure removal is "no tool (audit C2)" in plan.md.
+   when the schema has them (W1-9); until then a player `hoi4_production_set {line, equipment,
+   factories}`; 0 factories empties or removes the line (the descriptor says both; no live record of a
+   removal yet [?]).
 3. Stockpile targets in days of cover per item (item 28 defaults), trucks for every `war.motorization`
    level (truck stock ≥ 1.5× wanted), convoys for overseas supply and trade (item 21), aircraft to keep
    wings at strength (item 20).
@@ -360,6 +366,10 @@ Read: `war-air-naval-peace.md` §5; `strategy.md` "Air and naval support". Facts
 1. Wings, base per region (base capacity per level; build air bases with `construction`), missions by
    phase (air superiority before an offensive, CAS over the axis, interception, naval or port strikes),
    the switch trigger per wing, ground AA when the enemy has planes.
+   Wing names are made at runtime: write `air_plan[].wing` as `"<variant> at <state id>"` from the
+   dossier OOB (`F oob <TAG>`: each wing's variant and base state). `scripts/strategist/reconcile.py`
+   expands each selector to the live wings on day one (SKILL.md step 9). `region` in
+   `hoi4_air_mission` is the region's name (a string).
 2. Not applicable only when the country has no wings, plans none, and the enemy has no planes
    (cite `F oob` and dossier §3).
 Resolution: executor `air.war_missions`; player `air_plan` (`wing`, `base_state`, `mission`, `region`,

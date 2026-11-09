@@ -3,8 +3,8 @@
 The critic runs in a fresh context. It gets `RUN/run_spec.json`, `RUN/dossier/dossier.md` (and the facts
 CLI), `RUN/plan.json`, `RUN/plan.md`, `RUN/plan.brief.md`, `RUN/lint.json`, this rubric and, in round 2,
 the previous round's findings and answers. It does not get the strategist's reasoning or output log.
-It may run any read-only `facts.py` / `calc.py` command and `lint_plan.py` to check a claim, with the
-same `--mode` (the FAIR boundary in SKILL.md applies to the critic too). It never edits the plan.
+It may run any read-only `facts.py` / `calc.py` command, `lint_plan.py` and `check_calls.py RUN` to check
+a claim, with the same `--mode` (the FAIR boundary in SKILL.md applies to the critic too). It never edits the plan.
 
 ## 1. Scores
 
@@ -26,7 +26,7 @@ reason scores 2.
 | 7 | Conquest | VP order by value and adjacency to the threshold (with and without modifiers); mandatory states included; routes and river counts given; supply construction triggered along the axis | order works but one leg unjustified or supply follows late | threshold not reached, mandatory state missing, or targets not reachable |
 | 8 | Defence | every enemy-bordering own state guarded; corridor rule when targets go beyond 2 provinces; encirclement risks named with a response | one border or corridor thin | an enemy-bordering state without a guard, or guards removed during a phase |
 | 9 | Contingencies | each likely failure (lessons that apply, scenario escalations, stalls, core loss, new war) has a trigger predicate and a phase / overrides / revise response; checkpoints at mission deadlines | some failures covered only in text | none, or triggers the executor cannot evaluate and no player fallback |
-| 10 | Executor readiness | most decisions in executor-owned keys; player items name exact tool calls; ids stable; schema and lint clean; the coverage table resolves all 29 items (executor key, player call, or not applicable with a cited reason) | some player text that an executor key could carry, or one item resolved without a fact | key decisions only in prose, player items without calls, or checklist items missing from the coverage table |
+| 10 | Executor readiness | most decisions in executor-owned keys; player items name exact tool calls that `check_calls.py RUN` accepts; ids stable; schema and lint clean; the coverage table resolves all 29 items (executor key, player call, or not applicable with a cited reason) | some player text that an executor key could carry, or one item resolved without a fact | key decisions only in prose, player items without calls, any call `check_calls.py` rejects, or checklist items missing from the coverage table |
 | 11 | Brief usefulness | ≤ 60 lines; win check, next 3 checkpoints, what the executor does, player calls, judgement events with predicates, do-not list, `plan_revised` step; actionable in one batch per turn | complete but long-winded or one part missing | over 60 lines, or the player cannot tell what to do |
 | 12 | Force posture and XP budget | land / air / naval shares by phase follow the goal and the enemy aggregates; production, research folders and doctrine folders match them; XP forecast per branch with every spend dated, no month over the forecast, no pool left at the cap | posture stated but one arm unjustified, or the XP schedule not checked against the forecast | no posture, or planned XP spends the forecast cannot pay before they matter |
 | 13 | Templates and doctrines | a template per role and phase with width from the theatre's terrain mix (within 10% of a clean fit), support and regimental support justified, priority and XP cost given, equipment unlocked and covered, fielded divisions' switch dated; doctrine per folder and track order from the dossier, no grand-doctrine change without a reason that beats the mastery reset | templates exist but one role is missing or the width is not derived from terrain | a land war with no template decision, widths that do not fit the main terrain, or doctrines not in the dossier |
@@ -65,8 +65,9 @@ the open blockers.
 
 Severities:
 * `blocker`: the plan cannot reach the goal or breaks a hard rule (wrong goal, contradicted fact, FAIR
-  breach, threshold not reached, unguarded border, lint error missed, a checklist item with no
-  resolution, an overseas theatre with no convoy plan). Any open blocker fails the gate.
+  breach, threshold not reached, unguarded border, lint error missed, a player call that
+  `check_calls.py RUN` rejects, a checklist item with no resolution, an overseas theatre with no convoy
+  plan). Any open blocker fails the gate.
 * `major`: likely to cost the goal or weeks of game time (timing off, supply late, a likely failure
   without a contingency).
 * `minor`: clarity, tagging or efficiency.
