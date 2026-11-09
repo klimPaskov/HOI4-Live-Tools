@@ -3,7 +3,8 @@
 //! outcome is never replayed. Legacy version-1 adapters retain their read-only
 //! settlement contract. Strict version-2 intents never settle after an uncertain
 //! attempt: only that original attempt may certify delivery or positive no-input.
-//! Every unresolved dispatch quarantines shared input.
+//! An unresolved dispatch quarantines input for a bounded time (30 s for other domains and
+//! global input, 180 s for its own domain); it is never replayed.
 //!
 //! Settlement rule: compare only what the action can change. The game runs at
 //! speed 3-5 while an action is journaled, so unrelated state (other research
@@ -31,6 +32,10 @@ use std::{
 
 const LINE_LIMIT: usize = 16 << 10;
 const JOURNAL_LIMIT: u64 = 64 << 20;
+/// How long an unresolved intent blocks other domains (and global input such as events).
+const CROSS_DOMAIN_MS: u64 = 30_000;
+/// How long an unresolved intent blocks its own domain.
+const SAME_DOMAIN_MS: u64 = 180_000;
 
 #[cfg(test)]
 #[path = "journal/strict_tests.rs"]
@@ -217,6 +222,7 @@ impl GameJournal {
     pub fn receipt_exists(&self, id: &str) -> bool {
         self.receipts.contains_key(id)
     }
+    #[cfg(test)]
     pub(super) fn unresolved(&self) -> Option<&Receipt> {
         self.receipts
             .values()
@@ -224,16 +230,31 @@ impl GameJournal {
     }
     /// An unresolved dispatch that blocks new input in `domain`: one in the same domain, or any
     /// one whose domain is global (`*`), or any one at all when `domain` is global.
+    ///
+    /// Unresolved intents expire as blockers, so one uncertain click can never freeze a live
+    /// game for the rest of a campaign (w25: one focus click blocked every event for months):
+    /// after `CROSS_DOMAIN_MS` it blocks only its own domain, after `SAME_DOMAIN_MS` nothing.
+    /// The record itself stays `Dispatching` (never replayed; its own request_id still settles
+    /// it); a later fresh request relies on the adapter's own preflight (already active,
+    /// already researched, event closed, target reached) to refuse a duplicate.
     pub(super) fn unresolved_in(&self, domain: &str) -> Option<&Receipt> {
+        self.unresolved_at(domain, now())
+    }
+    fn unresolved_at(&self, domain: &str, now_ms: u64) -> Option<&Receipt> {
         self.receipts.values().find(|r| {
             r.status == Status::Dispatching && {
                 let theirs = domain_of(r.action["kind"].as_str().unwrap_or(""));
-                domain == "*" || theirs == "*" || theirs == domain
+                let age = now_ms.saturating_sub(r.unix_ms);
+                if theirs == domain && domain != "*" {
+                    age < SAME_DOMAIN_MS
+                } else {
+                    (domain == "*" || theirs == "*" || theirs == domain) && age < CROSS_DOMAIN_MS
+                }
             }
         })
     }
     pub(super) fn blocked(&self) -> bool {
-        self.poisoned || self.unresolved().is_some()
+        self.poisoned || self.unresolved_in("*").is_some()
     }
     /// Blocked for new input in `domain` (a persistence failure blocks everything).
     pub(super) fn blocked_for(&self, domain: &str) -> bool {
@@ -275,7 +296,7 @@ impl GameJournal {
                 Status::Dispatching | Status::Diverged => Err(Error::new("action_uncertain", "Historical strict action remains unresolved; current UI cannot settle or replay it")),
             };
         }
-        if self.unresolved().is_some() {
+        if self.unresolved_in("*").is_some() {
             return Err(Error::new(
                 "action_uncertain",
                 "Unresolved shared game input blocks a new strict action",
@@ -1037,6 +1058,34 @@ pub(super) fn domain_of(kind: &str) -> &'static str {
 #[cfg(test)]
 mod domain_tests {
     use super::domain_of;
+    use super::tests::{dir, epoch, journal};
+    use super::*;
+    #[test]
+    fn an_unresolved_intent_stops_blocking_other_domains_then_its_own() {
+        let d = dir("expiry");
+        let mut j = journal(&d);
+        let t0 = now();
+        let intent = j
+            .append(Receipt {
+                version: 1,
+                id: "f1".into(),
+                epoch: epoch(),
+                action: serde_json::json!({"kind": "focus_start", "focus": "x"}),
+                status: Status::Dispatching,
+                detail: Value::Null,
+                unix_ms: t0,
+            })
+            .unwrap();
+        assert!(j.unresolved_at("*", t0 + 1_000).is_some());
+        assert!(j.unresolved_at("focus", t0 + 1_000).is_some());
+        assert!(j.unresolved_at("army", t0 + 1_000).is_none());
+        assert!(j.unresolved_at("*", t0 + CROSS_DOMAIN_MS).is_none());
+        assert!(j.unresolved_at("army", t0 + CROSS_DOMAIN_MS).is_none());
+        assert!(j.unresolved_at("focus", t0 + CROSS_DOMAIN_MS).is_some());
+        assert!(j.unresolved_at("focus", t0 + SAME_DOMAIN_MS).is_none());
+        // The intent itself is never rewritten: only its own request_id settles it.
+        assert_eq!(j.unresolved().map(|r| r.id.clone()), Some(intent.id));
+    }
     #[test]
     fn kinds_and_tools_map_to_the_same_domains() {
         assert_eq!(domain_of("army_front"), "army");

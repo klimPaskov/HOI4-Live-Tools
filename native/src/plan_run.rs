@@ -378,6 +378,14 @@ impl State {
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
+/// Loose own divisions standing in `state_id` (hoi4_armies unassigned_by_state).
+fn unassigned_in(roster: &Value, state_id: i64) -> u64 {
+    list(roster, "unassigned_by_state")
+        .iter()
+        .filter(|r| r["state_id"].as_i64() == Some(state_id))
+        .filter_map(|r| r["divisions"].as_u64())
+        .sum()
+}
 fn list<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v[key].as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -1345,6 +1353,26 @@ fn layout_step(
             .filter(|a| a["main_state"].as_i64() == Some(home))
             .map(|a| text(&a["army"]).to_string())
             .find(|n| !taken.contains(n));
+        // No free army there yet but loose divisions stand in the state (a fresh 1936 start
+        // has none in armies): make the army first; the next step binds or detaches from it.
+        if base.is_none() && unassigned_in(&roster, home) > 0 {
+            if state.skipped(now, "layoutcreate", &home.to_string()) {
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_create",
+                json!({"state_id": home}),
+                "lc",
+            )?;
+            if !ok {
+                state.skip(now, "layoutcreate", &home.to_string(), 2 * DAY);
+            }
+            return Ok(Some(format!(
+                "layout: army created in {home} for {hint}: {ok} {why}"
+            )));
+        }
         let first_strike = text(&e["role"]) == "strike"
             && !entries[..index]
                 .iter()
@@ -4766,6 +4794,41 @@ mod tests {
             layout_step(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn army_layout_creates_the_army_from_loose_divisions_first() {
+        struct C(RefCell<bool>);
+        impl Tools for C {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                let made = *self.0.borrow();
+                Ok(match name {
+                    "hoi4_armies" if made => json!({"armies": [
+                        {"army": "Army 1", "main_state": 550, "commander": null}],
+                        "unassigned_by_state": []}),
+                    "hoi4_armies" => json!({"armies": [], "unassigned_by_state": [
+                        {"state_id": 550, "divisions": 12}, {"state_id": 158, "divisions": 10}]}),
+                    "hoi4_army_create" => {
+                        assert_eq!(args["state_id"], 550);
+                        *self.0.borrow_mut() = true;
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"army_layout": [
+            {"name_hint": "North strike (Army 1)", "state": 550, "role": "strike"}]});
+        let tools = C(RefCell::new(false));
+        let mut state = State::default();
+        let s1 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(s1.starts_with("layout: army created in 550"), "{s1}");
+        let s2 = layout_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert_eq!(s2, "layout: Army 1 is North strike (Army 1)");
     }
 
     /// The war fake with a validated war list at peace.
