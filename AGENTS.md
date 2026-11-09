@@ -4,8 +4,10 @@ The current starting point is [docs/RESUME_HANDOFF.md](docs/RESUME_HANDOFF.md)
 (5 November 2026): goal, state, blockers, the agreed order (small war campaigns
 starting with Italy vs Ethiopia, then Germany, China, Poland) and how to run a
 live game. Final campaign videos must be filmed from native macOS HOI4 at
-1920x1080 or higher. Live play uses one Sonnet 5.5 player with exclusive input
-ownership (user decision, 2 November; Haiku later). Expand the Rust runtime
+1920x1080 or higher. Live play uses one player agent with exclusive input
+ownership; its model and effort come from the `agents` section of `config.json`
+(defaults: player Haiku at medium effort, strategist Sonnet at xhigh, launched
+by `scripts/strategist/run.py`). Expand the Rust runtime
 across Linux, Windows and macOS, preserving the legacy Python package and
 earlier failed campaigns.
 

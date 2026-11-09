@@ -55,5 +55,28 @@
   "time": {
     "poll_seconds": 0.8,
     "popup_policy": "first"
+  },
+  "agents": {
+    "provider": "claude",
+    "roles": ["strategist", "critic", "player"],
+    "effort_scale": ["low", "medium", "high", "xhigh", "max"],
+    "providers": {
+      "claude": {
+        "launcher": "claude-code",
+        "binary": "claude",
+        "strategist": {"model": "sonnet", "effort": "xhigh", "tools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]},
+        "critic": {"model": "sonnet", "effort": "high", "tools": ["Read", "Glob", "Grep", "Bash"]},
+        "player": {"model": "haiku", "effort": "medium", "tools": ["Read", "Bash", "mcp__hoi4-live"]},
+        "revision": {"quick_effort": "xhigh", "full_effort": "xhigh"}
+      },
+      "openai": {
+        "launcher": "codex",
+        "binary": "codex",
+        "effort_levels": ["low", "medium", "high"],
+        "strategist": {"model": null, "effort": "high"},
+        "critic": {"model": null, "effort": "high"},
+        "player": {"model": null, "effort": "medium"}
+      }
+    }
   }
 }
