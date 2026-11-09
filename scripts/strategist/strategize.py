@@ -39,8 +39,11 @@ SKILL = os.path.join(ROOT, "skills", "hoi4-strategist")
 PROMPTS = os.path.join(SKILL, "prompts")
 FIX_ROUNDS = 2
 REVIEW_ROUNDS = 2
-PASS_TOTAL = 16
-CRITICAL_ROWS = ("1", "2", "7")
+# Critic rubric (skills/hoi4-strategist/references/rubric.md): 16 rows scored 0-2, pass at 22 of 32 with no 0
+# in a critical row. A critic file that states another `max` is scored against the same share of it.
+PASS_TOTAL = 22
+MAX_TOTAL = 32
+CRITICAL_ROWS = ("1", "2", "7", "13")
 
 
 def log(msg):
@@ -150,16 +153,35 @@ def gates(runner, run_dir, args):
     return vcode == 0 and lcode == 0 and ccode == 0, text, lint
 
 
+def max_total(critic, scores):
+    """The rubric maximum: the critic file's `max` when it is a positive integer, never below 2 points per
+    scored row; MAX_TOTAL otherwise."""
+    declared = critic.get("max")
+    if isinstance(declared, bool) or not isinstance(declared, int) or declared <= 0:
+        return MAX_TOTAL
+    return max(declared, 2 * len(scores))
+
+
+def pass_mark(maximum):
+    """PASS_TOTAL of MAX_TOTAL, scaled to another maximum and rounded up (16 of 22 for the 11-row rubric)."""
+    if maximum == MAX_TOTAL:
+        return PASS_TOTAL
+    return -(-PASS_TOTAL * maximum // MAX_TOTAL)
+
+
 def review_passes(critic):
     if not critic:
         return False, "no critic output"
     scores = {str(k): v for k, v in (critic.get("scores") or {}).items()}
     total = critic.get("total", sum(v for v in scores.values() if isinstance(v, int)))
+    maximum = max_total(critic, scores)
+    mark = pass_mark(maximum)
     zeros = [r for r in CRITICAL_ROWS if scores.get(r) == 0]
     blockers = [f.get("id") for f in critic.get("findings") or [] if f.get("severity") == "blocker"
                 and f.get("status", "open") == "open"]
-    ok = total >= PASS_TOTAL and not zeros and not blockers
-    return ok, "total %s/22, zero rows %s, open blockers %s" % (total, zeros or "none", blockers or "none")
+    ok = total >= mark and not zeros and not blockers
+    return ok, "total %s/%s (pass %s), zero rows %s, open blockers %s" % (
+        total, maximum, mark, zeros or "none", blockers or "none")
 
 
 def latest(run_dir, pattern):

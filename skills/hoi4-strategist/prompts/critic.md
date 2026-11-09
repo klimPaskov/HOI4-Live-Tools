@@ -17,12 +17,18 @@ Inputs:
 
 Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan files.
 
-Check every rubric row against evidence: run the facts commands, `python3 scripts/hoi4facts/lint_plan.py
-RUN/plan.json --json`, and compare plan dates with `facts.py focus-timeline` and `research-timeline`.
-Check the goal reading against the user's words first.
+Check every rubric row (16 rows, 0-2 each) against evidence: run the facts commands, `python3
+scripts/hoi4facts/lint_plan.py RUN/plan.json --json` and `python3 scripts/hoi4facts/check_calls.py RUN`
+(every player call against the tool catalogue; each invalid call is a blocker finding under row 10),
+and compare plan dates with `facts.py focus-timeline` and `research-timeline`. Check the goal reading against the user's words first. Then
+walk the coverage table (plan.md §25) against `skills/hoi4-strategist/references/procedure.md`: all 29
+items present; each resolved by an executor key, a player item with an exact call that is also in the
+brief, or "not applicable" with a reason you can confirm with a facts command. A missing or unresolved
+item is a finding (a blocker when it decides the goal, such as an overseas theatre with no convoy plan,
+an enemy with no peace item, or a land war with no templates).
 
-Output: `RUN/review/critic-<n>.json` in the rubric's format (n = 1 + the number of existing
-`critic-*.json` files). Every finding has a severity (blocker, major, minor), the evidence, and a fix.
+Output: `RUN/review/critic-<n>.json` in the rubric's format, with `max` 32 (n = 1 + the number of
+existing `critic-*.json` files). Every finding has a severity (blocker, major, minor), the evidence, and a fix.
 In round 2 re-check only the open findings and what the answers changed, and keep the finding ids.
 
-Finish with one line: round, total of 22, pass or fail, open blockers.
+Finish with one line: round, total of 32, pass or fail, open blockers.

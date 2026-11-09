@@ -46,8 +46,8 @@ class Fake(strategize.Runner):
             if role == "critic":
                 self.critics += 1
                 ok = self.critics > self.critic_fails
-                critic = {"round": self.critics, "total": 18 if ok else 12, "pass": ok,
-                          "scores": {"1": 2, "2": 2, "7": 2 if ok else 0},
+                critic = {"round": self.critics, "total": 25 if ok else 12, "max": 32, "pass": ok,
+                          "scores": {"1": 2, "2": 2, "7": 2 if ok else 0, "13": 2},
                           "findings": [] if ok else [{"id": "F1", "severity": "blocker"}]}
                 with open(os.path.join(self.run_dir, "review", "critic-%d.json" % self.critics), "w") as f:
                     json.dump(critic, f)
@@ -105,13 +105,37 @@ class StrategizeTests(unittest.TestCase):
             self.assertEqual(sum(1 for r in roles(fake) if r[1] == "fix.md"), strategize.FIX_ROUNDS)
 
     def test_review_gate_rules(self):
-        ok, _ = strategize.review_passes({"total": 16, "scores": {"1": 1, "2": 1, "7": 1}, "findings": []})
-        self.assertTrue(ok)
-        self.assertFalse(strategize.review_passes({"total": 20, "scores": {"2": 0}, "findings": []})[0])
+        self.assertEqual((strategize.PASS_TOTAL, strategize.MAX_TOTAL), (22, 32))
+        self.assertEqual(strategize.CRITICAL_ROWS, ("1", "2", "7", "13"))
+        ok, detail = strategize.review_passes({"total": 22, "scores": {"1": 1, "2": 1, "7": 1, "13": 1},
+                                               "findings": []})
+        self.assertTrue(ok, detail)
+        self.assertIn("22/32", detail)
+        self.assertFalse(strategize.review_passes({"total": 21, "scores": {}, "findings": []})[0])
+        self.assertFalse(strategize.review_passes({"total": 16, "scores": {"1": 1, "2": 1, "7": 1}, "findings": []})[0])
+        self.assertFalse(strategize.review_passes({"total": 28, "scores": {"2": 0}, "findings": []})[0])
+        self.assertFalse(strategize.review_passes({"total": 28, "scores": {"13": 0}, "findings": []})[0])
+        self.assertTrue(strategize.review_passes({"total": 28, "scores": {"12": 0}, "findings": []})[0])
         self.assertFalse(strategize.review_passes(
-            {"total": 20, "scores": {}, "findings": [{"id": "F", "severity": "blocker"}]})[0])
-        self.assertFalse(strategize.review_passes({"total": 15, "scores": {}, "findings": []})[0])
+            {"total": 28, "scores": {}, "findings": [{"id": "F", "severity": "blocker"}]})[0])
+        self.assertTrue(strategize.review_passes(
+            {"total": 28, "scores": {}, "findings": [{"id": "F", "severity": "blocker", "status": "fixed"}]})[0])
         self.assertFalse(strategize.review_passes(None)[0])
+
+    def test_max_from_the_critic_file(self):
+        rows11 = {str(i): 1 for i in range(1, 12)}
+        ok, detail = strategize.review_passes({"total": 16, "max": 22, "scores": rows11, "findings": []})
+        self.assertTrue(ok, detail)
+        self.assertIn("16/22", detail)
+        self.assertFalse(strategize.review_passes({"total": 15, "max": 22, "scores": rows11, "findings": []})[0])
+        # A declared max below 2 points per scored row does not lower the pass mark.
+        rows16 = {str(i): 1 for i in range(1, 17)}
+        ok, detail = strategize.review_passes({"total": 16, "max": 16, "scores": rows16, "findings": []})
+        self.assertFalse(ok)
+        self.assertIn("16/32", detail)
+        for bad in (None, 0, -4, "32", True):
+            self.assertEqual(strategize.max_total({"max": bad}, {}), 32, bad)
+        self.assertEqual([strategize.pass_mark(m) for m in (32, 22, 64)], [22, 16, 44])
 
 
 if __name__ == "__main__":

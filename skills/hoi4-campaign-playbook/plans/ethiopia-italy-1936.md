@@ -98,8 +98,10 @@ stockpile has support equipment for them.
 
 * Construction (about one civilian factory left after consumer goods [H]): Shewa 271 infrastructure, then
   an arms factory in Shewa when a slot appears (focus `ETH_develop_the_capital_region` adds two civilian
-  factories and two slots [V NFETH:1354]), then Tigray 842 infrastructure. A supply hub (20,000 points) is
-  out of reach before Eritrea falls.
+  factories and two slots [V NFETH:1354]), then Tigray 842 infrastructure. No supply hub, also not in Tigray
+  842 after Eritrea falls: a hub costs 20000 points [V common/buildings/00_buildings.txt] and Ethiopia's one
+  or two free civilian factories would need years [D calc.py build-order]; captured railways and ports
+  (Asmara, Massaua) supply the advance [lesson L12_early_hub_cost].
 * Production: 2 x infantry_equipment_0 for the whole plan. Equipment comes mainly from capture:
   `ETH_scavenging_tactics` gives +40% equipment capture [V IETH:742-745]; escalation level 8 gives 1,200
   infantry_equipment_1, 500 support, 50 artillery [V WAR:1354-1383]; `ETH_volunteers` gives 2,000 rifles
