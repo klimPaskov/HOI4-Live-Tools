@@ -20,7 +20,10 @@ cheating against other players.
   in the journal; without one, take the plain alternative.
 * **Checks**: `lint_plan.py` runs the `fair.*` rules (`scripts/hoi4facts/lint_fair.py`) on every plan whose
   mode is fair (`_validator.mode`, `_meta.mode` or `run_spec.mode`; a plan without a mode is fair). The executor refuses the rules that only
-  the live game shows (the guard list at the top of `lint_fair.py`). A rule no tool can check is still a
+  the live game shows (the guard list at the top of `lint_fair.py`): in a FAIR run every action, the
+  player's direct calls included, passes `native/src/fair_guard.rs`, which refuses a breach before any input
+  with the error `fair_rule_refused` naming the rule (`fair.naval_mines: ...`); `_fair.exceptions` lets that
+  rule through and META skips the guards. A rule no tool can check is still a
   rule: record the decision and the evidence.
 
 ## House rules (FAIR; META keeps them too)

@@ -15,6 +15,7 @@ mod bop;
 mod commanders;
 mod construction;
 mod construction_find;
+mod fair_facts;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
@@ -903,6 +904,15 @@ impl Commands for MacClock {
     }
     fn plan_path(&self) -> Option<std::path::PathBuf> {
         Some(self.directory.join("plan.json"))
+    }
+    fn fair_facts(
+        &self,
+        process: &dyn Process,
+    ) -> Option<std::sync::Arc<crate::fair_guard::Facts>> {
+        let exe = process.identity()?.exe.clone();
+        mapdata::game_dir(&exe)
+            .ok()
+            .map(|dir| fair_facts::facts(&dir))
     }
     fn date_stop_status(&self) -> Option<Value> {
         Some(self.daily.date_stop_status())

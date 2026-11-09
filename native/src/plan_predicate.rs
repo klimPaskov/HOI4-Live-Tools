@@ -47,11 +47,15 @@
 //!   focus_done:<key>            hoi4_focus_completed completed (all pages)           readable
 //!   tech_done:<key>             hoi4_research researched[].id (all pages)            readable
 //!   phase:<id>                  the plan's active phase (`Ctx::phase`)               readable
-//!   convoys_free                unknown: hoi4_convoys reads the total only (convoys in use
-//!                               are not mapped); read from convoys.free when it appears
-//!   stockpile_days:<equipment>  unknown: no stockpile read yet (audit W1-10)
+//!   convoys_free                hoi4_convoys convoys.free (stock minus in use, the top-bar
+//!                               figure), else hoi4_country_status convoys.free     readable
+//!   stockpile_days:<equipment>  hoi4_stockpile{equipment} days_of_cover of the archetype row
+//!                               (an archetype or a variant key); a stock that is not falling
+//!                               (depleting false) counts as 9999 days; unknown until the server
+//!                               has measured a trend (net_per_day null)            readable
 //!   var:<name>                  unknown: no tool reads scenario variables (audit W1-18)
-//!   bop:<id>                    unknown: no balance-of-power read (audit W1-17)
+//!   bop:<id>                    hoi4_country_status balances_of_power[].value of the balance
+//!                               whose id is <id> (-1..1); an inactive balance is unknown
 //!   mission_days:<id>           unknown: hoi4_decisions_list has no mission timers (W1-18)
 //!   capitulated:<TAG>           hoi4_wars + hoi4_events + hoi4_states: no longer at war with TAG and
 //!                               (a peace conference is open or TAG owns no state)
@@ -732,6 +736,37 @@ fn province_controller(ctx: &mut Ctx, p: i64) -> Read<String> {
     ))
 }
 
+/// Days of cover of `equipment` (an archetype or a variant key) in a hoi4_stockpile read: the
+/// row's days_of_cover; a stock that is not falling counts as [`NOT_FALLING_DAYS`].
+pub(crate) fn stockpile_days(read: &Value, equipment: &str) -> Read<f64> {
+    let rows = read["equipment"]
+        .as_array()
+        .ok_or("hoi4_stockpile lists no equipment")?;
+    let row = rows
+        .iter()
+        .find(|r| r["archetype"].as_str() == Some(equipment))
+        .or_else(|| {
+            rows.iter().find(|r| {
+                r["variants"]
+                    .as_array()
+                    .is_some_and(|v| v.iter().any(|x| x["type"].as_str() == Some(equipment)))
+            })
+        })
+        .ok_or_else(|| format!("{equipment} not in hoi4_stockpile"))?;
+    if let Some(days) = row["days_of_cover"].as_f64() {
+        return Ok(days);
+    }
+    if row["depleting"] == json!(false) {
+        return Ok(NOT_FALLING_DAYS);
+    }
+    Err(format!(
+        "{equipment}: no stockpile trend yet (net_per_day needs two game days seen by this server)"
+    ))
+}
+
+/// Days of cover of a stockpile that is not falling.
+pub(crate) const NOT_FALLING_DAYS: f64 = 9999.0;
+
 fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
     let arg = atom.arg.as_deref().unwrap_or("");
     let num = |v: Option<f64>, why: &str| v.map(Reading::Number).ok_or_else(|| why.to_string());
@@ -778,14 +813,14 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             num(v, "hoi4_resources fuel.ratio unreadable")
         }
         "convoys_free" => {
-            let v = ctx.read("hoi4_convoys", &json!({})).and_then(|c| {
-                ["free", "available", "unused"]
-                    .iter()
-                    .find_map(|k| c["convoys"][*k].as_f64())
-            });
+            let free = |c: &Value| c["convoys"]["free"].as_f64();
+            let v = ctx
+                .read("hoi4_convoys", &json!({}))
+                .and_then(free)
+                .or_else(|| ctx.read("hoi4_country_status", &json!({})).and_then(free));
             num(
                 v,
-                "hoi4_convoys reads the convoy total only (convoys in use are not mapped)",
+                "free convoys unreadable (hoi4_convoys and hoi4_country_status convoys.free)",
             )
         }
         "resistance" | "compliance" => {
@@ -834,10 +869,33 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             )
         }
         "stockpile_days" => {
-            Err("no stockpile read yet (needs a stockpile tool, audit W1-10)".into())
+            if arg.is_empty() {
+                return Err("stockpile_days needs an equipment key".into());
+            }
+            let read = ctx
+                .read("hoi4_stockpile", &json!({"equipment": arg}))
+                .ok_or("hoi4_stockpile unreadable")?;
+            stockpile_days(read, arg).map(Reading::Number)
         }
         "var" => Err("no tool reads scenario variables (audit W1-18)".into()),
-        "bop" => Err("no balance-of-power read (audit W1-17)".into()),
+        "bop" => {
+            let read = ctx
+                .read("hoi4_country_status", &json!({}))
+                .ok_or("hoi4_country_status unreadable")?;
+            let list = read["balances_of_power"].as_array().ok_or_else(|| {
+                format!(
+                    "balances of power unreadable ({})",
+                    read["balances_of_power_error"]["code"]
+                        .as_str()
+                        .unwrap_or("no list")
+                )
+            })?;
+            let row = list
+                .iter()
+                .find(|b| b["id"].as_str() == Some(arg))
+                .ok_or_else(|| format!("no active balance of power '{arg}'"))?;
+            num(row["value"].as_f64(), "balance of power value missing")
+        }
         "mission_days" => Err("hoi4_decisions_list reports no mission timers (audit W1-18)".into()),
         "capitulated" => {
             // What a player sees: the war with TAG is over and either the peace conference that
@@ -1186,8 +1244,8 @@ mod tests {
         }
         let unknown = ctx.take_unknown();
         assert_eq!(unknown.len(), 9, "{unknown:?}");
-        assert!(unknown["bop:ETH_centralization > 0.5"].contains("balance-of-power"));
-        assert!(unknown["convoys_free > 10"].contains("total only"));
+        assert!(unknown["bop:ETH_centralization > 0.5"].contains("balances of power"));
+        assert!(unknown["convoys_free > 10"].contains("free convoys unreadable"));
         assert!(unknown["world_tension > 0.5"].contains("text_empty"));
         // three-valued combinations: a false part decides all, a true part decides any
         assert_eq!(
@@ -1205,6 +1263,42 @@ mod tests {
         // an invalid predicate is unknown too, with its parse error
         assert_eq!(check(&json!("stability <"), &mut ctx), Truth::Unknown);
         assert!(ctx.unknown()["stability <"].starts_with("invalid predicate"));
+    }
+
+    #[test]
+    fn stockpile_convoys_and_balance_of_power_are_read() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_convoys",
+            json!({"convoys": {"total": 200, "in_use": 32, "free": 168, "needed": 32}}),
+        );
+        f.replies.insert(
+            "hoi4_country_status",
+            json!({"fields": {}, "balances_of_power": [
+                {"id": "ETH_centralization", "value": -0.35, "own": false}]}),
+        );
+        f.replies.insert(
+            "hoi4_stockpile",
+            json!({"equipment": [
+                {"archetype": "infantry_equipment", "days_of_cover": 12.5, "depleting": true,
+                 "variants": [{"type": "infantry_equipment_1", "amount": 900}]},
+                {"archetype": "motorized_equipment", "days_of_cover": null, "depleting": false, "variants": []},
+                {"archetype": "artillery_equipment", "days_of_cover": null, "depleting": null, "variants": []}]}),
+        );
+        for (p, want) in [
+            ("convoys_free > 100", Truth::True),
+            ("convoys_free < 100", Truth::False),
+            ("bop:ETH_centralization < 0", Truth::True),
+            ("bop:ETH_centralization > -0.2", Truth::False),
+            ("stockpile_days:infantry_equipment < 30", Truth::True),
+            ("stockpile_days:infantry_equipment_1 < 10", Truth::False),
+            ("stockpile_days:motorized_equipment > 365", Truth::True),
+            ("stockpile_days:artillery_equipment < 30", Truth::Unknown),
+            ("stockpile_days:support_equipment < 30", Truth::Unknown),
+            ("bop:ITA_other > 0", Truth::Unknown),
+        ] {
+            assert_eq!(eval(&f, json!(p)), want, "{p}");
+        }
     }
 
     #[test]

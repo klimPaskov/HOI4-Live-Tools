@@ -3,6 +3,7 @@ pub mod alarms;
 pub mod autopilot;
 pub mod calendar;
 pub mod error;
+pub mod fair_guard;
 #[cfg(any(target_os = "linux", test))]
 mod focus_ui_observation;
 pub mod framing;

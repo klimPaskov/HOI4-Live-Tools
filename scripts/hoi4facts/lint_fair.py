@@ -57,7 +57,10 @@ Rules (error unless marked; every message ends with the rule in plain words):
                         mainland Europe (training, sea transfers, invasions; warning for army_layout), lend-
                         lease except to Spain
 
-Executor guards: rules the executor must refuse at action time in FAIR mode (the plan lint cannot see them):
+Executor guards: rules the executor must refuse at action time in FAIR mode (the plan lint cannot see them).
+native/src/fair_guard.rs refuses (error fair_rule_refused, message starting with the rule id) the ones the
+action's arguments, the plan and the game files decide, for the plan runner and direct tool calls alike; its
+module doc lists what it guards and what is not guarded yet (needs live state):
   hoi4_fleet_mission        mine_laying; convoy_raiding while at peace; any mission for a submarine task force
                             of fewer than 5 submarines; an Italian surface fleet out of core Italian ports when
                             Italy joins the war

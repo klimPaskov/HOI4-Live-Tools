@@ -403,7 +403,7 @@ class PredicateGrammar(unittest.TestCase):
             "resistance", "compliance", "equipment_fill", "stockpile_days", "var", "bop", "mission_days",
             "at_peace_conference", "date", "province_controlled", "state_fully_controlled", "owner"}, True)
         self.assertEqual({k for k, a in self.table.items() if not a["readable"]},
-                         {"convoys_free", "stockpile_days", "var", "bop", "mission_days"})
+                         {"var", "mission_days"})
         for k in ("at_war_with", "controls_state", "controller", "focus_done", "tech_done", "exists"):
             self.assertTrue(self.table[k]["readable"], k)
         for name, atom in self.table.items():
@@ -427,7 +427,9 @@ class PredicateGrammar(unittest.TestCase):
         self.assertEqual(self.v.parse_atom("pp > 150", self.table)[0]["value"], 150)
         self.assertEqual(self.v.parse_atom(False, self.table)[0]["value"], False)
         self.assertTrue(self.v.parse_atom("capitulated:ETH", self.table)[0]["readable"])
-        self.assertFalse(self.v.parse_atom("bop:ETH_centralization > 0.5", self.table)[0]["readable"])
+        self.assertTrue(self.v.parse_atom("bop:ETH_centralization > 0.5", self.table)[0]["readable"])
+        self.assertTrue(self.v.parse_atom("stockpile_days:infantry_equipment < 30", self.table)[0]["readable"])
+        self.assertFalse(self.v.parse_atom("var:ITA_escalation > 4", self.table)[0]["readable"])
 
     def test_can_hold(self):
         can = lambda p: self.v.predicate_can_hold(p, self.table)  # noqa: E731
@@ -436,7 +438,7 @@ class PredicateGrammar(unittest.TestCase):
         self.assertEqual(can("mission_days:m < 5"), (False, False))
         self.assertEqual(can(["at_war_with:ETH", "mission_days:m < 5"]), (False, True))  # all: one never true
         self.assertEqual(can({"any": ["vp_share:ETH < 0.2", "mission_days:m < 5"]}), (True, False))
-        self.assertEqual(can({"not": "bop:x > 0"}), (False, False))
+        self.assertEqual(can({"not": "var:x > 0"}), (False, False))
         self.assertEqual(can(False), (False, True))
 
     def test_rejected(self):
@@ -505,21 +507,22 @@ class CoverageKeys(unittest.TestCase):
         for k in ("goal_reached", "goal_at_risk", "goal_risk_days", "checkpoint_missed", "phase_changed",
                   "contingency_triggered"):
             self.assertIn(k, alarms)
-        for key in ("force_posture", "xp_budget", "stockpile_targets", "sea_transfer", "garrison_template",
+        for key in ("force_posture", "xp_budget", "sea_transfer", "garrison_template",
                     "retake_rules", "_coverage"):
             self.assertEqual(owners[key], "player", key)
         # wave 2: plan_military.rs and plan_affairs.rs took these over (hold_targets lands in parallel)
         for key in ("army_group", "navy", "invasions", "designs", "diplomacy", "faction", "intelligence", "mio", "trade",
-                    "research_bonuses", "hold_targets"):
+                    "research_bonuses", "hold_targets", "stockpile_targets"):
             self.assertEqual(owners[key], "executor", key)
         for path in ("production[].design", "production[].accept_progress_loss", "production[].remove"):
             self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
-        for key, item in (("xp_budget", "W1-6"), ("stockpile_targets", "W1-10"), ("sea_transfer", "W1-14"),
+        for key, item in (("xp_budget", "W1-6"), ("sea_transfer", "W1-14"),
                           ("garrison_template", "W1-7"), ("occupation.per_state", "W1-7"),
                           ("production[].replace", "W1-9"), ("manage.fuel_floor", "W3-10")):
             self.assertEqual(planned.get(key), item, key)
-        for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "manage.air_superiority",
+        for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "stockpile_targets",
+                    "manage.air_superiority",
                     "manage.casualty_ratio", "manage.casualty_days"):
             self.assertNotIn(key, planned)  # the step landed: no planned mark, the placeholder names are gone
 
@@ -545,7 +548,7 @@ class CoverageKeys(unittest.TestCase):
                 "casualty_rest_days": 7, "enemy_air_superiority": 0.6, "air_hold_days": 10,
                 # executor rules that act with or without `manage` (production, templates, invasions)
                 "rebalance_step": 3, "day0_production": True, "war_priority": True, "war_civs": False,
-                "mature_line_days": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
+                "mature_line_days": 30, "mature_line_efficiency": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
                 "invasion_techs": {}}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)

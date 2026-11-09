@@ -16,11 +16,12 @@
 //!                    first one short of its queue trains `batch`, one action per tick)
 //!   training_rules   {"only_if_stockpile":{"<archetype>":n},"cap_template"?,"cap"?} for every training
 //!                    entry. `cap`: never more than `cap` divisions of `cap_template` (every template when
-//!                    absent) fielded (hoi4_supply) plus queued; an unreadable count waits. No tool reads
-//!                    the equipment stockpile, so `only_if_stockpile` is a proxy: training waits while
-//!                    any fielded division lacks equipment of that archetype (the game reinforces from
-//!                    the stockpile first, so it holds less than n); otherwise the guard is unknown,
-//!                    training goes ahead and the digest says so
+//!                    absent) fielded (hoi4_supply) plus queued; an unreadable count waits.
+//!                    `only_if_stockpile`: training waits while hoi4_stockpile holds less than n of
+//!                    that archetype (or variant key). Without the read it is a proxy: training waits
+//!                    while any fielded division lacks equipment of that archetype (the game
+//!                    reinforces from the stockpile first, so it holds less than n); otherwise the
+//!                    guard is unknown, training goes ahead and the digest says so
 //!   templates        [{"id","name","base"?,"regiments","support"?,"priority"?,"xp"?,"when"?,
 //!                    "upgrade_fielded"?,"regimental_support"?,"role"?}] division templates made once per
 //!                    `id` (else per name): `base` names an existing template edited in place
@@ -81,14 +82,26 @@
 //!                    costs factory output, and wakes the player instead; "stability_floor":0.5 wakes below it;
 //!                    "equipment_fill_floor":0.8 an army whose divisions' mean equipment fill
 //!                    (hoi4_supply) is below it wakes the player and nudges `disband`;
-//!                    "stockpile_days_critical":7 / "stockpile_days_warning":30 and "trucks_ratio":1.5
-//!                    are reported unknown (no tool reads the stockpile); "deficit_wake_days":14.
+//!                    stockpile and trucks (rules 11 and 21, once a game day from hoi4_stockpile):
+//!                    every `stockpile_targets` entry {"<archetype or variant>": days} (default
+//!                    infantry_equipment at "stockpile_days_warning":30) whose days of cover fall
+//!                    below its days, and trucks (motorized_equipment) below the warning days or
+//!                    below "trucks_ratio":1.5 x what the divisions need, raise that equipment's
+//!                    production line by `rebalance_step` idle military factories (a new line
+//!                    when none builds it); with no idle factory, cover below
+//!                    "stockpile_days_critical":7 wakes the player. A stock that is not falling,
+//!                    or one whose trend the server has not measured yet, is left alone;
+//!                    "deficit_wake_days":14.
 //!                    These keys act whether or not the plan has `manage` (defaults shown):
 //!                    "rebalance_step":3 idle military factories per action to a priority line (tick
-//!                    step 6b, `production_priority` in plan_run.rs); "day0_production":false skips the
+//!                    step 6b, `production_priority` in plan_run.rs: the line whose equipment the
+//!                    divisions lack most, from hoi4_stockpile fielded_short, else hoi4_supply; with no
+//!                    shortage the line with the fewest days of stockpile cover, else the lines in
+//!                    turn; the line's read efficiency goes in the note); "day0_production":false skips the
 //!                    day-0 assignment of free military factories to the kept starting lines;
 //!                    "war_priority":false (templates above); "war_civs":true keeps industrial_complex
-//!                    jobs of `construction` at war (plan_run.rs); "mature_line_days":30
+//!                    jobs of `construction` at war (plan_run.rs); "mature_line_efficiency":30 (percent)
+//!                    and, without an efficiency read, "mature_line_days":30
 //!                    (plan_affairs.rs, the mature-line guard); "invasion_base_days":60,
 //!                    "invasion_base_divisions":4, "invasion_techs" (plan_military.rs, invasions)
 //!
@@ -118,6 +131,8 @@ pub(super) struct Memory {
     peace: Option<Conference>,
     /// hoi4_supply, read at most once a game day.
     supply: Option<(GameHour, Value)>,
+    /// hoi4_stockpile, read at most once a game day.
+    stockpile: Option<(GameHour, Value)>,
     /// (game hour, own casualties so far) samples for the manpower rule.
     losses: Vec<(GameHour, f64)>,
     /// When the current resource deficit was first seen.
@@ -253,6 +268,18 @@ fn supply(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> 
     Some(read)
 }
 
+/// hoi4_stockpile, read at most once a game day (None when unreadable or listing nothing).
+fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
+    if let Some((at, read)) = &state.manage.stockpile {
+        if now - *at < DAY {
+            return Some(read.clone()).filter(|r| r["equipment"].is_array());
+        }
+    }
+    let read = tools.call("hoi4_stockpile", &json!({})).ok()?;
+    state.manage.stockpile = Some((now, read.clone()));
+    Some(read).filter(|r| r["equipment"].is_array())
+}
+
 /// Everything after the extras step, at most one action: the alert row and the failure ledger
 /// (no input), templates, occupation, resources, the air plan and the `manage` rules.
 pub fn step(
@@ -281,8 +308,10 @@ pub fn step(
     if let Some(done) = country_rules(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
+    if let Some(done) = stockpile_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
     equipment_rule(state, tools, plan, now);
-    unread_rules(state, plan);
     Ok(None)
 }
 
@@ -548,7 +577,32 @@ pub(super) fn training_step(
                 }
                 count = count.min(room);
             }
+            let stock = if guards.is_empty() {
+                None
+            } else {
+                stockpile(state, tools, now)
+            };
             for (archetype, n) in &guards {
+                let held = stock.as_ref().and_then(|s| {
+                    let row = archetype_row(s, archetype)?;
+                    list(s, "equipment")
+                        .iter()
+                        .find(|r| text(&r["archetype"]) == row)?["stockpile"]
+                        .as_f64()
+                });
+                if let Some(held) = held {
+                    if held < *n as f64 {
+                        note(
+                            state,
+                            "training",
+                            format!("{template}: waits, {archetype} stockpile {held:.0} below {n}"),
+                        );
+                        state.skip(now, "train", &template, DAY);
+                        continue 'entries;
+                    }
+                    said.push(format!("{archetype} {held:.0} >= {n}"));
+                    continue;
+                }
                 match read.as_ref().map(|s| stockpile_guard(s, archetype)) {
                     Some(Truth::False) => {
                         note(state, "training", format!("{template}: waits, fielded divisions lack {archetype} (stockpile below {n})"));
@@ -1766,6 +1820,7 @@ fn military_lines(tools: &dyn Tools, economy: &Value) -> Result<(Vec<MilLine>, i
                 l["factory_counters"]["requested_factories_raw_signed"]
                     .as_i64()
                     .unwrap_or(0),
+                l["output"]["efficiency"].as_f64(),
             )
         })
         .collect();
@@ -1773,9 +1828,18 @@ fn military_lines(tools: &dyn Tools, economy: &Value) -> Result<(Vec<MilLine>, i
     Ok((military, idle))
 }
 
-/// Equipment the fielded divisions lack per archetype (hoi4_supply: need minus held). This is
-/// the stand-in for days of stockpile cover: no tool reads the stockpile.
-fn shortfall(supply: Option<&Value>) -> HashMap<String, f64> {
+/// Equipment the fielded divisions lack per archetype: hoi4_stockpile fielded_short when read,
+/// else hoi4_supply (need minus held).
+fn shortfall(stock: Option<&Value>, supply: Option<&Value>) -> HashMap<String, f64> {
+    if let Some(rows) = stock.and_then(|s| s["equipment"].as_array()) {
+        return rows
+            .iter()
+            .filter_map(|r| {
+                let short = r["fielded_short"].as_f64()?;
+                (short > 0.0).then(|| (text(&r["archetype"]).to_string(), short))
+            })
+            .collect();
+    }
     let mut out: HashMap<String, f64> = HashMap::new();
     for d in supply.map_or(&[][..], |s| list(s, "divisions")) {
         for e in list(d, "equipment") {
@@ -1791,8 +1855,8 @@ fn shortfall(supply: Option<&Value>) -> HashMap<String, f64> {
     out
 }
 
-/// One military line: (entry index, equipment, requested factories).
-type MilLine = (i64, String, i64);
+/// One military line: (entry index, equipment, requested factories, efficiency percent read).
+type MilLine = (i64, String, i64, Option<f64>);
 
 /// The line that gets the next idle factories: of the `production_priority` lines (the plan's
 /// removed equipment never), the one whose archetype the divisions lack most; with no shortage
@@ -1834,8 +1898,13 @@ fn feed_choice(
     if lines.is_empty() {
         return None;
     }
-    let read = supply(state, tools, now);
-    let short = shortfall(read.as_ref());
+    let stock = stockpile(state, tools, now);
+    let read = if stock.is_some() {
+        None
+    } else {
+        supply(state, tools, now)
+    };
+    let short = shortfall(stock.as_ref(), read.as_ref());
     let lack = |l: &MilLine| -> f64 {
         short
             .iter()
@@ -1853,6 +1922,31 @@ fn feed_choice(
     }
     if let Some((l, n)) = best {
         return Some((l.clone(), format!("fielded divisions lack {n:.0}")));
+    }
+    // no shortage: the line whose stockpile runs out first (a falling stock only)
+    let cover = |l: &MilLine| -> Option<f64> {
+        let rows = stock.as_ref()?["equipment"].as_array()?;
+        rows.iter()
+            .filter(|r| {
+                let a = text(&r["archetype"]);
+                !a.is_empty() && l.1.starts_with(a)
+            })
+            .filter_map(|r| r["days_of_cover"].as_f64())
+            .reduce(f64::min)
+    };
+    let mut first: Option<(&MilLine, f64)> = None;
+    for l in &lines {
+        if let Some(d) = cover(l) {
+            if first.is_none_or(|(_, b)| d < b) {
+                first = Some((l, d));
+            }
+        }
+    }
+    if let Some((l, d)) = first {
+        return Some((
+            l.clone(),
+            format!("no shortage; fewest days of stockpile cover ({d:.0})"),
+        ));
     }
     let turn = state.manage.feed_turn % lines.len();
     state.manage.feed_turn = state.manage.feed_turn.wrapping_add(1);
@@ -1872,9 +1966,14 @@ fn feed(
     military: &[MilLine],
     idle: i64,
 ) -> Result<Option<String>> {
-    let Some(((index, equipment, factories), why)) = feed_choice(state, tools, plan, now, military)
+    let Some(((index, equipment, factories, efficiency), why)) =
+        feed_choice(state, tools, plan, now, military)
     else {
         return Ok(None);
+    };
+    let why = match efficiency {
+        Some(e) => format!("{why}; line efficiency {e:.0}%"),
+        None => why,
     };
     let step = plan["manage"]["rebalance_step"]
         .as_i64()
@@ -1965,7 +2064,7 @@ pub(super) fn day0_step(
         let Some(target) = line["factories"].as_i64() else {
             continue;
         };
-        let Some((index, have, current)) = military
+        let Some((index, have, current, _)) = military
             .iter()
             .find(|m| !equipment.is_empty() && m.1 == equipment)
             .cloned()
@@ -2037,21 +2136,183 @@ pub(super) fn war_drops_civs(
     at_war(state, tools, plan, now)
 }
 
-/// Rules 11 and 21 need the equipment stockpile, which no tool reads: they report unknown.
-fn unread_rules(state: &mut State, plan: &Value) {
+/// Rules 11 and 21: stockpile cover and trucks (hoi4_stockpile, once a game day). The equipment
+/// whose cover is lowest below its target gets `rebalance_step` idle military factories on its
+/// line (a new line when none builds it); with no idle factory a cover below
+/// `stockpile_days_critical` wakes the player.
+fn stockpile_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     let m = &plan["manage"];
-    if !m.is_object() {
-        return;
+    let (stock_on, trucks_on) = (!off(plan, "stockpile"), !off(plan, "trucks"));
+    if !m.is_object() || !(stock_on || trucks_on) || state.skipped(now, "mstock", "x") {
+        return Ok(None);
     }
-    if !off(plan, "stockpile") {
-        let critical = m["stockpile_days_critical"].as_i64().unwrap_or(7);
-        let warning = m["stockpile_days_warning"].as_i64().unwrap_or(30);
-        note(state, "stockpile_days", format!("unknown (critical {critical}, warning {warning} days): no tool reads the equipment stockpile"));
+    state.skip(now, "mstock", "x", DAY);
+    let critical = m["stockpile_days_critical"].as_f64().unwrap_or(7.0);
+    let warning = m["stockpile_days_warning"].as_f64().unwrap_or(30.0);
+    let ratio = m["trucks_ratio"].as_f64().unwrap_or(1.5);
+    let Some(read) = stockpile(state, tools, now) else {
+        note(
+            state,
+            "stockpile_days",
+            "unknown: hoi4_stockpile unreadable",
+        );
+        return Ok(None);
+    };
+    // (equipment, archetype, days of cover, why it is low)
+    let mut low: Vec<(String, String, f64, String)> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    if stock_on {
+        let mut targets: Vec<(String, f64)> = plan["stockpile_targets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(k, _)| k.as_str() != "why" && k.as_str() != "note")
+            .filter_map(|(k, v)| v.as_f64().map(|d| (k.clone(), d)))
+            .collect();
+        if targets.is_empty() {
+            targets.push(("infantry_equipment".into(), warning));
+        }
+        for (equipment, want) in targets {
+            match crate::plan_predicate::stockpile_days(&read, &equipment) {
+                Ok(days) => {
+                    seen.push(format!("{equipment} {days:.0}/{want:.0}"));
+                    if days < want {
+                        let arche = archetype_row(&read, &equipment).unwrap_or(equipment.clone());
+                        low.push((
+                            equipment,
+                            arche,
+                            days,
+                            format!("{days:.0} days of cover, wanted {want:.0}"),
+                        ));
+                    }
+                }
+                Err(why) => seen.push(format!("{equipment} unknown ({why})")),
+            }
+        }
     }
-    if !off(plan, "trucks") {
-        let ratio = m["trucks_ratio"].as_f64().unwrap_or(1.5);
-        note(state, "trucks", format!("unknown (wanted {ratio}x): no tool reads the truck stockpile (hoi4_supply lists trucks_and_trains_in_stock unavailable)"));
+    if trucks_on {
+        if let Some(t) = read["trucks"].as_object() {
+            let stock = t.get("stockpile").and_then(Value::as_f64).unwrap_or(0.0);
+            let need = t.get("fielded_need").and_then(Value::as_f64).unwrap_or(0.0);
+            let days = t.get("days_of_cover").and_then(Value::as_f64);
+            seen.push(format!(
+                "trucks {stock:.0} in stock, {need:.0} needed, cover {}",
+                days.map_or("not falling or unmeasured".into(), |d| format!(
+                    "{d:.0} days"
+                ))
+            ));
+            let short_ratio = need > 0.0 && stock < ratio * need;
+            if short_ratio || days.is_some_and(|d| d < warning) {
+                let why = if short_ratio {
+                    format!("{stock:.0} trucks, below {ratio} x the {need:.0} the divisions need")
+                } else {
+                    format!(
+                        "{:.0} days of truck cover, wanted {warning:.0}",
+                        days.unwrap_or(0.0)
+                    )
+                };
+                low.push((
+                    "motorized_equipment".into(),
+                    "motorized_equipment".into(),
+                    days.unwrap_or(0.0),
+                    why,
+                ));
+            }
+        }
     }
+    note(
+        state,
+        "stockpile_days",
+        format!("cover (days/wanted): {}", seen.join("; ")),
+    );
+    let Some((equipment, archetype, days, why)) = low
+        .into_iter()
+        .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+    else {
+        return Ok(None);
+    };
+    if state.skipped(now, "mstockline", &archetype) {
+        return Ok(None);
+    }
+    let economy = tools.call("hoi4_economy", &json!({}))?;
+    let (military, idle) = military_lines(tools, &economy)?;
+    let step = m["rebalance_step"].as_i64().filter(|n| *n > 0).unwrap_or(3);
+    let give = idle.min(step);
+    if give <= 0 {
+        note(
+            state,
+            "stockpile",
+            format!("{equipment}: {why}; no idle military factory to raise its line"),
+        );
+        if days < critical {
+            wake(
+                state,
+                plan,
+                now,
+                11,
+                "stockpile_low",
+                format!("{equipment}: {why} (critical {critical:.0} days) and no idle military factory: move factories or cut its use"),
+                json!({"equipment": equipment, "days_of_cover": days, "critical": critical}),
+            );
+        }
+        return Ok(None);
+    }
+    let line = military
+        .iter()
+        .filter(|l| l.1.starts_with(archetype.as_str()))
+        .max_by_key(|l| l.2)
+        .cloned();
+    let (ok, result) = match &line {
+        Some((index, have, factories, _)) => state.act(
+            tools,
+            lease,
+            "hoi4_production_set",
+            json!({"line": index, "equipment": have, "factories": factories + give}),
+            "pk",
+        )?,
+        None => state.act(
+            tools,
+            lease,
+            "hoi4_production_add",
+            json!({"equipment": archetype, "factories": give}),
+            "pk",
+        )?,
+    };
+    state.skip(
+        now,
+        "mstockline",
+        &archetype,
+        if ok { 3 * DAY } else { 7 * DAY },
+    );
+    let what = match &line {
+        Some((_, have, factories, _)) => format!("{have} {factories}+{give}"),
+        None => format!("new {archetype} line with {give}"),
+    };
+    note(
+        state,
+        "stockpile",
+        format!("{equipment}: {why}: {what}: {ok}"),
+    );
+    Ok(Some(format!(
+        "stockpile {equipment} low ({why}): {what}: {ok} {result}"
+    )))
+}
+
+/// The archetype row a key names in a hoi4_stockpile read (itself, or the row holding the variant).
+fn archetype_row(read: &Value, key: &str) -> Option<String> {
+    list(read, "equipment")
+        .iter()
+        .find(|r| {
+            text(&r["archetype"]) == key
+                || list(r, "variants").iter().any(|v| text(&v["type"]) == key)
+        })
+        .map(|r| text(&r["archetype"]).to_string())
 }
 
 #[cfg(test)]
@@ -2349,6 +2610,27 @@ mod tests {
         );
         assert!(state.manage.notes["training"].contains("lack infantry_equipment"));
         assert_eq!(actions(&tools).len(), 1);
+        // the stockpile read decides when present: 400 rifles held, 600 wanted
+        tools.replies.borrow_mut().insert(
+            "hoi4_stockpile".into(),
+            json!({"equipment": [{"archetype": "infantry_equipment", "stockpile": 400.0, "variants": []}]}),
+        );
+        let mut state = State::default();
+        assert_eq!(
+            training_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["training"].contains("stockpile 400 below 600"));
+        tools.replies.borrow_mut().insert(
+            "hoi4_stockpile".into(),
+            json!({"equipment": [{"archetype": "infantry_equipment", "stockpile": 900.0, "variants": []}]}),
+        );
+        let mut state = State::default();
+        training_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(state.manage.notes["training"].contains("infantry_equipment 900 >= 600"));
+        assert_eq!(actions(&tools).len(), 2);
     }
 
     #[test]
@@ -2913,7 +3195,7 @@ mod tests {
     }
 
     #[test]
-    fn low_stability_and_low_equipment_fill_wake_and_unread_rules_say_unknown() {
+    fn low_stability_and_low_equipment_fill_wake_and_an_unread_stockpile_is_unknown() {
         let tools = fake(vec![
             ("hoi4_country_status", json!({"stability": {"value": 0.42}})),
             (
@@ -2938,7 +3220,6 @@ mod tests {
             "the disband step is nudged"
         );
         let manage = digest(&state).unwrap();
-        assert!(manage["trucks"].as_str().unwrap().starts_with("unknown"));
         assert!(manage["stockpile_days"]
             .as_str()
             .unwrap()
@@ -2947,5 +3228,153 @@ mod tests {
         step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
         assert!(wakes(&mut state).is_empty());
         assert_eq!(reads(&tools, "hoi4_country_status"), 1);
+    }
+
+    fn stock_rows(inf_days: Value, trucks: f64, truck_need: f64) -> Value {
+        let trucks = json!({"archetype": "motorized_equipment", "stockpile": trucks,
+            "fielded_need": truck_need, "fielded_short": 0.0, "days_of_cover": null,
+            "depleting": false, "variants": []});
+        json!({"equipment": [
+            {"archetype": "infantry_equipment", "stockpile": 900.0, "fielded_short": 0.0,
+             "days_of_cover": inf_days, "depleting": true,
+             "variants": [{"type": "infantry_equipment_1", "amount": 900.0}]},
+            trucks.clone()], "trucks": trucks})
+    }
+
+    fn lines_with(idle: i64) -> Vec<(&'static str, Value)> {
+        vec![
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"military": 20 + idle}}),
+            ),
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                    {"entry_index": 0, "line_kind": "military", "equipment_id": "infantry_equipment_1",
+                     "factory_counters": {"requested_factories_raw_signed": 12}, "output": {"efficiency": 55.0}},
+                    {"entry_index": 1, "line_kind": "military", "equipment_id": "artillery_equipment_1",
+                     "factory_counters": {"requested_factories_raw_signed": 8}, "output": {"efficiency": 40.0}}]}),
+            ),
+        ]
+    }
+
+    #[test]
+    fn low_stockpile_cover_raises_its_line_and_wakes_without_idle_factories() {
+        let mut replies = lines_with(5);
+        replies.push(("hoi4_stockpile", stock_rows(json!(12.0), 500.0, 100.0)));
+        let tools = fake(replies);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("stockpile infantry_equipment low"), "{out}");
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_production_set");
+        assert_eq!(sent[0].1["line"], 0);
+        assert_eq!(sent[0].1["factories"], 15);
+        // once a game day, and the line waits after a raise
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 2).unwrap(),
+            None
+        );
+        // no idle factory, 5 days of cover: the player is woken
+        let mut replies = lines_with(0);
+        replies.push(("hoi4_stockpile", stock_rows(json!(5.0), 500.0, 100.0)));
+        let tools = fake(replies);
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        assert_eq!(wakes(&mut state)[0]["reason"], "stockpile_low");
+        // a plan target: artillery has no line falling, infantry at 40 days is above its 35
+        let mut replies = lines_with(5);
+        replies.push(("hoi4_stockpile", stock_rows(json!(40.0), 500.0, 100.0)));
+        let tools = fake(replies);
+        let mut state = State::default();
+        let targets =
+            json!({"manage": {}, "stockpile_targets": {"infantry_equipment_1": 35, "why": "x"}});
+        assert_eq!(
+            step(&mut state, &tools, &targets, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["stockpile_days"].contains("infantry_equipment_1 40/35"));
+        // a stock that is not falling is left alone
+        let mut replies = lines_with(5);
+        replies.push(("hoi4_stockpile", stock_rows(json!(null), 500.0, 100.0)));
+        let tools = fake(replies);
+        let mut state = State::default();
+        let mut quiet = json!({"manage": {}});
+        quiet["stockpile_targets"] = json!({"infantry_equipment": 30});
+        assert_eq!(step(&mut state, &tools, &quiet, "l", START).unwrap(), None);
+    }
+
+    #[test]
+    fn few_trucks_start_a_truck_line_and_the_rules_switch_off() {
+        let mut replies = lines_with(4);
+        replies.push(("hoi4_stockpile", stock_rows(json!(null), 120.0, 100.0)));
+        let tools = fake(replies);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("below 1.5 x"), "{out}");
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_production_add");
+        assert_eq!(sent[0].1["equipment"], "motorized_equipment");
+        assert_eq!(sent[0].1["factories"], 3);
+        // switched off: nothing
+        let mut replies = lines_with(4);
+        replies.push(("hoi4_stockpile", stock_rows(json!(3.0), 120.0, 100.0)));
+        let tools = fake(replies);
+        let mut state = State::default();
+        let off = json!({"manage": {"off": ["stockpile", "trucks"]}});
+        assert_eq!(step(&mut state, &tools, &off, "l", START).unwrap(), None);
+        assert_eq!(reads(&tools, "hoi4_stockpile"), 0);
+    }
+
+    #[test]
+    fn idle_factories_go_to_the_line_with_the_least_stockpile_cover() {
+        let mut replies = lines_with(3);
+        replies.push((
+            "hoi4_stockpile",
+            json!({"equipment": [
+                {"archetype": "infantry_equipment", "fielded_short": 0.0, "days_of_cover": 80.0, "variants": []},
+                {"archetype": "artillery_equipment", "fielded_short": 0.0, "days_of_cover": 20.0, "variants": []}]}),
+        ));
+        let tools = fake(replies);
+        let plan = json!({"production_priority": ["infantry_equipment", "artillery_equipment"]});
+        let mut state = State::default();
+        let economy = tools.call("hoi4_economy", &json!({})).unwrap();
+        let out = rebalance_step(&mut state, &tools, &plan, "l", START, &economy)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("production_set artillery_equipment_1 8+3"),
+            "{out}"
+        );
+        let line = &state.manage.notes["production"];
+        assert!(
+            line.contains("fewest days of stockpile cover (20)"),
+            "{line}"
+        );
+        assert!(line.contains("line efficiency 40%"), "{line}");
+        // a shortage read from the stockpile wins over cover
+        let mut replies = lines_with(3);
+        replies.push((
+            "hoi4_stockpile",
+            json!({"equipment": [
+                {"archetype": "infantry_equipment", "fielded_short": 300.0, "days_of_cover": 80.0, "variants": []},
+                {"archetype": "artillery_equipment", "fielded_short": 0.0, "days_of_cover": 20.0, "variants": []}]}),
+        ));
+        let tools = fake(replies);
+        let mut state = State::default();
+        let out = rebalance_step(&mut state, &tools, &plan, "l", START, &economy)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("production_set infantry_equipment_1 12+3"),
+            "{out}"
+        );
     }
 }

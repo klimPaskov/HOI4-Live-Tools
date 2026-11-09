@@ -84,8 +84,9 @@
 //!   research_bonuses       {"<bonus category or name>":[techs]} or true: an active research bonus puts its
 //!                          techs first in the research step (plan_affairs.rs)
 //!   production_priority    equipment prefixes whose lines receive military factories on no line: the
-//!                          line whose archetype the fielded divisions lack most (hoi4_supply need minus
-//!                          held; no tool reads the stockpile), else the lines in turn, at most
+//!                          line whose archetype the fielded divisions lack most (hoi4_stockpile
+//!                          fielded_short, else hoi4_supply need minus held), else the one with the
+//!                          fewest days of stockpile cover, else the lines in turn, at most
 //!                          `manage.rebalance_step` (3) factories per action, re-chosen each action;
 //!                          factories are never taken from a line; removed equipment is never fed
 //!                          (plan_manage.rs). Day 0: while the game is still paused at the hour this
@@ -3408,8 +3409,18 @@ fn war_step(
         } else if stage == 2 {
             // Planning before execution and the bound pause after a captured hub (plan_war.rs).
             let mean = org.map(|o| o.1);
-            if plan_war::execute_gate(state, plan, &name, target, supply_read.as_ref(), mean, now)
-                .is_some()
+            let planning = army["planning"]["mean"].as_f64();
+            if plan_war::execute_gate(
+                state,
+                plan,
+                &name,
+                target,
+                supply_read.as_ref(),
+                mean,
+                planning,
+                now,
+            )
+            .is_some()
             {
                 state.war_cool.insert(name.clone(), now + cooldown);
                 continue;
