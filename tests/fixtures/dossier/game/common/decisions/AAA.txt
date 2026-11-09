@@ -11,4 +11,26 @@ AAA_cat = {
 		cost = 50
 		complete_effect = { 1 = { add_building_construction = { type = industrial_complex level = 1 instant_build = yes } } }
 	}
+	AAA_withdraw_from_beta = {
+		allowed = { tag = AAA }
+		cost = 15
+		fire_only_once = yes
+		complete_effect = {
+			BBB = { country_event = { id = bbb.1 } }
+			effect_tooltip = { white_peace = BBB }
+		}
+	}
+	AAA_hand_over_one = {
+		allowed = { tag = AAA }
+		complete_effect = { BBB = { transfer_state = 1 } }
+	}
+	AAA_lean_left = {
+		allowed = { tag = AAA }
+		cost = 25
+		complete_effect = {
+			add_power_balance_modifier = { id = AAA_balance modifier = AAA_drift_left }
+			AAA_bop_shift_effect = yes
+			army_experience = -5
+		}
+	}
 }

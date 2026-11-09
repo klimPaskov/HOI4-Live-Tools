@@ -1,0 +1,6 @@
+AAA_drift_left = {
+	power_balance_daily = -0.002
+}
+AAA_drift_weekly = {
+	power_balance_weekly = 0.014
+}

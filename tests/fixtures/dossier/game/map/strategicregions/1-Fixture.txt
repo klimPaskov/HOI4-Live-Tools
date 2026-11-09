@@ -1,0 +1,42 @@
+strategic_region={
+	id=1
+	name="STRATEGICREGION_1"
+	provinces={
+		10 11 40 41
+	}
+	weather={
+		period={
+			between={ 0.0 30.0 }
+			temperature={ -20.0 -2.0 }
+			no_phenomenon=0.4
+			rain_light=0.0
+			rain_heavy=0.0
+			snow=0.5
+			blizzard=0.1
+			mud=1.0
+			sandstorm=0.0
+		}
+		period={
+			between={ 0.6 30.6 }
+			temperature={ 8.0 26.0 }
+			no_phenomenon=0.1
+			rain_light=0.55
+			rain_heavy=0.35
+			snow=0.0
+			blizzard=0.0
+			mud=1.0
+			sandstorm=0.0
+		}
+		period={
+			between={ 0.7 30.7 }
+			temperature={ 22.0 40.0 }
+			no_phenomenon=1.0
+			rain_light=0.0
+			rain_heavy=0.0
+			snow=0.0
+			blizzard=0.0
+			mud=1.0
+			sandstorm=0.0
+		}
+	}
+}

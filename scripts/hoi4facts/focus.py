@@ -144,6 +144,26 @@ def focus_row(world, b, path, line, days, ctx, tag):
     return row
 
 
+def xp_rewards(world, tag=None):
+    """[{"focus", "army", "air", "navy", "src"}] of the loaded tree's focuses whose completion reward gives
+    army/air/navy experience (world.xp_in: every if-branch counted, an upper bound)."""
+    from .world import xp_in
+
+    tag = tag or world.tag
+    t = tree(world, tag)
+    trees, shared = _focus_blocks(world)
+    blocks = list((trees.get(t["id"]) or {}).get("focuses", [])) + [shared[f] for f in t["focuses"] if f in shared]
+    out = []
+    for b, p, ln in blocks:
+        fid = get1(b, "id")
+        if fid not in t["focuses"]:
+            continue
+        xp = xp_in(get1(b, "completion_reward"))
+        if xp:
+            out.append(dict(xp, focus=fid, days=t["focuses"][fid]["days"], src=world.src(p, ln)))
+    return out
+
+
 def roots(t):
     return [fid for fid, r in t["focuses"].items() if not r["prereq"]]
 

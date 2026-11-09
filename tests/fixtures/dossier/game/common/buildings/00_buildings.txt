@@ -2,4 +2,7 @@ buildings = {
 	infrastructure = { base_cost = 6000 level_cap = { state_max = 5 } }
 	arms_factory = { base_cost = 7200 level_cap = { shares_slots = yes state_max = 20 } }
 	industrial_complex = { base_cost = 10800 level_cap = { shares_slots = yes state_max = 20 } }
+	supply_node = { base_cost = 20000 level_cap = { province_max = 1 } }
+	rail_way = { base_cost = 170 per_level_extra_cost = 130 level_cap = { province_max = 1 } }
+	naval_base = { base_cost = 5000 per_level_extra_cost = 1000 only_costal = yes level_cap = { province_max = 10 } }
 }

@@ -4,4 +4,8 @@ equipments = {
 	infantry_equipment_2 = { year = 1939 archetype = infantry_equipment build_cost_ic = 0.58 }
 	artillery_equipment = { is_archetype = yes build_cost_ic = 3 }
 	artillery_equipment_1 = { year = 1934 archetype = artillery_equipment }
+	light_tank_chassis = { is_archetype = yes type = armor build_cost_ic = 8 }
+	light_tank_chassis_1 = { year = 1936 archetype = light_tank_chassis }
+	fighter_equipment = { is_archetype = yes type = { fighter interceptor } build_cost_ic = 20 }
+	fighter_equipment_1 = { year = 1936 archetype = fighter_equipment }
 }
