@@ -20,6 +20,7 @@ Tags: `[V]` game file, `[W]` wiki, `[L]` seen in a live run, `[H]` heuristic.
 | Italy conquers Ethiopia / Ethiopia pushes Italy out of Africa (1936): dated plans, VP order, construction triggers | ../plans/italy-ethiopia-1936.md / ../plans/ethiopia-italy-1936.md (+ .plan.json) |
 | Ready-made validated standing plan (Germany 1936-38) | ../plans/germany-fair-1936-1938.md (+ .plan.json; check with scripts/validate_plan.py) |
 | What the tools can and cannot do yet | ../../docs/PLAYBOOK_TOOL_GAPS.md |
+| Live failures a plan must prevent, with the lint rule for each (one JSON object per line) | lessons.jsonl (lint: scripts/hoi4facts/lint_plan.py) |
 
 ## Ten rules that decided past failed campaigns
 1. Equipment, not division count, wins: size training to equipment production.
