@@ -884,8 +884,19 @@ class Lint:
             mine = [p for p in provs if p in start_ctl]
             tp = [e for e in targets if e.get("state") == sid or e["province"] in provs]
             if not tp and len(mine) < len(provs):
-                self.add("error", "conquest.mandatory", "vp_targets",
-                         f"the goal needs state {sid} ({kind} control) but no vp target is in it")
+                owner = owners.get(sid)
+                declared = {str(d.get("target")) for d in self.list_of("diplomacy")
+                            if isinstance(d, dict) and d.get("action") == "declare"}
+                at_war = set(self.war.get("enemies") or []) | set(self.capitulation_targets()) | declared
+                if owner in at_war:
+                    self.add("error", "conquest.mandatory", "vp_targets",
+                             f"the goal needs state {sid} ({kind} control) but no vp target is in it")
+                else:
+                    # A state of a country the plan does not fight (annexed by decision, demand or
+                    # puppet): no vp target is needed, but the route must be named somewhere.
+                    self.add("warning", "conquest.mandatory", "vp_targets",
+                             f"the goal needs state {sid} ({kind} control) of {owner}, which the plan does not "
+                             f"fight: name the decision or diplomacy item that acquires it")
             elif kind == "full":
                 covered = set(mine)
                 for e in targets:

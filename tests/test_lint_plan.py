@@ -485,6 +485,15 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertHit(plan, "predicates.unreadable", "warning", "checkpoints[0].must[0]")
         self.assertFalse(self.hits(plan, "predicates.unreadable", None, "goal.predicates[1]"))  # any[] with a readable atom
 
+    # -------------------------------------------------------------- conquest.mandatory, peaceful route
+    def test_goal_state_of_a_country_not_fought_is_a_warning(self):
+        plan = copy.deepcopy(self.ita)
+        plan["goal"] = dict(plan.get("goal") or {}, predicates=["capitulated:ETH", "state_controller:16=ITA"])
+        f = self.assertHit(plan, "conquest.mandatory", "warning", "vp_targets")
+        self.assertIn("does not fight", f["message"])
+        self.assertFalse([x for x in self.hits(plan, "conquest.mandatory", "error", "vp_targets")
+                          if "state 16" in x["message"]])
+
     # -------------------------------------------------------------- research.idle
     def test_idle_research_slots_with_the_fallback_off_fail(self):
         plan = copy.deepcopy(self.ita)
