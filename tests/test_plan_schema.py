@@ -23,9 +23,10 @@ from hoi4facts import schema_check  # noqa: E402
 SCHEMA_PATH = os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")
 PLAN_RUN = os.path.join(ROOT, "native", "src", "plan_run.rs")
 # The runner's child modules read plan keys too (plan_manage.rs: continuous management;
-# plan_predicate.rs: the predicate evaluator, once it lands). Missing files are skipped.
+# plan_predicate.rs: the predicate evaluator; plan_affairs.rs: designs, diplomacy, faction, trade,
+# MIOs, intelligence, research bonuses). Missing files are skipped.
 EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
-                                 for name in ("plan_manage.rs", "plan_predicate.rs")]
+                                 for name in ("plan_manage.rs", "plan_predicate.rs", "plan_affairs.rs")]
 ALARMS = os.path.join(ROOT, "native", "src", "alarms.rs")
 HAND_PLANS = [
     os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plans", name)
@@ -36,7 +37,7 @@ HAND_PLANS = [
 # loop variable names there).
 ENTRY_VARS = {
     "politics": (["tick"], ["pick"]),
-    "production": (["tick"], ["line"]),
+    "production": (["tick", "wanted_switches"], ["line"]),
     "research_path": (["tick"], ["step"]),
     "construction": (["construction_step"], ["job"]),
     "construction_plan": (["construction_plan_step"], ["item"]),
@@ -48,6 +49,11 @@ ENTRY_VARS = {
     "air_plan": (["air_plan_step", "wing_matches", "rebase_target"], ["entry"]),
     "decision_rules": (["decisions_step", "decision_forbidden"], ["rule", "r"]),
     "event_rules": (["event_rule_choice"], ["rule"]),
+    "designs": (["designs_step", "wanted_switches"], ["entry", "e"]),
+    "diplomacy": (["diplomacy_step", "justify", "declare", "relation", "widening", "expiry_watch",
+                   "justify_items", "dip_target"], ["item", "j", "o"]),
+    "mio": (["mio_step"], ["entry"]),
+    "trade": (["trade_step"], ["item"]),
 }
 # Fields the executor still reads that the schema deliberately leaves out.
 KNOWN_GAPS = {
