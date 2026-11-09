@@ -1,3 +1,8 @@
 numpy>=1.21
 Pillow>=9.0
 opencv-python-headless>=4.5
+pyobjc-framework-Cocoa>=10,<12; sys_platform == 'darwin'
+pyobjc-framework-Quartz>=10,<12; sys_platform == 'darwin'
+pyobjc-framework-ApplicationServices>=10,<12; sys_platform == 'darwin'
+pyobjc-framework-ScreenCaptureKit>=10,<12; sys_platform == 'darwin'
+pyobjc-framework-Vision>=10,<12; sys_platform == 'darwin'
