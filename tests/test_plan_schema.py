@@ -1,7 +1,7 @@
 """The plan schema (skills/hoi4-campaign-playbook/plan.schema.json) stays in step with the executor.
 
-(a) every plan key native/src/plan_run.rs and its child modules (plan_manage.rs, plan_predicate.rs once it
-    lands) and the alarms read is in the schema, tagged x-owner "executor", and no executor-tagged key is
+(a) every plan key native/src/plan_run.rs and its child modules (plan_manage.rs, plan_military.rs,
+    plan_predicate.rs once it lands) and the alarms read is in the schema, tagged x-owner "executor", and no executor-tagged key is
     unread (the code is grepped for plan["..."] and helper reads, comments stripped);
 (b) the schema uses only the draft-7 subset scripts/hoi4facts/schema_check.py implements;
 (c) the predicate grammar (pattern, x-grammar, x-atoms) agrees with hoi4facts/validate.py parse_predicate;
@@ -23,9 +23,10 @@ from hoi4facts import schema_check  # noqa: E402
 SCHEMA_PATH = os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")
 PLAN_RUN = os.path.join(ROOT, "native", "src", "plan_run.rs")
 # The runner's child modules read plan keys too (plan_manage.rs: continuous management;
+# plan_military.rs: army groups, navy, invasions, casualty and air superiority rules;
 # plan_predicate.rs: the predicate evaluator, once it lands). Missing files are skipped.
 EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
-                                 for name in ("plan_manage.rs", "plan_predicate.rs")]
+                                 for name in ("plan_manage.rs", "plan_military.rs", "plan_predicate.rs")]
 ALARMS = os.path.join(ROOT, "native", "src", "alarms.rs")
 HAND_PLANS = [
     os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plans", name)
