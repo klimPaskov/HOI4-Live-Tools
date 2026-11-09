@@ -18,7 +18,7 @@ covers templates, equipment, production lines and training.
   **0**; regimental companies **0** (they add no width and no speed). Division width is the sum of its
   battalions.
 - Designer: 5 x 5 battalion grid, **5 divisional support slots** and a **regimental row of 5 slots**, one
-  per column; a column of exactly 3 battalions carries one. Regimental items: `fire_support` (heavy weapons
+  per column; a column of 3 or more battalions carries one. Regimental items: `fire_support` (heavy weapons
   company) and `mot_fire_support`, `field_guns` (6 artillery eq), `rocket_battery`, `anti_air_battery`
   (16 AA eq), `anti_tank_battery` (16 AT eq), plus SP AA and tank-destroyer supports on armour columns. The
   game's AI templates use 9 infantry + 1-2 artillery brigades, engineer/recon/artillery/logistics and
@@ -137,7 +137,7 @@ slot as optional.
 
 Notation: `Wnn` width, `MP` manpower, `IC` equipment IC at the stated gear level, `Org` division average,
 `Sup` summed battalion supply use. Equipment totals are per division. Regimental support goes in the row
-under the regiment columns (one slot per column of exactly 3 battalions).
+under the regiment columns (one slot per column of 3 or more battalions).
 
 **T1 INF-18 (1936 start, Germany/China/Poland)**: 9 infantry (3 columns x 3), support engineer + artillery.
 W18, MP 9,600, Org 60, Sup 0.72, **inf 910, support 30, art 12**, IC ~620. The game's starting German
@@ -196,6 +196,52 @@ set-piece battles. Poor org after a lost battle.
 **T15 CAV-8 / marines**: 4 cavalry + recon + artillery is W8 and IC ~340: a scouting screen only (garrisons
 use T5). Marines are allowed only as ordinary historical amphibious infantry, **one landing at a time, never
 spam or space-marine stacks**.
+
+**Wide multiplayer templates (T16-T20)**: strong multiplayer players run 36-38-wide assault and holding divisions
+with all five support slots and a full regimental row (AR23). Widths below are the game's own (2 per battalion);
+mods with narrower special forces fit more battalions in the same width. Mountaineer, marine and ranger templates
+count against the special-forces cap (AR11, AR19): plan the division count from the cap.
+
+**T16 ARMOUR-38 (1939+ breakthrough armour)**: 12 tank + 8 mechanised (5 columns), regimental row 3 tank or TD
+companies under the tank columns and 2 SPAA under the mechanised; support engineer, recon (light tank), flame or
+armoured support, artillery (super-heavy howitzer later), logistics. W38, 4 km/h, MP ~18,600; with medium-II gear
+soft ~720, hard ~690, breakthrough ~1,260, armour ~70, piercing ~100. Variants: a Barbarossa build of 11 light and
+medium tanks + 8 mech (soft ~845, piercing ~170); a coastal-defence build of 11 heavy tanks + 8 mech (hard ~960,
+armour ~65, piercing ~185). Separate from infantry (no space marines).
+
+**T17 MOUNTAIN-36 (holder and line filler, hills and mountains)**: 18 mountaineers, support artillery, recon,
+engineer, AA, flame tank. W36, org ~88, defence ~1,040, soft ~610 with late gear. Variant ANTI-TANK: 15 mountaineers +
+3-5 line AT for key ports and narrow fronts facing armour. In a one-direction mountain fight 25 wide fits best (AR11).
+
+**T18 MARINE-36 (landing assault)**: 10-12 marines + 4-5 mechanised + 1-2 line AT; support artillery, super-heavy
+howitzer, light-tank recon, flame tank, engineer. W36, MP ~21,700, soft ~510, hard ~130-170, breakthrough ~455.
+Pacific variant: 5 marines + 12-15 mountaineers + 1 line AA (no terrain penalty on landings, rivers and mountains).
+Only as many marines as the landing needs (AR12); the follow-up waves use T19.
+
+**T19 RANGER-36 (inland after a landing, forests and hills)**: 16 rangers + 3 line AT (W35, MP ~10,000, soft ~470,
+hard ~170, breakthrough ~480) or 15 mountaineers + 4 mechanised + 1 line AT; same support as T18. Hard attack rises
+with each AT battalion; cut AT when AT equipment runs short, use towed instead of motorised AT when trucks run short.
+
+**T20 PORT-36 (port and island garrison)**: 18 infantry, support artillery, engineer or AT, AA. W36, about 1,000-1,500
+IC: a cheap holder for ports, islands and colonial coasts; reserve priority so it draws the oldest rifles (PR17); add
+support AT where the enemy lands armour. Remove a company rather than disable its equipment (MX15).
+
+### Designs used with these templates (1.19.4 designer)
+
+| Role | Design | Notes |
+|---|---|---|
+| Medium tank | Improved medium chassis, medium gun II, radio III, diesel, armour 17 clicks, engine 0 | Soft ~50, piercing ~104, armour ~89, ~15.7 IC; 4 km/h, matches the slowest tank in the division |
+| Heavy tank | Basic or improved heavy, high-velocity gun III, radio III, petrol, armour 17, engine 1-5 | Piercing 205-240, armour 110-116, ~23 IC; coastal defence and breakthrough |
+| Tank destroyer | Basic medium TD, gun III, no engine or armour clicks | Piercing ~275 for ~13.8 IC: the cheapest piercing |
+| Light recon | Improved light chassis, engine 1, armour 17 | Armour ~84, ~16.5 IC; recon support company |
+| Flame tank | Basic medium flame chassis, flamethrower, radio, armour 17, engine to 4 km/h | ~19 IC; support company |
+| SPAA | Basic light SPAA, AA gun II, no clicks | Air attack ~43 for ~4 IC; regimental row |
+| Amphibious tank | Three-man turret, high-velocity gun II, radio III, amphibious drive, auto-loader, easy maintenance, diesel, torsion bars, armour 14-17, engine to 4 km/h | Landing support where amphibious tanks are allowed |
+| CAS | Improved CAS airframe, bombs in every weapon slot, best engine, cheapest extras | Ground attack ~36, ~24 IC; the cheapest CAS in quantity for landings |
+| Fighter | Improved small airframe, three heavy-MG packs, best engine, self-sealing tank, armour plates | Air attack ~54, agility ~45, ~27 IC; start as a base design and add modules (PR40) |
+| Naval bomber | Improved naval bomber, torpedo III, best engine, fuel tanks, armour | Range ~1,365 km, ~29 IC |
+| Destroyer | Basic or improved hull, torpedoes in every slot, cheapest light battery, best engine | Torpedo attack ~86, ~1,200 IC (NA07) |
+| Mechanised (cost variant) | Every click on production cost, nothing else | The first variant of an own mechanised design, before the MIO (PR38) |
 
 ### Evolution path (by era; changes are template edits, see §8 and AR13)
 
@@ -434,13 +480,17 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR35 | 1.19.4 tank rules | Chassis module-attack multiplier: interwar -5%, basic 0, improved +5%, advanced +10%, modern +15%; tank HP scales with reliability, so keep reliability at 80%+. Defaults: riveted armour, best 3-man turret, radio, engine only to the division's speed; skip stabiliser, skirts, smoke and fuel drums. Against the AI a cheap howitzer medium gives most of the soft attack for about 40% of the cost | Tank designs | FAIR |
 | PR36 | Swaps are instant and final | A line swap applies at once even while paused and swapping back does not restore efficiency; switch only from a plan entry, never as a probe | All | FAIR |
 | PR37 | Absorb a surplus with battalions | A large surplus (e.g. artillery) goes into elite templates, not into moving factories | Over-production | FAIR |
+| PR38 | Swap to an own design without the MIO first | Switching a licensed or old line straight to a new design with an MIO attached loses the whole efficiency. Create a cost-only variant (or a chain of interim designs that change one thing each), switch the line to it with no MIO, then attach the MIO in the designer. After a cost-cutting MIO policy, upgrade the existing equipment once and never again | Own gun, mechanised or tank replaces a licensed or older line | FAIR |
+| PR39 | New line for the next gun tier | Keep the mature infantry-equipment line running and open a separate line for the next tier; switching the old line starves the stockpile while it regrows. Merge only when the stockpile is safe | Gun 2 to gun 3, artillery tiers | FAIR |
+| PR40 | Base airframe, then convert | Put many factories on a base design of the final airframe with the modules researched so far; add each new module as a variant (90%); when the final design is done, convert every base plane in stock to it | Fighters, CAS 1937-41 | FAIR |
+| PR41 | Lines of ten for later swaps | Run big plane lines as several lines of about 10 factories so part can switch role (fighter to CAS) without touching the rest | Allied CAS build-up, Axis Barbarossa CAS | FAIR |
 
 ## 11. Tactics: division design, training and experience
 
 | ID | Tactic | How it works | When | Mode |
 |---|---|---|---|---|
 | AR01 | Width from the fill table | Average fill over all terrains: widths 14, 15, 16, 18 and 20 fill 98-99%; 25: 97%; 30: 96%; 35: 91% (70% attacking a mountain from one side); 40: 86% (67% in forest). Line divisions 14-18 for mountains and hills, 20 elsewhere; avoid 34-36 and 40+ outside plains | Every template | FAIR |
-| AR02 | Regimental row | A column of exactly 3 battalions gets one regimental slot (5 columns, 5 slots); slot XP is halved. Heavy weapons company by default (keeps org), AA battery under enemy CAS, AT battery against armour, field guns for single-player offence; infantry guns and rockets were cut 75% in 1.19.3; batteries have 0 org and lower division org | Line templates from 1936 | FAIR |
+| AR02 | Regimental row | A column of 3 or more battalions gets one regimental slot (5 columns, 5 slots); slot XP is halved. Heavy weapons company by default (keeps org), AA battery under enemy CAS, AT battery against armour, field guns for single-player offence; infantry guns and rockets were cut 75% in 1.19.3; batteries have 0 org and lower division org | Line templates from 1936 | FAIR |
 | AR03 | Division AA all or nothing | The full 75% cut to CAS damage needs about 55 division air attack; token AA does little. Reach 55 with regimental AA batteries or none | Enemy CAS over the front | FAIR |
 | AR04 | Piercing against armour | Unpierced target takes half damage (piercing at 50% of armour: 65%, at 75%: 80%); division armour and piercing = 40% best battalion + 60% average, so one AT battalion lifts piercing. AT battery in every line division facing armour | Enemy armour seen | FAIR |
 | AR05 | Soft attack wins against the AI | Most fights are against infantry; assault templates maximise soft attack and breakthrough; hard attack only where enemy armour is seen | Single-player | FAIR |
@@ -461,3 +511,5 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | AR20 | Armour force against the AI | 4-8 tank divisions are enough; cheap mediums on the newest chassis, reliability 80%+, armour 25-30, one speed class per division; since 1.19.4 the AI fields real armour, so line divisions get AT batteries | Strike armies | FAIR |
 | AR21 | Template roles | Assault 20-35 wide (concentrates damage, routs faster); holders 14-20 (many small holders rotate as an org wall); exploitation and pocket closing 14-wide motorised | Template set | FAIR |
 | AR22 | Support companies by job | Engineer, artillery, recon in 1936; signal on assault templates; logistics on armour and colonial theatres; field hospital on strike templates from 1940; maintenance on armour | Every template | FAIR |
+| AR23 | Wide multiplayer templates | 36-38-wide armour (T16), mountaineer (T17), marine (T18), ranger (T19) and port (T20) divisions with all support slots and a full regimental row; two fill a plains fight with an extra direction. Use them where the front is plains or multi-direction; keep 14-25 for one-direction mountain and marsh fights | Multiplayer-scale wars, landings, 1939+ armour | FAIR |
+| AR24 | Regimental row on armour | Tank or TD companies under the tank columns, SPAA under the mechanised columns; a column needs 3 or more battalions for its slot | T16 and other armour | FAIR |

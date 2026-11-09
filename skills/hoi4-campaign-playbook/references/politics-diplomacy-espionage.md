@@ -390,6 +390,8 @@ Gaps:
 | DI16 | Lower autonomy before annexing | Building in the puppet lowers autonomy (0.7 x construction), lend-lease of better gear lowers it daily, an attaché by 0.05; resources sent to you and war score raise it; tier change 50 PP, annex 300 | Puppet holders | FAIR |
 | DI17 | Puppets by focus | Focus-driven devolution and reintegration (Yugoslavia's ten kingdoms, Ethiopia's Federal Empire) is ordinary play; release-and-annex spam is META | YUG, ETH | FAIR |
 | DI18 | Supervised states | 1.19 democratic puppets may refuse a call to arms | Democracies | FAIR |
+| DI19 | Faction goal order | Short: Joint Command Structure, Appoint a Spymaster, Develop Joint Research Practices (then every member puts scientists into the leader's land and air facilities and a second member's facility), Build Stronger Fortifications (30 bunker and coastal-bunker levels in the faction or level-2 fort techs); medium: Industrial Expansion (150 civilian factories faction-wide; members with 50+ get 2 x 50% industry), then the excavation goal; Arteries of Trade for the UK. Finish two annexations of a goal's targets shortly before the third to swap a mid-term goal without spending an initiative | Faction members and leaders | FAIR |
+| DI20 | Spymaster as a relay | The leader claims spymaster for the faction goal and hands it to a member later (Germany to Bulgaria, UK to the USA); a member with the role gets the decryption and agency bonuses | Faction play | FAIR |
 
 ## 13. Tactics: intelligence
 
@@ -405,6 +407,8 @@ Gaps:
 | IN08 | Root out resistance | An operative cuts a state's resistance target by 10 (5 on neighbours); try it before a harsher law | Garrisons draining equipment | FAIR |
 | IN09 | Spies survive | Since 1.18 operatives hide for 28 days instead of being captured as often; skip suicide pills and rescues | All | FAIR |
 | IN10 | Collaboration before the war | 90 days, 2 operatives, 50% network, 200 support and 1000 infantry equipment and 10 civilian factories for 60 days; each run +30%; collaboration lowers the surrender limit and becomes compliance at capitulation; stop near 75%; keep a third operative on a quiet network. Non-democracies only. Germany: France and Poland first, then Belgium; Japan: China before it capitulates | Year before the war | FAIR |
+| IN11 | Agency against a strong opponent | Defence and decryption before operative slots: Form Department, Passive Defence to max, Radio Interception x2, then Invisible Ink and Suicide Pills, Army Department; advisors that add an agency slot go into counter-intelligence and cryptology; decrypt the main enemy and its air leader | Multiplayer-strength enemies, majors | FAIR |
+| IN12 | Collaboration and infiltration targets | Germany: France 3, Poland 3, Belgium, Netherlands, Denmark, Norway 2 each (never the USSR in FAIR); Japan: China 3 before it capitulates, then the Raj; USSR: Latvia, Estonia, then networks, army infiltration and decryption on Germany, Hungary, Romania; UK and USA: infiltrate the Axis armies (GER, ITA, BUL, HUN, ROM, FIN) and decrypt them before a landing | Year before each war | FAIR |
 
 ## 14. Tactics: occupation
 

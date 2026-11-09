@@ -43,6 +43,10 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PR35 1.19.4 tank rules
 - PR36 Swaps are instant and final
 - PR37 Absorb a surplus with battalions
+- PR38 Swap to an own design without the MIO first
+- PR39 New line for the next gun tier
+- PR40 Base airframe, then convert
+- PR41 Lines of ten for later swaps
 
 ## Division design, training and experience: [templates-equipment-production.md §11](templates-equipment-production.md#11-tactics-division-design-training-and-experience)
 
@@ -68,6 +72,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AR20 Armour force against the AI
 - AR21 Template roles
 - AR22 Support companies by job
+- AR23 Wide multiplayer templates
+- AR24 Regimental row on armour
 
 ## Construction, energy, trade and fuel: [economy-build-orders.md §15](economy-build-orders.md#15-tactics-construction-energy-trade-and-fuel)
 
@@ -93,6 +99,10 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - EC20 Consumer-goods floor
 - EC21 Spread factories under bombing
 - EC22 Early dockyards for the USA
+- EC23 Refineries a year before the war
+- EC24 Build in conquered land before its gold
+- EC25 Forward bases before an overseas war
+- EC26 Never build where the front will pass
 
 ## Research, doctrines and MIOs: [research-doctrines-projects.md §10](research-doctrines-projects.md#10-tactics-research-doctrines-and-mios)
 
@@ -114,6 +124,11 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - RE16 MIO policies
 - RE17 MIO traits are not retroactive
 - RE18 Naval techs when building ships
+- RE19 Map the bonuses first
+- RE20 Fixed-date ahead-of-time
+- RE21 Skip techs the build does not use
+- RE22 MIO policy timing
+- RE23 Bank XP and manpower on starter subdoctrines
 
 ## Supply and logistics: [supply-logistics-deployment.md §11](supply-logistics-deployment.md#11-tactics-supply-and-logistics)
 
@@ -132,6 +147,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - LO13 Resistance on the corridor
 - LO14 Air supply only for a relief
 - LO15 Rear moves only
+- LO16 Barbarossa rail plan
 
 ## Generals, HQs and command power: [army-organisation.md §8](army-organisation.md#8-tactics-generals-hqs-and-command-power)
 
@@ -191,6 +207,11 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - OP42 Port guards
 - OP43 Static AA against paratroopers
 - OP44 Manual rotation
+- OP45 Spread a big army by fallback line
+- OP46 Marsh and edge stacking
+- OP47 Last stand where it decides
+- OP48 Undeployed reserve batches
+- OP49 Special forces on fronts, not plans
 
 ## Air: [war-air-naval-peace.md §16](war-air-naval-peace.md#16-tactics-air)
 
@@ -216,6 +237,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AI20 Naval bombers against a home fleet
 - AI21 Spotting
 - AI22 Port strike
+- AI23 CAS factory for a landing
 
 ## Navy and invasions: [war-air-naval-peace.md §17](war-air-naval-peace.md#17-tactics-navy-and-invasions)
 
@@ -256,6 +278,11 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - NA35 Target options
 - NA36 Escorts with detectors
 - NA37 Fleet range
+- NA38 Shore bombardment geometry
+- NA39 No fleet battle in bad conditions
+- NA40 Escort doctrine before a fleet battle
+- NA41 Simultaneous landings
+- NA42 Heavy batteries for bombardment
 
 ## Peace conference: [war-air-naval-peace.md §18](war-air-naval-peace.md#18-tactics-peace-conference)
 
@@ -322,6 +349,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - DI16 Lower autonomy before annexing
 - DI17 Puppets by focus
 - DI18 Supervised states
+- DI19 Faction goal order
+- DI20 Spymaster as a relay
 
 ## Intelligence: [politics-diplomacy-espionage.md §13](politics-diplomacy-espionage.md#13-tactics-intelligence)
 
@@ -335,6 +364,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - IN08 Root out resistance
 - IN09 Spies survive
 - IN10 Collaboration before the war
+- IN11 Agency against a strong opponent
+- IN12 Collaboration and infiltration targets
 
 ## Occupation: [politics-diplomacy-espionage.md §14](politics-diplomacy-espionage.md#14-tactics-occupation)
 
@@ -367,6 +398,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - SC04 Ethiopia: defend first
 - SC05 Ethiopia: counter-attack
 - SC06 Ethiopia: politics and peace
+- SC07 Italy: after the conquest
 
 ## META-only, banned and patched: [rules-and-modes.md](rules-and-modes.md#meta-only-banned-and-patched-tricks)
 

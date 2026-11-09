@@ -384,3 +384,4 @@ payload in its tooltip.
 | LO13 | Resistance on the corridor | At 75% resistance a state gives -50% local supply, +30% attrition, -50% speed and no strategic redeployment; garrison corridor states and use a harsher law there at 50% | Occupied corridors | FAIR |
 | LO14 | Air supply only for a relief | 0.01 supply per plane; a drop lasts 168 hours; only for a pocket you will relieve within a week | Pockets | FAIR |
 | LO15 | Rear moves only | Strategic redeployment and sea transfer burn no fuel but arrive at low organisation; use them for rear moves only | Rear transfers | FAIR |
+| LO16 | Barbarossa rail plan | From about four months before the attack: level-5 railways from the home hubs to the border, extended and joined to the captured hubs while advancing; ports on the Black Sea (Nikolayev) and the Baltic before Leningrad; supply hubs in front of Moscow and Stalingrad once the front nears them | Germany 1941 | FAIR |
