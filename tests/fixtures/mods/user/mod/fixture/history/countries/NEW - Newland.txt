@@ -1,0 +1,2 @@
+capital = 3
+set_technology = { t_a = 1 t_b = 1 }

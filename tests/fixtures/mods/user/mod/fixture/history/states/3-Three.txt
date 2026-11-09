@@ -1,0 +1,4 @@
+state = { id = 3 name = "STATE_3"
+    history = { owner = NEW victory_points = { 30 2 } 1936.1.1 = { victory_points = { 31 1 } } }
+    provinces = { 30 31 }
+}

@@ -262,16 +262,18 @@
   },
   "doctrines": [
     {
-      "doctrine": "defensive_postures",
+      "id": "land_infantry_defensive_postures",
+      "folder": "land",
       "track": "infantry",
-      "xp": 50,
-      "folder": "land"
+      "subdoctrine": "defensive_postures",
+      "xp": 50
     },
     {
-      "doctrine": "fire_concentration",
+      "id": "land_combat_support_fire_concentration",
+      "folder": "land",
       "track": "combat_support",
-      "xp": 100,
-      "folder": "land"
+      "subdoctrine": "fire_concentration",
+      "xp": 100
     }
   ],
   "special_projects": {

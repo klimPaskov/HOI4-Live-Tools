@@ -189,15 +189,17 @@
   ],
   "doctrines": [
     {
+      "id": "land_grand_mass_assault",
       "folder": "land",
       "grand_doctrine": "mass_assault",
-      "when": "army_xp >= 150"
+      "xp": 150
     },
     {
+      "id": "land_infantry_irregulars",
       "folder": "land",
       "track": "infantry",
       "subdoctrine": "irregulars",
-      "when": "army_xp >= 75"
+      "xp": 75
     }
   ],
   "armies": {
@@ -230,71 +232,125 @@
     {
       "name_hint": "Army of Tigray",
       "state": 842,
-      "divisions": "2 Mountain Division, 3 Mehal Sefari, 2 Chitet Sefari",
+      "templates": [
+        "Mountain Division",
+        "Mehal Sefari",
+        "Chitet Sefari"
+      ],
+      "count": 7,
       "general": "Seyoum Mengesha",
+      "role": "guard",
+      "guard_states_in_order": [
+        842
+      ],
+      "role_note": "hold then strike Eritrea",
+      "divisions": "2 Mountain Division, 3 Mehal Sefari, 2 Chitet Sefari",
       "hold": [
         13237,
         13238,
         2072
-      ],
-      "role": "hold then strike Eritrea"
+      ]
     },
     {
       "name_hint": "Army of Begemder",
       "state": 841,
-      "divisions": "1 Mehal Sefari, 1 Chitet Sefari at Gondar 1984",
+      "templates": [
+        "Mehal Sefari",
+        "Chitet Sefari"
+      ],
+      "count": 2,
       "general": "Ayalew Birru",
+      "role": "guard",
+      "guard_states_in_order": [
+        841
+      ],
+      "role_note": "hold",
+      "divisions": "1 Mehal Sefari, 1 Chitet Sefari at Gondar 1984",
       "hold": [
         1984
-      ],
-      "role": "hold"
+      ]
     },
     {
       "name_hint": "Army of Wello",
       "state": 843,
-      "divisions": "3 Mehal Sefari, 2 Chitet Sefari",
+      "templates": [
+        "Mehal Sefari",
+        "Chitet Sefari"
+      ],
+      "count": 5,
       "general": "Mulugeta Yeggazu of Illubabor",
+      "role": "guard",
+      "guard_states_in_order": [
+        843
+      ],
+      "role_note": "hold, reserve for Tigray",
+      "divisions": "3 Mehal Sefari, 2 Chitet Sefari",
       "hold": [
         5097,
         7944
-      ],
-      "role": "hold, reserve for Tigray"
+      ]
     },
     {
       "name_hint": "Imperial reserve",
       "state": 271,
-      "divisions": "Kebur Zabagna plus every new Chitet Sefari",
+      "templates": [
+        "Kebur Zabagna",
+        "Chitet Sefari"
+      ],
+      "count": 1,
       "general": "Kassa Haile Darge",
+      "role": "guard",
+      "guard_states_in_order": [
+        271
+      ],
+      "role_note": "reserve",
+      "divisions": "Kebur Zabagna plus every new Chitet Sefari",
       "hold": [
         5010,
         13239
-      ],
-      "role": "reserve"
+      ]
     },
     {
       "name_hint": "Army of the Ogaden",
       "state": 835,
-      "divisions": "1 Mehal Sefari (Dire Dawa), 2 Chitet Sefari (Wal Wal 12812, 12757)",
+      "templates": [
+        "Mehal Sefari",
+        "Chitet Sefari"
+      ],
+      "count": 3,
       "general": "Nasibu Zeamanuel",
+      "role": "guard",
+      "guard_states_in_order": [
+        835
+      ],
+      "role_note": "hold then strike Somaliland",
+      "divisions": "1 Mehal Sefari (Dire Dawa), 2 Chitet Sefari (Wal Wal 12812, 12757)",
       "hold": [
         12812,
         13249,
         7980
-      ],
-      "role": "hold then strike Somaliland"
+      ]
     },
     {
       "name_hint": "Army of Bale and Sidamo",
       "state": 836,
-      "divisions": "2 Chitet Sefari (4995), 1 Chitet Sefari (Sidamo 8062)",
+      "templates": [
+        "Chitet Sefari"
+      ],
+      "count": 2,
       "general": "Desta Damtew",
+      "role": "guard",
+      "guard_states_in_order": [
+        836
+      ],
+      "role_note": "hold then strike Jubaland",
+      "divisions": "2 Chitet Sefari (4995), 1 Chitet Sefari (Sidamo 8062)",
       "hold": [
         4995,
         8062,
         10775,
         13247
-      ],
-      "role": "hold then strike Jubaland"
+      ]
     }
   ],
   "army_group": [

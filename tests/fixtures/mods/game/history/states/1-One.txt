@@ -1,0 +1,5 @@
+state = { id = 1 name = "STATE_1"
+    history = { owner = AAA victory_points = { 10 5 } # comment inside the block
+        1938.3.1 = { owner = BBB } }
+    provinces = { 10 11 }
+}

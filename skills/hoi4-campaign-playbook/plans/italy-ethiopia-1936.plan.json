@@ -357,22 +357,25 @@
   "decisions": [],
   "doctrines": [
     {
+      "id": "land_infantry_assault_infantry",
       "folder": "land",
       "track": "infantry",
       "subdoctrine": "assault_infantry",
-      "when": "army_xp >= 100"
+      "xp": 100
     },
     {
+      "id": "land_combat_support_fire_concentration",
       "folder": "land",
       "track": "combat_support",
       "subdoctrine": "fire_concentration",
-      "when": "army_xp >= 135"
+      "xp": 135
     },
     {
+      "id": "land_operations_mission_type_tactics",
       "folder": "land",
       "track": "operations",
       "subdoctrine": "mission_type_tactics",
-      "when": "army_xp >= 135"
+      "xp": 135
     }
   ],
   "armies": {

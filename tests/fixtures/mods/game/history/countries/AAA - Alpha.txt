@@ -1,0 +1,6 @@
+capital = 1
+set_research_slots = 3
+set_technology = { t_a = 1 }
+if = { limit = { has_dlc = "Fixture DLC" } set_oob = "AAA_dlc" else = { set_oob = "AAA_1936" } }
+1936.6.1 = { set_technology = { t_b = 1 } }
+1939.1.1 = { set_oob = "AAA_1939" capital = 2 }

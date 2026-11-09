@@ -1,0 +1,1 @@
+ideas = { economy = { mod_law = { } } }

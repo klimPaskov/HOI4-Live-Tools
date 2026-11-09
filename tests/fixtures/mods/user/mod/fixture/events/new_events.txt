@@ -1,0 +1,2 @@
+add_namespace = new
+news_event = { id = new.1 option = { name = new.1.a } option = { name = new.1.b } }
