@@ -1,0 +1,1 @@
+idea_categories = { economy = { cost = 150 } country = { cost = 0 } }

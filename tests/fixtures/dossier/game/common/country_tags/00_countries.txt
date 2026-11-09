@@ -1,0 +1,2 @@
+AAA = "countries/A.txt"
+BBB = "countries/B.txt"

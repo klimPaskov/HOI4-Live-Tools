@@ -1,0 +1,6 @@
+technologies = {
+	t_a = { research_cost = 1 start_year = 1936 folder = { name = main_folder } path = { leads_to_tech = t_c } }
+	t_b = { research_cost = 2 start_year = 1936 folder = { name = main_folder } path = { leads_to_tech = t_c } }
+	t_c = { research_cost = 1.5 start_year = 1937 folder = { name = main_folder } }
+	t_dlc = { research_cost = 1 start_year = 1936 folder = { name = dlc_folder } }
+}

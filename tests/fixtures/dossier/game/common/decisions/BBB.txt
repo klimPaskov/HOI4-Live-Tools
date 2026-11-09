@@ -1,0 +1,7 @@
+BBB_cat = {
+	BBB_defeat_aaa = {
+		allowed = { tag = BBB }
+		available = { has_full_control_of_state = 1 controls_state = 3 NOT = { controls_state = 2 } has_war_with = AAA }
+		complete_effect = { AAA = { country_event = bbb.1 } white_peace = AAA }
+	}
+}

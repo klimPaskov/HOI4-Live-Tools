@@ -1,0 +1,7 @@
+state = { id = 2 name = "STATE_2" state_category = rural
+    history = { owner = BBB add_core_of = BBB
+        victory_points = { 20 10 } # capital
+        victory_points = { 21 3 }
+        buildings = { infrastructure = 1 } }
+    provinces = { 20 21 }
+}

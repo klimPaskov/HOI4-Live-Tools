@@ -1,0 +1,15 @@
+capital = 1
+set_research_slots = 3
+set_stability = 0.6
+set_technology = { t_a = 1 }
+add_ideas = { aaa_spirit partial_mob }
+if = { limit = { has_dlc = "Fixture DLC" } set_oob = "AAA_dlc" else = { set_oob = "AAA_1936" } }
+set_variable = { AAA_conquer_days = 170 }
+set_variable = { var = AAA_other value = 3 }
+if = {
+	limit = { has_start_date < 1936.01.02 }
+	declare_war_on = { target = BBB type = annex_everything }
+}
+set_politics = { ruling_party = fascism }
+recruit_character = AAA_general
+1939.1.1 = { add_political_power = 500 }

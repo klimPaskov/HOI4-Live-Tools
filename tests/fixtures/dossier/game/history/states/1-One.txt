@@ -1,0 +1,6 @@
+state = { id = 1 name = "STATE_1" manpower = 1000 state_category = city
+    resources = { steel = 4 }
+    history = { owner = AAA add_core_of = AAA victory_points = { 10 5 }
+        buildings = { infrastructure = 3 industrial_complex = 2 arms_factory = 1 11 = { naval_base = 1 } } }
+    provinces = { 10 11 }
+}
