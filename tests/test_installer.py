@@ -138,8 +138,10 @@ class RegistrationTests(unittest.TestCase):
 class PlatformLayoutTests(unittest.TestCase):
     def test_macos_layout(self):
         with mock.patch.object(install.sys, "platform", "darwin"), \
-                mock.patch.dict(os.environ, {"HOME": "/Users/a"}, clear=True):
-            self.assertEqual(install.default_prefix(), "/Users/a/Library/Application Support/hoi4-live-tools")
+                mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(install.os.path, "expanduser", return_value="/Users/a"):
+            self.assertEqual(install.default_prefix(),
+                             os.path.join("/Users/a", "Library", "Application Support", "hoi4-live-tools"))
             self.assertEqual(install.venv_python("/p"), os.path.join("/p", "venv", "bin", "python"))
             install.check_platform()
 
