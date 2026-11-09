@@ -285,7 +285,7 @@ AI behaviour, or space-marine / paratrooper width tricks. Tool: `hoi4_naval_inva
 | Launch gates | 50%+ supremacy in every crossed region and 40% naval intel, checked at launch only; once launched the landing goes ahead |
 | Army orders | an army with a front or fallback line never starts the invasion: clear them first |
 | Landing penalty | -50% attack, reduced by landing-craft techs; worse for heavy equipment |
-| Shore bombardment | up to -33% for the defender |
+| Shore bombardment | up to -33% for the defender; heavy attack counts twice light attack; split over every land tile the sea region touches (NA38) |
 | Transports spotted | invasion convoys are spotted 10x more easily |
 | Supply on shore | 72 hours without a port; a floating harbour gives about 30 days |
 
@@ -306,6 +306,19 @@ Procedure:
    wave through it, widen the beachhead with front and offensive lines, keep
    fighters over it and escort its convoys.
 6. Never repeat the operation as a feint or stack landings to exhaust the AI.
+
+Landing on a defended coast (strong-player checklist, FAIR):
+
+- Months before: build the landing force (T18 marines, T19 follow-up, T16 armour after the port falls), 100+
+  factories of cheap CAS, heavy-battery cruisers for bombardment (NA42), ports linked by level-5 rail on the home
+  coast, the navy chief and command-power advisors for the operation; raise encryption a month before launch.
+- Pick the target for its port and terrain: a level-10 port on a peninsula (reserve waves land behind it and close
+  the pocket), under your own air cover, with sea regions that touch few land tiles (NA38).
+- Launch: every planned landing on the same day (NA41), 2 divisions per landing tile, never more marines than the
+  tiles need; Force Attack the first wave or hand it to the commander with command power; backup waves already
+  planned.
+- After landfall: take the port, motorise the hubs, ship supply; push out on several axes so the defender cannot
+  mass; keep rangers and mountaineers on fronts rather than battle plans across rivers (OP49).
 
 ---------------------------------------------------------------------------
 
@@ -684,6 +697,11 @@ Never improvise raw input for a gap.
 | OP42 | Port guards | One small division per port delays a landing; AI invasions are more aggressive since 1.18.3 and aim at high-VP coasts; a 10-wide coast guard on every port in reach of an enemy navy | Every coast at war | FAIR |
 | OP43 | Static AA against paratroopers | Static AA cuts a dropped division to 69/58/45/35% strength at AA level 1/2/3/5 | Defending hub provinces | FAIR |
 | OP44 | Manual rotation | Pull a defender near 0 org one province back when a fresh division of the same army stands next to it | Long defensive battles | FAIR |
+| OP45 | Spread a big army by fallback line | Draw the fallback lines with one division, then deploy the mass of new infantry into that army and let it spread itself along the lines (one click on the leader); fix marsh and key tiles by hand | Defending a long front (USSR 1941) | FAIR |
+| OP46 | Marsh and edge stacking | Put only 2-4 infantry divisions in a marsh tile (width 50, attackers at -40%); keep tanks at the marsh edges on the plains tiles behind it, never in the marsh | Pripyat-type fronts | FAIR |
+| OP47 | Last stand where it decides | Since last stand costs command power per battalion, hold it for mechanised and infantry on the hubs and cities that decide the front (two mech divisions per key city), and take cheap-last-stand focuses (Japan's Senjinkun code). 2-wide last-stand divisions break the 10-width rule (BAN in FAIR) | Holding key tiles | FAIR |
+| OP48 | Undeployed reserve batches | Train about 20 batches of infantry before the war and leave them undeployed; deploy one batch onto a breakthrough the front cannot close | Defensive war start | FAIR |
+| OP49 | Special forces on fronts, not plans | Rangers and mountaineers on battle plans across rivers and through many tiles lose equipment fast; give them a front line and attack tile by tile | Rangers in forests, mountaineers inland | FAIR |
 
 ## 16. Tactics: air
 
@@ -711,6 +729,7 @@ Never improvise raw input for a gap.
 | AI20 | Naval bombers against a home fleet | Land-based naval bombers with air superiority beat the Royal Navy: 300-600 by mid-1940 in Belgium, the Netherlands and northern France, held back until ready; the damaged Home Fleet goes to repair, which is the window to take the sea | Germany against Britain | FAIR |
 | AI21 | Spotting | One 100-plane naval patrol wing per target sea region; the rest on naval strike | Naval air | FAIR |
 | AI22 | Port strike | Over the port's land region while the enemy fleet is in port and own superiority is 70%+; Base Strike +40% | GER, JAP, UK, USA | FAIR |
+| AI23 | CAS factory for a landing | The cheapest CAS design on 100+ military factories by the landing year, in lines of 10 (PR41); CAS to the width cap over every landing tile with fighters above | Allied landings in France, Axis Barbarossa | FAIR |
 
 ## 17. Tactics: navy and invasions
 
@@ -753,6 +772,11 @@ Never improvise raw input for a gap.
 | NA35 | Target options | Main fleet ignores submarines and convoys; ASW groups hunt submarines; check that the setting does not make fleets disengage | All navies | FAIR |
 | NA36 | Escorts with detectors | A task force's submarine detection is the average of its ships | Convoy escort | FAIR |
 | NA37 | Fleet range | A fleet's range is its shortest-range ship | Blue-water fleets | FAIR |
+| NA38 | Shore bombardment geometry | A sea region splits its bombardment over every land tile it touches; a land tile touching two sea regions gets both. Each heavy attack point is worth twice a light one; the total caps at -33%. Pick landing tiles whose sea region touches few tiles, or split the bombarding fleet so each tile's regions carry enough heavy attack | Landings on defended coasts | FAIR |
+| NA39 | No fleet battle in bad conditions | Never engage in storms, without own air cover, under enemy air superiority or on low supply: the fleet is destroyed | Every fleet battle | FAIR |
+| NA40 | Escort doctrine before a fleet battle | Switch the fighter subdoctrine to the escort branch (Medium-Range Escort: +15% sortie efficiency, carrier fighter agility and speed) and take a sortie-efficiency advisor before a carrier engagement | Carrier navies (Japan, USA) | FAIR |
+| NA41 | Simultaneous landings | Launch every landing the same day so the defender's command power and reserves cannot answer all; 2 divisions per tile, backup waves planned, Force Attack or a commander with command power on the first wave | Big amphibious operations | FAIR |
+| NA42 | Heavy batteries for bombardment | Refit heavy cruisers' secondary slots and torpedo or plane slots to heavy cruiser batteries and build new heavy-battery cruisers; admiral and high-command bombardment bonuses (naval gunfire support subdoctrine, a Ground Pounder admiral, Naval Liaison generals) stack toward the cap | Before a landing | FAIR |
 
 ## 18. Tactics: peace conference
 
