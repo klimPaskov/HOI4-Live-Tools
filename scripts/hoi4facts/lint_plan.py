@@ -12,6 +12,8 @@ mods) through hoi4facts.Game and hoi4facts.derive; nothing is country specific.
 
 Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/references/lessons.jsonl):
   research.start_year      research_path tech with start_year after its block year
+  research.idle            more than 25% of the slots' time to the horizon has nothing planned: an error
+                           with research_fallback off, else a warning naming what the fallback uses
   research.throughput      (warning) a block's base research days do not fit the slots before the
                            next block year (research_cost x BASE_TECH_COST, no speed bonus)
   research.prerequisites   prerequisite not at the start or earlier in the path under either parent
@@ -330,6 +332,33 @@ class Lint:
                          f"{capacity} by {end_label} (before research-speed bonuses)")
         self.facts["research"] = {"slots": slots, "base_tech_cost": derive.define(game, "BASE_TECH_COST"),
                                   "capacity": cap_rows}
+        # idle slots: planned base days against the slot-days to the horizon. A slot with nothing to
+        # research is wasted time (user rule: research proper techs, never idle); with the fallback off
+        # nothing fills it.
+        horizon = self.stop or (self.goal.get("deadline") if isinstance(self.goal, dict) else None)
+        end_day = derive.day(horizon) if horizon else begin + 365
+        if end_day > begin and slots:
+            # the capacity row of the last block window that ends by the horizon (its cumulative days
+            # are the techs planned to start before then); else everything against the horizon
+            rows_in = [r for r in cap_rows if r["until"] and derive.day(r["until"]) <= end_day]
+            if rows_in:
+                last = max(rows_in, key=lambda r: derive.day(r["until"]))
+                total, capacity = last["cumulative_days"], last["slot_days"]
+                end_day = derive.day(last["until"])
+            else:
+                capacity = slots * (end_day - begin)
+            idle = max(0.0, 1.0 - total / capacity)
+            fallback = plan.get("research_fallback", True)
+            self.facts["research"]["idle_share"] = round(idle, 3)
+            if idle > 0.25 and fallback in (False, "priority_only"):
+                self.add("error", "research.idle", "research_path",
+                         f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
+                         f"nothing planned ({total:.0f} of {capacity} slot-days) and research_fallback is off: "
+                         f"extend research_path with in-time techs or enable a restricted fallback")
+            elif idle > 0.25:
+                self.add("warning", "research.idle", "research_path",
+                         f"about {idle:.0%} of the slots' time has nothing planned; the fallback fills it from "
+                         f"{', '.join(plan.get('research_fallback_prefixes') or ['the whole catalogue'])}")
         # naval / air folders
         planned = [t for b in blocks for t in b[3]] + [x for x in plan.get("research_priority") or [] if isinstance(x, str)]
         fams = defaultdict(list)

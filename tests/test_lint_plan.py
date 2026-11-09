@@ -485,6 +485,18 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertHit(plan, "predicates.unreadable", "warning", "checkpoints[0].must[0]")
         self.assertFalse(self.hits(plan, "predicates.unreadable", None, "goal.predicates[1]"))  # any[] with a readable atom
 
+    # -------------------------------------------------------------- research.idle
+    def test_idle_research_slots_with_the_fallback_off_fail(self):
+        plan = copy.deepcopy(self.ita)
+        first = plan["research_path"][0]
+        first["techs"] = first["techs"][:2]
+        plan["research_fallback"] = False
+        f = self.assertHit(plan, "research.idle", "error", "research_path")
+        self.assertIn("nothing planned", f["message"])
+        plan["research_fallback"] = True
+        self.assertHit(plan, "research.idle", "warning", "research_path")
+        self.assertFalse(self.hits(self.ita, "research.idle", None, "research_path"))
+
     # -------------------------------------------------------------- conquest.skipped_near
     def test_near_vp_province_left_untaken_warns(self):
         plan = copy.deepcopy(self.ita)
