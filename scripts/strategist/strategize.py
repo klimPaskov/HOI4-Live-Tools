@@ -302,6 +302,11 @@ def strategize(args, runner=None):
 
 def finish(run_dir, report, failure, started):
     report["seconds"] = round(time.time() - started)
+    gaps = os.path.join(run_dir, "tool-gaps.md")
+    if os.path.exists(gaps):
+        # The models may not change the tools; they report gaps here for the operator to fix.
+        report["tool_gaps"] = gaps
+        log("tool gaps reported: " + gaps)
     if failure:
         report["failure"] = failure
         with open(os.path.join(run_dir, "strategist-blocked.md"), "w", encoding="utf-8") as f:

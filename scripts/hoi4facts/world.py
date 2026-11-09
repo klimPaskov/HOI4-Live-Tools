@@ -540,7 +540,7 @@ class World:
                 for idea in (bare(v) if isinstance(v, list) else [v]):
                     ideas.pop(idea, None)
                     out["removed_ideas"].append(F(idea, line))
-            elif kl in ("set_oob", "set_naval_oob", "set_air_oob", "load_oob") and isinstance(v, str):
+            elif kl in ("oob", "set_oob", "set_naval_oob", "set_air_oob", "load_oob") and isinstance(v, str):
                 out["oobs"].append(dict(F(v, line), kind=kl))
             elif kl == "set_politics" and isinstance(v, list):
                 for a, b in v:

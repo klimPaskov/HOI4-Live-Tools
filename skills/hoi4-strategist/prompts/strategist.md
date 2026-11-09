@@ -36,3 +36,5 @@ Finish with a short summary: goal reading, phases, coverage (executor / player /
 counts), lint totals, open warnings.
 
 Operator notes: if `RUN/operator-notes.md` exists, read it first. It holds corrections from the user or the operator (and earlier review findings); treat each as a finding to fix or to rebut with a source, and record how in plan.md §11.
+
+Files: change nothing outside RUN (the tools, skills, schema and plans in the repository are what the plan is checked with). If a tool or fact reader is wrong or missing, write the gap with evidence to `RUN/tool-gaps.md` and continue with the best sourced workaround.

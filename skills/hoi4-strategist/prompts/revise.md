@@ -27,3 +27,5 @@ per-division enemy positions and no AI strategy files. Do not apply the plan to 
 step does that. Never ask for input.
 
 Finish with one line: trigger, mode, keys changed, lint totals, wall time.
+
+Files: change nothing outside RUN (the tools, skills, schema and plans in the repository are what the plan is checked with). If a tool or fact reader is wrong or missing, write the gap with evidence to `RUN/tool-gaps.md` and continue with the best sourced workaround.

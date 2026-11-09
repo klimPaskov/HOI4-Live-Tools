@@ -146,7 +146,10 @@ class CommandLines(unittest.TestCase):
         adapter, settings, effort, binary, version, inv = run.plan(self.args("strategist"), env, OK_PROBE)
         self.assertEqual(inv.argv[:9], ["/bin/claude", "-p", "--model", "sonnet", "--effort", "xhigh",
                                         "--output-format", "json", "--allowed-tools"])
-        self.assertEqual(inv.argv[9], "Read,Write,Edit,Glob,Grep,Bash")
+        # writes are scoped to the run folder: one Edit rule governs every file-writing tool
+        root = os.path.abspath(self.run_dir).replace(os.sep, "/").lstrip("/")
+        self.assertEqual(inv.argv[9], "Read,Edit(//%s/**),Glob,Grep,Bash" % root)
+        self.assertNotIn("Write", inv.argv[9])
         self.assertEqual(inv.argv[10:12], ["--add-dir", self.run_dir])
         self.assertIn(run.SKILL_DIR, inv.argv)
         self.assertEqual(inv.stdin_path, self.prompt)

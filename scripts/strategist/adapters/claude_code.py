@@ -19,6 +19,24 @@ import os
 from .base import Adapter, Invocation
 
 
+def scoped_tools(tools, run_dir):
+    """Write and Edit only inside the run folder (permission rules with an absolute `//path`), so a
+    planning model can never change the tools, skills or plans it is checked with; it reports gaps in
+    RUN/tool-gaps.md instead. Other tools pass through unchanged."""
+    # One Edit rule governs every file-writing tool (Write, Edit, MultiEdit, NotebookEdit); a bare
+    # Write would allow any path (checked live with the CLI, 9 Nov 2026).
+    root = os.path.abspath(run_dir).replace(os.sep, "/").lstrip("/")
+    out, scoped = [], False
+    for t in tools:
+        if t in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+            if not scoped:
+                out.append("Edit(//%s/**)" % root)
+                scoped = True
+        else:
+            out.append(t)
+    return out
+
+
 class ClaudeCode(Adapter):
     name = "claude-code"
     default_binary = "claude"
@@ -30,7 +48,7 @@ class ClaudeCode(Adapter):
         argv = [binary, "-p", "--model", conf["model"], "--effort", native, "--output-format", "json"]
         tools = conf.get("tools")
         if tools:
-            argv += ["--allowed-tools", ",".join(tools)]
+            argv += ["--allowed-tools", ",".join(scoped_tools(tools, run_dir))]
         for d in [run_dir] + list(add_dirs):
             argv += ["--add-dir", d]
         if self.pconf.get("permission_mode"):
