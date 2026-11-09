@@ -1330,3 +1330,23 @@ Lint rules proposed by the audit and not built (each needs data the plan does no
 | `air.cas_cap` | more CAS than about 3 x the axis enemy width x attacking armies | needs per-axis width facts |
 | `fair.hollow_design` | a near-empty design produced early and converted later | needs design module costs in the facts |
 | `politics.stability_forecast` | a planned law, adviser or decision that drops forecast stability below the floor | needs a stability forecast model |
+
+## 17. Strategist run gaps (Italy-Ethiopia strategist run, 10 November 2026)
+
+Fixed in the Python tools: the validator's equipment catalogue now holds every copy a duplicated archetype makes
+(`small_plane_cas_airframe_0`); `validate_plan.py` fills a missing `_validator` from `run_spec.json` and
+`dossier/manifest.json` beside the plan and warns when it would fall back to GER; focuses with
+`available = { always = no }` that an effect completes count as satisfied prerequisites; vp 0 is accepted on a
+province of a country the goal does not capitulate, and lint reports such rows; `facts.py hooks` prints conditions
+in full; `facts.py event` lists every caller with the receiving scope, delay and conditions; `facts.py effect`
+prints scripted effect bodies and callers; `facts.py grep` has `-C N`, a substring fallback and, in FAIR, leaves
+out `common/ai_*`; `facts.py resources <TAG>` gives the per-resource balance at the start. The Italo-Ethiopian
+reference no longer lists the enemy's per-division start positions or AI front choices.
+
+Still open:
+
+| Gap | What is missing | Where it would go |
+| --- | --- | --- |
+| Advisor slot index | `politics` needs `category` and `slot` for `hoi4_politics_choose`; the files give the advisor's slot type (`army_chief`) but the index is the in-game panel position, which only the live game shows | a read of the politics panel (slot index per slot type) or a `hoi4_politics_choose` that takes the slot type; until then reconcile confirms the index |
+| Supply consumption | nothing prints supply needed per division or per convoy, so sea-supply sizing stays a judgement | `calc.py supply`: template supply use from the sub-unit stats and the supply defines, convoys per route from the naval supply defines |
+| Resource modifiers | `facts.py resources` counts state history resources and the trade-law export share; extraction techs, `local_resources_factor`, occupation and design module resources are left out | resource modifiers from the start techs and ideas; module resources once designs are resolved |

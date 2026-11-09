@@ -21,10 +21,8 @@ all dates below use it.
    capitulation (checked at capitulation and at peace).
 4. The "Christmas offensive" is a 14-day Ethiopian bonus (+10% attack vs Italy, +10% breakthrough),
    ended by `ETH_christmas_offensive_mission` about **15 January**, which then fires
-   Mussolini's event `BBA_italo_ethiopian_war_events.01`. Ethiopia's AI attacks in a
-   rush into the Danakil (Eritrea, Tigray, Wello) and Ethiopian Highlands regions while it still holds
-   Tigray or Begemder. Unguarded, every Eritrean province can be Ethiopian by mid-January and Italy's army
-   starves.
+   Mussolini's event `BBA_italo_ethiopian_war_events.01`. Expect Ethiopia to use the bonus against Eritrea at
+   once. Unguarded, every Eritrean province can be Ethiopian by mid-January and Italy's army starves.
 5. Event .01 starts two Italian missions and two Ethiopian counter-missions with a timer of **120 days**
    (option a, to about 15 May) or **180 days** (option b, to about 14 July):
    North = control 2 of Gondar 1984, Macalle 2072, Dessie 5097; South = control 2 of Wal Wal 12812,
@@ -181,7 +179,7 @@ Counter `ETH.ETH_war_escalation_level`, starts 0. Every +1 comes from `ETH_escal
 | Italy refuses Fait Accompli (event .120 b) | event |
 | De-escalation -1 | Italian focus ITA_servizio_informazione_militare |
 
-At start Italy has 25 divisions in 550/559/844, 4 of them irregular bands (21 count), and 120 aircraft in Eritrea.
+At start Italy (its own OOB; the Italian player's count) has 25 divisions in 550/559/844, 4 of them irregular bands (21 count), and 120 aircraft in Eritrea.
 
 | Level reached | Ethiopia gets (each once, if not fascist) | Italy gets (each once) |
 |---|---|---|
@@ -343,27 +341,26 @@ four of them in Afar).
   historical focus) -> Italy event .402 4-12 h later: Italy annexes AFA and gets 2 "Banda Indigena
   Irregolare" at Aussa 13240; b -> Italy declares war on AFA. b at event .400 costs 50 PP and -5% popularity.
 * Timing: Tigray taken in early March brings the ultimatum about 18 days later. An Italian Afar needs a garrison:
-  Ethiopia attacks it. Ethiopia's AI prepares for war against AFA while it exists and before 1937.
+  Ethiopia attacks it.
 * Peace deals give Afar to Ethiopia whenever Italy owns it.
 
 ## 9. Starting forces
 
+FAIR: a side's own forces are listed in full only for the player of that side. The enemy's start forces are
+aggregate in FAIR (division count and templates, as `facts.py oob <ENEMY>` prints them); per-division positions,
+the enemy's generals and its AI strategy files are private. What the enemy holds where is read live from the map.
+
 ### 9.1 Ethiopia (`ETH_1936_bba`, 21 divisions)
 
-| Template | Composition | Where (province, state) | Equipment |
-|---|---|---|---|
-| Kebur Zabagna (1) | 4 infantry + 1 cavalry, locked | Addis 5010 (271) | 100% |
-| Mehal Sefari (8) | 4 infantry | Gondar 1984 (841); Adwa 13238 x2, Macalle 2072 (842); Dessie 5097 x3 (843); Dire Dawa 7980 (835) | 80% |
-| Mountain Division (2) | 4 mountaineers | Aksum 13237 (842) | 80% |
-| Chitet Sefari (10) | 6 irregular infantry, cap 20 | Macalle 2072, Adwa 13238 (842); 7944 x2 (843); Gondar 1984 (841); Wal Wal 12812, 12757 (835); 4995 x2 (836); 8062 (837) | 45-100% |
-
-Generals: field marshals Haile Selassie (2), Hailu Tekle Haymanot (hill fighter), Abba Jofir (desert fox); corps
-commanders Balcho Safo (skill 3, attack 4, cavalry leader, reckless), Mulugeta Yeggazu (attack 3, infantry leader),
-Desta Damtew (attack 3, reckless), Seyoum Mengesha (defence 3), Kassa Haile Darge (cautious), Imru Haile Selassie
-(infantry officer), Ayalew Birru (mountaineer), Beyene Merid (desert fox), Nasibu Zeamanuel (hill fighter), six
-unnamed random generals. Ethiopia starts with no grand doctrine set.
+Aggregate (public in FAIR): 1 Kebur Zabagna (4 infantry + 1 cavalry, locked), 8 Mehal Sefari (4 infantry),
+2 Mountain Division (4 mountaineers), 10 Chitet Sefari (6 irregular infantry, cap 20). Equipment 45-100%.
+No air force. Positions and generals: Ethiopia's own `facts.py oob ETH` / `facts.py characters ETH` when
+playing Ethiopia; an Italian player reads them from the map in game.
 
 ### 9.2 Italy in East Africa (`ITA_1936_nsb`, No Step Back)
+
+For the Italian player only. Playing Ethiopia in FAIR, use the aggregate: 46 divisions in total, templates as
+`facts.py oob ITA` prints them; positions are read from the map.
 
 | Where | Divisions |
 |---|---|
@@ -392,13 +389,6 @@ Badoglio (organizer), Emilio De Bono, Italo Balbo; corps commanders Giovanni Mes
 Amedeo Guillet (skill 3, desert fox, irregulars officer), Hamid Idris Awate and Ibrahim Farag Mohammed (ascari
 officer, desert fox), Carlo Vecchiarelli (mountaineer), Alessandro Pirzio Biroli (harsh leader), Ugo Cavallero,
 Prince Filiberto.
-
-### 9.3 AI behaviour
-
-* Ethiopia: rush fronts in regions 17 and 273 while it controls 842 or 841 (273 also 843); careful fronts
-  after losing them; always careful in 274 (Ogaden).
-* Italy (when AI): front on Begemder 841 while the North mission runs, Sidamo 837 while the South runs,
-  Shewa 271 while the Addis mission runs; AI chooses event .01 option a.
 
 ## 10. Italian focuses that matter during the war
 

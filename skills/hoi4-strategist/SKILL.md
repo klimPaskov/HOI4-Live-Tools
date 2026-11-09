@@ -88,7 +88,11 @@ DLC and mod list match the run spec (or the launch configuration when `auto`).
 
 **2. Formalise the goal.** Follow [references/goal-patterns.md](references/goal-patterns.md): search
 in-game formalisations first (`facts.py decisions <TAG>`, `missions <TAG>`, `hooks <TAG>`, `vp <ENEMY>`,
-`grep <token>`), then the generic patterns. Write `goal` (`summary`, `reading`, `alternatives`,
+`grep <token>`), then the generic patterns. `facts.py event <id>` prints who fires an event (focus,
+decision, event option, on_action, scripted effect), the receiving scope, the delay and the conditions;
+`facts.py effect <name>` prints a scripted effect's body and its callers; `grep -C N` adds context
+lines (in FAIR, grep leaves out the AI-only folders); `facts.py resources <TAG>` gives the
+per-resource balance at the start. Write `goal` (`summary`, `reading`, `alternatives`,
 `predicates`, `deadline`, `fail_predicates`, `sources`). *Gate:* every predicate uses real ids from the
 dossier or facts output; every scenario rule that changes the outcome is cited (for example "the
 attacker must control state S at capitulation"); the deadline equals the scenario timer when one
@@ -121,7 +125,11 @@ and the facts command used; no empty row, no "later" or "TBD", and items 1, 2 an
 applicable".
 
 **6. Emit.**
-* `RUN/plan.json`: valid against the schema; `_meta.version` 1 (step 10 fills the rest).
+* `RUN/plan.json`: valid against the schema; `_meta.version` 1 (step 10 fills the rest). Write a
+  `_validator` block from the run spec and the dossier manifest: `tag`, `start_date`, `stop_date` (the
+  horizon), `mode`, `history_file` and `dlcs` (the manifest's resolved list, never `auto`).
+  `validate_plan.py` fills missing fields from `RUN/run_spec.json` and `RUN/dossier/manifest.json`
+  beside the plan; with neither it checks the plan as GER and warns.
 * `RUN/plan.md`: from [templates/plan.md](templates/plan.md), the section order of
   `skills/hoi4-campaign-playbook/plans/italy-ethiopia-1936.md`. Every number tagged.
 * `RUN/plan.brief.md`: from [templates/brief.md](templates/brief.md), at most 60 lines.

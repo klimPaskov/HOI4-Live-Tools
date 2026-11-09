@@ -52,8 +52,10 @@ write them in the shapes below (the schema descriptions and `native/src/plan_mil
 | `F vp <TAG>` | VP list, total, surrender threshold with modifiers, capital, mandatory-control rules |
 | `F oob <TAG>` / `F characters <TAG> [--role general\|marshal\|admiral\|advisor\|leader]` | templates, divisions per state, wings, fleets / commanders and advisors with traits |
 | `F laws <TAG>` / `F idea <id>` / `F decisions <TAG>` / `F missions <TAG>` | costs, gates (`needs has_war_support > ...`), conditions, timers |
-| `F hooks <TAG>` / `F event <id>` | scenario reference graph / event options with name, loc text, trigger, effects |
-| `F grep <token> [--folder <dir>]` / `F defines <KEY>` | every reference to a key with file:line and mod / define values with source |
+| `F hooks <TAG>` / `F event <id>` | scenario reference graph (conditions in full) / event options with name, loc text, trigger, effects, and every caller: where it fires, the receiving scope, delay, conditions |
+| `F effect <name>` | a scripted effect's (or trigger's) full body with source, and where it is called |
+| `F resources <TAG>` | per-resource balance at the start: owned states, trade-law export share, start lines |
+| `F grep <token> [--folder <dir>] [-C N]` / `F defines <KEY>` | every reference to a key with file:line, mod and N context lines (FAIR leaves out `common/ai_*`) / define values with source |
 | `C build-order` / `C equipment` / `C pp` | factory compounding / equipment need per template and division count / PP timeline |
 | `python3 scripts/hoi4facts/tool_schemas.py show <tool>` / `check-call <tool> '<json>'` | a tool's required and allowed arguments with types and enums / one call checked against the catalogue |
 
@@ -257,7 +259,7 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 3. Slot gains (focuses, techs, decisions) before the build order needs them; energy: coal states and
    one energy or industrial keystone per state where the files offer it; refineries and fuel silos for
    an oil-poor country (item 19).
-4. Resources: per deficit on a planned line, automatic importing with a budget (executor
+4. Resources (`F resources <TAG>` for the start balance): per deficit on a planned line, automatic importing with a budget (executor
    `auto_import {budget}`) or manual purchases (executor `trade`: a list of `{id, resource, amount
    (a number, "max" or "needed"), from (a tag or the name hoi4_trade lists; absent: the partner offering
    most), when}`; automatic importing blocks manual trades while it is on); International Market

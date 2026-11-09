@@ -92,9 +92,9 @@ def _scan_effect(world, tag, action, block, path, own, rows, conds, depth=0):
             continue
         if kl in ("if", "else_if", "else"):
             limit = get1(v, "limit", [])
-            cond = world.text(limit, 220, tag) if limit else ""
+            cond = world.text(limit, None, tag) if limit else ""
             if kl == "else" and prev_limit is not None:
-                cond = "NOT (" + world.text(prev_limit, 160, tag) + ")"
+                cond = "NOT (" + world.text(prev_limit, None, tag) + ")"
             text = render(v)
             named = own or _mentions(text, tag)
             if kl != "else":
@@ -109,14 +109,14 @@ def _scan_effect(world, tag, action, block, path, own, rows, conds, depth=0):
                 _scan_effect(world, tag, action, [(a, b) for a, b in v if (a or "").lower() != "limit"],
                              path, own, rows, conds + ((cond,) if cond else ()), depth + 1)
                 continue
-            rows.append({"on_action": action, "condition": " AND ".join(c for c in conds + (cond,) if c)[:400],
+            rows.append({"on_action": action, "condition": " AND ".join(c for c in conds + (cond,) if c),
                          "effects": summary, "thresholds": [_cmp_text(t) for t in th],
                          "events": [s.split(":", 1)[1] for s in summary if s.startswith("event:")],
                          "src": world.src(path, line_of(block, i)), "mod": world.content.source(path)})
         elif re.match(r"^[A-Z][A-Z0-9]{2}$", k or "") and (own or k == tag or _mentions(render(v), tag)):
             summary = effect_summary(v, 10)
             if summary:
-                rows.append({"on_action": action, "condition": " AND ".join(conds)[:400] or None,
+                rows.append({"on_action": action, "condition": " AND ".join(conds) or None,
                              "scope": k, "effects": summary, "thresholds": [],
                              "events": [s.split(":", 1)[1] for s in summary if s.startswith("event:")],
                              "src": world.src(path, line_of(block, i)), "mod": world.content.source(path)})
@@ -295,18 +295,166 @@ def event(world, eid):
     return None
 
 
+# ---------------------------------------------------------------- references (event and effect callers)
+
+EVENT_KEYS = ("country_event", "news_event", "state_event", "unit_leader_event", "operative_leader_event")
+REF_ROOTS = ("events/", "common/", "history/")
+SCOPE_WORDS = re.compile(r"^(ROOT|FROM|PREV|THIS|owner|controller|overlord|faction_leader|capital_scope|"
+                         r"(every|random|all|any)_\w+|event_target:\w+|var:\S+|[A-Z][A-Z0-9]{2}|\d+)$")
+DELAY_KEYS = ("days", "hours", "random", "random_days", "random_hours")
+SKIP_BLOCKS = ("limit", "trigger", "available", "allowed", "visible", "ai_will_do", "ai_chance", "bypass",
+               "cancel_if_invalid", "allow_branch")
+
+
+def _label(k, v):
+    ident = (get1(v, "id") or get1(v, "name")) if isinstance(v, list) else None
+    return f"{k}({ident})" if isinstance(ident, str) else (k or "{}")
+
+
+def find_refs(world, needle, match):
+    """Every place in the effective script files (events, common, history; FAIR leaves out common/ai_*)
+    where match(key, value) holds: {src, mod, key, via (block chain), scope (tags, ROOT, FROM, every_* ...
+    on the way, "self" when none), conditions (if/else_if limits on the way), delay (days/hours keys of
+    the hit block)}. `needle` filters the files by their raw text first."""
+    raw = needle.encode("utf-8")
+    skip_ai = getattr(world, "mode", "fair") == "fair"
+    out = []
+    merged = world.content.merged()
+    for key in sorted(merged):
+        if not key.endswith(".txt") or not key.startswith(REF_ROOTS) or (skip_ai and ai_only(key)):
+            continue
+        rel, path, mod = merged[key]
+        try:
+            with open(path, "rb") as fh:
+                if raw not in fh.read():
+                    continue
+        except OSError:
+            continue
+
+        def walk(block, chain, scopes, conds, path=path, mod=mod):
+            for i, (k, v) in enumerate(block):
+                if match(k, v):
+                    row = {"src": world.src(path, line_of(block, i)), "mod": mod, "key": k,
+                           "via": " > ".join(chain), "scope": " > ".join(scopes) or "self",
+                           "conditions": list(conds)}
+                    if isinstance(v, list):
+                        delay = {d: get1(v, d) for d in DELAY_KEYS if isinstance(get1(v, d), str)}
+                        if delay:
+                            row["delay"] = delay
+                    out.append(row)
+                if not isinstance(v, list):
+                    continue
+                kl = (k or "").lower()
+                c = conds
+                if kl in ("if", "else_if"):
+                    lim = get1(v, "limit")
+                    if isinstance(lim, list) and lim:
+                        c = conds + (world.text(lim, None),)
+                elif kl == "else":
+                    c = conds + ("else",)
+                elif kl in SKIP_BLOCKS:
+                    continue
+                sc = scopes + ((k,) if k and SCOPE_WORDS.match(k) else ())
+                walk(v, chain + (_label(k, v),), sc, c)
+
+        walk(parse_file(path), (), (), ())
+    return out
+
+
+def _event_match(eid):
+    def match(k, v):
+        if k in EVENT_KEYS:
+            return v == eid or (isinstance(v, list) and get1(v, "id") == eid)
+        # on_actions: events = { id } and random_events = { 100 = id }
+        return v == eid and (k is None or re.match(r"^\d+$", k) is not None)
+    return match
+
+
+def event_callers(world, eid):
+    """[{src, via, scope, conditions, delay, key, effect?, effect_called_from?}] of every place that fires
+    the event: focus rewards, decision effects, other events' options and immediates, on_actions, scripted
+    effects, history. `scope` is the scope chain at the call, so the receiver is that scope's country (an
+    explicit tag, FROM, every_enemy_country ...) or the running country ("self"). A hit inside a
+    scripted effect also lists where that effect is called."""
+    rows = [r for r in find_refs(world, eid, _event_match(eid))
+            if not (r["via"] == "" and r["src"].startswith("events/"))]
+    effects = scripted_effects(world)
+    for r in rows:
+        top = r["via"].split(" > ")[0] if r["via"] else ""
+        if top in effects and r["src"].startswith("common/scripted_effects/"):
+            r["effect"] = top
+            r["effect_called_from"] = [f"{c['src']} ({c['via'] or 'top'}; scope {c['scope']})"
+                                       for c in effect_callers(world, top)[:20]]
+    return rows
+
+
+def effect_callers(world, name):
+    """Places that call a scripted effect (`name = yes`)."""
+    return find_refs(world, name, lambda k, v: k == name and v == "yes")
+
+
+def effect_body(world, name):
+    """{name, kind, src, mod, text, summary} of a scripted effect (else a scripted trigger) with its full
+    source text; None when unknown."""
+    hit = scripted_effects(world).get(name)
+    kind = "scripted_effect"
+    if not hit:
+        for p in world.game.files("common/scripted_triggers"):
+            items = parse_file(p)
+            for i, (k, v) in enumerate(items):
+                if k == name and isinstance(v, list):
+                    hit, kind = (v, p, line_of(items, i)), "scripted_trigger"
+                    break
+            if hit:
+                break
+    if not hit:
+        return None
+    block, path, line = hit
+    try:
+        with open(path, encoding="utf-8-sig", errors="replace") as fh:
+            lines = fh.read().split("\n")
+    except OSError:
+        lines = []
+    body, depth, started = [], 0, False
+    for ln in lines[(line or 1) - 1:]:
+        body.append(ln.rstrip())
+        code = ln.split("#", 1)[0]
+        depth += code.count("{") - code.count("}")
+        started = started or "{" in code
+        if started and depth <= 0:
+            break
+    return {"name": name, "kind": kind, "src": world.src(path, line), "mod": world.content.source(path),
+            "text": "\n".join(body), "summary": effect_summary(block, 30) if kind == "scripted_effect" else []}
+
+
 # ---------------------------------------------------------------- grep
 
 GREP_EXT = (".txt", ".lua", ".yml", ".csv", ".gui", ".gfx", ".asset")
 
 
-def grep(world, token, limit=400, folders=None, languages=("english",)):
+# Folders only the AI reads (strategy plans, front and template preferences, peace weights): FAIR private.
+AI_ONLY_PREFIX = "common/ai_"
+
+
+def ai_only(key):
+    """True for a content path in an AI-only folder (common/ai_strategy, ai_strategy_plans, ai_templates ...)."""
+    return key.lower().replace("\\", "/").startswith(AI_ONLY_PREFIX)
+
+
+def grep(world, token, limit=400, folders=None, languages=("english",), context=0, skip_ai=None):
     """[{src, mod, text}] of every line holding `token` as a word in the effective text files
-    (localisation only in `languages`; None for all)."""
+    (localisation only in `languages`; None for all). A token that never stands as a word (a suffix
+    such as `italo_ethiopian_war_events.110` of `BBA_italo_ethiopian_war_events.110`) matches as a
+    substring instead. `context` adds that many lines before and after each hit ("context" list).
+    skip_ai (default: FAIR mode) leaves out the AI-only folders (common/ai_*); the result is then
+    marked by a final row {"hidden_ai_only": n} when hits there were left out."""
+    if skip_ai is None:
+        skip_ai = getattr(world, "mode", "fair") == "fair"
     needle = token.encode("utf-8")
     word = re.compile(rb"(?<![A-Za-z0-9_])" + re.escape(needle) + rb"(?![A-Za-z0-9_])")
-    out = []
     merged = world.content.merged()
+    files = []
+    hidden = 0
     for key in sorted(merged):
         rel, path, mod = merged[key]
         if folders and not any(key.startswith(f.lower().rstrip("/") + "/") for f in folders):
@@ -322,12 +470,32 @@ def grep(world, token, limit=400, folders=None, languages=("english",)):
             continue
         if needle not in data:
             continue
-        for n, line in enumerate(data.split(b"\n"), 1):
-            if needle in line and word.search(line):
-                out.append({"src": f"{rel}:{n}", "mod": mod,
-                            "text": line.decode("utf-8", "replace").strip()[:200]})
-                if len(out) >= limit:
-                    return out
+        if skip_ai and ai_only(key):
+            hidden += 1
+            continue
+        files.append((rel, mod, data.split(b"\n")))
+
+    def scan(match):
+        out = []
+        for rel, mod, lines in files:
+            for n, line in enumerate(lines, 1):
+                if needle in line and match(line):
+                    row = {"src": f"{rel}:{n}", "mod": mod, "text": line.decode("utf-8", "replace").strip()[:200]}
+                    if context:
+                        lo, hi = max(0, n - 1 - context), min(len(lines), n + context)
+                        row["context"] = [f"{k + 1}: " + lines[k].decode("utf-8", "replace").rstrip()
+                                          for k in range(lo, hi)]
+                    out.append(row)
+                    if len(out) >= limit:
+                        return out
+        return out
+
+    out = scan(word.search)
+    if not out:
+        out = [dict(r, substring=True) for r in scan(lambda line: True)]
+    if hidden:
+        out.append({"hidden_ai_only": hidden, "fair": "private",
+                    "note": "FAIR: hits in AI-only folders (common/ai_*) left out; --mode meta shows them"})
     return out
 
 

@@ -15,8 +15,10 @@
     facts.py characters <TAG> [--role general|marshal|admiral|advisor|leader]
     facts.py laws <TAG>          facts.py idea <id>
     facts.py decisions <TAG>     facts.py missions <TAG>
-    facts.py hooks <TAG>         facts.py event <id>
-    facts.py grep <token>        facts.py defines <KEY>
+    facts.py hooks <TAG>         facts.py event <id>   (options, and who fires it: caller, scope, delay)
+    facts.py effect <name>       scripted effect (or trigger) body with source, and its callers
+    facts.py resources <TAG>     per-resource balance at the start: owned states, trade-law export, start lines
+    facts.py grep <token> [-C N] facts.py defines <KEY>   (FAIR: grep leaves out common/ai_*)
     facts.py terrain-width <TAG | state ids> [--route A B]   terrain mix, combat widths, width target
     facts.py units [--category C] [--unlocked-by D --tag T]  battalions and companies: width, needs, rows
     facts.py weather <state | --region ID | R<id> | name>     monthly mud, snow, cold, heat
@@ -690,7 +692,7 @@ def cmd_hooks(args):
         for t in x["timers"]:
             out.append(f"timer {t['kind']} {t['id']} {t['days']}d [{t['src']}]")
         for r in x["on_startup"] + x["on_actions"]:
-            out.append(f"{r['on_action']}: " + (f"when {r['condition'][:160]}: " if r.get("condition") else "")
+            out.append(f"{r['on_action']}: " + (f"when {r['condition']}: " if r.get("condition") else "")
                        + ", ".join(r.get("effects") or []) + f" [{r['src']}]")
         return out
 
@@ -702,12 +704,23 @@ def cmd_event(args):
     e = scenariomod.event(w, args.id)
     if not e:
         return fail(f"unknown event {args.id}")
+    e["called_from"] = scenariomod.event_callers(w, args.id)
 
     def text(x):
-        out = [f"{x['id']} ({x['type']}) \"{x['title']}\" [{x['src']}]" + (" hidden" if x["hidden"] else "")]
+        out = [f"{x['id']} ({x['type']}) \"{x['title']}\" [{x['src']}]" + (" hidden" if x["hidden"] else "")
+               + (" triggered_only" if x.get("triggered_only") else "")]
         for k in ("trigger", "mean_time_to_happen", "immediate"):
             if x.get(k):
                 out.append(f"{k}: {x[k]}")
+        for c in x["called_from"]:
+            out.append(f"fired by {c['src']}: {c['via'] or 'top level'} -> {c['key']}; receiver scope {c['scope']}"
+                       + (f"; delay {' '.join(f'{k}={v}' for k, v in c['delay'].items())}" if c.get("delay") else ""))
+            for cond in c["conditions"]:
+                out.append(f"    when {cond}")
+            if c.get("effect_called_from"):
+                out.append(f"    effect {c['effect']} called from: " + "; ".join(c["effect_called_from"]))
+        if not x["called_from"] and x.get("triggered_only"):
+            out.append("fired by: no caller found in events, common or history (code, console or a mod)")
         for o in x["options"]:
             out.append(f"option {o['name']} \"{o['text']}\" -> {', '.join(o['effects'])} [{o['src']}]")
             for k in ("trigger", "ai_chance"):
@@ -718,12 +731,62 @@ def cmd_event(args):
     return emit(args, e, text)
 
 
+def cmd_resources(args):
+    w = world(args, args.TAG)
+    r = w.resources(args.TAG)
+
+    def text(x):
+        out = [f"{x['tag']} trade law {x['trade_law']} (min_export {x['min_export']})",
+               "resource produced exported available needed balance"]
+        for k, b in x["balance"].items():
+            out.append(f"{k} {b['produced']:g} {b['exported']:g} {b['available']:g} {b['needed']:g} {b['balance']:+g}")
+        for s in x["states"]:
+            out.append(f"state {s['id']} {s['name']}: " + " ".join(f"{k} {v:g}" for k, v in s["resources"].items())
+                       + f" [{s['src']}]")
+        for ln in x["lines"]:
+            out.append(f"line {ln['equipment']} {ln['version'] or ''} x{ln['factories']}: "
+                       + (" ".join(f"{k} {v:g}" for k, v in ln["per_factory"].items()) or "no resources")
+                       + " per factory" + (f" ({ln['note']})" if ln.get("note") else "") + f" [{ln['src']}]")
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, r, text)
+
+
+def cmd_effect(args):
+    w = world(args)
+    e = scenariomod.effect_body(w, args.name)
+    if not e:
+        return fail(f"unknown scripted effect or trigger {args.name}")
+    e["called_from"] = scenariomod.effect_callers(w, args.name) if e["kind"] == "scripted_effect" else []
+
+    def text(x):
+        out = [f"{x['kind']} {x['name']} [{x['src']}]" + (f" ({x['mod']})" if x.get("mod") else ""), x["text"]]
+        for c in x["called_from"]:
+            out.append(f"called from {c['src']}: {c['via'] or 'top level'}; scope {c['scope']}")
+        return out
+
+    return emit(args, e, text)
+
+
 def cmd_grep(args):
     w = world(args)
     rows = scenariomod.grep(w, args.token, limit=args.limit, folders=args.folder,
-                            languages=None if args.all_languages else ("english",))
-    return emit(args, rows, lambda rs: [f"{r['src']}{' (' + r['mod'] + ')' if r['mod'] else ''}: {r['text']}"
-                                        for r in rs] or ["no match"])
+                            languages=None if args.all_languages else ("english",), context=args.context or 0)
+
+    def text(rs):
+        out = []
+        for r in rs:
+            if "hidden_ai_only" in r:
+                out.append(f"({r['hidden_ai_only']} file(s) in AI-only folders hidden: {r['note']})")
+                continue
+            out.append(f"{r['src']}{' (' + r['mod'] + ')' if r['mod'] else ''}: {r['text']}"
+                       + (" [substring]" if r.get("substring") else ""))
+            if r.get("context"):
+                out.extend("    " + c for c in r["context"])
+        return out or ["no match"]
+
+    return emit(args, rows, text)
 
 
 def cmd_terrain_width(args):
@@ -1448,10 +1511,13 @@ def parser():
     p.add_argument("--all", action="store_true")
     add("hooks", cmd_hooks, "TAG")
     add("event", cmd_event, "id")
+    add("effect", cmd_effect, "name")
+    add("resources", cmd_resources, "TAG")
     p = add("grep", cmd_grep, "token")
     p.add_argument("--limit", type=int, default=200)
     p.add_argument("--folder", action="append", help="limit to a content folder (repeat)")
     p.add_argument("--all-languages", action="store_true", help="also non-English localisation")
+    p.add_argument("--context", "-C", type=int, default=0, help="lines of context before and after each hit")
     add("defines", cmd_defines, "KEY")
     p = add("terrain-width", cmd_terrain_width, ("target", {"nargs": "*", "help": "a TAG or state ids"}))
     p.add_argument("--route", nargs=2, type=int, metavar=("FROM", "TO"))

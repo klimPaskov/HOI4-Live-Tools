@@ -134,6 +134,11 @@ AGENCY_METHOD = ("common/intelligence_agency_upgrades (one block per branch; `le
 ENERGY_DEFINES = ("ENERGY_RESOURCE", "RESOURCE_TO_ENERGY_COEFFICIENT", "BASE_COUNTRY_ENERGY_PRODUCTION",
                   "ENERGY_SCALING_COST_BY_FACTORY_COUNT", "BASE_ENERGY_COST", "ENERGY_COST_CAP",
                   "ENERGY_SCALE_PER_TRADE_FACTORY_EXPORT")
+RESOURCES_METHOD = ("produced = state history resources of the owned states at the start (extraction techs, "
+                    "local_resources_factor and occupation left out [?]); exported = produced x the trade law's "
+                    "min_export (the share the market takes at most); needed = start production lines x factories x the "
+                    "equipment's resources (archetype resources for designs; modules add more); balance = produced - "
+                    "exported - needed; a negative balance is imported or stalls the lines")
 ENERGY_METHOD = ("produced = BASE_COUNTRY_ENERGY_PRODUCTION + energy resource in own states x RESOURCE_TO_ENERGY_COEFFICIENT; "
                  "per factory = min(ENERGY_COST_CAP, BASE_ENERGY_COST + ENERGY_SCALING_COST_BY_FACTORY_COUNT x factories); "
                  "demand = sum over states of factories x per factory x (1 + local consumption modifiers of the energy "
@@ -2524,6 +2529,90 @@ class World:
         return {"tag": tag or None, "agency_at_start": self.country(tag)["agency"] if tag else None,
                 "upgrades": ups, "operations": ops, "phases": phases, "defines": self.defines_rows(AGENCY_DEFINES),
                 "dlc_la_resistance": "La Resistance" in self.dlcs, "fair": "public", "d": AGENCY_METHOD}
+
+    # ------------------------------------------------------------ resources
+    def equipment_resources(self):
+        """{equipment: {resources: {res: n}, base: equipment the numbers come from, design: bool}} from
+        common/units/equipment; an equipment without its own resources takes its archetype's (or parent's);
+        a duplicated archetype's copy (small_plane_cas_airframe_0) takes its source's (small_plane_airframe_0).
+        design is true for chassis, airframes and hulls, whose modules add resources not counted here."""
+
+        def load():
+            raw, dups = {}, []
+            for p in self.game.files("common/units/equipment"):
+                for k, v in parse_file(p):
+                    if k == "equipments" and isinstance(v, list):
+                        for name, body in v:
+                            if name and isinstance(body, list):
+                                raw[name] = {"res": _numbers(get1(body, "resources")),
+                                             "up": get1(body, "archetype") or get1(body, "parent"),
+                                             "modules": isinstance(get1(body, "module_slots"), (list, str))}
+                    elif k == "duplicate_archetypes" and isinstance(v, list):
+                        for name, body in v:
+                            if name and isinstance(body, list) and isinstance(get1(body, "archetype"), str):
+                                dups.append((name, get1(body, "archetype")))
+            for dup, arch in dups:
+                for eq, r in list(raw.items()):
+                    if r["up"] == arch and eq.startswith(arch) and eq != arch:
+                        raw.setdefault(dup + eq[len(arch):], {"res": {}, "up": eq, "modules": r["modules"]})
+
+            def resolve(name, seen=()):
+                r = raw.get(name)
+                if r is None or name in seen:
+                    return {}, None, False
+                if r["res"]:
+                    return r["res"], name, r["modules"]
+                res, base, mod = resolve(r["up"], seen + (name,)) if isinstance(r["up"], str) else ({}, None, False)
+                return res, base, mod or r["modules"]
+
+            out = {}
+            for name in raw:
+                res, base, mod = resolve(name)
+                out[name] = {"resources": res, "base": base, "design": bool(mod)}
+            return out
+
+        return self.cached("equipment_resources", load)
+
+    def resources(self, tag=None):
+        """Per-resource balance at the start (RESOURCES_METHOD): produced in owned states, the trade law's
+        min_export share, the start production lines' needs, and the balance."""
+        tag = tag or self.tag
+        states = self.states()
+        produced, by_state = defaultdict(float), []
+        for sid in self.owned_states(tag):
+            st = states[sid]
+            if st["resources"]:
+                by_state.append({"id": sid, "name": st["name"], "resources": st["resources"], "src": st["file"]})
+                for r, n in st["resources"].items():
+                    produced[r] += n
+        laws = self.laws(tag)
+        trade = (laws.get("trade_laws") or {}).get("current")
+        min_export = None
+        if trade:
+            min_export = _numbers(self.ideas().get(trade, {}).get("modifier"), deep=True).get("min_export")
+        eq = self.equipment_resources()
+        lines, need, partial = [], defaultdict(float), []
+        for line in self.oob(tag)["production"]:
+            info = eq.get(line["type"]) or {"resources": {}, "base": None, "design": False}
+            f = line.get("factories") or 0
+            row = {"equipment": line["type"], "version": line.get("version"), "factories": f,
+                   "per_factory": info["resources"], "src": line["src"]}
+            if info["design"]:
+                row["note"] = "design: module resources not counted"
+                partial.append(line["type"])
+            lines.append(row)
+            for r, n in info["resources"].items():
+                need[r] += n * f
+        names = sorted(set(produced) | set(need))
+        balance = {}
+        for r in names:
+            p = produced.get(r, 0.0)
+            exported = p * (min_export or 0)
+            balance[r] = {"produced": round(p, 2), "exported": round(exported, 2),
+                          "available": round(p - exported, 2), "needed": round(need.get(r, 0.0), 2),
+                          "balance": round(p - exported - need.get(r, 0.0), 2)}
+        return {"tag": tag, "trade_law": trade, "min_export": min_export, "balance": balance, "states": by_state,
+                "lines": lines, "partial_lines": partial, "fair": "public", "d": RESOURCES_METHOD}
 
     # ------------------------------------------------------------ energy (F-21)
     def energy_buildings(self):

@@ -950,6 +950,14 @@ class Lint:
                          f"targets hold {got:g} of {enemy}'s {s['total_vp']:g} VP; capitulation needs {s['vp_needed']} "
                          f"(limit {s['limit']:g}: base {s['base']:g}, {mods})")
         self.facts["surrender"] = surr
+        if surr:
+            # rows on another country's state count nothing towards the surrender (owner at the start)
+            for i, e in enumerate(targets):
+                owner = owners.get(pstate.get(e.get("province")))
+                if owner and owner not in surr and vps.get(e.get("province"), 0) > 0:
+                    self.add("info", "conquest.threshold", f"vp_targets[{i}] {e['province']}",
+                             f"state {pstate.get(e['province'])} is {owner}'s at the start: its "
+                             f"{vps[e['province']]:g} VP do not count towards {', '.join(sorted(surr))}")
         self.conquest_skipped_near(targets, vps, owners, pstate)
         must = self.goal_states()
         self.facts["goal_states"] = {str(k): v for k, v in sorted(must.items())}
