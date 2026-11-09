@@ -323,5 +323,78 @@ class StrategistSkillTest(unittest.TestCase):
             self.assertIn("hoi4-strategist/SKILL.md", read(os.path.join(ROOT, rel)), rel)
 
 
+PLAYBOOK = os.path.join(ROOT, "skills", "hoi4-campaign-playbook")
+REFERENCES = os.path.join(PLAYBOOK, "references")
+TACTIC_ROW = re.compile(r"^\| ([A-Z]{2}\d{2}) \|", re.M)
+# Provenance the agents must not read (user rule: the playbook is plain shared knowledge, no citations).
+CITATIONS = [
+    re.compile(r"https?://"),
+    re.compile(r"\[(?:V|F|W|D|L|H)\??(?:[ :][^\]]*)?\]"),
+    re.compile(r"\[\?\]"),
+    re.compile(r"\bwiki\b", re.I),
+    re.compile(r"\bdefines?[:`]"),
+    re.compile(r"UNSURE|\[uncertain\]|\[playbook\]"),
+]
+
+
+def anchor(heading):
+    return re.sub(r"[^a-z0-9 -]", "", heading.lower()).replace(" ", "-")
+
+
+class PlaybookReferencesTest(unittest.TestCase):
+    def test_tactics_index_matches_the_sections(self):
+        text = read(os.path.join(REFERENCES, "tactics.md"))
+        groups = re.findall(r"^## .*?\[[^\]]+\]\(([a-z-]+\.md)#([a-z0-9-]+)\)\n\n((?:- .+\n)+)", text, re.M)
+        self.assertGreater(len(groups), 15)
+        indexed = set()
+        for fname, anc, lines in groups:
+            ids = re.findall(r"^- ([A-Z]{2}\d{2}) ", lines, re.M)
+            self.assertTrue(ids, fname)
+            body = read(os.path.join(REFERENCES, fname))
+            headings = {anchor(h): h for h in re.findall(r"^#{2,3} (.+)$", body, re.M)}
+            self.assertIn(anc, headings, "%s has no section #%s" % (fname, anc))
+            section = body.split("## " + headings[anc], 1)[1].split("\n## ", 1)[0]
+            for tid in ids:
+                self.assertRegex(section, r"(?m)^\| %s \|" % tid, "%s missing from %s #%s" % (tid, fname, anc))
+                self.assertNotIn(tid, indexed, "%s indexed twice" % tid)
+                indexed.add(tid)
+        rows = set()
+        for name in os.listdir(REFERENCES):
+            if name.endswith(".md") and name != "tactics.md":
+                rows |= set(TACTIC_ROW.findall(read(os.path.join(REFERENCES, name))))
+        self.assertEqual(rows - indexed, set(), "tactic rows missing from tactics.md")
+        self.assertGreater(len(indexed), 300)
+
+    def test_nation_openers(self):
+        text = read(os.path.join(REFERENCES, "nation-openers.md"))
+        for tag in ("GER", "ITA", "JAP", "SOV", "ENG", "USA", "FRA", "POL", "HUN", "ROM", "CHI", "SWE", "ETH"):
+            self.assertRegex(text, r"(?m)^## .*\(%s\)" % tag, tag)
+        for card in ("germany-fair.md", "china-fair.md", "poland-meta.md", "italo-ethiopian-war.md"):
+            self.assertIn("](%s)" % card, text)
+            self.assertTrue(os.path.exists(os.path.join(REFERENCES, card)), card)
+
+    def test_new_references_are_reachable(self):
+        index = read(os.path.join(REFERENCES, "INDEX.md"))
+        skill = read(os.path.join(PLAYBOOK, "SKILL.md"))
+        for name in ("tactics.md", "nation-openers.md"):
+            self.assertIn(name, index)
+            self.assertIn("references/%s" % name, skill)
+        self.assertIn("tactics.md", read(os.path.join(SKILL, "references", "procedure.md")))
+        self.assertIn("nation-openers.md", read(os.path.join(SKILL, "SKILL.md")))
+        self.assertIn("META-only, banned and patched tricks", read(os.path.join(REFERENCES, "rules-and-modes.md")))
+
+    def test_playbook_has_no_citations(self):
+        self.assertFalse(os.path.exists(os.path.join(REFERENCES, "sources.md")))
+        paths = [os.path.join(PLAYBOOK, "SKILL.md")] + [
+            os.path.join(REFERENCES, n) for n in sorted(os.listdir(REFERENCES)) if n.endswith(".md")]
+        hits = []
+        for path in paths:
+            for n, line in enumerate(read(path).splitlines(), 1):
+                for pattern in CITATIONS:
+                    if pattern.search(line):
+                        hits.append("%s:%d: %s" % (os.path.basename(path), n, line[:100]))
+        self.assertEqual(hits, [])
+
+
 if __name__ == "__main__":
     unittest.main()

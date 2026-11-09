@@ -19,7 +19,7 @@ Every item ends in exactly one of:
   Shorthand such as `hoi4_air_rebase {wing, state_id}` in this file lists argument names only; never
   copy it as a call;
 * **not applicable: <reason>**, where the reason cites a fact (a facts output, a dossier line, the DLC
-  list) or a missing tool (the audit row id, e.g. "no tool: production line MIO chooser"). "Later",
+  list) or a missing tool (name it, e.g. "no tool: production line MIO chooser"). "Later",
   "TBD" and "if needed" are not resolutions.
 
 Items 1, 2 and 29 are never "not applicable". Write every resolution into the coverage table, plan.md
@@ -57,7 +57,7 @@ write them in the shapes below (the schema descriptions and `native/src/plan_mil
 | `C build-order` / `C equipment` / `C pp` | factory compounding / equipment need per template and division count / PP timeline |
 | `python3 scripts/hoi4facts/tool_schemas.py show <tool>` / `check-call <tool> '<json>'` | a tool's required and allowed arguments with types and enums / one call checked against the catalogue |
 
-Fact readers being added (audit F-1 to F-11). Use them when `F --help` lists them; until then use the
+Fact readers being added. Use them when `F --help` lists them; until then use the
 fallback named here and tag the result with the file it came from:
 
 | Command | Answers | Until available |
@@ -76,9 +76,10 @@ the plan, and re-check any game number it gives with `F` before you use it. Play
 under `skills/hoi4-campaign-playbook/references/`): `generic-playbook.md`, `strategy.md`,
 `economy-build-orders.md`, `research-doctrines-projects.md`, `war-operating-loop.md`,
 `war-air-naval-peace.md`, `supply-logistics-deployment.md`, `army-organisation.md`,
-`templates-equipment-production.md`, `politics-diplomacy-espionage.md`, `rules-and-modes.md`; a
-scenario reference from `INDEX.md` when one exists. Tool status (what is live-verified):
-`docs/LIVE_VERIFICATION_1_19_4.md`.
+`templates-equipment-production.md`, `politics-diplomacy-espionage.md`, `rules-and-modes.md`,
+`nation-openers.md`; a scenario reference from `INDEX.md` when one exists. `tactics.md` lists every tactic in
+one line with its id (PR01, OP13, ...): scan it once before item 3; the steps below name the ids each item must
+decide. Tool status (what is live-verified): `docs/LIVE_VERIFICATION_1_19_4.md`.
 
 Each item below gives: **Facts** (commands), the steps, **Resolution** (the key or call), **Check**
 (lint rule or rubric row).
@@ -94,7 +95,8 @@ fail predicates, reading, alternatives); plan.md §0; brief "Win" line. Check: l
 ### 2. Situation
 Facts: dossier §1-4 and §8-9; `F hooks <TAG>`, `F event <id>`, `F oob <ENEMY>` (FAIR: counts and
 templates only), `F states <TAG>`, `C pp`. SKILL.md step 3. Resolution: `war.enemies`, the first phase's
-`enter` and the months-to-war number used by items 3, 10 and 17; plan.md §1 and §7. Check: step 3 gate;
+`enter` and the months-to-war number used by items 3, 10 and 17; the tag's opener in `nation-openers.md` when
+it has one (compare, do not copy); plan.md §1 and §7. Check: step 3 gate;
 rubric row 2.
 
 ## B. Force posture, doctrines, experience
@@ -109,6 +111,7 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
    (an enemy with no planes needs no fighters beyond what CAS escort needs; an overseas theatre needs
    convoys before anything else).
 2. Name the arms the goal does not need and why; their research and doctrine folders stay out.
+3. Every start line, wing and fleet the posture does not use is marked for removal in item 8 (PR08, L18).
 Resolution: executor `production` (factories per line, `from`), `production_priority`,
 `phases[].overrides.production_priority`, `research_fallback_exclude`, `doctrines` folders; plan.md §12.
 Check: lint `production.factories`, `research.folders`; rubric row 12.
@@ -122,6 +125,8 @@ doctrines and tracks), `F grep <doctrine key> --folder common/doctrines` (`xp_co
    per track in XP order, which track to master first.
 2. A theorist before an expensive adoption (cost reduction) as a `politics` item.
 3. Special forces: which branch, or not applicable with the reason (no special-forces templates planned).
+4. Land: Mass Assault for a defensive war, Grand Battle Plan for an offensive one; naval and air doctrines follow
+   the build (RE06-RE09).
 Resolution: executor `doctrines` (`id`, `folder`, `grand_doctrine` or `track` + `subdoctrine`, `xp`) and
 `politics` (theorist); plan.md §13. Check: `validate_plan.py` doctrine check; rubric row 13.
 
@@ -134,6 +139,9 @@ Read: `research-doctrines-projects.md` §2.3. Facts: starting experience (dossie
 2. Order every spend per branch with its month: doctrines (item 4), template edits (item 6), designs
    (item 7), officer-corps spirits. No month spends more than the forecast; keep the reserve for
    designs that the playbook names.
+3. XP sources with their costs: exercises of a few cheap divisions to Regular (stop 14 days before the war), one
+   air wing on training, naval exercises to about 100 XP, attachés (100 PP + 50 command power), volunteers
+   (AR15-AR17, RE10).
 Resolution: the `xp` fields of `doctrines` (and of `templates` once that key has one) in spend order,
 `xp_budget` (key pending); plan.md §13 table. Check: rubric row 12.
 
@@ -143,18 +151,26 @@ Resolution: the `xp` fields of `doctrines` (and of `templates` once that key has
 Read: `templates-equipment-production.md` §1 (width, the terrain-mix method), §3, §4, §8;
 `army-organisation.md` §1, §3. Facts: `F terrain-width <TAG|theatre>`, `F units [--category]`,
 `F oob <TAG>` (start templates), `F tech <id>` (support-company unlocks), `C equipment`.
-1. One template per role and phase: line, assault, mobile, garrison (cheap suppression, item 23),
-   mountain or marine where the theatre needs it. Width target from the axis terrain mix, within 10%
-   of a clean fit for the main terrain.
+1. One template per role and phase: line, assault, mobile, garrison (item 23), mountain or marine where the
+   theatre needs it. Width from the axis terrain with the fill table (`templates-equipment-production.md` §1):
+   line divisions 14-18 for mountains and hills, 20 elsewhere; no 34-36 or 40+ outside plains; fill at least
+   0.95 on the main terrain (AR01, L21).
 2. Support companies and the 1.19 regimental-support row, each with the reason (the enemy's armour,
-   air, terrain). The template tools have no regimental-support argument yet (audit F2): record the
+   air, terrain). The template tools have no regimental-support argument yet: record the
    regimental row in plan.md and leave it out of the call.
 3. Reinforcement priority (elite for the strike army, reserve for garrisons), the XP cost (item 5),
    the equipment it needs (`C equipment`, unlocked by that date), and when fielded divisions switch.
+4. Regimental row: columns of exactly 3 battalions; heavy weapons company by default, AA batteries only up to
+   about 55 division air attack against enemy CAS, AT batteries against armour; no line TD or SPA in line
+   divisions (AR02-AR04, AR09).
+5. Garrison template by hardness: one cavalry battalion, or 2-4 obsolete light tanks or armoured cars; no
+   military police (AR10).
+6. Fielded veteran divisions get a new template instead of a battalion edit (up to 50% XP lost);
+   `allow_in_use` only when the stockpile covers the change for every division (AR13).
 Resolution: player `templates` (`name`, `regiments`, `support`, `when`, `call` `hoi4_template_create
 {name, regiments, support, priority}` or `hoi4_template_edit {template, regiments, support, priority,
 allow_in_use}`); `training.template` (executor); plan.md §14. Not applicable only for a goal with no
-land war. Check: lint `schema.player_call`, `production.equipment`; rubric rows 6 and 13.
+land war. Check: lint `schema.player_call`, `production.equipment`, `army.width_terrain`; rubric rows 6 and 13.
 
 ### 7. Equipment designs
 Read: `research-doctrines-projects.md` §6.2; `templates-equipment-production.md` §2, §5. Facts: dossier
@@ -164,6 +180,11 @@ module slots, modules unlocked at the date, XP costs, start variants), `F tech <
    change keeps 90% efficiency; a new chassis much less).
 2. Not applicable when the plan builds no tanks, planes or ships of a designer family, or the DLC is
    not active (cite dossier §0).
+3. For each new design: its switch class (variant 90%, family 70%, tier 30%) and whether its line switches at
+   once or ramps (item 8); keep one chassis or airframe per role and change modules (PR03-PR05); 1.19.4 tank
+   rules (PR35); one design per role per phase (PR27); ships: torpedo destroyer, ASW destroyer, raider
+   submarine over 60 torpedo attack (NA07, NA08, NA12); planes: never two engines on a small airframe
+   (AI08-AI10).
 Resolution: executor `designs` (`id`, `kind` tank / plane / ship / other, `base` an equipment key from
 `F designs` or a start variant name, `name`, `modules` {slot: module} for the module designers or
 `upgrades` {row: level} without one, `xp`, `when`), made once per id with an XP guard; the line switch is
@@ -179,15 +200,33 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
    date; equipment unlocked by then.
 2. Removals and replacements of starting lines (obsolete equipment): `production[].remove` / `replace`
    when the schema has them (W1-9); until then a player `hoi4_production_set {line, equipment,
-   factories}`; 0 factories empties or removes the line (the descriptor says both; no live record of a
-   removal yet [?]).
+   factories}`; 0 factories empties or removes the line (removal is not live-verified yet).
 3. Stockpile targets in days of cover per item (item 28 defaults), trucks for every `war.motorization`
    level (truck stock ≥ 1.5× wanted), convoys for overseas supply and trade (item 21), aircraft to keep
    wings at strength (item 20).
 4. `training`: only what equipment covers (`army-organisation.md` §3); `training_rules` for the guard.
+5. **Day 0 (paused, before the first unpause):** every free or freed military factory goes onto a line that
+   exists at the start (PR01, L19): `production` entries on start lines, applied by the executor's first pass
+   while the game is still paused; otherwise day-0 brief lines with the exact `hoi4_production_set` calls.
+6. **Line audit at the start and at every phase change:** every live line is kept, resized or removed with a
+   reason; a line no template, wing, fleet or stockpile target uses is removed (PR08, L18).
+7. **Finish items in progress first:** start naval lines finish the hull that is nearly done, then go
+   (`remove` with a `from` after it); hulls under about 50% the plan does not need go at once; an expensive
+   tank or plane in progress finishes before its line switches (PR06, PR07).
+8. **Line-switch plan per tier:** for every tier change in the research path (infantry equipment I to II,
+   artillery, AT, AA, tank chassis, airframes) the date, switch or ramp, and the reason. Ramp while the old
+   gear is still needed in quantity: 3-5 new factories (about 10% of the old line) on the new model, the old
+   line untouched; switch the old line whole when its gear covers about 30 days of field demand or quality
+   binds. A young line (under 15%) switches at once; variants any time (PR04, L17).
+9. **Rebalance in steps:** idle factories to the line with the fewest days of cover in chunks of
+   max(2, 20% of the line); factories leave a line only with 90+ days of cover, at most one pull per line per
+   30 days; priority lines on top of the list (PR09-PR11, L20).
+10. **Stockpile cover targets** per item: critical under 7 days, warning under 30, 30+ days before a
+    declaration (PR28, CP01); spare trucks 1.5x, trains 1.2x, convoys 0.25 per sea supply (PR29).
 Resolution: executor `production`, `production_priority`, `production_min_idle`, `training`; player
 `training_rules`; `stockpile_targets` (key pending); plan.md §5. Check: lint `production.factories`,
-`production.equipment`, `production.trucks`; rubric row 6.
+`production.equipment`, `production.trucks`, `production.day0`, `production.cull`, `production.mature_switch`;
+rubric row 6.
 
 ### 9. MIOs
 Read: `research-doctrines-projects.md` §6.1; `politics-diplomacy-espionage.md` "Designers and MIOs".
@@ -196,9 +235,11 @@ trees, policies, defines).
 1. Which organisation per big line (best efficiency trait on the biggest line), the trait order, the
    policies (25 PP each, 180-day lock), the design-team slot.
 2. A trait is its 0-based `trait_index` as `hoi4_mio_trait {"list":true}` numbers the tree (trait entries
-   carry no text); a line's MIO cannot be chosen by a tool: `mio[].line` and plan.md say "no tool (audit
-   C7)".
+   carry no text); a line's MIO cannot be chosen by a tool: `mio[].line` and plan.md say "no tool
+   for this").
 3. Not applicable when AAT is not active (dossier §0).
+4. Trait order: production first (cap, then cost or output, growth last), then the role stat; combat MIO on
+   the design, production MIO on the line; queue traits so the policy prompt appears (RE13-RE17).
 Resolution: executor `mio` (`organisation`, `traits` [trait_index, ...] in queue order, `policy`,
 `design_team` true or a slot, `slot`, `when`); plan.md §15. Check: validate_plan (organisation allowed for
 the tag, policy, trait index range); rubric row 6.
@@ -220,7 +261,7 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
    `auto_import {budget}`) or manual purchases (executor `trade`: a list of `{id, resource, amount
    (a number, "max" or "needed"), from (a tag or the name hoi4_trade lists; absent: the partner offering
    most), when}`; automatic importing blocks manual trades while it is on); International Market
-   purchases have no tool (audit B16).
+   purchases have no tool.
 5. Every construction item states its cost in points (`base_cost`, table in `economy-build-orders.md`
    §1.1; `F grep base_cost --folder common/buildings`) and its estimated finish date from
    `C build-order` (5 points per civilian factory per day, at most 15 factories per project,
@@ -228,6 +269,16 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 6. Supply construction on the attack axis is item 19: railways first, then a port where no supply
    reaches the shore, trucks, and a hub only after the cost and time check there. Idle-factory check: no date where civilian factories have no queued project
    (`construction` filler list).
+7. Switch date from the payback: war date - 2.9 x civilian payback; no civilian factories queued in the last
+   18 months before the war or once it runs unless it will last over a year; at war convert civilian to
+   military factories when slots are full (EC01-EC03).
+8. Slots: every concentrated or dispersed industry level adds +20% building slots; count them when ranking
+   states (EC04). Expensive buildings in infrastructure-5 or dam states (EC05).
+9. Energy: coal and energy techs for the planned factory count; check coal before each economy-law step
+   (EC11, EC12).
+10. Trades in blocks of 8 from several sellers, never from a planned enemy; auto-import budget, priority and
+    accepted shortages; obsolete gear sold on the market when a tool exists (EC14, EC15, PR22).
+11. Under bombing: repair order and factory spread (EC08, EC21, PR33).
 Resolution: executor `construction`, `construction_plan` (stable `id`s), `construction_min_idle`,
 `construction_queue_depth`, `auto_import`, `trade`; plan.md §4. Check: lint `construction.front`,
 `construction.infrastructure`; rubric row 4.
@@ -242,16 +293,24 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
    dates into plan.md §3 as `[D research-timeline]`.
 4. **Every slot busy, all the time (user rule).** Research serves the whole campaign, not only the current
    war: the game goes on after the goal, and the economy compounds. List enough techs that no slot waits
-   until the horizon: when a block runs out before the next block year, pull the next tier forward (one year
-   ahead costs little: `F tech <id>` shows the ahead-of-time days) instead of leaving slots empty. Order:
-   industry (production, construction, industry folder: e.g. the concentrated/dispersed industry line,
-   machine tools, construction), then the equipment the planned templates use, then what the war plan
+   until the horizon. When a block runs out before the next block year, fill the slots first with in-year
+   techs of other folders the campaign uses (industry, construction, electronics, support companies,
+   logistics, equipment the templates use). Pull a tier forward only when nothing in-year remains, and say so
+   in plan.md §3: research speed is 1 / (2 x years ahead + 1), so half a year ahead doubles the time and one
+   year triples it, and ordinary bonuses do not reduce it (only ahead-of-time bonuses do; `F tech <id>` shows
+   the days) (RE01). Order: industry (production, construction, industry folder: the concentrated/dispersed
+   line, machine tools, construction), then the equipment the planned templates use, then what the war plan
    needs. Never cut an industry tech because "it does not help this war". Lint `research.idle` fails a
    plan with more than 25% of slot-time unplanned, with or without a fallback.
 5. `research_fallback` false, or restricted with `research_fallback_prefixes` to the same families; it is
    a safety net, not the plan. No naval or air folder techs unless item 3 needs them.
 6. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or
    name>": [techs]} (`F tech <id>` gives the categories), or `true` for the category word match only.
+   Spend a limited bonus on the most expensive matching tech (RE02).
+7. Concentrated or dispersed industry with the reason: dispersed when two or more big line swaps a year,
+   bombing, licences or war within a year; else concentrated (PR15).
+8. A plan that builds ships lists its naval techs itself: hull, snorkel, torpedo, transport and landing craft,
+   radar (RE18).
 Resolution: executor `research_path`, `research_priority`, `research_fallback*`, `research_bonuses`,
 `special_projects` (a facility at start, else not applicable with the reason). Check: lint `research.start_year`,
 `research.prerequisites`, `research.throughput`, `research.idle`, `research.fallback`, `research.folders`;
@@ -278,13 +337,22 @@ atom `bop:<id>` pending); plan.md §6 and §16. Check: lint `focus.exclusive`, `
 Read: `economy-build-orders.md` §5; `politics-diplomacy-espionage.md` "Economy, trade and conscription
 laws". Facts: `F laws <TAG>` (current law and the `needs` gate of each), `F idea <id>`, `C pp`.
 1. Economy, trade and conscription laws in buy order with `cost` and a PP date (`C pp`, plan.md §2.1
-   as `[D pp]`). Never bank past a purchase that is needed.
+   as `[D pp]`). A running focus costs 1 PP a day: if `C pp` does not subtract it, subtract it yourself
+   (PO01). Never bank past a purchase that is needed.
 2. Each law with a gate (war support, stability, war, government) gets `when` as a predicate; until
    the `war_support` / `stability` atoms exist, the brief carries it: "when `hoi4_country_status {}`
    shows war support > X: `hoi4_politics_choose {category, slot, idea}`".
 3. Output cost of the top conscription laws against the manpower plan (item 17).
-Resolution: executor `politics` (`id`, `category`, `slot`, `idea`, `cost`) with player-owned `when`.
-Check: rubric rows 3 and 10.
+4. **Law jumps:** plan only the target law of each phase; gates never require the previous law (PO04).
+5. Gates as the files state them, including the enemy-industry ratio of War Economy and Total Mobilisation and
+   surrender progress for the top conscription laws; war-only laws (Closed Economy, National Defence State)
+   before the peace (PO12, PO13, PO15).
+6. Trade law with the reason: Free Trade (open to every country) in the 1936 build-up unless the export share
+   starves the plan's own lines (EC14).
+7. **No conscription law the plan does not need:** Service by Requirement -10%, All Adults Serve -30%, Scraping
+   the Barrel -40% output; set `manage.conscription_laws` to the laws the manpower plan allows (PO14, L22).
+Resolution: executor `politics` (`id`, `category`, `slot`, `idea`, `cost`) with player-owned `when`;
+`manage.conscription_laws`. Check: lint `politics.unneeded_conscription`; rubric rows 3 and 10.
 
 ### 14. Stability and war support
 Read: `politics-diplomacy-espionage.md` §2. Facts: dossier §1 (stability, war support, spirits with
@@ -293,13 +361,23 @@ their exits), `F defines BASE_STABILITY_WAR_FACTOR`, `F idea <spirit>`, `F decis
    advisors, spirit removals, decisions, propaganda. At war: an offensive war costs war support, a
    defensive one adds it (`politics-diplomacy-espionage.md` §2 "Drivers").
 2. Stability floor (50% unless the plan argues otherwise) and what happens below it.
-Resolution: executor `politics`, `decisions`; player `decision_rules`; `contingencies` with the atom
+3. **Stability and war support at or above 50%:** both are multipliers (stability above 50% up to +20%
+   factory output, below it down to -50%; war support below 50% lowers the surrender limit 30% and cuts
+   command power gain 95%) (PO16, PO17). Name the source that holds each above 50%.
+4. **War-support routes** for democracies and neutrals short of a 25% or 50% gate: an attaché to the Spanish
+   Civil War or the Sino-Japanese War after improving relations to 20 (`diplomacy` `improve_relations`, then
+   `send_attache`), war propaganda, focuses (PO19, PO21). Improve Worker Conditions when stability is under
+   80% and war is over 12 months away, at most twice (PO18).
+Resolution: executor `politics`, `decisions`, `diplomacy` (attaché); player `decision_rules`; `contingencies` with the atom
 pending; plan.md §16. Check: rubric row 9.
 
 ### 15. Advisors and high command
 Read: `politics-diplomacy-espionage.md` §4. Facts: `F characters <TAG> --role advisor`, dossier §7.
 1. Political advisors, theorists (item 4), designers (items 7-9), army, navy and air chiefs and high
    command, in buy order with cost and the date from `C pp`; each with the slot and the reason.
+2. The chief of army among the first three hires of a land power; each advisor passes the payback test
+   (cost / daily gain under half the horizon); officer-corps spirits bought before the hires they discount
+   (PO07, PO08, PO10).
 Resolution: executor `politics`. Check: rubric row 10.
 
 ## F. Army organisation and manpower
@@ -317,8 +395,13 @@ dossier §9.
    once, never churned. A marshal who is only a general is promoted by the tool for command power; one
    who also commands a layout army is skipped (`F characters <TAG> --role marshal`).
 4. Planned trait assignments and command-power use (15 CP per trait, 20 per preferred tactic): no tool
-   yet (audit G6, G8): plan.md only, `commanders` key pending.
-5. `disband`: far divisions whose equipment the front needs; keep a home guard.
+   yet: plan.md only, `commanders` key pending.
+5. `disband`: far divisions whose equipment the front needs; keep a home guard; never divisions overseas
+   (75% of their equipment is lost) or in a pocket.
+6. One deployed HQ per strike army close to its front (no HQ costs 20% planning cap and speed); generals
+   chosen once, divisions swapped between generals rather than unassigned (GN03, GN04); no HQ tool yet:
+   plan.md and a brief line.
+7. Guards also on ports and hubs in reach of an enemy navy (OP42).
 Resolution: executor `armies`, `army_layout`, `army_group`, `disband`, `war.guards`, `war.guard_states`;
 plan.md §2 army table. Check: lint `army.templates`, `army.counts`, `army.guards`, `army.strike_size`,
 `army.generals` (marshals too); validate_plan (group armies are layout name_hints, one group per army);
@@ -330,7 +413,9 @@ population), `F laws <TAG>`, `C equipment` (manpower per template).
 1. Divisions planned per phase × manpower per division, plus 2 months of losses at war [H]; the
    conscription law dates that cover it, with their gates (item 13).
 2. What stops when manpower runs short (training first, then the next law).
-Resolution: executor `politics` (conscription with `when`), `training`; atom `manpower` pending for the
+3. The highest conscription law the plan allows and the trigger for it (training blocked by manpower or the
+   front under 80% manpower), with its output cost (item 13, L22).
+Resolution: executor `politics` (conscription with `when`), `training`, `manage.conscription_laws`; atom `manpower` pending for the
 contingency; plan.md §16. Check: rubric row 6.
 
 ## G. War
@@ -344,20 +429,41 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    non-decreasing per army; more than 2 river crossings on a leg is a warning to answer.
 2. Weather and season: no offensive planned into mud, snow or extreme cold on the axis (from
    `F weather <region>`); the season named per phase.
-3. Planning time before each offensive (the planning bonus grows per day to its cap) and the rest
-   thresholds (`war.rest_below`, `war.resume_above`, `war.supply_floor`, `war.stall_days`).
+3. **Planning wait:** per offensive, draw the front and offensive line and wait 12-15 game days (planning
+   +2% a day to 30%, x0.8 without a deployed HQ) before executing; exceptions named (deadline or mission timer
+   under 20 days, an enemy about to dig in) (OP01, L13). Key `war.plan_days` when the schema has it, else a
+   brief line.
+3a. **Rest, resume, stall:** rest at about 30% of the template's max org (`war.rest_below` is absolute: about
+   18 for a 60-org infantry division) or 60% strength, resume at about 80% (`war.resume_above` about 48); at a
+   stall rest if supply or org is under 50%, else replan on the next target with two directions; a direct move
+   only into an empty adjacent province with a guard behind (OP03, OP08).
+3b. **Supply floor:** `war.supply_floor` 50 (no new offensive below it); below 35% stop and pull 25-50% of the
+   divisions out of the overdrawn province; resume at 70% (OP09, OP10, L14).
+3c. **Advance in bounds:** each push ends just past a captured hub or port and rests until it connects (about
+   8-12 days) with its railway queued on top (OP11, L16).
+3d. Two attack directions where possible, engineers for river crossings, pinning attacks beside the breach,
+   equipment fill 90%+ before an offensive (OP04-OP06, OP17, OP20).
 4. Defence: hold targets on rivers and mountains, the corridor rule when targets run more than 2
    provinces past own land (a guard follows the strike army), encirclement opportunities from
    `hoi4_encirclement_candidates {enemy}` at war (no executor step yet: player call). A hold post is
    `hold_targets` {`id`, `army` (army_layout name_hint), `provinces` along the corridor, rear first, each
    touching the one before, `when`, `until`}: the army stands in the most forward listed province the
    player controls and follows as the corridor grows; it replaces the layout guard post of that army.
+4a. **Pocket step:** for each pocket from `hoi4_encirclement_candidates`, the pincers at the neck from two
+   directions, the anvil pinning, then the reduction: an explicit offensive into every pocket province (the
+   battle plan clears only empty pockets of 2 provinces or fewer), pocket ports first (OP13). Own fall-back
+   at 50% hostile share or a neck of 2 own provinces or fewer, the HQ first (OP16, L15).
+4b. Defensive sectors: fallback lines behind rivers, a mobile reserve one state behind, retakes by the reserve
+   not the strike army (OP19, OP31, OP36).
+4c. **War-readiness gate** before each declaration: fronts on every border, plans drawn 15 days earlier,
+   fighters up 7-14 days earlier, laws at their gates, stockpile cover 30+ days (CP01).
 5. Phase-specific `war` in `phases[].overrides.war`.
 6. Naval invasions are item 21 (`invasions`).
 Resolution: executor `war`, `vp_targets`, `phases`, `hold_targets`; player `retake_rules`; plan.md §7,
 §7.1, §8. Check: lint `conquest.threshold`, `conquest.mandatory`, `conquest.adjacency`,
-`conquest.by_order`, `conquest.rivers`, `army.guards` (a hold post outside its army's guard states);
-validate_plan (hold corridors touch on the map graph, armies known); rubric rows 7 and 8.
+`conquest.by_order`, `conquest.rivers`, `army.guards` (a hold post outside its army's guard states),
+`war.planning_wait`, `war.supply_floor`; validate_plan (hold corridors touch on the map graph, armies
+known); rubric rows 7 and 8.
 
 ### 19. Supply and logistics
 Read: `supply-logistics-deployment.md` §1, §5, §6, §10; `strategy.md` "Economy compounds only if the
@@ -384,6 +490,8 @@ cost in points, its estimated finish date (`C build-order`) and the source:
 5. Overseas theatres: naval base level and throughput at each landing port, convoys (item 8) and
    escort (item 21).
 6. Fuel: refinery or import plan when the plan runs motorised, air or naval forces on little oil.
+7. Railway level 5 on the main axis before a large offensive; a fully motorised hub uses 60 trucks; consumption
+   cuts (logistics companies, a Logistics Wizard marshal) in poor-supply theatres (LO04, LO06, LO09).
 Resolution: executor `construction_plan`, `war.motorization`, `war.supply_floor`, `war.supply_first`;
 `stockpile_targets` (key pending); plan.md §4 and §17. Check: lint `construction.hub`,
 `construction.hub_cost`, `construction.railway`, `construction.trigger_route`, `production.trucks`;
@@ -401,6 +509,11 @@ Read: `war-air-naval-peace.md` §5; `strategy.md` "Air and naval support". Facts
    `hoi4_air_mission` is the region's name (a string).
 2. Not applicable only when the country has no wings, plans none, and the enemy has no planes
    (cite `F oob` and dossier §3).
+3. **Composition rules:** fighters first, about 1.5x the enemy's fighters over the decisive region 1-2 weeks
+   before the offensive; CAS at most 3 per enemy combat width of the expected battles (6% of production or
+   less against AA-heavy enemies); naval bombers only against fleets; no strategic bombers in a war shorter
+   than a year; bases at 70% capacity or less; logistics strike when no attack runs; interception only
+   against bombers; bombers change region at most monthly (AI01-AI14).
 Resolution: executor `air.war_missions`; player `air_plan` (`wing`, `base_state`, `mission`, `region`,
 `switch_when`, `call` `hoi4_air_mission {wing, mission, region}` or `hoi4_air_rebase {wing,
 state_id}`); plan.md §18. Check: lint `schema.player_call`; rubric row 14.
@@ -423,10 +536,19 @@ Read: `war-air-naval-peace.md` §6, §7; `strategy.md` "Naval invasion state mac
    `war.reserve` too.
 3. Or "no navy: <reason>" (`{"posture": "none", "reason": ...}`; no coastline or naval base in
    `F states <TAG>`; no overseas theatre and no naval threat in dossier §3).
+4. **Composition rules:** one patrol task force per region to control, started 50+ days before an invasion
+   or blockade; a strike force only where a patrol runs, at most 2 regions; 3 screens per capital or carrier;
+   torpedo destroyers with 1 cruiser per 4; submarines in groups of 8-12, one per deep-ocean region, only
+   against a convoy-dependent enemy; escorts 1 per 12 convoys per region; carriers only for UK, USA and
+   Japan with a full fleet (NA01-NA17, NA28).
+5. **Invasions:** capacity and preparation from the techs owned (divisions/plans/days 4/1/60, 6/2/50,
+   10/5/40, 15/9/30); the invasion army detached from front and fallback lines; 60% control and 40% naval
+   intel on every route region; radar on the route coast (NA20-NA23, L23).
+6. Start naval queue: each start ship line finished, cut or removed with a date (PR07).
 Resolution: executor `navy`, `invasions`; `sea_transfer` (player key, executor step pending W1-14):
 `hoi4_army_move`; convoy lines in executor `production`; plan.md §19. Check: lint `navy.required`,
 `navy.overseas`, `army.generals` (admirals); validate_plan (fleets in the start OOB, sea region names,
-coastal invasion states); rubric row 14.
+coastal invasion states), lint `navy.invasion_prep`; rubric row 14.
 
 ## H. Diplomacy, occupation, intelligence, peace
 
@@ -442,6 +564,10 @@ gates, war goals), `F factions <TAG>` (templates), `F defines TENSION_CB_WAR` an
    the policy goes in the brief).
 3. Not applicable for any part only with the reason (for example "already at war on day 1 with the
    only enemy; no faction is open to the tag").
+4. **World-tension gates** by ideology for every justify, guarantee, faction join, lend-lease and volunteer
+   item (`when` with `world_tension`); justify on claims and cores (Conquer expires 60 days after completion);
+   one justification at a time; no AI allies called into the plan's wars (DI01-DI03, DI08).
+5. Attaché, volunteer and lend-lease routes with their costs and recall dates (PO19, DI07, DI09).
 Resolution: executor `diplomacy`, in list order, once per `id`: [{`id`, `action` (justify, declare,
 guarantee, nap, access, offer_access, docking, improve_relations, send_attache, invite_to_faction, or a
 hoi4_diplomacy row), `target` (tag), `when`, `world_tension_max`; justify: `war_goal` (the type as
@@ -454,11 +580,15 @@ and the widening check. Executor `faction` {`join` (tag or ANY), `create` {`name
 Read: `supply-logistics-deployment.md` §7; `army-organisation.md` §6; `strategy.md` "Occupation, peace
 and endgame". Facts: `F occupation-laws`, dossier §2 (own non-core states and their compliance;
 colonies can resist from day one), `F vp <ENEMY>` (VP states that will resist).
-1. Default law per phase (laws the government can use, from `F occupation-laws`); the switch rules:
-   resistance ≥ 50% (garrison damage doubles) → a harsher law; compliance ≥ 40% with resistance < 25%
-   → a milder law; supply routes and states the armies cross get the strongest suppression.
-2. A garrison template (item 6) and its count; a collaboration government when compliance can reach
-   80% (La Resistance).
+1. Default law per phase (laws the government can use, from `F occupation-laws`, including ideology laws
+   such as colonial police); the switch rules: a state's resistance target at 25 or more → a harsher law;
+   milder only at peace (Local Police, then Civilian Oversight at about 20% compliance); supply routes and
+   states the armies cross get the strongest suppression (OC02-OC05).
+2. **Occupation per state:** Harsh Quotas on factory states, Forced Labour on resource states, Military
+   Governor on populous states, Martial Law on supply routes (OC01); no per-state tool yet: plan.md and a
+   brief line, the default law meanwhile.
+2a. A garrison template by hardness (item 6, AR10) and its count; accept the collaboration-government event
+   at 80% compliance unless the plan needs that land's dockyards (OC06).
 3. Not applicable only when the plan conquers nothing and no own state resists (dossier §2).
 Resolution: player `occupation` (`law`, `when`, `call` `hoi4_occupation_law {law}`), `templates`
 (garrison); `garrison_template` (key pending); plan.md §22. Check: rubric row 15.
@@ -470,6 +600,10 @@ at start), `F agency` (upgrades by branch with their levels, operations, defines
    their missions (network, counter-intelligence), the decryption target (plan.md only: no tool).
 2. Not applicable: LaR inactive (dossier §0), or the goal ends before an agency pays off (state the
    dates).
+3. Upgrades: training centres, then cheap upgrades to 5 for the extra operative; intel networks in the states
+   just behind the front of the main offensive 3-6 months ahead; collaboration operations on the main target
+   from the year before the war (non-democracies; no tool yet); decryption timed to the main offensive
+   (IN02, IN03, IN06, IN10).
 Resolution: executor `intelligence` {`agency`, `upgrades` in order ("<branch>:<upgrade>" or the key; a
 key twice is its second level), `operatives` (a count, or one entry per operative: `mission` with
 `state_id` for build_intel_network, quiet_intel_network, root_out_resistance, `target` for
@@ -483,6 +617,10 @@ Read: `war-air-naval-peace.md` §9; `generic-playbook.md` §5. Facts: `F vp <ENE
    mandatory states of the goal first.
 2. The answer to scripted peace offers and white peace (an `event_rules` entry each) and the rule for
    when to accept.
+3. **Bidding:** occupy first; take order own cores, claims, occupied states, uncontrolled last (x10);
+   contested cores in round one, uncontested wants early, a contest at most 1-2 turns; capital and VP
+   provinces to own armies for participation; the faction peace rule set before the conference; capital ships
+   last (PC01-PC06, PC11, DI13).
 Resolution: player `peace` (`take`, `puppet`; the brief carries `hoi4_peace_take {states, puppet,
 release, max_cost}`, `hoi4_peace_submit {}`, `hoi4_peace_exit {}`); `event_rules`; plan.md §23. Every
 enemy in `war.enemies` has a peace entry. Check: rubric row 15.
@@ -514,6 +652,8 @@ the army survives".
    equipment short. Each has a `trigger` predicate and a `phase`, `overrides` or `revise` response.
 3. Every lesson that applies is covered by a lint rule, a contingency or a do-not item; name which in
    plan.md §9 or §10.
+4. One phase per expected capitulation with overrides for war (free the guards, new axes), production (the
+   cull of item 8) and occupation (CP07, CP09).
 Resolution: `checkpoints`, `contingencies`, `phases` (player keys; executor evaluation is build item
 15). Check: rubric row 9.
 
@@ -524,27 +664,31 @@ thresholds run in `plan_manage.rs` and `plan_military.rs` (the casualty and air-
 threshold the schema marks `x-executor-planned` (`convoys_free`, `fuel_floor`) is not run yet: until it is,
 the rule is a brief line (read, threshold, call) when the player must act.
 
-| Rule | Default threshold (source) | Key today |
+| Rule | Default threshold | Key today |
 |---|---|---|
 | Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`) | `alarms` |
 | Game alert row (`hoi4_alerts {}`) | any named alert → its fix; officer corps, MIO, admiral alerts wake the player | `manage` |
-| Armies and generals | ≤ 24 divisions, general on armies ≥ 8 (`defines` `CORPS_COMMANDER_DIVISIONS_CAP`) | `armies` |
-| Rest and resume | organisation < 12 or supply < 25%; at most 20 days | `war.rest_below`, `war.supply_floor`, `war.rest_max_days` |
-| Stalled attack / forming pocket | 8 days / encirclement risk ≥ 70% | `war.stall_days`, `war.avoid_pockets` |
+| Armies and generals | ≤ 24 divisions, general on armies ≥ 8 | `armies` |
+| Rest and resume | rest at about 30% of max organisation (absolute `rest_below`, about 18 for 60-org infantry), resume at about 80% (about 48); at most 20 days. The executor defaults (12 / 30) are too low: set them | `war.rest_below`, `war.resume_above`, `war.rest_max_days` |
+| Supply floor | no new offensive below 50% supply (attrition from 35%); the executor default 25 is too low: set 50 | `war.supply_floor` |
+| Planning wait | 12-15 game days of planning before executing a new offensive | `war.plan_days` (key pending: brief line) |
+| Advance in bounds | rest after a captured hub or port until it connects (8-12 days) | key pending: brief line |
+| Stalled attack / forming pocket | 8 days / fall back at 50% hostile share or a neck of 2 own provinces (the executor's 70% is late: brief line until a key exists) | `war.stall_days`, `war.avoid_pockets` |
+| Factory rebalance | idle factories by days of cover in chunks of max(2, 20% of a line); no pulls from lines under 90 days of cover | `production_priority`, `production_min_idle` |
 | Supply line first at war | supply construction ahead of other lines | `war.supply_first` |
 | Front equipment fill | army mean < 80% → disband home divisions, elite priority, factories to the short item (`strategy.md`) | `manage` |
 | Stockpile days of cover | < 7 critical, < 30 warning (`strategy.md`) | `stockpile_targets` |
 | Training only what equipment covers | stockpile guard and cap | `training_rules` |
 | Trucks | stock < 1.5× wanted → truck line, lower motorisation (`supply-logistics-deployment.md` §10) | `manage` |
-| Manpower | free manpower < 2 months of losses → next conscription law if its gate holds | `manage` |
+| Manpower | free manpower < 2 months of losses → next conscription law only if the plan allows it (output cost) | `manage.manpower_months`, `manage.conscription_laws` |
 | Laws when the gate opens | the `needs` gate of `F laws` | `politics[].when` |
-| Stability / war support drift | below a plan gate or stability < 50% | `manage` |
+| Stability / war support drift | below a plan gate, or either below 50% (both are multipliers) | `manage.stability_floor` |
 | Resource deficit on a priority line | any → auto-import budget, else trade | `auto_import` |
-| Occupation | resistance ≥ 50% → harsher; compliance ≥ 40% and resistance < 25% → milder (`common/resistance_compliance_modifiers`) | `occupation` |
+| Occupation | resistance target ≥ 25 → harsher; milder only at peace | `occupation` |
 | Air wings idle at war / air plan switch | standing-by wing; `switch_when`; base over capacity | `air.war_missions` / `air_plan` |
 | Enemy air superiority on our front | > 60% → fighters to the region, delay the offensive (reported unknown until a tool maps it) | `manage.enemy_air_superiority`, `air_front_regions`, `air_hold_days` |
 | Convoys for overseas armies | free convoys < 10% of total, or overseas supply < floor | `manage` |
-| Fuel | < 25% of capacity (`defines` fuel penalty) → stop exercises, import oil | `manage` |
+| Fuel | < 25% of capacity → stop exercises, import oil | `manage` |
 | Doctrines and template edits | XP ≥ the next planned spend | `doctrines` / `templates` |
 | Scenario variable, mission timer, BoP | the plan's thresholds (escalation level, mission days < 15, BoP range edge) | `contingencies` |
 | Peace conference open | open → peace step or wake the player | `peace` |

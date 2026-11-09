@@ -209,7 +209,7 @@ targets (`intelligence`), decryption target (plan.md only: no tool). Or: not app
 
 | Phase | Default law | Switch rule (resistance / compliance) | Garrison template | Call |
 |---|---|---|---|---|
-| <phase> | <law> [V occupation-laws] | ≥ 50% resistance → <law>; ≥ 40% compliance and < 25% resistance → <law> | <name × n> | `hoi4_occupation_law {"law":"<law>"}` |
+| <phase> | <law> [V occupation-laws] | resistance target ≥ 25 → <law>; at peace, milder → <law> | <name × n> | `hoi4_occupation_law {"law":"<law>"}` |
 
 ## 23. Peace aims
 
