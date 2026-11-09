@@ -76,7 +76,7 @@ the plan, and re-check any game number it gives with `F` before you use it. Play
 under `skills/hoi4-campaign-playbook/references/`): `generic-playbook.md`, `strategy.md`,
 `economy-build-orders.md`, `research-doctrines-projects.md`, `war-operating-loop.md`,
 `war-air-naval-peace.md`, `supply-logistics-deployment.md`, `army-organisation.md`,
-`templates-equipment-production.md`, `politics-diplomacy-espionage.md`, `rules-and-modes.md`,
+`templates-equipment-production.md`, `politics-diplomacy-espionage.md`, `rules-and-modes.md`, `exploits.md` (META only),
 `nation-openers.md`; a scenario reference from `INDEX.md` when one exists. `tactics.md` lists every tactic in
 one line with its id (PR01, OP13, ...): scan it once before item 3; the steps below name the ids each item must
 decide. Tool status (what is live-verified): `docs/LIVE_VERIFICATION_1_19_4.md`.
@@ -709,3 +709,8 @@ Read: `rules-and-modes.md`. SKILL.md hard rule 3. Every enemy fact used in items
 is `public` or `aggregate` in fair mode, and plan.md tags it. Resolution: the source tags in plan.md (the run
 spec's `mode` decides the classes allowed); no per-division enemy position, no `common/ai_strategy`. Check: rubric
 row 2.
+
+META checklist (only when the run spec says `mode: meta`): read `exploits.md` and decide each line with status
+**works** for this tag (use it, or say in plan.md §11 why not); an **unclear** line is used only as a journalled one-time
+test with a FAIR fallback; never a **patched** line or one marked *needs pause*. List the chosen exploits with their
+MX id or name in plan.md §11, and keep the house bans in `rules-and-modes.md` for every line a fair run would refuse.
