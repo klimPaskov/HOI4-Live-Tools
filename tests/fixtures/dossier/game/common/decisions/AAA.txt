@@ -9,7 +9,8 @@ AAA_cat = {
 	AAA_build = {
 		allowed = { tag = AAA }
 		cost = 50
-		complete_effect = { 1 = { add_building_construction = { type = industrial_complex level = 1 instant_build = yes } } }
+		complete_effect = { 1 = { add_building_construction = { type = industrial_complex level = 1 instant_build = yes } }
+			create_faction_from_template = { template = faction_template_aaa name = AAA_league } }
 	}
 	AAA_withdraw_from_beta = {
 		allowed = { tag = AAA }

@@ -1,0 +1,16 @@
+operation_fix = {
+	name = operation_fix
+	days = 90
+	network_strength = 35
+	operatives = 2
+	requirements = { has_tech = t_a }
+	equipment = { infantry_equipment = 100 }
+	phases = { fix_phase_1 = { base = 10 } }
+	phases = { fix_phase_2 = { base = 5 } }
+	awarded_tokens = { token_fix }
+	risk_chance = 0.1
+}
+operation_bbb_only = {
+	days = 10
+	allowed = { original_tag = BBB }
+}

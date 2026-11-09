@@ -1,0 +1,7 @@
+fix_phase_1 = {
+	name = "Dig"
+	equipment = { infantry_equipment = 10 }
+}
+fix_phase_2 = {
+	name = "Collapse"
+}

@@ -23,6 +23,17 @@ game.Game and content.Content) for one country at one bookmark:
     occupation_laws(), resistance_modifiers(), resistance_activities()
     adjacency_rules(), strategic_regions() (with weather periods), weather_settings(), power_balances()
     laws(tag) rows carry `gates` (gates(): numeric and named conditions of `available`)
+  wave 2 (F-12 .. F-21; public rules or own-country facts):
+    designs(tag, kind)  chassis / hulls / airframes and modules the start techs unlock, XP costs, start variants
+    mio(tag)            military-industrial organisations (include resolved), trait trees, policies
+    projects(tag)       special projects, facilities at start, scientists, scientist traits
+    diplomacy(tag)      world tension at start, ideology rules and tension gates, war goal types and costs
+    faction_content()   faction templates, rules, goals, manifests, member upgrades (scenario.factions per tag)
+    peace(tag, enemies) peace-conference cost modifiers naming the tag / enemies / nobody, peace defines
+    command(tag)        military spirits (XP cost), leader abilities, assignable traits, command-power defines
+    agency(tag)         intelligence agency upgrades, operations, phases, agency defines
+    energy(tag)         energy resource per own state, factories, energy buildings, the estimate from the defines
+    static(block, tag)  static trigger value with scripted triggers expanded; gate_text() its text otherwise
 
 A fact is {"v": value, "src": "common/decisions/ETH.txt:3", "mod": None}; derived numbers carry
 "d": "<method>". Enemy facts carry "fair": public | aggregate | private (design 2.3): the FAIR
@@ -37,7 +48,7 @@ from collections import defaultdict
 
 from . import derive
 from .defines import Defines
-from .script import (Block, Ctx, _sub, bare, date_tuple, get, get1, history_walk, line_of, parse_file, render,
+from .script import (Block, Ctx, _sub, bare, date_tuple, get, get1, history_walk, line_of, op_of, parse_file, render,
                      run_effects, trigger)
 
 FAIR_LEVELS = ("public", "aggregate", "private")
@@ -55,6 +66,136 @@ GATE_KEYS_TEXT = {"has_war_support": "war support", "has_stability": "stability"
                   "num_of_factories": "factories", "num_of_military_factories": "military factories",
                   "num_of_civilian_factories": "civilian factories", "surrender_progress": "surrender progress",
                   "enemies_strength_ratio": "enemy strength ratio", "threat": "world tension"}
+
+# designers (F-12): unit type -> designer; plane types; the XP branch each designer spends
+DESIGN_KINDS = {"armor": "tank", "capital_ship": "ship", "screen_ship": "ship", "submarine": "ship", "carrier": "ship"}
+PLANE_TYPES = {"fighter", "interceptor", "cas", "tactical_bomber", "strategic_bomber", "naval_bomber", "heavy_fighter",
+               "maritime_patrol_plane", "suicide", "scout_plane", "transport_plane"}
+XP_BRANCH = {"tank": "army", "plane": "air", "ship": "navy"}
+DESIGN_DEFINES = ("EQUIPMENT_MODULE_ADD_XP_COST", "EQUIPMENT_MODULE_REPLACE_XP_COST", "EQUIPMENT_MODULE_CONVERT_XP_COST",
+                  "EQUIPMENT_MODULE_REMOVE_XP_COST", "DESIGN_TEAM_CHANGE_XP_COST", "LICENSE_EQUIPMENT_UPGRADE_XP_FACTOR",
+                  "BASE_LAND_EQUIPMENT_CONVERSION_IC_COST_FACTOR", "BASE_NAVAL_EQUIPMENT_CONVERSION_IC_COST_FACTOR")
+DESIGNS_METHOD = ("bases = equipment with module_slots (own or inherited; duplicate_archetypes families generated) enabled "
+                  "by a start technology (history set_technology at the date); modules = enable_equipment_modules of "
+                  "those techs, kind from the slots that allow the module's category; next = enabled by a tech with "
+                  "start_year <= the year + 2; loaded = the module block's `limit` (DLC) is not false; XP per change: "
+                  "the module's xp_cost when set, else EQUIPMENT_MODULE_ADD_XP_COST (empty slot) / REPLACE (unrelated "
+                  "module) / CONVERT (can_convert_from) / REMOVE [?] (rule from the defines' comments, not live-verified)")
+MIO_BONUS_KEYS = ("equipment_bonus", "production_bonus", "organization_modifier")
+MIO_DEFINES = ("FUNDS_FOR_SIZE_UP", "FUNDS_FOR_SIZE_UP_LEVEL_FACTOR", "FUNDS_FOR_SIZE_UP_LEVEL_POW",
+               "UNLOCKED_TRAITS_PER_SIZE_UP", "ASSIGN_DESIGN_TEAM_PP_COST_PER_DAY",
+               "ASSIGN_INDUSTRIAL_MANUFACTURER_PP_COST_PER_DAY", "DESIGN_TEAM_RESEARCH_BONUS",
+               "FUNDS_FOR_RESEARCH_COMPLETION_PER_RESEARCH_COST", "FUNDS_FROM_MANUFACTURER_PER_IC_PER_DAY",
+               "MAX_FUNDS_FROM_MANUFACTURER_PER_DAY", "DEFAULT_INITIAL_POLICY_ATTACH_COST",
+               "DEFAULT_INITIAL_ATTACH_POLICY_COOLDOWN", "DESIGN_TEAM_CHANGE_XP_COST")
+MIO_METHOD = ("common/military_industrial_organization/organizations with `include` resolved; listed when the static "
+              "`allowed` (tag, original_tag, has_dlc, scripted triggers) is not false for the tag; visible/available "
+              "true when static, else their text; traits unlock one per size-up (UNLOCKED_TRAITS_PER_SIZE_UP)")
+PROJECT_DEFINES = ("DEFAULT_COMPLEXITY", "PROTOTYPE_PHASE_MAX_PROGRESS", "NEEDED_SUPPLY_FOR_FULL_SPEED_PROJECT",
+                   "MINIMUM_PROJECT_SPEED_FACTOR_FROM_SUPPLY", "RECRUIT_SCIENTIST_COST", "SCIENTIST_SKILL_LEVEL_THRESHOLDS",
+                   "SCIENTIST_SKILL_LEVEL_SPEED_MODIFIER", "DISMANTLE_FACILITY_DAYS", "BREAKTHROUGH_DAILY_TECHNOLOGY_GAIN",
+                   "BREAKTHROUGH_DAILY_SCIENTIST_SKILL_GAIN", "AMOUNT_OF_SUPPORTIVE_SCIENTISTS")
+PROJECT_METHOD = ("common/special_projects/projects; listed when the static `allowed` is not false; prototype_days from "
+                  "sp_time constants, complexity {min, max} from sp_complexity (common/script_constants); outputs = "
+                  "enable_equipment_modules / enable_equipments / set_technology found in project_output; facilities = "
+                  "buildings with tags facility in own states at the start; scientists = characters with a scientist role")
+TENSION_KEYS = ("generate_wargoal_tension", "join_faction_tension", "guarantee_tension", "lend_lease_tension",
+                "send_volunteers_tension", "request_lease_tension")
+GATE_TEXT = {"generate_wargoal_tension": "justify a war goal", "join_faction_tension": "join a faction",
+             "guarantee_tension": "guarantee", "lend_lease_tension": "send lend-lease",
+             "send_volunteers_tension": "send volunteers", "request_lease_tension": "request lend-lease"}
+DIPLOMACY_DEFINES = ("BASE_GENERATE_WARGOAL_DAILY_PP", "WARGOAL_VERSUS_MAJOR_AT_WAR_REDUCTION",
+                     "WARGOAL_WORLD_TENSION_REDUCTION", "WARGOAL_JUSTIFY_TENSION_FROM_PRODUCTION",
+                     "MIN_WARGOAL_JUSTIFY_COST", "WARGOAL_PER_JUSTIFY_AND_WAR_COST_FACTOR", "WARGOAL_COST_LEND_LEASE",
+                     "WARGOAL_COST_VOLUNTEERS", "GUARANTEE_COST", "VOLUNTEERS_DIVISIONS_REQUIRED",
+                     "VOLUNTEERS_PER_TARGET_PROVINCE", "VOLUNTEERS_PER_COUNTRY_ARMY", "VOLUNTEERS_TRANSFER_SPEED",
+                     "TENSION_CB_WAR", "TENSION_NO_CB_WAR", "TENSION_FACTION_JOIN", "TENSION_GUARANTEE",
+                     "TENSION_VOLUNTEER_FORCE_DIVISION", "NAP_EXPIRY_MONTHS", "BASE_IMPROVE_RELATION_COST",
+                     "BASE_SEND_ATTACHE_COST", "BASE_STAGE_COUP_DAILY_PP")
+DIPLOMACY_METHOD = ("gate need = the ruling ideology's modifier (common/ideologies, hidden_modifier included) plus the "
+                    "start spirits' modifiers of the same key, as a world-tension fraction (0.8 = 80%); the action needs "
+                    "world tension at or above it (additive combination assumed [?]); rules = the ideology's `rules`; "
+                    "war goals = common/wargoals with the static `allowed` decided (costs as in the file: "
+                    "generate_base_cost + generate_per_state_cost per state; justification days not computed [?])")
+LEADER_MODIFIER_KEYS = ("modifier", "non_shared_modifier", "corps_commander_modifier", "field_marshal_modifier")
+COMMAND_DEFINES = ("BASE_MAX_COMMAND_POWER", "BASE_COMMAND_POWER_GAIN", "STARTING_COMMAND_POWER", "PROMOTE_LEADER_CP_COST",
+                   "UNIT_LEADER_ASSIGN_TRAIT_COST", "ARMY_LEADER_COST", "NAVY_LEADER_COST",
+                   "PREFERRED_TACTIC_COMMAND_POWER_COST", "BASE_SEND_ATTACHE_CP_COST", "CORPS_COMMANDER_DIVISIONS_CAP",
+                   "FIELD_MARSHAL_DIVISIONS_CAP", "FIELD_MARSHAL_ARMIES_CAP", "FIELD_MARSHAL_XP_RATIO")
+COMMAND_METHOD = ("spirits = common/ideas in idea categories of type army/navy/air_spirit (common/idea_tags; cost in that "
+                  "branch's experience), static `allowed` decided; abilities = common/abilities (cost as in the file, "
+                  "command power; duration and cooldown in hours [?]); traits = common/unit_leader assignable traits "
+                  "with gui row/column, parents and `cost` as in the file [?]; skills = leader_skills level costs")
+AGENCY_DEFINES = ("AGENCY_CREATION_DAYS", "AGENCY_UPGRADE_DAYS", "AGENCY_CREATION_FACTORIES", "AGENCY_UPGRADE_PER_OPERATIVE_SLOT",
+                  "MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES", "AGENCY_OPERATIVE_RECRUITMENT_TIME")
+AGENCY_METHOD = ("common/intelligence_agency_upgrades (one block per branch; `level` blocks in order), common/operations "
+                 "(blocks with days), common/operation_phases; the agency needs La Resistance; operations with a "
+                 "static `allowed` false for the tag are left out")
+ENERGY_DEFINES = ("ENERGY_RESOURCE", "RESOURCE_TO_ENERGY_COEFFICIENT", "BASE_COUNTRY_ENERGY_PRODUCTION",
+                  "ENERGY_SCALING_COST_BY_FACTORY_COUNT", "BASE_ENERGY_COST", "ENERGY_COST_CAP",
+                  "ENERGY_SCALE_PER_TRADE_FACTORY_EXPORT")
+ENERGY_METHOD = ("produced = BASE_COUNTRY_ENERGY_PRODUCTION + energy resource in own states x RESOURCE_TO_ENERGY_COEFFICIENT; "
+                 "per factory = min(ENERGY_COST_CAP, BASE_ENERGY_COST + ENERGY_SCALING_COST_BY_FACTORY_COUNT x factories); "
+                 "demand = sum over states of factories x per factory x (1 + local consumption modifiers of the energy "
+                 "buildings there; _per_infrastructure keys x infrastructure); factories = civilian + military + "
+                 "dockyards; formula from the defines' comments, trade and country modifiers left out [?]")
+FACTORY_BUILDINGS = ("industrial_complex", "arms_factory", "dockyard")
+PEACE_DEFINES = ("BASE_PEACE_PUPPET_FACTOR", "BASE_PEACE_LIBERATE_FACTOR", "BASE_PEACE_TAKE_UNCONTROLLED_STATE_FACTOR",
+                 "BASE_PEACE_TAKE_FACTION_CONTROLLED_STATE_FACTOR", "BASE_PEACE_FORCE_GOVERNMENT_COST",
+                 "PEACE_COST_FACTOR_CONTESTED_BID", "PEACE_COST_FACTOR_UNCONTESTED_BID_MIN",
+                 "PEACE_COST_FACTOR_UNCONTESTED_BID_MAX", "PEACE_COST_FACTOR_UNCONTESTED_BID_STEP",
+                 "PEACE_INCREASE_COST_FACTOR_PER_MISSING_PERCENT_FOR_CAPITULATION", "PEACE_COST_FACTOR_COMPLIANCE_STEPS",
+                 "PEACE_SCORE_SCALE_FACTOR", "PEACE_SCORE_DISTRIBUTION", "PEACE_CONTEST_REFUND_FACTOR",
+                 "PEACE_ACTION_MAX_COST", "PEACE_COST_FACTOR_CAPITAL_SHIP_IC", "TENSION_ANNEX_NO_CLAIM", "TENSION_ANNEX_CLAIM",
+                 "TENSION_ANNEX_CORE", "TENSION_PUPPET", "TENSION_LIBERATE")
+PEACE_METHOD = ("common/peace_conference/cost_modifiers: a modifier is listed when its `enable` names the tag or one of "
+                "the given enemies (tag / original_tag), or names no tag at all (generic); all active modifiers of an "
+                "action multiply (cost_multiplier); base costs and bid factors from the defines")
+
+
+def _numbers(block, deep=False):
+    """{key: number} of a block's numeric items ({} for a non-block); deep flattens nested blocks (key of the leaf)."""
+    out = {}
+    if not isinstance(block, list):
+        return out
+    for k, v in block:
+        if not k:
+            continue
+        if isinstance(v, list):
+            if deep:
+                out.update(_numbers(v, True))
+        elif num(v) is not None:
+            out[k] = num(v)
+    return out
+
+
+def expand_scripted(items, table, depth=3, aliases=()):
+    """A trigger block with `name = yes` scripted triggers replaced by AND = { body } and `name = no` by
+    NOT = { AND = { body } } (`depth` levels), `is_debug` false, and the scope blocks named in `aliases`
+    (FROM, OWNER ...: scopes that are the country itself in that context) read as AND blocks."""
+    if not isinstance(items, list):
+        return items
+    out = Block(getattr(items, "line", 1))
+    ops = getattr(items, "ops", None)
+    for i, (k, v) in enumerate(items):
+        op = (ops[i] if ops is not None and i < len(ops) else "=") or "="
+        if k == "is_debug" and v in ("yes", "no"):  # a campaign never runs in debug mode
+            out.add(("always", "no" if v == "yes" else "yes"), line_of(items, i), "=")
+        elif k in aliases and isinstance(v, list):
+            out.add(("AND", expand_scripted(v, table, depth, aliases)), line_of(items, i), "=")
+        elif depth > 0 and isinstance(v, str) and v in ("yes", "no") and k in table:
+            body = expand_scripted(table[k], table, depth - 1, aliases)
+            if v == "yes":
+                out.add(("AND", body), line_of(items, i), "=")
+            else:
+                inner = Block(line_of(items, i) or 1)
+                inner.add(("AND", body), line_of(items, i), "=")
+                out.add(("NOT", inner), line_of(items, i), "=")
+        elif isinstance(v, list):
+            out.add((k, expand_scripted(v, table, depth, aliases)), line_of(items, i), op)
+        else:
+            out.add((k, v), line_of(items, i), op)
+    return out
 
 
 def occupation_settings(block):
@@ -369,7 +510,7 @@ class World:
                "faction": [], "access": [], "subjects": [], "characters": [], "doctrines": [],
                "techs": [], "events": [], "completed_focuses": [], "dynamic_modifiers": [],
                "political_power": None, "command_power": None, "power_balance": [], "experience": {},
-               "state_scopes": []}
+               "state_scopes": [], "variants": [], "threats": [], "agency": None}
         path = self.game.file(rel) if rel else None
         if not path:
             return out
@@ -458,6 +599,19 @@ class World:
                                                  left_side=get1(v, "left_side"), right_side=get1(v, "right_side")))
             elif kl == "add_power_balance_value" and isinstance(v, list):
                 out["power_balance"].append(dict(F(get1(v, "id"), line), kind="add", value=num(get1(v, "value"))))
+            elif kl == "create_equipment_variant" and isinstance(v, list):
+                mods, ups = get1(v, "modules"), get1(v, "upgrades")
+                out["variants"].append(dict(F(get1(v, "name"), line), type=get1(v, "type"),
+                                            modules={a: b for a, b in mods if a and isinstance(b, str)}
+                                            if isinstance(mods, list) else {},
+                                            upgrades={a: num(b, b) for a, b in ups if a} if isinstance(ups, list) else {},
+                                            obsolete=get1(v, "obsolete") == "yes"))
+            elif kl == "add_named_threat" and isinstance(v, list) and num(get1(v, "threat")) is not None:
+                out["threats"].append(dict(F(num(get1(v, "threat")), line), name=get1(v, "name")))
+            elif kl == "add_threat" and num(v) is not None:
+                out["threats"].append(dict(F(num(v), line), name=None))
+            elif kl == "create_intelligence_agency":
+                out["agency"] = F(get1(v, "name") if isinstance(v, list) else (v or "yes"), line)
             elif kl in XP_EFFECTS and num(v) is not None:
                 branch = XP_EFFECTS[kl]
                 prev = out["experience"].get(branch, {}).get("v", 0)
@@ -801,7 +955,8 @@ class World:
         recruited = {f["v"] for f in self.country(tag)["characters"]}
         ctx = self.ctx_for(tag)
         roles_wanted = {"general": ("corps_commander", "field_marshal"), "marshal": ("field_marshal",),
-                        "admiral": ("navy_leader",), "advisor": ("advisor",), "leader": ("country_leader",)}
+                        "admiral": ("navy_leader",), "advisor": ("advisor",), "leader": ("country_leader",),
+                        "scientist": ("scientist",)}
         want = roles_wanted.get(role, (role,) if role else None)
         out = []
         for p in self.game.files("common/characters"):
@@ -823,7 +978,7 @@ class World:
                     for b in blocks:
                         for rk, rv in b:
                             if rk not in ("country_leader", "corps_commander", "field_marshal", "navy_leader",
-                                          "advisor", "operative") or not isinstance(rv, list):
+                                          "advisor", "operative", "scientist") or not isinstance(rv, list):
                                 continue
                             if trigger(get1(rv, "allowed", []), ctx) is False:
                                 continue
@@ -831,6 +986,8 @@ class World:
                             traits = get1(rv, "traits")
                             if isinstance(traits, list):
                                 r["traits"] = bare(traits)
+                            if rk == "scientist":
+                                r["skills"] = {a: num(c) for a, c in (get1(rv, "skills") or []) if a and num(c) is not None}
                             for sk in ("skill", "attack_skill", "defense_skill", "planning_skill",
                                        "logistics_skill", "maneuvering_skill", "coordination_skill"):
                                 if get1(rv, sk) is not None:
@@ -1491,6 +1648,940 @@ class World:
             return out
 
         return self.cached("bops", load)
+
+    # ------------------------------------------------------------ static triggers, constants, top-level blocks
+    def scripted_triggers(self):
+        """{name: block} of common/scripted_triggers."""
+        return self.cached("scriptedtriggers", lambda: {k: v for p in self.game.files("common/scripted_triggers")
+                                                       for k, v in parse_file(p) if k and isinstance(v, list)})
+
+    def static(self, items, tag=None, aliases=()):
+        """Static value of a trigger block for the tag (scripted triggers `name = yes/no` expanded three levels;
+        `aliases` = scope blocks that are the country itself here): True, False, or None when it needs the
+        running game. An absent block (None) counts as True."""
+        if items is None:
+            return True
+        if not isinstance(items, list):
+            return None
+        return trigger(expand_scripted(items, self.scripted_triggers(), 3, aliases), self.ctx_for(tag or self.tag))
+
+    def script_constants(self):
+        """{"sp_time.prototype.short": 45, ...} of common/script_constants (schema blocks skipped)."""
+
+        def load():
+            out = {}
+
+            def walk(block, prefix):
+                for k, v in block:
+                    if not k or k == "schema":
+                        continue
+                    if isinstance(v, list):
+                        walk(v, f"{prefix}{k}.")
+                    elif num(v) is not None:
+                        out[prefix + k] = num(v)
+
+            for p in self.game.files("common/script_constants"):
+                walk(parse_file(p), "")
+            return out
+
+        return self.cached("scriptconstants", load)
+
+    def blocks(self, folder, recursive=False, inside=None):
+        """[(name, block, path, line)] of the top-level blocks of a content folder (or of the blocks inside
+        each top-level `inside` wrapper), in load order; a later definition of a name replaces an earlier one."""
+        out = {}
+        for p in self.game.files(folder, recursive=recursive):
+            items = parse_file(p)
+            for i, (k, v) in enumerate(items):
+                if not k or not isinstance(v, list) or k.startswith("@"):
+                    continue
+                if inside is None:
+                    out[k] = (k, v, p, line_of(items, i))
+                elif k == inside:
+                    for j, (n, b) in enumerate(v):
+                        if n and isinstance(b, list) and n != "limit":
+                            out[n] = (n, b, p, line_of(v, j))
+        return list(out.values())
+
+    def foreign(self, ident, tag=None):
+        """True when an id starts with another country's tag ("CHI_force_attack" for ITA): content of that country."""
+        m = re.match(r"^([A-Z][A-Z0-9]{2})_", ident or "")
+        return bool(m and m.group(1) != (tag or self.tag) and m.group(1) in self.game.country_tags())
+
+    def gate_text(self, items, tag=None, limit=200, aliases=()):
+        """True / False when a trigger block is static for the tag, else its text with the static parts decided
+        (`aliases` scope blocks read as the country itself; a lone FROM / ROOT / owner wrapper is unwrapped)."""
+        st = self.static(items, tag, aliases) if isinstance(items, list) else True
+        if st is not None:
+            return st
+        while len(items) == 1 and isinstance(items[0][1], list) and (items[0][0] or "").upper() in ("FROM", "ROOT", "OWNER"):
+            items = items[0][1]
+        flat = Block(getattr(items, "line", 1))
+
+        def inline(block):  # top-level AND blocks are the implicit AND of the block itself
+            for i, (k, v) in enumerate(block):
+                if (k or "").upper() == "AND" and isinstance(v, list):
+                    inline(v)
+                else:
+                    flat.add((k, v), line_of(block, i), op_of(block, i))
+
+        inline(reduce_trigger(expand_scripted(items, {}, 0, aliases), self.ctx_for(tag or self.tag)))
+        return render(flat, limit) if flat else True
+
+    def defines_rows(self, keys):
+        """{key: {"v", "src", "mod", "key"}} of the defines that exist among `keys` (short names)."""
+        out = {}
+        for k in keys:
+            _, f = self.define(k)
+            if f:
+                out[k] = f
+        return out
+
+    # ------------------------------------------------------------ designers (F-12)
+    def equipment_defs(self):
+        """{equipment: {id, archetype, parent, is_archetype, types, year, slots (block | "inherit" | None),
+        upgrades, variant_name, path, line}} of common/units/equipment, plus the families duplicate_archetypes
+        generates (archetype X duplicated as Y: Y and Y<suffix> for every X<suffix> of X)."""
+
+        def load():
+            raw, dups = {}, []
+            for p in self.game.files("common/units/equipment"):
+                for k, v in parse_file(p):
+                    if k not in ("equipments", "duplicate_archetypes") or not isinstance(v, list):
+                        continue
+                    for j, (name, b) in enumerate(v):
+                        if not name or not isinstance(b, list):
+                            continue
+                        t, ms, ups = get1(b, "type"), get1(b, "module_slots"), get1(b, "upgrades")
+                        row = {"id": name, "archetype": get1(b, "archetype"), "parent": get1(b, "parent"),
+                               "is_archetype": get1(b, "is_archetype") == "yes",
+                               "types": bare(t) if isinstance(t, list) else ([t] if t else []),
+                               "year": num(get1(b, "year")),
+                               "slots": ms if isinstance(ms, list) else ("inherit" if ms == "inherit" else None),
+                               "upgrades": bare(ups) if isinstance(ups, list) else [],
+                               "variant_name": get1(b, "derived_variant_name"), "path": p, "line": line_of(v, j)}
+                        if k == "duplicate_archetypes":
+                            dups.append(row)
+                        else:
+                            raw[name] = row
+            for d in dups:
+                base = d["archetype"]
+                if base not in raw:
+                    continue
+                raw[d["id"]] = dict(raw[base], id=d["id"], is_archetype=True, archetype=None, parent=None,
+                                    types=d["types"] or raw[base]["types"], path=d["path"], line=d["line"],
+                                    duplicate_of=base)
+                for name, r in list(raw.items()):
+                    if r.get("archetype") == base and name.startswith(base) and not r.get("duplicate_of"):
+                        par = r["parent"]
+                        nid = d["id"] + name[len(base):]
+                        raw.setdefault(nid, dict(r, id=nid, archetype=d["id"], types=[], duplicate_of=name,
+                                                 parent=d["id"] + par[len(base):] if par and par.startswith(base)
+                                                 else par))
+            return raw
+
+        return self.cached("equipdefs", load)
+
+    def _eq_chain(self, e):
+        defs, out, cur = self.equipment_defs(), [], e
+        while cur in defs and cur not in out:
+            out.append(cur)
+            cur = defs[cur]["parent"] or defs[cur]["archetype"]
+        return out
+
+    def eq_slots(self, e):
+        """[{"slot", "required", "categories"}] of an equipment (own module_slots, else inherited), or None."""
+        return self.cached("eqslots:" + e, lambda: self._eq_slots(e))
+
+    def _eq_slots(self, e):
+        defs = self.equipment_defs()
+        chain = self._eq_chain(e)
+        for i, x in enumerate(chain):
+            s = defs[x]["slots"]
+            if not isinstance(s, list):
+                continue
+            up = None
+            out = []
+            for n, b in s:
+                if not n:
+                    continue
+                if isinstance(b, list):
+                    out.append({"slot": n, "required": get1(b, "required") == "yes",
+                                "categories": bare(get1(b, "allowed_module_categories", []))})
+                elif b == "inherit":  # the same slot of the parent
+                    if up is None:
+                        up = {r["slot"]: r for r in (self.eq_slots(chain[i + 1]) or [])} if i + 1 < len(chain) else {}
+                    if n in up:
+                        out.append(dict(up[n]))
+                elif isinstance(b, str):  # a copy of another slot of this equipment
+                    src = next((r for r in out if r["slot"] == b), None)
+                    if src:
+                        out.append(dict(src, slot=n))
+            return out
+        return None
+
+    def eq_kind(self, e):
+        """Designer of an equipment from its type: tank (armor), ship, plane, else the type."""
+        defs = self.equipment_defs()
+        types = next((defs[x]["types"] for x in self._eq_chain(e) if defs[x]["types"]), [])
+        for t in types:
+            if t in DESIGN_KINDS:
+                return DESIGN_KINDS[t]
+        return "plane" if set(types) & PLANE_TYPES else (types[0] if types else None)
+
+    def equipment_modules(self):
+        """{module: {id, name, category, loaded (static `limit` of its equipment_modules block), xp_cost,
+        dismantle_cost_ic, add_stats, multiply_stats, build_cost_resources, can_convert_from,
+        allow_equipment_type, forbid_equipment_type, src, mod}} of common/units/equipment/modules."""
+
+        def load():
+            out = {}
+            for p in self.game.files("common/units/equipment/modules"):
+                for k, v in parse_file(p):
+                    if k != "equipment_modules" or not isinstance(v, list):
+                        continue
+                    lim = get1(v, "limit")
+                    loaded = trigger(lim, self.ctx) if isinstance(lim, list) else True
+                    for j, (name, b) in enumerate(v):
+                        if not name or name == "limit" or not isinstance(b, list):
+                            continue
+                        out[name] = {"id": name, "name": self.loc.get(name) or name, "category": get1(b, "category"),
+                                     "loaded": loaded, "xp_cost": num(get1(b, "xp_cost")),
+                                     "dismantle_cost_ic": num(get1(b, "dismantle_cost_ic")),
+                                     "add_stats": _numbers(get1(b, "add_stats")),
+                                     "multiply_stats": _numbers(get1(b, "multiply_stats")),
+                                     "build_cost_resources": _numbers(get1(b, "build_cost_resources")),
+                                     "can_convert_from": [x for c in get(b, "can_convert_from") if isinstance(c, list)
+                                                          for x in (get1(c, "module"), get1(c, "module_category"))
+                                                          if x],
+                                     "allow_equipment_type": [x for c in get(b, "allow_equipment_type")
+                                                              for x in (bare(c) if isinstance(c, list) else [c])],
+                                     "forbid_equipment_type": [x for key in ("forbid_equipment_type",
+                                                                             "forbid_equipment_type_exact_match")
+                                                               for c in get(b, key)
+                                                               for x in (bare(c) if isinstance(c, list) else [c])],
+                                     "src": self.src(p, line_of(v, j)), "mod": self.content.source(p)}
+            return out
+
+        return self.cached("eqmodules", load)
+
+    def module_unlocks(self):
+        """{module: [{"tech", "year", "src"}]} from the technologies' enable_equipment_modules."""
+
+        def load():
+            out = {}
+            for name, body, p, ln in self.blocks("common/technologies", inside="technologies"):
+                if name.startswith("@"):
+                    continue
+                for en in get(body, "enable_equipment_modules"):
+                    for m in bare(en):
+                        out.setdefault(m, []).append({"tech": name, "year": num(get1(body, "start_year"), 0),
+                                                      "src": self.src(p, ln)})
+            return out
+
+        return self.cached("moduleunlocks", load)
+
+    def equipment_upgrades(self):
+        """{upgrade: {max_level, cost (land | air | naval), cost_by_level, src}} of common/units/equipment/upgrades."""
+
+        def load():
+            out = {}
+            for name, b, p, ln in self.blocks("common/units/equipment/upgrades", inside="upgrades"):
+                lc = get1(b, "linear_cost")
+                out[name] = {"max_level": num(get1(b, "max_level")), "cost": get1(b, "cost"),
+                             "cost_by_level": num(get1(lc, "cost_by_level")) if isinstance(lc, list) else None,
+                             "src": self.src(p, ln)}
+            return out
+
+        return self.cached("equpgrades", load)
+
+    def designs(self, tag=None, kind=None):
+        """Designer facts of a tag at the date (DESIGNS_METHOD): per designer (tank, plane, ship) whether its
+        modules load with the active DLCs, the chassis/hulls/airframes and modules enabled by the start
+        technologies (with XP cost, dismantle cost, stats, resources), the next ones by research year, the
+        start variants (history create_equipment_variant), the branch XP at start and the XP cost defines."""
+        tag = tag or self.tag
+        done = set(self.country(tag)["techs"])
+        year = int(self.date.split(".")[0])
+        defs, mods, munlock = self.equipment_defs(), self.equipment_modules(), self.module_unlocks()
+        eunlock, meta, ups = derive.equipment_unlocks(self.game), derive.tech_meta(self.game), self.equipment_upgrades()
+        catkinds = {}
+        for e in defs:
+            for s in self.eq_slots(e) or []:
+                for c in s["categories"]:
+                    catkinds.setdefault(c, set()).add(self.eq_kind(e))
+        xp = self.experience(tag)["start"]
+        out = {"tag": tag, "date": self.date, "kinds": {}, "fair": "public", "d": DESIGNS_METHOD,
+               "costs": self.defines_rows(DESIGN_DEFINES)}
+        for e, r in sorted(defs.items()):
+            if r["is_archetype"] or self.eq_slots(e) is None:
+                continue
+            k = self.eq_kind(e)
+            if kind and k != kind:
+                continue
+            kd = out["kinds"].setdefault(k, {"bases": [], "next_bases": [], "modules": [], "next_modules": [],
+                                             "variants": [], "xp": xp.get(XP_BRANCH.get(k, "army"))})
+            techs = sorted(eunlock.get(e, set()))
+            have = [t for t in techs if t in done]
+            arch = self._eq_chain(e)[-1]
+            row = {"id": e, "name": self.loc.get(r["variant_name"] or "") or self.loc.get(e) or e, "archetype": arch,
+                   "family": defs[arch].get("duplicate_of") or arch,
+                   "year": r["year"], "techs": have or techs, "src": self.src(r["path"], r["line"]),
+                   "upgrades": [dict(ups[u], id=u) for u in r["upgrades"] if u in ups]}
+            if have:
+                row["slots"] = self.eq_slots(e)
+                kd["bases"].append(row)
+            elif techs and min((meta.get(t) or {}).get("year") or 9999 for t in techs) <= year + 2:
+                row["year"] = min((meta.get(t) or {}).get("year") or 9999 for t in techs)
+                kd["next_bases"].append(row)
+        for m, r in sorted(mods.items()):
+            ks = sorted(x for x in catkinds.get(r["category"], set()) if x)
+            if not ks or (kind and kind not in ks) or r["loaded"] is False:  # a module whose DLC is off does not exist
+                continue
+            techs = munlock.get(m, [])
+            have = [t["tech"] for t in techs if t["tech"] in done]
+            row = dict(r, techs=have or [t["tech"] for t in techs])
+            for k in ks:
+                kd = out["kinds"].get(k)
+                if kd is None:
+                    continue
+                if have:
+                    kd["modules"].append(row)
+                elif techs and min(t["year"] or 9999 for t in techs) <= year + 2:
+                    kd["next_modules"].append(dict(row, year=min(t["year"] or 9999 for t in techs)))
+        for k, kd in out["kinds"].items():
+            kd["loaded"] = any(m["loaded"] is not False for m in mods.values()
+                               if k in catkinds.get(m["category"], set()))
+            kd["next_bases"].sort(key=lambda x: (x["year"], x["id"]))
+            kd["next_modules"].sort(key=lambda x: (x["year"], x["id"]))
+        for v in self.country(tag)["variants"]:
+            k = self.eq_kind(v["type"]) if v.get("type") in defs else None
+            if k in out["kinds"]:
+                out["kinds"][k]["variants"].append(v)
+        return out
+
+    # ------------------------------------------------------------ military-industrial organisations (F-13)
+    def mio_organisations(self):
+        """{mio: resolved row} of common/military_industrial_organization/organizations with `include`
+        applied (the included MIO's fields and traits, then delete_included_values, own fields, remove_trait,
+        override_trait, add_trait; trait rows: token, name, parents, exclusive, position, bonuses)."""
+
+        def load():
+            raw = {n: (b, p, ln) for n, b, p, ln in self.blocks("common/military_industrial_organization/organizations")}
+            done = {}
+
+            def trait_row(b):
+                row = {"token": get1(b, "token"), "name": None, "any_parent": bare(get1(b, "any_parent", [])),
+                       "all_parents": bare(get1(b, "all_parents", [])),
+                       "mutually_exclusive": bare(get1(b, "mutually_exclusive", [])),
+                       "special": get1(b, "special_trait_background") == "yes"}
+                pos = get1(b, "position")
+                row["position"] = [num(get1(pos, "x")), num(get1(pos, "y"))] if isinstance(pos, list) else None
+                for key in MIO_BONUS_KEYS:
+                    if isinstance(get1(b, key), list):
+                        row[key] = _numbers(get1(b, key), deep=True)
+                for key in ("available", "visible"):
+                    if isinstance(get1(b, key), list) and get1(b, key):
+                        row[key] = render(get1(b, key), 160)
+                row["limit_to_equipment_type"] = bare(get1(b, "limit_to_equipment_type", []))
+                n = get1(b, "name") or row["token"]
+                row["name"] = self.loc.get(n) or n
+                return row
+
+            def resolve(mid, depth=0):
+                if mid in done:
+                    return done[mid]
+                b, p, ln = raw[mid]
+                inc = get1(b, "include")
+                base = resolve(inc, depth + 1) if inc in raw and inc != mid and depth < 5 else None
+                row = {"id": mid, "include": inc, "src": self.src(p, ln), "mod": self.content.source(p)}
+                for key in ("allowed", "visible", "available", "equipment_type", "research_categories",
+                            "research_bonus", "task_capacity", "name", "initial_trait"):
+                    row[key] = base.get(key) if base else None
+                traits = [dict(t) for t in base["traits"]] if base else []
+                for key in bare(get1(b, "delete_included_values", [])):
+                    row[key] = None
+                for key in ("allowed", "visible", "available"):
+                    if isinstance(get1(b, key), list):
+                        row[key] = get1(b, key)
+                for key in ("equipment_type", "research_categories"):
+                    if isinstance(get1(b, key), list):
+                        row[key] = bare(get1(b, key))
+                for key in ("research_bonus", "task_capacity", "name"):
+                    if get1(b, key) is not None:
+                        row[key] = num(get1(b, key), get1(b, key))
+                if isinstance(get1(b, "initial_trait"), list):
+                    it = trait_row(get1(b, "initial_trait"))
+                    row["initial_trait"] = dict(row["initial_trait"] or {}, **{a: c for a, c in it.items() if c})
+                gone = {x for r in get(b, "remove_trait") if isinstance(r, list) for x in bare(r)}
+                traits = [t for t in traits if t["token"] not in gone]
+                for key, val in b:
+                    if key in ("trait", "add_trait") and isinstance(val, list):
+                        traits.append(trait_row(val))
+                    elif key == "override_trait" and isinstance(val, list):
+                        tr = trait_row(val)
+                        for t in traits:
+                            if t["token"] == tr["token"]:
+                                t.update({a: c for a, c in tr.items() if c not in (None, [], {}, False)})
+                row["traits"] = traits
+                own_name = get1(b, "name")  # the name is not inherited: the loc key defaults to the MIO token
+                row["name"] = self.loc.get(own_name or mid) or own_name or mid
+                done[mid] = row
+                return row
+
+            return {m: resolve(m) for m in raw}
+
+        return self.cached("mios", load)
+
+    def mio_policies(self):
+        """[{id, name, allowed, available, cost, cooldown, bonuses, src}] of military_industrial_organization/policies
+        (cost and cooldown default to DEFAULT_INITIAL_POLICY_ATTACH_COST / DEFAULT_INITIAL_ATTACH_POLICY_COOLDOWN)."""
+        cost, _ = self.define("DEFAULT_INITIAL_POLICY_ATTACH_COST")
+        cool, _ = self.define("DEFAULT_INITIAL_ATTACH_POLICY_COOLDOWN")
+        out = []
+        for n, b, p, ln in self.blocks("common/military_industrial_organization/policies"):
+            out.append({"id": n, "name": self.loc.get(n) or n, "allowed": render(get1(b, "allowed", []), 160),
+                        "available": render(get1(b, "available", []), 160),
+                        "cost": num(get1(b, "cost"), cost), "cooldown": num(get1(b, "cooldown"), cool),
+                        "bonuses": {key: _numbers(get1(b, key), deep=True) for key in MIO_BONUS_KEYS
+                                    if isinstance(get1(b, key), list)},
+                        "src": self.src(p, ln), "mod": self.content.source(p)})
+        return out
+
+    def mio(self, tag=None):
+        """MIOs a tag may get (static `allowed` not false): equipment and research lines, initial trait, trait
+        tree, visible/available text with the static parts decided; policies; the MIO defines."""
+        tag = tag or self.tag
+        rows = []
+        for mid, r in sorted(self.mio_organisations().items()):
+            allowed = self.static(r["allowed"], tag) if r["allowed"] is not None else False
+            if allowed is False:
+                continue
+            row = {k: r[k] for k in ("id", "name", "include", "equipment_type", "research_categories", "research_bonus",
+                                     "task_capacity", "initial_trait", "traits", "src", "mod")}
+            row["allowed"] = allowed
+            row["foreign"] = self.foreign(mid, tag)  # another country's MIO (invited / licensed)
+            for key in ("visible", "available"):
+                row[key] = self.gate_text(r[key], tag, 220, ("FROM", "owner", "OWNER"))
+            if False in (row["visible"], row["available"]) and row["foreign"]:
+                continue
+            rows.append(row)
+        rows.sort(key=lambda r: (r["foreign"], r["id"]))
+        return {"tag": tag, "organisations": rows, "policies": self.mio_policies(), "fair": "public",
+                "defines": self.defines_rows(MIO_DEFINES), "d": MIO_METHOD}
+
+    # ------------------------------------------------------------ special projects (F-14)
+    def special_projects(self):
+        """{project: {id, name, specialization, tags, parent, allowed, available, breakthrough_cost, prototype_days,
+        complexity {min, max}, resources, outputs {modules, equipments, techs}, src}} of common/special_projects/projects
+        (sp_time / sp_complexity constants resolved from common/script_constants)."""
+
+        def load():
+            const = self.script_constants()
+            out = {}
+            for n, b, p, ln in self.blocks("common/special_projects/projects"):
+                if get1(b, "specialization") is None and get1(b, "project_output") is None:
+                    continue
+                cx = get1(b, "complexity")
+                pt = get1(b, "prototype_time")
+                rc = get1(b, "resource_cost")
+                outp = get1(b, "project_output") or []
+                found = {"modules": set(), "equipments": set(), "techs": set()}
+
+                def walk(block):
+                    for k, v in block:
+                        if k == "enable_equipment_modules" and isinstance(v, list):
+                            found["modules"].update(bare(v))
+                        elif k == "enable_equipments" and isinstance(v, list):
+                            found["equipments"].update(bare(v))
+                        elif k == "set_technology" and isinstance(v, list):
+                            found["techs"].update(a for a, c in v if a and a != "popup")
+                        elif k in ("TECH", "tech") and isinstance(v, str):
+                            found["techs"].add(v)
+                        elif isinstance(v, list):
+                            walk(v)
+
+                walk(outp if isinstance(outp, list) else [])
+                cxv = {"min": const.get(f"{cx}.min"), "max": const.get(f"{cx}.max")} if isinstance(cx, str) \
+                    and f"{cx}.min" in const else ({"min": num(cx), "max": num(cx)} if num(cx) is not None else None)
+                out[n] = {"id": n, "name": self.loc.get(n) or n, "specialization": get1(b, "specialization"),
+                          "tags": bare(get1(b, "project_tags")) if isinstance(get1(b, "project_tags"), list)
+                          else [x for x in [get1(b, "project_tags")] if x],
+                          "parent": [x for pb in get(b, "special_project_parent")
+                                     for x in (bare(pb) if isinstance(pb, list) else [pb])],
+                          "allowed": get1(b, "allowed"),
+                          "available": get1(b, "available"), "breakthrough_cost": _numbers(get1(b, "breakthrough_cost")),
+                          "prototype_days": const.get(pt, num(pt)) if isinstance(pt, str) else None,
+                          "prototype_time": pt, "complexity": cxv, "complexity_key": cx,
+                          "resources": _numbers(get1(rc, "resources")) if isinstance(rc, list) else {},
+                          "outputs": {k: sorted(v) for k, v in found.items()},
+                          "src": self.src(p, ln), "mod": self.content.source(p)}
+            return out
+
+        return self.cached("specialprojects", load)
+
+    def facility_buildings(self):
+        """{building: {specialization, coastal, cost, per_controlled_cost, src}} of common/buildings with tags facility."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/buildings", inside="buildings"):
+                if "facility" in bare(get1(b, "tags", [])):
+                    out[n] = {"specialization": bare(get1(b, "specialization", [])), "coastal": get1(b, "only_costal") == "yes",
+                              "cost": num(get1(b, "base_cost")), "per_controlled_cost":
+                              num(get1(b, "per_controlled_building_extra_cost")), "src": self.src(p, ln)}
+            return out
+
+        return self.cached("facilities", load)
+
+    def projects(self, tag=None):
+        """Special projects for a tag: projects whose static `allowed` is not false (available text with the static
+        parts decided), facilities at the start in own states, scientists (characters with a scientist role),
+        scientist traits, facility buildings and the NProject defines."""
+        tag = tag or self.tag
+        rows = []
+        for pid, r in sorted(self.special_projects().items()):
+            allowed = self.static(r["allowed"], tag)
+            if allowed is False:
+                continue
+            row = {k: v for k, v in r.items() if k not in ("allowed", "available")}
+            row["allowed"] = allowed
+            row["available"] = self.gate_text(r["available"], tag, 200, ("FROM",))
+            if row["available"] is False:
+                continue
+            rows.append(row)
+        fac = self.facility_buildings()
+        states = self.states()
+        have = []
+        for sid in self.owned_states(tag):
+            st = states[sid]
+            for b, n in st["buildings"].items():
+                if b in fac and n:
+                    have.append({"state": sid, "name": st["name"], "building": b, "level": n, "src": st["file"]})
+            for prov, bs in st["province_buildings"].items():
+                for b, n in bs.items():
+                    if b in fac and n:
+                        have.append({"state": sid, "name": st["name"], "province": prov, "building": b, "level": n,
+                                     "src": st["file"]})
+        sci = []
+        for ch in self.characters(tag, "scientist"):
+            for r in ch["roles"]:
+                if r["role"] == "scientist":
+                    sci.append({"id": ch["id"], "name": ch["name"], "skills": r.get("skills", {}),
+                                "traits": r.get("traits", []), "visible": r.get("visible"), "src": ch["src"]})
+        traits = {n: {"modifier": _numbers(get1(b, "modifier")), "src": self.src(p, ln)}
+                  for n, b, p, ln in self.blocks("common/scientist_traits")}
+        return {"tag": tag, "projects": rows, "facilities_at_start": have, "facility_buildings": fac,
+                "scientists": sci, "scientist_traits": traits, "defines": self.defines_rows(PROJECT_DEFINES),
+                "fair": "public", "d": PROJECT_METHOD}
+
+    # ------------------------------------------------------------ diplomacy: world tension, ideology gates, war goals (F-15, F-16)
+    def ideologies(self):
+        """{ideology group: {types, rules, modifiers (hidden_modifier flattened), faction_modifiers,
+        war_impact_on_world_tension, faction_impact_on_world_tension, can_collaborate, src}} of common/ideologies."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/ideologies", inside="ideologies"):
+                types = get1(b, "types")
+                out[n] = {"id": n, "name": self.loc.get(n) or n,
+                          "types": [a for a, c in types if a] if isinstance(types, list) else [],
+                          "rules": {a: c for a, c in (get1(b, "rules") or []) if a and isinstance(c, str)},
+                          "modifiers": _numbers(get1(b, "modifiers"), deep=True),
+                          "faction_modifiers": _numbers(get1(b, "faction_modifiers"), deep=True),
+                          "src": self.src(p, ln), "mod": self.content.source(p)}
+                for key in ("war_impact_on_world_tension", "faction_impact_on_world_tension"):
+                    out[n][key] = num(get1(b, key))
+                for key in ("can_collaborate", "can_host_government_in_exile"):
+                    out[n][key] = get1(b, key) == "yes"
+            return out
+
+        return self.cached("ideologies", load)
+
+    def wargoals(self):
+        """{war goal: {generate_base_cost, generate_per_state_cost, take_states_limit, take_states_cost, expire,
+        threat, allowed, available, src}} of common/wargoals."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/wargoals", inside="wargoal_types"):
+                row = {"id": n, "name": self.loc.get(n) or n, "src": self.src(p, ln), "mod": self.content.source(p)}
+                for key in ("generate_base_cost", "generate_per_state_cost", "take_states_limit", "take_states_cost",
+                            "expire", "threat"):
+                    row[key] = num(get1(b, key))
+                for key in ("allowed", "available"):
+                    row[key] = get1(b, key) if isinstance(get1(b, key), list) else None
+                out[n] = row
+            return out
+
+        return self.cached("wargoals", load)
+
+    def world_tension(self):
+        """World tension the histories set up to the start date: add_named_threat / add_threat of every country
+        history ({"named": [...], "total", "wars": wars at start with their war goal's threat, "d"})."""
+
+        def load():
+            named = []
+            for p in self.game.files("history/countries"):
+                try:
+                    with open(p, encoding="utf-8-sig", errors="replace") as fh:
+                        if "_threat" not in fh.read():
+                            continue
+                except OSError:
+                    continue
+                m = re.match(r"^([A-Z][A-Z0-9]{2})", os.path.basename(p))
+                if m:
+                    named += [dict(t, tag=m.group(1)) for t in self.country(m.group(1))["threats"]]
+            goals = self.wargoals()
+            wars = [dict(w, threat=(goals.get(w["type"]) or {}).get("threat")) for w in self.wars()]
+            return {"named": named, "total": round(sum(t["v"] for t in named), 3), "wars": wars, "fair": "public",
+                    "d": "sum of add_named_threat / add_threat in the country histories up to the start (percent "
+                         "points); wars declared in the histories add tension when the game starts (war goal threat x "
+                         "the TENSION_* defines, scaled by the TENSION_TIME_SCALE defines), not computed here [?]"}
+
+        return self.cached("worldtension", load)
+
+    def diplomacy(self, tag=None):
+        """Diplomatic gates of a tag at the start: world tension, the ruling ideology's rules and tension thresholds
+        (ideology modifier plus the start spirits' modifiers of the same key), the war goal types with costs and
+        the justification, guarantee, volunteer and lend-lease defines."""
+        tag = tag or self.tag
+        party = self.ruling_party(tag)
+        ideo = self.ideologies().get(party) or {}
+        spirits = []
+        for f in self.country(tag)["ideas"]:
+            i = self.ideas().get(f["v"])
+            if not i:
+                continue
+            for a, c in _numbers(i["modifier"], deep=True).items():
+                if a in TENSION_KEYS or a.startswith("justify_war_goal"):
+                    spirits.append({"idea": f["v"], "key": a, "value": c, "src": self.src(i["path"], i["line"])})
+        gates_ = {}
+        for key in TENSION_KEYS:
+            base = (ideo.get("modifiers") or {}).get(key)
+            extra = [s for s in spirits if s["key"] == key]
+            total = (base or 0) + sum(s["value"] for s in extra)
+            gates_[key] = {"ideology": base, "spirits": extra, "need": round(total, 4),
+                           "text": GATE_TEXT.get(key, key)}
+        goals = []
+        for gid, g in sorted(self.wargoals().items()):
+            st = self.static(g["allowed"], tag)
+            if st is False:
+                continue
+            goals.append(dict({k: v for k, v in g.items() if k not in ("allowed", "available")},
+                              allowed=self.gate_text(g["allowed"], tag, 160),
+                              available=self.gate_text(g["available"], tag, 160) if g["available"] else True))
+        return {"tag": tag, "ideology": party, "ideology_src": ideo.get("src"), "rules": ideo.get("rules") or {},
+                "war_impact_on_world_tension": ideo.get("war_impact_on_world_tension"),
+                "gates": gates_, "spirits": spirits, "world_tension": self.world_tension(), "wargoals": goals,
+                "defines": self.defines_rows(DIPLOMACY_DEFINES), "fair": "public", "d": DIPLOMACY_METHOD}
+
+    # ------------------------------------------------------------ factions (F-17)
+    def faction_content(self):
+        """{"templates", "rules", "rule_groups", "goals", "member_upgrades", "member_groups", "upgrades",
+        "upgrade_groups"}: {id: row} of common/factions (goals and manifests from goals/, rules by `type`)."""
+
+        def load():
+            out = {k: {} for k in ("templates", "rules", "rule_groups", "goals", "member_upgrades", "member_groups",
+                                   "upgrades", "upgrade_groups")}
+            for n, b, p, ln in self.blocks("common/factions/templates"):
+                out["templates"][n] = {"id": n, "name": self.loc.get(get1(b, "name") or "") or get1(b, "name"),
+                                       "manifest": get1(b, "manifest"), "goals": bare(get1(b, "goals", [])),
+                                       "default_rules": bare(get1(b, "default_rules", [])),
+                                       "can_leader_join_other_factions": get1(b, "can_leader_join_other_factions") == "yes",
+                                       "visible": get1(b, "visible"), "available": get1(b, "available"),
+                                       "src": self.src(p, ln), "mod": self.content.source(p)}
+            for n, b, p, ln in self.blocks("common/factions/rules"):
+                out["rules"][n] = {"id": n, "name": self.loc.get(n) or n, "type": get1(b, "type"),
+                                   "trigger": render(get1(b, "trigger", []), 200),
+                                   "visible": render(get1(b, "visible", []), 120),
+                                   "modifier": _numbers(get1(b, "modifier"), deep=True),
+                                   "peace_action_modifiers": bare(get1(b, "peace_action_modifiers", [])),
+                                   "src": self.src(p, ln)}
+            for n, b, p, ln in self.blocks("common/factions/rules/groups"):
+                out["rule_groups"][n] = {"id": n, "default": get1(b, "default_rule"), "rules": bare(get1(b, "rules", [])),
+                                         "src": self.src(p, ln)}
+            for n, b, p, ln in self.blocks("common/factions/goals"):
+                rp = get1(b, "ratio_progress")
+                secs = get1(rp, "progress_sections") if isinstance(rp, list) else None
+                at = {k: v for k, v in parse_file(p) if k and k.startswith("@") and isinstance(v, str)}
+                out["goals"][n] = {"id": n, "name": self.loc.get(get1(b, "name") or n) or n,
+                                   "category": get1(b, "category"), "manifest": get1(b, "is_manifest") == "yes",
+                                   "completed": render(get1(b, "completed", []), 200),
+                                   "ratio": {k: v for k, v in (rp or []) if k and isinstance(v, str)} if isinstance(rp, list) else None,
+                                   "scale": _numbers(get1(rp, "scale")) if isinstance(rp, list) else {},
+                                   "sections": {k: {"min": num(at.get(get1(v, "min"), get1(v, "min"))),
+                                                    "max": num(at.get(get1(v, "max"), get1(v, "max"))),
+                                                    "modifier": _numbers(get1(v, "modifier"))}
+                                                for k, v in (secs or []) if k and isinstance(v, list)},
+                                   "complete_effect": effect_summary(get1(b, "complete_effect"), 6)
+                                   if isinstance(get1(b, "complete_effect"), list) else [],
+                                   "src": self.src(p, ln)}
+            for folder, key in (("common/factions/member_upgrades", "member_upgrades"),
+                                ("common/factions/member_upgrades/member_groups", "member_groups"),
+                                ("common/factions/upgrades", "upgrades"), ("common/factions/upgrades/groups", "upgrade_groups")):
+                for n, b, p, ln in self.blocks(folder):
+                    out[key][n] = {"id": n, "name": self.loc.get(get1(b, "name") or n) or n,
+                                   "bonus": num(get1(b, "bonus")), "upgrade_cost": num(get1(b, "upgrade_cost")),
+                                   "upgrades": bare(get1(b, "upgrades", [])), "default": get1(b, "default_upgrade"),
+                                   "type": get1(b, "upgrade_type"), "src": self.src(p, ln)}
+            return out
+
+        return self.cached("factions", load)
+
+    # ------------------------------------------------------------ peace conference (F-18)
+    def peace_modifiers(self):
+        """[{id, category, types, enable (text), tags (tags the enable names), cost_multiplier, src}] of
+        common/peace_conference/cost_modifiers, and {category: name} of the categories."""
+
+        def load():
+            mods = []
+            for n, b, p, ln in self.blocks("common/peace_conference/cost_modifiers", inside="peace_action_modifiers"):
+                pt = get1(b, "peace_action_type")
+                en = get1(b, "enable", [])
+                text = render(en, 260)
+                mods.append({"id": n, "category": get1(b, "category") or "other",
+                             "types": bare(pt) if isinstance(pt, list) else [pt],
+                             "enable": text, "tags": sorted(set(re.findall(r"\b(?:original_)?tag = ([A-Z][A-Z0-9]{2})\b",
+                                                                         render(en)))
+                                                            | set(re.findall(r"(?<![\w.])([A-Z][A-Z0-9]{2}) = \{", render(en)))
+                                                            - {"NOT", "AND"}),
+                             "cost_multiplier": num(get1(b, "cost_multiplier")), "src": self.src(p, ln),
+                             "mod": self.content.source(p)})
+            cats = {n: self.loc.get(get1(b, "name") or n) or n
+                    for n, b, p, ln in self.blocks("common/peace_conference/categories", inside="peace_action_categories")}
+            return mods, cats
+
+        return self.cached("peacemods", load)
+
+    def peace(self, tag=None, enemies=None):
+        """Peace-conference costs for a tag (PEACE_METHOD): the cost modifiers that name the tag or its enemies
+        (`own` / `enemy`) and the generic ones, grouped by action type, with the categories and the defines."""
+        tag = tag or self.tag
+        enemies = list(enemies) if enemies is not None else self.at_war_with(tag)
+        mods, cats = self.peace_modifiers()
+        rows = []
+        for m in mods:
+            if not m["tags"]:
+                rel = "generic"
+            elif tag in m["tags"]:
+                rel = "own"
+            elif set(m["tags"]) & set(enemies):
+                rel = "enemy"
+            else:
+                continue
+            rows.append(dict(m, relation=rel, category_name=cats.get(m["category"], m["category"])))
+        rows.sort(key=lambda r: ({"own": 0, "enemy": 1, "generic": 2}[r["relation"]], r["types"], r["id"]))
+        return {"tag": tag, "enemies": enemies, "modifiers": rows, "categories": cats,
+                "defines": self.defines_rows(PEACE_DEFINES), "fair": "public", "d": PEACE_METHOD}
+
+    # ------------------------------------------------------------ command: spirits, abilities, leader traits (F-19)
+    def spirit_slots(self):
+        """{idea category: {"type": army_spirit | navy_spirit | air_spirit, "cost", "removal_cost", "src"}} of
+        common/idea_tags (military spirits are bought with army / navy / air experience)."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/idea_tags", inside="idea_categories"):
+                t = get1(b, "type")
+                if isinstance(t, str) and t.endswith("_spirit") and t != "national_spirit":
+                    for s in [n] + [x for x in get(b, "slot") if isinstance(x, str)]:
+                        out[s] = {"type": t, "cost": num(get1(b, "cost")), "removal_cost": num(get1(b, "removal_cost")),
+                                  "src": self.src(p, ln)}
+            return out
+
+        return self.cached("spiritslots", load)
+
+    def leader_abilities(self):
+        """{ability: {name, type, cost, duration, cooldown, allowed, modifiers, src}} of common/abilities."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/abilities", inside="ability"):
+                out[n] = {"id": n, "name": self.loc.get(get1(b, "name") or n) or n, "type": get1(b, "type"),
+                          "cost": num(get1(b, "cost")), "duration": num(get1(b, "duration")),
+                          "cooldown": num(get1(b, "cooldown")), "allowed": get1(b, "allowed"),
+                          "modifiers": {k: _numbers(get1(b, k), deep=True) for k in ("unit_modifiers", "modifier")
+                                        if isinstance(get1(b, k), list)},
+                          "src": self.src(p, ln), "mod": self.content.source(p)}
+            return out
+
+        return self.cached("abilities", load)
+
+    def leader_traits(self):
+        """{trait: {type, trait_type, cost, gui_row, gui_column, parents, mutually_exclusive, slot, modifiers,
+        enable_ability, src}} of common/unit_leader `leader_traits`."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/unit_leader", inside="leader_traits"):
+                par = [x for pb in get(b, "parent") if isinstance(pb, list) for x in bare(get1(pb, "traits", []))]
+                t = get1(b, "type")
+                out[n] = {"id": n, "name": self.loc.get(n) or n, "type": bare(t) if isinstance(t, list) else t,
+                          "trait_type": get1(b, "trait_type"), "cost": num(get1(b, "cost")),
+                          "gui_row": num(get1(b, "gui_row")), "gui_column": num(get1(b, "gui_column")),
+                          "any_parent": bare(get1(b, "any_parent", [])), "all_parents": bare(get1(b, "all_parents", [])),
+                          "parent": par, "mutually_exclusive": get1(b, "mutually_exclusive"),
+                          "slot": get1(b, "slot"), "enable_ability": get1(b, "enable_ability"),
+                          "attack_skill": num(get1(b, "attack_skill")), "defense_skill": num(get1(b, "defense_skill")),
+                          "modifiers": {k: _numbers(get1(b, k), deep=True) for k in LEADER_MODIFIER_KEYS
+                                        if isinstance(get1(b, k), list) and get1(b, k)},
+                          "src": self.src(p, ln), "mod": self.content.source(p)}
+            return out
+
+        return self.cached("leadertraits", load)
+
+    def leader_skills(self):
+        """[{level, type, cost, src}] of common/unit_leader `leader_skills` (skill level costs in leader XP)."""
+        out = []
+        for p in self.game.files("common/unit_leader"):
+            for k, v in parse_file(p):
+                if k == "leader_skills" and isinstance(v, list):
+                    for j, (lvl, b) in enumerate(v):
+                        if isinstance(b, list):
+                            out.append({"level": num(lvl), "type": get1(b, "type"), "cost": num(get1(b, "cost")),
+                                        "src": self.src(p, line_of(v, j))})
+        return out
+
+    def command(self, tag=None):
+        """Officer-corps facts for a tag: military spirits (idea categories of type army/navy/air_spirit, cost in
+        that branch's experience) allowed for the tag, leader abilities, assignable leader traits (trait tree rows),
+        skill level costs, the command-power defines and command power at the start."""
+        tag = tag or self.tag
+        slots = self.spirit_slots()
+        spirits = []
+        for iid, i in sorted(self.ideas().items()):
+            s = slots.get(i["category"])
+            if not s:
+                continue
+            vis = get1(i["block"], "visible")
+            gate = {k: self.gate_text(b, tag, 120) for k, b in (("allowed", i["allowed"]), ("visible", vis),
+                                                                 ("available", i["available"]))}
+            if False in gate.values() or (self.foreign(iid, tag) and gate["visible"] is not True):
+                continue
+            spirits.append({"id": iid, "name": self.name(iid), "slot": i["category"], "branch": s["type"].split("_")[0],
+                            "cost": i["cost"] if i["cost"] is not None else s["cost"],
+                            "available": gate["available"], "visible": gate["visible"],
+                            "modifier": render(i["modifier"], 200) if i["modifier"] else None,
+                            "src": self.src(i["path"], i["line"])})
+        abilities = []
+        for aid, a in sorted(self.leader_abilities().items()):
+            al = self.gate_text(a["allowed"], tag, 160, ("OWNER", "owner"))
+            if al is False or (self.foreign(aid, tag) and al is not True):
+                continue
+            abilities.append(dict({k: v for k, v in a.items() if k != "allowed"}, allowed=al))
+        traits = [t for t in self.leader_traits().values() if t["trait_type"] in ("assignable_trait",
+                                                                                  "assignable_terrain_trait")
+                  and not self.foreign(t["id"], tag)]
+        traits.sort(key=lambda t: (str(t["type"]), t["gui_row"] if t["gui_row"] is not None else 99,
+                                   t["gui_column"] if t["gui_column"] is not None else 99, t["id"]))
+        return {"tag": tag, "command_power_at_start": self.country(tag)["command_power"], "spirits": spirits,
+                "abilities": abilities, "traits": traits, "skills": self.leader_skills(),
+                "defines": self.defines_rows(COMMAND_DEFINES), "fair": "public", "d": COMMAND_METHOD}
+
+    # ------------------------------------------------------------ intelligence agency (F-20)
+    def agency(self, tag=None):
+        """Intelligence agency rules: upgrades per branch (levels with modifiers, modifiers while upgrading),
+        operations (days, network strength, operatives, risk, equipment, phases) with the static `allowed`
+        decided for the tag, operation phases, the agency defines and whether the history creates the agency."""
+        tag = tag or self.tag
+        ups = []
+        for p in self.game.files("common/intelligence_agency_upgrades"):
+            for k, v in parse_file(p):
+                if not k or not isinstance(v, list):
+                    continue
+                for j, (n, b) in enumerate(v):
+                    if not n or not isinstance(b, list):
+                        continue
+                    ups.append({"branch": k, "id": n, "name": self.loc.get(n) or n,
+                                "levels": [_numbers(get1(lv, "modifier"), deep=True) for lv in get(b, "level")
+                                           if isinstance(lv, list)],
+                                "during_progress": _numbers(get1(b, "modifiers_during_progress")),
+                                "available": render(get1(b, "available", []), 160),
+                                "src": self.src(p, line_of(v, j))})
+        phases = {n: {"name": get1(b, "name"), "equipment": _numbers(get1(b, "equipment")), "src": self.src(p, ln)}
+                  for n, b, p, ln in self.blocks("common/operation_phases")}
+        ops = []
+        for n, b, p, ln in self.blocks("common/operations"):
+            if get1(b, "days") is None:
+                continue
+            al = self.static(get1(b, "allowed"), tag) if tag else None
+            if al is False:
+                continue
+            groups = []
+            for pb in get(b, "phases"):
+                if isinstance(pb, list):
+                    groups.append([a for a, c in pb if a and a in phases] or bare(pb))
+            ops.append({"id": n, "name": self.loc.get(get1(b, "name") or n) or n, "days": num(get1(b, "days")),
+                        "network_strength": num(get1(b, "network_strength")), "operatives": num(get1(b, "operatives")),
+                        "risk_chance": num(get1(b, "risk_chance")), "outcome_extra_chance": num(get1(b, "outcome_extra_chance")),
+                        "cost_multiplier": num(get1(b, "cost_multiplier")),
+                        "equipment": _numbers(get1(b, "equipment")), "phases": groups,
+                        "requirements": render(get1(b, "requirements", []), 160),
+                        "visible": render(get1(b, "visible", []), 160), "allowed": al,
+                        "awarded_tokens": bare(get1(b, "awarded_tokens", [])),
+                        "src": self.src(p, ln), "mod": self.content.source(p)})
+        return {"tag": tag or None, "agency_at_start": self.country(tag)["agency"] if tag else None,
+                "upgrades": ups, "operations": ops, "phases": phases, "defines": self.defines_rows(AGENCY_DEFINES),
+                "dlc_la_resistance": "La Resistance" in self.dlcs, "fair": "public", "d": AGENCY_METHOD}
+
+    # ------------------------------------------------------------ energy (F-21)
+    def energy_buildings(self):
+        """{building: {affects_energy, keystone group, energy modifiers (state_modifiers keys with "energy"),
+        shares_slots, src}} of common/buildings that change factory energy use."""
+
+        def load():
+            out = {}
+            for n, b, p, ln in self.blocks("common/buildings", inside="buildings"):
+                sm = _numbers(get1(b, "state_modifiers"), deep=True)
+                em = {k: v for k, v in sm.items() if "energy" in k}
+                cap = get1(b, "level_cap") or []
+                if em or get1(b, "affects_energy") == "yes":
+                    out[n] = {"affects_energy": get1(b, "affects_energy") == "yes", "energy_modifiers": em,
+                              "group": get1(cap, "group_by") if isinstance(cap, list) else None,
+                              "cost": num(get1(b, "base_cost")), "buildable": get1(b, "is_buildable") != "no",
+                              "shares_slots": get1(cap, "shares_slots") == "yes" if isinstance(cap, list) else False,
+                              "src": self.src(p, ln)}
+            return out
+
+        return self.cached("energybuildings", load)
+
+    def energy(self, tag=None):
+        """Energy of a tag at the start (ENERGY_METHOD): energy resource per own state, factories, the energy
+        buildings present and their local consumption modifiers, and the country estimate from the defines."""
+        tag = tag or self.tag
+        d = self.defines_rows(ENERGY_DEFINES)
+        res = (d.get("ENERGY_RESOURCE") or {}).get("v") or "coal"
+        eb = self.energy_buildings()
+        states = self.states()
+        rows, coal, facts_ = [], 0, 0
+        for sid in self.owned_states(tag):
+            st = states[sid]
+            fac = sum(st["buildings"].get(b, 0) for b in FACTORY_BUILDINGS)
+            present = {b: n for b, n in st["buildings"].items() if n and eb.get(b, {}).get("energy_modifiers")}
+            for bs in st["province_buildings"].values():
+                for b, n in bs.items():
+                    if n and eb.get(b, {}).get("energy_modifiers"):
+                        present[b] = present.get(b, 0) + n
+            local = 0.0
+            for b in present:
+                for k, v in eb[b]["energy_modifiers"].items():
+                    local += v * (st["infrastructure"] if k.endswith("_per_infrastructure") else 1)
+            c = st["resources"].get(res, 0)
+            coal += c
+            facts_ += fac
+            rows.append({"id": sid, "name": st["name"], "coal": c, "factories": fac, "infrastructure": st["infrastructure"],
+                         "buildings": present, "local_consumption": round(local, 4), "src": st["file"]})
+        v = lambda k, dflt: (d.get(k) or {}).get("v", dflt)  # noqa: E731
+        produced = v("BASE_COUNTRY_ENERGY_PRODUCTION", 0) + coal * v("RESOURCE_TO_ENERGY_COEFFICIENT", 0)
+        per = min(v("ENERGY_COST_CAP", 99), v("BASE_ENERGY_COST", 0) + v("ENERGY_SCALING_COST_BY_FACTORY_COUNT", 0) * facts_)
+        demand = sum(r["factories"] * per * max(0.0, 1 + r["local_consumption"]) for r in rows)
+        return {"tag": tag, "resource": res, "states": rows, "coal": coal, "factories": facts_,
+                "estimate": {"produced": round(produced, 2), "per_factory": round(per, 4), "demand": round(demand, 2),
+                             "ratio": round(produced / demand, 3) if demand else None},
+                "keystones": {b: r for b, r in eb.items() if r["buildable"] and r["energy_modifiers"]}, "defines": d,
+                "fair": "public",
+                "d": ENERGY_METHOD}
 
 
 # ---------------------------------------------------------------- script summaries

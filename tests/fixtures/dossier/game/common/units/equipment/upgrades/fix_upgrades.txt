@@ -1,0 +1,3 @@
+upgrades = {
+	fix_engine_upgrade = { max_level = 5 cost = land linear_cost = { cost_by_level = 2 } }
+}

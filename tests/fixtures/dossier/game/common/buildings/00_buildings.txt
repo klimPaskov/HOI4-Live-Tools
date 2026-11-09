@@ -5,4 +5,11 @@ buildings = {
 	supply_node = { base_cost = 20000 level_cap = { province_max = 1 } }
 	rail_way = { base_cost = 170 per_level_extra_cost = 130 level_cap = { province_max = 1 } }
 	naval_base = { base_cost = 5000 per_level_extra_cost = 1000 only_costal = yes level_cap = { province_max = 10 } }
+	land_facility = { base_cost = 10000 per_controlled_building_extra_cost = 6000 specialization = { specialization_land }
+		tags = { facility } level_cap = { province_max = 1 state_max = 1 group_by = special_project_facility } }
+	dam = { base_cost = 20000 is_buildable = no affects_energy = yes level_cap = { province_max = 1 }
+		state_modifiers = { local_factory_energy_consumption = -0.65 } }
+	energy_infrastructure = { base_cost = 12000 affects_energy = yes
+		level_cap = { state_max = 1 shares_slots = yes group_by = infrastructure_keystone }
+		state_modifiers = { local_factory_energy_consumption_per_infrastructure = -0.075 } }
 }

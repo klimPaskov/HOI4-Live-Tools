@@ -1,0 +1,11 @@
+branch_fix = {
+	upgrade_fix_army = {
+		modifiers_during_progress = { civilian_factory_use = 5 }
+		level = { modifier = { army_intel_factor = 0.25 } }
+		level = { modifier = { army_intel_factor = 0.15 } }
+	}
+	upgrade_fix_radio = {
+		available = { has_tech = t_c }
+		level = { modifier = { operation_outcome = 1 } }
+	}
+}

@@ -22,6 +22,9 @@ ai_strategy(world, tag)  common/ai_strategy blocks enabled for the tag (FAIR: pr
 bop(world, tag)    balance of power: definition, value and range at start, focuses/decisions that gain or
                    move it (BOP_METHOD)
 never_take(world, tag)   decisions that end a war, cede states or withdraw (NEVER_METHOD)
+tag_sources(world, tag)  effect blocks of the tag's loaded focuses and its decisions; find_effects() searches them
+factions(world, tag)     faction templates the tag can create (by its focuses/decisions or selectable), with
+                         manifest, goals, default rules; rule groups; member upgrades (FACTION_METHOD)
 """
 import os
 import re
@@ -552,3 +555,99 @@ def never_take(world, tag=None):
         return out
 
     return world.cached("nevertake:" + tag, load)
+
+
+# ---------------------------------------------------------------- effects of the tag's focuses and decisions
+
+def tag_sources(world, tag=None):
+    """[(kind, id, effect block, src)] of the tag's loaded focuses (completion_reward) and its decisions
+    (complete_effect, remove_effect): the blocks a player of the tag can run."""
+    from . import focus as focusmod  # local: keeps scenario importable without the focus module loaded
+
+    tag = tag or world.tag
+
+    def load():
+        out = []
+        tid = focusmod.tree_id(world, tag)
+        trees, shared = focusmod._focus_blocks(world)
+        loaded = set(focusmod.tree(world, tag)["focuses"])
+        for b, p, ln in (trees.get(tid) or {}).get("focuses", []) + [shared[x] for x in sorted(loaded) if x in shared]:
+            fid = get1(b, "id")
+            if fid in loaded:
+                out.append(("focus", fid, get1(b, "completion_reward"), world.src(p, ln)))
+        for dd in world.decision_index():
+            if dd["id"].startswith(tag + "_") or _names_tag_text(dd, tag):
+                for key in ("complete_effect", "remove_effect"):
+                    out.append(("decision", dd["id"], get1(dd["block"], key), world.src(dd["path"], dd["line"])))
+        return out
+
+    return world.cached("tagsources:" + tag, load)
+
+
+def find_effects(block, keys, scripted=None, depth=0):
+    """[(key, value)] of the effects named in `keys` anywhere in an effect block (scripted effects followed
+    two levels when `scripted` is given; trigger and tooltip blocks skipped)."""
+    out = []
+    if not isinstance(block, list):
+        return out
+    for k, v in block:
+        if k in keys:
+            out.append((k, v))
+        elif isinstance(v, list):
+            if k not in _NOT_RUN:
+                out.extend(find_effects(v, keys, scripted, depth))
+        elif scripted and v == "yes" and k in scripted and depth < 2:
+            out.extend(find_effects(scripted[k][0], keys, scripted, depth + 1))
+    return out
+
+
+# ---------------------------------------------------------------- factions (F-17)
+
+FACTION_METHOD = ("templates = common/factions/templates the tag can create: named by create_faction_from_template in "
+                  "its focuses or decisions, or selectable (static `visible` not false; an empty visible hides a "
+                  "template); each with its manifest, goals and default rules (common/factions/goals, rules); rule "
+                  "groups list the rules a leader may switch to (FACTION_INITIATIVE_CHANGE_RULE_COST)")
+FACTION_DEFINES = ("FACTION_INITIATIVE_CHANGE_RULE_COST", "FACTION_DOCTRINE_SHARING_UNLOCK_COST",
+                   "FACTION_UNLOCK_COMMANDER_COST", "ASSIGN_FACILITY_TO_FACTION_INITIATIVE_COST",
+                   "FACTION_ASSIGN_SCIENTIST_COST", "FACTION_THEATER_COMMANDER_COUNTRY_LIMIT_BASE", "TENSION_FACTION_JOIN")
+
+
+def factions(world, tag=None):
+    """Faction facts for a tag (FACTION_METHOD): faction at the start, templates it can create with their manifest,
+    goals and default rules, the effects that create or join a faction, rule groups, member upgrades, defines."""
+    tag = tag or world.tag
+    fc = world.faction_content()
+    scripted = scripted_effects(world)
+    by, joins = {}, []
+    for kind, sid, block, src in tag_sources(world, tag):
+        for k, v in find_effects(block, ("create_faction_from_template", "create_faction", "add_to_faction",
+                                         "join_faction"), scripted):
+            if k == "create_faction_from_template":
+                tid = get1(v, "template") if isinstance(v, list) else v
+                if any(x["id"] == sid for x in by.get(tid, [])):
+                    continue
+                by.setdefault(tid, []).append({"kind": kind, "id": sid, "src": src,
+                                               "name": get1(v, "name") if isinstance(v, list) else None})
+            else:
+                joins.append({"effect": k, "target": v if isinstance(v, str) else render(v, 80), "kind": kind,
+                              "id": sid, "src": src})
+    rows = []
+    for tid, t in sorted(fc["templates"].items()):
+        vis = t["visible"]
+        st = world.static(vis, tag) if isinstance(vis, list) and vis else False
+        if tid not in by and st is False:
+            continue
+        rows.append({"id": tid, "name": t["name"], "created_by": by.get(tid, []), "selectable": st,
+                     "available": world.text(t["available"], 160, tag) if isinstance(t["available"], list) else None,
+                     "manifest": fc["goals"].get(t["manifest"]) or {"id": t["manifest"]},
+                     "goals": [fc["goals"].get(g) or {"id": g} for g in t["goals"]],
+                     "default_rules": [fc["rules"].get(r) or {"id": r} for r in t["default_rules"]],
+                     "can_leader_join_other_factions": t["can_leader_join_other_factions"],
+                     "src": t["src"], "mod": t["mod"]})
+    rows.sort(key=lambda r: (not r["created_by"], r["selectable"] is False, r["id"]))
+    return {"tag": tag, "faction_at_start": world.country(tag)["faction"], "templates": rows,
+            "missing_templates": sorted(t for t in by if t and t not in fc["templates"]), "joins": joins,
+            "rule_groups": list(fc["rule_groups"].values()),
+            "member_upgrades": {"groups": list(fc["member_groups"].values()),
+                                "upgrades": list(fc["member_upgrades"].values())},
+            "defines": world.defines_rows(FACTION_DEFINES), "fair": "public", "d": FACTION_METHOD}

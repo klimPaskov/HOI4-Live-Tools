@@ -26,3 +26,7 @@ every_owned_state = {
 	set_resistance = 10
 }
 1939.1.1 = { add_political_power = 500 }
+create_equipment_variant = { name = "Alpha Tank" type = light_tank_chassis_1
+	modules = { turret_slot = fix_turret_small armament_slot = fix_gun_mg } upgrades = { fix_engine_upgrade = 1 } }
+add_named_threat = { threat = 5 name = AAA_tension }
+1939.1.1 = { add_named_threat = { threat = 30 name = AAA_late_tension } }

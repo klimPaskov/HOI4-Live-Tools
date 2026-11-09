@@ -1,0 +1,9 @@
+fix_joining_rule = {
+	type = joining_rules
+	trigger = { has_government = fascism }
+	modifier = { stability_factor = 0.05 }
+}
+fix_peace_rule = {
+	type = peace_conference_rules
+	peace_action_modifiers = { generic_claim }
+}

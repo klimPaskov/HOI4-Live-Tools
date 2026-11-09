@@ -1,0 +1,19 @@
+@fix_value = 0.75
+
+fix_manifest = {
+	name = fix_manifest
+	is_manifest = yes
+	ratio_progress = {
+		total_amount = 10
+		completed_amount_collection = collection:fix_members
+		progress_sections = {
+			fulfilled = { min = @fix_value modifier = { political_power_factor = 0.1 } }
+		}
+	}
+}
+
+fix_goal = {
+	category = medium_term
+	completed = { has_war = yes }
+	complete_effect = { add_political_power = 50 }
+}

@@ -1,0 +1,35 @@
+generic_fix_tank_organization = {
+	allowed = { NOT = { original_tag = AAA } }
+	equipment_type = { armor }
+	research_categories = { armor_cat }
+	initial_trait = { name = fix_initial equipment_bonus = { reliability = 0.05 } }
+	trait = { token = fix_t1 name = fix_t1 position = { x = 0 y = 0 } equipment_bonus = { breakthrough = 0.05 } }
+	trait = { token = fix_t2 any_parent = { fix_t1 } production_bonus = { production_cost_factor = -0.05 } }
+	trait = { token = fix_t3 any_parent = { fix_t1 } mutually_exclusive = { fix_t2 }
+		organization_modifier = { military_industrial_organization_funds_gain = 0.1 } }
+}
+
+AAA_fix_works_organization = {
+	include = generic_fix_tank_organization
+	allowed = { original_tag = AAA }
+	available = { FROM = { has_completed_focus = AAA_army_focus } }
+	remove_trait = { fix_t3 }
+	override_trait = { token = fix_t2 production_bonus = { production_cost_factor = -0.10 } }
+	add_trait = { token = AAA_special any_parent = { fix_t2 } equipment_bonus = { hard_attack = 0.1 } }
+}
+
+BBB_fix_organization = {
+	include = generic_fix_tank_organization
+	allowed = { tag = BBB }
+}
+
+AAA_scripted_organization = {
+	include = generic_fix_tank_organization
+	allowed = { aaa_fix_trigger = yes }
+	visible = { FROM = { has_dlc = "Fixture DLC" } }
+}
+
+DEBUG_fix_organization = {
+	include = generic_fix_tank_organization
+	allowed = { is_debug = yes }
+}

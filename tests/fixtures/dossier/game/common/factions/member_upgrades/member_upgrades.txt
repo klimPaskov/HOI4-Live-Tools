@@ -1,0 +1,2 @@
+fix_share0 = { bonus = 0.0 }
+fix_share1 = { bonus = 0.05 }

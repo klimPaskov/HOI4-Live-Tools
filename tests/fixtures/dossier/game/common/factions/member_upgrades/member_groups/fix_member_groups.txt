@@ -1,0 +1,6 @@
+fix_member_group = {
+	name = FIX_MANPOWER
+	default_upgrade = fix_share0
+	upgrade_type = faction_member_upgrade_manpower
+	upgrades = { fix_share0 fix_share1 }
+}
