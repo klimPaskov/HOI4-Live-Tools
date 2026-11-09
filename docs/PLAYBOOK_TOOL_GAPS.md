@@ -1289,3 +1289,44 @@ Playbook rows that name an action no tool performs yet. The player falls back to
 | politics section 7 | Faction theaters with a theater commander | `hoi4_faction_theater {regions, commander, ally}` A |
 | LO17 | Supply-area flow against demand per area, to spot areas above 1.5x maximum flow | add demand/flow ratio per supply area to `hoi4_supply` |
 | EC27 | Re-set the auto-import budget after a civilian-factory change | `hoi4_auto_import` exists; add a sitrep trigger when usable civilian factories fall |
+| occupation rows (politics, peace) | Per-state occupation law (the tool sets only the default law) | `hoi4_occupation_law {state_id?, law}`; the plan key `occupation.per_state` is executor-read but has no per-state action |
+| army-organisation section 6 | Choose the garrison template the occupation view uses | `hoi4_garrison_template {template}` (plan key `garrison_template` has no action) |
+| RE09, AR XP rows | Army exercises for experience and mastery | `hoi4_army_exercise {army}`; the plan's `xp_budget` lists exercises the executor cannot run |
+| OP rows on pinning attacks | Support attack (join a battle without advancing) | a `support_attack` order in `hoi4_army_move` |
+| GN03, GN10 | Army HQ read: distance factor and staff choice | HQ fields in `hoi4_armies` and a staff choice in `hoi4_army_hq` |
+| PC table, peace section | Peace demands beyond take, puppet and liberate (take navy, resource rights, reparations, demilitarise, dismantle) | more `kind` values in `hoi4_peace_take` |
+| EC rows on conversion | Convert a civilian factory to a military one or back | `hoi4_factory_convert {state_id, to}` |
+| NA raider rows | Convoy routes: avoid or block a sea region | `hoi4_convoy_route {region, mode: avoid/block/clear}` |
+| intelligence, NA rows | Decryption target (plan key `intelligence.decryption_target` is read by nobody) | `hoi4_decryption {country}` |
+
+## 16. Executor, read and lint gaps from the research integration audit (9 November 2026)
+
+Every research row was mapped to the playbook, the executor, the lint or a tool; these are the rows that still need code.
+Ranked by their effect on the Italy-Ethiopia war (both sides) first. The playbook line exists for each; the executor or
+lint step does not.
+
+| Rank | Gap | What is missing | Where it would go |
+| --- | --- | --- | --- |
+| 1 | Overdrawn stacks | `hoi4_supply` lists `overdrawn_provinces`, but no standing rule splits or pulls back a stack that draws more than its province receives (the playbook says pull 25-50% out below 35%) | war step: per overdrawn province, move part of the stack to the nearest province with headroom |
+| 2 | Rivers in target choice | `hoi4_front_plan` does not model rivers, so the runner attacks across a river without the second direction it needs | river crossings in the front plan's axis score and the second-direction rule |
+| 3 | Per-state occupation | resistance is handled with the default law only; a hot state cannot get a harsher law (see section 15) | occupation step once the per-state tool exists |
+| 4 | Air superiority by region | the air-superiority rule reports unknown because no read gives superiority per strategic region | a read of air superiority per region, then the rule's region check |
+| 5 | Idle factories by deficit | idle military factories go to the first `production_priority` line; `hoi4_stockpile` now gives days of cover, so they can go to the worst deficit | management: rebalance by days of cover (the playbook's PR10) |
+| 6 | Veteran guard on template edits | no check before an upgrade that would change the battalions of veteran divisions (loses experience) | template step: refuse or warn when the fielded divisions are mostly veteran |
+| 7 | Parallel ramp of a new tier | `production[].ramp` (start factories, step, keep the old line) is not executed; only straight switches and the mature-line guard exist | production step: grow the new line in steps while the old one runs |
+| 8 | Per-division reads | no experience/veteran share and no entrenchment per division | `hoi4_division_detail` fields |
+| 9 | Peace bid order | the peace step takes states by rank only; the playbook's order (controlled first, faction states at half, uncontrolled last) is not applied | peace step ordering |
+| 10 | Navy region cap | no `navy.max_regions` key: a task force spread over more than two regions loses its strike bonus | navy step and schema key |
+| 11 | Reads for production planning | no switch preview (the efficiency the game projects for a line change), no energy balance, no ships or convoys sunk per war | production, economy and war-stats reads |
+
+Lint rules proposed by the audit and not built (each needs data the plan does not carry yet):
+
+| Rule | Checks | Blocker |
+| --- | --- | --- |
+| `production.ramp` | a ramp whose start plus steps exceed the factories, or whose old line is never retired | needs the ramp key above |
+| `production.remove` extension | removing or switching an expensive land or air line with no ramp | needs the ramp key |
+| `navy.screens` | a task force with under 3 screens per capital ship | the plan's fleets carry no ship composition |
+| `navy.raid_target` | convoy raiding against an enemy with no overseas states or seaborne trade | needs the enemy's convoy need from the game facts |
+| `air.cas_cap` | more CAS than about 3 x the axis enemy width x attacking armies | needs per-axis width facts |
+| `fair.hollow_design` | a near-empty design produced early and converted later | needs design module costs in the facts |
+| `politics.stability_forecast` | a planned law, adviser or decision that drops forecast stability below the floor | needs a stability forecast model |

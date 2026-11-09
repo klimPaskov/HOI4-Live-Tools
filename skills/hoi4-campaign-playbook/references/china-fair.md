@@ -200,7 +200,7 @@ Taiwan 524 (all China cores or Japanese/puppet holdings). Expelling Japan from t
 
 **Capitulation**: refuse a peace that ends the route unless a lawful later route is recorded. Home-island assault needs transports, escorts, air range, a secured port and the invasion state machine in
 [strategy](strategy.md); Kyushu or Shikoku first, then Kansai/Kanto. Invasion capacity by tech (divisions / plans / prep days): base 4/1/60, transport 6/2/50, landing craft 10/5/40, tank landing
-craft 15/9/30; launch needs 50%+ supremacy in every crossed region and 40% naval intel. Japan capitulates only after the capital region and victory points are held; confirm with a fresh read.
+craft 15/9/30; launch needs sea control (60% of the needed dominance) in every crossed region and 40% naval intel. Japan capitulates only after the capital region and victory points are held; confirm with a fresh read.
 
 **Jinan**: if Japan takes it, the Han Fuju event lets China annex Shandong with its divisions; do not spend the main army
 holding Jinan: hold the Yellow River line and retake the city once the Japanese attackers are worn down.

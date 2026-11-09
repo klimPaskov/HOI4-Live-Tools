@@ -42,8 +42,8 @@ For the chosen pocket (from step 5):
 3. Each pincer: `hoi4_army_front` toward the neck's owner, then
    `hoi4_army_offensive {"army":..., "state_id": <neck state>}`. Both pincers aim at the
    **neck**, never at the pocket itself.
-4. Wait for planning (about 10 game days; `hoi4_wait_for`), then `hoi4_army_plan` execute on
-   both pincers on the same day.
+4. Wait for planning (planning gains 2% a day to its 30% cap: about 14 game days, at most 15;
+   `hoi4_wait_for`), then `hoi4_army_plan` execute on both pincers on the same day.
 5. Every 3-5 game days: `hoi4_wars` (occupied/threatened states), `hoi4_supply` (under 50% =
    stop that pincer, `hoi4_army_plan execute:false`; under 35% pull part of it out),
    `hoi4_encirclement_candidates` (did the pocket close? `already_cut_off:true`).
@@ -66,7 +66,8 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
    encircled; protect the capital and high-victory-point states first (capitulation comes at
    about 80% of victory points lost). Fall back when half the land around an army is hostile
    (`hoi4_armies` threat) or the neck behind it is 2 own provinces or fewer; the
-   `encirclement_risk` flag (70%) and the runner's pocket fall-back come too late. The HQ goes first.
+   `encirclement_risk` flag (70%) comes too late. The runner falls back at the same half
+   (`war.pocket_share`, default 50%). The HQ goes first.
 5. Use what the enemy gives you: an enemy salient (an enemy-held state sticking into your
    line) is a pocket for you; check `hoi4_encirclement_candidates` every week even in defence.
 
@@ -114,14 +115,20 @@ the player decides strategy:
 - `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
   every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
   axis whose next enemy-held state is nearest: front line, offensive line, execute.
-- `"stall_days": 8`: an ordered army without progress gets a direct `hoi4_army_move` into its
-  target. The direct move burns planning (3% a day) and has no flank cover: prefer a replanned
-  offensive on another axis, and a direct move only into an empty adjacent province.
-- `"rest_below": 18, "resume_above": 48` (absolute organisation: about 30% and 80% of a 60-org
-  infantry division's max; scale to the template): an exhausted army stops its plan and attacks
-  again when it recovers. The defaults (12 / 30) are too low.
-- `"supply_floor": 50`: an army under 50% supply rests (attrition starts at 35%); the default 25
-  is too low.
+- `"stall_days": 8` (default): an ordered army without progress first gets a second direction
+  (an offensive on another axis, `second_direction`, default on), then a direct `hoi4_army_move`
+  into its target. The direct move burns planning (3% a day) and has no flank cover.
+- Rest and resume (defaults): an army rests below 30% of the highest organisation it has shown
+  (`rest_below_pct` 0.3) and resumes at 80% (`resume_above_pct` 0.8) with supply at 70%
+  (`supply_resume`), after at most `rest_max_days` 20 unless supply is under `supply_hold`.
+  `rest_below` / `resume_above` (absolute organisation) replace the shares when set.
+- `"supply_floor": 50` (default): an army under 50% supply rests and gets no new attack order
+  except a retake of an own state; under `supply_hold` 35 (default; attrition starts there)
+  nothing attacks.
+- Planning wait (default on): an offensive executes once planning reaches 90% of its 30% cap,
+  at most `planning_max_days` 15; skipped `planning_skip_days` 20 before the goal deadline.
+- Advance in bounds (`bound`, default on): after a captured hub, port or railway the next
+  advance waits until it feeds the front (rail about 10 days, 5 on cores), at most 12 days.
 - `"motorization": 2`: every driven army's supply hubs use trucks.
 - `"reserve": ["Army 2"]`: armies only the player commands. Executing plans are never touched.
 - `"guard_states": [559, 844]` (or `"guards": {"Army 3": 844}`): the army standing in that own

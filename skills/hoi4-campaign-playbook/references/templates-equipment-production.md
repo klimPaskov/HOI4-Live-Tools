@@ -487,6 +487,9 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR42 | Skip secondary turrets on gun tanks | Secondaries multiply the whole tank's attack down (small cannon x0.95 soft and hard, HMG x0.96 soft) | Any design with 100+ soft attack before secondaries | FAIR |
 | PR43 | Armour type | Welded: +30% armour, +5% HP, +4 defence and breakthrough, no IC multiplier, 1 chromium; cast: +30% armour, +10% HP, +20% IC; riveted: -20% IC, no armour gain | Line tanks welded when chromium is covered, else riveted; cast only when HP binds | FAIR |
 | PR44 | Reliability for long drives | Reliability also sets organisation loss while moving and the weight of weather penalties | Armour that drives far or fights in autumn mud and winter snow: about 75-80% | FAIR |
+| PR45 | Newest variant to elite templates | When two variants of one archetype are in stock, set the elite and attack templates to the newest and the reserves and garrisons to the oldest, per template | Variant changeover | FAIR |
+| PR46 | MIO-only conversion never ends | A conversion to a design that differs only by the organisation producing it shows no cost and never finishes; change one module so the cost differs | Designer conversions | FAIR |
+| PR47 | Convert big old stocks | A large starting stock of obsolete armour is worth converting into a cheap useful variant (a light tank chassis with a fixed superstructure and a howitzer) before it is scrapped or left idle | Germany, majors with old armour | FAIR |
 
 ## 11. Tactics: division design, training and experience
 
@@ -518,3 +521,5 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | AR24 | Regimental row on armour | Tank or TD companies under the tank columns, SPAA under the mechanised columns; a column needs 3 or more battalions for its slot | T16 and other armour | FAIR |
 | AR25 | Wide infantry against armour | Once a narrow division's defence runs out it takes hits 4x as often, and two narrow divisions pay for two sets of support companies | Against armour-heavy attackers: 20-30 width line infantry with AT and AA, not 10-width screens | FAIR |
 | AR26 | Role battalion penalties | TD battalions -75% breakthrough and -10% soft attack; SP artillery -75% breakthrough and -10% hard attack; SPAA -90% breakthrough | Never count them toward a template's breakthrough | FAIR |
+| AR27 | Upgrade when stock covers it | Change a template to new equipment only when the stockpile plus about 60 days of line output covers the whole change; otherwise divisions sit under-equipped | Template upgrades | FAIR |
+| AR28 | Flat or percentage support | Support companies with flat stats (artillery, anti-air, anti-tank, engineers) lift weak divisions the most; percentage companies pay only on strong ones | Support company choice | FAIR |
