@@ -933,6 +933,9 @@ impl<'p> MacKeys<'p> {
             pause(40);
             // Always release the modifier, even when the key failed.
             modifier(false)?;
+            // Let the release reach the session state first: a plain key posted at once still
+            // carried Shift ("Veneto" was typed as "VE", live 9 Nov 2026).
+            pause(40);
             result
         }
     }

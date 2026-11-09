@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.1 - 2026-11-09
+
+The Python server installs on macOS from the release archive.
+
+- `install.py` now supports macOS as well as Windows. It installs into `~/Library/Application Support/hoi4-live-tools`
+  (`app/`, `venv/`, `config.json`, `artifacts/`, `install.json`, as on Windows). It installs the PyObjC frameworks
+  the macOS platform needs (Cocoa, Quartz, ApplicationServices, ScreenCaptureKit, Vision), checks that the
+  server answers, and registers the clients it finds. Linux is still refused; use the native runtime there.
+- The new POSIX launcher `app/hoi4-live-tools` is what macOS clients start. It chooses Python and settings the
+  same way `hoi4-live-tools.cmd` does on Windows: `HOI4_LIVE_PYTHON`, then the private `venv`, then a checkout
+  `.venv`, then `python3`. The release archive stores it with LF line endings and mode 755, and the installer sets
+  it executable again after copying.
+- `requirements.txt` lists the macOS-only PyObjC dependencies with the same `sys_platform` markers as
+  `pyproject.toml`. The Windows install is unchanged.
+- Tested on macOS 26.5 (Apple silicon) with Apple's Python 3.9.6: a fresh install took 25 s, the server listed
+  52 tools, every selftest line passed (including Vision OCR), and re-running, registering Claude Code and Codex,
+  `status` and `uninstall --purge` all worked. The game was not started.
+
 ## 1.4.0 - 2026-11-09
 
 Mod-test checks, DLC without the Steam client, four launch fixes on 1.19.4.1, and war tools for the native

@@ -204,6 +204,26 @@ runner), the refusals reached for the rest, and the fixes the Linux build needed
 conferences and the operative tools were not reached on Linux. The older Linux-only GUI
 diagnostics written for 1.19.3 refuse on 1.19.4.1.
 
+## Quick start: macOS (Python server)
+
+You need a Mac with HOI4 from Steam and Python 3.9 or newer (Apple's command-line tools
+Python or python.org). FFmpeg is optional.
+
+1. Download `hoi4-live-tools-<version>.zip` from the
+   [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) and unpack it.
+2. In that folder, run `python3 install.py`. It installs a private Python environment, with numpy, Pillow,
+   OpenCV and PyObjC, under `~/Library/Application Support/hoi4-live-tools`, and registers the server with
+   the coding clients it finds.
+3. Restart your coding client and check the game side:
+
+   ```
+   ~/Library/Application\ Support/hoi4-live-tools/app/hoi4-live-tools selftest
+   ```
+
+The app that starts the server (your terminal or coding client) needs Screen Recording and Accessibility
+permission in System Settings; a tool that lacks one returns an error that names it. To uninstall, run
+`python3 install.py uninstall`.
+
 ARM64 Linux through FEX has verified own-state reads and lower-level stationary
 Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
 the latest retained-goal Research action still timed out at five seconds. The

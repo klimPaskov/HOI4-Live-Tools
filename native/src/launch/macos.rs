@@ -10,6 +10,7 @@ mod airread;
 mod airui;
 mod alerts;
 mod armies;
+mod army_roles;
 mod commanders;
 mod construction;
 mod construction_find;
@@ -685,7 +686,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
+        json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
         json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
@@ -735,6 +736,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_rename","description":"Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 24 characters).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"name":{"type":"string","minLength":1,"maxLength":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","name","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_motorization","description":"Set an army's supply motorization: 0 none, 1 partial, 2 full. The supply hubs the army draws from then use trucks (about 40 per level per hub) to carry supply much farther into roadless land; it costs trucks from the stockpile (keep truck production running) and fuels nothing. With the game's ordinary control: the army's card selects it, then the motorization button on its badge is clicked until the level is reached, each click verified from memory. Read the current level in hoi4_armies (motorization). Refused before input with army_unknown or invalid_arguments.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"level":{"type":"integer","minimum":0,"maximum":2},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","level","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_division_disband","description":"Disband own divisions of one army (the division list's delete button; their equipment and manpower go back to the pool). Use it to cut useless divisions that only eat equipment, manpower and supply: tiny starting divisions (2-4 battalions), cavalry or irregulars a strong player would not keep, once the army has enough good divisions. `divisions` are ids as hoi4_armies / hoi4_supply list them; listing every division of the army disbands the whole army in one press. Each division is verified gone. Refused before input when a division is not in that army.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_map_mode","description":"Switch the map mode with the game's own F-key shortcut, as a human checks the map: political (F1, default; armies and fronts), naval (F2), air (F3, air regions and superiority), supply (F4), terrain (F5), resistance (F6), compliance (F7), resources (F8), air_raids (F9), factions (F10). A view change only (no game state changes, nothing to read back): switch to political again before giving army orders. Look at a mode when its domain matters: supply before an offensive, resistance and compliance for occupied states, air for superiority, naval for sea lanes.","inputSchema":{"type":"object","properties":{"mode":{"type":"string","enum":["political","naval","air","supply","terrain","resistance","compliance","resources","air_raids","factions"]},"lease_token":{"type":"string"}},"required":["mode","lease_token"],"additionalProperties":false}}),
@@ -742,7 +744,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_state_slots","description":"Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_create","description":"(optional absorb_existing: true folds armies standing there into the new one) Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"absorb_existing":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_create","description":"(optional absorb_existing: true folds armies standing there into the new one) Create one army from the unassigned own divisions standing in a state with ONE selection: the camera frames them once (the Find view only when they are not on screen, then one zoom-out swoop at most), one box around all of them (one click per stack when another army stands among them) selects them, read back from memory (a division of another army refuses the action before the card is clicked; missed stacks get one Shift+click round), then the new-army card. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"absorb_existing":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_assign_plan","description":"Pure read: where the unassigned divisions standing in a state would go (into the standing army with the most room under 24, or the named one; a new army when none stands there), how many, the overflow and the split needed afterwards. Typed refusals: no_unassigned_here, no_such_army, target_not_in_state, army_full.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"army":{"type":"string","maxLength":128}},"required":["state_id"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_assign","description":"Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there. Same refusals as hoi4_army_assign_plan, all before any input. Folding into a standing army uses the game's own control (box-select the divisions, RIGHT-click the army's card); it refuses with selection_mismatch, before the click, when the box also took divisions of another army. Creating a new army uses the verified new-army path.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"army":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
@@ -874,6 +876,7 @@ impl Commands for MacClock {
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
                     | "hoi4_army_motorization"
+                    | "hoi4_army_rename"
                     | "hoi4_army_detach"
                     | "hoi4_map_mode"
                     | "hoi4_occupation_law"
@@ -904,6 +907,38 @@ impl Commands for MacClock {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
+        // Plan role names (army_layout name_hint) stand for the army bound to the role; a
+        // settlement of an earlier dispatch resolves the same way, so its action still matches.
+        let (resolved_arguments, resolved) = self.resolve_army_roles(process, name, arguments);
+        let arguments = resolved_arguments.as_ref().unwrap_or(arguments);
+        let result = self.call_resolved(process, name, arguments);
+        if resolved.is_empty() {
+            return result;
+        }
+        let note: serde_json::Map<String, Value> = resolved
+            .iter()
+            .map(|(asked, army)| (asked.clone(), json!(army)))
+            .collect();
+        match result {
+            Ok(mut value) => {
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("army_resolved".into(), Value::Object(note));
+                }
+                Ok(value)
+            }
+            Err(mut e) => {
+                let named: Vec<String> = resolved
+                    .iter()
+                    .map(|(asked, army)| format!("{asked} is {army}"))
+                    .collect();
+                e.message = format!("{} (plan role: {})", e.message, named.join(", "));
+                Err(e)
+            }
+        }
+    }
+}
+impl MacClock {
+    fn call_resolved(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         // A request_id already in the journal is a settlement of an earlier dispatch: let it
         // through so a typo's open journal can still be settled.
         let journaled = arguments
@@ -948,7 +983,7 @@ impl Commands for MacClock {
         let result = (if journaled {
             Ok(())
         } else {
-            army_names_exist(process, name, arguments).and_then(|()| {
+            army_names_exist(process, name, arguments, &|| self.army_roles_text()).and_then(|()| {
                 self.army_screen_ready(process, name, arguments.get("lease_token").is_some())
             })
         })
@@ -993,8 +1028,54 @@ impl Commands for MacClock {
         }
         result
     }
-}
-impl MacClock {
+    /// Role bindings the executor keeps (plan_state.json `layout` next to plan.json) and the
+    /// role names of the plan (`army_layout`); empty without a plan.
+    fn army_roles(&self) -> (std::collections::BTreeMap<String, String>, Vec<String>) {
+        let plan = self.directory.join("plan.json");
+        let saved = std::fs::read(crate::plan_run::state_path(&plan))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+            .unwrap_or(Value::Null);
+        let planned = crate::plan_run::read_plan(&plan)
+            .map(|p| army_roles::planned(&p))
+            .unwrap_or_default();
+        (army_roles::bound(&saved), planned)
+    }
+    fn army_roles_text(&self) -> String {
+        let (bound, planned) = self.army_roles();
+        army_roles::describe(&bound, &planned)
+    }
+    /// The arguments with plan role names rewritten to their armies (None when nothing was),
+    /// and each (asked, army). Reads the armies only when an army argument is given.
+    #[allow(clippy::type_complexity)]
+    fn resolve_army_roles(
+        &self,
+        process: &dyn Process,
+        name: &str,
+        arguments: &Value,
+    ) -> (Option<Value>, Vec<(String, String)>) {
+        if !army_roles::addressed(name) || process.identity() != self.process.identity() {
+            return (None, Vec::new());
+        }
+        let asked = army_roles::asked(arguments);
+        if asked.is_empty() {
+            return (None, Vec::new());
+        }
+        let Ok(view) = armies::armies(process) else {
+            return (None, Vec::new());
+        };
+        let names = army_and_group_names(&view);
+        if asked.iter().all(|a| names.contains(a)) {
+            return (None, Vec::new());
+        }
+        let (bound, _) = self.army_roles();
+        let (out, done) = army_roles::rewrite(arguments, &names, &bound);
+        if done.is_empty() {
+            (None, done)
+        } else {
+            (Some(out), done)
+        }
+    }
     /// Army orders need the political map with no panel over it: a run left the map in naval
     /// mode with the diplomacy panel open and every army order failed until both were cleared
     /// by hand (Ethiopia run 10). F1 is the game's own political map-mode key.
@@ -1024,28 +1105,45 @@ impl MacClock {
 }
 /// Army names are checked before anything is journaled: a typo used to become an uncertain
 /// dispatch that blocked every later action (seen live: "Army 1 1 ").
-fn army_names_exist(process: &dyn Process, name: &str, arguments: &Value) -> Result<()> {
+/// Plan role names are resolved before this check; `roles` describes them for the refusal.
+fn army_names_exist(
+    process: &dyn Process,
+    name: &str,
+    arguments: &Value,
+    roles: &dyn Fn() -> String,
+) -> Result<()> {
     if !name.starts_with("hoi4_army_")
         || matches!(name, "hoi4_army_create" | "hoi4_army_assign_plan")
     {
         return Ok(());
     }
-    let wanted: Vec<&str> = ["army", "source", "target", "into"]
-        .iter()
-        .filter_map(|k| arguments.get(*k).and_then(Value::as_str))
-        .chain(
-            arguments
-                .get("armies")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str),
-        )
-        .collect();
+    let wanted = army_roles::asked(arguments);
     if wanted.is_empty() {
         return Ok(());
     }
     let view = armies::armies(process)?;
+    let names = army_and_group_names(&view);
+    for w in wanted {
+        if !names.contains(&w) {
+            let roles = roles();
+            let roles = if roles.is_empty() {
+                String::new()
+            } else {
+                format!(" Plan roles: {roles}.")
+            };
+            return Err(Error::new(
+                "army_unknown",
+                format!(
+                    "No own army or army group is named {w:?}; nothing was done. Names: {}.{roles}",
+                    names.join(", ")
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+/// Own army and army group names of a `hoi4_armies` view.
+fn army_and_group_names(view: &Value) -> Vec<String> {
     let mut names: Vec<String> = view["armies"]
         .as_array()
         .into_iter()
@@ -1059,18 +1157,7 @@ fn army_names_exist(process: &dyn Process, name: &str, arguments: &Value) -> Res
             .flatten()
             .filter_map(|g| g["army_group"].as_str().map(str::to_string)),
     );
-    for w in wanted {
-        if !names.iter().any(|n| n == w) {
-            return Err(Error::new(
-                "army_unknown",
-                format!(
-                    "No own army or army group is named {w:?}; nothing was done. Names: {}",
-                    names.join(", ")
-                ),
-            ));
-        }
-    }
-    Ok(())
+    names
 }
 /// A settled receipt whose target did not happen (NotApplied) or happened only in part
 /// (Diverged) is a failure for the caller, never a success with a buried status (seen live:
@@ -4513,6 +4600,48 @@ impl MacClock {
                 let name = armies::detach(process, keys, army, &ids, into)?;
                 *moved_to.borrow_mut() = Some(name);
                 Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_rename" {
+            allowed(args, &["army", "name", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            let new_name = string(args, "name")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                let view = armies::armies(process)?;
+                if let Some(refusal) = armies::rename_refusal(&view, army, new_name) {
+                    return Err(refusal);
+                }
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_rename","army":army,"name":new_name});
+            let keys = &self.keys;
+            let mut settle = || {
+                let view = armies::armies(process)?;
+                let names = army_and_group_names(&view);
+                let body = json!({"army":army,"name":new_name});
+                Ok(if names.iter().any(|n| n == new_name) {
+                    journal::Outcome::Reached(body)
+                } else if names.iter().any(|n| n == army) {
+                    journal::Outcome::Unchanged(body)
+                } else {
+                    journal::Outcome::Diverged(body)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                if army == new_name {
+                    return Ok(());
+                }
+                armies::rename(process, keys, army, new_name)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));

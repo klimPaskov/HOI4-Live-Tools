@@ -430,6 +430,45 @@ impl State {
             .get(&skip_key(kind, key))
             .is_some_and(|until| *until > now)
     }
+    /// Army `old` now carries the name `new`: everything kept by army name follows it (role
+    /// bindings, war rules, done-memory and skip timers ending in the name, military memory).
+    fn army_renamed(&mut self, old: &str, new: &str) {
+        fn rekey<V>(map: &mut HashMap<String, V>, old: &str, new: &str) {
+            if let Some(v) = map.remove(old) {
+                map.insert(new.to_string(), v);
+            }
+        }
+        for army in self.layout.values_mut() {
+            if army == old {
+                *army = new.to_string();
+            }
+        }
+        rekey(&mut self.war_assign, old, new);
+        rekey(&mut self.war_stage, old, new);
+        rekey(&mut self.war_cool, old, new);
+        rekey(&mut self.war_since, old, new);
+        rekey(&mut self.war_rest, old, new);
+        rekey(&mut self.war_guard, old, new);
+        rekey(&mut self.war_repeat, old, new);
+        rekey(&mut self.war_province, old, new);
+        if self.war_move.remove(old) {
+            self.war_move.insert(new.to_string());
+        }
+        let suffix = format!(":{old}");
+        for map in [&mut self.done, &mut self.bad] {
+            let keys: Vec<String> = map
+                .keys()
+                .filter(|k| k.ends_with(&suffix))
+                .cloned()
+                .collect();
+            for k in keys {
+                if let Some(v) = map.remove(&k) {
+                    map.insert(format!("{}:{new}", &k[..k.len() - suffix.len()]), v);
+                }
+            }
+        }
+        plan_military::army_renamed(&mut self.military, old, new);
+    }
     /// One action with a fresh id; an uncertain dispatch is settled by
     /// retrying its own id once. If readback remains uncertain, stop the
     /// runner before it can try a fallback under a new id.
@@ -687,6 +726,9 @@ pub fn tick(
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
     if war_on && plan["war"]["first"] != json!(false) {
         if let Some(step) = layout_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+        if let Some(step) = layout_names_step(state, tools, lease, now)? {
             return Ok(Tick::Acted(step));
         }
         if let Some(step) = war_step(state, tools, plan, lease, now)? {
@@ -1716,6 +1758,55 @@ fn layout_step(
                 "layout general {general} -> {army}: {ok} {why}"
             )));
         }
+    }
+    Ok(None)
+}
+
+/// `army_layout` names: each army bound to a role takes the role's name once, so the cards,
+/// hoi4_armies and the plan all say "North_strike" instead of "Army 1" (spectators and players
+/// read the plan's names). One rename per step; a refused name is not tried again for 30 days.
+/// Runs apart from `layout_step`'s skip timer: a failed detach must not keep the names back.
+fn layout_names_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let mut renames: Vec<(String, String)> = state
+        .layout
+        .iter()
+        .filter(|(hint, army)| !army.is_empty() && hint != army)
+        .filter(|(hint, _)| !state.skipped(now, "layoutname", hint))
+        .map(|(hint, army)| (hint.clone(), army.clone()))
+        .collect();
+    if renames.is_empty() {
+        return Ok(None);
+    }
+    renames.sort();
+    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let present: HashSet<String> = list(&roster, "armies")
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .collect();
+    for (hint, army) in renames {
+        // The army is gone (the layout step drops it), or another army has the name already.
+        if !present.contains(&army) || present.contains(&hint) {
+            state.skip(now, "layoutname", &hint, DAY);
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_rename",
+            json!({"army": army, "name": hint}),
+            "ln",
+        )?;
+        if ok {
+            state.army_renamed(&army, &hint);
+        } else {
+            state.skip(now, "layoutname", &hint, 30 * DAY);
+        }
+        return Ok(Some(format!("layout: {army} renamed {hint}: {ok} {why}")));
     }
     Ok(None)
 }
@@ -6156,6 +6247,86 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(s2, "layout: Army 1 is North strike (Army 1)");
+    }
+
+    #[test]
+    fn army_layout_renames_each_bound_army_to_its_role_once_and_its_memory_follows() {
+        /// Armies by name; a rename moves the name, "Refuse" refuses every rename.
+        struct R(RefCell<Vec<String>>, RefCell<Vec<String>>);
+        impl Tools for R {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.1.borrow_mut().push(name.to_string());
+                match name {
+                    "hoi4_armies" => Ok(json!({"armies": self
+                        .0
+                        .borrow()
+                        .iter()
+                        .map(|n| json!({"army": n}))
+                        .collect::<Vec<_>>()})),
+                    "hoi4_army_rename" if text(&args["name"]) == "Refuse" => {
+                        Err(Error::new("name_not_typable", "no"))
+                    }
+                    "hoi4_army_rename" => {
+                        let mut names = self.0.borrow_mut();
+                        let at = names.iter().position(|n| n == text(&args["army"])).unwrap();
+                        names[at] = text(&args["name"]).to_string();
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let tools = R(
+            RefCell::new(vec!["Army 1".into(), "Army 6".into(), "Army 7".into()]),
+            RefCell::new(vec![]),
+        );
+        let mut state = State::default();
+        state.layout.insert("North_strike".into(), "Army 1".into());
+        state.layout.insert("South_army".into(), "Army 6".into());
+        state.layout.insert("Empty_role".into(), String::new());
+        state.war_guard.insert("Army 6".into(), 559);
+        state.done.insert("mrest:cas:Army 1".into(), START);
+        state.done.insert("mrest:cas:Army 11".into(), START);
+        state.skip(START, "layoutgen", "Army 1", 365 * DAY);
+        let s1 = layout_names_step(&mut state, &tools, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            s1.starts_with("layout: Army 1 renamed North_strike: true"),
+            "{s1}"
+        );
+        assert_eq!(state.layout["North_strike"], "North_strike");
+        assert!(state.done.contains_key("mrest:cas:North_strike"));
+        // only the exact name moves, never a longer one ending the same way
+        assert!(state.done.contains_key("mrest:cas:Army 11"));
+        assert!(state.skipped(START, "layoutgen", "North_strike"));
+        let s2 = layout_names_step(&mut state, &tools, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            s2.starts_with("layout: Army 6 renamed South_army: true"),
+            "{s2}"
+        );
+        assert_eq!(state.war_guard.get("South_army"), Some(&559));
+        assert!(!state.war_guard.contains_key("Army 6"));
+        // every role carries its name: nothing more, and not even a roster read
+        let reads = tools.1.borrow().len();
+        assert_eq!(
+            layout_names_step(&mut state, &tools, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(tools.1.borrow().len(), reads);
+        // a refused name waits 30 days instead of being retried every tick
+        state.layout.insert("Refuse".into(), "Army 7".into());
+        let s3 = layout_names_step(&mut state, &tools, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(s3.contains("renamed Refuse: false"), "{s3}");
+        assert_eq!(
+            layout_names_step(&mut state, &tools, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(state.layout["Refuse"], "Army 7");
     }
 
     /// The war fake with a validated war list at peace.
