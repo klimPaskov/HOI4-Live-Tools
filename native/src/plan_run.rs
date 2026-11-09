@@ -56,8 +56,17 @@
 //!   occupation             {"default_law","harsher_at_resistance","milder_at_compliance",..} law steps (plan_manage.rs)
 //!   peace                  {"take","puppet"?,"liberate"?} demands when a conference opens, else the stop (plan_manage.rs)
 //!   auto_import            {"budget"} automatic importing on a resource deficit (plan_manage.rs)
-//!   air_plan               [{"wing"|"airframe","region","mission","base_state"|"base_region",..}] (plan_manage.rs)
-//!   manage                 thresholds of the standing rules: alerts, manpower, stability, equipment (plan_manage.rs)
+//!   air_plan               [{"wing"|"airframe","region","mission","base_state"|"base_region",..}] (plan_manage.rs);
+//!                          any mission hoi4_air_mission accepts (strategic_bombing, naval_strike, port_strike,
+//!                          logistics_strike, interception, ..): there is no separate `air_ops` key (plan_military.rs)
+//!   manage                 thresholds of the standing rules: alerts, manpower, stability, equipment (plan_manage.rs);
+//!                          casualty_ratio_max, casualty_window_days, casualty_min_losses, casualty_rest_days,
+//!                          enemy_air_superiority, air_front_regions, air_hold_days (plan_military.rs)
+//!   army_group             [{"id","name"?,"armies":[..],"marshal"?,"when"?}] grouped once, field marshal once (plan_military.rs)
+//!   navy                   {"posture","fleets":[{"fleet","missions":[{"mission","regions",..}],..}],"convoy_escort"?,
+//!                          "admirals"?,"repair_below"?,"repair_until"?} regions, missions, admirals, repair (plan_military.rs)
+//!   invasions              [{"id","from_state","target_state","target_province"?,"armies":[..],"fleet"?,"when"?,..}]
+//!                          one naval invasion at a time through hoi4_naval_invasion (plan_military.rs)
 //!   production_priority    equipment prefixes that receive military factories on no line
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
 //!   production             [{"equipment","factories"}] lines added once
@@ -170,6 +179,9 @@ use std::{
 /// Continuous management (alerts, templates, occupation, peace, resources, air plan, `manage`).
 #[path = "plan_manage.rs"]
 mod plan_manage;
+/// Military domains (army groups, navy, naval invasions, casualty ratio, air superiority).
+#[path = "plan_military.rs"]
+mod plan_military;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -254,6 +266,8 @@ pub struct State {
     layout: HashMap<String, String>,
     /// Continuous management (plan_manage.rs): wake alarms, digest lines, the peace conference.
     manage: plan_manage::Memory,
+    /// Military domains (plan_military.rs): wake alarms, digest lines, loss samples.
+    military: plan_military::Memory,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
@@ -363,6 +377,7 @@ impl Default for State {
             plan_built: HashMap::new(),
             layout: HashMap::new(),
             manage: Default::default(),
+            military: Default::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -1155,6 +1170,11 @@ pub fn tick(
     // 8a'. continuous management (plan_manage.rs): alerts, templates, occupation, resources,
     // air_plan, manage
     if let Some(step) = plan_manage::step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a''. military domains (plan_military.rs): naval invasions, casualty ratio, air
+    // superiority, army groups, navy
+    if let Some(step) = plan_military::step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
     // 9. armies (here unless the war runs first, which runs them right after itself)
@@ -4252,6 +4272,7 @@ pub fn run(
     let plan = strategy_overrides(state, &plan).unwrap_or(plan);
     let mut alarms = observe_alarms(tools, &plan);
     alarms.extend(plan_manage::take_alarms(state));
+    alarms.extend(plan_military::take_alarms(state));
     if let Some(alarm) = construction_alarm(state, tools, &plan, construction.as_deref()) {
         alarms.push(alarm);
     }
@@ -4323,6 +4344,9 @@ pub fn run(
     }
     if let Some(manage) = plan_manage::digest(state) {
         result["manage"] = manage;
+    }
+    if let Some(military) = plan_military::digest(state) {
+        result["military"] = military;
     }
     if !state.strategy.summary.is_null() {
         result["strategy"] = state.strategy.summary.clone();
