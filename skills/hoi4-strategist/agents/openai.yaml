@@ -1,0 +1,4 @@
+interface:
+  display_name: "HOI4 Strategist"
+  short_description: "Grounded, validated HOI4 campaign plans from a goal and the game files"
+  default_prompt: "Use $hoi4-strategist to write, review or revise the campaign plan for the run folder in HOI4_LIVE_RUN."

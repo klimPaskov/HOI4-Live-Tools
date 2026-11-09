@@ -19,6 +19,8 @@ earlier phase. Historical reports describe earlier stop times; the preserved
 The latest checkpoint is [docs/MAC_CONTINUATION_STATUS.md](docs/MAC_CONTINUATION_STATUS.md).
 For campaign strategy and FAIR/META rules, read
 [skills/hoi4-campaign-playbook/SKILL.md](skills/hoi4-campaign-playbook/SKILL.md).
+Campaign plans are written, reviewed and revised with
+[skills/hoi4-strategist/SKILL.md](skills/hoi4-strategist/SKILL.md).
 
 - Work autonomously; never ask questions. Preserve unrelated changes and explain
   concrete external blockers. Do not launch/control the shared Windows game for
