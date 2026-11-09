@@ -7,9 +7,11 @@
 //! its failure ledger (an order refused 3 times in 10 game days is not sent again, and
 //! plan_manage's rule 35 wakes the player). All cadences are game time.
 //!
-//! Hooks in plan_run.rs: [`step`] runs in the tick right after plan_manage's step; `run` adds
-//! [`take_alarms`] to its `alarms` and [`digest`] as `military`. A wake is the alarm
-//! {"code":"wake_player","rule","reason","message","evidence"}, once per reason per
+//! Hooks in plan_run.rs: [`step`] runs in the tick right after plan_manage's step; [`hold_step`]
+//! runs right after the events, before the layout and the war step (in peace too); the war
+//! step's guard loop gives an army [`holding`] a corridor no guard order, only its pocket
+//! fall-back; `run` adds [`take_alarms`] to its `alarms` and [`digest`] as `military`. A wake is
+//! the alarm {"code":"wake_player","rule","reason","message","evidence"}, once per reason per
 //! `manage.wake_repeat_days` (7).
 //!
 //! Plan keys:
@@ -73,7 +75,42 @@
 //!                below its armies. Done-memory `inv:<id>:start`, `:move:<army>`,
 //!                `:ordered:<army>`, `:exec:<army>`, `:tf:<task force>`, `:fleet`, `:landed`,
 //!                `:aborted`
-//!   manage       the standing rules here run only when the plan has `manage` (like plan_manage's):
+//!   hold_targets [{"id","army","provinces":[province ids along the corridor, rear first],"when"?,
+//!                "until"?,"state"?}] (lesson L01: Somaliland, Jubaland, Afar and Wello were lost
+//!                behind the strike armies): `army` (an army name, or an army_layout name_hint:
+//!                the army playing that role) holds the supply corridor behind the advance. The
+//!                hold starts once `when` holds and ends for good once `until` holds; an entry
+//!                without `army` is the player's (never acted on). While it runs the army's post
+//!                is the most forward listed province the player controls, unless a listed
+//!                province behind it is lost: then the rearmost such province (retake the corridor
+//!                first); with none held the player is woken and the army waits. Judged once a
+//!                game day and at once when a listed province changes controller (its state's
+//!                hoi4_states read, every tick through the tick's read cache): when the army is not
+//!                known to be heading for or standing in its post, one hoi4_army_move {army,
+//!                state_id (the province's state), province_id}; a receipt whose pre-check says
+//!                "already heading or standing there: nothing was sent" is trusted and the move is
+//!                not sent again until the post changes (a move that was sent is checked once more
+//!                a day later through that pre-check). An executing battle plan is stopped first
+//!                (hoi4_army_plan execute:false). Never for an army with encirclement_risk
+//!                (hoi4_armies threat) or during the war step's pocket fall-back from one (the
+//!                pocket timer): the fall-back owns it then, and the post is ordered again once it
+//!                is over. Never for an army the player ordered (war.player_claim_seconds) or one
+//!                in the running naval invasion. The order goes through the failure ledger: 3
+//!                failures in 10 game days and it is not sent again, the player is woken. A
+//!                province's state is learned from the own and the enemies' hoi4_states reads
+//!                (victory points, provinces held by others), then by reading candidate states
+//!                (`state` first, then the nearest to the corridor, at most 8 a tick); a province
+//!                found in none wakes the player. Binding: while the hold runs the army is bound
+//!                in `war_guard` to its post's state (its guard post before the hold is kept, and
+//!                is the army_layout guard_states_in_order[0] after a restart); the war step
+//!                neither drives it, nor draws it to retake a state, nor sends its guard order.
+//!                When the hold ends (`until`, the entry removed, its army changed) the army is
+//!                bound to its old guard post again with its guard stage reset, so the war step
+//!                sends it back there and draws its front; an army that was no guard goes back
+//!                to the war step. One army, one hold (the first entry in list order). Done-memory
+//!                `hold:<id>:on`, `hold:<id>:released`; the post, the last order and the province
+//!                index are this server life's
+//!   manage      the standing rules here run only when the plan has `manage` (like plan_manage's):
 //!                "casualty_ratio_max":2.0 own / enemy losses (hoi4_war_stats, per enemy over the
 //!                war relations with the player) over "casualty_window_days":14 above which, with
 //!                at least "casualty_min_losses":1000 own losses, every attacking army on that
@@ -109,9 +146,11 @@
 //! reads; an atom that cannot be read is unknown and the item waits.
 use super::{item_id, list, strings, text, GameHour, State, Tools, DAY};
 use crate::error::Result;
-use crate::plan_predicate::Truth;
+use crate::plan_predicate::{Cache, Ctx, Truth};
 use serde_json::{json, Value};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::time::Duration;
 
 /// Losses per enemy tag: (own, enemy), in men.
 type Losses = BTreeMap<String, (f64, f64)>;
@@ -128,6 +167,25 @@ pub(super) struct Memory {
     /// Armies whose war cooldown this server life holds for a rest (after a restart the
     /// persisted rest sets it again once).
     cooled: HashSet<String>,
+    /// hold_targets: army -> (the hold's id, the army's `war_guard` post before the hold).
+    held: HashMap<String, (String, Option<i32>)>,
+    /// hold_targets: hold id -> the last move it sent.
+    hold_orders: HashMap<String, HoldOrder>,
+    /// hold_targets: hold id -> the controllers of its provinces last seen.
+    hold_seen: HashMap<String, String>,
+    /// Province -> state, learned from hoi4_states reads (map facts: they never change).
+    province_state: HashMap<i64, i64>,
+    /// States whose every province was read into `province_state`.
+    scanned: HashSet<i64>,
+}
+
+/// The last move a hold sent.
+struct HoldOrder {
+    army: String,
+    post: i64,
+    at: GameHour,
+    /// The receipt's pre-check said the army was already heading for or standing in the post.
+    under_way: bool,
 }
 
 /// The wake alarms raised since the last call (the run result's `alarms`).
@@ -1880,6 +1938,676 @@ fn navy_step(
     Ok(None)
 }
 
+// ---------------------------------------------------------------------------------------------
+// hold_targets (lesson L01): an army holds the supply corridor behind the advance.
+
+/// Candidate states read per call to learn the states of a corridor's provinces.
+const HOLD_SCAN: usize = 8;
+
+/// A running hold: its id, its army (resolved) and its plan entry.
+struct Hold<'a> {
+    id: String,
+    army: String,
+    entry: &'a Value,
+}
+
+/// Whether the army is bound to a running hold (the war step leaves it alone but for its
+/// pocket fall-back).
+pub(super) fn holding(state: &State, army: &str) -> bool {
+    state.military.held.contains_key(army)
+}
+
+/// A read through the tick's read cache (shared with the plan predicates): each tool and
+/// arguments at most once per tick.
+fn cached(
+    state: &mut State,
+    tools: &dyn Tools,
+    name: &str,
+    args: &Value,
+    now: GameHour,
+) -> Option<Value> {
+    let cache = match state.pcache.take() {
+        Some((hour, cache)) if hour == now => cache,
+        _ => Cache::default(),
+    };
+    let mut ctx = Ctx::with_cache(tools, now, cache);
+    let out = ctx.read(name, args).cloned();
+    state.pcache = Some((now, ctx.into_cache()));
+    out
+}
+
+/// Keeps the last reply of the calls made through it: `State::act` reports a receipt's status
+/// only, and the hold reads the move pre-check's note in the receipt's detail.
+struct Receipts<'a> {
+    inner: &'a dyn Tools,
+    last: RefCell<Option<Value>>,
+}
+impl Tools for Receipts<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        let out = self.inner.call(name, args);
+        *self.last.borrow_mut() = out.as_ref().ok().cloned();
+        out
+    }
+}
+
+/// The row of state `id` in a hoi4_states read.
+fn state_row(read: &Value, id: i64) -> Option<&Value> {
+    list(read, "states")
+        .iter()
+        .find(|r| r["state_id"].as_i64() == Some(id))
+}
+
+/// Whether `State::act` refused an order because the failure ledger holds it.
+fn ledger_stopped(why: &str) -> bool {
+    why.starts_with("skipped:")
+}
+
+/// The guard post army_layout gives the army playing a guard role (guard_states_in_order[0]).
+fn layout_guard_post(state: &State, plan: &Value, army: &str) -> Option<i32> {
+    list(plan, "army_layout")
+        .iter()
+        .filter(|e| text(&e["role"]) == "guard")
+        .find(|e| {
+            state
+                .layout
+                .get(text(&e["name_hint"]))
+                .is_some_and(|a| a == army)
+        })
+        .and_then(|e| {
+            list(e, "guard_states_in_order")
+                .first()
+                .and_then(Value::as_i64)
+        })
+        .map(|p| p as i32)
+}
+
+/// Bind the army to its hold: `war_guard` names its post's state (else what it named), so the
+/// war step neither drives it nor draws it to a retake nor sends its guard order. The first
+/// bind keeps the guard post the army had and clears what the war step drove it for.
+fn bind(state: &mut State, plan: &Value, id: &str, army: &str, post_state: Option<i64>) {
+    if !state.military.held.contains_key(army) {
+        let guard = state
+            .war_guard
+            .get(army)
+            .copied()
+            .or_else(|| layout_guard_post(state, plan, army));
+        state
+            .military
+            .held
+            .insert(army.to_string(), (id.to_string(), guard));
+        state.war_assign.remove(army);
+        state.war_stage.remove(army);
+        state.war_move.remove(army);
+        state.war_since.remove(army);
+        state.war_rest.remove(army);
+        state.war_repeat.remove(army);
+        state.war_province.remove(army);
+    }
+    let post = post_state
+        .map(|s| s as i32)
+        .or_else(|| state.war_guard.get(army).copied())
+        .or_else(|| state.military.held.get(army).and_then(|(_, g)| *g))
+        .unwrap_or(0);
+    state.war_guard.insert(army.to_string(), post);
+}
+
+/// The hold is over for the army: bound to the guard post it had again with its guard stage
+/// reset (the war step sends it back there and draws its front), else back to the war step.
+fn unbind(state: &mut State, plan: &Value, army: &str, why: &str) {
+    let Some((id, guard)) = state.military.held.remove(army) else {
+        return;
+    };
+    state.military.hold_orders.remove(&id);
+    state.war_stage.remove(&format!("guard:{army}"));
+    let back = match guard.or_else(|| layout_guard_post(state, plan, army)) {
+        Some(post) => {
+            state.war_guard.insert(army.to_string(), post);
+            format!("back to its guard post, state {post}")
+        }
+        None => {
+            state.war_guard.remove(army);
+            "back to the war step".to_string()
+        }
+    };
+    note(
+        state,
+        &format!("hold:{id}"),
+        format!("{army} released ({why}): {back}"),
+    );
+}
+
+/// hold_targets: start and end the holds, bind every running hold's army (an army that left
+/// its hold is released), and send at most one order (a move the pre-check settles without
+/// input does not count: the next hold is looked at).
+pub(super) fn hold_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let entries = list(plan, "hold_targets");
+    if entries.is_empty() && state.military.held.is_empty() {
+        return Ok(None);
+    }
+    let (invading, _) = invasion_claims(state, plan);
+    let roles: HashSet<&str> = list(plan, "army_layout")
+        .iter()
+        .map(|e| text(&e["name_hint"]))
+        .filter(|h| !h.is_empty())
+        .collect();
+    let mut running: Vec<Hold> = Vec::new();
+    for (i, e) in entries.iter().enumerate() {
+        // an entry without an army is the player's (a mission to watch), never acted on
+        let hint = text(&e["army"]).trim();
+        if hint.is_empty() {
+            continue;
+        }
+        let id = item_id(e).unwrap_or_else(|| format!("#{i}"));
+        let label = format!("hold:{id}");
+        if state.done.contains_key(&format!("hold:{id}:released")) {
+            continue;
+        }
+        if !state.done.contains_key(&format!("hold:{id}:on")) {
+            match when_holds(state, tools, &e["when"], now) {
+                Truth::True => {
+                    state.done.insert(format!("hold:{id}:on"), now);
+                }
+                t => {
+                    note(state, &label, format!("waits: when {}", t.label()));
+                    continue;
+                }
+            }
+        }
+        let until = &e["until"];
+        let set = !(until.is_null() || until.as_str().is_some_and(|s| s.trim().is_empty()));
+        if set && when_holds(state, tools, until, now) == Truth::True {
+            state.done.insert(format!("hold:{id}:released"), now);
+            note(state, &label, "over: until holds");
+            continue;
+        }
+        if roles.contains(hint) && state.layout.get(hint).is_none_or(|a| a.is_empty()) {
+            note(
+                state,
+                &label,
+                format!("waits for the army playing {hint} (army_layout)"),
+            );
+            continue;
+        }
+        let army = resolve(state, hint);
+        if invading.contains(&army) {
+            note(
+                state,
+                &label,
+                format!("{army} is in the running naval invasion; waits"),
+            );
+            continue;
+        }
+        if let Some(other) = running.iter().find(|h| h.army == army) {
+            note(
+                state,
+                &label,
+                format!("{army} already holds {}; waits", other.id),
+            );
+            continue;
+        }
+        running.push(Hold { id, army, entry: e });
+    }
+    let ended: Vec<(String, String)> = state
+        .military
+        .held
+        .iter()
+        .filter(|(army, (id, _))| !running.iter().any(|h| h.id == *id && h.army == **army))
+        .map(|(army, (id, _))| (army.clone(), id.clone()))
+        .collect();
+    for (army, id) in ended {
+        let why = if state.done.contains_key(&format!("hold:{id}:released")) {
+            "until holds"
+        } else {
+            "its hold no longer runs for it"
+        };
+        unbind(state, plan, &army, why);
+    }
+    for hold in &running {
+        if let Some(line) = hold_one(state, tools, plan, lease, now, hold)? {
+            return Ok(Some(line));
+        }
+    }
+    Ok(None)
+}
+
+/// Learn the state of every listed province (false while one is unknown): the own and the
+/// enemies' hoi4_states rows name their victory point provinces and the provinces others hold;
+/// the rest come from reading candidate states, the entry's `state` first and then the nearest
+/// to the corridor (else to the army), at most HOLD_SCAN a call. A province in none of them
+/// wakes the player.
+fn locate(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    hold: &Hold,
+    provinces: &[i64],
+    me: &str,
+    now: GameHour,
+) -> bool {
+    let missing = |s: &State| -> Vec<i64> {
+        provinces
+            .iter()
+            .copied()
+            .filter(|p| !s.military.province_state.contains_key(p))
+            .collect()
+    };
+    if missing(state).is_empty() {
+        return true;
+    }
+    let label = format!("hold:{}", hold.id);
+    if state.skipped(now, "holdfind", &hold.id) {
+        return false;
+    }
+    let mut candidates: Vec<(i64, Option<(f64, f64)>)> = Vec::new();
+    let mut tags = vec![me.to_string()];
+    for tag in strings(&plan["war"], "enemies") {
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+    let mut next = 0;
+    while next < tags.len() && next < 8 {
+        let tag = tags[next].clone();
+        next += 1;
+        let Some(read) = cached(state, tools, "hoi4_states", &json!({"query": tag}), now) else {
+            continue;
+        };
+        for row in list(&read, "states") {
+            let Some(sid) = row["state_id"].as_i64() else {
+                continue;
+            };
+            for key in ["provinces_held_by_others", "victory_points", "provinces"] {
+                for p in list(row, key) {
+                    if let Some(pid) = p["province"].as_i64() {
+                        state.military.province_state.insert(pid, sid);
+                    }
+                }
+            }
+            // the countries holding parts of these states own the rest of the corridor
+            let holders = list(row, "provinces_held_by_others")
+                .iter()
+                .map(|p| text(&p["controller"]))
+                .chain([text(&row["owner"]), text(&row["controller"])]);
+            for holder in holders {
+                if !holder.is_empty() && !tags.iter().any(|t| t == holder) {
+                    tags.push(holder.to_string());
+                }
+            }
+            if !candidates.iter().any(|(s, _)| *s == sid) {
+                candidates.push((sid, row["x"].as_f64().zip(row["z"].as_f64())));
+            }
+        }
+    }
+    if missing(state).is_empty() {
+        return true;
+    }
+    // nearest to the corridor's states already known, else to the army's state
+    let centre = |s: i64| {
+        candidates
+            .iter()
+            .find(|(c, _)| *c == s)
+            .and_then(|(_, at)| *at)
+    };
+    let known: Vec<(f64, f64)> = provinces
+        .iter()
+        .filter_map(|p| state.military.province_state.get(p))
+        .filter_map(|s| centre(*s))
+        .collect();
+    let reference = if known.is_empty() {
+        cached(state, tools, "hoi4_armies", &json!({}), now)
+            .and_then(|r| army_row(&r, &hold.army).and_then(|a| a["main_state"].as_i64()))
+            .and_then(centre)
+    } else {
+        let n = known.len() as f64;
+        Some((
+            known.iter().map(|k| k.0).sum::<f64>() / n,
+            known.iter().map(|k| k.1).sum::<f64>() / n,
+        ))
+    };
+    let first = hold.entry["state"].as_i64();
+    let mut order: Vec<(i64, f64)> = candidates
+        .iter()
+        .map(|(s, at)| {
+            let d = match (reference, at) {
+                _ if Some(*s) == first => -1.0,
+                (Some((rx, rz)), Some((x, z))) => (x - rx).powi(2) + (z - rz).powi(2),
+                _ => f64::MAX,
+            };
+            (*s, d)
+        })
+        .collect();
+    if let Some(s) = first.filter(|s| !candidates.iter().any(|(c, _)| c == s)) {
+        order.push((s, -1.0));
+    }
+    order.retain(|(s, _)| !state.military.scanned.contains(s));
+    order.sort_by(|a, b| a.1.total_cmp(&b.1));
+    for (sid, _) in order.iter().take(HOLD_SCAN) {
+        let Some(read) = cached(
+            state,
+            tools,
+            "hoi4_states",
+            &json!({"query": sid.to_string()}),
+            now,
+        ) else {
+            continue;
+        };
+        let Some(row) = state_row(&read, *sid) else {
+            continue;
+        };
+        let found = list(row, "provinces");
+        if found.is_empty() {
+            continue;
+        }
+        for p in found {
+            if let Some(pid) = p["province"].as_i64() {
+                state.military.province_state.insert(pid, *sid);
+            }
+        }
+        state.military.scanned.insert(*sid);
+        if missing(state).is_empty() {
+            return true;
+        }
+    }
+    let left = missing(state);
+    if order.len() > HOLD_SCAN {
+        note(
+            state,
+            &label,
+            format!("{}: finding the states of provinces {left:?}", hold.army),
+        );
+        return false;
+    }
+    // every candidate state was read: these provinces are in none of them
+    state.skip(now, "holdfind", &hold.id, DAY);
+    note(
+        state,
+        &label,
+        format!(
+            "{}: provinces {left:?} are in no own or enemy state; waits",
+            hold.army
+        ),
+    );
+    wake(
+        state,
+        plan,
+        now,
+        json!("L01"),
+        &format!("hold_province:{}", hold.id),
+        format!(
+            "hold {}: provinces {left:?} are in no own or enemy state read (hoi4_states); check the ids",
+            hold.id
+        ),
+        json!({"army": hold.army, "provinces": left}),
+    );
+    false
+}
+
+/// One running hold: the post from the corridor's controllers, the binding, at most one order.
+fn hold_one(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    hold: &Hold,
+) -> Result<Option<String>> {
+    let (id, army) = (hold.id.as_str(), hold.army.as_str());
+    let label = format!("hold:{id}");
+    let provinces: Vec<i64> = list(hold.entry, "provinces")
+        .iter()
+        .filter_map(Value::as_i64)
+        .collect();
+    if provinces.is_empty() {
+        bind(state, plan, id, army, None);
+        note(state, &label, format!("{army}: no provinces listed"));
+        return Ok(None);
+    }
+    let me = cached(state, tools, "hoi4_overview", &json!({}), now)
+        .map(|o| text(&o["player"]).to_string())
+        .unwrap_or_default();
+    if me.is_empty() {
+        bind(state, plan, id, army, None);
+        note(state, &label, "player unknown (hoi4_overview unreadable)");
+        return Ok(None);
+    }
+    if !locate(state, tools, plan, hold, &provinces, &me, now) {
+        bind(state, plan, id, army, None);
+        return Ok(None);
+    }
+    // who holds each listed province: its state's read, every tick (a change acts at once)
+    let mut mine: Vec<Option<bool>> = Vec::new();
+    let mut seen = String::new();
+    for p in &provinces {
+        let sid = state.military.province_state.get(p).copied().unwrap_or(0);
+        let read = cached(
+            state,
+            tools,
+            "hoi4_states",
+            &json!({"query": sid.to_string()}),
+            now,
+        );
+        let holder = read
+            .as_ref()
+            .and_then(|r| state_row(r, sid))
+            .and_then(|row| {
+                list(row, "provinces")
+                    .iter()
+                    .find(|x| x["province"].as_i64() == Some(*p))
+                    .map(|x| text(&x["controller"]).to_string())
+            })
+            .filter(|c| !c.is_empty());
+        seen.push_str(&format!("{p}:{} ", holder.as_deref().unwrap_or("?")));
+        mine.push(holder.map(|c| c == me));
+    }
+    let changed = state.military.hold_seen.get(id) != Some(&seen);
+    state.military.hold_seen.insert(id.to_string(), seen);
+    if !changed && state.skipped(now, "hold", id) {
+        bind(state, plan, id, army, None);
+        return Ok(None);
+    }
+    state.skip(now, "hold", id, DAY);
+    if mine.iter().any(Option::is_none) {
+        bind(state, plan, id, army, None);
+        state.skip(now, "hold", id, DAY / 4);
+        note(
+            state,
+            &label,
+            format!("{army}: who holds a listed province is unknown (hoi4_states); waits"),
+        );
+        return Ok(None);
+    }
+    let mine: Vec<bool> = mine.into_iter().map(|m| m == Some(true)).collect();
+    let Some(front) = mine.iter().rposition(|m| *m) else {
+        bind(state, plan, id, army, None);
+        note(
+            state,
+            &label,
+            format!("{army}: no listed province is held; waits"),
+        );
+        wake(
+            state,
+            plan,
+            now,
+            json!("L01"),
+            &format!("hold_lost:{id}"),
+            format!("hold {id}: every province of the corridor is lost; {army} has no post"),
+            json!({"army": army, "provinces": provinces}),
+        );
+        return Ok(None);
+    };
+    // a lost province behind the most forward held one comes first: the rearmost
+    let at = mine[..front].iter().position(|m| !*m).unwrap_or(front);
+    let post = provinces[at];
+    let post_state = state
+        .military
+        .province_state
+        .get(&post)
+        .copied()
+        .unwrap_or(0);
+    bind(state, plan, id, army, Some(post_state));
+    let why = if at < front {
+        format!("province {post} behind the post is lost: retaken first")
+    } else {
+        "the most forward held province".to_string()
+    };
+    // the war step's pocket fall-back owns the army and voids the last order
+    if state.skipped(now, "pocket", army) {
+        state.military.hold_orders.remove(id);
+        note(
+            state,
+            &label,
+            format!("{army} falls back from a pocket (war step); province {post} waits"),
+        );
+        return Ok(None);
+    }
+    if let Some(o) = state
+        .military
+        .hold_orders
+        .get(id)
+        .filter(|o| o.army == army && o.post == post)
+    {
+        if o.under_way || now - o.at < DAY {
+            let how = if o.under_way {
+                "heading there or standing there"
+            } else {
+                "ordered"
+            };
+            note(
+                state,
+                &label,
+                format!("{army} holds province {post} (state {post_state}), {why}: {how}"),
+            );
+            return Ok(None);
+        }
+    }
+    let Some(roster) = cached(state, tools, "hoi4_armies", &json!({}), now) else {
+        state.skip(now, "hold", id, DAY / 4);
+        note(state, &label, "hoi4_armies unreadable; waits");
+        return Ok(None);
+    };
+    let Some(row) = army_row(&roster, army).cloned() else {
+        note(
+            state,
+            &label,
+            format!("{army} not found (hoi4_armies); waits"),
+        );
+        return Ok(None);
+    };
+    if row["threat"]["encirclement_risk"] == json!(true) {
+        state.military.hold_orders.remove(id);
+        note(
+            state,
+            &label,
+            format!("{army} is at risk of encirclement: no hold order (the war step's pocket fall-back owns it)"),
+        );
+        return Ok(None);
+    }
+    let claim = plan["war"]["player_claim_seconds"].as_u64().unwrap_or(300);
+    if crate::autopilot::autopilot()
+        .claimed(Duration::from_secs(claim))
+        .iter()
+        .any(|a| a == army)
+    {
+        note(
+            state,
+            &label,
+            format!("{army} was ordered by the player: left alone"),
+        );
+        return Ok(None);
+    }
+    let stopped = |state: &mut State, what: &str, why: &str| {
+        note(state, &label, format!("{army}: {what}: {why}"));
+        wake(
+            state,
+            plan,
+            now,
+            json!("L01"),
+            &label,
+            format!("hold {id}: {what} for {army} failed 3 times in 10 game days; the corridor is not held"),
+            json!({"army": army, "province": post, "state_id": post_state}),
+        );
+    };
+    // an executing battle plan would take the army away again: stopped first
+    if row["plan_executing"] == json!(true) {
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_plan",
+            json!({"army": army, "execute": false}),
+            "hp",
+        )?;
+        if ledger_stopped(&why) {
+            stopped(state, "stopping the battle plan", &why);
+            return Ok(None);
+        }
+        // the move follows in two game hours
+        state.skip(now, "hold", id, if ok { 2 } else { DAY });
+        note(
+            state,
+            &label,
+            format!("{army} stops its battle plan: {ok} {why}"),
+        );
+        return Ok(Some(format!(
+            "hold {id}: {army} stops its battle plan to hold the corridor: {ok} {why}"
+        )));
+    }
+    let receipts = Receipts {
+        inner: tools,
+        last: RefCell::new(None),
+    };
+    let (ok, why_sent) = state.act(
+        &receipts,
+        lease,
+        "hoi4_army_move",
+        json!({"army": army, "state_id": post_state, "province_id": post}),
+        "hd",
+    )?;
+    let line = format!(
+        "hold {id}: {army} -> province {post} (state {post_state}), {why}: {ok} {why_sent}"
+    );
+    if !ok {
+        state.military.hold_orders.remove(id);
+        if ledger_stopped(&why_sent) {
+            stopped(state, &format!("the move to province {post}"), &why_sent);
+            return Ok(None);
+        }
+        note(state, &label, line.clone());
+        return Ok(Some(line));
+    }
+    let under_way = receipts
+        .last
+        .borrow()
+        .as_ref()
+        .and_then(|r| r["receipt"]["detail"]["note"].as_str().map(str::to_string))
+        .is_some_and(|n| n.contains("nothing was sent"));
+    state.military.hold_orders.insert(
+        id.to_string(),
+        HoldOrder {
+            army: army.to_string(),
+            post,
+            at: now,
+            under_way,
+        },
+    );
+    if under_way {
+        // the pre-check settled it without input: not an action, the next hold is looked at
+        note(
+            state,
+            &label,
+            format!("{army} holds province {post} (state {post_state}), {why}: already heading or standing there"),
+        );
+        return Ok(None);
+    }
+    note(state, &label, line.clone());
+    Ok(Some(line))
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{date_hour, tick, Tick};
@@ -2718,5 +3446,395 @@ mod tests {
         assert!(!state.done.contains_key("inv:x:start"));
         invasion_step(&mut state, &tools, &plan, "l", at).unwrap();
         assert!(state.done.contains_key("inv:x:start"));
+    }
+
+    // --- hold_targets (lesson L01) ---------------------------------------------------------
+
+    /// A small war map: Eritrea (1: 101, 102) and home (4: 401) are Italian, Tigray (2: 201,
+    /// 202) and Wello (3: 301) Ethiopian; a province's controller is its state's owner unless
+    /// `holder` says otherwise. Moves are Verified, with the pre-check's "nothing was sent"
+    /// note while `heading`, or refused with `refuse`.
+    struct Corridor {
+        calls: RefCell<Vec<(String, Value)>>,
+        holder: RefCell<HashMap<i64, &'static str>>,
+        armies: RefCell<Value>,
+        heading: RefCell<bool>,
+        refuse: RefCell<Option<&'static str>>,
+    }
+    const MAP: [(i64, &str, f64, &[i64]); 4] = [
+        (1, "ITA", 0.0, &[101, 102]),
+        (2, "ETH", 100.0, &[201, 202]),
+        (3, "ETH", 200.0, &[301]),
+        (4, "ITA", -100.0, &[401]),
+    ];
+    impl Tools for Corridor {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            if args.get("request_id").is_some() {
+                if name == "hoi4_army_move" {
+                    if let Some(code) = *self.refuse.borrow() {
+                        return Err(Error::new(code, "refused by the fake"));
+                    }
+                    if *self.heading.borrow() {
+                        return Ok(json!({"receipt": {"status": "Verified", "detail": {
+                            "note": "already heading or standing there: nothing was sent"}}}));
+                    }
+                }
+                return Ok(json!({"receipt": {"status": "Verified"}}));
+            }
+            Ok(match name {
+                "hoi4_overview" => json!({"player": "ITA"}),
+                "hoi4_armies" => self.armies.borrow().clone(),
+                "hoi4_states" => self.states(text(&args["query"])),
+                _ => json!({}),
+            })
+        }
+    }
+    impl Corridor {
+        fn new() -> Self {
+            let c = Corridor {
+                calls: RefCell::new(Vec::new()),
+                holder: RefCell::new(HashMap::new()),
+                armies: RefCell::new(json!({})),
+                heading: RefCell::new(false),
+                refuse: RefCell::new(None),
+            };
+            c.army(1, false);
+            c
+        }
+        fn army(&self, main_state: i64, risk: bool) {
+            *self.armies.borrow_mut() = json!({"armies": [{"army": "Guardia", "division_count": 8,
+                "main_state": main_state, "plan_executing": false, "battle_plan_orders": 0,
+                "threat": {"share": if risk { 0.8 } else { 0.1 }, "encirclement_risk": risk}}]});
+        }
+        fn take(&self, province: i64, tag: &'static str) {
+            self.holder.borrow_mut().insert(province, tag);
+        }
+        fn controller(&self, province: i64, owner: &'static str) -> &'static str {
+            self.holder
+                .borrow()
+                .get(&province)
+                .copied()
+                .unwrap_or(owner)
+        }
+        fn states(&self, query: &str) -> Value {
+            let mut rows = Vec::new();
+            for (id, owner, x, provinces) in MAP {
+                let controller = self.controller(provinces[0], owner);
+                let mut row = json!({"state_id": id, "owner": owner, "controller": controller,
+                    "x": x, "z": 0.0});
+                if query == id.to_string() {
+                    row["provinces"] = provinces
+                        .iter()
+                        .map(|p| json!({"province": p, "controller": self.controller(*p, owner)}))
+                        .collect();
+                } else if query == owner || query == controller {
+                    let others: Vec<Value> = provinces
+                        .iter()
+                        .filter(|p| self.controller(**p, owner) != owner)
+                        .map(|p| json!({"province": p, "controller": self.controller(*p, owner)}))
+                        .collect();
+                    if !others.is_empty() {
+                        row["provinces_held_by_others"] = json!(others);
+                    }
+                } else {
+                    continue;
+                }
+                rows.push(row);
+            }
+            json!({"states": rows})
+        }
+        /// The moves sent (actions only), as their arguments.
+        fn moves(&self) -> Vec<Value> {
+            self.calls
+                .borrow()
+                .iter()
+                .filter(|(n, a)| n == "hoi4_army_move" && a.get("request_id").is_some())
+                .map(|(_, a)| a.clone())
+                .collect()
+        }
+    }
+
+    fn corridor_plan() -> Value {
+        json!({"war": {"enemies": ["ETH"], "supply_first": false, "rest": false},
+            "hold_targets": [{"id": "north", "army": "Guardia",
+                "provinces": [101, 102, 201, 301]}]})
+    }
+
+    /// One hold step at game hour `now` (a fresh tick: its read cache is empty).
+    fn hold_at(
+        state: &mut State,
+        tools: &dyn Tools,
+        plan: &Value,
+        now: GameHour,
+    ) -> Option<String> {
+        state.clock = now;
+        state.pcache = None;
+        hold_step(state, tools, plan, "l", now).unwrap()
+    }
+
+    fn war_at(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) -> Option<String> {
+        state.clock = now;
+        super::super::war_step(state, tools, plan, "l", now).unwrap()
+    }
+
+    #[test]
+    fn a_hold_post_advances_as_the_corridor_provinces_are_taken() {
+        let tools = Corridor::new();
+        let plan = corridor_plan();
+        let mut state = State::default();
+        // Eritrea is held, Tigray not yet: the post is the last Eritrean province
+        let out = hold_at(&mut state, &tools, &plan, START).unwrap();
+        assert!(
+            out.starts_with("hold north: Guardia -> province 102 (state 1)"),
+            "{out}"
+        );
+        let first = &tools.moves()[0];
+        assert_eq!(
+            (&first["army"], &first["state_id"], &first["province_id"]),
+            (&json!("Guardia"), &json!(1), &json!(102))
+        );
+        assert_eq!(state.war_guard.get("Guardia"), Some(&1));
+        assert!(holding(&state, "Guardia"));
+        // the provinces' states were learned once (map facts)
+        assert_eq!(state.military.province_state.get(&301), Some(&3));
+        // nothing changes within the day: no order
+        assert_eq!(hold_at(&mut state, &tools, &plan, START + 6), None);
+        // Tigray's province is taken: the post moves forward at once, not a day later
+        tools.take(201, "ITA");
+        let out = hold_at(&mut state, &tools, &plan, START + 8).unwrap();
+        assert!(
+            out.starts_with("hold north: Guardia -> province 201 (state 2)"),
+            "{out}"
+        );
+        assert_eq!(tools.moves().len(), 2);
+        assert_eq!(
+            state.war_guard.get("Guardia"),
+            Some(&2),
+            "the binding follows the post"
+        );
+        tools.take(301, "ITA");
+        hold_at(&mut state, &tools, &plan, START + 10).unwrap();
+        assert_eq!(tools.moves()[2]["state_id"], 3);
+        assert_eq!(tools.moves()[2]["province_id"], 301);
+    }
+
+    #[test]
+    fn a_lost_province_behind_the_post_pulls_the_post_back() {
+        let tools = Corridor::new();
+        tools.take(201, "ITA");
+        tools.take(301, "ITA");
+        let plan = corridor_plan();
+        let mut state = State::default();
+        hold_at(&mut state, &tools, &plan, START).unwrap();
+        assert_eq!(tools.moves()[0]["province_id"], 301);
+        // Ethiopia retakes an Eritrean province behind the army: retaken first
+        tools.take(102, "ETH");
+        let out = hold_at(&mut state, &tools, &plan, START + 3).unwrap();
+        assert!(
+            out.contains("-> province 102 (state 1), province 102 behind the post is lost"),
+            "{out}"
+        );
+        assert_eq!(tools.moves().len(), 2);
+        // two lost behind the front: the rearmost first
+        tools.take(201, "ETH");
+        tools.take(101, "ETH");
+        hold_at(&mut state, &tools, &plan, START + 5).unwrap();
+        assert_eq!(tools.moves()[2]["province_id"], 101);
+        // everything lost: no post, the player is woken
+        tools.take(301, "ETH");
+        tools.take(102, "ETH");
+        assert_eq!(hold_at(&mut state, &tools, &plan, START + 7), None);
+        assert_eq!(tools.moves().len(), 3);
+        let alarms = take_alarms(&mut state);
+        assert_eq!(alarms[0]["reason"], "hold_lost:north");
+    }
+
+    #[test]
+    fn a_move_the_pre_check_reports_under_way_is_not_sent_again() {
+        let tools = Corridor::new();
+        let plan = corridor_plan();
+        let mut state = State::default();
+        hold_at(&mut state, &tools, &plan, START).unwrap();
+        assert_eq!(tools.moves().len(), 1);
+        // a day later the sent move is checked once more: the pre-check says it is under way
+        *tools.heading.borrow_mut() = true;
+        assert_eq!(
+            hold_at(&mut state, &tools, &plan, START + DAY),
+            None,
+            "no input: no action"
+        );
+        assert_eq!(tools.moves().len(), 2);
+        assert!(state.military.notes["hold:north"].contains("already heading or standing there"));
+        // then never again while the post stands, whatever the days
+        for day in 2..9 {
+            hold_at(&mut state, &tools, &plan, START + day * DAY);
+        }
+        // a listed province ahead of the post changing hands is looked at at once, but the
+        // post stands: still not sent again
+        tools.take(301, "ENG");
+        hold_at(&mut state, &tools, &plan, START + 9 * DAY + 1);
+        assert_eq!(
+            state.military.hold_seen["north"],
+            "101:ITA 102:ITA 201:ETH 301:ENG "
+        );
+        assert_eq!(tools.moves().len(), 2);
+        // a new post is ordered again
+        tools.take(201, "ITA");
+        hold_at(&mut state, &tools, &plan, START + 9 * DAY + 3);
+        assert_eq!(tools.moves().len(), 3);
+        assert_eq!(tools.moves()[2]["province_id"], 201);
+    }
+
+    #[test]
+    fn the_failure_ledger_stops_a_refused_hold_move_and_wakes_the_player() {
+        let tools = Corridor::new();
+        *tools.refuse.borrow_mut() = Some("input_readback_failed");
+        let plan = corridor_plan();
+        let mut state = State::default();
+        for day in 0..3 {
+            let out = hold_at(&mut state, &tools, &plan, START + day * DAY).unwrap();
+            assert!(out.contains("false input_readback_failed"), "{out}");
+        }
+        assert_eq!(tools.moves().len(), 3);
+        assert!(take_alarms(&mut state).is_empty());
+        // three failures in ten game days: never sent again, the player is woken once
+        for day in 3..8 {
+            assert_eq!(hold_at(&mut state, &tools, &plan, START + day * DAY), None);
+        }
+        assert_eq!(tools.moves().len(), 3);
+        let alarms = take_alarms(&mut state);
+        assert_eq!(alarms.len(), 1);
+        assert_eq!(alarms[0]["reason"], "hold:north");
+        assert!(alarms[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("failed 3 times"));
+    }
+
+    #[test]
+    fn the_war_step_never_retasks_a_held_army() {
+        // without a hold the war step sends the army at the nearest Ethiopian state
+        let tools = Corridor::new();
+        let plan = corridor_plan();
+        let mut free = State::default();
+        let out = war_at(&mut free, &tools, &json!({"war": plan["war"]}), START).unwrap();
+        assert!(out.starts_with("war front Guardia -> state 2"), "{out}");
+        // held: no order for it, also when an own province is lost (no retake draw either)
+        let tools = Corridor::new();
+        let mut state = State::default();
+        state.war_assign.insert("Guardia".into(), 2);
+        state.war_stage.insert("Guardia".into(), 1);
+        hold_at(&mut state, &tools, &plan, START).unwrap();
+        assert!(state.war_assign.is_empty() && state.war_stage.is_empty());
+        let before = tools.calls.borrow().len();
+        assert_eq!(war_at(&mut state, &tools, &plan, START + 1), None);
+        tools.take(101, "ETH");
+        assert_eq!(war_at(&mut state, &tools, &plan, START + 2), None);
+        let sent: Vec<(String, Value)> = tools.calls.borrow()[before..]
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .cloned()
+            .collect();
+        assert!(sent.is_empty(), "{sent:?}");
+        assert!(!state.war_assign.contains_key("Guardia"));
+    }
+
+    #[test]
+    fn until_releases_the_army_back_to_its_guard_post() {
+        let tools = Corridor::new();
+        let t0 = date_hour("1936.5.1").unwrap();
+        let plan = json!({"war": {"enemies": ["ETH"], "supply_first": false, "rest": false},
+            "army_layout": [{"name_hint": "guard_eritrea", "state": 4, "role": "guard",
+                "templates": ["Fanteria"], "count": 2, "guard_states_in_order": [4]}],
+            "hold_targets": [{"id": "north", "army": "guard_eritrea",
+                "provinces": [101, 102, 201], "when": "date:1936.5.1", "until": "date:1936.6.1"}]});
+        let mut state = State::default();
+        state
+            .layout
+            .insert("guard_eritrea".into(), "Guardia".into());
+        state.war_guard.insert("Guardia".into(), 4);
+        state.war_stage.insert("guard:Guardia".into(), 2);
+        // before `when`: not held, the guard post stands
+        assert_eq!(hold_at(&mut state, &tools, &plan, t0 - DAY), None);
+        assert!(!holding(&state, "Guardia"));
+        hold_at(&mut state, &tools, &plan, t0).unwrap();
+        assert_eq!(
+            state.war_guard.get("Guardia"),
+            Some(&1),
+            "the hold replaces the guard post"
+        );
+        assert_eq!(war_at(&mut state, &tools, &plan, t0 + 1), None);
+        // `until` holds: back to the guard post, which the war step orders at once
+        let t1 = date_hour("1936.6.1").unwrap();
+        assert_eq!(hold_at(&mut state, &tools, &plan, t1), None);
+        assert!(!holding(&state, "Guardia"));
+        assert_eq!(state.war_guard.get("Guardia"), Some(&4));
+        assert!(state.done.contains_key("hold:north:released"));
+        assert!(state.military.notes["hold:north"].contains("back to its guard post, state 4"));
+        let out = war_at(&mut state, &tools, &plan, t1).unwrap();
+        assert!(
+            out.starts_with("war guard move Guardia -> state 4"),
+            "{out}"
+        );
+        // over for good, also after a restart
+        let mut fresh = restarted(&state, t1 + DAY);
+        assert_eq!(hold_at(&mut fresh, &tools, &plan, t1 + DAY), None);
+        assert!(!holding(&fresh, "Guardia"));
+        assert_eq!(tools.moves().len(), 2);
+    }
+
+    #[test]
+    fn a_held_army_in_a_pocket_is_left_to_the_war_steps_fall_back() {
+        let tools = Corridor::new();
+        let plan = corridor_plan();
+        let mut state = State::default();
+        tools.army(1, true);
+        // at risk of encirclement: bound, but no hold order
+        assert_eq!(hold_at(&mut state, &tools, &plan, START), None);
+        assert!(tools.moves().is_empty());
+        assert!(holding(&state, "Guardia"));
+        assert!(state.military.notes["hold:north"].contains("pocket fall-back owns it"));
+        // the war step's fall-back moves it to the nearest fully held own state
+        let out = war_at(&mut state, &tools, &plan, START + 1).unwrap();
+        assert!(out.starts_with("war pocket Guardia"), "{out}");
+        assert_eq!(tools.moves()[0]["state_id"], 4);
+        assert!(tools.moves()[0].get("province_id").is_none());
+        // while it falls back the hold sends nothing
+        tools.army(4, false);
+        for hour in [DAY, 2 * DAY] {
+            assert_eq!(hold_at(&mut state, &tools, &plan, START + hour), None);
+        }
+        assert_eq!(tools.moves().len(), 1);
+        // the fall-back is over: the post is ordered again
+        let out = hold_at(&mut state, &tools, &plan, START + 4 * DAY).unwrap();
+        assert!(
+            out.starts_with("hold north: Guardia -> province 102"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn the_tick_binds_holds_before_the_war_step() {
+        let tools = Corridor::new();
+        let plan = corridor_plan();
+        let mut state = State::default();
+        let out = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&out, Tick::Acted(s) if s.starts_with("hold north: Guardia -> province 102")),
+            "{out:?}"
+        );
+        // the next ticks leave the army to the hold: the war step sends it nowhere
+        tick(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(tools.moves().len(), 1);
+        assert!(!tools
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, a)| a["army"] == "Guardia"
+                && a.get("request_id").is_some()
+                && n != "hoi4_army_move"));
     }
 }

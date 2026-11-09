@@ -67,6 +67,9 @@
 //!                          "admirals"?,"repair_below"?,"repair_until"?} regions, missions, admirals, repair (plan_military.rs)
 //!   invasions              [{"id","from_state","target_state","target_province"?,"armies":[..],"fleet"?,"when"?,..}]
 //!                          one naval invasion at a time through hoi4_naval_invasion (plan_military.rs)
+//!   hold_targets           [{"id","army","provinces":[rear first],"when"?,"until"?}] an army holds the most forward
+//!                          held province of a corridor (a lost one behind it first); it replaces the army's guard
+//!                          post and the war step leaves it alone while active (plan_military.rs, before the war)
 //!   designs                [{"id","kind","base","name"?,"modules"?|"upgrades"?,"when"?,"xp"?,"production"?}]
 //!                          equipment designs made once, XP-guarded (plan_affairs.rs); `production[].design`
 //!                          switches that line to a design once (plan_affairs.rs)
@@ -670,6 +673,11 @@ pub fn tick(
             )));
         }
         return Ok(Tick::Waiting { event: key, new });
+    }
+    // 1a'. hold_targets (plan_military.rs): corridor posts are bound before the war step runs,
+    // so it never sends a holding army elsewhere
+    if let Some(step) = plan_military::hold_step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
     }
     // 1a. war first: at war a game day passes in about 2.5 s at speed 3, and one construction
     // step can take 100 s (w15, 6 Nov 2026: 111-day stalls while the tick built factories), so
@@ -2704,6 +2712,18 @@ fn war_step(
         if state.war_cool.get(&name).is_some_and(|until| *until > now) {
             continue;
         }
+        // An army holding a corridor (plan_military.rs hold_targets) takes no guard order; in a
+        // pocket it falls back like the armies this step drives.
+        if plan_military::holding(state, &name) {
+            if cfg["avoid_pockets"] != json!(false) {
+                if let Some(line) =
+                    pocket_fall_back(state, tools, lease, army, &safe, cooldown, now)?
+                {
+                    return Ok(Some(line));
+                }
+            }
+            continue;
+        }
         let here = army["main_state"].as_i64().map(|s| s as i32);
         let key = format!("guard:{name}");
         let stage = state.war_stage.get(&key).copied().unwrap_or(0);
@@ -2895,37 +2915,9 @@ fn war_step(
                 now
             }
         };
-        // A pocket forming: most land around the army is held by others. Fall back to the
-        // nearest fully held own state once, then re-check (w24: armies were encircled).
-        if army["threat"]["encirclement_risk"] == json!(true)
-            && cfg["avoid_pockets"] != json!(false)
-            && !state.skipped(now, "pocket", &name)
-        {
-            let (ax, az) = position.unwrap_or((0.0, 0.0));
-            if let Some((safe_id, _)) = safe
-                .iter()
-                .filter(|(id, _)| Some(*id) != here)
-                .min_by(|a, b| {
-                    let d = |p: &(f64, f64)| (p.0 - ax).powi(2) + (p.1 - az).powi(2);
-                    d(&a.1).total_cmp(&d(&b.1))
-                })
-                .copied()
-            {
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_army_move",
-                    json!({"army": name, "state_id": safe_id}),
-                    "wp",
-                )?;
-                state.skip(now, "pocket", &name, 3 * DAY);
-                state.war_move.remove(&name);
-                state.war_province.remove(&name);
-                state.war_cool.insert(name.clone(), now + cooldown * 2);
-                return Ok(Some(format!(
-                    "war pocket {name}: {:.0}% of the land around it is held by others -> back to state {safe_id}: {ok} {why}",
-                    army["threat"]["share"].as_f64().unwrap_or(0.0) * 100.0
-                )));
+        if cfg["avoid_pockets"] != json!(false) {
+            if let Some(line) = pocket_fall_back(state, tools, lease, army, &safe, cooldown, now)? {
+                return Ok(Some(line));
             }
         }
         // Direct moves have no plan to stop: an exhausted or starving army gets no new attack
@@ -3215,6 +3207,54 @@ fn war_step(
         )));
     }
     Ok(None)
+}
+
+/// A pocket forming: most land around the army is held by others. Fall back to the nearest
+/// fully held own state (`safe`) once, then re-check (w24: armies were encircled). None when
+/// the army is not at risk, fell back less than 3 game days ago, or no other state is safe.
+fn pocket_fall_back(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    army: &Value,
+    safe: &[(i32, (f64, f64))],
+    cooldown: GameHour,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let name = text(&army["army"]).to_string();
+    if army["threat"]["encirclement_risk"] != json!(true) || state.skipped(now, "pocket", &name) {
+        return Ok(None);
+    }
+    let here = army["main_state"].as_i64().map(|s| s as i32);
+    let (ax, az) = here
+        .and_then(|s| state.centers.get(&s).copied())
+        .unwrap_or((0.0, 0.0));
+    let Some((safe_id, _)) = safe
+        .iter()
+        .filter(|(id, _)| Some(*id) != here)
+        .min_by(|a, b| {
+            let d = |p: &(f64, f64)| (p.0 - ax).powi(2) + (p.1 - az).powi(2);
+            d(&a.1).total_cmp(&d(&b.1))
+        })
+        .copied()
+    else {
+        return Ok(None);
+    };
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_army_move",
+        json!({"army": name, "state_id": safe_id}),
+        "wp",
+    )?;
+    state.skip(now, "pocket", &name, 3 * DAY);
+    state.war_move.remove(&name);
+    state.war_province.remove(&name);
+    state.war_cool.insert(name.clone(), now + cooldown * 2);
+    Ok(Some(format!(
+        "war pocket {name}: {:.0}% of the land around it is held by others -> back to state {safe_id}: {ok} {why}",
+        army["threat"]["share"].as_f64().unwrap_or(0.0) * 100.0
+    )))
 }
 
 /// Game hours between two judgements of the strategy keys (a change of the keys is judged at once).
