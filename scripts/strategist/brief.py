@@ -45,7 +45,7 @@ def render(run_dir, call, batch, sitrep=None, log=None, stop_date=None, minutes=
         "CALL": call,
         "BATCH": batch,
         "PLAN_BRIEF": plan_brief,
-        "SITREP": sitrep or "%s hoi4_overview '{}'" % call,
+        "SITREP": sitrep or "%s hoi4_observe '{\"since\":0}'" % call,
         "LOG": log or os.path.join(run_dir, "%s-log.md" % run),
         "STOP_DATE": stop_date or goal.get("deadline") or spec.get("horizon") or "the plan horizon",
         "MINUTES": str(minutes),

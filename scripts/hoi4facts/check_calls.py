@@ -9,7 +9,9 @@ Checks `call` fields anywhere in plan.json (player-owned items name the exact ca
 exist): the tool exists, required arguments are present,
 no unknown arguments, types and enums match (scripts/hoi4facts/tool_schemas.py; catalogue
 skills/hoi4-campaign-playbook/tools.schema.json, rebuilt from native/src). Placeholders such as
-"<wing>" are allowed as values. Exit 1 when any call is invalid. Stdlib only, Python 3.9+.
+"<wing>" are allowed as values. A brief call that duplicates work the executor owns in this plan
+(an army order to a role army, production, research, focus, construction, laws, templates, events in
+the plan, ...) is an error too: the executor does it, the player only does what it cannot. Exit 1 when any call is invalid. Stdlib only, Python 3.9+.
 """
 import argparse
 import json
@@ -42,6 +44,54 @@ def plan_calls(node, path="plan"):
     return out
 
 
+# A player call that does what the executor already does for this plan (the user: "lots of duplicate and
+# failed actions"): tool prefix -> the plan keys whose presence makes the executor own that work.
+EXECUTOR_OWNS = [
+    ("hoi4_production_set", ("production",)), ("hoi4_production_add", ("production",)),
+    ("hoi4_research_start", ("research_path", "research_priority")),
+    ("hoi4_focus_start", ("focus_path",)),
+    ("hoi4_construction_", ("construction", "construction_plan")), ("hoi4_railway_build", ("construction_plan",)),
+    ("hoi4_politics_choose", ("politics",)), ("hoi4_decision_take", ("decisions", "decision_rules")),
+    ("hoi4_template_", ("templates",)), ("hoi4_train", ("training",)),
+    ("hoi4_air_mission", ("air_plan", "air")), ("hoi4_air_rebase", ("air_plan",)),
+    ("hoi4_occupation_law", ("occupation",)), ("hoi4_peace_", ("peace",)),
+    ("hoi4_diplomacy_act", ("diplomacy",)), ("hoi4_doctrine_adopt", ("doctrines",)),
+    ("hoi4_army_group_create", ("army_group",)), ("hoi4_mio_trait", ("mio",)), ("hoi4_design_", ("designs",)),
+    ("hoi4_trade_set", ("trade",)), ("hoi4_fleet_", ("navy",)), ("hoi4_naval_invasion", ("invasions",)),
+    ("hoi4_faction_", ("faction",)), ("hoi4_agency_", ("intelligence",)),
+]
+ARMY_ORDERS = ("hoi4_army_front", "hoi4_army_move", "hoi4_army_attack", "hoi4_army_offensive", "hoi4_army_hold",
+               "hoi4_army_commander", "hoi4_army_detach", "hoi4_army_create", "hoi4_army_merge", "hoi4_army_split")
+
+
+def role_armies(plan):
+    """Army names and layout roles the executor drives in this plan."""
+    out = set()
+    for e in plan.get("army_layout") or []:
+        if isinstance(e, dict) and e.get("name_hint"):
+            out.add(e["name_hint"])
+    for e in plan.get("army_group") or []:
+        if isinstance(e, dict):
+            out.update(a for a in e.get("armies") or [] if isinstance(a, str))
+    for e in plan.get("hold_targets") or []:
+        if isinstance(e, dict) and isinstance(e.get("army"), str):
+            out.add(e["army"])
+    return out
+
+
+def overlap(plan, tool, args):
+    """Why this player call duplicates executor work, or None."""
+    for prefix, keys in EXECUTOR_OWNS:
+        if tool.startswith(prefix) and any(plan.get(k) for k in keys):
+            return "the executor owns this through %s; put it in the plan, not the brief" % "/".join(
+                k for k in keys if plan.get(k))
+    if tool in ARMY_ORDERS and isinstance(args, dict):
+        army = args.get("army") or args.get("source")
+        if army in role_armies(plan) and (plan.get("war") or plan.get("vp_targets") or plan.get("hold_targets")):
+            return "army %s has a role in the plan, so the executor gives its orders" % army
+    return None
+
+
 def check(target):
     run_dir = target if os.path.isdir(target) else os.path.dirname(os.path.abspath(target))
     plan_path = target if not os.path.isdir(target) else os.path.join(run_dir, "plan.json")
@@ -61,6 +111,10 @@ def check(target):
                         items.append(("%s:%d" % (name, n), tool, args))
     for where, tool, args in items:
         checked += 1
+        if where.startswith("plan.brief.md") and isinstance(args, dict):
+            why = overlap(plan, tool, args)
+            if why:
+                findings.append({"where": where, "tool": tool, "problem": "duplicates the executor: " + why})
         if args == "REF":
             if tool not in catalogue:
                 findings.append({"where": where, "tool": tool, "problem": "unknown tool %s" % tool})

@@ -627,9 +627,8 @@
           },
           "remove": {
             "type": "boolean",
-            "x-owner": "player",
-            "x-executor-planned": "W1-9",
-            "description": "true: remove the line of this equipment from `from`. Not read by the executor yet (it would add the line; lint production.remove)"
+            "x-owner": "executor",
+            "description": "true: the executor removes every own line of this equipment (live entry_index, hoi4_production_set factories 0) from `from`. A naval line is removed only with an explicit `from`: its ships in progress must finish first (no read gives ship progress yet)."
           },
           "replace": {
             "type": "string",
