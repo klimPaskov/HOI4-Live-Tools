@@ -9,7 +9,7 @@ import os
 import re
 from collections import defaultdict
 
-from . import adjacency
+from . import mapgraph
 from .content import Content, integrated_dlcs
 from .script import (DEFAULT_START, walk_all, bare, get, get1, history_walk, parse, parse_file, read,
                      run_effects, trigger)
@@ -19,8 +19,9 @@ EVENT_TYPES = ("country_event", "news_event", "state_event", "unit_leader_event"
 
 
 class Game:
-    def __init__(self, root, mods=(), content=None):
+    def __init__(self, root, mods=(), content=None, cache_dir=None):
         self.root = root
+        self.cache_dir = cache_dir  # mapgraph cache (None: its default)
         self.content = content or Content(root, mods)
         self._cache = {}
 
@@ -381,8 +382,41 @@ class Game:
         return {sid: r["owner"] for sid, r in self.state_facts(ctx, start_date).items()}
 
     def neighbours(self, straits=True):
-        """{province: set(provinces)} from the effective map, or None (see adjacency.py)."""
-        return self.cached(f"adj:{straits}", lambda: adjacency.neighbours(self.content, straits))
+        """{province: set(provinces)} from the effective map graph (mapgraph.py), or None when the
+        map files are missing. straits=False keeps only pixel borders (a railway needs provinces
+        that touch); impassable edges are always left out."""
+
+        def load():
+            graph = self.map_graph()
+            if graph is None:
+                return None
+            out = {}
+            for a, row in graph["adj"].items():
+                for b, e in row.items():
+                    if e.get("impassable") or (not straits and e.get("kind") != "border"):
+                        continue
+                    out.setdefault(a, set()).add(b)
+            return out
+
+        return self.cached(f"adj:{straits}", load)
+
+    def map_graph(self):
+        """mapgraph.load over this Game's mod-layered content, or None without map files."""
+
+        def load():
+            if not self.file("map/definition.csv") or not self.file("map/provinces.bmp"):
+                return None
+
+            def content_path(rel):
+                return self.file(rel) or os.path.join(self.root, *rel.split("/"))
+
+            try:
+                return mapgraph.load(content_path=content_path, content_files=self.content.files,
+                                     cache_dir=self.cache_dir)
+            except (OSError, ValueError):
+                return None
+
+        return self.cached("mapgraph", load)
 
     # ------------------------------------------------------------------ politics and decisions
     def ideas(self, ctx=None):

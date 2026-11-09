@@ -25,8 +25,8 @@ Checks (errors unless marked warning):
     from common/ideas) or a known character id / idea_token (advisors).
   * decisions: every key exists in common/decisions.
   * event options: shape only.
-  * shapes: types of research_path, construction_plan, vp_targets, army_layout, war,
-    doctrines and event_rules entries (what native/src/plan_run.rs reads).
+  * schema: the whole plan against skills/hoi4-campaign-playbook/plan.schema.json
+    (hoi4facts/schema_check.py); entries with schema errors skip the game-file checks below.
   * research_path: years in order, not_before dates, known techs, no duplicates, prerequisites at
     the start / earlier in the path / in research_priority, start_year not after the entry year
     (warning).
@@ -35,15 +35,16 @@ Checks (errors unless marked warning):
     when neither reading allows it; a warning naming the tech and the missing parents when only
     the ANY reading does.
   * construction_plan: buildings, state ids, province in its state, triggers (bare date,
-    province_controlled:<id> in the item's state, state_fully_controlled:<id>, owner:<id>=<TAG>;
-    free text is a player-only warning), railway paths (provinces in from_state/to_state at the
-    ends, consecutive provinces touching on map/provinces.bmp), unique order.
+    province_controlled:<id> in the item's state, state_fully_controlled:<id>, owner:<id>=<TAG>),
+    railway paths (provinces in from_state/to_state at the ends, consecutive provinces sharing a
+    pixel border in the mod-layered map graph, hoi4facts/mapgraph.py), unique ids.
   * vp_targets: province in its state, vp equal to the state history at the start date.
   * army_layout: role strike|guard, templates in the start OOB the history file loads, divisions
     of those templates in the state at the start (none: error; fewer than count: warning),
     guard posts, owner: triggers.
   * war / war_by_phase: state ids in axes, theatre, guard_states, guards; enemy tags.
-  * doctrines: {id, folder, grand_doctrine | track + subdoctrine, xp} against common/doctrines.
+  * doctrines: {id, folder, grand_doctrine and/or track + subdoctrine, xp} against
+    common/doctrines (folder, track of the grand doctrine, subdoctrine track, XP type and cost).
   * event_rules: the event id exists in events/ and option names are options of it.
 
 Stdlib only, Python 3.9+. Exit status 0 when there are no errors.

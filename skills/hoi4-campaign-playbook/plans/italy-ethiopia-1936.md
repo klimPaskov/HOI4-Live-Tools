@@ -26,8 +26,8 @@ NEW keys (not read by the executor yet; the player applies them, the executor ca
 |---|---|---|
 | `event_rules` | list of `{event, option_name, condition?, else_option_name?, fallback_option_name?, why}` | choose an event option by its localisation key (`<event>.a/.b/.c`), not by index; `condition` is a plain-language test the player checks; `fallback_option_name` when the named option is not shown |
 | `research_path` | list of `{year, not_before, techs[]}` | research only techs of blocks whose `not_before` date has passed, in order; never start a tech whose `start_year` is later than the current year |
-| `construction_plan` | ordered list of `{order, building, state, province?, path?, from_state?, to_state?, when, priority, why}` | `when` is `"YYYY.MM.DD"`, `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`; `priority: "top"` moves the project to the top of the queue the moment it is queued; `path` lists the provinces a railway must follow |
-| `doctrines` | list of `{folder, track, subdoctrine, when}` | adopt with `hoi4_doctrine_adopt` when the army XP condition holds |
+| `construction_plan` | ordered list of `{id, order, building, state, province?, path?, from_state?, to_state?, when, priority, why}` | `when` is `"YYYY.MM.DD"`, `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`; `priority: "top"` moves the project to the top of the queue the moment it is queued; `path` lists the provinces a railway must follow |
+| `doctrines` | list of `{id, folder, track, subdoctrine, xp}` | adopt with `hoi4_doctrine_adopt` once army XP reaches `xp` |
 | `army_layout` | list of `{name_hint, state, templates, count, general, role, axis or guard_states_in_order, when?}` | how to split the per-state armies into strike and guard armies on day one |
 | `army_group` | `{name_hint, field_marshal, fallback_field_marshal, members}` | army group over the northern armies |
 | `air_plan` | list of `{base_state, airframe, version, count, mission, region, then_region, switch_when}` plus rules | air missions per wing type and when to move them |
@@ -35,7 +35,7 @@ NEW keys (not read by the executor yet; the player applies them, the executor ca
 | `vp_targets` | ordered list of `{order, province, name, state, vp, army, by, mission?, path?}` | the province each strike army goes for, with the date it should fall |
 | `surrender_goal` | numbers from MECH §3 | stop condition for the VP hunt |
 | `retake_rules` | list of `{if, do}` | own-land and corridor recapture rules (section 7) |
-| `phases` | list of `{id, from, until/exit, goal}` | phase machine (section 6) |
+| `phases` | list of `{id, enter?, exit?, goal, note}` | phase machine (section 6); `enter`/`exit` are plan.schema.json predicates, the original wording is in `note` |
 
 ## 1. Checkpoints
 

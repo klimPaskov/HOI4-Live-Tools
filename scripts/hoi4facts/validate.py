@@ -4,10 +4,12 @@ validate(plan, game) -> (Report, counts). Errors are things the executor (native
 cannot do or will do wrongly; warnings are legal but doubtful choices, or player-only text the
 executor never reads. See validate_plan.py for the list of checks.
 """
+import json
 import os
 import re
 from collections import defaultdict
 
+from . import schema_check
 from . import tech as techrule
 from .script import DEFAULT_START, Ctx, date_tuple
 
@@ -63,105 +65,47 @@ def start_of(meta):
 
 
 # --------------------------------------------------------------------------
-# Schema shapes of the executor keys (types only; meaning is checked below)
+# Schema (skills/hoi4-campaign-playbook/plan.schema.json through schema_check)
+
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                           "skills", "hoi4-campaign-playbook", "plan.schema.json")
+CHECKED_LISTS = ("research_path", "construction_plan", "vp_targets", "army_layout", "doctrines", "event_rules")
 
 
 def _is_int(v):
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def _is_num(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+def load_schema(path=None):
+    path = path or SCHEMA_PATH
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
 
 
-_TYPES = {
-    "int": (_is_int, "an integer"),
-    "num": (_is_num, "a number"),
-    "str": (lambda v: isinstance(v, str), "a string"),
-    "bool": (lambda v: isinstance(v, bool), "a boolean"),
-    "[int]": (lambda v: isinstance(v, list) and all(_is_int(x) for x in v), "a list of integers"),
-    "[str]": (lambda v: isinstance(v, list) and all(isinstance(x, str) for x in v), "a list of strings"),
-    "[[int]]": (lambda v: isinstance(v, list) and all(isinstance(a, list) and all(_is_int(x) for x in a)
-                                                      for a in v), "a list of integer lists"),
-    "{str:int}": (lambda v: isinstance(v, dict) and all(_is_int(x) for x in v.values()),
-                  "an object of integers"),
-}
-
-# key -> {field: (type, required)} for list-of-object keys
-ITEM_SHAPES = {
-    "research_path": {"year": ("int", True), "not_before": ("str", False), "techs": ("[str]", True)},
-    "construction_plan": {
-        "order": ("int", True), "building": ("str", True), "when": ("str", False), "state": ("int", False),
-        "province": ("int", False), "path": ("[int]", False), "from_state": ("int", False),
-        "to_state": ("int", False), "states": ("[int]", False), "priority": ("str", False),
-    },
-    "vp_targets": {
-        "province": ("int", True), "state": ("int", True), "army": ("str", False), "vp": ("num", False),
-        "order": ("int", False), "path": ("[int]", False),
-    },
-    "army_layout": {
-        "name_hint": ("str", True), "state": ("int", True), "templates": ("[str]", True),
-        "role": ("str", True), "count": ("int", False), "general": ("str", False),
-        "guard_states_in_order": ("[int]", False), "when": ("str", False),
-    },
-    "doctrines": {
-        "id": ("str", True), "folder": ("str", True), "xp": ("int", True), "grand_doctrine": ("str", False),
-        "track": ("str", False), "subdoctrine": ("str", False),
-    },
-    "event_rules": {
-        "event": ("str", True), "option_name": ("str", False), "fallback_option_name": ("str", False),
-        "else_option_name": ("str", False), "condition": ("str", False),
-    },
-}
-
-WAR_SHAPE = {
-    "enabled": "bool", "first": "bool", "me": "str", "enemies": "[str]", "reserve": "[str]",
-    "axes": "[[int]]", "theatre": "[int]", "guard_states": "[int]", "guards": "{str:int}",
-    "min_army": "int", "per_target": "int", "cooldown_hours": "int", "stall_days": "int",
-    "rest_max_days": "int", "player_claim_seconds": "int", "motorization": "int",
-    "rest_below": "num", "resume_above": "num", "supply_floor": "num",
-    "direct_moves": "bool", "supply_first": "bool", "avoid_pockets": "bool", "rest": "bool",
-}
-
-
-def check_shapes(plan, rep):
-    """Type shape of the executor keys. Returns {key: [indexes of well-formed entries]}."""
+def check_schema(plan, rep, schema=None):
+    """Schema errors (as errors) and {key: [indexes of entries without schema errors]} for the
+    lists the game-file checks below read; those checks skip malformed entries."""
+    schema = schema if schema is not None else load_schema()
     good = {}
-    for key, fields in ITEM_SHAPES.items():
-        if key not in plan:
-            continue
-        v = plan[key]
-        if not isinstance(v, list):
-            rep.error(f"{key} must be a list")
+    if schema is None:
+        rep.warn(f"plan schema not found ({SCHEMA_PATH}); shapes not checked, executor-key checks skipped")
+        return {k: [] for k in CHECKED_LISTS}
+    errors = schema_check.validate(plan, schema)
+    bad = defaultdict(set)
+    for path, message in errors:
+        rep.error(f"schema: {path}: {message}")
+        m = re.match(r"^([A-Za-z_]+)(?:\[(\d+)\])?", path)
+        if m:
+            bad[m.group(1)].add(int(m.group(2)) if m.group(2) is not None else None)
+    for key in CHECKED_LISTS:
+        v = plan.get(key)
+        if not isinstance(v, list) or None in bad[key]:
             good[key] = []
             continue
-        ok = []
-        for i, e in enumerate(v):
-            if not isinstance(e, dict):
-                rep.error(f"{key}[{i}]: must be an object")
-                continue
-            bad = False
-            for f, (t, required) in fields.items():
-                if f not in e:
-                    if required:
-                        rep.error(f"{key}[{i}]: {f} is required ({_TYPES[t][1]})")
-                        bad = True
-                    continue
-                test, what = _TYPES[t]
-                if not test(e[f]):
-                    rep.error(f"{key}[{i}].{f} must be {what}, not {e[f]!r}")
-                    bad = True
-            if not bad:
-                ok.append(i)
-        good[key] = ok
-    war = plan.get("war")
-    if war is not None:
-        if not isinstance(war, dict):
-            rep.error("war must be an object")
-        else:
-            for f, t in WAR_SHAPE.items():
-                if f in war and not _TYPES[t][0](war[f]):
-                    rep.error(f"war.{f} must be {_TYPES[t][1]}, not {war[f]!r}")
+        good[key] = [i for i, e in enumerate(v) if isinstance(e, dict) and i not in bad[key]]
     return good
 
 
@@ -248,10 +192,15 @@ def check_research_path(game, plan, meta, rep, good):
     last_year = None
     n = 0
     for i, e in entries:
-        year = e["year"]
-        if not 1900 <= year <= 2100:
+        year = e.get("year")
+        if year is None:
+            year = date_year(e.get("not_before"), None)
+        if year is None:
+            rep.warn(f"research_path[{i}]: no year or not_before; the executor treats it as due at once")
+            year = 0
+        elif not 1900 <= year <= 2100:
             rep.error(f"research_path[{i}].year {year} is not a game year")
-        if last_year is not None and year < last_year:
+        if year and last_year and year < last_year:
             rep.warn(f"research_path[{i}]: year {year} comes after {last_year} (entries count from their year)")
         last_year = year
         nb = e.get("not_before")
@@ -259,7 +208,7 @@ def check_research_path(game, plan, meta, rep, good):
             d = date_tuple(nb)
             if not d or not re.match(r"^\d{4}[.-]\d{1,2}[.-]\d{1,2}$", nb) or not (1 <= d[1] <= 12 and 1 <= d[2] <= 31):
                 rep.error(f"research_path[{i}].not_before {nb!r} is not a date like \"1936.01.01\"")
-            elif d[0] != year:
+            elif year and d[0] != year:
                 rep.warn(f"research_path[{i}]: not_before {nb} is not in year {year}")
         for k in e["techs"]:
             label = f"research_path[{i}]"
@@ -275,7 +224,7 @@ def check_research_path(game, plan, meta, rep, good):
             if k in have:
                 rep.warn(f"{label} {k}: already researched at start")
             _prereq(rep, label, k, info, done)
-            if info["year"] > year:
+            if year and info["year"] > year:
                 rep.warn(
                     f"{label} {k}: start_year {info['year']} is after the entry's year {year} "
                     f"(ahead-of-time penalty)"
@@ -613,8 +562,9 @@ def check_construction_plan(game, plan, meta, rep, good):
     orders = defaultdict(list)
     adj = None
     for i, e in entries:
-        label = f"construction_plan[{i}] #{e['order']} {e['building']}"
-        orders[e["order"]].append(i)
+        key = e.get("id", e.get("order"))
+        label = f"construction_plan[{i}] {key} {e['building']}"
+        orders[str(key)].append(i)
         b = e["building"]
         rail = b in RAILWAY
         if not rail and b not in buildings:
@@ -674,7 +624,7 @@ def check_construction_plan(game, plan, meta, rep, good):
                 rep.warn(f"{label}: state {home} is owned by {owners.get(home)}, not {ctx.tag}, at the start")
     for order, idx in orders.items():
         if len(idx) > 1:
-            rep.error(f"construction_plan: order {order} is used by entries {idx} (done-memory is keyed by order)")
+            rep.error(f"construction_plan: id {order} is used by entries {idx} (done-memory is keyed by id)")
     return len(entries)
 
 
@@ -823,9 +773,6 @@ def check_war(game, plan, rep):
             if not isinstance(payload, dict):
                 rep.error(f"war_by_phase.{name} must be an object")
                 continue
-            for f, t in WAR_SHAPE.items():
-                if f in payload and not _TYPES[t][0](payload[f]):
-                    rep.error(f"war_by_phase.{name}.{f} must be {_TYPES[t][1]}")
             _war_ids(rep, f"war_by_phase.{name}", payload, states, tags)
 
 
@@ -851,33 +798,30 @@ def check_doctrines(game, plan, meta, rep, good):
     ids = set()
     for i, e in entries:
         label = f"doctrines[{i}] {e['id']}"
-        if not e["id"].strip():
-            rep.error(f"doctrines[{i}]: id must not be empty")
-        if e["id"] in ids:
+        if str(e["id"]) in ids:
             rep.error(f"{label}: duplicate id")
-        ids.add(e["id"])
+        ids.add(str(e["id"]))
         folder = e["folder"]
-        if d["folders"] and folder not in d["folders"]:
+        if d["folders"] and folder not in d["folders"] and not (folder == "navy" and "naval" in d["folders"]):
             rep.error(f"{label}: unknown doctrine folder {folder} (have {', '.join(sorted(d['folders']))})")
         elif d["folders"].get(folder) is False:
             rep.warn(f"{label}: folder {folder} is not allowed with the active DLCs")
-        if e["xp"] < 0:
-            rep.error(f"{label}: xp must be >= 0")
         gd, sub, track = e.get("grand_doctrine"), e.get("subdoctrine"), e.get("track")
-        if bool(gd) == bool(sub):
-            rep.error(f"{label}: give exactly one of grand_doctrine or subdoctrine")
+        if not gd and not sub:
+            rep.error(f"{label}: give grand_doctrine or subdoctrine (or both: the grand doctrine is adopted first)")
             continue
+        costs = []
         if gd:
             info = d["grand"].get(gd)
             if info is None:
                 rep.error(f"{label}: unknown grand doctrine {gd}")
-                continue
-            if info["folder"] and info["folder"] != folder:
-                rep.error(f"{label}: grand doctrine {gd} is in folder {info['folder']}, not {folder}")
-            if track:
-                rep.warn(f"{label}: track is ignored for a grand doctrine")
-            cost = info["xp_cost"]
-        else:
+            else:
+                if info["folder"] and info["folder"] != folder:
+                    rep.error(f"{label}: grand doctrine {gd} is in folder {info['folder']}, not {folder}")
+                if track and not sub:
+                    rep.warn(f"{label}: track is ignored for a grand doctrine")
+                costs.append(info["xp_cost"])
+        if sub:
             info = d["sub"].get(sub)
             if info is None:
                 rep.error(f"{label}: unknown subdoctrine {sub}")
@@ -888,15 +832,18 @@ def check_doctrines(game, plan, meta, rep, good):
                 rep.error(f"{label}: subdoctrine {sub} is on track {info['track']}, not {track}")
             elif d["tracks"] and track not in d["tracks"]:
                 rep.error(f"{label}: unknown doctrine track {track}")
-            in_folder = {t for g in d["grand"].values() if g["folder"] == folder for t in g["tracks"]}
+            pool = [g for k, g in d["grand"].items() if g["folder"] == folder and (not gd or k == gd)]
+            in_folder = {t for g in pool for t in g["tracks"]}
             if track and in_folder and track not in in_folder:
-                rep.error(f"{label}: track {track} belongs to no {folder} grand doctrine")
+                where = f"grand doctrine {gd}" if gd else f"{folder} grand doctrine"
+                rep.error(f"{label}: track {track} belongs to no {where}")
             want = _XP_TYPE.get(folder)
             if want and info["xp_type"] and info["xp_type"] != want:
                 rep.error(f"{label}: subdoctrine {sub} costs {info['xp_type']} XP, folder {folder} gives {want}")
-            cost = info["xp_cost"]
+            costs.append(info["xp_cost"])
+        cost = max(costs) if costs else 0
         if cost and e["xp"] < cost:
-            rep.warn(f"{label}: xp {e['xp']} is below the base cost {cost:g} (the adopt is refused until then)")
+            rep.warn(f"{label}: xp {e['xp']:g} is below the base cost {cost:g} (the adopt is refused until then)")
     return len(entries)
 
 
@@ -969,10 +916,11 @@ def resolve_meta(plan, game, rep):
     return meta
 
 
-def validate(plan, game):
+def validate(plan, game, schema=None):
+    """(Report, counts). schema: the plan schema dict (default: plan.schema.json in the repo)."""
     rep = Report()
     meta = resolve_meta(plan, game, rep)
-    good = check_shapes(plan, rep)
+    good = check_schema(plan, rep, schema)
     counts = {"research": check_research(game, plan, meta, rep)}
     check_focus(game, plan, meta, rep)
     check_production(game, plan, rep)

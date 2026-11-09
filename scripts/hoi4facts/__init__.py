@@ -8,7 +8,8 @@ Modules:
     game       Game(root, mods): technologies, focus trees, country history, states, VPs,
                OOBs, doctrines, events, ideas, decisions, buildings, equipment
     tech       eligible(tech, done, rule="all"|"any"), missing, multi_parent, readings
-    adjacency  province adjacency from map/provinces.bmp + adjacencies.csv
+    mapgraph   province graph (adjacency, rivers, supply, routes); Game.map_graph() layers it
+    schema_check  JSON Schema subset validator for plan.schema.json
     validate   plan checks (scripts/validate_plan.py is the CLI)
 
 Callers outside scripts/ put the scripts folder on sys.path and `import hoi4facts`.

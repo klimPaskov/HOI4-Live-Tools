@@ -64,11 +64,11 @@ GOOD = {
         {"year": 1937, "not_before": "1937.01.01", "techs": ["t_ab"]},
     ],
     "construction_plan": [
-        {"order": 1, "building": "supply_node", "state": 1, "province": 11, "when": "1936.01.01"},
-        {"order": 2, "building": "rail_way", "from_state": 1, "to_state": 2, "path": [10, 11, 20],
+        {"id": "c1", "order": 1, "building": "supply_node", "state": 1, "province": 11, "when": "1936.01.01"},
+        {"id": "c2", "order": 2, "building": "rail_way", "from_state": 1, "to_state": 2, "path": [10, 11, 20],
          "when": "province_controlled:20"},
-        {"order": 3, "building": "infrastructure", "state": 2, "when": "owner:3=AAA"},
-        {"order": 4, "building": "infrastructure", "state": 1, "when": "state_fully_controlled:3"},
+        {"id": "c3", "order": 3, "building": "infrastructure", "state": 2, "when": "owner:3=AAA"},
+        {"id": "c4", "order": 4, "building": "infrastructure", "state": 1, "when": "state_fully_controlled:3"},
     ],
     "vp_targets": [{"province": 10, "state": 1, "vp": 5, "army": "North"}, {"province": 30, "state": 3}],
     "army_layout": [
@@ -81,7 +81,7 @@ GOOD = {
         {"id": "grand", "folder": "land", "grand_doctrine": "grand_x", "xp": 100},
         {"id": "inf", "folder": "land", "track": "inf", "subdoctrine": "sub_inf", "xp": 50},
     ],
-    "event_rules": [{"event": "aaa.1", "option_name": "aaa.1.b", "condition": "x", "else_option_name": "aaa.1.a"}],
+    "event_rules": [{"event": "aaa.1", "option_name": "aaa.1.b", "condition": "province_controlled:10", "else_option_name": "aaa.1.a"}],
 }
 
 
@@ -137,11 +137,11 @@ class CoverageTests(unittest.TestCase):
     def test_shapes(self):
         text = self.errors(research_path={"year": 1936}, army_layout=[{"name_hint": "x", "state": "1"}],
                            war={"axes": [3]}, doctrines=[{"id": "d", "folder": "land", "xp": "100"}])
-        self.assertIn("research_path must be a list", text)
-        self.assertIn("army_layout[0].state must be an integer", text)
-        self.assertIn("army_layout[0]: templates is required", text)
-        self.assertIn("war.axes must be a list of integer lists", text)
-        self.assertIn("doctrines[0].xp must be an integer", text)
+        self.assertIn("schema: research_path: expected array, got object", text)
+        self.assertIn("schema: army_layout[0].state: expected integer, got string", text)
+        self.assertIn("schema: army_layout[0]: missing required key 'templates'", text)
+        self.assertIn("schema: war.axes[0]: expected array, got integer", text)
+        self.assertIn("schema: doctrines[0].xp: expected number, got string", text)
 
     def test_research_path_readings_and_years(self):
         # t_ab after t_a (start) only: the ANY reading allows it, ALL does not -> warning naming it
@@ -163,7 +163,8 @@ class CoverageTests(unittest.TestCase):
         bad[1]["path"] = [10, 20]
         bad[2]["when"] = "owner:3=ZZZ"
         bad[3]["when"] = "province_controlled:30"
-        bad.append({"order": 1, "building": "bunker", "state": 9, "when": "province_controlled:x"})
+        bad.append({"id": "c1", "building": "bunker", "state": 9, "when": "province_controlled:10"})
+        bad.append({"id": "c9", "building": "infrastructure", "state": 1, "when": "province_controlled:x"})
         text = self.errors(construction_plan=bad)
         self.assertIn("province 20 is in state 2, not 1", text)
         self.assertIn("path starts at 10 in state 1", text.replace("\n", " ") + " path starts at 10 in state 1")
@@ -173,12 +174,8 @@ class CoverageTests(unittest.TestCase):
                       text)
         self.assertIn("unknown building bunker", text)
         self.assertIn("state 9 is not a state id", text)
-        self.assertIn("needs a numeric id", text)
-        self.assertIn("order 1 is used by entries", text)
-        rep = self.run_plan(construction_plan=[{"order": 1, "building": "infrastructure", "states": [1],
-                                                "when": "when it feels right"}])
-        self.assertEqual(rep.errors, [])
-        self.assertTrue(any("player-only" in w for w in rep.warnings))
+        self.assertIn('schema: construction_plan[5].when: "province_controlled:x" does not match', text)
+        self.assertIn("id c1 is used by entries", text)
 
     def test_railway_ends_must_be_in_their_states(self):
         bad = copy.deepcopy(GOOD["construction_plan"])
@@ -199,7 +196,9 @@ class CoverageTests(unittest.TestCase):
             {"name_hint": "A", "state": 2, "templates": ["Line"], "role": "strike"},
             {"name_hint": "B", "state": 1, "templates": ["Elite"], "count": 1, "role": "guard",
              "guard_states_in_order": [1]},
-            {"name_hint": "C", "state": 1, "templates": ["Guard"], "count": 3, "role": "hold"},
+            {"name_hint": "C", "state": 1, "templates": ["Guard"], "count": 3, "role": "guard",
+             "guard_states_in_order": [1]},
+            {"name_hint": "F", "state": 1, "templates": ["Guard"], "count": 1, "role": "hold"},
             {"name_hint": "D", "state": 2, "templates": ["Guard"], "count": 1, "role": "guard",
              "guard_states_in_order": [77]},
             {"name_hint": "E", "state": 3, "templates": ["Elite"], "role": "guard", "when": "owner:3=AAA",
@@ -207,7 +206,7 @@ class CoverageTests(unittest.TestCase):
         ])
         text = "\n".join(rep.errors)
         self.assertIn("template 'Elite' is not in the start OOB AAA_1936", text)
-        self.assertIn("role must be strike or guard, not 'hold'", text)
+        self.assertIn('schema: army_layout[3].role: "hold" is not one of ["strike", "guard"]', text)
         self.assertIn("no division of Guard starts in state 2", text)
         self.assertIn("guard_states_in_order 77 is not a state id", text)
         self.assertNotIn("'E'", text)  # a when-entry only warns about its template
@@ -225,27 +224,31 @@ class CoverageTests(unittest.TestCase):
     def test_doctrines(self):
         text = self.errors(doctrines=[
             {"folder": "land", "track": "inf", "subdoctrine": "sub_inf", "when": "army_xp >= 100"},
-            {"id": "a", "folder": "sea", "grand_doctrine": "grand_x", "xp": 100},
+            {"id": "a", "folder": "air", "grand_doctrine": "grand_x", "xp": 100},
             {"id": "b", "folder": "land", "subdoctrine": "sub_inf", "xp": 50},
             {"id": "c", "folder": "land", "track": "other", "subdoctrine": "sub_inf", "xp": 50},
             {"id": "c", "folder": "land", "grand_doctrine": "nope", "xp": 50},
             {"id": "e", "folder": "land", "xp": 50},
         ])
         self.assertIn("old shape with 'when'", text)
-        self.assertIn("unknown doctrine folder sea", text)
-        self.assertIn("grand doctrine grand_x is in folder land, not sea", text)
+        self.assertIn("unknown doctrine folder air", text)
+        self.assertIn("grand doctrine grand_x is in folder land, not air", text)
         self.assertIn("subdoctrine sub_inf needs its track (inf)", text)
         self.assertIn("is on track inf, not other", text)
         self.assertIn("duplicate id", text)
         self.assertIn("unknown grand doctrine nope", text)
-        self.assertIn("exactly one of grand_doctrine or subdoctrine", text)
+        self.assertIn("give grand_doctrine or subdoctrine", text)
+        rep = self.run_plan(doctrines=[{"id": "both", "folder": "land", "grand_doctrine": "grand_x",
+                                        "track": "inf", "subdoctrine": "sub_inf", "xp": 100}])
+        self.assertEqual(rep.errors, [])
         rep = self.run_plan(doctrines=[{"id": "x", "folder": "land", "grand_doctrine": "grand_x", "xp": 20}])
         self.assertTrue(any("below the base cost 100" in w for w in rep.warnings))
 
     def test_event_rules(self):
         text = self.errors(event_rules=[{"event": "aaa.1", "option_name": "aaa.1.z"},
                                         {"event": "aaa.9", "option_name": "aaa.9.a"},
-                                        {"event": "aaa.1", "fallback_option_name": "aaa.1.q"}])
+                                        {"event": "aaa.1", "option_name": "aaa.1.a",
+                                         "fallback_option_name": "aaa.1.q"}])
         self.assertIn("option_name aaa.1.z is not an option of the event (has aaa.1.a, aaa.1.b)", text)
         self.assertIn("aaa.9: no event with this id", text)
         self.assertIn("fallback_option_name aaa.1.q", text)

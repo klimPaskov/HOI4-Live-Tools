@@ -139,30 +139,35 @@
   ],
   "politics": [
     {
+      "id": "pol_government_2_partial_economic_mobilisation",
       "category": "government",
       "slot": 2,
       "idea": "partial_economic_mobilisation",
       "cost": 173
     },
     {
+      "id": "pol_government_3_POL_stanislaw_wojciechowski",
       "category": "government",
       "slot": 3,
       "idea": "POL_stanislaw_wojciechowski",
       "cost": 173
     },
     {
+      "id": "pol_government_4_POL_eugeniusz_kwiatkowiski",
       "category": "government",
       "slot": 4,
       "idea": "POL_eugeniusz_kwiatkowiski",
       "cost": 150
     },
     {
+      "id": "pol_government_5_POL_zdzislaw_lubomirski",
       "category": "government",
       "slot": 5,
       "idea": "POL_zdzislaw_lubomirski",
       "cost": 150
     },
     {
+      "id": "pol_government_0_limited_conscription",
       "category": "government",
       "slot": 0,
       "idea": "limited_conscription",

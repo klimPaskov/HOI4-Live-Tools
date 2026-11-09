@@ -26,12 +26,12 @@ NEW keys, for an executor extension (the player applies them until then):
 
 | Key | Shape | Meaning |
 |---|---|---|
-| `event_rules` | `{event, option_name, condition, else_option_name, why}` | choose the option by localisation key; `condition` is checked by the player |
+| `event_rules` | `{event, option_name, condition, else_option_name, why, note}` | choose the option by localisation key; `condition` is a plan.schema.json predicate (the original wording is in `note`), checked by the player |
 | `research_path` | `{year, not_before, techs[]}` | research blocks only from their `not_before` date, in order |
-| `construction_plan` | ordered `{order, building, state, province?, when, why}` | as in italy-plan.md |
+| `construction_plan` | ordered `{id, order, building, state, province?, when, why, note}` | as in italy-plan.md; the Shewa arms factory waits in `contingencies` for focus ETH_develop_the_capital_region |
 | `training_rules` | `{only_if_stockpile: {archetype: n}, cap_template, cap}` | queue `training` only when the stockpile holds n of that equipment; never above the template cap |
-| `doctrines` | `{folder, grand_doctrine or track+subdoctrine, when}` | adopt when army XP allows |
-| `army_layout` | `{name_hint, state, divisions, general, hold[], role}` | armies per region, which provinces each must hold |
+| `doctrines` | `{id, folder, grand_doctrine or track+subdoctrine, xp}` | adopt once army XP reaches `xp` |
+| `army_layout` | `{name_hint, state, templates, count, general, role: guard, guard_states_in_order, note}` | one guard army per region holding its state; `note` keeps the planned role, divisions and provinces to hold. Layout guards stay bound to their post, so the P3/P4 attacks need the phase overrides (build item 15) or the player |
 | `army_group` | list of `{name_hint, field_marshal, members}` | two fronts |
 | `war_by_phase` | `{phase: {axes, guard_states}}` | the exact `plan set` payload for `war` at each phase switch |
 | `hold_targets` | `{mission, provinces[], keep_at_least, until}` | provinces whose loss fails an Ethiopian mission |
