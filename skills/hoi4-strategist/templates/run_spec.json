@@ -1,0 +1,16 @@
+{
+  "_comment": "Strategist input (design 3.1). tag: country tag; start_date: a bookmark date (YYYY.M.D); goal: the user's words, verbatim; goal_clarifications: later user answers, verbatim; mode: fair (default) or meta, chosen by the user; dlcs and mods: auto (read the launch configuration) or explicit lists; horizon: the last date the plan covers; player: the role that plays from the brief (model and effort come from config.json agents); lessons: the lessons file.",
+  "tag": "<TAG>",
+  "start_date": "1936.1.1",
+  "goal": "<the user's goal in their words>",
+  "goal_clarifications": [],
+  "mode": "fair",
+  "difficulty": "normal",
+  "ai": "historical",
+  "speed": 3,
+  "horizon": "1937.1.1",
+  "dlcs": "auto",
+  "mods": "auto",
+  "player": {"provider": "claude", "role": "player"},
+  "lessons": "skills/hoi4-campaign-playbook/references/lessons.jsonl"
+}

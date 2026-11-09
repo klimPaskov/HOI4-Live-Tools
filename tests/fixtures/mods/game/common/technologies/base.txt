@@ -1,0 +1,5 @@
+technologies = {
+    t_a = { research_cost = 1 start_year = 1936 path = { leads_to_tech = t_ab } }
+    t_b = { research_cost = 1 start_year = 1936 path = { leads_to_tech = t_ab } }
+    t_ab = { research_cost = 2 start_year = 1937 }
+}

@@ -104,6 +104,28 @@ Spend order for army XP (XP also pays variants, section 6): (1) infantry subdoct
 When NOT to apply: do not swap subdoctrines mid-war unless the current track's rewards are idle (mastery restarts for the new subdoctrine); do not buy a
 subdoctrine whose `available` is false (greyed in UI).
 
+### 2.3 Experience budget (every spend of army, air and navy XP)
+
+- Pools: army, navy and air experience each cap at **500** (`MAX_ARMY_EXPERIENCE`, `MAX_NAVY_EXPERIENCE`,
+  `MAX_AIR_EXPERIENCE`, defines:891-893) [V]. XP gained above the cap is lost, so plan spends before a
+  pool fills.
+- Sources: combat (the main one); training divisions give at most 0.08 army XP per day
+  (`NMilitary.TRAINING_MAX_DAILY_COUNTRY_EXP`, defines:1015) and training ships at most 1 navy XP per day
+  (`NNavy.TRAINING_MAX_DAILY_COUNTRY_EXP`, defines:1971) [V]; army exercises in peace (the exercise
+  button of the army view; no tool yet); focus and decision rewards (`army_experience = N`, read with
+  `facts.py focus <id>`); chiefs and high command with experience-gain traits (§ 4 of
+  `politics-diplomacy-espionage.md`).
+- Start-date XP: no `history/countries` file sets `army_experience` (`facts.py grep army_experience
+  --folder history/countries`: no match, 1.19.4.1); read the real value live with `hoi4_doctrines` at
+  reconcile [?].
+- Costs: grand doctrine 100, subdoctrines 100 (most), 60 or 50 (§2); template edits 5 per battalion and
+  10 per support company, plus 25 for an extra regiment column on this build (the template tools read
+  the cost from the window; the wiki Division designer and Division pages say 20 or 25) [?]; designer
+  modules add 5, replace 6, convert 3, remove 1, legacy upgrades 10 plus a ramp (§6.2) [V];
+  officer-corps spirits 20, 35 and 50 XP for the first, second and third (wiki Officer corps) [W].
+- Order: write every spend per branch with its month; no month spends more than the forecast; keep the
+  35 XP variant reserve (§2.2) only when a design is planned.
+
 ## 3. Research priority tables
 
 Costs below are `research_cost` from G/common/technologies (multiply by 110 for points [?]). Years are `start_year`; researching earlier than the year is ahead of time.

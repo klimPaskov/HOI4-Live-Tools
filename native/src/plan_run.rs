@@ -43,9 +43,46 @@
 //!                          and the alarms `research_slot_idle_plan_exhausted` / `no_active_focus_plan_exhausted`
 //!                          when nothing from the plan could be started. `active` missing means active; only
 //!                          `"active": false` pauses the runner (result reason `plan inactive (active:false)`)
-//!   politics               [{"category","slot","idea"}] one-shot picks
+//!   _meta                  {"campaign":"<id>",..}: optional; `campaign` names the campaign this plan
+//!                          belongs to, and plan_state.json of another campaign is ignored (below)
+//!   politics               [{"id"?,"category","slot","idea","cost"?}] one-shot picks in list order;
+//!                          "cost": political power needed first. Done-memory is keyed by `id`
+//!                          (stable across a reorder or a revision), else by list position and idea
 //!   decisions              decision keys taken whenever enabled
-//!   training               {"template","queue","batch","deploy_state"} keep a training queue
+//!   training               {"template","queue","batch","deploy_state","when"?} keep a training queue, or a
+//!                          list of them (plan_manage.rs, with `training_rules`)
+//!   training_rules         {"only_if_stockpile","cap_template","cap"} guard and cap for training (plan_manage.rs)
+//!   templates              [{"id","name","base"?,"regiments","support",..}] templates made once by plan (plan_manage.rs)
+//!   occupation             {"default_law","harsher_at_resistance","milder_at_compliance",..} law steps (plan_manage.rs)
+//!   peace                  {"take","puppet"?,"liberate"?} demands when a conference opens, else the stop (plan_manage.rs)
+//!   auto_import            {"budget"} automatic importing on a resource deficit (plan_manage.rs)
+//!   air_plan               [{"wing"|"airframe","region","mission","base_state"|"base_region",..}] (plan_manage.rs);
+//!                          any mission hoi4_air_mission accepts (strategic_bombing, naval_strike, port_strike,
+//!                          logistics_strike, interception, ..): there is no separate `air_ops` key (plan_military.rs)
+//!   manage                 thresholds of the standing rules: alerts, manpower, stability, equipment (plan_manage.rs);
+//!                          casualty_ratio_max, casualty_window_days, casualty_min_losses, casualty_rest_days,
+//!                          enemy_air_superiority, air_front_regions, air_hold_days (plan_military.rs)
+//!   army_group             [{"id","name"?,"armies":[..],"marshal"?,"when"?}] grouped once, field marshal once (plan_military.rs)
+//!   navy                   {"posture","fleets":[{"fleet","missions":[{"mission","regions",..}],..}],"convoy_escort"?,
+//!                          "admirals"?,"repair_below"?,"repair_until"?} regions, missions, admirals, repair (plan_military.rs)
+//!   invasions              [{"id","from_state","target_state","target_province"?,"armies":[..],"fleet"?,"when"?,..}]
+//!                          one naval invasion at a time through hoi4_naval_invasion (plan_military.rs)
+//!   hold_targets           [{"id","army","provinces":[rear first],"when"?,"until"?}] an army holds the most forward
+//!                          held province of a corridor (a lost one behind it first); it replaces the army's guard
+//!                          post and the war step leaves it alone while active (plan_military.rs, before the war)
+//!   designs                [{"id","kind","base","name"?,"modules"?|"upgrades"?,"when"?,"xp"?,"production"?}]
+//!                          equipment designs made once, XP-guarded (plan_affairs.rs); `production[].design`
+//!                          switches that line to a design once (plan_affairs.rs)
+//!   diplomacy              [{"id","action","target","when"?,"world_tension_max"?,..}] justify, declare (only when
+//!                          the justification is complete and the war does not widen), guarantee, NAP,
+//!                          access, ... once each (plan_affairs.rs)
+//!   faction                {"join"?,"create"?:{"name","template"?,"invite"?},"when"?} (plan_affairs.rs)
+//!   intelligence           {"agency","upgrades":[ordered],"operatives"?} agency, next upgrade when none runs
+//!                          (plan_affairs.rs)
+//!   mio                    [{"organisation","traits":[trait_index..],"when"?,"design_team"?,"policy"?}] (plan_affairs.rs)
+//!   trade                  [{"resource","amount","from"?,"when"?}] manual purchases once each (plan_affairs.rs)
+//!   research_bonuses       {"<bonus category or name>":[techs]} or true: an active research bonus puts its
+//!                          techs first in the research step (plan_affairs.rs)
 //!   production_priority    equipment prefixes that receive military factories on no line
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
 //!   production             [{"equipment","factories"}] lines added once
@@ -59,6 +96,22 @@
 //!   construction_fallback_any_own_state  true: when every listed state is full, build in other own states
 //!                          (hoi4_states with the player tag); every tick's result names why
 //!                          nothing was queued in `construction`
+//!   construction_plan      [{"id"?,"order","building","state"?,"province"?,"path"?:[province ids],
+//!                          "from_state"?,"to_state"?,"when"?,"priority"?}] a triggered build order,
+//!                          each item queued once (hoi4_construction_add, or hoi4_railway_build for
+//!                          "rail_way"/"railway" from `path`'s first to last province) when `when` holds:
+//!                          "YYYY.MM.DD", "province_controlled:<id>", "state_fully_controlled:<id>",
+//!                          "owner:<state>=<TAG>" or empty (at once). Runs in peace and at war (when the
+//!                          war runs first, right after the war step; else just before `construction`).
+//!                          Done-memory is keyed by `id` (stable), else by `order`
+//!   doctrines              [{"id","folder","grand_doctrine"?,"track"?,"subdoctrine"?,"xp"}] adopted in
+//!                          list order through hoi4_doctrine_adopt once the folder's experience (folder
+//!                          "land"/"special_forces" army XP, "naval"/"navy" navy XP, "air" air XP;
+//!                          default "land") reaches "xp" (default 100): "grand_doctrine" is sent as
+//!                          {doctrine}, "subdoctrine" as {doctrine, track} (an entry with both adopts
+//!                          the grand doctrine first). The old entry shape {"doctrine","track"} is still
+//!                          read for one release. An entry that waits blocks the ones after it.
+//!                          Done-memory is keyed by `id` (stable), else by list position
 //!   war                    {"enemies":["FRA"],"min_army":6,"per_target":2,"reserve":["Army 9"],"cooldown_hours":12}
 //!                          send armies at the nearest enemy-held states (own states held by an enemy first):
 //!                          step into the state, draw front and offensive lines, execute the plan.
@@ -78,13 +131,78 @@
 //!                          listed general to an army of at least `min_for_general` divisions;
 //!                          armies below that size are merged into others (hoi4_army_merge) unless
 //!                          "consolidate": false
+//!
+//! The strategy layer (step 0, before events and war; reads only, never input). Predicates are
+//! `crate::plan_predicate` strings or {all|any|not}; an atom that cannot be read is unknown, never
+//! true, and whatever waits on it waits; every unknown atom is listed once per run in the digest's
+//! `predicates_unknown` with the reason. These keys are judged at most every 6 game hours (and at
+//! once when they change); the digest's `strategy` block shows the phase, the goal status, the
+//! checkpoints and the active contingencies, `strategy_changes` what changed in this run:
+//!   goal                   {"predicates":[..],"deadline"?:"YYYY.MM.DD","fail_predicates"?:[..]}: every
+//!                          predicate holds -> alarm `goal_reached`; a fail predicate holds, the deadline has
+//!                          passed or is less than `alarms.goal_risk_days` (default 30) game days away ->
+//!                          `goal_at_risk`. Both are also noted in the change feed when the status changes
+//!   phases                 [{"id","enter"?,"exit"?,"overrides"?,"revise_on_enter"?}] in order: with no
+//!                          phase active the first whose `enter` holds (no enter: holds) starts; when the
+//!                          active phase's `exit` holds, the next later phase whose `enter` holds takes over.
+//!                          The active phase's `overrides` are merged over the plan for the whole tick
+//!                          (top-level keys replaced, null removes a key, `war` and `alarms` merged key by
+//!                          key; the strategy keys, `active` and `_meta` are never overridden). A change is
+//!                          kept in plan_state.json, noted in the change feed and raised as `phase_changed`
+//!   checkpoints            [{"id","by":"YYYY.MM.DD","must":[..],"else"?}] judged once the date is reached:
+//!                          every `must` holds -> met; one is false -> alarm and feed `checkpoint_missed`,
+//!                          then `else` "phase:<id>" (or a bare phase id) switches to that phase,
+//!                          "contingency:<id>" triggers that contingency, "revise" only raises the alarm;
+//!                          an unknown `must` (and none false) waits. Each checkpoint is settled once
+//!   contingencies          [{"id","when" (or "trigger"),"then":{"phase"?,"overrides"?} (or "phase" and
+//!                          "overrides" beside "when"),"revise"?}]: when the trigger holds the contingency
+//!                          becomes active (feed and alarm `contingency_triggered`; its phase is switched to
+//!                          once) and its overrides apply over the phase's while it is active; it clears when
+//!                          the trigger is false again (unknown leaves it as it is; one triggered by a missed
+//!                          checkpoint stays)
+//!   politics[].when        a gated pick (a law behind war support, ...) waits until its predicate holds
+//!   decision_rules         [{"id","decision","when"?,"target"?,"max"?,"never"?}] tried before `decisions`:
+//!                          taken when the game enables it and `when` holds; `target` picks the row of a
+//!                          targeted decision (hoi4_decision_take target); `max` successful takes at most
+//!                          (done-memory by id); "never": true blocks the decision in every path, the
+//!                          `decisions` list included (`decision_forbidden`)
+//!   event_rules            [{"event","option_name","when" (or "condition")?,"else_option_name"?,
+//!                          "fallback_option_name"?,"fallback_index"?}]: the first rule of the open event
+//!                          whose condition holds picks the option whose text (hoi4_events options) is
+//!                          option_name, ignoring case, markup and punctuation (else the one option that
+//!                          contains it); a false condition takes else_option_name or leaves the event to
+//!                          the next rule; a name not offered falls back to fallback_option_name, then
+//!                          fallback_index, then event_options; an unknown condition waits
+//!
+//! Memory across a server restart: `plan_state.json` next to plan.json (written by the runner
+//! through a temp file and a rename whenever it changes; never edited by hand) keeps what is done
+//! (politics, doctrines, production lines; construction_plan items queued, each with its game
+//! hour), the running skip timers (a decision taken waits 30 days), the failure ledger, the
+//! army_layout roles and the strategy layer (active phase, settled checkpoints, active
+//! contingencies, last goal status). It is read once per server life when the game date is known, and ignored
+//! when it names another campaign (player tag, the game's playthrough id, or `_meta.campaign`).
+//! Work dated after the current game date is dropped (an earlier save was loaded). A note on
+//! an ignored or unwritable file is in the run result as `plan_state`.
 use crate::error::{Error, Result};
+use crate::plan_predicate::{Cache, Ctx, Truth};
 use serde_json::{json, Map, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::Path,
     time::Duration,
 };
+
+/// Continuous management (alerts, templates, occupation, peace, resources, air plan, `manage`).
+#[path = "plan_manage.rs"]
+mod plan_manage;
+/// Military domains (army groups, navy, naval invasions, casualty ratio, air superiority).
+#[path = "plan_military.rs"]
+mod plan_military;
+
+/// State, economy and diplomacy affairs (designs, diplomacy, faction, trade, MIOs, intelligence,
+/// research bonuses).
+#[path = "plan_affairs.rs"]
+mod plan_affairs;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -143,7 +261,8 @@ pub struct State {
     boot: u64,
     bad: HashMap<String, GameHour>,
     last_hour: GameHour,
-    done: HashSet<String>,
+    /// One-shot work done (`pol:..`, `prod:..`, `doc:..`): key -> game hour it was done.
+    done: HashMap<String, GameHour>,
     seen: HashMap<String, GameHour>,
     seq: u64,
     sent: HashMap<String, (String, Value)>,
@@ -162,22 +281,47 @@ pub struct State {
     war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
     /// The enemy-held province of an own state last ordered for an army, and when.
     war_province: HashMap<String, (i32, GameHour)>,
-    /// `construction_plan` items already queued (by `order`).
-    plan_built: HashSet<i64>,
+    /// `construction_plan` items already queued (by `id`, else `order`) -> game hour queued.
+    plan_built: HashMap<String, GameHour>,
     /// `army_layout`: name_hint -> the army that plays that role.
     layout: HashMap<String, String>,
+    /// Continuous management (plan_manage.rs): wake alarms, digest lines, the peace conference.
+    manage: plan_manage::Memory,
+    /// Military domains (plan_military.rs): wake alarms, digest lines, loss samples.
+    military: plan_military::Memory,
+    /// State, economy and diplomacy affairs (plan_affairs.rs): wake alarms, digest lines, reads.
+    affairs: plan_affairs::Memory,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
-    /// Refusals per politics pick (index): each refusal doubles the wait.
-    pol_fails: HashMap<usize, u32>,
+    /// Refusals per politics pick (its done key): each refusal doubles the wait.
+    pol_fails: HashMap<String, u32>,
     /// Political power when a pick was last refused: it is not tried again until the
     /// country has gained some (a refusal is usually a missing few points).
-    pol_pp_at_fail: HashMap<usize, f64>,
+    pol_pp_at_fail: HashMap<String, f64>,
     centers: HashMap<i32, (f64, f64)>,
     con: ConState,
     /// stop_on_date: (target hour, outcome of the single pause attempt)
     date_stop: Option<(i64, String)>,
     stages: Stages,
+    /// `plan_state.json`: the memory that survives a server restart.
+    persist: Persist,
+    /// goal, phases, checkpoints, contingencies (step 0)
+    strategy: Strategy,
+    /// this tick's predicate reads (game hour, cache): each read at most once per tick
+    pcache: Option<(GameHour, Cache)>,
+}
+
+/// What `run` knows about the persisted memory next to plan.json.
+#[derive(Default)]
+struct Persist {
+    /// The file was looked at (restored or ignored) once the game date was known.
+    restored: bool,
+    /// The campaign this memory belongs to: {"player","playthrough","campaign"}.
+    identity: Option<Value>,
+    /// The memory last written (nothing is written while it is unchanged).
+    saved: Option<Value>,
+    /// Why the file was ignored or could not be written (reported as `plan_state`).
+    note: Option<String>,
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -240,7 +384,7 @@ impl Default for State {
                 .map_or(0, |d| d.as_secs()),
             bad: HashMap::new(),
             last_hour: 0,
-            done: HashSet::new(),
+            done: HashMap::new(),
             seen: HashMap::new(),
             seq: 0,
             sent: HashMap::new(),
@@ -253,8 +397,11 @@ impl Default for State {
             war_guard: HashMap::new(),
             war_repeat: HashMap::new(),
             war_province: HashMap::new(),
-            plan_built: HashSet::new(),
+            plan_built: HashMap::new(),
             layout: HashMap::new(),
+            manage: Default::default(),
+            military: Default::default(),
+            affairs: Default::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -262,6 +409,9 @@ impl Default for State {
             con: ConState::default(),
             date_stop: None,
             stages: Stages::default(),
+            persist: Persist::default(),
+            strategy: Strategy::default(),
+            pcache: None,
         }
     }
 }
@@ -378,6 +528,15 @@ impl State {
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
+/// The stable `id` of a plan list item (a non-empty string or a number), used for its
+/// done-memory instead of its position so a revised or reordered list keeps what was done.
+fn item_id(item: &Value) -> Option<String> {
+    match &item["id"] {
+        Value::String(id) if !id.trim().is_empty() => Some(id.trim().to_string()),
+        Value::Number(id) => Some(id.to_string()),
+        _ => None,
+    }
+}
 /// Loose own divisions standing in `state_id` (hoi4_armies unassigned_by_state).
 fn unassigned_in(roster: &Value, state_id: i64) -> u64 {
     list(roster, "unassigned_by_state")
@@ -451,10 +610,17 @@ pub fn tick(
     state.stages.research = None;
     state.stages.focus = None;
     state.con.baseline.get_or_insert(now);
+    // 0. strategy (reads only): goal, phases, checkpoints, contingencies; the active phase's and
+    // contingencies' overrides are merged over the plan for the rest of this tick. One predicate
+    // context per tick: every read behind a predicate happens at most once.
+    state.pcache = None;
+    let merged = strategy_step(state, tools, plan, now);
+    let plan = merged.as_ref().unwrap_or(plan);
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
     if events["peace_conference_open"] == json!(true) {
-        return Ok(Tick::Stop("peace conference open".into()));
+        // the plan's `peace` demands, else the stop (plan_manage.rs)
+        return plan_manage::peace(state, tools, plan, lease, now);
     }
     if let Some(top) = list(&events, "events").last() {
         let key = text(&top["event"]).to_string();
@@ -468,6 +634,14 @@ pub fn tick(
             .map_or(2 * DAY, |days| days.saturating_mul(DAY));
         // A choice event is the model's decision unless the plan names an option for it
         // or explicitly allows answering every event ("auto_events": "all").
+        // `event_rules` come first: an option by its name; an unknown condition waits.
+        let ruled = event_rule_choice(state, tools, plan, &key, top, now);
+        if matches!(ruled, Some(None)) {
+            return Ok(Tick::Waiting { event: key, new });
+        }
+        let (ruled, how) = ruled
+            .flatten()
+            .map_or((None, String::new()), |(i, how)| (Some(i), how));
         let chosen = plan["event_options"][&key].as_u64().or_else(|| {
             // {"event_prefix_options": {"DOD_": "last"}}: a rule for a whole family of events
             plan["event_prefix_options"]
@@ -483,6 +657,7 @@ pub fn tick(
                     })
                 })
         });
+        let chosen = ruled.or(chosen);
         let all = plan["auto_events"] == json!("all");
         if auto && (news || chosen.is_some() || (waited > patience && all)) {
             let option = chosen.unwrap_or(0);
@@ -494,10 +669,15 @@ pub fn tick(
                 "ev",
             )?;
             return Ok(Tick::Acted(format!(
-                "event {key} option {option}: {ok} {why}"
+                "event {key} option {option}{how}: {ok} {why}"
             )));
         }
         return Ok(Tick::Waiting { event: key, new });
+    }
+    // 1a'. hold_targets (plan_military.rs): corridor posts are bound before the war step runs,
+    // so it never sends a holding army elsewhere
+    if let Some(step) = plan_military::hold_step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
     }
     // 1a. war first: at war a game day passes in about 2.5 s at speed 3, and one construction
     // step can take 100 s (w15, 6 Nov 2026: 111-day stalls while the tick built factories), so
@@ -577,6 +757,8 @@ pub fn tick(
             }
         }
         priority.extend(strings(plan, "research_priority"));
+        // an active research bonus puts the techs it speeds first (plan_affairs.rs)
+        plan_affairs::bonus_first(state, tools, plan, now, available.as_ref(), &mut priority);
         let open: Vec<&String> = priority
             .iter()
             .filter(|t| !done.contains(*t) && !busy.contains(*t))
@@ -836,8 +1018,15 @@ pub fn tick(
     // 4. politics (one-shot picks)
     let mut political_power: Option<f64> = None;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
-        let key = format!("pol:{index}:{}", text(&pick["idea"]));
-        if state.done.contains(&key) || state.skipped(now, "pol", &index.to_string()) {
+        let key = item_id(pick).map_or_else(
+            || format!("pol:{index}:{}", text(&pick["idea"])),
+            |id| format!("pol:id:{id}"),
+        );
+        if state.done.contains_key(&key) || state.skipped(now, "pol", &key) {
+            continue;
+        }
+        // A gated pick (a law behind war support or a war) waits until its gate holds.
+        if !pick["when"].is_null() && !judge(state, tools, &pick["when"], now).is_true() {
             continue;
         }
         if political_power.is_none() {
@@ -853,7 +1042,7 @@ pub fn tick(
             let need = pick["cost"].as_f64().unwrap_or(0.0);
             let since = state
                 .pol_pp_at_fail
-                .get(&index)
+                .get(&key)
                 .map_or(f64::MIN, |p| p + 15.0);
             if pp < need || pp < since {
                 continue;
@@ -867,73 +1056,34 @@ pub fn tick(
             "po",
         )?;
         if ok || why.contains("already holds") {
-            state.done.insert(key);
-            state.pol_fails.remove(&index);
-            state.pol_pp_at_fail.remove(&index);
+            state.pol_fails.remove(&key);
+            state.pol_pp_at_fail.remove(&key);
+            state.done.insert(key, now);
         } else {
             if let Some(pp) = political_power {
-                state.pol_pp_at_fail.insert(index, pp);
+                state.pol_pp_at_fail.insert(key.clone(), pp);
             }
             // Usually short of political power. Each attempt opens the politics screen, so
             // back off (3, 6, 12 ... 30 days) instead of retrying every game day.
-            let fails = state.pol_fails.entry(index).or_insert(0);
+            let fails = state.pol_fails.entry(key.clone()).or_insert(0);
             *fails += 1;
             let days = (3u64 << (*fails - 1).min(4)).min(30);
-            state.skip(now, "pol", &index.to_string(), days as GameHour * DAY);
+            state.skip(now, "pol", &key, days as GameHour * DAY);
         }
         return Ok(Tick::Acted(format!(
             "politics {} : {ok} {why}",
             text(&pick["idea"])
         )));
     }
-    // 5. decisions
-    let wanted = strings(plan, "decisions");
-    if !wanted.is_empty() {
-        let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
-        for d in list(&offered, "decisions") {
-            let key = text(&d["decision"]);
-            if wanted.iter().any(|w| w == key)
-                && d["enabled"] == json!(true)
-                && !d["active_timer"].as_bool().unwrap_or(false)
-                && !state.skipped(now, "dec", key)
-            {
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_decision_take",
-                    json!({"decision": key}),
-                    "de",
-                )?;
-                state.skip(now, "dec", key, if ok { 30 * DAY } else { 3 * DAY });
-                return Ok(Tick::Acted(format!("decision {key}: {ok} {why}")));
-            }
-        }
+    // 5. decisions: `decision_rules` (guarded, targeted, counted, never-take) before the plain
+    // `decisions` list
+    if let Some(step) = decisions_step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
     }
-    // 6. training
-    if plan["training"].is_object() {
-        let tr = &plan["training"];
-        let template = text(&tr["template"]).to_string();
-        let templates = tools.call("hoi4_division_templates", &json!({}))?;
-        let have = list(&templates, "templates")
-            .iter()
-            .find(|t| text(&t["template"]) == template)
-            .and_then(|t| t["queued_lines"].as_u64());
-        let queue = tr["queue"].as_u64().unwrap_or(6);
-        if let Some(have) = have {
-            if have < queue && !state.skipped(now, "train", &template) {
-                let count = tr["batch"].as_u64().unwrap_or(2).min(queue - have);
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_train",
-                    json!({"template": template, "count": count, "deploy_state_id": tr["deploy_state"]}),
-                    "tr",
-                )?;
-                if !ok {
-                    state.skip(now, "train", &template, 2 * DAY);
-                }
-                return Ok(Tick::Acted(format!("train {count} {template}: {ok} {why}")));
-            }
+    // 6. training: one template or a list, with training_rules (plan_manage.rs)
+    if !plan["training"].is_null() {
+        if let Some(step) = plan_manage::training_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
         }
     }
     // 6b. military factories on no line go to the first priority line that exists
@@ -990,13 +1140,13 @@ pub fn tick(
             }
         }
     }
-    // 7. production lines added once. The runner's memory does not survive a server
-    // restart, so a line that already exists in the game counts as done (a restart on
-    // 1 Nov 2026 re-added five lines).
+    // 7. production lines added once. The done-memory is kept in plan_state.json, and a line
+    // that already exists in the game counts as done too (a restart on 1 Nov 2026, before the
+    // memory was persisted, re-added five lines).
     let mut existing: Option<HashSet<String>> = None;
     for line in list(plan, "production") {
         let equipment = text(&line["equipment"]).to_string();
-        if state.done.contains(&format!("prod:{equipment}"))
+        if state.done.contains_key(&format!("prod:{equipment}"))
             || state.skipped(now, "prod", &equipment)
             || !reached(line, now)
         {
@@ -1014,7 +1164,7 @@ pub fn tick(
             );
         }
         if existing.as_ref().is_some_and(|e| e.contains(&equipment)) {
-            state.done.insert(format!("prod:{equipment}"));
+            state.done.insert(format!("prod:{equipment}"), now);
             continue;
         }
         let (ok, why) = state.act(
@@ -1025,11 +1175,19 @@ pub fn tick(
             "pr",
         )?;
         if ok {
-            state.done.insert(format!("prod:{equipment}"));
+            state.done.insert(format!("prod:{equipment}"), now);
         } else {
             state.skip(now, "prod", &equipment, 14 * DAY);
         }
         return Ok(Tick::Acted(format!("production {equipment}: {ok} {why}")));
+    }
+    // 7b. the triggered build order, in peace (and at war when the war does not run first;
+    // a war-first tick ran it right after the war step). Its items go before the open
+    // `construction` jobs so those cannot take the factories an ordered item waits for.
+    if !(war_on && plan["war"]["first"] != json!(false)) {
+        if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
     }
     // 8. construction with idle civilian factories. It comes before the armies
     // (which always find something to retry) so they cannot starve it.
@@ -1038,6 +1196,21 @@ pub fn tick(
     }
     // 8a. special projects, doctrines, air missions in war (one action at most)
     if let Some(step) = extras_step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a'. continuous management (plan_manage.rs): alerts, templates, occupation, resources,
+    // air_plan, manage
+    if let Some(step) = plan_manage::step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a''. military domains (plan_military.rs): naval invasions, casualty ratio, air
+    // superiority, army groups, navy
+    if let Some(step) = plan_military::step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a'''. state, economy and diplomacy affairs (plan_affairs.rs): diplomacy, faction, trade,
+    // designs and line switches, MIOs, intelligence
+    if let Some(step) = plan_affairs::step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
     // 9. armies (here unless the war runs first, which runs them right after itself)
@@ -1190,11 +1363,22 @@ fn armies_step(
             }
         }
         // Consolidate: fold the smallest army below `min_for_general` into the army that ends
-        // fullest without passing `max` (hoi4_army_merge), so generals lead real armies.
+        // fullest without passing `max` (hoi4_army_merge), so generals lead real armies. Armies
+        // with a planned role (layout, guard, hold) are left out on both sides.
         // An army with battle-plan orders is never emptied (the game deletes its orders).
         if cfg["consolidate"] != json!(false) {
+            // Armies with a planned role (army_layout, a guard post or a hold_targets post) are
+            // small on purpose: never fold them into others or others into them.
+            let roles: HashSet<String> = state
+                .layout
+                .values()
+                .filter(|a| !a.is_empty())
+                .cloned()
+                .chain(state.war_guard.keys().cloned())
+                .collect();
             let mut sizes: Vec<(String, u64, bool)> = list(&roster, "armies")
                 .iter()
+                .filter(|a| !roles.contains(text(&a["army"])))
                 .map(|a| {
                     (
                         text(&a["army"]).to_string(),
@@ -1477,10 +1661,11 @@ fn layout_step(
     Ok(None)
 }
 
-/// `construction_plan`: ordered items `{order, building, state, province?, path?, from_state?,
+/// `construction_plan`: ordered items `{id?, order, building, state, province?, path?, from_state?,
 /// to_state?, when, priority?}` queued once each when `when` holds: a date ("1936.01.01"),
 /// `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`. Supply
-/// lines are then raised by the supply-first rule. One item per step.
+/// lines are then raised by the supply-first rule. One item per step, in peace and at war. An
+/// item is remembered as queued by its `id` (else its `order`), also across a restart.
 fn construction_plan_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -1491,6 +1676,20 @@ fn construction_plan_step(
     let Some(items) = plan["construction_plan"].as_array() else {
         return Ok(None);
     };
+    let key_of = |item: &Value| {
+        item_id(item).map_or_else(
+            || format!("order:{}", item["order"].as_i64().unwrap_or(-1)),
+            |id| format!("id:{id}"),
+        )
+    };
+    let pending = |state: &State, item: &Value| {
+        let key = key_of(item);
+        !state.plan_built.contains_key(&key) && !state.skipped(now, "cplan", &key)
+    };
+    // Nothing left to queue: no reads at all (in peace this step runs every tick).
+    if !items.iter().any(|item| pending(state, item)) {
+        return Ok(None);
+    }
     let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
     let mut provinces_of: HashMap<i64, Value> = HashMap::new();
     let mut detail = |state_id: i64| -> Value {
@@ -1505,11 +1704,12 @@ fn construction_plan_step(
             .clone()
     };
     for item in items {
-        let order = item["order"].as_i64().unwrap_or(-1);
-        let key = order.to_string();
-        if state.plan_built.contains(&order) || state.skipped(now, "cplan", &key) {
+        if !pending(state, item) {
             continue;
         }
+        let order = item["order"].as_i64().unwrap_or(-1);
+        let key = key_of(item);
+        let label = item_id(item).unwrap_or_else(|| format!("#{order}"));
         let home = item["state"]
             .as_i64()
             .or_else(|| item["to_state"].as_i64())
@@ -1558,12 +1758,12 @@ fn construction_plan_step(
         };
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
         if ok {
-            state.plan_built.insert(order);
+            state.plan_built.insert(key, now);
         } else {
             state.skip(now, "cplan", &key, 2 * DAY);
         }
         return Ok(Some(format!(
-            "construction plan #{order} {building} in {home}: {ok} {why}"
+            "construction plan {label} {building} in {home}: {ok} {why}"
         )));
     }
     Ok(None)
@@ -2119,8 +2319,9 @@ fn reached(entry: &Value, now: GameHour) -> bool {
 /// Routine domains the player tends to forget, one action per tick:
 ///   special_projects {"priority":["sp_key",..]}  an empty facility gets an idle scientist of its
 ///                    specialisation and the first priority (else visible) project of it;
-///   doctrines [{"doctrine":id,"track":t,"xp":100,"folder":"land"},..]  the next entry is adopted
-///                    once that folder's experience reaches "xp";
+///   doctrines [{"id","folder":"land","grand_doctrine"?,"track"?,"subdoctrine"?,"xp":100},..]  the
+///                    next entry is adopted once that folder's experience reaches "xp" (old shape
+///                    {"doctrine","track"} still read); see the module docs;
 ///   air {"war_missions":true}  in war, standing-by fighters fly air superiority and CAS wings
 ///                    close air support over our first border state with an enemy.
 fn extras_step(
@@ -2190,11 +2391,28 @@ fn extras_step(
         state.skip(now, "doccheck", "x", 7 * DAY);
         let read = tools.call("hoi4_doctrines", &json!({}))?;
         for (index, entry) in doctrines.iter().enumerate() {
-            let key = format!("doc:{index}");
-            if state.done.contains(&key) {
+            let key =
+                item_id(entry).map_or_else(|| format!("doc:{index}"), |id| format!("doc:id:{id}"));
+            if state.done.contains_key(&key) {
                 continue;
             }
-            if state.skipped(now, "doc", &key) {
+            // What to adopt: the grand doctrine, the subdoctrine on its track, or (old shape,
+            // kept for one release) `doctrine` with an optional `track`. An entry naming both
+            // a grand doctrine and a subdoctrine adopts the grand doctrine first.
+            let grand = entry["grand_doctrine"].as_str().filter(|g| !g.is_empty());
+            let sub = entry["subdoctrine"]
+                .as_str()
+                .or_else(|| entry["doctrine"].as_str())
+                .filter(|d| !d.is_empty());
+            let grand_key = format!("{key}:grand");
+            let (part_key, doctrine, track) = match (grand, sub) {
+                (Some(g), Some(_)) if !state.done.contains_key(&grand_key) => (grand_key, g, None),
+                (_, Some(d)) => (key.clone(), d, entry["track"].as_str()),
+                (Some(g), None) => (key.clone(), g, None),
+                // nothing to adopt: the entry is not this step's to fix
+                (None, None) => continue,
+            };
+            if state.skipped(now, "doc", &part_key) {
                 break;
             }
             let folder = entry["folder"].as_str().unwrap_or("land");
@@ -2207,20 +2425,17 @@ fn extras_step(
             if xp < entry["xp"].as_f64().unwrap_or(100.0) {
                 break;
             }
-            let mut args = json!({"doctrine": entry["doctrine"]});
-            if let Some(track) = entry["track"].as_str() {
+            let mut args = json!({"doctrine": doctrine});
+            if let Some(track) = track.filter(|t| !t.is_empty()) {
                 args["track"] = json!(track);
             }
             let (ok, why) = state.act(tools, lease, "hoi4_doctrine_adopt", args, "dc")?;
             if ok || why.contains("already") {
-                state.done.insert(key);
+                state.done.insert(part_key, now);
             } else {
-                state.skip(now, "doc", &key, 15 * DAY);
+                state.skip(now, "doc", &part_key, 15 * DAY);
             }
-            return Ok(Some(format!(
-                "doctrine {}: {ok} {why}",
-                text(&entry["doctrine"])
-            )));
+            return Ok(Some(format!("doctrine {doctrine}: {ok} {why}")));
         }
     }
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
@@ -2239,7 +2454,10 @@ fn extras_step(
             let air = tools.call("hoi4_air", &json!({}))?;
             for wing in list(&air, "wings") {
                 let name = text(&wing["wing"]).to_string();
-                if wing["standing_by"] != json!(true) || state.skipped(now, "airwing", &name) {
+                if wing["standing_by"] != json!(true)
+                    || state.skipped(now, "airwing", &name)
+                    || plan_manage::air_plan_claims(plan, wing)
+                {
                     continue;
                 }
                 let Some(mission) = war_mission(text(&wing["aircraft_type"])) else {
@@ -2505,6 +2723,18 @@ fn war_step(
         if state.war_cool.get(&name).is_some_and(|until| *until > now) {
             continue;
         }
+        // An army holding a corridor (plan_military.rs hold_targets) takes no guard order; in a
+        // pocket it falls back like the armies this step drives.
+        if plan_military::holding(state, &name) {
+            if cfg["avoid_pockets"] != json!(false) {
+                if let Some(line) =
+                    pocket_fall_back(state, tools, lease, army, &safe, cooldown, now)?
+                {
+                    return Ok(Some(line));
+                }
+            }
+            continue;
+        }
         let here = army["main_state"].as_i64().map(|s| s as i32);
         let key = format!("guard:{name}");
         let stage = state.war_stage.get(&key).copied().unwrap_or(0);
@@ -2696,37 +2926,9 @@ fn war_step(
                 now
             }
         };
-        // A pocket forming: most land around the army is held by others. Fall back to the
-        // nearest fully held own state once, then re-check (w24: armies were encircled).
-        if army["threat"]["encirclement_risk"] == json!(true)
-            && cfg["avoid_pockets"] != json!(false)
-            && !state.skipped(now, "pocket", &name)
-        {
-            let (ax, az) = position.unwrap_or((0.0, 0.0));
-            if let Some((safe_id, _)) = safe
-                .iter()
-                .filter(|(id, _)| Some(*id) != here)
-                .min_by(|a, b| {
-                    let d = |p: &(f64, f64)| (p.0 - ax).powi(2) + (p.1 - az).powi(2);
-                    d(&a.1).total_cmp(&d(&b.1))
-                })
-                .copied()
-            {
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_army_move",
-                    json!({"army": name, "state_id": safe_id}),
-                    "wp",
-                )?;
-                state.skip(now, "pocket", &name, 3 * DAY);
-                state.war_move.remove(&name);
-                state.war_province.remove(&name);
-                state.war_cool.insert(name.clone(), now + cooldown * 2);
-                return Ok(Some(format!(
-                    "war pocket {name}: {:.0}% of the land around it is held by others -> back to state {safe_id}: {ok} {why}",
-                    army["threat"]["share"].as_f64().unwrap_or(0.0) * 100.0
-                )));
+        if cfg["avoid_pockets"] != json!(false) {
+            if let Some(line) = pocket_fall_back(state, tools, lease, army, &safe, cooldown, now)? {
+                return Ok(Some(line));
             }
         }
         // Direct moves have no plan to stop: an exhausted or starving army gets no new attack
@@ -3018,6 +3220,785 @@ fn war_step(
     Ok(None)
 }
 
+/// A pocket forming: most land around the army is held by others. Fall back to the nearest
+/// fully held own state (`safe`) once, then re-check (w24: armies were encircled). None when
+/// the army is not at risk, fell back less than 3 game days ago, or no other state is safe.
+fn pocket_fall_back(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    army: &Value,
+    safe: &[(i32, (f64, f64))],
+    cooldown: GameHour,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let name = text(&army["army"]).to_string();
+    if army["threat"]["encirclement_risk"] != json!(true) || state.skipped(now, "pocket", &name) {
+        return Ok(None);
+    }
+    let here = army["main_state"].as_i64().map(|s| s as i32);
+    let (ax, az) = here
+        .and_then(|s| state.centers.get(&s).copied())
+        .unwrap_or((0.0, 0.0));
+    let Some((safe_id, _)) = safe
+        .iter()
+        .filter(|(id, _)| Some(*id) != here)
+        .min_by(|a, b| {
+            let d = |p: &(f64, f64)| (p.0 - ax).powi(2) + (p.1 - az).powi(2);
+            d(&a.1).total_cmp(&d(&b.1))
+        })
+        .copied()
+    else {
+        return Ok(None);
+    };
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_army_move",
+        json!({"army": name, "state_id": safe_id}),
+        "wp",
+    )?;
+    state.skip(now, "pocket", &name, 3 * DAY);
+    state.war_move.remove(&name);
+    state.war_province.remove(&name);
+    state.war_cool.insert(name.clone(), now + cooldown * 2);
+    Ok(Some(format!(
+        "war pocket {name}: {:.0}% of the land around it is held by others -> back to state {safe_id}: {ok} {why}",
+        army["threat"]["share"].as_f64().unwrap_or(0.0) * 100.0
+    )))
+}
+
+/// Game hours between two judgements of the strategy keys (a change of the keys is judged at once).
+const STRATEGY_EVERY: GameHour = 6;
+
+/// The strategy layer: what is kept in plan_state.json (phase, settled checkpoints, active
+/// contingencies, goal status) and what the current run reports.
+#[derive(Default)]
+struct Strategy {
+    /// the active phase and the game hour it began
+    phase: Option<(String, GameHour)>,
+    /// settled checkpoints: id -> (game hour, met)
+    checkpoints: HashMap<String, (GameHour, bool)>,
+    /// active contingencies: id -> (game hour, triggered by a missed checkpoint)
+    contingencies: HashMap<String, (GameHour, bool)>,
+    /// the goal status last judged ("open", "reached", "at_risk")
+    goal: Option<String>,
+    /// last judgement: (game hour, the strategy keys as text)
+    evaluated: Option<(GameHour, String)>,
+    /// the digest's `strategy` block
+    summary: Value,
+    /// this run: predicate atoms that read unknown -> why
+    unknown: BTreeMap<String, String>,
+    /// this run: phase changes, missed checkpoints, triggered contingencies
+    news: Vec<Value>,
+}
+
+impl Strategy {
+    fn memory(&self) -> Value {
+        json!({"phase": self.phase.as_ref().map(|(p, _)| p),
+            "phase_since": self.phase.as_ref().map(|(_, h)| h),
+            "checkpoints": self.checkpoints, "contingencies": self.contingencies,
+            "goal": self.goal})
+    }
+    /// Take back a saved strategy memory; anything dated after `now` is dropped.
+    fn restore(&mut self, saved: &Value, now: GameHour, rewound: bool) {
+        if let (Some(phase), Some(since)) = (saved["phase"].as_str(), saved["phase_since"].as_i64())
+        {
+            if since <= now && self.phase.is_none() {
+                self.phase = Some((phase.to_string(), since));
+            }
+        }
+        let pairs = |key: &str| -> Vec<(String, GameHour, bool)> {
+            saved[key]
+                .as_object()
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(k, v)| Some((k.clone(), v[0].as_i64()?, v[1].as_bool()?)))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        for (id, at, flag) in pairs("checkpoints") {
+            if at <= now {
+                self.checkpoints.entry(id).or_insert((at, flag));
+            }
+        }
+        for (id, at, flag) in pairs("contingencies") {
+            if at <= now {
+                self.contingencies.entry(id).or_insert((at, flag));
+            }
+        }
+        if !rewound {
+            if let Some(goal) = saved["goal"].as_str() {
+                self.goal.get_or_insert_with(|| goal.to_string());
+            }
+        }
+    }
+    fn phase_id(&self) -> Option<String> {
+        self.phase.as_ref().map(|(p, _)| p.clone())
+    }
+}
+
+/// A plan predicate judged in this tick's context; unknown atoms go to the run digest.
+fn judge(state: &mut State, tools: &dyn Tools, predicate: &Value, now: GameHour) -> Truth {
+    let cache = match state.pcache.take() {
+        Some((hour, cache)) if hour == now => cache,
+        _ => Cache::default(),
+    };
+    let mut ctx = Ctx::with_cache(tools, now, cache);
+    ctx.phase = state.strategy.phase_id();
+    let truth = crate::plan_predicate::check(predicate, &mut ctx);
+    for (atom, why) in ctx.take_unknown() {
+        state.strategy.unknown.entry(atom).or_insert(why);
+    }
+    state.pcache = Some((now, ctx.into_cache()));
+    truth
+}
+
+/// 0. The strategy layer (reads only, never input): `goal`, `phases`, `checkpoints` and
+///    `contingencies` are judged at most every `STRATEGY_EVERY` game hours (at once when they
+///    change); the plan for the rest of the tick is the base plan with the active phase's and
+///    the active contingencies' overrides merged over it (None: no overrides).
+fn strategy_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+) -> Option<Value> {
+    let keys = [
+        &plan["goal"],
+        &plan["phases"],
+        &plan["checkpoints"],
+        &plan["contingencies"],
+    ];
+    if keys.iter().all(|v| v.is_null()) {
+        state.strategy.summary = Value::Null;
+        return None;
+    }
+    let signature = Value::Array(keys.iter().map(|v| (*v).clone()).collect()).to_string();
+    let due = match &state.strategy.evaluated {
+        None => true,
+        Some((at, seen)) => *seen != signature || now < *at || now >= at + STRATEGY_EVERY,
+    };
+    if due {
+        state.strategy.evaluated = Some((now, signature));
+        // the atoms this judgement could not read stay in the `strategy` block until the next
+        let earlier = std::mem::take(&mut state.strategy.unknown);
+        judge_strategy(state, tools, plan, now);
+        let unread: Vec<&String> = state.strategy.unknown.keys().collect();
+        state.strategy.summary["unknown_atoms"] = json!(unread);
+        for (atom, why) in earlier {
+            state.strategy.unknown.entry(atom).or_insert(why);
+        }
+    }
+    strategy_overrides(state, plan)
+}
+
+/// Phases that have an id, in plan order.
+fn phase_list(plan: &Value) -> Vec<(String, &Value)> {
+    list(plan, "phases")
+        .iter()
+        .filter_map(|p| Some((item_id(p)?, p)))
+        .collect()
+}
+
+/// Make `to` the active phase (persisted, noted in the change feed, raised as an alarm).
+fn switch_phase(
+    state: &mut State,
+    phases: &[(String, &Value)],
+    to: &str,
+    why: String,
+    now: GameHour,
+) {
+    let from = state.strategy.phase_id();
+    if from.as_deref() == Some(to) {
+        return;
+    }
+    state.strategy.phase = Some((to.to_string(), now));
+    let revise = phases
+        .iter()
+        .find(|(id, _)| id == to)
+        .is_some_and(|(_, p)| p["revise_on_enter"] == json!(true));
+    let detail = json!({"from": from, "to": to, "reason": why, "game_hour": now,
+        "revise_on_enter": revise});
+    crate::watch::feed().note(crate::watch::PHASE_CHANGED, revise, detail.clone());
+    state
+        .strategy
+        .news
+        .push(json!({"kind": crate::watch::PHASE_CHANGED, "detail": detail}));
+}
+
+/// The contingency with this id.
+fn contingency<'p>(plan: &'p Value, id: &str) -> Option<&'p Value> {
+    list(plan, "contingencies")
+        .iter()
+        .find(|c| item_id(c).as_deref() == Some(id))
+}
+
+/// A field of a contingency's `then` object, else of the contingency itself.
+fn then_field<'c>(c: &'c Value, key: &str) -> &'c Value {
+    if c["then"].get(key).is_some() {
+        &c["then"][key]
+    } else {
+        &c[key]
+    }
+}
+
+/// Activate a contingency: remembered, noted (feed and alarm), and its phase switched to.
+fn activate_contingency(
+    state: &mut State,
+    phases: &[(String, &Value)],
+    c: &Value,
+    forced: bool,
+    why: String,
+    now: GameHour,
+) {
+    let Some(id) = item_id(c) else { return };
+    state
+        .strategy
+        .contingencies
+        .insert(id.clone(), (now, forced));
+    let overrides: Vec<String> = then_field(c, "overrides")
+        .as_object()
+        .map(|o| o.keys().cloned().collect())
+        .unwrap_or_default();
+    let phase = then_field(c, "phase").as_str().map(str::to_string);
+    let detail = json!({"contingency": id, "reason": why, "phase": phase, "overrides": overrides,
+        "revise": then_field(c, "revise"), "game_hour": now});
+    crate::watch::feed().note(crate::watch::CONTINGENCY_TRIGGERED, true, detail.clone());
+    state
+        .strategy
+        .news
+        .push(json!({"kind": crate::watch::CONTINGENCY_TRIGGERED, "detail": detail}));
+    if let Some(phase) = phase {
+        if phases.iter().any(|(p, _)| *p == phase) {
+            switch_phase(state, phases, &phase, format!("contingency {id}"), now);
+        } else {
+            state
+                .strategy
+                .unknown
+                .entry(format!("contingency {id}"))
+                .or_insert_with(|| format!("names phase {phase}, which the plan does not have"));
+        }
+    }
+}
+
+/// One judgement of the strategy keys: phases in order, then checkpoints that are due, then
+/// contingencies (both may force a phase), then the goal; the digest block is rebuilt.
+fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
+    let phases = phase_list(plan);
+    if state
+        .strategy
+        .phase
+        .as_ref()
+        .is_some_and(|(p, _)| !phases.iter().any(|(id, _)| id == p))
+    {
+        state.strategy.phase = None;
+    }
+    let known: HashSet<String> = list(plan, "contingencies")
+        .iter()
+        .filter_map(item_id)
+        .collect();
+    state
+        .strategy
+        .contingencies
+        .retain(|id, _| known.contains(id));
+    // a. phases: with none active the first whose `enter` holds; on through `exit`
+    for _ in 0..=phases.len() {
+        let current = state
+            .strategy
+            .phase
+            .as_ref()
+            .and_then(|(p, _)| phases.iter().position(|(id, _)| id == p));
+        let (from, why) = match current {
+            None => (0, "its enter holds".to_string()),
+            Some(i) => {
+                let exit = &phases[i].1["exit"];
+                if exit.is_null() || judge(state, tools, exit, now) != Truth::True {
+                    break;
+                }
+                (i + 1, format!("the exit of {} holds", phases[i].0))
+            }
+        };
+        let mut next = None;
+        for (id, p) in &phases[from.min(phases.len())..] {
+            if p["enter"].is_null() || judge(state, tools, &p["enter"], now) == Truth::True {
+                next = Some(id.clone());
+                break;
+            }
+        }
+        match next {
+            Some(id) => switch_phase(state, &phases, &id, why, now),
+            None => break,
+        }
+    }
+    // b. checkpoints whose date has come, each settled once
+    for c in list(plan, "checkpoints") {
+        let Some(id) = item_id(c) else { continue };
+        if state.strategy.checkpoints.contains_key(&id) {
+            continue;
+        }
+        let Some(by) = c["by"].as_str().and_then(crate::plan_predicate::date_hour) else {
+            state
+                .strategy
+                .unknown
+                .entry(format!("checkpoint {id}"))
+                .or_insert_with(|| "`by` is not a YYYY.MM.DD date".into());
+            continue;
+        };
+        if now < by {
+            continue;
+        }
+        let mut failed = Vec::new();
+        let mut unknown = false;
+        for must in list(c, "must") {
+            match judge(state, tools, must, now) {
+                Truth::True => {}
+                Truth::False => failed.push(text_or(must)),
+                Truth::Unknown => unknown = true,
+            }
+        }
+        if failed.is_empty() {
+            if !unknown {
+                state.strategy.checkpoints.insert(id, (now, true));
+            }
+            continue;
+        }
+        state.strategy.checkpoints.insert(id.clone(), (now, false));
+        let otherwise = text(&c["else"]).trim().to_string();
+        let detail = json!({"checkpoint": id, "by": c["by"], "failed": failed,
+            "else": otherwise, "game_hour": now});
+        crate::watch::feed().note(crate::watch::CHECKPOINT_MISSED, true, detail.clone());
+        state
+            .strategy
+            .news
+            .push(json!({"kind": crate::watch::CHECKPOINT_MISSED, "detail": detail}));
+        let why = format!("checkpoint {id} missed");
+        if let Some(cid) = otherwise.strip_prefix("contingency:") {
+            match contingency(plan, cid) {
+                Some(c) => activate_contingency(state, &phases, c, true, why, now),
+                None => {
+                    state
+                        .strategy
+                        .unknown
+                        .entry(format!("checkpoint {id}"))
+                        .or_insert_with(|| {
+                            format!("else names contingency {cid}, which the plan does not have")
+                        });
+                }
+            }
+        } else if otherwise != "revise" && !otherwise.is_empty() {
+            let phase = otherwise.strip_prefix("phase:").unwrap_or(&otherwise);
+            if phases.iter().any(|(p, _)| p == phase) {
+                switch_phase(state, &phases, phase, why, now);
+            } else {
+                state
+                    .strategy
+                    .unknown
+                    .entry(format!("checkpoint {id}"))
+                    .or_insert_with(|| {
+                        format!("else names phase {phase}, which the plan does not have")
+                    });
+            }
+        }
+    }
+    // c. contingencies: active while the trigger holds (unknown leaves them as they are)
+    for c in list(plan, "contingencies") {
+        let Some(id) = item_id(c) else { continue };
+        let when = if c["when"].is_null() {
+            &c["trigger"]
+        } else {
+            &c["when"]
+        };
+        if when.is_null() {
+            continue;
+        }
+        let truth = judge(state, tools, when, now);
+        match (truth, state.strategy.contingencies.get(&id).copied()) {
+            (Truth::True, None) => {
+                activate_contingency(state, &phases, c, false, "its trigger holds".into(), now)
+            }
+            (Truth::False, Some((_, false))) => {
+                state.strategy.contingencies.remove(&id);
+            }
+            _ => {}
+        }
+    }
+    // d. the goal
+    let goal = &plan["goal"];
+    let mut goal_block = Value::Null;
+    if goal.is_object() {
+        let reached = if goal["predicates"].is_null() {
+            Truth::Unknown
+        } else {
+            judge(state, tools, &goal["predicates"], now)
+        };
+        let mut failing = Vec::new();
+        for f in list(goal, "fail_predicates") {
+            if judge(state, tools, f, now) == Truth::True {
+                failing.push(text_or(f));
+            }
+        }
+        let deadline = goal["deadline"]
+            .as_str()
+            .and_then(crate::plan_predicate::date_hour);
+        let margin = crate::alarms::goal_risk_days(plan).map(|d| (d * DAY as f64) as GameHour);
+        let label = text(&goal["deadline"]);
+        let (status, why) = match deadline {
+            _ if reached == Truth::True => ("reached", "every goal predicate holds".to_string()),
+            _ if !failing.is_empty() => (
+                "at_risk",
+                format!("fail predicate(s) hold: {}", failing.join(", ")),
+            ),
+            Some(at) if now >= at => (
+                "at_risk",
+                format!("the deadline {label} has passed and the goal is not reached"),
+            ),
+            Some(at) if margin.is_some_and(|m| now + m >= at) => (
+                "at_risk",
+                format!(
+                    "{} game days to the deadline {label} and the goal is not reached",
+                    (at - now) / DAY
+                ),
+            ),
+            _ if reached == Truth::Unknown => (
+                "open",
+                "some goal predicates read unknown (see predicates_unknown)".to_string(),
+            ),
+            _ => ("open", "not reached yet".to_string()),
+        };
+        if state.strategy.goal.as_deref() != Some(status) {
+            if status != "open" {
+                let kind = if status == "reached" {
+                    crate::watch::GOAL_REACHED
+                } else {
+                    crate::watch::GOAL_AT_RISK
+                };
+                crate::watch::feed().note(
+                    kind,
+                    true,
+                    json!({"status": status, "why": why, "game_hour": now}),
+                );
+            }
+            state.strategy.goal = Some(status.to_string());
+        }
+        goal_block = json!({"status": status, "why": why, "deadline": goal["deadline"],
+            "predicates": reached.label()});
+    }
+    let settled = |met: bool| -> Vec<String> {
+        let mut ids: Vec<String> = state
+            .strategy
+            .checkpoints
+            .iter()
+            .filter(|(_, (_, m))| *m == met)
+            .map(|(id, _)| id.clone())
+            .collect();
+        ids.sort();
+        ids
+    };
+    let pending: Vec<String> = list(plan, "checkpoints")
+        .iter()
+        .filter_map(item_id)
+        .filter(|id| !state.strategy.checkpoints.contains_key(id))
+        .collect();
+    let mut active: Vec<String> = state.strategy.contingencies.keys().cloned().collect();
+    active.sort();
+    state.strategy.summary = json!({
+        "phase": state.strategy.phase_id(),
+        "phase_since_hour": state.strategy.phase.as_ref().map(|(_, h)| h),
+        "goal": goal_block,
+        "checkpoints": {"met": settled(true), "missed": settled(false), "pending": pending},
+        "contingencies_active": active,
+        "judged_at_hour": now,
+    });
+}
+
+/// The plan with the active phase's and the active contingencies' overrides merged over it
+/// (None when nothing is overridden).
+fn strategy_overrides(state: &State, plan: &Value) -> Option<Value> {
+    let mut layers: Vec<&Value> = Vec::new();
+    if let Some((phase, _)) = &state.strategy.phase {
+        if let Some((_, p)) = phase_list(plan).into_iter().find(|(id, _)| id == phase) {
+            layers.push(&p["overrides"]);
+        }
+    }
+    for c in list(plan, "contingencies") {
+        if item_id(c).is_some_and(|id| state.strategy.contingencies.contains_key(&id)) {
+            layers.push(then_field(c, "overrides"));
+        }
+    }
+    let layers: Vec<&Map<String, Value>> = layers
+        .into_iter()
+        .filter_map(Value::as_object)
+        .filter(|o| !o.is_empty())
+        .collect();
+    if layers.is_empty() {
+        return None;
+    }
+    let mut merged = plan.clone();
+    for layer in layers {
+        apply_overrides(&mut merged, layer);
+    }
+    Some(merged)
+}
+
+/// Overrides over a plan: top-level keys are replaced (null removes one), `war` and `alarms` are
+/// merged key by key; the strategy keys, `active` and `_meta` are never overridden.
+pub fn apply_overrides(plan: &mut Value, overrides: &Map<String, Value>) {
+    let Some(object) = plan.as_object_mut() else {
+        return;
+    };
+    for (key, value) in overrides {
+        if matches!(
+            key.as_str(),
+            "goal" | "phases" | "checkpoints" | "contingencies" | "active" | "_meta"
+        ) {
+            continue;
+        }
+        if value.is_null() {
+            object.remove(key);
+            continue;
+        }
+        if let (Some(parts), true) = (value.as_object(), matches!(key.as_str(), "war" | "alarms")) {
+            if let Some(Value::Object(base)) = object.get_mut(key) {
+                for (k, v) in parts {
+                    if v.is_null() {
+                        base.remove(k);
+                    } else {
+                        base.insert(k.clone(), v.clone());
+                    }
+                }
+                continue;
+            }
+        }
+        object.insert(key.clone(), value.clone());
+    }
+}
+
+/// Whether the plan forbids a decision (`decision_rules` with "never": true): no path takes it.
+pub fn decision_forbidden(plan: &Value, decision: &str) -> bool {
+    list(plan, "decision_rules")
+        .iter()
+        .any(|r| r["never"] == json!(true) && text(&r["decision"]) == decision)
+}
+
+/// 5. Decisions: `decision_rules` in plan order (when enabled by the game and `when` holds; the
+///    row of `target`; at most `max` successful takes), then the plain `decisions` list. Nothing
+///    a never-take rule names is ever taken. The decisions panel is opened only when something
+///    could be taken.
+fn decisions_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let wanted: Vec<String> = strings(plan, "decisions")
+        .into_iter()
+        .filter(|d| !decision_forbidden(plan, d))
+        .collect();
+    // (rule id, decision, target, successful takes so far, skip key)
+    let mut rules: Vec<(String, String, Option<String>, usize, String)> = Vec::new();
+    for (index, rule) in list(plan, "decision_rules").iter().enumerate() {
+        let key = text(&rule["decision"]).to_string();
+        if key.is_empty() || rule["never"] == json!(true) || decision_forbidden(plan, &key) {
+            continue;
+        }
+        let id = item_id(rule).unwrap_or_else(|| format!("{index}:{key}"));
+        let target = match &rule["target"] {
+            Value::String(t) if !t.trim().is_empty() => Some(t.trim().to_string()),
+            Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        };
+        let prefix = format!("decrule:{id}#");
+        let taken = state.done.keys().filter(|k| k.starts_with(&prefix)).count();
+        if rule["max"].as_u64().is_some_and(|max| taken as u64 >= max) {
+            continue;
+        }
+        let skip = target
+            .as_ref()
+            .map_or_else(|| key.clone(), |t| format!("{key}@{t}"));
+        if state.skipped(now, "dec", &skip) {
+            continue;
+        }
+        if !rule["when"].is_null() && !judge(state, tools, &rule["when"], now).is_true() {
+            continue;
+        }
+        rules.push((id, key, target, taken, skip));
+    }
+    if wanted.is_empty() && rules.is_empty() {
+        return Ok(None);
+    }
+    let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
+    let ready =
+        |d: &Value| d["enabled"] == json!(true) && !d["active_timer"].as_bool().unwrap_or(false);
+    for (id, key, target, taken, skip) in rules {
+        let wanted_row = |d: &&Value| {
+            text(&d["decision"]) == key
+                && ready(d)
+                && target
+                    .as_ref()
+                    .is_none_or(|t| text(&d["title"]).to_lowercase().contains(&t.to_lowercase()))
+        };
+        if !list(&offered, "decisions").iter().any(|d| wanted_row(&d)) {
+            continue;
+        }
+        let mut args = json!({"decision": key});
+        if let Some(t) = &target {
+            args["target"] = json!(t);
+        }
+        let (ok, why) = state.act(tools, lease, "hoi4_decision_take", args, "dr")?;
+        state.skip(now, "dec", &skip, if ok { 30 * DAY } else { 3 * DAY });
+        if ok {
+            state
+                .done
+                .insert(format!("decrule:{id}#{}", taken + 1), now);
+        }
+        let on = target.map_or_else(String::new, |t| format!(" on {t}"));
+        return Ok(Some(format!("decision {key}{on} (rule {id}): {ok} {why}")));
+    }
+    for d in list(&offered, "decisions") {
+        let key = text(&d["decision"]);
+        if wanted.iter().any(|w| w == key) && ready(d) && !state.skipped(now, "dec", key) {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_decision_take",
+                json!({"decision": key}),
+                "de",
+            )?;
+            state.skip(now, "dec", key, if ok { 30 * DAY } else { 3 * DAY });
+            return Ok(Some(format!("decision {key}: {ok} {why}")));
+        }
+    }
+    Ok(None)
+}
+
+/// Option text reduced for matching: colour codes, icons and $vars$ dropped, lower case, accents
+/// folded, punctuation as spaces.
+fn option_words(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '§' => {
+                chars.next();
+            }
+            '£' | '$' => {
+                for n in chars.by_ref() {
+                    if n == c {
+                        break;
+                    }
+                }
+            }
+            c if c.is_alphanumeric() => out.push(c),
+            _ => out.push(' '),
+        }
+    }
+    plain(&out).split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The index of the option named `wanted`: its text (or `name`/`key`/`text` when hoi4_events
+/// lists objects) equal after `option_words`, else the one option that contains it.
+fn option_index(options: &[Value], wanted: &str) -> Option<usize> {
+    let want = option_words(wanted);
+    if want.is_empty() {
+        return None;
+    }
+    let names: Vec<Vec<String>> = options
+        .iter()
+        .map(|o| match o {
+            Value::String(s) => vec![option_words(s)],
+            other => ["name", "key", "text"]
+                .iter()
+                .filter_map(|k| other[*k].as_str())
+                .map(option_words)
+                .collect(),
+        })
+        .collect();
+    if let Some(i) = names.iter().position(|n| n.contains(&want)) {
+        return Some(i);
+    }
+    let partial: Vec<usize> = names
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.iter().any(|t| t.contains(&want)))
+        .map(|(i, _)| i)
+        .collect();
+    match partial.as_slice() {
+        [only] => Some(*only),
+        _ => None,
+    }
+}
+
+/// 1. `event_rules` for the open event: None when no rule decides (event_options and the
+///    defaults do), Some(None) when a rule's condition reads unknown (the event waits), else the
+///    option index and how it was chosen.
+fn event_rule_choice(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    key: &str,
+    top: &Value,
+    now: GameHour,
+) -> Option<Option<(u64, String)>> {
+    let options = list(top, "options");
+    for rule in list(plan, "event_rules") {
+        if text(&rule["event"]) != key {
+            continue;
+        }
+        let condition = if rule["when"].is_null() {
+            &rule["condition"]
+        } else {
+            &rule["when"]
+        };
+        let truth = if condition.is_null() {
+            Truth::True
+        } else {
+            judge(state, tools, condition, now)
+        };
+        let name = match truth {
+            Truth::True => text(&rule["option_name"]),
+            Truth::False => match rule["else_option_name"].as_str() {
+                Some(other) => other,
+                None => continue,
+            },
+            Truth::Unknown => return Some(None),
+        };
+        if let Some(i) = option_index(options, name) {
+            return Some(Some((i as u64, format!(" (event_rules '{name}')"))));
+        }
+        if let Some((fallback, i)) = rule["fallback_option_name"]
+            .as_str()
+            .and_then(|f| Some((f, option_index(options, f)?)))
+        {
+            return Some(Some((
+                i as u64,
+                format!(" (event_rules fallback '{fallback}'; '{name}' not offered)"),
+            )));
+        }
+        if let Some(i) = rule["fallback_index"]
+            .as_u64()
+            .filter(|i| (*i as usize) < options.len())
+        {
+            return Some(Some((
+                i,
+                format!(" (event_rules fallback_index; '{name}' not offered)"),
+            )));
+        }
+        let offered: Vec<String> = options.iter().map(text_or).collect();
+        state
+            .strategy
+            .unknown
+            .entry(format!("event_rules {key}"))
+            .or_insert_with(|| {
+                format!("option '{name}' is not among {offered:?}; event_options decides")
+            });
+        return None;
+    }
+    None
+}
+
 /// The single `stop_on_date` pause: `hoi4_time paused:true` under its own request id,
 /// skipped when the overview already says paused. The outcome text is final: a refused
 /// or uncertain pause is reported and never retried under a new id.
@@ -3118,6 +4099,164 @@ pub fn merge_plan(path: &Path, changes: &Map<String, Value>) -> Result<Value> {
     Ok(plan)
 }
 
+/// `plan_state.json` next to `plan.json` (`<stem>_state.json` for another plan file name).
+pub fn state_path(plan_path: &Path) -> std::path::PathBuf {
+    let stem = plan_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("plan");
+    plan_path.with_file_name(format!("{stem}_state.json"))
+}
+
+/// The campaign the memory belongs to: the player tag (hoi4_overview), the game's playthrough
+/// id (the `handle_scope` of hoi4_construction_queue, which distinguishes campaigns) and the
+/// plan's `_meta.campaign` when the plan names one. None while the overview cannot be read.
+fn campaign_identity(tools: &dyn Tools, plan: &Value) -> Option<Value> {
+    let overview = tools.call("hoi4_overview", &json!({})).ok()?;
+    let playthrough = tools
+        .call("hoi4_construction_queue", &json!({"limit": 1}))
+        .ok()
+        .and_then(|q| {
+            q["handle_scope"]["playthrough_id"]
+                .as_str()
+                .map(String::from)
+        });
+    Some(json!({
+        "player": overview["player"].as_str(),
+        "playthrough": playthrough,
+        "campaign": plan["_meta"]["campaign"].as_str(),
+    }))
+}
+
+/// Same campaign unless a field both sides know differs (an unknown field never rejects).
+fn same_campaign(saved: &Value, now: &Value) -> bool {
+    ["player", "playthrough", "campaign"].iter().all(|field| {
+        match (saved[field].as_str(), now[field].as_str()) {
+            (Some(a), Some(b)) if !a.is_empty() && !b.is_empty() => a == b,
+            _ => true,
+        }
+    })
+}
+
+impl State {
+    /// The part of the memory that must survive a server restart: one-shot work done
+    /// (politics, doctrines, production lines), construction_plan items queued, running skip
+    /// timers (decisions taken wait 30 days), the failure ledger and the army_layout roles.
+    fn memory(&self, now: GameHour) -> Value {
+        let skips: HashMap<&String, &GameHour> =
+            self.bad.iter().filter(|(_, until)| **until > now).collect();
+        let failures: HashMap<&String, &Vec<GameHour>> = self
+            .failures
+            .iter()
+            .filter(|(_, times)| times.iter().any(|t| now - *t < 10 * DAY))
+            .collect();
+        let layout: HashMap<&String, &String> =
+            self.layout.iter().filter(|(_, a)| !a.is_empty()).collect();
+        json!({"done": self.done, "plan_built": self.plan_built, "skips": skips,
+            "failures": failures, "layout": layout, "strategy": self.strategy.memory()})
+    }
+    /// Take back a saved memory. Work dated after `now` is dropped (an earlier save was
+    /// loaded: in that game it has not happened); after such a reload the timers and the
+    /// failure ledger are dropped too.
+    fn restore(&mut self, saved: &Value, now: GameHour) {
+        let hours = |key: &str| -> Vec<(String, GameHour)> {
+            saved[key]
+                .as_object()
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(k, v)| Some((k.clone(), v.as_i64()?)))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        for (key, at) in hours("done") {
+            if at <= now {
+                self.done.entry(key).or_insert(at);
+            }
+        }
+        for (key, at) in hours("plan_built") {
+            if at <= now {
+                self.plan_built.entry(key).or_insert(at);
+            }
+        }
+        let rewound = saved["game_hour"].as_i64().is_some_and(|h| now < h);
+        if !rewound {
+            for (key, until) in hours("skips") {
+                if until > now {
+                    self.bad.entry(key).or_insert(until);
+                }
+            }
+            if let Some(failures) = saved["failures"].as_object() {
+                for (signature, times) in failures {
+                    let times: Vec<GameHour> = times
+                        .as_array()
+                        .map(|t| t.iter().filter_map(Value::as_i64).collect())
+                        .unwrap_or_default();
+                    self.failures.entry(signature.clone()).or_insert(times);
+                }
+            }
+        }
+        if let Some(layout) = saved["layout"].as_object() {
+            for (hint, army) in layout {
+                if let Some(army) = army.as_str().filter(|a| !a.is_empty()) {
+                    self.layout
+                        .entry(hint.clone())
+                        .or_insert_with(|| army.to_string());
+                }
+            }
+        }
+        self.strategy.restore(&saved["strategy"], now, rewound);
+    }
+}
+
+/// Once per server life, when the game date is known: read `plan_state.json` back unless it
+/// belongs to another campaign (then it is ignored and later overwritten).
+fn restore_memory(state: &mut State, tools: &dyn Tools, plan: &Value, path: &Path, now: GameHour) {
+    let Some(identity) = campaign_identity(tools, plan) else {
+        return;
+    };
+    state.persist.restored = true;
+    state.persist.saved = None;
+    let file = state_path(path);
+    match std::fs::read(&file) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => state.persist.note = Some(format!("plan_state.json unreadable: {e}")),
+        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+            Err(e) => state.persist.note = Some(format!("plan_state.json is not JSON: {e}")),
+            Ok(saved) if !same_campaign(&saved["identity"], &identity) => {
+                state.persist.note = Some(format!(
+                    "plan_state.json belongs to another campaign ({}), ignored",
+                    saved["identity"]
+                ));
+            }
+            Ok(saved) => state.restore(&saved, now),
+        },
+    }
+    state.persist.identity = Some(identity);
+}
+
+/// Write the memory when it changed (temp file and rename, like merge_plan).
+fn save_memory(state: &mut State, path: &Path, now: GameHour) {
+    let memory = state.memory(now);
+    if state.persist.saved.as_ref() == Some(&memory) {
+        return;
+    }
+    let mut body = memory.clone();
+    body["version"] = json!(1);
+    body["identity"] = state.persist.identity.clone().unwrap_or(Value::Null);
+    body["game_hour"] = json!(now);
+    let file = state_path(path);
+    let temporary = file.with_extension("json.tmp");
+    let written = serde_json::to_vec_pretty(&body)
+        .map_err(|e| Error::new("invalid_plan", e.to_string()))
+        .and_then(|bytes| Ok(std::fs::write(&temporary, bytes)?))
+        .and_then(|()| Ok(std::fs::rename(&temporary, &file)?));
+    match written {
+        Ok(()) => state.persist.saved = Some(memory),
+        Err(e) => state.persist.note = Some(format!("plan_state.json not written: {}", e.message)),
+    }
+}
+
 /// Run the plan for up to `seconds`, returning early when an event needs the
 /// model's choice or the runner must stop (peace conference). The plan file is
 /// read before every tick, so changes apply at once.
@@ -3141,10 +4280,18 @@ pub fn run(
     let mut focus_line: Option<(String, bool)> = None;
     let mut stopped_on_date = false;
     state.stages.fallback_used.clear();
+    state.strategy.unknown.clear();
+    state.strategy.news.clear();
     let reason = loop {
         let plan = read_plan(plan_path)?;
         let now = game_hour(state, tools);
+        if !state.persist.restored && now > 0 {
+            restore_memory(state, tools, &plan, plan_path, now);
+        }
         let step = tick(state, tools, &plan, lease, now);
+        if state.persist.restored {
+            save_memory(state, plan_path, now);
+        }
         // the digest survives a failing tick: it says what the stage saw
         match state.con.digest.take() {
             Some(digest) => construction = Some(digest),
@@ -3200,7 +4347,12 @@ pub fn run(
         std::thread::sleep(pause);
     };
     let plan = read_plan(plan_path).unwrap_or_else(|_| json!({}));
+    // the digest uses the plan as the ticks did: with the active phase's overrides (alarms too)
+    let plan = strategy_overrides(state, &plan).unwrap_or(plan);
     let mut alarms = observe_alarms(tools, &plan);
+    alarms.extend(plan_manage::take_alarms(state));
+    alarms.extend(plan_military::take_alarms(state));
+    alarms.extend(plan_affairs::take_alarms(state));
     if let Some(alarm) = construction_alarm(state, tools, &plan, construction.as_deref()) {
         alarms.push(alarm);
     }
@@ -3233,6 +4385,11 @@ pub fn run(
                 state.stages.fallback_used.join(", ")),
             "fix": {"tool": "hoi4_plan", "args_hint": {"op": "set", "plan": {"research_priority": ["<wanted keys>"], "research_fallback": "priority_only"}}}}));
     }
+    alarms.extend(crate::alarms::strategy(
+        &plan,
+        &state.strategy.summary,
+        &state.strategy.news,
+    ));
     let mut result = json!({"reason": reason, "actions": actions,
         "alarms": alarms,
         "game_hour": state.last_hour,
@@ -3261,6 +4418,32 @@ pub fn run(
     let blocked = focus_blocked(state, &plan, state.last_hour);
     if !blocked.is_empty() {
         result["focus_blocked"] = json!(blocked);
+    }
+    if let Some(note) = state.persist.note.take() {
+        result["plan_state"] = json!(note);
+    }
+    if let Some(manage) = plan_manage::digest(state) {
+        result["manage"] = manage;
+    }
+    if let Some(military) = plan_military::digest(state) {
+        result["military"] = military;
+    }
+    if let Some(affairs) = plan_affairs::digest(state) {
+        result["affairs"] = affairs;
+    }
+    if !state.strategy.summary.is_null() {
+        result["strategy"] = state.strategy.summary.clone();
+    }
+    if !state.strategy.news.is_empty() {
+        result["strategy_changes"] = json!(state.strategy.news);
+    }
+    if !state.strategy.unknown.is_empty() {
+        result["predicates_unknown"] = json!(state
+            .strategy
+            .unknown
+            .iter()
+            .map(|(atom, why)| json!({"atom": atom, "why": why}))
+            .collect::<Vec<_>>());
     }
     if stopped_on_date {
         result["stopped_on_date"] = json!(true);
@@ -4364,6 +5547,43 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 1 -> Army 3: true")),
             "{step:?}"
         );
+    }
+
+    #[test]
+    fn armies_with_a_planned_role_are_never_consolidated() {
+        struct Roster(RefCell<Vec<Value>>);
+        impl Tools for Roster {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                        {"army": "Guard 1", "division_count": 2, "commander": null},
+                        {"army": "Held 1", "division_count": 3, "commander": null},
+                        {"army": "Army 2", "division_count": 20, "commander": "A"},
+                        {"army": "Army 3", "division_count": 1, "commander": null}]})),
+                    "hoi4_army_merge" => {
+                        self.0.borrow_mut().push(args.clone());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"generals": ["C"]}});
+        let mut state = State::default();
+        state.layout.insert("North guard".into(), "Guard 1".into());
+        state.war_guard.insert("Held 1".into(), 550);
+        let tools = Roster(RefCell::new(vec![]));
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        // only the role-less small army is folded, and never into a role army
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 3 -> Army 2: true")),
+            "{step:?}"
+        );
+        assert_eq!(tools.0.borrow().len(), 1);
     }
 
     struct War {
@@ -5967,5 +7187,861 @@ mod tests {
         let result = run(&mut State::default(), &fake(vec![]), &path, "l", 1).unwrap();
         assert_eq!(result["reason"], json!("plan inactive (active:false)"));
         let _ = std::fs::remove_file(path);
+    }
+
+    /// The actions sent (name, args) by a fake.
+    fn actions(f: &Fake) -> Vec<(String, Value)> {
+        f.calls
+            .borrow()
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn construction_plan_runs_in_peace_before_open_construction() {
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ITA"}))]);
+        let plan = json!({
+            "construction": [{"building": "arms_factory", "states": [7]}],
+            "construction_plan": [
+                {"id": "hub-5", "order": 1, "building": "supply_node", "state": 5,
+                 "province": 900, "when": "1936.01.01"}]});
+        let mut state = State::default();
+        let now = date_hour("1936.03.01").unwrap();
+        let step = tick(&mut state, &tools, &plan, "l", now).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("construction plan hub-5 supply_node in 5: true")),
+            "{step:?}"
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_construction_add");
+        assert_eq!(sent[0].1["state_id"], 5);
+        assert_eq!(sent[0].1["province_id"], 900);
+        assert!(state.plan_built.contains_key("id:hub-5"));
+        // queued once: the next peace tick does not send it again
+        tick(&mut state, &tools, &plan, "l", now + DAY).unwrap();
+        assert_eq!(
+            actions(&tools)
+                .iter()
+                .filter(|(_, a)| a["building"] == "supply_node")
+                .count(),
+            1
+        );
+        // a plan whose items are all done reads nothing for them
+        let before = tools.calls.borrow().len();
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap(),
+            None
+        );
+        assert_eq!(tools.calls.borrow().len(), before);
+    }
+
+    #[test]
+    fn construction_plan_waits_for_its_date_in_peace() {
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ITA"}))]);
+        let plan = json!({"construction_plan": [
+            {"order": 2, "building": "infrastructure", "state": 5, "when": "1937.01.01"}]});
+        let mut state = State::default();
+        tick(
+            &mut state,
+            &tools,
+            &plan,
+            "l",
+            date_hour("1936.06.01").unwrap(),
+        )
+        .unwrap();
+        assert!(actions(&tools).is_empty());
+        let step = tick(
+            &mut state,
+            &tools,
+            &plan,
+            "l",
+            date_hour("1937.01.02").unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("construction plan #2")));
+        assert!(state.plan_built.contains_key("order:2"));
+    }
+
+    fn doctrine_tools() -> Fake {
+        fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 150.0}, "navy": {"value": 10.0},
+                "air": {"value": 0.0}}}),
+        )])
+    }
+    /// One doctrine pass a week apart (the check runs every 7 game days).
+    fn doctrine_pass(state: &mut State, tools: &Fake, plan: &Value, week: i64) -> Option<String> {
+        extras_step(state, tools, plan, "l", START + week * 8 * DAY).unwrap()
+    }
+    fn adopted(tools: &Fake) -> Vec<Value> {
+        actions(tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_doctrine_adopt")
+            .map(|(_, mut a)| {
+                let o = a.as_object_mut().unwrap();
+                o.remove("request_id");
+                o.remove("lease_token");
+                a
+            })
+            .collect()
+    }
+
+    #[test]
+    fn doctrines_new_shape_send_the_grand_doctrine_then_the_subdoctrine_on_its_track() {
+        let plan = json!({"doctrines": [
+            {"id": "land-grand", "folder": "land", "grand_doctrine": "new_mobile_warfare", "xp": 50},
+            {"id": "land-inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
+            {"id": "navy-grand", "folder": "naval", "grand_doctrine": "fleet_in_being", "xp": 50},
+            {"id": "never", "folder": "land", "grand_doctrine": "x", "xp": 1}]});
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        let first = doctrine_pass(&mut state, &tools, &plan, 0).unwrap();
+        assert!(
+            first.starts_with("doctrine new_mobile_warfare: true"),
+            "{first}"
+        );
+        doctrine_pass(&mut state, &tools, &plan, 1).unwrap();
+        // the naval entry waits for navy XP (10 < 50) and blocks the entry after it
+        assert_eq!(doctrine_pass(&mut state, &tools, &plan, 2), None);
+        assert_eq!(
+            adopted(&tools),
+            vec![
+                json!({"doctrine": "new_mobile_warfare"}),
+                json!({"doctrine": "mobile_infantry", "track": "infantry"}),
+            ]
+        );
+        assert!(state.done.contains_key("doc:id:land-grand"));
+        assert!(state.done.contains_key("doc:id:land-inf"));
+    }
+
+    #[test]
+    fn doctrines_old_shape_and_combined_entries_still_work() {
+        let plan = json!({"doctrines": [
+            {"doctrine": "superior_firepower", "track": "operations", "xp": 100, "folder": "land"},
+            {"folder": "air", "xp": 0, "grand_doctrine": "strategic_destruction",
+             "subdoctrine": "air_superiority_sub", "track": "fighters"}]});
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        for week in 0..4 {
+            doctrine_pass(&mut state, &tools, &plan, week);
+        }
+        assert_eq!(
+            adopted(&tools),
+            vec![
+                json!({"doctrine": "superior_firepower", "track": "operations"}),
+                json!({"doctrine": "strategic_destruction"}),
+                json!({"doctrine": "air_superiority_sub", "track": "fighters"}),
+            ]
+        );
+        assert!(state.done.contains_key("doc:0"));
+        assert!(state.done.contains_key("doc:1:grand"));
+        assert!(state.done.contains_key("doc:1"));
+    }
+
+    #[test]
+    fn id_keyed_done_memory_survives_a_list_reorder() {
+        // doctrines
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        let a = json!({"id": "a", "folder": "land", "grand_doctrine": "ga", "xp": 10});
+        let b = json!({"id": "b", "folder": "land", "subdoctrine": "sb", "track": "t", "xp": 10});
+        doctrine_pass(
+            &mut state,
+            &tools,
+            &json!({"doctrines": [a.clone(), b.clone()]}),
+            0,
+        );
+        let reordered = json!({"doctrines": [b, a]});
+        doctrine_pass(&mut state, &tools, &reordered, 1);
+        assert_eq!(doctrine_pass(&mut state, &tools, &reordered, 2), None);
+        assert_eq!(
+            adopted(&tools),
+            vec![
+                json!({"doctrine": "ga"}),
+                json!({"doctrine": "sb", "track": "t"})
+            ]
+        );
+        // construction_plan: the revision renumbers and reorders the items
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ITA"}))]);
+        let x = json!({"id": "x", "order": 1, "building": "infrastructure", "state": 5});
+        let y = json!({"id": "y", "order": 2, "building": "supply_node", "state": 6});
+        let mut state = State::default();
+        let first = json!({"construction_plan": [x.clone(), y.clone()]});
+        construction_plan_step(&mut state, &tools, &first, "l", START).unwrap();
+        let mut y2 = y;
+        y2["order"] = json!(1);
+        let mut x2 = x;
+        x2["order"] = json!(2);
+        let revised = json!({"construction_plan": [y2, x2]});
+        construction_plan_step(&mut state, &tools, &revised, "l", START).unwrap();
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &revised, "l", START).unwrap(),
+            None
+        );
+        let states: Vec<Value> = actions(&tools)
+            .iter()
+            .map(|(_, a)| a["state_id"].clone())
+            .collect();
+        assert_eq!(states, vec![json!(5), json!(6)]);
+        // politics
+        let tools = fake(vec![]);
+        let mut state = State::default();
+        let p = json!({"id": "law-1", "category": "law", "slot": 0, "idea": "partial_economic_mobilisation"});
+        let q = json!({"id": "adv-1", "category": "advisor", "slot": 1, "idea": "some_advisor"});
+        tick(
+            &mut state,
+            &tools,
+            &json!({"politics": [p.clone()]}),
+            "l",
+            START,
+        )
+        .unwrap();
+        tick(
+            &mut state,
+            &tools,
+            &json!({"politics": [q.clone(), p.clone()]}),
+            "l",
+            START,
+        )
+        .unwrap();
+        tick(
+            &mut state,
+            &tools,
+            &json!({"politics": [q, p]}),
+            "l",
+            START + DAY,
+        )
+        .unwrap();
+        let ideas: Vec<Value> = actions(&tools)
+            .iter()
+            .filter(|(n, _)| n == "hoi4_politics_choose")
+            .map(|(_, a)| a["idea"].clone())
+            .collect();
+        assert_eq!(
+            ideas,
+            vec![
+                json!("partial_economic_mobilisation"),
+                json!("some_advisor")
+            ]
+        );
+    }
+
+    /// A plan file in its own fresh directory (so its plan_state.json is its own).
+    fn plan_dir(plan: &Value) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "plan-state-test-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("plan.json");
+        std::fs::write(&path, serde_json::to_vec(plan).unwrap()).unwrap();
+        path
+    }
+    fn campaign(playthrough: &str, hour: GameHour) -> Fake {
+        fake(vec![
+            (
+                "hoi4_overview",
+                json!({"player": "ITA", "date": {"raw": hour}}),
+            ),
+            (
+                "hoi4_construction_queue",
+                json!({"handle_scope": {"playthrough_id": playthrough}}),
+            ),
+        ])
+    }
+
+    #[test]
+    fn state_round_trips_through_plan_state_json() {
+        let path = plan_dir(&json!({}));
+        assert_eq!(state_path(&path), path.with_file_name("plan_state.json"));
+        let tools = campaign("p-1", START);
+        let mut state = State::default();
+        restore_memory(&mut state, &tools, &json!({}), &path, START);
+        assert!(state.persist.restored);
+        state.done.insert("pol:id:law-1".into(), START - DAY);
+        state
+            .done
+            .insert("prod:infantry_equipment".into(), START - 2);
+        state.plan_built.insert("id:hub-5".into(), START - 3);
+        state.skip(START, "dec", "some_decision", 30 * DAY);
+        state.skip(START - 40 * DAY, "dec", "old", DAY);
+        state.layout.insert("strike".into(), "Army 2".into());
+        state.layout.insert("empty".into(), String::new());
+        save_memory(&mut state, &path, START);
+        let saved: Value =
+            serde_json::from_slice(&std::fs::read(state_path(&path)).unwrap()).unwrap();
+        assert_eq!(saved["identity"]["playthrough"], "p-1");
+        assert_eq!(saved["identity"]["player"], "ITA");
+        assert!(
+            saved["skips"].get("dec:old").is_none(),
+            "expired timers are not kept"
+        );
+        assert!(!path.with_file_name("plan_state.json.tmp").exists());
+
+        // a restarted server (a fresh State) takes it back
+        let mut again = State::default();
+        restore_memory(&mut again, &tools, &json!({}), &path, START + DAY);
+        assert_eq!(again.done, state.done);
+        assert_eq!(again.plan_built, state.plan_built);
+        assert!(again.skipped(START + DAY, "dec", "some_decision"));
+        assert_eq!(
+            again.layout.get("strike").map(String::as_str),
+            Some("Army 2")
+        );
+        assert!(!again.layout.contains_key("empty"));
+        assert_eq!(again.persist.note, None);
+
+        // an earlier save loaded: work done after the game date is dropped, timers too
+        let mut rewound = State::default();
+        restore_memory(&mut rewound, &tools, &json!({}), &path, START - DAY);
+        assert!(rewound.done.contains_key("pol:id:law-1"));
+        assert!(!rewound.done.contains_key("prod:infantry_equipment"));
+        assert!(rewound.plan_built.is_empty());
+        assert!(rewound.bad.is_empty());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn plan_state_of_another_campaign_is_ignored_and_replaced() {
+        let path = plan_dir(&json!({}));
+        let mut state = State::default();
+        restore_memory(
+            &mut state,
+            &campaign("p-1", START),
+            &json!({}),
+            &path,
+            START,
+        );
+        state.done.insert("doc:id:a".into(), START);
+        save_memory(&mut state, &path, START);
+        // another playthrough in the same folder
+        let mut other = State::default();
+        restore_memory(
+            &mut other,
+            &campaign("p-2", START),
+            &json!({}),
+            &path,
+            START,
+        );
+        assert!(other.done.is_empty());
+        assert!(other
+            .persist
+            .note
+            .as_deref()
+            .unwrap()
+            .contains("another campaign"));
+        save_memory(&mut other, &path, START);
+        let saved: Value =
+            serde_json::from_slice(&std::fs::read(state_path(&path)).unwrap()).unwrap();
+        assert_eq!(saved["identity"]["playthrough"], "p-2");
+        assert_eq!(saved["done"], json!({}));
+        // the plan's _meta.campaign tells campaigns apart too
+        let plan_a = json!({"_meta": {"campaign": "ita-1936-a"}});
+        let mut a = State::default();
+        restore_memory(&mut a, &campaign("p-3", START), &plan_a, &path, START);
+        a.done.insert("doc:id:a".into(), START);
+        save_memory(&mut a, &path, START);
+        let mut b = State::default();
+        let plan_b = json!({"_meta": {"campaign": "ita-1936-b"}});
+        restore_memory(&mut b, &campaign("p-3", START), &plan_b, &path, START);
+        assert!(b.done.is_empty());
+        let mut same = State::default();
+        restore_memory(&mut same, &campaign("p-3", START), &plan_a, &path, START);
+        assert!(same.done.contains_key("doc:id:a"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_restarted_server_does_not_queue_a_construction_plan_item_again() {
+        let plan = json!({"construction_plan": [
+            {"id": "rail-1", "order": 1, "building": "infrastructure", "state": 5}]});
+        let path = plan_dir(&plan);
+        let tools = campaign("p-1", START);
+        let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
+        assert!(
+            result["actions"][0]
+                .as_str()
+                .unwrap()
+                .starts_with("construction plan rail-1"),
+            "{result}"
+        );
+        // the server restarts: a fresh State reads plan_state.json back
+        let tools = campaign("p-1", START + DAY);
+        let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
+        assert!(
+            !actions(&tools)
+                .iter()
+                .any(|(n, _)| n == "hoi4_construction_add"),
+            "{result}"
+        );
+        assert!(result.get("plan_state").is_none(), "{result}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    // ---- strategy layer (goal, phases, checkpoints, contingencies), gated politics, decision
+    // rules and event rules ----
+
+    fn hour(date: &str) -> GameHour {
+        crate::plan_predicate::date_hour(date).unwrap()
+    }
+    /// A game with an idle research slot: the research step shows which priority list (base or
+    /// overridden) the tick used.
+    fn slot_idle(extra: Vec<(&'static str, Value)>) -> Fake {
+        let mut replies = vec![("hoi4_research", json!({"slots": [{"researching": null}]}))];
+        replies.extend(extra);
+        fake(replies)
+    }
+    fn news_of<'s>(state: &'s State, kind: &str) -> Vec<&'s Value> {
+        state
+            .strategy
+            .news
+            .iter()
+            .filter(|n| n["kind"] == kind)
+            .collect()
+    }
+    fn alarm_codes(alarms: &[Value]) -> Vec<String> {
+        alarms
+            .iter()
+            .filter_map(|a| a["code"].as_str().map(str::to_string))
+            .collect()
+    }
+
+    #[test]
+    fn phases_switch_on_exit_and_their_overrides_apply_to_the_whole_tick() {
+        let plan = json!({
+            "research_priority": ["base_tech"],
+            "phases": [
+                {"id": "build", "exit": "at_war_with:ETH",
+                 "overrides": {"research_priority": ["build_tech"]}},
+                {"id": "war", "enter": "at_war_with:ETH", "revise_on_enter": true,
+                 "overrides": {"research_priority": ["war_tech"], "war": {"enabled": false}}}]});
+        let mut state = State::default();
+        let now = hour("1936.01.01");
+        let peace = slot_idle(vec![(
+            "hoi4_wars",
+            json!({"wars": {"at_war": false, "enemies": []}}),
+        )]);
+        assert_eq!(
+            acted(tick(&mut state, &peace, &plan, "l", now).unwrap()),
+            "research build_tech slot 0"
+        );
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("build"));
+        let war = slot_idle(vec![(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["ETH"]}}),
+        )]);
+        assert_eq!(
+            acted(tick(&mut state, &war, &plan, "l", now + DAY).unwrap()),
+            "research war_tech slot 0"
+        );
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("war"));
+        let changes = news_of(&state, "phase_changed");
+        assert_eq!(changes.len(), 2, "none -> build, build -> war");
+        assert_eq!(changes[1]["detail"]["from"], "build");
+        assert_eq!(changes[1]["detail"]["revise_on_enter"], true);
+        assert!(changes[1]["detail"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("exit of build"));
+        // the phase is kept for plan_state.json; the base plan itself is untouched
+        assert_eq!(state.memory(now + DAY)["strategy"]["phase"], "war");
+        assert_eq!(plan["research_priority"], json!(["base_tech"]));
+        let alarms = crate::alarms::strategy(&plan, &state.strategy.summary, &state.strategy.news);
+        assert!(alarm_codes(&alarms).contains(&"phase_changed".to_string()));
+    }
+
+    #[test]
+    fn overrides_replace_keys_merge_war_and_never_touch_the_strategy_keys() {
+        let mut plan = json!({"war": {"enemies": ["ETH"], "min_army": 6}, "decisions": ["a"],
+            "phases": [{"id": "x"}], "active": true});
+        let overrides = json!({"war": {"min_army": 2, "enemies": null}, "decisions": null,
+            "focus_path": ["f"], "phases": [], "active": false});
+        apply_overrides(&mut plan, overrides.as_object().unwrap());
+        assert_eq!(plan["war"], json!({"min_army": 2}));
+        assert!(plan.get("decisions").is_none());
+        assert_eq!(plan["focus_path"], json!(["f"]));
+        assert_eq!(plan["phases"], json!([{"id": "x"}]));
+        assert_eq!(plan["active"], true);
+    }
+
+    #[test]
+    fn a_missed_checkpoint_raises_its_alarm_once_and_switches_to_its_else_phase() {
+        let plan = json!({
+            "phases": [{"id": "advance"},
+                {"id": "defend", "enter": false, "overrides": {"research_priority": ["fort_tech"]}}],
+            "checkpoints": [{"id": "addis", "by": "1936.06.01", "must": ["controls_state:550"],
+                "else": "phase:defend"}]});
+        let tools = slot_idle(vec![
+            ("hoi4_overview", json!({"player": "ITA"})),
+            (
+                "hoi4_states",
+                json!({"states": [{"state_id": 550, "owner": "ETH", "controller": "ETH"}]}),
+            ),
+        ]);
+        let mut state = State::default();
+        // before its date a checkpoint reads nothing
+        tick(&mut state, &tools, &plan, "l", hour("1936.05.01")).unwrap();
+        assert!(!names(&tools).contains(&"hoi4_states".to_string()));
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("advance"));
+        let step = acted(tick(&mut state, &tools, &plan, "l", hour("1936.06.01")).unwrap());
+        assert_eq!(step, "research fort_tech slot 0");
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("defend"));
+        let missed = news_of(&state, "checkpoint_missed");
+        assert_eq!(missed.len(), 1);
+        assert_eq!(missed[0]["detail"]["failed"], json!(["controls_state:550"]));
+        let alarms = crate::alarms::strategy(&plan, &state.strategy.summary, &state.strategy.news);
+        let codes = alarm_codes(&alarms);
+        assert!(
+            codes.contains(&"checkpoint_missed".to_string()),
+            "{codes:?}"
+        );
+        // settled once: later judgements do not raise it again
+        state.strategy.news.clear();
+        tick(&mut state, &tools, &plan, "l", hour("1936.06.03")).unwrap();
+        assert!(state.strategy.news.is_empty(), "{:?}", state.strategy.news);
+        assert_eq!(
+            state.strategy.summary["checkpoints"]["missed"],
+            json!(["addis"])
+        );
+    }
+
+    #[test]
+    fn a_checkpoint_that_reads_unknown_waits_and_one_that_holds_is_met() {
+        let plan = json!({"checkpoints": [
+            {"id": "a", "by": "1936.02.01", "must": ["bop:ETH_centralization > 0.2"], "else": "revise"},
+            {"id": "b", "by": "1936.02.01", "must": ["1936.01.15"]}]});
+        let mut state = State::default();
+        tick(&mut state, &fake(vec![]), &plan, "l", hour("1936.02.02")).unwrap();
+        assert!(state.strategy.news.is_empty());
+        assert_eq!(state.strategy.summary["checkpoints"]["met"], json!(["b"]));
+        assert_eq!(
+            state.strategy.summary["checkpoints"]["pending"],
+            json!(["a"])
+        );
+        assert!(state
+            .strategy
+            .unknown
+            .contains_key("bop:ETH_centralization > 0.2"));
+    }
+
+    #[test]
+    fn a_contingency_applies_its_overrides_while_its_trigger_holds() {
+        let plan = json!({"research_priority": ["base_tech"],
+            "contingencies": [{"id": "unrest", "when": "stability < 40%",
+                "then": {"overrides": {"research_priority": ["calm_tech"]}}}]});
+        let status = |s: f64| {
+            slot_idle(vec![(
+                "hoi4_country_status",
+                json!({"fields": {"stability": {"value": s}}}),
+            )])
+        };
+        let mut state = State::default();
+        let now = hour("1936.03.01");
+        assert_eq!(
+            acted(tick(&mut state, &status(0.3), &plan, "l", now).unwrap()),
+            "research calm_tech slot 0"
+        );
+        assert!(state.strategy.contingencies.contains_key("unrest"));
+        assert_eq!(news_of(&state, "contingency_triggered").len(), 1);
+        // within the judgement interval nothing is read again
+        let calm = status(0.7);
+        assert_eq!(
+            acted(tick(&mut state, &calm, &plan, "l", now + 1).unwrap()),
+            "research calm_tech slot 0"
+        );
+        assert!(!names(&calm).contains(&"hoi4_country_status".to_string()));
+        // unreadable: the contingency stays as it is
+        assert_eq!(
+            acted(tick(&mut state, &slot_idle(vec![]), &plan, "l", now + DAY).unwrap()),
+            "research calm_tech slot 0"
+        );
+        // calm again: cleared, the base plan applies
+        assert_eq!(
+            acted(tick(&mut state, &calm, &plan, "l", now + 2 * DAY).unwrap()),
+            "research base_tech slot 0"
+        );
+        assert!(state.strategy.contingencies.is_empty());
+    }
+
+    #[test]
+    fn a_contingency_with_a_phase_switches_to_it() {
+        let plan = json!({"phases": [{"id": "attack"}, {"id": "hold", "enter": false}],
+            "contingencies": [{"id": "core_lost", "trigger": "not_exists:ETH", "phase": "hold"}]});
+        let tools = fake(vec![("hoi4_states", json!({"states": []}))]);
+        let mut state = State::default();
+        tick(&mut state, &tools, &plan, "l", hour("1936.03.01")).unwrap();
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("hold"));
+        let changes = news_of(&state, "phase_changed");
+        assert_eq!(
+            changes.last().unwrap()["detail"]["reason"],
+            "contingency core_lost"
+        );
+    }
+
+    #[test]
+    fn the_goal_is_reached_or_at_risk_by_its_predicates_and_deadline() {
+        let plan = json!({"goal": {"predicates": ["vp_share:ETH <= 0.2"], "deadline": "1937.01.01",
+            "fail_predicates": ["at_war_with:FRA"]}});
+        let game = |share: f64, enemies: Value| {
+            fake(vec![
+                (
+                    "hoi4_states",
+                    json!({"states": [], "victory_points": {"share_held_by_others": share}}),
+                ),
+                ("hoi4_wars", json!({"wars": {"enemies": enemies}})),
+            ])
+        };
+        let status = |state: &State| state.strategy.summary["goal"]["status"].clone();
+        let mut state = State::default();
+        tick(
+            &mut state,
+            &game(0.3, json!(["ETH"])),
+            &plan,
+            "l",
+            hour("1936.03.01"),
+        )
+        .unwrap();
+        assert_eq!(status(&state), "open");
+        tick(
+            &mut state,
+            &game(0.3, json!(["ETH"])),
+            &plan,
+            "l",
+            hour("1936.12.15"),
+        )
+        .unwrap();
+        assert_eq!(status(&state), "at_risk", "{}", state.strategy.summary);
+        let alarms = crate::alarms::strategy(&plan, &state.strategy.summary, &[]);
+        assert_eq!(alarm_codes(&alarms), ["goal_at_risk"]);
+        let mut state = State::default();
+        tick(
+            &mut state,
+            &game(0.3, json!(["ETH", "FRA"])),
+            &plan,
+            "l",
+            hour("1936.03.01"),
+        )
+        .unwrap();
+        assert!(state.strategy.summary["goal"]["why"]
+            .as_str()
+            .unwrap()
+            .contains("at_war_with:FRA"));
+        tick(
+            &mut state,
+            &game(0.85, json!(["ETH"])),
+            &plan,
+            "l",
+            hour("1936.04.01"),
+        )
+        .unwrap();
+        assert_eq!(status(&state), "reached");
+        let alarms = crate::alarms::strategy(&plan, &state.strategy.summary, &[]);
+        assert_eq!(alarm_codes(&alarms), ["goal_reached"]);
+    }
+
+    #[test]
+    fn a_gated_law_waits_for_its_gate_then_is_taken() {
+        let plan = json!({"politics": [{"id": "econ", "category": "government", "slot": 1,
+            "idea": "partial_economic_mobilisation", "when": "war_support >= 25"}]});
+        let support = |v: f64| {
+            fake(vec![(
+                "hoi4_country_status",
+                json!({"fields": {"war_support": {"value": v}}}),
+            )])
+        };
+        let mut state = State::default();
+        let low = support(0.1);
+        tick(&mut state, &low, &plan, "l", START).unwrap();
+        assert!(!names(&low).contains(&"hoi4_politics_choose".to_string()));
+        // unreadable: waits too, and says why
+        let unread = fake(vec![]);
+        tick(&mut state, &unread, &plan, "l", START + 1).unwrap();
+        assert!(!names(&unread).contains(&"hoi4_politics_choose".to_string()));
+        assert!(state.strategy.unknown.contains_key("war_support >= 25"));
+        let high = support(0.3);
+        let step = acted(tick(&mut state, &high, &plan, "l", START + DAY).unwrap());
+        assert!(
+            step.starts_with("politics partial_economic_mobilisation : true"),
+            "{step}"
+        );
+        assert!(state.done.contains_key("pol:id:econ"));
+    }
+
+    #[test]
+    fn a_never_take_decision_is_refused_in_every_path() {
+        let plan = json!({"decisions": ["ITA_withdraw_from_ethiopia", "ITA_good"],
+            "decision_rules": [
+                {"id": "no-withdraw", "decision": "ITA_withdraw_from_ethiopia", "never": true},
+                {"id": "withdraw-anyway", "decision": "ITA_withdraw_from_ethiopia"}]});
+        let tools = fake(vec![(
+            "hoi4_decisions_list",
+            json!({"decisions": [
+                {"decision": "ITA_withdraw_from_ethiopia", "enabled": true, "active_timer": false},
+                {"decision": "ITA_good", "enabled": true, "active_timer": false}]}),
+        )]);
+        let mut state = State::default();
+        assert_eq!(
+            acted(tick(&mut state, &tools, &plan, "l", START).unwrap()),
+            "decision ITA_good: true Verified"
+        );
+        tick(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        let taken: Vec<Value> = actions(&tools)
+            .iter()
+            .filter(|(n, _)| n == "hoi4_decision_take")
+            .map(|(_, a)| a["decision"].clone())
+            .collect();
+        assert_eq!(taken, vec![json!("ITA_good")]);
+        assert!(decision_forbidden(&plan, "ITA_withdraw_from_ethiopia"));
+        assert!(!decision_forbidden(&plan, "ITA_good"));
+    }
+
+    #[test]
+    fn decision_rules_wait_for_when_pick_the_target_row_and_stop_at_max() {
+        let plan = json!({"decision_rules": [{"id": "rail", "decision": "ETH_rail",
+            "target": "Addis", "when": "at_war_with:ITA", "max": 1}]});
+        let rows = json!({"decisions": [
+            {"decision": "ETH_rail", "title": "Rail to Dire Dawa", "enabled": true},
+            {"decision": "ETH_rail", "title": "Rail to Addis Abeba", "enabled": true}]});
+        let game = |enemies: Value| {
+            fake(vec![
+                ("hoi4_decisions_list", rows.clone()),
+                ("hoi4_wars", json!({"wars": {"enemies": enemies}})),
+            ])
+        };
+        let mut state = State::default();
+        let peace = game(json!([]));
+        tick(&mut state, &peace, &plan, "l", START).unwrap();
+        assert!(
+            !names(&peace).contains(&"hoi4_decisions_list".to_string()),
+            "the decisions panel is not opened while nothing may be taken"
+        );
+        let war = game(json!(["ITA"]));
+        assert_eq!(
+            acted(tick(&mut state, &war, &plan, "l", START + DAY).unwrap()),
+            "decision ETH_rail on Addis (rule rail): true Verified"
+        );
+        assert_eq!(actions(&war)[0].1["target"], "Addis");
+        let later = game(json!(["ITA"]));
+        tick(&mut state, &later, &plan, "l", START + 40 * DAY).unwrap();
+        assert!(actions(&later).is_empty(), "max 1 reached");
+    }
+
+    #[test]
+    fn event_rules_choose_an_option_by_its_name_and_fall_back() {
+        let events = json!({"events": [{"event": "ita_eth.5",
+            "options": ["Negotiate a settlement", "§YPush on§! to Addis Ababa!"]}]});
+        let plan = json!({"event_rules": [{"event": "ita_eth.5",
+                "option_name": "push on to addis ababa", "when": "at_war_with:ETH"}],
+            "event_options": {"ita_eth.5": 0}});
+        let game = |enemies: Option<Value>| {
+            let mut replies = vec![("hoi4_events", events.clone())];
+            if let Some(e) = enemies {
+                replies.push(("hoi4_wars", json!({"wars": {"enemies": e}})));
+            }
+            fake(replies)
+        };
+        let run_once = |plan: &Value, tools: &Fake| {
+            acted(tick(&mut State::default(), tools, plan, "l", START).unwrap())
+        };
+        let step = run_once(&plan, &game(Some(json!(["ETH"]))));
+        assert!(
+            step.starts_with(
+                "event ita_eth.5 option 1 (event_rules 'push on to addis ababa'): true"
+            ),
+            "{step}"
+        );
+        // the condition is false and the rule names no else option: event_options decides
+        let step = run_once(&plan, &game(Some(json!([]))));
+        assert!(step.starts_with("event ita_eth.5 option 0: true"), "{step}");
+        // the condition cannot be read: the event waits for the model
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &game(None), &plan, "l", START).unwrap(),
+            Tick::Waiting {
+                event: "ita_eth.5".into(),
+                new: true
+            }
+        );
+        assert!(state.strategy.unknown.contains_key("at_war_with:ETH"));
+        // a name the event does not offer: the rule's fallbacks, then event_options
+        let fallback = json!({"event_rules": [{"event": "ita_eth.5", "option_name": "Retreat",
+            "fallback_option_name": "negotiate"}]});
+        let step = run_once(&fallback, &game(None));
+        assert!(
+            step.starts_with("event ita_eth.5 option 0 (event_rules fallback 'negotiate'"),
+            "{step}"
+        );
+        let by_index = json!({"event_rules": [{"event": "ita_eth.5", "option_name": "Retreat",
+            "fallback_index": 1}]});
+        let step = run_once(&by_index, &game(None));
+        assert!(
+            step.starts_with("event ita_eth.5 option 1 (event_rules fallback_index"),
+            "{step}"
+        );
+        let mut state = State::default();
+        let unmatched = json!({"event_rules": [{"event": "ita_eth.5", "option_name": "Retreat"}],
+            "event_options": {"ita_eth.5": 1}});
+        let step = acted(tick(&mut state, &game(None), &unmatched, "l", START).unwrap());
+        assert!(step.starts_with("event ita_eth.5 option 1: true"), "{step}");
+        assert!(state.strategy.unknown["event_rules ita_eth.5"].contains("Retreat"));
+    }
+
+    #[test]
+    fn option_names_ignore_case_markup_and_punctuation() {
+        let options = [
+            json!("Accept the £pol_power£ deal."),
+            json!("Refuse!"),
+            json!({"name": "ita.1.c", "text": "Wait"}),
+        ];
+        assert_eq!(option_index(&options, "accept the deal"), Some(0));
+        assert_eq!(option_index(&options, "REFUSE"), Some(1));
+        assert_eq!(option_index(&options, "ita.1.c"), Some(2));
+        assert_eq!(option_index(&options, "deal"), Some(0));
+        assert_eq!(option_index(&options, "e"), None, "ambiguous");
+        assert_eq!(option_index(&options, ""), None);
+    }
+
+    #[test]
+    fn the_run_digest_lists_unknown_atoms_and_the_phase_survives_a_restart() {
+        let plan = json!({"phases": [{"id": "build", "exit": "bop:ETH_centralization > 0.5"},
+                {"id": "war"}],
+            "goal": {"predicates": ["vp_share:ETH < 0.1"], "deadline": "1937.01.01"}});
+        let path = plan_dir(&plan);
+        let now = hour("1936.03.01");
+        let result = run(&mut State::default(), &campaign("p-1", now), &path, "l", 1).unwrap();
+        let atoms: Vec<&str> = result["predicates_unknown"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|u| u["atom"].as_str())
+            .collect();
+        assert_eq!(
+            atoms,
+            ["bop:ETH_centralization > 0.5", "vp_share:ETH < 0.1"],
+            "{result}"
+        );
+        assert_eq!(result["strategy"]["phase"], "build");
+        assert_eq!(result["strategy"]["goal"]["status"], "open");
+        assert!(alarm_codes(result["alarms"].as_array().unwrap())
+            .contains(&"phase_changed".to_string()));
+        // a restarted server takes the phase back from plan_state.json and does not announce it
+        let result = run(
+            &mut State::default(),
+            &campaign("p-1", now + DAY),
+            &path,
+            "l",
+            1,
+        )
+        .unwrap();
+        assert_eq!(result["strategy"]["phase"], "build", "{result}");
+        assert!(result.get("strategy_changes").is_none(), "{result}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

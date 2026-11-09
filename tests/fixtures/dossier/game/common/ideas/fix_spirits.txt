@@ -1,0 +1,11 @@
+ideas = {
+	academy_spirit = {
+		fix_bold_spirit = { available = { has_military_academy = yes } modifier = { army_org_factor = 0.05 } }
+		fix_dlc_spirit = { visible = { has_dlc = "Fixture DLC" } }
+		BBB_only_spirit = { visible = { tag = BBB } }
+		BBB_focus_spirit = { visible = { has_completed_focus = BBB_x } }
+	}
+	navy_spirit = {
+		fix_navy_spirit = { cost = 40 modifier = { navy_org_factor = 0.05 } }
+	}
+}

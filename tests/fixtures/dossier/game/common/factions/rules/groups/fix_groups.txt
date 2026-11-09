@@ -1,0 +1,4 @@
+rule_group_fix = {
+	default_rule = fix_joining_rule
+	rules = { fix_joining_rule }
+}

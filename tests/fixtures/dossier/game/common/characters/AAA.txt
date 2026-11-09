@@ -1,0 +1,5 @@
+characters = {
+	AAA_general = { name = AAA_general corps_commander = { traits = { brilliant } skill = 3 attack_skill = 2 defense_skill = 3 planning_skill = 2 logistics_skill = 1 } }
+	AAA_adviser = { name = AAA_adviser advisor = { slot = political_advisor idea_token = AAA_adviser_token cost = 100 } }
+	AAA_scientist = { name = AAA_scientist scientist = { traits = { fix_sci_trait } skills = { specialization_land = 2 } } }
+}

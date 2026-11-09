@@ -15,6 +15,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", hoi4_live_native::recording::run(&session, &config)?);
             return Ok(());
         }
+        Some("--list-tools") => {
+            println!("{}", hoi4_live_native::protocol::list_tools_offline());
+            return Ok(());
+        }
         None => None,
         Some("--session") => Some(PathBuf::from(
             args.next().ok_or("--session requires a manifest")?,

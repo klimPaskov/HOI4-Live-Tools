@@ -1,0 +1,5 @@
+sabotage_infrastructure = {
+	max_amount = 3
+	duration = 10
+	effect = { add_stability = -0.01 }
+}

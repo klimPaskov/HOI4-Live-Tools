@@ -1,0 +1,28 @@
+no_garrison = {
+	icon = 1
+	state_modifier = {
+		resistance_target = 0.4
+		no_compliance_gain = 1
+		required_garrison_factor = -1
+	}
+}
+
+military_governor_occupation = {
+	icon = 6
+	default_law = yes
+	starting_law = yes
+	state_modifier = {
+		resistance_target = -0.35
+		compliance_gain = -0.045
+		local_resources = 0.10
+	}
+}
+
+autonomous_occupation = {
+	visible = { has_government = democratic }
+	main_fallback_law = yes
+	state_modifier = {
+		resistance_target = 0.10
+		compliance_gain = 0.02
+	}
+}

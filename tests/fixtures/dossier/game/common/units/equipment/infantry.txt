@@ -1,0 +1,18 @@
+equipments = {
+	infantry_equipment = { is_archetype = yes build_cost_ic = 0.43 }
+	infantry_equipment_1 = { year = 1936 archetype = infantry_equipment build_cost_ic = 0.5 }
+	infantry_equipment_2 = { year = 1939 archetype = infantry_equipment build_cost_ic = 0.58 }
+	artillery_equipment = { is_archetype = yes build_cost_ic = 3 }
+	artillery_equipment_1 = { year = 1934 archetype = artillery_equipment }
+	light_tank_chassis = { is_archetype = yes type = armor build_cost_ic = 8
+		module_slots = {
+			turret_slot = { required = yes allowed_module_categories = { fix_turret } }
+			armament_slot = { required = no allowed_module_categories = { fix_gun } }
+		} }
+	light_tank_chassis_1 = { year = 1936 archetype = light_tank_chassis
+		module_slots = { turret_slot = inherit armament_slot = inherit extra_slot = armament_slot }
+		upgrades = { fix_engine_upgrade } }
+	light_tank_chassis_2 = { year = 1937 archetype = light_tank_chassis parent = light_tank_chassis_1 module_slots = inherit }
+	fighter_equipment = { is_archetype = yes type = { fighter interceptor } build_cost_ic = 20 }
+	fighter_equipment_1 = { year = 1936 archetype = fighter_equipment }
+}

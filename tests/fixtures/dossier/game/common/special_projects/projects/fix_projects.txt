@@ -1,0 +1,30 @@
+sp_fix_tank = {
+	specialization = specialization_land
+	project_tags = sp_tag_tank
+	allowed = { }
+	available = { FROM = { has_tech = t_c } }
+	breakthrough_cost = { specialization_land = 1 }
+	resource_cost = { resources = { steel = 4 } }
+	prototype_time = sp_time.prototype.short
+	complexity = sp_complexity.small
+	project_output = {
+		country_effects = { set_technology = { t_dlc = 1 popup = no } }
+		enable_equipment_modules = { fix_turret_dlc }
+	}
+}
+
+sp_fix_child = {
+	specialization = specialization_land
+	special_project_parent = { sp_fix_tank }
+	available = { FROM = { has_tech = t_a } }
+	prototype_time = sp_time.prototype.short
+	complexity = 40
+	project_output = { enable_equipments = { light_tank_chassis_2 } }
+}
+
+sp_fix_dlc = {
+	specialization = specialization_land
+	allowed = { has_dlc = "Fixture DLC" }
+	prototype_time = sp_time.prototype.short
+	project_output = { }
+}

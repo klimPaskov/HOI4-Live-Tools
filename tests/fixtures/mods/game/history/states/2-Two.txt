@@ -1,0 +1,1 @@
+state = { id = 2 name = "STATE_2" history = { owner = BBB } provinces = { 20 } }

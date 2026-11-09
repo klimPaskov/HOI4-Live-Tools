@@ -1,0 +1,2 @@
+division_template = { name = "Levy" regiments = { infantry = { x = 0 y = 0 } } }
+units = { division = { location = 20 division_template = "Levy" } }

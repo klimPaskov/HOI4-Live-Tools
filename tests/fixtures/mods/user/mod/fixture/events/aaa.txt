@@ -1,0 +1,2 @@
+add_namespace = aaa
+country_event = { id = aaa.1 option = { name = aaa.1.mod } }

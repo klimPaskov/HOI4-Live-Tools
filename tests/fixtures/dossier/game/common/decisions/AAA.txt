@@ -1,0 +1,37 @@
+AAA_cat = {
+	AAA_conquer_mission = {
+		allowed = { tag = AAA }
+		days_mission_timeout = AAA_conquer_days
+		activation = { always = no }
+		available = { controls_province = 20 controls_province = 21 }
+		timeout_effect = { set_country_flag = AAA_defeat_flag add_political_power = -25 }
+	}
+	AAA_build = {
+		allowed = { tag = AAA }
+		cost = 50
+		complete_effect = { 1 = { add_building_construction = { type = industrial_complex level = 1 instant_build = yes } }
+			create_faction_from_template = { template = faction_template_aaa name = AAA_league } }
+	}
+	AAA_withdraw_from_beta = {
+		allowed = { tag = AAA }
+		cost = 15
+		fire_only_once = yes
+		complete_effect = {
+			BBB = { country_event = { id = bbb.1 } }
+			effect_tooltip = { white_peace = BBB }
+		}
+	}
+	AAA_hand_over_one = {
+		allowed = { tag = AAA }
+		complete_effect = { BBB = { transfer_state = 1 } }
+	}
+	AAA_lean_left = {
+		allowed = { tag = AAA }
+		cost = 25
+		complete_effect = {
+			add_power_balance_modifier = { id = AAA_balance modifier = AAA_drift_left }
+			AAA_bop_shift_effect = yes
+			army_experience = -5
+		}
+	}
+}

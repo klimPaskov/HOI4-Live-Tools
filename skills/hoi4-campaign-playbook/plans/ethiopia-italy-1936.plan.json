@@ -1,5 +1,40 @@
 {
-  "_comment": "Ethiopia FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone). Goal: survive Italy's 1936 offensive, then take Eritrea 550, Italian Somaliland 559 and Jubaland 844 and end the war with the decision ETH_defeat_italy (Italy's AI always accepts). Explained in ethiopia-plan.md; mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner; keys marked NEW in ethiopia-plan.md section 0 are not read by the current executor yet.",
+  "_comment": "Ethiopia FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone). Goal: survive Italy's 1936 offensive, then take Eritrea 550, Italian Somaliland 559 and Jubaland 844 and end the war with the decision ETH_defeat_italy (Italy's AI always accepts). Explained in ethiopia-plan.md; mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner; keys marked NEW in ethiopia-plan.md section 0 are not read by the current executor yet. Event BBA_italo_ethiopian_war_events.100: arrives at the host country, not at Ethiopia (no rule needed).",
+  "_meta": {
+    "version": 1,
+    "source": "hand"
+  },
+  "_coverage": {
+    "c1": "key:win_condition",
+    "c2": "md:italo-ethiopian-war.md (scenario reference; ethiopia-italy-1936.md has no situation section)",
+    "c3": "na: missing in hand plan",
+    "c4": "key:doctrines",
+    "c5": "na: missing in hand plan",
+    "c6": "na: missing in hand plan (training uses the start template Chitet Sefari)",
+    "c7": "na: no tanks, planes or ships to design (2 military factories, no air force or navy)",
+    "c8": "key:production,production_priority",
+    "c9": "na: missing in hand plan",
+    "c10": "key:construction,construction_plan",
+    "c11": "key:research_path,research_priority",
+    "c12": "na: missing in hand plan (focus_path and focus_fallback cover the focus part; no balance-of-power path for ETH_centralization_balance)",
+    "c13": "key:politics",
+    "c14": "na: missing in hand plan",
+    "c15": "na: missing in hand plan (politics holds only partial_economic_mobilisation)",
+    "c16": "key:armies,army_layout,army_group",
+    "c17": "na: missing in hand plan (training and training_rules only, no conscription plan)",
+    "c18": "key:war,war_by_phase,vp_targets,hold_targets,phases",
+    "c19": "key:construction_plan",
+    "c20": "key:air",
+    "c21": "na: landlocked at the start, no navy",
+    "c22": "na: missing in hand plan",
+    "c23": "na: missing in hand plan",
+    "c24": "na: minor nation without civilian factories for an agency (audit row O1: majors)",
+    "c25": "na: missing in hand plan (the war ends with the decision ETH_defeat_italy in win_condition)",
+    "c26": "key:event_rules,event_options,decisions",
+    "c27": "key:phases,contingencies,retake_rules",
+    "c28": "key:alarms",
+    "c29": "md:ethiopia-italy-1936.md (FAIR tags in the text)"
+  },
   "_validator": {
     "tag": "ETH",
     "start_date": "1936.1.1",
@@ -28,13 +63,15 @@
     {
       "event": "BBA_italy_second_italo_ethiopian_war.1",
       "option_name": "BBA_italy_second_italo_ethiopian_war.1.a",
-      "condition": "Ethiopia has full control of state 550 AND state 559",
+      "condition": {
+        "all": [
+          "state_fully_controlled:550",
+          "state_fully_controlled:559"
+        ]
+      },
       "else_option_name": "BBA_italy_second_italo_ethiopian_war.1.b",
-      "why": "Italy's withdrawal offer (decision ITA_withdraw_from_ethiopia, fire_only_once, AI from 1937-03-01) transfers only the states Ethiopia fully controls"
-    },
-    {
-      "event": "BBA_italo_ethiopian_war_events.100",
-      "note": "arrives at the host country, not at Ethiopia"
+      "why": "Italy's withdrawal offer (decision ITA_withdraw_from_ethiopia, fire_only_once, AI from 1937-03-01) transfers only the states Ethiopia fully controls",
+      "note": "condition: Ethiopia has full control of state 550 AND state 559"
     }
   ],
   "focus_path": [
@@ -131,25 +168,13 @@
   "construction_queue_depth": 1,
   "construction_plan": [
     {
+      "id": "cp01_infrastructure_271",
       "order": 1,
       "building": "infrastructure",
       "state": 271,
       "when": "1936.01.01",
-      "why": "the only state with a hub and railway; infrastructure is the only building Ethiopia can afford (2 civilian factories, no free slots)"
-    },
-    {
-      "order": 2,
-      "building": "arms_factory",
-      "state": 271,
-      "when": "focus ETH_develop_the_capital_region completed or a free slot shows in 271"
-    },
-    {
-      "order": 3,
-      "building": "supply_node",
-      "state": 842,
-      "province": 13238,
-      "when": "never before Eritrea is taken; only if 5+ civilian factories are free",
-      "priority": "low"
+      "why": "the only state with a hub and railway; infrastructure is the only building Ethiopia can afford (2 civilian factories, no free slots)",
+      "note": "cp03_supply_node_842 (Adwa hub after Eritrea) removed: 20000 points take about 2000 days with 2 free civilian factories at Tigray's infrastructure 0 (lint construction.hub_cost); the Asmara hub 13250 is captured with Eritrea"
     }
   ],
   "production_priority": [
@@ -178,6 +203,7 @@
   },
   "politics": [
     {
+      "id": "pol_government_2_partial_economic_mobilisation",
       "category": "government",
       "slot": 2,
       "idea": "partial_economic_mobilisation",
@@ -189,15 +215,17 @@
   ],
   "doctrines": [
     {
+      "id": "land_grand_mass_assault",
       "folder": "land",
       "grand_doctrine": "mass_assault",
-      "when": "army_xp >= 150"
+      "xp": 150
     },
     {
+      "id": "land_infantry_irregulars",
       "folder": "land",
       "track": "infantry",
       "subdoctrine": "irregulars",
-      "when": "army_xp >= 75"
+      "xp": 75
     }
   ],
   "armies": {
@@ -230,91 +258,116 @@
     {
       "name_hint": "Army of Tigray",
       "state": 842,
-      "divisions": "2 Mountain Division, 3 Mehal Sefari, 2 Chitet Sefari",
-      "general": "Seyoum Mengesha",
-      "hold": [
-        13237,
-        13238,
-        2072
+      "templates": [
+        "Mountain Division",
+        "Mehal Sefari",
+        "Chitet Sefari"
       ],
-      "role": "hold then strike Eritrea"
+      "count": 7,
+      "general": "Seyoum Mengesha",
+      "role": "guard",
+      "guard_states_in_order": [
+        842
+      ],
+      "note": "hold then strike Eritrea; divisions at start: 2 Mountain Division, 3 Mehal Sefari, 2 Chitet Sefari; holds provinces 13237, 13238, 2072"
     },
     {
       "name_hint": "Army of Begemder",
       "state": 841,
-      "divisions": "1 Mehal Sefari, 1 Chitet Sefari at Gondar 1984",
-      "general": "Ayalew Birru",
-      "hold": [
-        1984
+      "templates": [
+        "Mehal Sefari",
+        "Chitet Sefari"
       ],
-      "role": "hold"
+      "count": 2,
+      "general": "Ayalew Birru",
+      "role": "guard",
+      "guard_states_in_order": [
+        841
+      ],
+      "note": "hold; divisions at start: 1 Mehal Sefari, 1 Chitet Sefari at Gondar 1984; holds provinces 1984"
     },
     {
       "name_hint": "Army of Wello",
       "state": 843,
-      "divisions": "3 Mehal Sefari, 2 Chitet Sefari",
-      "general": "Mulugeta Yeggazu of Illubabor",
-      "hold": [
-        5097,
-        7944
+      "templates": [
+        "Mehal Sefari",
+        "Chitet Sefari"
       ],
-      "role": "hold, reserve for Tigray"
+      "count": 5,
+      "general": "Mulugeta Yeggazu of Illubabor",
+      "role": "guard",
+      "guard_states_in_order": [
+        843
+      ],
+      "note": "hold, reserve for Tigray; divisions at start: 3 Mehal Sefari, 2 Chitet Sefari; holds provinces 5097, 7944"
     },
     {
       "name_hint": "Imperial reserve",
       "state": 271,
-      "divisions": "Kebur Zabagna plus every new Chitet Sefari",
-      "general": "Kassa Haile Darge",
-      "hold": [
-        5010,
-        13239
+      "templates": [
+        "Kebur Zabagna",
+        "Chitet Sefari"
       ],
-      "role": "reserve"
+      "count": 1,
+      "general": "Kassa Haile Darge",
+      "role": "guard",
+      "guard_states_in_order": [
+        271
+      ],
+      "note": "reserve; divisions at start: Kebur Zabagna plus every new Chitet Sefari; holds provinces 5010, 13239"
     },
     {
       "name_hint": "Army of the Ogaden",
       "state": 835,
-      "divisions": "1 Mehal Sefari (Dire Dawa), 2 Chitet Sefari (Wal Wal 12812, 12757)",
-      "general": "Nasibu Zeamanuel",
-      "hold": [
-        12812,
-        13249,
-        7980
+      "templates": [
+        "Mehal Sefari",
+        "Chitet Sefari"
       ],
-      "role": "hold then strike Somaliland"
+      "count": 3,
+      "general": "Nasibu Zeamanuel",
+      "role": "guard",
+      "guard_states_in_order": [
+        835
+      ],
+      "note": "hold then strike Somaliland; divisions at start: 1 Mehal Sefari (Dire Dawa), 2 Chitet Sefari (Wal Wal 12812, 12757); holds provinces 12812, 13249, 7980"
     },
     {
       "name_hint": "Army of Bale and Sidamo",
       "state": 836,
-      "divisions": "2 Chitet Sefari (4995), 1 Chitet Sefari (Sidamo 8062)",
-      "general": "Desta Damtew",
-      "hold": [
-        4995,
-        8062,
-        10775,
-        13247
+      "templates": [
+        "Chitet Sefari"
       ],
-      "role": "hold then strike Jubaland"
+      "count": 2,
+      "general": "Desta Damtew",
+      "role": "guard",
+      "guard_states_in_order": [
+        836
+      ],
+      "note": "hold then strike Jubaland; divisions at start: 2 Chitet Sefari (4995), 1 Chitet Sefari (Sidamo 8062); holds provinces 4995, 8062, 10775, 13247"
     }
   ],
   "army_group": [
     {
-      "name_hint": "Northern front",
-      "field_marshal": "Hailu Tekle Haymanot",
-      "fallback_field_marshal": "Haile Selassie",
-      "members": [
+      "id": "ag_northern_front",
+      "name": "Northern front",
+      "armies": [
         "Army of Tigray",
         "Army of Begemder",
         "Army of Wello"
+      ],
+      "marshal": [
+        "Hailu Tekle Haymanot",
+        "Haile Selassie"
       ]
     },
     {
-      "name_hint": "Southern front",
-      "field_marshal": "Abba Jofir",
-      "members": [
+      "id": "ag_southern_front",
+      "name": "Southern front",
+      "armies": [
         "Army of the Ogaden",
         "Army of Bale and Sidamo"
-      ]
+      ],
+      "marshal": "Abba Jofir"
     }
   ],
   "air": {
@@ -423,29 +476,57 @@
   },
   "hold_targets": [
     {
-      "mission": "ETH_hold_the_north_mission",
+      "id": "hold_north_gondar",
+      "army": "Army of Begemder",
       "provinces": [
-        1984,
-        2072,
+        1984
+      ],
+      "until": "1936.06.25",
+      "note": "ETH_hold_the_north_mission: keep at least 2 of Gondar 1984, Macalle 2072, Dessie 5097 until the mission ends (about 1936-05-15 if Italy chose option a, 1936-07-14 if b); until is the P3_eritrea start, when the Army of Tigray strikes Eritrea"
+    },
+    {
+      "id": "hold_north_macalle",
+      "army": "Army of Tigray",
+      "provinces": [
+        2072
+      ],
+      "until": "1936.06.25",
+      "note": "ETH_hold_the_north_mission (see hold_north_gondar)"
+    },
+    {
+      "id": "hold_north_dessie",
+      "army": "Army of Wello",
+      "provinces": [
         5097
       ],
-      "keep_at_least": 2,
-      "until": "mission ends (about 1936-05-15 if Italy chose option a, 1936-07-14 if b)"
+      "until": "1936.06.25",
+      "note": "ETH_hold_the_north_mission (see hold_north_gondar)"
     },
     {
-      "mission": "ETH_hold_the_south_mission",
+      "id": "hold_south_wal_wal",
+      "army": "Army of the Ogaden",
       "provinces": [
-        12812,
-        10775,
-        13247
+        12812
       ],
-      "keep_at_least": 2,
-      "until": "same date as the north mission"
+      "until": "1936.07.14",
+      "note": "ETH_hold_the_south_mission: keep at least 2 of Wal Wal 12812, Gaba 10775, Moyale 13247 until the mission ends (same date as the north mission); Moyale is the one the plan can lose"
     },
     {
-      "mission": "ETH_hold_addis_ababa_mission",
-      "state": 271,
-      "until": "180 days after it activates"
+      "id": "hold_south_gaba",
+      "army": "Army of Bale and Sidamo",
+      "provinces": [
+        10775
+      ],
+      "until": "1936.07.14",
+      "note": "ETH_hold_the_south_mission (see hold_south_wal_wal)"
+    },
+    {
+      "id": "hold_addis_ababa",
+      "army": "Imperial reserve",
+      "provinces": [
+        5010
+      ],
+      "note": "ETH_hold_addis_ababa_mission: hold state 271 (5010, 8036, 10734, 13239) for 180 days after it activates; the reserve stands in Addis Ababa 5010 (retake_rules: never leave 5010 empty)"
     }
   ],
   "vp_targets": [
@@ -690,33 +771,40 @@
   "phases": [
     {
       "id": "P0_setup",
-      "from": "1936-01-01",
-      "until": "unpause",
-      "goal": "research, production, focus, armies and generals, defensive fronts on hills and mountains"
+      "goal": "research, production, focus, armies and generals, defensive fronts on hills and mountains",
+      "enter": "1936.01.01",
+      "note": "from: 1936-01-01; until: unpause"
     },
     {
       "id": "P1_hold",
-      "from": "1936-01-01",
-      "until": "the Hold the North/South missions end",
-      "goal": "keep 2 of Gondar/Macalle/Dessie and 2 of Wal Wal/Gaba/Moyale; no attack into Eritrea except the opportunity rule"
+      "goal": "keep 2 of Gondar/Macalle/Dessie and 2 of Wal Wal/Gaba/Moyale; no attack into Eritrea except the opportunity rule",
+      "enter": "1936.01.01",
+      "note": "from: 1936-01-01; until: the Hold the North/South missions end"
     },
     {
       "id": "P2_counterattack",
-      "from": "mission end",
-      "until": "focus ETH_northern_thrust completed (about 1936-06-25)",
-      "goal": "retake Tigray provinces Italy holds, rest and refill, train Chitet"
+      "goal": "retake Tigray provinces Italy holds, rest and refill, train Chitet",
+      "exit": "focus_completed:ETH_northern_thrust",
+      "note": "from: mission end; until: focus ETH_northern_thrust completed (about 1936-06-25)"
     },
     {
       "id": "P3_eritrea",
-      "from": "1936-06-25",
-      "until": "state 550 fully controlled",
-      "goal": "Asmara, Massaua, then every Eritrean province inside the 90-day Northern Thrust window (+25% attack, +50% breakthrough in 550/841/842/843)"
+      "goal": "Asmara, Massaua, then every Eritrean province inside the 90-day Northern Thrust window (+25% attack, +50% breakthrough in 550/841/842/843)",
+      "enter": "1936.06.25",
+      "exit": "state_fully_controlled:550",
+      "note": "from: 1936-06-25; until: state 550 fully controlled"
     },
     {
       "id": "P4_south",
-      "from": "state 550 fully controlled",
-      "until": "states 559 and 844 fully controlled",
-      "goal": "Wal Wal -> 2020 -> Mogadiscio; Sidamo 8062 -> 11014 -> Kismaayo"
+      "goal": "Wal Wal -> 2020 -> Mogadiscio; Sidamo 8062 -> 11014 -> Kismaayo",
+      "enter": "state_fully_controlled:550",
+      "exit": {
+        "all": [
+          "state_fully_controlled:559",
+          "state_fully_controlled:844"
+        ]
+      },
+      "note": "from: state 550 fully controlled; until: states 559 and 844 fully controlled"
     },
     {
       "id": "P5_finish",
@@ -727,5 +815,32 @@
     "political_power": 160,
     "idle_military_factories": 0,
     "unassigned_divisions": 1
-  }
+  },
+  "contingencies": [
+    {
+      "id": "capital_region_arms_factory",
+      "trigger": "focus_completed:ETH_develop_the_capital_region",
+      "overrides": {
+        "construction_plan": [
+          {
+            "id": "cp01_infrastructure_271",
+            "order": 1,
+            "building": "infrastructure",
+            "state": 271,
+            "when": "1936.01.01",
+            "why": "the only state with a hub and railway; infrastructure is the only building Ethiopia can afford (2 civilian factories, no free slots)"
+          },
+          {
+            "id": "cp02_arms_factory_271",
+            "order": 2,
+            "building": "arms_factory",
+            "state": 271,
+            "when": "",
+            "note": "when: focus ETH_develop_the_capital_region completed or a free slot shows in 271; cp03_supply_node_842 (Adwa hub) removed: about 2000 days with 2 free civilian factories (lint construction.hub_cost)"
+          }
+        ]
+      },
+      "note": "adds the Shewa arms factory: focus ETH_develop_the_capital_region completed or a free slot shows in 271"
+    }
+  ]
 }

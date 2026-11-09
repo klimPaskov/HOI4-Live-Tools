@@ -141,24 +141,28 @@
   ],
   "politics": [
     {
+      "id": "pol_government_3_GER_hjalmar_schacht",
       "category": "government",
       "slot": 3,
       "idea": "GER_hjalmar_schacht",
       "cost": 150
     },
     {
+      "id": "pol_government_1_free_trade",
       "category": "government",
       "slot": 1,
       "idea": "free_trade",
       "cost": 150
     },
     {
+      "id": "pol_government_0_extensive_conscription",
       "category": "government",
       "slot": 0,
       "idea": "extensive_conscription",
       "cost": 150
     },
     {
+      "id": "pol_government_4_GER_joachim_von_ribbentrop",
       "category": "government",
       "slot": 4,
       "idea": "GER_joachim_von_ribbentrop",

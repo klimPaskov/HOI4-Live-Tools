@@ -47,6 +47,18 @@ here only templates, equipment, production lines and training are covered.
 | Mountain/marsh | 50 | 2x25, 5x10, 3x16 | Prefer small 10-16 wide mountaineers |
 | Urban | 80 | **4x20**, 2x40 | 20-wide again |
 
+**Width target from a terrain mix** (method; widths from `common/terrain/00_terrain.txt:33-180`, stacking
+from `COMBAT_STACKING_START = 5`):
+1. Count the provinces of each attack axis by terrain (`facts.py route` for the path,
+   `facts.py province <id>` for each province's terrain; `facts.py terrain-width` once it exists).
+2. For each candidate width `w` in the role's range (line 14-21, assault 20-35, mountain or marsh
+   defence 10-16) and each terrain with share `s` and base width `W`: `n = min(floor(W / w), 5)`
+   divisions fit without the stacking penalty, `fill = n * w / W`.
+3. Score `sum(s * fill)`; take the best, the smaller width on a tie (cheaper replacement, more reserves
+   to rotate). Re-check the main terrain with one extra attack direction (`W * 1.5`).
+Example [D]: an axis of 60% mountain (50) and 40% hills (70), line range 14-21: w 16 scores 0.94
+(3 × 16 = 48 of 50, 4 × 16 = 64 of 70), w 14 0.90, w 21 0.86, w 20 0.82, so a 16-wide line division.
+
 Role guidance (contested community advice, so a heuristic): **20-21 wide**
 (7 inf + 2 art, or 6 inf + 3 art) is the default line division: it divides 60
 and 80 exactly, is cheap to replace and spreads damage. **10-16 wide** for

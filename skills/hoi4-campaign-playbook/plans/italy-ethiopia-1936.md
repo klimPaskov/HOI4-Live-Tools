@@ -26,16 +26,16 @@ NEW keys (not read by the executor yet; the player applies them, the executor ca
 |---|---|---|
 | `event_rules` | list of `{event, option_name, condition?, else_option_name?, fallback_option_name?, why}` | choose an event option by its localisation key (`<event>.a/.b/.c`), not by index; `condition` is a plain-language test the player checks; `fallback_option_name` when the named option is not shown |
 | `research_path` | list of `{year, not_before, techs[]}` | research only techs of blocks whose `not_before` date has passed, in order; never start a tech whose `start_year` is later than the current year |
-| `construction_plan` | ordered list of `{order, building, state, province?, path?, from_state?, to_state?, when, priority, why}` | `when` is `"YYYY.MM.DD"`, `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`; `priority: "top"` moves the project to the top of the queue the moment it is queued; `path` lists the provinces a railway must follow |
-| `doctrines` | list of `{folder, track, subdoctrine, when}` | adopt with `hoi4_doctrine_adopt` when the army XP condition holds |
+| `construction_plan` | ordered list of `{id, order, building, state, province?, path?, from_state?, to_state?, when, priority, why}` | `when` is `"YYYY.MM.DD"`, `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`; `priority: "top"` moves the project to the top of the queue the moment it is queued; `path` lists the provinces a railway must follow |
+| `doctrines` | list of `{id, folder, track, subdoctrine, xp}` | adopt with `hoi4_doctrine_adopt` once army XP reaches `xp` |
 | `army_layout` | list of `{name_hint, state, templates, count, general, role, axis or guard_states_in_order, when?}` | how to split the per-state armies into strike and guard armies on day one |
-| `army_group` | `{name_hint, field_marshal, fallback_field_marshal, members}` | army group over the northern armies |
+| `army_group` | `{id, name, armies, marshal}` (executor, plan_military.rs) | army group over the northern armies; `marshal` lists Graziani, then Badoglio |
 | `air_plan` | list of `{base_state, airframe, version, count, mission, region, then_region, switch_when}` plus rules | air missions per wing type and when to move them |
 | `war_by_phase` | `{phase_id: {axes, guard_states, guards}}` | the exact `plan set` payload for the `war` object at each phase switch (section 6) |
 | `vp_targets` | ordered list of `{order, province, name, state, vp, army, by, mission?, path?}` | the province each strike army goes for, with the date it should fall |
 | `surrender_goal` | numbers from MECH §3 | stop condition for the VP hunt |
 | `retake_rules` | list of `{if, do}` | own-land and corridor recapture rules (section 7) |
-| `phases` | list of `{id, from, until/exit, goal}` | phase machine (section 6) |
+| `phases` | list of `{id, enter?, exit?, goal, note}` | phase machine (section 6); `enter`/`exit` are plan.schema.json predicates, the original wording is in `note` |
 
 ## 1. Checkpoints
 
@@ -46,7 +46,7 @@ NEW keys (not read by the executor yet; the player applies them, the executor ca
 | 1936-02-05 | Logistics focus done: Eritrea infrastructure 3, Massaua naval base 5, Mogadiscio 4, Kismaayo 4 [V NFITA:65-150] | if Eritrea was not Italian-controlled at completion, its part is lost: never let Eritrea's controller change |
 | 1936-02-10 | Adwa 13238 and Aksum 13237 Italian; railway Asmara 13250 -> Adwa queued at the top | strike army rests, then direct move into 13238 |
 | 1936-02-20 | Wal Wal 12812 Italian (South mission 1/2) | south strike army holds 2020/1964 and tries again after resting |
-| 1936-03-05 | Macalle 2072 Italian, Tigray fully Italian: hub at Macalle and railway Adwa -> Macalle queued | see section 9 "Tigray stalls" |
+| 1936-03-05 | Macalle 2072 Italian, Tigray fully Italian: railway Adwa -> Macalle queued | see section 9 "Tigray stalls" |
 | 1936-03-31 | Aussa annexed (event .400 a); Bale desert 4995 Italian | if no event .400 within 25 days of full Tigray: check that every Tigray province is Italian |
 | 1936-04-10 | Gondar 1984 Italian: North mission success (Macalle + Gondar) | attack Gondar from 13251, 13237 and 2072 at once with strike army + Gondar group |
 | 1936-04-30 | Dessie 5097 Italian (via Afar 5041 if Afar is Italian, else 7944) | — |
@@ -73,8 +73,8 @@ Do it in three batches, then unpause at speed 3 and never pause again.
 * Research, one tech per slot: slot 1 `basic_machine_tools`, slot 2 `construction1`, slot 3
   `interwar_artillery`, slot 4 `tech_military_police` (occupation needs it from March).
 * Focus: `ITA_ethiopian_war_logistics_bba` (35 days).
-* Construction: supply hub (`supply_node`) in Somaliland 559 at province 2020 at the top, railway
-  12991 -> 2020 second, then `arms_factory` in Emilia-Romagna 161 (infra 4, 7 free slots) [V history/states].
+* Construction: railway 12991 -> 2020 (Mogadiscio port to the Somali front) at the top, then
+  `arms_factory` in Emilia-Romagna 161 (infra 4, 7 free slots) [V history/states]. No supply hub (section 4).
 * Laws: save political power for `war_economy` (government slot 2, 150 PP; available: war support > 50% and
   fascist [V common/ideas/_economic.txt:479-615]). Buy it the day PP reaches 150.
 
@@ -123,22 +123,26 @@ uses `bba_air_techs`), anything naval [V common/technologies].
 
 ## 4. Construction order
 
-Civilian factories go to one project at a time (max 15 per project). Hubs in 0-infrastructure Ethiopian
-states take months [H MECH §7.4], railways days: **railways first, then hubs**.
+Civilian factories go to one project at a time (max 15 per project). **No supply hubs in this war:** a
+hub costs 20000 points against 170 + 130 per level for a railway and 5000 for a port
+[V common/buildings/00_buildings.txt]; with 15 civilian factories it takes about 190-270 days at
+infrastructure 2 to 0 [D calc.py build-order], so a day-1 Somaliland hub or a Macalle hub finishes after
+the war and starves the factory build-up meanwhile [lesson L12_early_hub_cost]. Supply comes from
+railway levels out of the existing hubs and ports (Asmara, Massaua, Mogadiscio), port levels from the
+logistics focus, and motorised trucks (`supply-logistics-deployment.md` §5). Row numbers stay the plan.json
+orders; rows 1 and 5 were the two hubs.
 
 | # | Build | Where | When | Why |
 |---|---|---|---|---|
-| 1 | supply_node | Somaliland 559, province 2020 | 1 Jan | only hub buildable on day one; touches Mogadiscio port 12991, Wal Wal 12812 and Bale 4995 |
-| 2 | rail_way | 12991 -> 2020 | 1 Jan | links the hub to the port |
+| 2 | rail_way | 12991 -> 2020 | 1 Jan | Mogadiscio port to the Somali front (Wal Wal 12812, Bale 4995) |
 | 3 | rail_way | Asmara 13250 -> Adwa 13238 | Adwa Italian | top of queue |
-| 4 | rail_way | 13238 -> Macalle 2072 | Macalle Italian | top |
-| 5 | supply_node | Macalle 2072 (842) | Tigray fully Italian (the game refuses while Ethiopians hold a province) [L] | top; feeds Wello, Gondar, Afar corridor |
+| 4 | rail_way | 13238 -> Macalle 2072 | Macalle Italian | top; carries Asmara's hub supply to Tigray, Wello, Gondar, the Afar corridor |
 | 6 | rail_way | Massaua 12766 -> 8043 -> 13236 -> 5041 -> Aussa 13240 | Afar owned by Italy | own land, no river |
 | 7 | rail_way | 13240 -> 13239 | 13239 Italian | joins the Addis-Dire Dawa line [V railways.txt:884]: captured Addis 5010 and Dire Dawa 7980 hubs get Italian supply |
 | 8 | rail_way | 2072 -> 7944 -> Dessie 5097 | Dessie Italian | second link north |
 | 9 | rail_way | 2020 -> 12812 -> 13253 -> 12714 -> Harar 13249 -> Dire Dawa 7980 | each province as it falls | southern link to the Dire Dawa hub |
-| 10 | infrastructure | Tigray 842 | after the hub | supply flow |
-| filler | arms_factory | Emilia-Romagna 161, Abruzzo 157, Sicily 115, Tuscany 162, Sardinia 114 | whenever no hub or railway can be built | equipment |
+| 10 | infrastructure | Tigray 842 | after railway 4 | supply flow |
+| filler | arms_factory | Emilia-Romagna 161, Abruzzo 157, Sicily 115, Tuscany 162, Sardinia 114 | whenever no railway can be built | equipment |
 
 After the war: `ITA_develop_ethiopia/eritrea/somaliland` give infrastructure and slots [V NFITA:259-966].
 
@@ -150,7 +154,10 @@ After the war: `ITA_develop_ethiopia/eritrea/somaliland` give infrastructure and
 | artillery_equipment_1 | 4 | 1 Jan |
 | support_equipment_1 | 2 | 1 Jan |
 | motorized_equipment_1 | 5 | 1 Jan |
-| artillery_equipment_2 | 3 (the factories from Army Primacy, Fiocchi, Artillery Production) | after interwar_artillery (about June) |
+
+No artillery_equipment_2 line: it is unlocked by `artillery1` (start_year 1939), not by
+interwar_artillery [V common/technologies/artillery.txt, lint production.equipment]. The 3 factories
+from Army Primacy, Fiocchi and Artillery Production go to the `production_priority` lines.
 
 Every military factory is on a line (`production_min_idle 1`). No new divisions until every African
 division is above 90% equipment; trucks before planes.
@@ -229,8 +236,8 @@ With "Demoralized High Command" (Ethiopia controls 5 or fewer of its 10 states f
   (`war_by_phase`). It moves only when the next state is fully Italian and leaves one Banda in 13251 and
   8043. Afar guard (2 bands) stays in 908 [L w24: Afar and Wello were retaken behind the army].
 * **Corridor rule.** The strike army never advances more than two provinces beyond the last province held
-  by a guard division; the provinces linking it to Asmara/Massaua or the Macalle hub always hold one
-  division.
+  by a guard division; the provinces linking it to Asmara/Massaua or the railhead at Macalle always hold
+  one division.
 * **Supply rule.** `supply_floor 30`: below 30% the strike army stops attacking (executor rest); at
   motorization 2 from day one; if supply stays below 30% for 5 days, detach the two weakest divisions
   (irregulars, cavalry) to the guard army [playbook war-operating-loop §6].

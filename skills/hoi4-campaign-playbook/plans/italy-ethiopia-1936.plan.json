@@ -1,5 +1,40 @@
 {
   "_comment": "Italy FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone loads the BBA Italo-Ethiopian war). Explained in italy-plan.md; game mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner. Keys marked NEW in italy-plan.md section 0 are not read by the current executor yet: the player follows them by hand until the executor is extended.",
+  "_meta": {
+    "version": 1,
+    "source": "hand"
+  },
+  "_coverage": {
+    "c1": "key:surrender_goal",
+    "c2": "md:italo-ethiopian-war.md (scenario reference; italy-ethiopia-1936.md has no situation section)",
+    "c3": "na: missing in hand plan",
+    "c4": "key:doctrines",
+    "c5": "na: missing in hand plan",
+    "c6": "na: missing in hand plan",
+    "c7": "na: missing in hand plan",
+    "c8": "key:production,production_priority,disband",
+    "c9": "na: missing in hand plan",
+    "c10": "key:construction,construction_plan",
+    "c11": "key:research_path,research_priority",
+    "c12": "key:focus_path,focus_fallback",
+    "c13": "key:politics",
+    "c14": "na: missing in hand plan",
+    "c15": "na: missing in hand plan (politics holds only war_economy)",
+    "c16": "key:armies,army_layout,army_group",
+    "c17": "na: missing in hand plan",
+    "c18": "key:war,war_by_phase,vp_targets,phases",
+    "c19": "key:construction_plan,war.motorization",
+    "c20": "key:air,air_plan",
+    "c21": "na: missing in hand plan",
+    "c22": "na: missing in hand plan",
+    "c23": "na: missing in hand plan",
+    "c24": "na: missing in hand plan",
+    "c25": "na: missing in hand plan (surrender_goal is the goal, not the peace aims)",
+    "c26": "key:event_rules,event_options",
+    "c27": "na: missing in hand plan as keys (checkpoints and contingencies are text in italy-ethiopia-1936.md sections 1 and 9; phases and retake_rules are keys)",
+    "c28": "key:alarms",
+    "c29": "md:italy-ethiopia-1936.md (FAIR tags in the text)"
+  },
   "_validator": {
     "tag": "ITA",
     "start_date": "1936.1.1",
@@ -56,16 +91,23 @@
     {
       "event": "BBA_italo_ethiopian_war_events.120",
       "option_name": "BBA_italo_ethiopian_war_events.120.b",
-      "condition": "Italy controls state 271 or holds at least 12 Ethiopian victory points",
+      "condition": {
+        "any": [
+          "state_controller:271=ITA",
+          "vp_share:ETH<=0.625"
+        ]
+      },
       "else_option_name": "BBA_italo_ethiopian_war_events.120.a",
-      "why": "refusing costs -25% war support, -20% stability, -250 PP; accept only when the war is lost"
+      "why": "refusing costs -25% war support, -20% stability, -250 PP; accept only when the war is lost",
+      "note": "condition: Italy controls state 271 or holds at least 12 Ethiopian victory points"
     },
     {
       "event": "BBA_italo_ethiopian_war_events.110",
       "option_name": "BBA_italo_ethiopian_war_events.110.b",
-      "condition": "Ethiopian surrender share at least 0.5",
+      "condition": "vp_share:ETH<=0.5",
       "else_option_name": "BBA_italo_ethiopian_war_events.110.a",
-      "why": "refusing hands every democratic LoN major a topple_government wargoal on Italy (event 113); accept unless capitulation is close"
+      "why": "refusing hands every democratic LoN major a topple_government wargoal on Italy (event 113); accept unless capitulation is close",
+      "note": "condition: Ethiopian surrender share at least 0.5"
     }
   ],
   "focus_path": [
@@ -175,7 +217,8 @@
         115,
         162,
         114
-      ]
+      ],
+      "note": "filler: arms factories whenever no hub or railway can be built (was construction_plan order 11)"
     }
   ],
   "construction_fallback_any_own_state": true,
@@ -183,15 +226,7 @@
   "construction_queue_depth": 3,
   "construction_plan": [
     {
-      "order": 1,
-      "building": "supply_node",
-      "state": 559,
-      "province": 2020,
-      "when": "1936.01.01",
-      "priority": "top",
-      "why": "only hub Italy can start on day one; 2020 touches Mogadishu port 12991, Wal Wal 12812 and Bale 4995"
-    },
-    {
+      "id": "cp02_rail_way_559",
       "order": 2,
       "building": "rail_way",
       "from_state": 559,
@@ -201,9 +236,11 @@
         2020
       ],
       "when": "1936.01.01",
-      "priority": "top"
+      "priority": "top",
+      "note": "cp01_supply_node_559 (day-1 Somaliland hub at 2020) removed: 20000 points take about 286 days with Italy's 10 free civilian factories at infrastructure 2 (lint construction.hub_cost); this railway from the Mogadishu port 12991 carries the southern supply instead"
     },
     {
+      "id": "cp03_rail_way_842",
       "order": 3,
       "building": "rail_way",
       "from_state": 550,
@@ -216,6 +253,7 @@
       "priority": "top"
     },
     {
+      "id": "cp04_rail_way_842",
       "order": 4,
       "building": "rail_way",
       "from_state": 842,
@@ -225,18 +263,11 @@
         2072
       ],
       "when": "province_controlled:2072",
-      "priority": "top"
-    },
-    {
-      "order": 5,
-      "building": "supply_node",
-      "state": 842,
-      "province": 2072,
-      "when": "state_fully_controlled:842",
       "priority": "top",
-      "why": "Macalle hub feeds Wello, Gondar and the Afar corridor"
+      "note": "cp05_supply_node_842 (Macalle hub) removed: about 400 days at Tigray's infrastructure 0 with 10 free civilian factories, finishing after the 1937-01-01 horizon (lint construction.hub_cost); this railway from the Asmara hub 13250 reaches Macalle instead"
     },
     {
+      "id": "cp06_rail_way_908",
       "order": 6,
       "building": "rail_way",
       "from_state": 550,
@@ -253,6 +284,7 @@
       "why": "Massaua port to Aussa through own Afar land, no river"
     },
     {
+      "id": "cp07_rail_way_271",
       "order": 7,
       "building": "rail_way",
       "from_state": 908,
@@ -266,6 +298,7 @@
       "why": "joins the existing Addis-Dire Dawa line (railways.txt:884), so the captured Addis 5010 and Dire Dawa 7980 hubs get Italian supply"
     },
     {
+      "id": "cp08_rail_way_843",
       "order": 8,
       "building": "rail_way",
       "from_state": 842,
@@ -279,6 +312,7 @@
       "priority": "high"
     },
     {
+      "id": "cp09_rail_way_835",
       "order": 9,
       "building": "rail_way",
       "from_state": 559,
@@ -296,24 +330,12 @@
       "why": "build province by province as each one is Italian; ends at the Dire Dawa hub"
     },
     {
+      "id": "cp10_infrastructure_842",
       "order": 10,
       "building": "infrastructure",
       "state": 842,
       "when": "state_fully_controlled:842",
       "priority": "normal"
-    },
-    {
-      "order": 11,
-      "building": "arms_factory",
-      "states": [
-        161,
-        157,
-        115,
-        162,
-        114
-      ],
-      "when": "no hub or railway is buildable",
-      "priority": "filler"
     }
   ],
   "production_priority": [
@@ -338,16 +360,12 @@
     {
       "equipment": "motorized_equipment_1",
       "factories": 5
-    },
-    {
-      "equipment": "artillery_equipment_2",
-      "factories": 3,
-      "from": "1936.06.01"
     }
   ],
   "production_min_idle": 1,
   "politics": [
     {
+      "id": "pol_government_2_war_economy",
       "category": "government",
       "slot": 2,
       "idea": "war_economy",
@@ -357,22 +375,25 @@
   "decisions": [],
   "doctrines": [
     {
+      "id": "land_infantry_assault_infantry",
       "folder": "land",
       "track": "infantry",
       "subdoctrine": "assault_infantry",
-      "when": "army_xp >= 100"
+      "xp": 100
     },
     {
+      "id": "land_combat_support_fire_concentration",
       "folder": "land",
       "track": "combat_support",
       "subdoctrine": "fire_concentration",
-      "when": "army_xp >= 135"
+      "xp": 135
     },
     {
+      "id": "land_operations_mission_type_tactics",
       "folder": "land",
       "track": "operations",
       "subdoctrine": "mission_type_tactics",
-      "when": "army_xp >= 135"
+      "xp": 135
     }
   ],
   "armies": {
@@ -506,16 +527,21 @@
       "when": "owner:908=ITA"
     }
   ],
-  "army_group": {
-    "name_hint": "Africa Orientale",
-    "field_marshal": "Rodolfo Graziani",
-    "fallback_field_marshal": "Pietro Badoglio",
-    "members": [
-      "North strike (Army 1)",
-      "Gondar group",
-      "North guard"
-    ]
-  },
+  "army_group": [
+    {
+      "id": "ag_africa_orientale",
+      "name": "Africa Orientale",
+      "armies": [
+        "North strike (Army 1)",
+        "Gondar group",
+        "North guard"
+      ],
+      "marshal": [
+        "Rodolfo Graziani",
+        "Pietro Badoglio"
+      ]
+    }
+  ],
   "disband": {
     "templates": [
       "Divisione di Fanteria",
@@ -872,7 +898,7 @@
       "state": 838,
       "vp": 2,
       "army": "North strike (Army 1)",
-      "by": "when needed"
+      "note": "by: when needed"
     }
   ],
   "surrender_goal": {
@@ -900,37 +926,46 @@
   "phases": [
     {
       "id": "P0_setup",
-      "from": "1936-01-01",
-      "until": "unpause",
-      "goal": "paused setup: production, research, focus, laws, armies split by role, generals, air missions, fronts on every border province"
+      "goal": "paused setup: production, research, focus, laws, armies split by role, generals, air missions, fronts on every border province",
+      "enter": "1936.01.01",
+      "note": "from: 1936-01-01; until: unpause"
     },
     {
       "id": "P1_hold_christmas",
-      "from": "1936-01-01",
-      "until": "1936-01-16",
       "goal": "every Eritrean, Somali and Jubaland province stays Italian while ETH_christmas_offensive_idea is active",
-      "exit": "date >= 1936-01-16 and no own province enemy-held"
+      "enter": "1936.01.01",
+      "exit": "1936.01.16",
+      "note": "from: 1936-01-01; until: 1936-01-16; exit: date >= 1936-01-16 and no own province enemy-held"
     },
     {
       "id": "P2_tigray",
-      "from": "1936-01-16",
       "goal": "Adwa, Aksum, Macalle; south takes Wal Wal",
-      "exit": "state 842 fully Italian"
+      "enter": "1936.01.16",
+      "exit": "state_fully_controlled:842",
+      "note": "from: 1936-01-16; exit: state 842 fully Italian"
     },
     {
       "id": "P3_gondar_afar",
       "goal": "Gondar (north mission), Aussa annexation, Bale desert",
-      "exit": "province 1984 Italian and owner of 908 is ITA"
+      "exit": {
+        "all": [
+          "province_controlled:1984",
+          "owner:908=ITA"
+        ]
+      },
+      "note": "exit: province 1984 Italian and owner of 908 is ITA"
     },
     {
       "id": "P4_addis",
       "goal": "Dessie, then Addis Ababa through 13240-13239; rails behind the army",
-      "exit": "state 271 controlled by Italy"
+      "exit": "state_controller:271=ITA",
+      "note": "exit: state 271 controlled by Italy"
     },
     {
       "id": "P5_harar_and_rest",
       "goal": "Dire Dawa, Harar, Debre Markos, Gaba, Irgalem, Yabello until capitulation",
-      "exit": "Ethiopia capitulated"
+      "exit": "capitulated:ETH",
+      "note": "exit: Ethiopia capitulated"
     },
     {
       "id": "P6_peace",

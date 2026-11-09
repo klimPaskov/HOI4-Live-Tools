@@ -26,15 +26,15 @@ NEW keys, for an executor extension (the player applies them until then):
 
 | Key | Shape | Meaning |
 |---|---|---|
-| `event_rules` | `{event, option_name, condition, else_option_name, why}` | choose the option by localisation key; `condition` is checked by the player |
+| `event_rules` | `{event, option_name, condition, else_option_name, why, note}` | choose the option by localisation key; `condition` is a plan.schema.json predicate (the original wording is in `note`), checked by the player |
 | `research_path` | `{year, not_before, techs[]}` | research blocks only from their `not_before` date, in order |
-| `construction_plan` | ordered `{order, building, state, province?, when, why}` | as in italy-plan.md |
+| `construction_plan` | ordered `{id, order, building, state, province?, when, why, note}` | as in italy-plan.md; the Shewa arms factory waits in `contingencies` for focus ETH_develop_the_capital_region |
 | `training_rules` | `{only_if_stockpile: {archetype: n}, cap_template, cap}` | queue `training` only when the stockpile holds n of that equipment; never above the template cap |
-| `doctrines` | `{folder, grand_doctrine or track+subdoctrine, when}` | adopt when army XP allows |
-| `army_layout` | `{name_hint, state, divisions, general, hold[], role}` | armies per region, which provinces each must hold |
-| `army_group` | list of `{name_hint, field_marshal, members}` | two fronts |
+| `doctrines` | `{id, folder, grand_doctrine or track+subdoctrine, xp}` | adopt once army XP reaches `xp` |
+| `army_layout` | `{name_hint, state, templates, count, general, role: guard, guard_states_in_order, note}` | one guard army per region holding its state; `note` keeps the planned role, divisions and provinces to hold. Layout guards stay bound to their post, so the P3/P4 attacks need the phase overrides (build item 15) or the player |
+| `army_group` | list of `{id, name, armies, marshal}` (executor, plan_military.rs) | two fronts; `armies` are layout name_hints, `marshal` a name or names tried in order |
 | `war_by_phase` | `{phase: {axes, guard_states}}` | the exact `plan set` payload for `war` at each phase switch |
-| `hold_targets` | `{mission, provinces[], keep_at_least, until}` | provinces whose loss fails an Ethiopian mission |
+| `hold_targets` | `{id, army, provinces[], until?}` (executor, plan_military.rs) | one army per province whose loss fails an Ethiopian mission (provinces rear first; the post is the most forward one held); `note` names the mission and how many provinces it must keep |
 | `vp_targets` | ordered `{order, province, name, state, from[]}` | the provinces to take, and from where |
 | `win_condition` | `{decision, needs}` | take the decision the day it is available |
 | `retake_rules`, `phases` | as in italy-plan.md | phase machine (section 6) |
@@ -98,8 +98,10 @@ stockpile has support equipment for them.
 
 * Construction (about one civilian factory left after consumer goods [H]): Shewa 271 infrastructure, then
   an arms factory in Shewa when a slot appears (focus `ETH_develop_the_capital_region` adds two civilian
-  factories and two slots [V NFETH:1354]), then Tigray 842 infrastructure. A supply hub (20,000 points) is
-  out of reach before Eritrea falls.
+  factories and two slots [V NFETH:1354]), then Tigray 842 infrastructure. No supply hub, also not in Tigray
+  842 after Eritrea falls: a hub costs 20000 points [V common/buildings/00_buildings.txt] and Ethiopia's one
+  or two free civilian factories would need years [D calc.py build-order]; captured railways and ports
+  (Asmara, Massaua) supply the advance [lesson L12_early_hub_cost].
 * Production: 2 x infantry_equipment_0 for the whole plan. Equipment comes mainly from capture:
   `ETH_scavenging_tactics` gives +40% equipment capture [V IETH:742-745]; escalation level 8 gives 1,200
   infantry_equipment_1, 500 support, 50 artillery [V WAR:1354-1383]; `ETH_volunteers` gives 2,000 rifles

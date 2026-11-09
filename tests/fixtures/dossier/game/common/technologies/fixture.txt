@@ -1,0 +1,10 @@
+technologies = {
+	t_a = { research_cost = 1 start_year = 1936 folder = { name = main_folder } path = { leads_to_tech = t_c }
+		enable_subunits = { mountaineers } enable_equipments = { light_tank_chassis_1 light_tank_aa_chassis_1 }
+		enable_equipment_modules = { fix_turret_small fix_gun_mg } }
+	t_b = { research_cost = 2 start_year = 1936 folder = { name = main_folder } path = { leads_to_tech = t_c }
+		enable_subunits = { field_guns } enable_equipments = { fighter_equipment_1 } }
+	t_c = { research_cost = 1.5 start_year = 1937 folder = { name = main_folder }
+		enable_equipments = { light_tank_chassis_2 } enable_equipment_modules = { fix_gun_cannon } }
+	t_dlc = { research_cost = 1 start_year = 1936 folder = { name = dlc_folder } enable_equipment_modules = { fix_turret_dlc } }
+}

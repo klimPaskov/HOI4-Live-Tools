@@ -1,0 +1,14 @@
+ideologies = {
+	fascism = {
+		types = { fascism_ideology = { } }
+		rules = { can_send_volunteers = yes can_puppet = yes }
+		war_impact_on_world_tension = 1.0
+		modifiers = { lend_lease_tension = 0.5 hidden_modifier = { join_faction_tension = -0.1 } }
+	}
+	democratic = {
+		types = { conservatism = { } }
+		rules = { can_only_justify_war_on_threat_country = yes can_send_volunteers = no }
+		war_impact_on_world_tension = 0.25
+		modifiers = { generate_wargoal_tension = 1.00 join_faction_tension = 0.80 guarantee_tension = 0.25 }
+	}
+}

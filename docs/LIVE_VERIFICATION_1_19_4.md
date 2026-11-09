@@ -1,8 +1,10 @@
 # Live verification inventory: HOI4 1.19.4.1 with 10 DLCs (macOS)
 
-Date: 1 November 2026. Purpose: list every macOS tool, what live evidence it has on HOI4 1.19.4.1 (f584), and what
-must be run before the full Germany, China and Poland campaigns. Written from documents, descriptors and git history
-only; the game was not touched for this inventory.
+Date: 1 November 2026, updated 9 November 2026 with the live rounds of 5-8 November (section "Live results, 5-8
+November"; rows of table 1a name the newest evidence). Purpose: list every macOS tool, what live evidence it has on
+HOI4 1.19.4.1 (f584), and what must be run before the campaigns. Written from documents, descriptors and git history
+only; the game was not touched for this inventory. `[?]` marks a result recorded only in the session notes of a test
+round, with no commit message or document that states it.
 
 Active content now: No Step Back (NSB), By Blood Alone (BBA), Arms Against Tyranny (AAT), No Compromise No Surrender
 (NCNS), La Resistance (LaR), Gotterdammerung, Anniversary Pack, Poland United and Ready, Rocket Launcher, Historical
@@ -21,6 +23,8 @@ plane module designers, MIOs, the intelligence agency and BBA air were mostly ne
 | **1.19.3 only (date)** | Live evidence exists only on the old build (Mach-O 089EA519); not re-run on 1.19.4 | `PLAYBOOK_TOOL_GAPS.md` sections 6c, 11-14, commits of 18-26 Oct |
 | **never** | No live run recorded; descriptor or doc says so (`UNVALIDATED (no live test yet)`, `validated:false`) | descriptors, `LIVE_VALIDATION_QUEUE.md` |
 | **unknown** | Nothing documented either way for 1.19.4 | |
+| **5-8 Nov** (commit) | Live result stated in a commit message of 5-8 November (test beds Italy 1936/1937 with 10 DLCs, rounds w8 and w12-w17, the Ethiopia training wars and the speed-3 work) | the commit named in the row |
+| **round notes [?]** | Stated only in the round's session notes (rounds w12-w14, 6 Nov), not in a commit or a document | session notes |
 
 Not mapped to a single tool: the caller also reports the "status digest" as verified on 1 Nov with 10 DLCs.
 
@@ -43,13 +47,13 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 | `hoi4_capabilities` | R | 1 Nov, 10 DLC | any | P1 |
 | `hoi4_overview` | R | 31 Oct, 3 DLC, blanket | any | P1 |
 | `hoi4_input_lease` | A | not listed by name; every action of 31 Oct and 1 Nov takes a lease | any | P1 |
-| `hoi4_time` | A | 1.19.3 only (26 Oct, unpause, `PLAYBOOK_TOOL_GAPS.md` 14); not listed for 1.19.4 | any | P1 |
+| `hoi4_time` | A | 1-2 Nov, 10 DLC ("verified", live results table) | any | P1 |
 | `hoi4_wait_for` | R | 31 Oct, 3 DLC, blanket | running clock | P2 |
 | `hoi4_events` | R | 31 Oct, 3 DLC, blanket | an open event | P1 |
-| `hoi4_event_choose` | A | 31 Oct, 3 DLC | an open event with 2+ options (NSB Poland election `NSB_poland_royal_election.1`) | P1 |
+| `hoi4_event_choose` | A | 1-2 Nov, 10 DLC; 8 Nov: 15 events in 250-590 ms, including three stacked windows (0aea416) | an open event with 2+ options (NSB Poland election `NSB_poland_royal_election.1`) | P1 |
 | `hoi4_plan` | R | unknown (plans rewritten 1 Nov, 56e478e) | none (file only) | P1 |
 | `hoi4_plan_run` | A | 1 Nov, gate. The new steps of 024e140 (special projects, doctrine adoption, war air missions, dated lines) and db9073b (BBA fighters in war) have no live record | running game with a plan; war for the war steps | P1 |
-| `hoi4_save` | A | 1 Nov, 1.19.4 ("Verified live: GER_1937_03_19_16.hoi4 written", c2a8475); DLC set not stated | any | P1 |
+| `hoi4_save` | A | 1 Nov, 1.19.4 ("Verified live: GER_1937_03_19_16.hoi4 written", c2a8475); 6 Nov round w12: Escape until the game menu opens (3681b1a) | any | P1 |
 
 #### Economy, construction, production
 
@@ -61,15 +65,15 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 | `hoi4_production_shortages` | R | 31 Oct, 3 DLC, blanket (`validated:false`) | a resource deficit | P2 |
 | `hoi4_economy_detail` | R | 31 Oct, 3 DLC, blanket | any | P2 |
 | `hoi4_construction_queue` | R | 31 Oct, 3 DLC, blanket ("Selection, province and railway live validation pending") | queued construction | P1 |
-| `hoi4_construction_add` | A | 31 Oct, 3 DLC; fixes from the gate (1aad8fb) | own state with a free slot, idle civilian factories | P1 |
+| `hoi4_construction_add` | A | 1-2 Nov, 10 DLC (state buildings); 8 Nov: infrastructure in Eritrea in 1.2 s (eeda2ae). Province buildings (`province_id`: supply_node, naval_base, bunker, coastal_bunker): unit-tested, live test pending (a7039cb) [?] | own state with a free slot, idle civilian factories | P1 |
 | `hoi4_state_slots` | A | 31 Oct, 3 DLC | any | P1 |
 | `hoi4_production_lines` | R | 1 Nov, 10 DLC | any | P1 |
 | `hoi4_production_add` | A | 1 Nov, 10 DLC for plane and tank lines with `design` (Shift+click skips the AAT MIO chooser, a0e8a2d). Base-type add without `design`, land equipment and naval lines: never with AAT | idle military factories; dockyards for naval | P1 |
 | `hoi4_production_set` | A | unknown on 1.19.4 (not in the 31 Oct table; 4 calls in the 25 Oct gate on 1.19.3) | an existing line | P1 |
-| `hoi4_design_set_production` | A | 31 Oct, 3 DLC. Never with AAT (a click on a design opens the MIO chooser, a0e8a2d) | line plus a second design of its family | P1 |
+| `hoi4_design_set_production` | A | 31 Oct, 3 DLC. With AAT a click on a design opens the MIO chooser (a0e8a2d); 6 Nov: accepts the line index (c4fe48c) | line plus a second design of its family | P1 |
 | `hoi4_naval_production_options` | R | 31 Oct, 3 DLC, blanket | any | P2 |
 | `hoi4_trade` | R-style A | 31 Oct, 3 DLC (with trade_set and auto_import) | any | P2 |
-| `hoi4_trade_set` | A | 31 Oct, 3 DLC | Automatic Importing off, a short resource | P2 |
+| `hoi4_trade_set` | A | 31 Oct, 3 DLC; 6 Nov round w12: a country tag resolves to the game's display name (3681b1a) | Automatic Importing off, a short resource | P2 |
 | `hoi4_auto_import` | A | 31 Oct, 3 DLC (on/off, budget 5 to 8 to 3) | any | P1 |
 
 #### Research, doctrines, special projects, MIOs, intelligence
@@ -79,22 +83,22 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 | `hoi4_research` | R | 31 Oct, 3 DLC, blanket | any | P1 |
 | `hoi4_technology_list` | R | 31 Oct, 3 DLC, blanket | any | P2 |
 | `hoi4_research_extras` | R | 31 Oct, 3 DLC, blanket | any | P2 |
-| `hoi4_research_start` | A | 31 Oct, 3 DLC. Never on the NSB armour and BBA air trees | empty research slot; one NSB armour and one BBA air tech | P1 |
+| `hoi4_research_start` | A | 1-2 Nov, 10 DLC: armor_tech_1 (NSB) and armor_piercing_bombs (BBA) with Shift+click (suggested MIO); 5 Nov: `replace:true` live-tested (7c0b6fc) | empty research slot; one NSB armour and one BBA air tech | P1 |
 | `hoi4_focus_list` | R | 31 Oct, 3 DLC, blanket (Mac: catalog only) | any | P2 |
 | `hoi4_focus_completed` | R | 31 Oct, 3 DLC, blanket (descriptor: "other Focus trees and full campaigns unverified") | a completed focus | P1 |
-| `hoi4_focus_start` | A | 31 Oct, 3 DLC (Germany). Never on the NSB Poland and NCNS China trees | empty focus slot, PP; Poland and China starts | P1 |
+| `hoi4_focus_start` | A | 1-2 Nov, 10 DLC ("verified"). Never on the NSB Poland and NCNS China trees | empty focus slot, PP; Poland and China starts | P1 |
 | `hoi4_doctrines` | R | 1 Nov, 10 DLC ("track mastery fields are validated:false until a track holds a subdoctrine") | any | P1 |
-| `hoi4_doctrine_adopt` | A | never (31 Oct: typed refusal only, "adopting needs 100 naval experience") | army/navy/air experience at or above the cost | P1 |
+| `hoi4_doctrine_adopt` | A | 1-2 Nov, 10 DLC: armored_spearhead adopted (land). Air and naval adoption never [?] | army/navy/air experience at or above the cost | P1 |
 | `hoi4_special_projects` | R | 31 Oct, 3 DLC, blanket | a facility | P2 |
 | `hoi4_special_projects_panel` | A | 1 Nov, 10 DLC | a facility | P2 |
 | `hoi4_special_project_assign` | A | 31 Oct, 3 DLC | facility, idle scientist, breakthrough point | P2 |
 | `hoi4_special_project_recruit` | A | 1.19.3 only (26 Oct) | PP 25-100 | P2 |
 | `hoi4_special_project_stop` | A | 1.19.3 only (26 Oct) | a running project | P3 |
 | `hoi4_special_project_unassign` | A | 1.19.3 only (26 Oct) | crewed facility without a project | P3 |
-| `hoi4_mios` | R | 1 Nov, 10 DLC (catalogue and designer ideas; per-organisation state "NOT mapped", `mio_system.state_read:false`) | any | P1 |
+| `hoi4_mios` | R | 1 Nov, 10 DLC (catalogue); 6 Nov: organisation list and details work, rows found by opening Details (b722b01); per-organisation funds and size still `state_read:false` | any | P1 |
 | `hoi4_mio_design_team` | A | never (`UNVALIDATED`) | AAT, an organisation slot in the politics view, PP | P2 |
-| `hoi4_mio_policy` | A | never (`UNVALIDATED`) | AAT, organisation, 25 PP (playbook: "Policies cost 25 PP") | P2 |
-| `hoi4_mio_trait` | A | never (`UNVALIDATED`) | AAT, an organisation with a trait point | P1 |
+| `hoi4_mio_policy` | A | never (`UNVALIDATED`); 6 Nov round notes: the policy rows are a smooth listbox the tool cannot reach, and blind clicks are refused because of the 180-day lock [?] | AAT, organisation, 25 PP (playbook: "Policies cost 25 PP") | P2 |
+| `hoi4_mio_trait` | A | 6 Nov, 10 DLC: traits queue, verified by reopening the detail window (b722b01); descriptor still `UNVALIDATED` | AAT, an organisation with a trait point | P1 |
 | `hoi4_intelligence` | R | 1 Nov, 10 DLC (agency existence, levels and operatives `state_read:false`) | any | P2 |
 
 #### Politics, decisions, diplomacy, war planning
@@ -103,23 +107,23 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 |---|---|---|---|---|
 | `hoi4_country_status` | R | 31 Oct, 3 DLC, blanket (descriptor: "Unvalidated until the live checks of docs/COUNTRY_STATUS_WARS_DESIGN.md are recorded") | any, compare with top bar | P1 |
 | `hoi4_politics_options` | A | 31 Oct, 3 DLC. Category `research_production` under AAT (MIO slots): never | any | P1 |
-| `hoi4_politics_choose` | A | 31 Oct, 3 DLC: refusal only ("idea disabled"). Success path: 1.19.3 gate (25 Oct); advisor settle fixed 1 Nov (9bf0049), no live record | PP 150 for a law or advisor | P1 |
+| `hoi4_politics_choose` | A | 1-2 Nov, 10 DLC (success path, "verified") | PP 150 for a law or advisor | P1 |
 | `hoi4_decisions_list` | A | 31 Oct, 3 DLC | any | P1 |
-| `hoi4_decision_take` | A | 31 Oct, 3 DLC | enabled untargeted decision, PP | P1 |
+| `hoi4_decision_take` | A | 1-2 Nov, 10 DLC (untargeted). Targeted path open | enabled untargeted decision, PP | P1 |
 | `hoi4_diplomacy` | A | 31 Oct, 3 DLC | any foreign country | P1 |
-| `hoi4_diplomacy_act` | A | 1 Nov, gate: `declare_war` on Poland ("Found in the Germany run", 90b3ce3). Other keys 1.19.3 only (26 Oct: justify, cancel, improve relations, NAP, access, guarantee) | PP; completed war goal for declare_war | P1 |
+| `hoi4_diplomacy_act` | A | 1-2 Nov, 10 DLC: justify war goal and declare war (Germany 1939). Other keys 1.19.3 only (26 Oct: cancel, improve relations, NAP, access, guarantee); 6 Nov: one retry of the war-goal type click (c00ee7e) | PP; completed war goal for declare_war | P1 |
 | `hoi4_diplomacy_countries` | R | 31 Oct, 3 DLC, blanket | any | P1 |
-| `hoi4_diplomacy_state` | R | 31 Oct, 3 DLC, blanket (war list exercised on 1.19.3 only, 26 Oct) | a war for the war fields | P1 |
+| `hoi4_diplomacy_state` | R | 31 Oct, 3 DLC, blanket; 6 Nov: reads with the player at war and names factions (8377624, the player's first live war failed the old read) | a war for the war fields | P1 |
 | `hoi4_diplomacy_incoming` | R/A | never (`UNVALIDATED`) | an AI proposal pop-up | P1 |
 | `hoi4_faction_invite_accept` | A | never (`UNVALIDATED`) | a faction invitation pop-up | P2 |
-| `hoi4_faction_create` | A | never (`UNVALIDATED`; Germany leads the Axis so the flow was unreachable) | player without a faction who may create one | P3 |
+| `hoi4_faction_create` | A | 6 Nov, round w12: opened from the political view's `new_faction_button` (404412a); the game's national-spirit refusal reads `faction_creation_not_allowed`. That a faction was founded is in the round notes only [?]; descriptor still `UNVALIDATED` | player without a faction who may create one | P3 |
 | `hoi4_faction_leave` | A | never (`UNVALIDATED`) | player in a faction (test on a throwaway save) | P3 |
 | `hoi4_wars` | R | 31 Oct, 3 DLC, blanket at peace; war output 1.19.3 only (26 Oct) | a war | P1 |
 | `hoi4_war_risk` | R | never (added 1 Nov, 90b3ce3) | target with guarantors or a faction | P1 |
 | `hoi4_war_goal_targets` | R | 31 Oct, 3 DLC, blanket | named enemy | P1 |
 | `hoi4_front_plan` | R | 31 Oct, 3 DLC, blanket ("No live validation against a running game yet" for the plan output, `PLAYBOOK_TOOL_GAPS.md` 10) | border with an enemy, own divisions | P1 |
 | `hoi4_encirclement_candidates` | R | as front_plan | war with a land enemy | P1 |
-| `hoi4_states` | R | 31 Oct, 3 DLC, blanket | any | P1 |
+| `hoi4_states` | R | 31 Oct, 3 DLC, blanket; 8 Nov: VP provinces with controllers and the surrender estimate (2d0d660), province controllers read live (4f8d4b6) | any | P1 |
 
 #### Army, templates, designs, supply
 
@@ -129,30 +133,47 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 | `hoi4_army` | R | 31 Oct, 3 DLC, blanket | any | P2 |
 | `hoi4_commanders` | R | 31 Oct, 3 DLC, blanket (NSB leader traits not checked) | any | P1 |
 | `hoi4_supply` | R | 31 Oct, 3 DLC, blanket ("Supply fields are validated:false") | divisions in an overdrawn province | P1 |
-| `hoi4_train` | A | 31 Oct, 3 DLC | template, manpower, equipment | P1 |
+| `hoi4_train` | A | 1-2 Nov, 10 DLC | template, manpower, equipment | P1 |
 | `hoi4_deploy_locations` | A | unknown on 1.19.4 (label offset moved to +0x160 in a56dadc; train works without it) | a training line without location | P2 |
 | `hoi4_army_assign_plan` | R | 31 Oct, 3 DLC, blanket | unassigned divisions | P1 |
-| `hoi4_army_assign` | A | 31 Oct, 3 DLC: new-army path only. Fold path: never ("the fold path of army_assign" not verified) | unassigned divisions next to an army | P1 |
-| `hoi4_army_create` | A | 31 Oct, 3 DLC | unassigned divisions | P1 |
+| `hoi4_army_assign` | A | 31 Oct, 3 DLC: new-army path. Fold path: 1-2 Nov ("partial folds in large states"); 6 Nov round w12: unit-counter selection, provinces that also hold the receiving army (3681b1a, fc9c58a) | unassigned divisions next to an army | P1 |
+| `hoi4_army_create` | A | 1-2 Nov, 10 DLC; 5 Nov: folds the state's remaining unassigned divisions (5bc2580); slow in large states, 49-82 s (round notes) [?] | unassigned divisions | P1 |
 | `hoi4_army_merge` | A | never (added 1 Nov, 1aad8fb) | two armies, total 24 or fewer divisions | P1 |
 | `hoi4_army_split` | A | 1.19.3 only (18 Oct, 2546aae) | army of 2+ divisions | P1 |
-| `hoi4_army_group_create` | A | 1.19.3 only (18 Oct, 3eff720) | 2+ armies, a field marshal or promotable general | P1 |
-| `hoi4_army_commander` | A | 31 Oct, 3 DLC (general to army). Field marshal to group: 1.19.3 only | army plus free general | P1 |
-| `hoi4_army_front` | A | 31 Oct, 3 DLC | army on a border with a foothold | P1 |
-| `hoi4_army_offensive` | A | 1.19.3 only (m007/m008 narrative, `PLAYBOOK_TOOL_GAPS.md` 3.7) | war, army holding a front line | P1 |
-| `hoi4_army_plan` | A | 1.19.3 only (narrative) | army with battle plan orders | P1 |
-| `hoi4_army_move` | A | 1.19.3 only (26 Oct Luxembourg war) | any army | P1 |
+| `hoi4_army_group_create` | A | 1-2 Nov, 10 DLC ("all verified in war") | 2+ armies, a field marshal or promotable general | P1 |
+| `hoi4_army_commander` | A | 1-2 Nov, 10 DLC: general to army; field marshal promoted and assigned to a group (Rundstedt) | army plus free general | P1 |
+| `hoi4_army_front` | A | 1-2 Nov, 10 DLC (war); 5 Nov: highlighted front found around Bale (5bc2580); 8 Nov: aimed without the Find view when the camera is low (5f4e248) | army on a border with a foothold | P1 |
+| `hoi4_army_offensive` | A | 1-2 Nov, 10 DLC (war); 8 Nov: drawn from the army to the target, Jubaland to Sidamo and to Addis Abeba on the first stroke (6981beb), 1.9 s (5f4e248) | war, army holding a front line | P1 |
+| `hoi4_army_plan` | A | 1-2 Nov, 10 DLC (war); 8 Nov: 0.5 s (5f4e248) | army with battle plan orders | P1 |
+| `hoi4_army_move` | A | 1-2 Nov, 10 DLC (war); 5 Nov: a move by sea counts as started (d006b39, seen live); 6 Nov round w12: overseas moves, readback `sea_transfer_unverified` until the troops land (e1eaed7); 8 Nov: `province_id` (4f8d4b6), 0.6 s (0aea416) | any army | P1 |
 | `hoi4_division_templates` | R | 31 Oct, 3 DLC, blanket | any | P1 |
 | `hoi4_template_get` | R | 31 Oct, 3 DLC, blanket | any | P1 |
 | `hoi4_template_options` | A | 1 Nov, 10 DLC | any | P1 |
 | `hoi4_template_create` | A | 31 Oct, 3 DLC | army XP (5 per battalion, 10 per company, +25 for a new group) | P1 |
 | `hoi4_template_edit` | A | 31 Oct, 3 DLC | army XP | P1 |
-| `hoi4_template_rename` | A | 31 Oct, 3 DLC | any | P2 |
+| `hoi4_template_rename` | A | 31 Oct, 3 DLC; 6 Nov round w13: locked templates refused as `template_locked` (565fcc9) | any | P2 |
 | `hoi4_template_delete` | A | unknown (no live record on any build) | an unused template | P2 |
 | `hoi4_designs` | R | 1 Nov, 10 DLC | any | P1 |
 | `hoi4_design_options` | A | 1 Nov, 10 DLC (tank, plane, ship; tank/plane module slots) | any | P1 |
-| `hoi4_design_create` | A | Ship: 31 Oct, 3 DLC. Tank/plane module path: 1 Nov, 10 DLC up to the experience check; Save never (db9073b) | army XP (tank), air XP (plane), navy XP (ship) | P1 |
+| `hoi4_design_create` | A | Ship: 31 Oct, 3 DLC. Tank and plane: 1-2 Nov, 10 DLC, designs saved (Panzer III S 5194, Bf 109 E N 5195); 6 Nov: accepts a design name (c4fe48c) | army XP (tank), air XP (plane), navy XP (ship) | P1 |
 | `hoi4_design_obsolete` | A | 1.19.3 only (26 Oct); flag width fixed 1 Nov (a0e8a2d), no live record | a non-obsolete own design | P2 |
+
+#### Added after 2 November
+
+| Tool | A/R | Last live verification | Game state needed to verify | P |
+|---|---|---|---|---|
+| `hoi4_alerts` | R | 5 Nov, Italy 1937: 17 alert frames named, each checked against the game's tooltip (1ad2100); 6 Nov: frames 29 `insufficient_resources` and 68 `insufficient_energy` (c4fe48c) | any alert in the top bar | P1 |
+| `hoi4_division_disband` | A | 5 Nov, Italy 1937: one division, then a whole army; manpower returned to the pool (6cb027e) | an army with a division to drop | P1 |
+| `hoi4_map_mode` | A | 5 Nov: F-key table mapped live (political, naval, air, supply, terrain, resistance, compliance, resources, air raids, factions); no readback (7ac629c) | any | P2 |
+| `hoi4_occupation` | R | 5 Nov: default occupation law validated by `hoi4_occupation_law` (f10cd06); resistance and compliance per state from the game's own triggers; the extras (target before additions, neighbour share, resisting country) unconfirmed (41c10b8) [?] | an occupied or resisting state | P1 |
+| `hoi4_occupation_law` | A | 5 Nov, Italy 1937: Military Governor -> Martial Law -> Military Governor, verified from memory (f10cd06) | an occupied or resisting state | P1 |
+| `hoi4_war_stats` | R | added 5 Nov (41c10b8); no live comparison with the war screen recorded [?] | a war with casualties | P1 |
+| `hoi4_army_motorization` | A | 5 Nov, Ethiopia training war: a starving army's supply rose from 29% to 41% in nine game days (5bc2580) | an army at war | P1 |
+| `hoi4_army_detach` | A | 5 Nov: live-tested (7c0b6fc) | an army of 2+ divisions | P1 |
+| `hoi4_railway_build` | A | 6 Nov: added (e1eaed7); Eritrea to Wello queued in 26 s after the zoom fix (dc0a55d); 8 Nov: Eritrea to Tigray in 4.7 s, 1.9 s with both ends on screen (3611139) | a hub or port and a target province | P1 |
+| `hoi4_construction_order` | A | 6 Nov, round w17: top, down, up and remove verified by the line's new queue position (ab02318) | two or more construction lines | P1 |
+| `hoi4_army_attack` | A | 8 Nov: offensive + execute in 2.3 s (5f4e248; the first version never ran because of its request ids) | army on a front with a target | P1 |
+| `hoi4_autopilot` | A | 8 Nov: added (e25a492, "live validation pending"); used in the speed-3 soaks merged as 463c475 with no per-tool record [?] | a running game with a plan | P1 |
 
 #### Air
 
@@ -161,7 +182,7 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 | `hoi4_air` | R | 31 Oct, 3 DLC, blanket (legacy planes; BBA airframe wings never) | BBA wings | P1 |
 | `hoi4_air_regions` | R | 31 Oct, 3 DLC, blanket | any | P1 |
 | `hoi4_air_wings` | A | unknown on 1.19.4 | any | P2 |
-| `hoi4_air_mission` | A | 31 Oct, 3 DLC with legacy planes. BBA wings: never | wing in range of a region | P1 |
+| `hoi4_air_mission` | A | 1-2 Nov, 10 DLC: CAS and air superiority over Poland; 8 Nov: region readback, CAS over Tigray 4.1 s, air superiority 3.9 s (9db0800); a wing already on another region takes the second point tried (3259d3b) | wing in range of a region | P1 |
 | `hoi4_air_rebase` | A | 31 Oct, 3 DLC | air base with free capacity | P1 |
 | `hoi4_air_wing_create` | A | 31 Oct, 3 DLC (legacy reserve). BBA reserve planes: never | reserve aircraft at a base | P1 |
 | `hoi4_air_wing_split` | A | 31 Oct, 3 DLC | wing of 2+ planes | P2 |
@@ -176,36 +197,36 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 |---|---|---|---|---|
 | `hoi4_fleets` | R | 31 Oct, 3 DLC, blanket | any fleet | P1 |
 | `hoi4_convoys` | R | 31 Oct, 3 DLC, blanket | any | P1 |
-| `hoi4_fleet_mission` | A | 31 Oct, 3 DLC | task force | P1 |
+| `hoi4_fleet_mission` | A | 31 Oct, 3 DLC; 6 Nov round w12: fleet panel titles cut at 31 characters, sea regions from the map files (3681b1a); fleet matched by its task forces (4f4d18c) | task force | P1 |
 | `hoi4_fleet_region` | A | 31 Oct, 3 DLC | fleet and a coastal state | P1 |
 | `hoi4_fleet_admiral` | A | 31 Oct, 3 DLC | fleet and a free admiral | P2 |
 | `hoi4_fleet_create` | A | 31 Oct, 3 DLC | task force | P2 |
-| `hoi4_fleet_split` | A | 31 Oct, 3 DLC (descriptor still says `UNVALIDATED`) | task force of 4+ ships | P2 |
+| `hoi4_fleet_split` | A | 31 Oct, 3 DLC (descriptor still says `UNVALIDATED`); 6 Nov round w12: delete-task-force and progress-loss dialogs accepted (c4fe48c) | task force of 4+ ships | P2 |
 | `hoi4_fleet_merge` | A | 31 Oct, 3 DLC (descriptor still `UNVALIDATED`; task forces in different ports are split off by the game) | fleet with 2+ task forces in one port | P2 |
 | `hoi4_fleet_assign` | A | 31 Oct, 3 DLC (descriptor still `UNVALIDATED`) | two fleets | P2 |
 | `hoi4_fleet_reserve` | A | 31 Oct, 3 DLC (descriptor still `UNVALIDATED`) | task force | P3 |
 | `hoi4_fleet_balance` | A | never (button meaning "inferred from its name") | fleet with 2+ task forces | P3 |
 | `hoi4_fleet_delete` | A | never (destroys ships) | throwaway task force | P3 |
-| `hoi4_naval_invasion` | A | never (`UNVALIDATED`) | war with a coastal enemy, army in a port state, convoys above 0 | P1 |
+| `hoi4_naval_invasion` | A | 6 Nov, rounds w13/w14: "executed and landed" in the round notes only, no commit records it [?]; `plan_not_executable` explains invasion preparation and naval dominance (c00ee7e); descriptor still `UNVALIDATED` | war with a coastal enemy, army in a port state, convoys above 0 | P1 |
 
 #### Espionage (La Resistance)
 
 | Tool | A/R | Last live verification | Game state needed to verify | P |
 |---|---|---|---|---|
-| `hoi4_agency_create` | A | never (31 Oct refused before input: LaR was not active) | LaR, no agency, 5 civilian factories for 30 days | P2 |
-| `hoi4_agency_upgrade` | A | never | agency created, no upgrade running | P2 |
-| `hoi4_operative_recruit` | A | never | agency, free operative slot | P3 |
-| `hoi4_operative_assign` | A | never (`operation` and `boost_ideology` refuse by design) | recruited operative, target country | P3 |
+| `hoi4_agency_create` | A | 6 Nov, round w12: creation verified live (946dca4); descriptor still `UNVALIDATED` | LaR, no agency, 5 civilian factories for 30 days | P2 |
+| `hoi4_agency_upgrade` | A | 1-2 Nov, 10 DLC: upgrade_army_department started | agency created, no upgrade running | P2 |
+| `hoi4_operative_recruit` | A | 6 Nov, round w13: fixed live (565fcc9): candidates from the leaders grid, the recruiting bar read; descriptor still `UNVALIDATED` | agency, free operative slot | P3 |
+| `hoi4_operative_assign` | A | 6 Nov, round w13: fixed live (565fcc9): switches an operative already on a mission; `operation` and `boost_ideology` refuse by design; descriptor still `UNVALIDATED` | recruited operative, target country | P3 |
 
 #### Peace conference
 
 | Tool | A/R | Last live verification | Game state needed to verify | P |
 |---|---|---|---|---|
-| `hoi4_peace_status` | R | 1.19.3 only with a conference open (26 Oct Luxembourg); 31 Oct blanket covers the closed path | open conference | P1 |
+| `hoi4_peace_status` | R | 1-2 Nov, 10 DLC with a conference open (Luxembourg; conference state list) | open conference | P1 |
 | `hoi4_peace_options` | R | never with a conference open (`validated:false`) | open conference | P1 |
-| `hoi4_peace_take` | A | never | open conference, own turn | P1 |
-| `hoi4_peace_submit` | A | never | open conference with a pending demand | P1 |
-| `hoi4_peace_exit` | A | never | conference after the last round | P1 |
+| `hoi4_peace_take` | A | 1-2 Nov, 10 DLC: Luxembourg taken; 6 Nov rounds w13/w14: Albania end to end (round notes only) [?] | open conference, own turn | P1 |
+| `hoi4_peace_submit` | A | 1-2 Nov, 10 DLC: Luxembourg; 6 Nov rounds w13/w14: Albania (round notes only) [?] | open conference with a pending demand | P1 |
+| `hoi4_peace_exit` | A | 1-2 Nov, 10 DLC: Luxembourg (Return accepts the exit popup); 6 Nov rounds w13/w14: Albania (round notes only) [?] | conference after the last round | P1 |
 
 ### 1b. Diagnostic, staged-primitive and debug tools (all P3)
 
@@ -240,6 +261,12 @@ None of these is listed for 1.19.4 by name; the blanket read statement may cover
 `hoi4_production_add` and `hoi4_design_create` are counted under 10 DLC although only part of their paths ran.
 `hoi4_input_lease` and `hoi4_politics_choose` (refusal path only) are counted with the 3-DLC group.
 
+These counts are those of 1 November and are not recomputed. Since then (rows above): the 1-2 November table moved
+`hoi4_time`, `hoi4_doctrine_adopt`, `hoi4_agency_upgrade`, the peace take/submit/exit tools, `hoi4_army_group_create`,
+`hoi4_army_offensive`, `hoi4_army_plan`, `hoi4_army_move` and others to "1-2 Nov, 10 DLC"; the 5-8 November rounds
+added 12 tools (table "Added after 2 November") and moved `hoi4_mio_trait`, `hoi4_agency_create` and the operative
+tools out of "never"; `hoi4_naval_invasion` and `hoi4_faction_create` rest on round notes only [?].
+
 ## Live results, 1-2 November 2026 (10 DLCs, test games 1939 Germany, 1936 Italy, 1936 Germany)
 
 Verified with real actions (receipt plus memory or window readback); each item names the fix it needed.
@@ -265,6 +292,36 @@ Verified with real actions (receipt plus memory or window readback); each item n
 Still open: MIO list rows (CSmoothListbox item storage), folds outside the boxes around a state's centre,
 naval invasion, operative recruit/assign, targeted decisions, province buildings, automatic diplomatic responses.
 
+## Live results, 5-8 November 2026 (10 DLCs; Italy 1936/1937 test beds, rounds w8 and w12-w17, Ethiopia training wars)
+
+Each row names the commit whose message states the result. Rows marked [?] rest on the round's session notes only.
+
+| Tool | Result | Evidence |
+|---|---|---|
+| hoi4_alerts | 17 frames named from the game's tooltips (no focus, free dockyards, missing equipment production, modify government, wings without mission, nothing training, resistance, unassigned divisions, decisions, garrison, doctrines, officer corps, MIO, admiral ...); frames 29 and 68 added | 1ad2100, c4fe48c |
+| hoi4_division_disband | single division, then a whole army, each verified gone; manpower returned | 6cb027e |
+| hoi4_map_mode | ten modes by F key; no readback | 7ac629c |
+| hoi4_occupation_law, hoi4_occupation | default law changed and changed back, read back from memory | f10cd06, 41c10b8 |
+| hoi4_railway_build | Eritrea to Wello, Eritrea to Tigray queued | e1eaed7, dc0a55d, 3611139 |
+| hoi4_construction_order | top, down, up, remove | ab02318 |
+| hoi4_army_move overseas (sea transfer) | a move by sea counts as started; the readback says `sea_transfer_unverified` until the troops land; "sea transfer works" in round w12 [?] | d006b39, e1eaed7 |
+| hoi4_mios, hoi4_mio_trait | organisation list, details and trait queue | b722b01 |
+| hoi4_operative_recruit, hoi4_operative_assign | recruitment and assignment fixed live | 565fcc9 |
+| hoi4_agency_create | agency created | 946dca4 |
+| hoi4_faction_create | opened from the political view; refusal text mapped; a faction founded [?] | 404412a, 8377624 |
+| hoi4_naval_invasion | executed and landed [?] | round w13/w14 notes; c00ee7e (refusal text) |
+| hoi4_peace_take, _submit, _exit | Albania end to end [?] (Luxembourg already on 1-2 Nov) | round w13/w14 notes |
+| hoi4_army_motorization | supply 29% to 41% in nine game days | 5bc2580 |
+| hoi4_army_detach, hoi4_research_start `replace` | live-tested | 7c0b6fc |
+| hoi4_air_mission | honest region readback; CAS 4.1 s, air superiority 3.9 s; second point for a wing already on another region | 9db0800, 3259d3b |
+| hoi4_army_attack, hoi4_army_offensive, hoi4_army_move, hoi4_event_choose | speed work: 2.3 s, 1.9 s, 0.6 s, 250-590 ms | 5f4e248, 6981beb, 0aea416 |
+
+Still open after 8 November: `hoi4_mio_policy` (no live test), faction invite and leave and incoming-proposal answers
+(need a game state with an invitation or a proposal), province buildings through `hoi4_construction_add province_id`
+(live test pending, a7039cb), targeted decisions, a stockpile read, a verified production-line removal
+(`hoi4_production_set` with 0 factories, see the mismatches), the regimental-support row in the template tools,
+a garrison-template action.
+
 ## 2. Missing capabilities a strong player needs
 
 No tool covers these. Sources are the playbook references (`skills/hoi4-campaign-playbook/references/`), descriptor
@@ -285,7 +342,7 @@ limits and `HOI4_1_19_4_UPDATE.md`.
 | Construction queue priority and 1.19.4 repair priority | `PLAYBOOK_TOOL_GAPS.md` 3.11.1: "Priority of that line is not controllable by any tool yet"; 1.19.4 repair priority "not yet driven" | Poland (bunkers first), Germany under bombing | P2 |
 | Import priority window (1.19.4: order, accepted shortage, oil for fuel) | `hoi4_auto_import`: "Import priority order and accepted shortages are left at the game's settings" | Germany (oil, rubber) | P2 |
 | Lend-lease, volunteers, licence production, expeditionary forces | `diplomacy_act` cancels dialogs that need choices (`dialog_unsupported`); `china-fair.md` expects "Soviet or Western lend-lease flowing"; volunteers give experience | China, Germany | P2 |
-| Occupation laws, garrison template, resistance and compliance read | `supply-logistics-deployment.md` 7 and its tool list item 9: "no action to set occupation law" | Germany (Poland, France), China | P2 |
+| Garrison template (occupation laws and the resistance read exist since 5 Nov: `hoi4_occupation_law`, `hoi4_occupation`) | `countryoccupationview.gui` `garrison_template_button`; no action | Italy 1936 (colonies resist from day 1), Germany, China | P1 |
 | Faction goals, rules, initiative and influence | `politics-diplomacy-espionage.md` 7; `china-fair.md`: warlord integration needs "own influence ratio more than twice the target's", faction goals define "subjugated" | China | P2 |
 | Recruiting new generals and assigning earned commander traits | `hoi4_commanders` lists "not-yet-recruited" leaders but no tool recruits; `army_commander` only assigns and promotes | China (85 divisions), all | P2 |
 | Division template change and upgrade of existing divisions, reinforcement priority, training cancel | `templates-equipment-production.md` 9(c) items 3 and 7 | all three | P2 |
@@ -379,12 +436,26 @@ Each needs its own live pass in A, D or G before the campaigns start.
 ## Documentation mismatches found
 
 - `fleetops.rs` still prefixes `hoi4_fleet_split`, `_merge`, `_assign` and `_reserve` with `UNVALIDATED (no live
-  test yet)`, though `HOI4_1_19_4_UPDATE.md` lists them as verified on 31 Oct.
-- `docs/TOOLS_MACOS.md` marks `hoi4_design_create` and `hoi4_template_create` as `R`; both need a lease
-  (`gen_tool_index.py` looks for `lease_token` only in the first 1500 characters after the description). The file
-  also lacks `hoi4_save` (regenerating adds it) and the 28 common tools of `protocol.rs` and the preview modules.
+  test yet)`, though `HOI4_1_19_4_UPDATE.md` lists them as verified on 31 Oct. The same holds after 5-8 November for
+  `hoi4_mio_trait`, `hoi4_agency_create`, `hoi4_operative_recruit`, `hoi4_operative_assign` and `hoi4_faction_create`
+  (live per the rows above) and `hoi4_naval_invasion` (round notes only). These are descriptor texts in code; this
+  inventory records the mismatch and does not change code.
+- `hoi4_production_set` says both "factories 0 removes the line (its close button)" and "0 keeps the line with no
+  factories"; the code accepts either outcome. No live record of a removal.
+- The tool catalogue `skills/hoi4-campaign-playbook/tools.schema.json` (9 November) has no entry for
+  `hoi4_naval_invasion`, `hoi4_faction_create`, `hoi4_diplomacy_incoming` and the `format!`-built fleet tools
+  (`hoi4_fleet_split` ...), and empty argument lists for `hoi4_army_move` and `hoi4_plan`, so `check_calls.py`
+  reports the first group as unknown and accepts any arguments for the second.
+- `docs/TOOLS_MACOS.md` was regenerated on 9 November (it gained `hoi4_construction_order`, `hoi4_army_attack` and
+  `hoi4_railway_build`). The generator still marks lease-taking tools whose `lease_token` comes late in the schema as
+  `R` (it looks only at the first 1500 characters after the description), misses `hoi4_occupation_law` (its
+  description is built with `format!` without the `{}` prefix the generator expects) and lists none of the common
+  tools of `protocol.rs` (`hoi4_autopilot`, `hoi4_capabilities`, ...). Fixing that is a change to
+  `scripts/gen_tool_index.py`, outside this inventory.
 - `LIVE_VALIDATION_QUEUE.md` expects `mio_system_absent` "in a game without Arms Against Tyranny" and the agency
   refusal for an inactive LaR; both DLCs are now active, so the real flows can be tested.
 - `skills/hoi4-campaign-playbook/references/*.md` still list as missing several tools that now exist (doctrine
-  purchase, MIO actions, designers, template editor, naval tools, peace tools, air rebase, faction creation). Their
-  "(c) Tools" sections are out of date.
+  purchase, MIO actions, designers, template editor, naval tools, peace tools, air rebase, faction creation,
+  occupation law, railway build, construction order, disband). Their "(c) Tools" sections are out of date, and several
+  titles still say "HOI4 1.19.3".
+- `docs/MANAGEMENT_MATRIX.md` dated from 21 October; refreshed on 9 November from the coverage audit.

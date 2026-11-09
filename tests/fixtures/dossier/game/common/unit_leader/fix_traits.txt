@@ -1,0 +1,25 @@
+leader_traits = {
+	fix_assignable = {
+		type = corps_commander
+		trait_type = assignable_trait
+		cost = 500
+		gui_row = 1
+		gui_column = 0
+		attack_skill = 1
+		modifier = { army_attack_factor = 0.05 }
+	}
+	fix_child = {
+		type = corps_commander
+		trait_type = assignable_trait
+		any_parent = { fix_assignable }
+		mutually_exclusive = fix_other
+		gui_row = 2
+		corps_commander_modifier = { org_loss_when_moving = -0.1 }
+		enable_ability = fix_force_attack
+	}
+	fix_personality = { type = all trait_type = personality_trait }
+}
+leader_skills = {
+	1 = { cost = 100 type = navy }
+	2 = { cost = 200 type = navy }
+}

@@ -1,0 +1,8 @@
+on_actions = {
+	on_capitulation = { effect = { if = { limit = { tag = BBB } AAA = { AAA_end_war = yes } } } }
+	on_daily_AAA = {
+		effect = {
+			IF = { limit = { check_variable = { BBB.escalation > 4 } } set_country_flag = AAA_escalated country_event = aaa.5 }
+		}
+	}
+}

@@ -1,0 +1,1 @@
+ideas = { country = { nested_idea = { } } }

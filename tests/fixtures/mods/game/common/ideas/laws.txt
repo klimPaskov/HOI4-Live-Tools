@@ -1,0 +1,1 @@
+ideas = { economy = { base_law = { } } }

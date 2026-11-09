@@ -1,0 +1,3 @@
+technologies = {
+    t_x = { research_cost = 1 start_year = 1936 }
+}

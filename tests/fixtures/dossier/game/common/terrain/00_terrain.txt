@@ -1,0 +1,16 @@
+categories = {
+	ocean = { color = { 40 83 176 } movement_cost = 1.0 is_water = yes }
+	plains = {
+		color = { 255 129 66 }
+		movement_cost = 1.0
+		combat_width = 70
+		combat_support_width = 35
+	}
+	mountain = {
+		movement_cost = 2.0
+		attrition = 0.3
+		combat_width = 50
+		combat_support_width = 25
+		units = { attack = -0.5 }
+	}
+}

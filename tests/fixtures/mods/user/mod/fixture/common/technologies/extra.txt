@@ -1,0 +1,4 @@
+technologies = {
+    t_x = { research_cost = 3 start_year = 1940 }
+    t_mod = { research_cost = 1 start_year = 1936 }
+}

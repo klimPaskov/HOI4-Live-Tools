@@ -95,7 +95,7 @@ GOOD = {
     "production": [{"equipment": "infantry_equipment_1", "factories": 3}],
     "production_priority": ["infantry_equipment"],
     "construction": [{"building": "industrial_complex", "states": [1, "Beta"], "count": 2}],
-    "politics": [{"category": "government", "slot": 1, "idea": "free_trade"}],
+    "politics": [{"id": "pol_free_trade", "category": "government", "slot": 1, "idea": "free_trade"}],
     "decisions": ["AAA_decision"],
     "training": {"template": "Line Division", "queue": 2, "batch": 1, "deploy_state": 1},
     "stop_on_date": "1938.01.01",
@@ -200,7 +200,7 @@ class ValidatePlanTests(unittest.TestCase):
         self.assertNotIn("AAA_adviser", text)
 
     def test_advisor_token_is_a_warning(self):
-        rep = self.run_plan(politics=[{"category": "government", "slot": 3, "idea": "adviser"}])
+        rep = self.run_plan(politics=[{"id": "p", "category": "government", "slot": 3, "idea": "adviser"}])
         self.assertEqual(rep.errors, [])
         self.assertTrue(any("idea_token" in w for w in rep.warnings))
 

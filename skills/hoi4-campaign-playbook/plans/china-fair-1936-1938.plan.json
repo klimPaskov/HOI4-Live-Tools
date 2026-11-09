@@ -102,22 +102,26 @@
   ],
   "politics": [
     {
+      "id": "pol_government_3_CHI_zhang_qun",
       "category": "government",
       "slot": 3,
       "idea": "CHI_zhang_qun"
     },
     {
+      "id": "pol_government_2_partial_economic_mobilisation",
       "category": "government",
       "slot": 2,
       "idea": "partial_economic_mobilisation",
       "cost": 235
     },
     {
+      "id": "pol_government_4_CHI_t_v_soong",
       "category": "government",
       "slot": 4,
       "idea": "CHI_t_v_soong"
     },
     {
+      "id": "pol_government_5_CHI_h_h_kung",
       "category": "government",
       "slot": 5,
       "idea": "CHI_h_h_kung"

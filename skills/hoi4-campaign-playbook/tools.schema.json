@@ -1,0 +1,4527 @@
+{
+ "_generated_by": "scripts/hoi4facts/tool_schemas.py build",
+ "tools": {
+  "hoi4_agency_create": {
+   "description": "UNVALIDATED (no live test yet): create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Whether the agency exists is only on screen, so the refusals come from the opened window before the click: agency_exists, agency_creation_in_progress, agency_creation_unavailable (the game disables the button). Verified from the window only (the creation progress bar appears): verification gui_only, results carry validated:false. Creation takes civilian factories for the define's number of days.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_agency_upgrade": {
+   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals: branch_unknown, upgrade_unknown (before input, from the loaded database); agency_not_created, upgrade_in_progress, upgrade_unavailable (lists the branch's entries with their enabled state), found from the windows before the click. Verified from the agency view's upgrade progress bar only (verification gui_only). Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "branch": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "upgrade": {
+      "maxLength": 96,
+      "type": "string"
+     }
+    },
+    "required": [
+     "branch",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air": {
+   "description": "Own air wings and air bases read from game memory (no panel, no input, never pauses). Per wing: name, unit type (light/medium/heavy plane), aircraft type and variant, aircraft count, manpower, air base (id and state), missions set (bitmask decoded with the toolbar order) and assigned strategic region. Per air base: state, level (capacity/200), capacity, aircraft stationed, free capacity and the wings there. Mission mask bits (air superiority 1, CAS 2, interception 4, strategic bombing 8) and the region (pointer at wing +0xb8, null while the wing stands by after Hold) were validated against the Air Forces Overview after own orders on 26 October 2026; the mask keeps the last mission after Hold, so judge by `region`; `transfer_to_base_id` is the destination base id while a wing flies a transfer (arrival moves the base). Orders: hoi4_air_mission, hoi4_air_rebase, hoi4_air_wing_create/disband/split/merge, hoi4_air_hold; hoi4_air_regions groups the same data by region.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "wing": {
+      "description": "Only wings whose name contains this text",
+      "maxLength": 64,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_hold": {
+   "description": "Stop an own air wing's mission (the toolbar's Hold Air Wings button, shortcut H): the wing keeps its base and stands by (its panel row reads 'Standing by', the Air Forces Overview's Area column empties); its assigned region is cleared, the last mission selection stays in memory. Typed refusals before input: wing_unknown, wing_ambiguous, nothing_to_change (already standing by); hold_unavailable if the game disables the button. Verified from the wing's assigned region pointer in memory.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "wing": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "wing",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_mission": {
+   "description": "Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "mission": {
+      "type": "string"
+     },
+     "region": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "wing": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "wing",
+     "mission",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_rebase": {
+   "description": "Rebase one own air wing to the air base of a state with ordinary input: strategic air map (F3), the wing's row of the Air Forces Overview, the Find view centres `state_id`, the base's circle is located from the game's own map icon objects and right clicked. The wing flies a transfer (status 'To <base>'); verified from the wing's transfer destination in memory (hoi4_air `transfer_to_base_id`), the base id changes on arrival. Typed refusals before any input: wing_unknown, wing_ambiguous, air_base_unknown (state without an own air base; lists own base states), nothing_to_change (already based or already flying there), air_base_full (capacity minus wings stationed or incoming). The game set no range limit on a transfer in the test (a 570 km fighter wing was accepted 207 map units away); if it refuses anyway the tool reports rebase_refused. Map mode is restored afterwards.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "wing": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "wing",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_region_probe": {
+   "description": "What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "state_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_regions": {
+   "description": "Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_wing_create": {
+   "description": "Found a new air wing from reserve aircraft at an own air base: strategic air map, Find view centres `state_id`, left click on the base circle, the N shortcut ('Add new Air Wing'), the reserve row of `aircraft` (variant name such as 'Ju 86' or class name such as 'Inter-War Fighter', case-insensitive) moves up to 100 planes of that variant into the wing (the game's own limit per click), Ok. Reserve aircraft come from production or from disbanding a wing. Typed refusals: air_base_unknown, air_base_full (before input); no_reserve_aircraft (the game refuses the window when the reserve is empty), aircraft_not_in_reserve (lists what is in reserve), aircraft_ambiguous, create_unavailable (Ok disabled, e.g. no manpower) while driving; nothing is created in those cases. Verified from the new wing's name appearing at that base in memory (hoi4_air). The wing gets the game's default name and 'Deploying from Reserves' status.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "aircraft": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "state_id",
+     "aircraft",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_wing_disband": {
+   "description": "Disband one own air wing (row of the Air Forces Overview, toolbar Disband, OK of the confirmation); all its equipment returns to the reserve. Typed refusals before input: wing_unknown, wing_ambiguous; disband_unavailable if the game disables the button. Verified from the wing's absence in memory (hoi4_air).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "wing": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "wing",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_wing_merge": {
+   "description": "Merge own air wings of one aircraft type at one air base with the toolbar's Merge button. The game's map stack and merge work on every wing of that type at the base, so `wing` is joined with all others of its type there; give `with` to name the single expected partner (refused with merge_group_larger when more than two wings of the type are there). The first wing is selected through its Air Forces Overview row, the stack item of the type beside the base circle joins with a Shift click, the game's selection array decides that exactly the group is selected, then Merge; the first wing survives with the aircraft (a wing holds at most 100: merging 40+80+40 bombers left wings of 100 and 60). Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (same wing twice), merge_different_base, merge_different_type, no_merge_partner, merge_group_larger, wing_in_transfer; merge_unavailable if the game disables the button, selection_lost if the group could not be selected (nothing is merged then). Verified from memory: fewer wings of the group left holding all their aircraft.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "wing": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "with": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "wing",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_wing_split": {
+   "description": "Split one own air wing in two halves with the toolbar's Split button (shortcut D) after selecting it in the Air Forces Overview: the original keeps half of its aircraft, a new wing of the same type, base and orders takes the rest and gets the game's default name. Typed refusals before input: wing_unknown, wing_ambiguous, wing_in_transfer, nothing_to_change (fewer than 2 aircraft); split_unavailable if the game disables the button. Verified from memory: one more wing at the base and fewer aircraft in the original. This and hoi4_air_wing_create (up to 100 aircraft per click) are the ways to size wings; hoi4_air_wing_merge joins them again.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "wing": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "wing",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_air_wings": {
+   "description": "Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_alerts": {
+   "description": "Read-only: the game's own alert icons in the top bar, left to right (what a human sees as the warning row): each with its icon frame and, where the icon identifies it, the alert name and what to do (e.g. no_national_focus, free_dockyards, missing_equipment_production, modify_government, air_wings_without_mission, no_divisions_in_training, unassigned_divisions, decisions_available, doctrines_available, resistance), plus its screen rect (\"at\"); hovering an icon shows the game tooltip. Use it every tick: every alert is work a strong player would not leave undone. No input, no lease.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_armies": {
+   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "threat": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army": {
+   "description": "Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation. No persistent IDs, normalized units, enemies or actions.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_assign": {
+   "description": "Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there. Same refusals as hoi4_army_assign_plan, all before any input. Folding into a standing army uses the game's own control (box-select the divisions, RIGHT-click the army's card); it refuses with selection_mismatch, before the click, when the box also took divisions of another army. Creating a new army uses the verified new-army path.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_assign_plan": {
+   "description": "Pure read: where the unassigned divisions standing in a state would go (into the standing army with the most room under 24, or the named one; a new army when none stands there), how many, the overflow and the split needed afterwards. Typed refusals: no_unassigned_here, no_such_army, target_not_in_state, army_full.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "state_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_attack": {
+   "description": "Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute). Skip a step with front:false (the army already holds a front), offensive:false or execute:false. Stops at the first failing step and says which steps were done.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "execute": {
+      "type": "boolean"
+     },
+     "front": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "offensive": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_commander": {
+   "description": "Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "general": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "reassign": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "general",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_create": {
+   "description": "(optional absorb_existing: true folds armies standing there into the new one) Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "absorb_existing": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_detach": {
+   "description": "Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "divisions": {
+      "items": {
+       "maxLength": 32,
+       "type": "string"
+      },
+      "maxItems": 18,
+      "minItems": 1,
+      "type": "array"
+     },
+     "into": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "divisions",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_front": {
+   "description": "Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_group_create": {
+   "description": "Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "armies": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 2,
+      "type": "array"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "armies",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_merge": {
+   "description": "Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "source": {
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "source",
+     "target",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_motorization": {
+   "description": "Set an army's supply motorization: 0 none, 1 partial, 2 full. The supply hubs the army draws from then use trucks (about 40 per level per hub) to carry supply much farther into roadless land; it costs trucks from the stockpile (keep truck production running) and fuels nothing. With the game's ordinary control: the army's card selects it, then the motorization button on its badge is clicked until the level is reached, each click verified from memory. Read the current level in hoi4_armies (motorization). Refused before input with army_unknown or invalid_arguments.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "level": {
+      "maximum": 2,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "level",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_move": {
+   "description": "Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "province_id": {
+      "description": "One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller",
+      "maximum": 29999,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_offensive": {
+   "description": "Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "army",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_plan": {
+   "description": "Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "execute": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "execute",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_split": {
+   "description": "Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "count": {
+      "maximum": 19,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "count",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_auto_import": {
+   "description": "HOI4 1.19.4 Automatic Importing (Trade view): without enabled/budget it reads whether it is on, its civilian factory budget and the factories available for trade (opens the view with R, changes nothing). With enabled (true/false) and/or budget (civilian factories; only while on) it clicks the checkbox and the budget slider, verified from the view's own checkbox frame and budget text. The game then starts and ends trades itself to cover resource shortages (oil also covers fuel) and blocks manual trades: hoi4_trade_set refuses with auto_import_enabled while it is on. Import priority order and accepted shortages are left at the game's settings.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "budget": {
+      "maximum": 500,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_autopilot": {
+   "description": "Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. An army you order yourself (any hoi4_army_* action) is left to you by its war rules for war.player_claim_seconds (default 300); release:[names] hands armies back at once. {enabled:false} stops it; {} returns its status.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "enabled": {
+      "type": "boolean"
+     },
+     "interval_ms": {
+      "maximum": 10000,
+      "minimum": 250,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "release": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_capabilities": {
+   "description": "Verified runtime capabilities and explicit platform/build limitations.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_commanders": {
+   "description": "Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); while the list is open, leaders it does not show (not recruited, foreign, retired) are only named in not_assignable; with the list closed they appear with listed_in_panel_or_assigned false and available null. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_add": {
+   "description": "Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... Province buildings (supply_node = supply hub, naval_base, bunker, coastal_bunker) are clicked on a province: pass province_id, or the tool tries the state's provinces nearest the centre in turn until the game accepts one (a supply hub needs a province the game allows, usually on a railway). Railways (rail_way) are not supported.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building": {
+      "maxLength": 64,
+      "type": "string"
+     },
+     "count": {
+      "default": 1,
+      "maximum": 10,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "province_id": {
+      "maximum": 99999,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_clear_selection": {
+   "description": "Default-off Mac qualification: clear the exact original ordinary construction selection with at most one unmodified Escape down/up on its already-open idle own construction panel. Retains original own/campaign/catalog/full queue and current typed keyboard receiver/callback; no mouse, navigation, repeated Escape, input retry, pause or worker. An initially inactive selection receives no key. Ordinary panel closing and GUI invalidation may occur. Only same-attempt canonical inactive selection with the complete queue unchanged verifies this action. Identical successful replays are historical. Requires construction_cancellation=true and an immutable qualification deadline; full campaign acceptance remains false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_controls": {
+   "description": "Combined read-only own construction opener and one canonical public building choice for the verified Linux layout. Native macOS returns unsupported_platform before process reads. Exact named paths, Standard callback bindings, managed/selected modes, local receiver gates and scoped own blockers; optional exact renderer/input geometry. No queue/map payload, input, eligibility or global modal/frame/routing authority. Unknown controls and predicates stay explicit. Never pauses or moves the cursor.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_geometry": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "building_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_find_open": {
+   "description": "Default-off Mac qualification: open the materialized idle own Find view with at most one ordinary left click on its exact named MapModes button. Requires inactive construction selection and preserves the complete own queue. Retains original target, callback, native1920x1080 geometry and current typed mouse route; verifies an empty query and exact focused edit in the same attempt. An already-ready Find receives no input. No F, text, Return, screenshot, pause, worker or input retry. Successful replays are historical. Requires construction_find_open=true and its immutable qualification deadline; campaign use remains unqualified.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_find_state": {
+   "description": "Default-off Mac qualification: on an already-open, idle, exact focused Find box with empty query and inactive construction selection, type one own state ID and Return once. Retains original Find/control/state identity, full own construction queue and selection before each key; verifies the same requested camera anchor after Find closes. No F/opening, cursor movement, screenshot, pause, placement, worker or input retry. Possible delivery remains uncertain unless this same attempt verifies it; replays are historical. Requires construction_navigation=true and an exclusive input lease. Campaign use remains unqualified.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_find_view": {
+   "description": "Read-only own map Find view using independently recovered Linux and native Mac layouts. Visibility flags, bounded query, first result row joined to its current state catalog, camera eye/look-at and an optional requested own state's template map position. Optional include_focus checks the visible Mac Find box's exact name, type, own registry and both focus aliases; default reads skip those fields. Hidden Mac views skip retained query, result and edit-box payloads. Wrapped-camera equivalence remains unqualified. No input, search, camera movement, placement, eligibility, current-frame or routing authority. Never pauses or moves the cursor.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_focus": {
+      "default": false,
+      "type": "boolean"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_open": {
+   "description": "Default-off Mac qualification: open the own construction panel with at most one ordinary T down/up, using fresh typed named-button/current-shortcut checks and a durable original intent. An already-selected panel receives no key. Set already_open_only=true to require an initially open panel and prohibit any keypress even if it changes before dispatch; this mode has a distinct durable action identity. No cursor movement, menu dismissal, placement, pause or input retry. Uncertain attempts permanently quarantine this controller; later current UI cannot settle them. Verified replays are explicitly historical. Requires input.json construction_panel=true and the exclusive lease. One ordinary opener has verified live delivery; broader campaign use remains unqualified.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "already_open_only": {
+      "default": false,
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "maxLength": 96,
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_order": {
+   "description": "Reorder or remove one own construction line with its row buttons in the construction panel: action top (Shift+Click on the up arrow), up, down, bottom or remove (the row's close button). `line` is the 0-based index as hoi4_construction_queue lists the lines; the first lines get the civilian factories (15 per line), so put the supply hub or railway the front needs first. Verified by the line's new position in the own queue (or its absence after remove).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "enum": [
+       "top",
+       "up",
+       "down",
+       "bottom",
+       "remove"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "line": {
+      "maximum": 127,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "line",
+     "action",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_panel_probe": {
+   "description": "Read-only Mac construction panel/topbar opener binding. Verifies own manager/view, managed mode, named aliases, exact callback and optional renderer rectangle on the independently checked 1920x1080 canvas at GUI scale 1. Optional include_routing requires include_geometry and adds complete bounded mouse-route/cursor correlation. Independent include_shortcut checks the current plain T binding and preceding supported keyboard receivers. Already-selected mode skips the toggle control even while visibility is pending. No input, atomic cache completion, physical delivery or placement authority; never pauses or moves the cursor.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_geometry": {
+      "default": false,
+      "type": "boolean"
+     },
+     "include_routing": {
+      "default": false,
+      "type": "boolean"
+     },
+     "include_shortcut": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_place": {
+   "description": "Default-off Mac single-placement qualification: requires the exact ordinary building already selected, current own construction panel open and idle, hidden Find and original owned state at the calibrated client center. At most one unmodified move/down/up, exact original full-queue +1 readback; no opening, navigation, selection, Escape, retry, pause or worker. Requires complete typed direct-GUI rejection, separately observed dispatch guards and final original-field witnesses. This narrow precondition is not atomic delivery, full picking or absence of GUI effects. Cached SDL correlation does not prove current-event or full-picker eligibility; verified replay is historical.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_queue": {
+   "description": "Read-only preview of own construction collection, validated fully before paging. Exact Building/Railway types, reciprocal owner and snapshot-scoped full handles; named cost/produced/speed and factory counters. Building keys use fresh template catalog joins. Unknown types are metadata only. Progress ratio is unclamped produced/cost, not ETA or completion; optional include_location adds selected-building state/province IDs only for own-owned-and-controlled territory with reciprocal catalog/status joins. Default false avoids location reads. Optional include_ui requires the verified Linux layout and refuses native macOS before process reads; it implies location reads and joins visible-panel row text to exact own located building handles; displayed text may be stale and never authorizes input. It also reports owned construction selection modes 0/1/3 and canonical building key, independent of queued lines; selection does not prove placement eligibility or map routing. Railway paths, allocation and input remain unavailable. Run071 observed one advancing dockyard; Run072 observed its state/label with a late-lease protocol deviation. Selection, province and railway live validation pending. Never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_location": {
+      "default": false,
+      "type": "boolean"
+     },
+     "include_ui": {
+      "default": false,
+      "type": "boolean"
+     },
+     "limit": {
+      "default": 32,
+      "maximum": 128,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "default": 0,
+      "maximum": 2048,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_select": {
+   "description": "Default-off Mac qualification: select one own ordinary building template on an already-open construction panel using at most one unmodified cursor move and left click. Revalidates original callback/geometry and fresh target routing after cursor settle; verifies exact canonical mode1 selection with the complete own queue unchanged. An already-selected target uses no input. state_id binds an owned state for scope checking; this action does not select that state or place construction. No pause, screenshot, navigation, retry or later settlement of uncertain input. Verified replays are historical. Requires input.json construction_selection=true and exclusive lease; campaign use remains unqualified.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_target": {
+   "description": "Compact read-only queued amounts for one canonical public building and one own-owned-and-controlled state. The complete bounded queue, public catalog, target and reciprocal locations share one witness bracket; no first-page totals. Mac-only include_map_point defaults false; true adds a witnessed 1920x1080 center-terrain candidate joined to that own state, not the full picker, GUI routing or input authority. Incomplete queue evidence exposes null amounts. Never opens UI, moves the cursor, pauses, or proves building eligibility, capacity, built levels or input completion. Railway paths unsupported.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_map_point": {
+      "default": false,
+      "type": "boolean"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_construction_ui_probe": {
+   "description": "Read-only native Mac construction observation: own target/state/catalog/complete queue, panel owner links, local visibility, ordinary canonical selection and full bounded choice membership before the requested button state. Optional include_callback verifies the exact observer/item capture. Independent include_geometry checks requested-button ancestors, ordinary UI gates and its fully contained renderer rectangle on the own 1920x1080 canvas. Include_routing requires geometry and adds complete bounded mouse-route correlation. Hidden panels skip choice payload. No callback invocation, prerequisite evaluation, input, navigation, placement, atomic route completion or settled-frame authority; never pauses or moves the cursor. Other platforms refuse before process access.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "building_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_callback": {
+      "default": false,
+      "type": "boolean"
+     },
+     "include_geometry": {
+      "default": false,
+      "type": "boolean"
+     },
+     "include_routing": {
+      "default": false,
+      "type": "boolean"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "building_id",
+     "state_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_convoys": {
+   "description": "Own convoy count (equal to the top bar), own naval bases with level, and the convoy production lines, read from game memory (no input, never pauses). Needed convoys, escorts, convoys in use, convoy routes and lost convoys are not mapped and are listed under unavailable.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_country_status": {
+   "description": "Own country status read from the top bar's text boxes in GUI memory: political power, stability, war support, manpower (free), fuel, supply, convoys and world tension. Pure read; no lease needed, no input, no cursor movement, never pauses. Every field is {value, unit, display, raw_text, precision, source:'topbar_text', validated:false}; values are the UI-rounded text the game shows (stability, war support and world tension as 0..1 fractions, manpower and convoys as counts). A field that cannot be read is value:null with a reason (widget_not_found, text_unreadable, text_empty, topbar_text_unparsed) and is listed in 'unavailable'. Fails with topbar_unmaterialized in menus. Unvalidated until the live checks of docs/COUNTRY_STATUS_WARS_DESIGN.md are recorded.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_daily_governor": {
+   "description": "Owned Mac background plan preview. Research queues refill the same slot after natural completion; production supports one exact existing-line factory step per entry. Focus queues wait for fresh completed membership before the next Start. Default-off owner daily_research/daily_production/daily_focus; production also needs plan.production_permission. Start/update require an existing lease and explicit plan. Update requires a stopped worker. Digest reads fresh own state; stop joins without pausing the game. Uncertain input survives reconnect and never replays. Long campaigns remain unverified.",
+   "inputSchema": {
+    "oneOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "lease_token": {
+        "type": "string"
+       },
+       "op": {
+        "enum": [
+         "start",
+         "update"
+        ]
+       },
+       "plan": {
+        "type": "object"
+       }
+      },
+      "required": [
+       "op",
+       "lease_token",
+       "plan"
+      ]
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "op": {
+        "enum": [
+         "digest",
+         "stop"
+        ]
+       }
+      },
+      "required": [
+       "op"
+      ]
+     }
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_decision_take": {
+   "description": "Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables. A targeted decision has one row per target: pass `target` (part of the row title as hoi4_decisions_list shows it, e.g. the target country's name) to pick that row.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "decision": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "target": {
+      "maxLength": 96,
+      "type": "string"
+     }
+    },
+    "required": [
+     "decision",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_decisions_list": {
+   "description": "Open the decisions panel and list offered decisions (key, enabled by the game, whether a timer for it is running). Changes nothing.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_deploy_locations": {
+   "description": "Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_design_create": {
+   "description": "Create a new own equipment variant through the game's designer: Production panel, equipment selection list, the base design's Create variant button, then the designer's own controls, name box and Save. Equipment without module slots (tanks/planes without No Step Back/By Blood Alone, `other`) takes `upgrades` {row: level} (the designer's upgrade rows, e.g. armor, reliability, gun, engine, range; absolute levels 0..20, listed by hoi4_design_options); equipment with module slots (ships, and tanks/planes with No Step Back/By Blood Alone) takes `modules` {slot: module_key or null to empty the slot} (slot names and module keys as in hoi4_designs detail/hoi4_design_options; only the slots named are changed, the rest keep the base design's modules). `base` is a design id or an exact design name/type key. Saving a custom (named) design uses the designer's Save As New so the original design and its production lines stay unchanged. Spends army/air/navy experience read from the window and returned. Refused before any input: kind_mismatch, base_unknown/base_ambiguous (candidates listed), design_not_offered, slot_unknown (slots listed), name_taken, name_not_typable, nothing_to_change, designer_unsupported. Found while building (nothing saved, the draft is dropped): upgrade_unknown, upgrade_level_max, slot_locked, module_unavailable (unlocked modules listed), insufficient_experience. Verified when exactly one new own design with the requested name and exactly the requested modules (or the designer's computed stats) is listed by hoi4_designs; the receipt carries that row. Use the returned design_id with hoi4_production_add `design`.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "base": {
+      "type": [
+       "integer",
+       "string"
+      ]
+     },
+     "kind": {
+      "enum": [
+       "tank",
+       "plane",
+       "ship",
+       "other"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "modules": {
+      "additionalProperties": {
+       "maxLength": 96,
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "type": "object"
+     },
+     "name": {
+      "maxLength": 40,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "upgrades": {
+      "additionalProperties": {
+       "maximum": 20,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "type": "object"
+     }
+    },
+    "required": [
+     "kind",
+     "base",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_design_obsolete": {
+   "description": "Decommission (obsolete: true, default) or recommission (obsolete: false) an own equipment variant with the Production selection list's Decommission/Recommission button: a decommissioned variant is marked outdated equipment and hidden from the lists unless Show outdated equipment is ticked (the tool ticks and restores that filter itself when it must reach a hidden row). `design` is the design id or name from hoi4_designs. Refused before input: design_unknown, already_obsolete, not_obsolete. Verified from the design's obsolete flag in memory (hoi4_designs `obsolete`).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "design": {
+      "anyOf": [
+       {
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "maxLength": 128,
+        "type": "string"
+       }
+      ]
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "obsolete": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "design",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_design_options": {
+   "description": "What the equipment designers offer, read from the game's own designer windows (Production panel, equipment selection list, the row's Create variant button; nothing is saved and no experience is spent, the window is closed again). Without `base`: the own designs of that kind that can be a base (design_id, type, name, designer: upgrade or modules) and the held army/air/navy experience, read from memory with no input. With `base` (design_id, or an exact design name or equipment type key): the designer opens on it. Tank/plane without modules: the upgrade rows (key, label, level, experience per level measured by one step up and down, step limit) and the base stats. Ship: every module slot (locked or open, fixed or custom) with its current module and, per slot, the categories and unlocked modules the selector offers (module key, game name, experience cost text). `slot` limits the scan to one slot.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "base": {
+      "type": [
+       "integer",
+       "string"
+      ]
+     },
+     "kind": {
+      "enum": [
+       "tank",
+       "plane",
+       "ship",
+       "other"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "measure_costs": {
+      "type": "boolean"
+     },
+     "slot": {
+      "maxLength": 64,
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_design_set_production": {
+   "description": "Change which design an existing own production line builds: click the line's equipment picture, then the wanted design in the selection list (ordinary UI, same category). The game warns that progress of the line is lost; pass accept_progress_loss: true to confirm. `line` is the line index as hoi4_production_lines numbers it (0-based) or its handle; `design` a design id or name. Refused before input: line_unknown, design_unknown, design_wrong_type (a line only switches inside its equipment family as the game lists it), already_building, progress_loss_unconfirmed. Verified when the design's production_lines contain the line handle.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "accept_progress_loss": {
+      "type": "boolean"
+     },
+     "design": {
+      "anyOf": [
+       {
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "maxLength": 128,
+        "type": "string"
+       }
+      ]
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "line": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "line",
+     "design",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_designs": {
+   "description": "Own equipment designs (ship, plane, tank and other variants) read from game memory; no panel, no input, never pauses. Per design: id, name and class suffix, hull/chassis type, whether it is a default design or based on another, manpower, the production lines currently building it (line handle, requested factories); with detail:true also computed stats (non-zero only) and the chosen module per slot. Filters: kind, custom_only (named designs only), name. Obsolete and producible flags are not identified; design creation is not available.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "custom_only": {
+      "default": false,
+      "type": "boolean"
+     },
+     "detail": {
+      "default": false,
+      "type": "boolean"
+     },
+     "kind": {
+      "enum": [
+       "ship",
+       "plane",
+       "tank",
+       "other"
+      ],
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 64,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_diplomacy": {
+   "description": "Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "countries": {
+      "items": {
+       "pattern": "^[A-Z0-9]{3}$",
+       "type": "string"
+      },
+      "maxItems": 6,
+      "type": "array"
+     },
+     "country": {
+      "pattern": "^[A-Z0-9]{3}$",
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "states": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 5,
+      "type": "array"
+     },
+     "war_goal": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_diplomacy_act": {
+   "description": "Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "accept_widening": {
+      "type": "boolean"
+     },
+     "action": {
+      "type": "string"
+     },
+     "confirm": {
+      "type": "string"
+     },
+     "country": {
+      "pattern": "^[A-Z0-9]{3}$",
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "states": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 5,
+      "type": "array"
+     },
+     "try_anyway": {
+      "type": "boolean"
+     },
+     "war_goal": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_diplomacy_countries": {
+   "description": "Read-only (memory, no input, no pause): the countries of the world with what the player's own diplomacy shows about them: tag, name, number of states owned, faction name and members' faction, overlord, and the relations between the player and the country (war, guarantee given/received, non-aggression pact, military access each way, subject, lend-lease, docking rights, embargo...). Filters: query (tag or name part), relation (kind such as guarantee, non_aggression, military_access, subject, war), faction (name part), only_with_states (default true), limit (default 50, max 200) and offset. The actions available toward one country are listed by hoi4_diplomacy {country}; enemy opinion, AI intentions and anything hidden are not read.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "faction": {
+      "maxLength": 64,
+      "type": "string"
+     },
+     "limit": {
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "only_with_states": {
+      "type": "boolean"
+     },
+     "query": {
+      "maxLength": 64,
+      "type": "string"
+     },
+     "relation": {
+      "maxLength": 48,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_diplomacy_incoming": {
+   "description": "UNVALIDATED (no live test yet): Incoming diplomatic proposals (guarantee, alliance or faction invitation, lend-lease request, call to arms, ...) as open pop-ups. Without `answer` it is a pure read (memory only, no lease, nothing clicked): index, class (heuristic), title, description, whether Accept/Refuse are offered. With answer:\"accept\"|\"refuse\" (plus request_id and lease_token) it clicks that answer on ONE proposal chosen by `index`, by text in `which`, or the only open one (proposal_ambiguous / no_incoming_proposal otherwise). Verified by the pop-up closing. Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "answer": {
+      "enum": [
+       "accept",
+       "refuse"
+      ],
+      "type": "string"
+     },
+     "index": {
+      "maximum": 31,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "which": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_diplomacy_state": {
+   "description": "Own diplomatic situation from memory, no input, no lease, no pause: wars with enemies and allies at war, own faction (name and members; leader is the first member and unvalidated; goals and rules null), guarantees given and received, non-aggression pacts, military access, overlord and subjects with autonomy level, world tension. Foreign opinion, faction goals and rules, justification timers, war score, volunteers and the list of available diplomatic actions are null with reason offset_not_validated (use hoi4_diplomacy for the action rows of the open panel).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_division_disband": {
+   "description": "Disband own divisions of one army (the division list's delete button; their equipment and manpower go back to the pool). Use it to cut useless divisions that only eat equipment, manpower and supply: tiny starting divisions (2-4 battalions), cavalry or irregulars a strong player would not keep, once the army has enough good divisions. `divisions` are ids as hoi4_armies / hoi4_supply list them; listing every division of the army disbands the whole army in one press. Each division is verified gone. Refused before input when a division is not in that army.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "divisions": {
+      "items": {
+       "maxLength": 32,
+       "type": "string"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "type": "array"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "divisions",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_division_templates": {
+   "description": "Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_doctrine_adopt": {
+   "description": "Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "doctrine": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "track": {
+      "maxLength": 64,
+      "type": "string"
+     }
+    },
+    "required": [
+     "doctrine",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_doctrines": {
+   "description": "Own doctrines read from game memory (no input, no lease, never pauses). Per folder (land, naval, air, special_forces): the grand doctrine (id, loc key, XP cost and type), every track with its subdoctrine, mastery, banked mastery and an estimate of unlocked rewards; army/navy/air experience; the temporary doctrine cost reductions with uses left. include_catalog:true adds, per empty slot, the adoptable grand doctrines or the subdoctrines of the track with their script costs and costs after the best reduction (availability triggers are not evaluated). Validated live: grand doctrines, experience and cost reductions; track mastery fields are validated:false until a track holds a subdoctrine on screen.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_catalog": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_economy": {
+   "description": "Own-country named factory trigger counts, civilian project capacity and signed fixed-point political power. Pure reads; UI totals, stability, war support and shortages unavailable.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_economy_detail": {
+   "description": "Own economy detail from game memory (no input, no lease, never pauses): current economy, trade and conscription law ids with their modifiers, the country's aggregated modifier table (named where identified: consumer_goods_expected_value, min_export, conscription, fuel_gain_factor, research_speed_factor, arms factory speed), civilian factory consumers (consumer goods raw count, free civilians), industry total as on the top bar, fuel stock/capacity/gain factor. Trade deals, trade-civilian usage, exact stability/war support, manpower pool, PP daily gain, factory output modifier and fuel days left are null with reasons. Every block states validated true/false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_encirclement_candidates": {
+   "description": "Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "enemy": {
+      "items": {
+       "type": "string"
+      },
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "limit": {
+      "maximum": 20,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "max_gap": {
+      "maximum": 3,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "enemy"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_event_choose": {
+   "description": "Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "event": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "option": {
+      "maximum": 7,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "event",
+     "option",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_events": {
+   "description": "Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_faction_create": {
+   "description": "UNVALIDATED (no live test yet): Create a faction through the ordinary windows: the top bar faction button (ctrl+Q) opens the New Faction window with its templates (name, manifest, rule, goal), the chosen template's card, Create Faction, then the setup window: the name typed key by key into the name box (each key verified), optional `invite` country names picked in the Invite Countries window, and Create Faction. Refused with already_in_faction (read from memory) before any input; capability_unavailable when the top bar shows no faction button (the 'can create factions' rule is missing); template_required / template_unknown (offered templates listed, after the window was opened and closed again), invite_country_not_listed, button_disabled. Verified by the player being in a faction (named as asked) in memory. Windows are closed afterwards. Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "invite": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 8,
+      "type": "array"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 40,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "template": {
+      "maxLength": 64,
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_faction_invite_accept": {
+   "description": "UNVALIDATED (no live test yet): Answer the open faction invitation pop-up ('<country> wants us to join their faction'): accept by default, `decline:true` refuses. Uses the pop-up's own Accept / Decline buttons; only a faction_invitation proposal is touched (no_incoming_proposal otherwise; see hoi4_diplomacy_incoming). Verified by the pop-up closing and, when accepted, the player being in a faction. Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "decline": {
+      "type": "boolean"
+     },
+     "index": {
+      "maximum": 31,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "which": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_faction_leave": {
+   "description": "UNVALIDATED (no live test yet): Leave the player's faction (as the leader this dismantles it) with the faction view's leave button (top bar faction button, leave_faction_button) and the game's confirmation. Needs confirm:\"leave_faction\" (else confirmation_required, nothing sent); not_in_faction before any input. Verified by the player no longer being in a faction. Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "confirm": {
+      "enum": [
+       "leave_faction"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "confirm",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_admiral": {
+   "description": "Put an admiral in command of an own fleet (or unassign with unassign:true) through the fleet panel's 'Select Commander' list: Strategic Navy map mode, the fleet card, the commander portrait, the admiral's row (scrolled into view), a confirmation when he leads another fleet. With list:true it only opens the list and returns the admirals it offers (name, skill) without assigning. Typed refusals before input: fleet_unknown, reserve_fleet, nothing_to_change; unknown_commander lists the names offered. Verified from the fleet's leader in memory. The admirals' skills, traits and rank are the list's own; an admiral who leads another fleet is moved (the game's confirmation is accepted).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "admiral": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "fleet": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "list": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "unassign": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "fleet",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_assign": {
+   "description": "UNVALIDATED (no live test yet): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "route": {
+      "enum": [
+       "right_click",
+       "drag"
+      ],
+      "type": "string"
+     },
+     "task_force": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "to_fleet": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_force",
+     "to_fleet",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_balance": {
+   "description": "UNVALIDATED (no live test yet): Rebalance the ships of one own fleet's task forces with the toolbar's Task-force-o-matic button (btn_taskforce_o_matic; the button's meaning is inferred from its name, hover it first). Verified by the same ships grouped differently. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "fleet": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "fleet",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_create": {
+   "description": "Found a new fleet from one own task force with the game's ordinary controls: Strategic Navy map mode, the task force's fleet card, its Select button, then the bottom bar's '+' (new fleet) card; the new fleet holds exactly that task force and gets the game's default name (see hoi4_fleets). Typed refusals before input: task_force_unknown, task_force_ambiguous, nothing_to_change (already alone in its fleet), reserve_fleet. Verified from the fleet list in memory (one more fleet, holding only that task force). Use hoi4_fleet_mission / hoi4_fleet_region / hoi4_fleet_admiral on the new fleet afterwards.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "task_force": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_force",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_delete": {
+   "description": "UNVALIDATED (no live test yet): DESTROY one own task force and its ships with the toolbar delete button (btn_delete) and the 'Delete task force' confirmation. Needs confirm:\"destroy_ships\" (else confirmation_required, nothing sent). Verified by the task force being gone. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "confirm": {
+      "enum": [
+       "destroy_ships"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "task_force": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_force",
+     "confirm",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_merge": {
+   "description": "UNVALIDATED (no live test yet): Merge all task forces of one own fleet into a single task force: Strategic Navy map mode (F2), the fleet's card, no task force selected, the fleet panel toolbar's Merge button (btn_merge, 'Merge the selected task forces'). Verified by the fleet holding exactly one task force with the same ships. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "fleet": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "fleet",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_mission": {
+   "description": "Give one own task force a mission with the game's ordinary mission buttons (Strategic Navy map mode F2, fleet card, the task force entry's Select button, the mission button; the map mode is restored afterwards). Missions: patrol, strike_force, convoy_raiding, convoy_escort, mine_laying, mine_sweeping, training, invasion_support (all operate in the fleet's assigned sea regions; add regions with hoi4_fleet_region first) and hold (cancel the mission and sail to the closest port). Typed refusals before any input: task_force_unknown, task_force_ambiguous, nothing_to_change, no_assigned_region, reserve_fleet; found while driving: mission_unavailable (the game disables the button, e.g. mine missions without the technology). Verified from the task force's mission code in memory (hold 0, patrol 1, strike force 2, convoy raiding 3, convoy escort 4, training 7, invasion support 9 read back live). One mission per call; the ships sail when the game runs.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "mission": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "task_force": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_force",
+     "mission",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_region": {
+   "description": "Add a sea region to a fleet's area of operation (or remove it with remove:true) with ordinary input: Strategic Navy map mode, the Find view centres `state_id` (a coastal state next to the sea), left clicks on the map read the sea region names from the game's region view until `region` (exact display name, e.g. 'Eastern North Sea', 'Danish Belts') is found, then the fleet card and a right click on that region (remove: the remove-region button first). Typed refusals: fleet_unknown, already_assigned, region_not_assigned, reserve_fleet; region_not_found lists the sea regions seen (nothing is ordered then); mission_unavailable when the game disables the remove button. The fleet's task forces patrol/escort/raid in this area. Verified from the fleet's region list in memory (hoi4_fleets assigned_regions).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "fleet": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "region": {
+      "maxLength": 96,
+      "type": "string"
+     },
+     "remove": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "fleet",
+     "region",
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_reserve": {
+   "description": "UNVALIDATED (no live test yet): Send one own task force to the reserve fleet with the toolbar's set-as-reserve button (btn_exclude); a confirmation dialog is accepted. Verified by the task force being in the reserve fleet. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "task_force": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_force",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleet_split": {
+   "description": "UNVALIDATED (no live test yet): Split one own task force in half: fleet card, the entry's Select, toolbar 'Split the selected task force in half' (btn_split_in_half). Verified by the fleet gaining one task force with the same ships. Adds refusal task_force_too_small (fewer than two ships). Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "task_force": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "task_force",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_fleets": {
+   "description": "Own navy read from game memory (no panel, no input, never pauses): fleets, task forces (location: port province, state and strategic region; ship count by type; summed strength and percent; mission code and name: hold, patrol, strike_force, convoy_raiding, convoy_escort, training, reserve, invasion_support; admiral is per fleet) and per fleet the admiral and the assigned sea regions (fleet area of operation) and, with ships:true, every ship (id, name, type, hull, design/variant, strength, max strength, max organisation, experience, morale). Filter by fleet or task-force name with `fleet`. Morale and experience fields are validated:false; fuel, supply and current organisation are not mapped.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "fleet": {
+      "maxLength": 64,
+      "type": "string"
+     },
+     "ships": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_completed": {
+   "description": "Preview: fresh own completed-focus membership from the current Linux engine predicate, with active key and bounded sorted pages. Independent of open GUI; all members validated before paging. Completion cause, repeat counts, changed/shared trees and eligibility unavailable. Bounded Linux Rhineland completion verified; other Focus trees and full campaigns unverified. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "maximum": 4096,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_input_probe": {
+   "description": "Read-only Mac preview: witness the exact unfinished own Focus node in an already-open idle tree using the input binding. Optional include_pan also verifies complete obstacle geometry. Reports bounded logical payload-read counts and whole-observation time, with no controller, navigation, cursor movement, pause, eligibility or input authority. Other platforms explicitly refuse.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focus_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_]+$",
+      "type": "string"
+     },
+     "include_pan": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "focus_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_list": {
+   "description": "Bounded own canonical focus keys; filter is a case-sensitive key prefix. Linux also reports own selected details; Mac reports catalog only. All own memberships and keys validated before pagination; branch visibility, eligibility and input authorization unavailable. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "filter": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "limit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "maximum": 4096,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_node_detail": {
+   "description": "Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. Optional raw Sprite/Text/Frame diagnostics; no input or eligibility authority.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focus_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_geometry": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "focus_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_search_state": {
+   "description": "Read-only current own Focus search highlight and match counts for an exact canonical focus_id. Validates all search-cache/current-item joins before returning the selected key. A highlight is not an open detail, assignment or eligibility proof. Optional include_control adds exact own query text, listener and renderer diagnostics. Independent keyboard/text receiver identities are diagnostic; effective delivery and input authority remain unavailable.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focus_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_control": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "focus_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_selected_detail": {
+   "description": "Compact fresh exact own selected focus detail window. Start binding is window.start.ordinary_binding; the node symbol is a separate control. Refuses missing, different or multiple selected details. Optional existing raw renderer diagnostics; no client point, input or eligibility authority.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focus_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_geometry": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "focus_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_focus_start": {
+   "description": "Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focus": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "focus",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_front_plan": {
+   "description": "War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "enemy": {
+      "description": "enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]",
+      "items": {
+       "type": "string"
+      },
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "max_axes": {
+      "maximum": 6,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "enemy"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_industry": {
+   "description": "Own civilian, military and dockyard factory counts (validated against the top bar total) and political power; consumer goods share, output modifier, trade-civilian usage, exact stability, war support and PP daily gain are null with reasons. Pure read.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_input_geometry": {
+   "description": "Read-only own GUI dimensions and scale diagnostics. Mac-only include_source_point adds witnessed cached ordinary SDL coordinates joined to the owned window; defaults off. No current event/frame, hit routing or input authorization.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_source_point": {
+      "default": false,
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_input_lease": {
+   "description": "Exclusive configured-controller lease for ordinary macOS input. Acquire uses holder; renew/release use only lease_token. Status takes only op. Observations do not need a lease.",
+   "inputSchema": {
+    "oneOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "holder": {
+        "type": "string"
+       },
+       "op": {
+        "const": "acquire"
+       },
+       "seconds": {
+        "maximum": 900,
+        "minimum": 30,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "op",
+       "holder"
+      ]
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "lease_token": {
+        "type": "string"
+       },
+       "op": {
+        "const": "renew"
+       },
+       "seconds": {
+        "maximum": 900,
+        "minimum": 30,
+        "type": "integer"
+       }
+      },
+      "required": [
+       "op",
+       "lease_token"
+      ]
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "lease_token": {
+        "type": "string"
+       },
+       "op": {
+        "const": "release"
+       }
+      },
+      "required": [
+       "op",
+       "lease_token"
+      ]
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "op": {
+        "const": "status"
+       }
+      },
+      "required": [
+       "op"
+      ]
+     }
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_intelligence": {
+   "description": "Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Whether the agency is created, upgrade levels and progress, the operative roster and the intel network values are NOT mapped on this build state and are reported as state_read:false rather than guessed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_operations": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_map_mode": {
+   "description": "Switch the map mode with the game's own F-key shortcut, as a human checks the map: political (F1, default; armies and fronts), naval (F2), air (F3, air regions and superiority), supply (F4), terrain (F5), resistance (F6), compliance (F7), resources (F8), air_raids (F9), factions (F10). A view change only (no game state changes, nothing to read back): switch to political again before giving army orders. Look at a mode when its domain matters: supply before an offensive, resistance and compliance for occupied states, air for superiority, naval for sea lanes.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "mode": {
+      "enum": [
+       "political",
+       "naval",
+       "air",
+       "supply",
+       "terrain",
+       "resistance",
+       "compliance",
+       "resources",
+       "air_raids",
+       "factions"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "mode",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_mio_design_team": {
+   "description": "UNVALIDATED (no live test yet): put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "organization": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "slot": {
+      "maximum": 15,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "organization",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_mio_policy": {
+   "description": "UNVALIDATED (no live test yet): attach a policy to an organisation: politics view, the slot's roster, the organisation's details button, Open policies, the policy row (by localised name). `organization` and `policy` are script keys (mio_policy_general_ruthless_contracts, ...). Typed refusals: organization_unknown, organization_not_allowed, policy_unknown (before input); mio_system_absent, slot_unknown, organization_not_offered, policy_not_offered (lists the rows) from the windows before the click. Verified from the detail window's attached policy name only (verification gui_only). Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "organization": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "policy": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "slot": {
+      "maximum": 15,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "organization",
+     "policy",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_mio_trait": {
+   "description": "UNVALIDATED (no live test yet): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "list": {
+      "type": "boolean"
+     },
+     "organization": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "slot": {
+      "maximum": 15,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "trait_index": {
+      "maximum": 63,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "organization",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_mios": {
+   "description": "Military-industrial organisations and designers for the own country, read-only (no input, no lease, never pauses). Reports the own active designer ideas (validated live: e.g. GER_daimler_benz), the organisation catalogue of the install for the own tag (key, category land/naval/air, equipment, research categories, trait count, icon, matching designer idea; allowed_for_tag is true/false/null when it depends on DLC or flags) and the memory template count. Per-organisation state (size, funds, unlocked traits, policy, design team, production lines) is NOT mapped on this build state and is reported unavailable (mio_system.state_read:false). tag overrides the catalogue's tag; include_all lists every organisation script.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_all": {
+      "type": "boolean"
+     },
+     "tag": {
+      "pattern": "^[A-Z]{3}$",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_naval_invasion": {
+   "description": "UNVALIDATED (no live test yet): Order ONE naval invasion of an enemy coastal state for land units: the army's card selects it (or a box selection takes exactly the named `divisions` standing in one state), the battle plan toolbar's naval invasion button (with_harbor:true picks the harbour variant), a left click on the source state's centre, a right click on the destination state's centre, Return. One deliberate order per call, nothing is repeated. Aim: the Find view centres each state and the click goes to the centre plus an optional pixel offset ([dx,dy], within 350); a centre that is not a valid port or coast needs an offset. The game needs convoys, preparation days and naval dominance (read the army card). Typed refusals before input: own_state, enemy_required (the state's owner or controller is not at war with us), not_coastal, source_not_coastal, no_transports (no convoys), no_such_army, no_such_division, divisions_not_together, divisions_not_isolated, army_location_unknown, invalid_target; while driving selection_mismatch, button_disabled, input_readback_failed (the drawing is cancelled with Escape). Verified by more battle plan orders on the army or divisions heading for a province of the state. Result has validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "divisions": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 40,
+      "minItems": 1,
+      "type": "array"
+     },
+     "landing_offset": {
+      "items": {
+       "maximum": 350,
+       "minimum": -350,
+       "type": "integer"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "source_offset": {
+      "items": {
+       "maximum": 350,
+       "minimum": -350,
+       "type": "integer"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+     },
+     "source_state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "with_harbor": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_naval_production_options": {
+   "description": "Read-only (memory, no input): the ship and convoy designs the Production panel can build (not decommissioned) with their equipment keys and existing lines, and the own naval production lines with their line index and dockyard count. Use the equipment key and optional design id with hoi4_production_add; ship and convoy lines are added through the Production panel's naval category.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_navy_ui": {
+   "description": "DEBUG ONLY (never listed to a player): dump the naval UI tree or send one ordinary input.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "type": "integer"
+     },
+     "depth": {
+      "type": "integer"
+     },
+     "index": {
+      "type": "integer"
+     },
+     "items": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "letter": {
+      "type": "string"
+     },
+     "op": {
+      "type": "string"
+     },
+     "path": {
+      "type": "string"
+     },
+     "pixels": {
+      "type": "integer"
+     },
+     "root": {
+      "type": "string"
+     },
+     "x": {
+      "type": "number"
+     },
+     "y": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "op",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_observe": {
+   "description": "What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "kinds": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+     },
+     "limit": {
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "since": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "urgent_only": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_occupation": {
+   "description": "Read-only (memory, no input, no pause): resistance and compliance of occupied states (La Résistance). Per state: state_id, name, owner, controller, role (occupied_by_player, own_state_held_by_other, owned_non_core_or_resisting, other), resistance %, resistance target %, resistance speed %/day, compliance %, compliance speed %/day, plus unconfirmed extras (target before additions, target added from a neighbouring state). Also the player's occupation law key (unconfirmed slot). Default scope: states the player controls that have resistance or another owner, and own states others hold; scope all lists every occupied or resisting state in the world. Garrison strength and suppression are not read.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "maximum": 1100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "scope": {
+      "enum": [
+       "player",
+       "all"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_occupation_law": {
+   "description": "Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input: an occupied or resisting state's view, its occupation-law button, the default-law button, the law's row. Verified from the country's occupation law in memory (hoi4_occupation player_occupation_law). Laws, mild to harsh: no_garrison, foreign_civilian_oversight, local_police_force_garrison, secret_police_oversight, military_governor_occupation, martial_law_occupation, forced_labor_occupation, harsh_quotas_occupation, brutally_oppressive_occupation. Harsher laws cut resistance and raise the garrison need; milder ones raise compliance slowly and need fewer garrison troops. A law the game disables for you (ideology, DLC) is not applied: the readback refuses it with action_not_applied. `via_state` is an occupied or resisting state id (default: the first one hoi4_occupation lists).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "law": {
+      "enum": [
+       "no_garrison",
+       "foreign_civilian_oversight",
+       "local_police_force_garrison",
+       "secret_police_oversight",
+       "military_governor_occupation",
+       "martial_law_occupation",
+       "forced_labor_occupation",
+       "harsh_quotas_occupation",
+       "brutally_oppressive_occupation"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "via_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "law",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_operative_assign": {
+   "description": "UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` (operation overview) are not built and refuse with mission_not_built / operation_not_built. Typed refusals: invalid_arguments, target_required, country_has_no_states, unknown_country (before input); agency_not_created, operative_bar_unavailable, operative_unknown, operative_busy, mission_unavailable (the game disables the button) from the windows before the first state-changing click. Verified from the operative's on-mission marker on the bar only (verification gui_only). Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "country": {
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "mission": {
+      "type": "string"
+     },
+     "operation": {
+      "type": "string"
+     },
+     "operative": {
+      "maximum": 31,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "operative",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_operative_recruit": {
+   "description": "UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, the candidate at position `candidate` (0-based, default 0) of the recruitment window (names and traits are not readable, so the choice is by position). Typed refusals found from the windows before the click: agency_not_created, operative_bar_unavailable, no_free_operative_slot, unknown_candidate. Verified from the bar and the recruitment progress bar only (verification gui_only). Results carry validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "candidate": {
+      "maximum": 31,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_overview": {
+   "description": "Fresh owned-country process snapshot. Pure bounded reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_peace_exit": {
+   "description": "Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation); accepted bids persist. Refused before input with exit_not_available or no_conference_open. Verified when the conference window closes. validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_peace_options": {
+   "description": "Read the open peace conference from its window: header (current player, own remaining points = current_score, world tension, bidding phase, turn), which controls are usable (demand kinds take_state/liberate/puppet/force_government/take_navy, end turn, done), participant, available-action and bid lists as the window shows them, and for the asked `states` their owner and occupier. Costs are not stored: a state's tooltip shows them and hoi4_peace_take reports each state's cost as the score drop. No lease, no input. validated:false (no conference was arranged live; procedure in docs/PLAYBOOK_TOOL_GAPS.md).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "states": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 16,
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_peace_status": {
+   "description": "Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_peace_submit": {
+   "description": "Submit Demands for the round (the conference's end-turn button; one submission per round under the blind-bid rules). Refused before input with round_not_ready or no_conference_open. Verified when the header (phase, turn, score of the turn) changes or the window closes. validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_peace_take": {
+   "description": "In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "max_cost": {
+      "minimum": 0,
+      "type": "number"
+     },
+     "puppet": {
+      "type": "boolean"
+     },
+     "release": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "states": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "states",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_plan": {
+   "description": "Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.",
+   "inputSchema": {
+    "oneOf": [
+     {
+      "additionalProperties": false,
+      "properties": {
+       "op": {
+        "const": "get"
+       }
+      },
+      "required": [
+       "op"
+      ]
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "op": {
+        "const": "set"
+       },
+       "plan": {
+        "type": "object"
+       }
+      },
+      "required": [
+       "op",
+       "plan"
+      ]
+     }
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_plan_run": {
+   "description": "Carry out the standing plan for up to `seconds` (default 60): answer news and single-option events, fill empty research slots and the focus slot from the plan's lists, make planned politics picks and decisions, keep the training queue, put idle military factories on the priority lines and spend idle civilian factories on planned construction. Every step is an ordinary verified action under the given lease; the game is never paused. Returns early when a choice event needs the model or a peace conference opens. Use it instead of hoi4_wait_for while nothing else needs attention.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "seconds": {
+      "maximum": 300,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_politics_choose": {
+   "description": "Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "category": {
+      "enum": [
+       "government",
+       "research_production",
+       "military_staff"
+      ],
+      "type": "string"
+     },
+     "idea": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "slot": {
+      "maximum": 7,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "category",
+     "slot",
+     "idea",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_politics_options": {
+   "description": "List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "category": {
+      "enum": [
+       "government",
+       "research_production",
+       "military_staff"
+      ],
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "slot": {
+      "maximum": 7,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "category",
+     "slot",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_production_add": {
+   "description": "Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "design": {
+      "anyOf": [
+       {
+        "minimum": 1,
+        "type": "integer"
+       },
+       {
+        "maxLength": 128,
+        "type": "string"
+       }
+      ]
+     },
+     "equipment": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "factories": {
+      "maximum": 150,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "equipment",
+     "factories",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_production_controls": {
+   "description": "Linux read-only preview: joins an exact own current production line_handle and base equipment_id to its production row, named one-factory add/subtract controls, ordinary callback and local blockers. Optional same-snapshot renderer geometry. Never opens a panel, moves the cursor, pauses or authorizes input. Full line collection is validated before reading UI. Factory buttons clamp to at least one and depend on keyboard modifiers. Live validation pending.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "equipment_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_geometry": {
+      "default": false,
+      "type": "boolean"
+     },
+     "line_handle": {
+      "pattern": "^0x[0-9a-f]{16}$",
+      "type": "string"
+     }
+    },
+    "required": [
+     "line_handle",
+     "equipment_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_production_lines": {
+   "description": "Fresh own equipment-line collection only, validated in full before paging; default page 32. Exact Military/Naval snapshot-scoped opaque handles and signed active/damaged/requested factory counters. Unsupported types are metadata only, ownership unproved; completeness describes this collection's type coverage. Known owned lines can expose a base equipment type key after fresh canonical membership and variant/type checks; explicit unavailability covers unreviewed types. Custom variant identity, general production, allocation/idle capacity, eligibility and input authority unavailable. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "default": 32,
+      "maximum": 128,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "default": 0,
+      "maximum": 2048,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_production_set": {
+   "description": "factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "equipment": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "factories": {
+      "maximum": 150,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "line": {
+      "maximum": 2047,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "line",
+     "equipment",
+     "factories",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_production_shortages": {
+   "description": "Per production line (military and naval) the resources it was allocated per day and which of them are in deficit for the whole country. The efficiency penalty is null (not in memory). Pure read; validated:false.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_railway_build": {
+   "description": "Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends must be own or controlled land the game lets railways cross. Verified by the own construction queue holding one more line or one more railway level (a path already queued gets another level on its line). Typed refusals before input: no_node_in_state (lists what to build), province_not_in_state, unknown_state. Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "from_province": {
+      "maximum": 99999,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "from_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "to_province": {
+      "maximum": 99999,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "to_state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research": {
+   "description": "Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "limit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "maximum": 8192,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_category": {
+   "description": "Read-only exact public folder ID association with the current own research tree, named tab, dense selection index and ordinary callback. Optional raw Sprite diagnostics; no tab switch or input authorization.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "folder_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+     },
+     "include_geometry": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "folder_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_extras": {
+   "description": "Own research bonuses that the research panel only shows as tooltips, read from game memory (no input, no lease, never pauses): limited-use technology bonuses ('free research bonus': name, uses left, bonus as a fraction, categories), limited-use cost reductions, idea research bonuses, and technology-sharing faction membership. The ahead-of-time penalty, licenses and scientist rosters are not mapped (see the not_read block; scientists belong to hoi4_special_projects). Validated live against the focus and idea scripts of the owned game.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_folders": {
+   "description": "Fresh sorted exact installed public research-folder IDs for the verified Linux layout. Native macOS returns unsupported_platform before memory reads. Independent of open GUI; canonical keys only, with no aliases, eligibility, geometry or input authorization. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_node_detail": {
+   "description": "One exact own current technology key: complete current-record ownership checks, target-only raw renderer/hierarchy and own detail-state diagnostics. Unrelated GUI is outside scope; no client rectangle or input authorization.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "technology_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "type": "string"
+     }
+    },
+    "required": [
+     "technology_id"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_nodes": {
+   "description": "Current own-tree nodes joined to public technology keys and conditional ordinary-control diagnostics. Full model validated before prefix filtering/pagination; default page 25. Visibility, eligibility and click routing unavailable. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "filter": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "limit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "maximum": 512,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_slot_control": {
+   "description": "One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. Optional include_geometry adds bounded Sprite cache and typed hierarchy observations. No guessed Background name, coordinates or input authorization.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_geometry": {
+      "type": "boolean"
+     },
+     "slot": {
+      "maximum": 31,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "slot"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_start": {
+   "description": "Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "replace": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "slot": {
+      "maximum": 15,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "technology": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "technology",
+     "slot",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_research_ui": {
+   "description": "Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_resources": {
+   "description": "Own strategic resources per day from memory: for oil, aluminium, rubber, tungsten, steel, chromium and coal the gross produced, available_for_production, daily need of the production lines, balance, balance (= the Production view strip number) and shortage flag, the raw ten pool slots, plus fuel stock and capacity. Imports/exports and the shortage penalty percent are null with a reason (not identified). Pure read, no lease, never pauses; validated:false (see evidence).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_save": {
+   "description": "Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games. Use it at the end of a campaign segment so the next launch continues exactly from this point (no turns are replayed). The game stays paused if it was paused.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_special_project_assign": {
+   "description": "Put a scientist and/or a project into one own research facility with ordinary input: Research panel (W), Experimental Facilities tab, the facility card's scientist portrait and the roster row, then the facility icon, the project entry and Start. Give scientist (name as listed by hoi4_special_projects) and/or project (key, e.g. sp_air_radar); a project needs a scientist already in the facility or passed together. Verified from memory when the facility's own scientist and project slots hold them. Starting a project spends breakthrough points of its specialization. Refused before any input: facility_unknown, unknown_scientist (closest names), scientist_wrong_specialization, scientist_busy, unknown_project, project_wrong_specialization, project_busy, facility_has_project, scientist_required, already_assigned. Refused at the screen without starting: scientist_not_offered, project_not_offered, project_not_startable. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "facility_id": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "project": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "scientist": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "facility_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_special_project_recruit": {
+   "description": "Recruit one scientist the Recruit Scientist window offers (names under recruitable.candidates of hoi4_special_projects) for political power (25/50/75/100 by how many scientists are idle). Scientists button, Recruit Scientist, the candidate's row. Verified when the character appears in the own scientist list. Refused before any input: unknown_candidate (lists who is offered), already_recruited, insufficient_political_power.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "scientist": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "scientist",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_special_project_stop": {
+   "description": "Stop the running project of one own facility: facility window, the stop button and the game's 'Stop project' confirmation (accepted). Stopping takes about 10 game days (the scientist stays); canceling before an iteration completes refunds the breakthrough points once stopped. Verified when the project enters its stopping state (hoi4_special_projects shows stopping_days) or the facility shows no project. Refused before any input: facility_unknown, no_project, already_stopping.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "facility_id": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "facility_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_special_project_unassign": {
+   "description": "Take the scientist out of an own facility (the small button on the portrait of the facility card). Refused before any input: facility_unknown, no_scientist, facility_has_project (stop the project first with hoi4_special_project_stop and wait for it to finish stopping). Verified when the facility's scientist slot is empty.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "facility_id": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "facility_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_special_projects": {
+   "description": "Own special-project state read from memory (no input, no lease, nothing paused): facilities (facility_id, building, specialization, assigned scientist, running project), scientists (name, skills per specialization nuclear/naval/air/land, traits, assigned_facility_id), the visible project pool (key, specialization, base_days, running_in_facility_id) and the four breakthrough accounts (points and progress percent). Specialization 'nuclear' is called Physics on screen. A new facility is built with hoi4_construction_add (building land_facility, air_facility, naval_facility or nuclear_facility). Pass rules:true to add each project's vanilla rules from the install (breakthrough cost, parent projects, required technologies, the available trigger, prototype resources, time and complexity). Use hoi4_special_projects_panel for state names and what can be started.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "rules": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_special_projects_panel": {
+   "description": "Open the Research panel's Experimental Facilities tab with ordinary input (W, the tab), read what only the screen shows and close the panel again: each facility card's state name, research speed, scientist and project text; with facility_id also that facility's project window: every project the game offers there now with display name, type, approximate time, requirement text ('Requires a Scientist to start') and speed. Starts nothing. Needs the lease; moves the cursor.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "facility_id": {
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "rules": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_state_slots": {
+   "description": "Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "state_ids": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "state_ids",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_states": {
+   "description": "Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. Pure read.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "query": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "query"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_supply": {
+   "description": "Own divisions, the provinces and states they stand in and the supply system, read from game memory (no input, no lease, no pause). Per division: id (as hoi4_armies), army, template, state_id/province_id, hit points and percent of the template maximum, manpower against need, equipment held against need per archetype, plus supply: supply_percent (the 'Supply status' of the army tooltip, 100 = fully supplied), supply_need and supply_received per day, supply_band (full|ok|low|very_low) and the supply and demand of its province. `provinces` lists each province where own divisions stand: supply the province receives, demand placed by the units there, headroom (negative = overdrawn, the divisions there lose supply), flows from the supply nodes (node id, node province and kind when the node is own), supply hub present, railway level and naval base level. `states` gives the state's local supply and infrastructure. `supply_nodes` lists own hubs and ports with province, railway and naval base level. `below_70`/`below_50` list divisions under those supply percentages, `shortages` those with missing equipment or below `strength_below` (default 0.7) hit points, `overdrawn_provinces` the stacks that draw more than the province receives (spread them out, or build a hub or rail). Supply fields are validated:false (internally consistent, not yet compared with an on-screen reading); hub and rail throughput, trucks and trains, stored buffer and attrition are listed under `unavailable` as null.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "description": "only this army's divisions",
+      "maxLength": 128,
+      "type": "string"
+     },
+     "strength_below": {
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number"
+     },
+     "summary": {
+      "description": "per-army rows, totals and the first 10 of each short list; no division rows (a few KB)",
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_technology_list": {
+   "description": "Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility; available:true lists only techs not yet researched whose prerequisites are all researched. Pure reads; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "available": {
+      "type": "boolean"
+     },
+     "filter": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "limit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "offset": {
+      "maximum": 8192,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_template_create": {
+   "description": "Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 40,
+      "type": "string"
+     },
+     "priority": {
+      "enum": [
+       "reserve",
+       "regular",
+       "elite"
+      ],
+      "type": "string"
+     },
+     "regiments": {
+      "items": {
+       "items": {
+        "maxLength": 64,
+        "type": "string"
+       },
+       "maxItems": 5,
+       "type": "array"
+      },
+      "maxItems": 5,
+      "type": "array"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "support": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 5,
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "regiments",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_template_delete": {
+   "description": "Delete an own division template (its Delete button in the U panel and the game's confirmation). The game refuses a template used by divisions (also as garrison template) or by training lines; that is reported as template_in_use (with the division and line counts) before any click. Verified when the template is gone from the own list.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "template": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "template",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_template_edit": {
+   "description": "Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "allow_in_use": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "new_name": {
+      "maxLength": 40,
+      "type": "string"
+     },
+     "priority": {
+      "enum": [
+       "reserve",
+       "regular",
+       "elite"
+      ],
+      "type": "string"
+     },
+     "regiments": {
+      "items": {
+       "items": {
+        "maxLength": 64,
+        "type": "string"
+       },
+       "maxItems": 5,
+       "type": "array"
+      },
+      "maxItems": 5,
+      "type": "array"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "support": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 5,
+      "type": "array"
+     },
+     "template": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "template",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_template_get": {
+   "description": "Own division templates read from game memory (no input, no lease, no pause): per template the regiment columns (column x rows, e.g. [[infantry,infantry,infantry],...]), support companies, width, hit points, base organisation (mean of the battalions and companies; `organisation_live` is the same mean times the country's organisation modifier, taken from a live division of the template), manpower, supply use, equipment need per archetype (pieces), and per equipment archetype the variant a live division holds with its per-piece stats. `equipment_stats_estimate` (soft/hard attack, defence, breakthrough, armour, piercing, air attack) is an ESTIMATE summed from each battalion's main equipment variant, validated:false. Exact fields were recomputed against common/units and live divisions (hit points and manpower matched all own divisions). Optional `template` (exact name) narrows to one.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "template": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_template_options": {
+   "description": "Battalion and company types the Division Designer offers now (unlocked), read from its selection window (opens the designer on an empty draft and closes it again; nothing is saved and no experience is spent): per type the key, game name, group, army experience to add, width, hit points, organisation, manpower, supply use and equipment need from the definitions. Also the extra experience for a new column per group and the army experience held.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_template_rename": {
+   "description": "Rename an own division template (designer name box, Update). Refused with name_taken, name_not_typable or template_unknown before input. Divisions keep using the template.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "new_name": {
+      "maxLength": 40,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "template": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "template",
+     "new_name",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_time": {
+   "description": "Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "paused": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "speed": {
+      "maximum": 4,
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_trade": {
+   "description": "Read the Trade view (opens it with the R key, changes nothing): the player's civilian factories and, for the seven resources (oil, aluminium, rubber, tungsten, steel, chromium, coal), balance, produced, imported, exported, special projects, production lines and needed; with `resource` it also selects that resource's filter and lists its trade partners (country, units bought now, units available as 'current/available', convoys used). Selecting a filter is an ordinary click on the view. Set a purchase with hoi4_trade_set.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "limit": {
+      "maximum": 60,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "resource": {
+      "maxLength": 24,
+      "type": "string"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_trade_set": {
+   "description": "Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it, or its three-letter tag such as USA) through the Trade view: select the resource filter, click the partner's row, set the offer window's buy slider (a click on its track, then its arrows until the window's own 'Buy amount' reads the number) and press Send. amount: an integer (0 cancels the purchase), \"max\" or \"needed\" (the window's button that buys what the country needs). Typed refusals before anything is sent: partner_not_listed (lists the partners), amount_above_available (the window's maximum is named), trade_unavailable (the game offers no slider). Verified from the partner's contracted units in the view's Delivered column after Send (the game moves the goods with convoys over the following days; imports show in the balance table once they arrive).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "amount": {
+      "anyOf": [
+       {
+        "maximum": 100000,
+        "minimum": 0,
+        "type": "integer"
+       },
+       {
+        "enum": [
+         "max",
+         "needed"
+        ],
+        "type": "string"
+       }
+      ]
+     },
+     "country": {
+      "maxLength": 64,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "resource": {
+      "maxLength": 24,
+      "type": "string"
+     }
+    },
+    "required": [
+     "resource",
+     "country",
+     "amount",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_train": {
+   "description": "Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "count": {
+      "maximum": 24,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "deploy_state_id": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "template": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "template",
+     "count",
+     "deploy_state_id",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_wait_change": {
+   "description": "Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "kinds": {
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+     },
+     "limit": {
+      "maximum": 200,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "since": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "timeout_seconds": {
+      "maximum": 30,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "urgent_only": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "since"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_wait_for": {
+   "description": "Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "timeout_seconds": {
+      "maximum": 50,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "until_assignments": {
+      "additionalProperties": false,
+      "anyOf": [
+       {
+        "required": [
+         "focus_id"
+        ]
+       },
+       {
+        "properties": {
+         "research": {
+          "minItems": 1
+         }
+        },
+        "required": [
+         "research"
+        ]
+       }
+      ],
+      "properties": {
+       "focus_id": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_]+$",
+        "type": "string"
+       },
+       "research": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "slot": {
+           "maximum": 31,
+           "minimum": 0,
+           "type": "integer"
+          },
+          "technology_id": {
+           "maxLength": 256,
+           "minLength": 1,
+           "pattern": "^[A-Za-z0-9_]+$",
+           "type": "string"
+          }
+         },
+         "required": [
+          "slot",
+          "technology_id"
+         ],
+         "type": "object"
+        },
+        "maxItems": 32,
+        "type": "array"
+       }
+      },
+      "type": "object"
+     },
+     "until_date": {
+      "items": {
+       "type": "integer"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+     },
+     "until_research_ui": {
+      "additionalProperties": false,
+      "properties": {
+       "selected_slot": {
+        "maximum": 31,
+        "minimum": 0,
+        "type": "integer"
+       },
+       "view": {
+        "enum": [
+         "panel",
+         "tree"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "view"
+      ],
+      "type": "object"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_war_goal_targets": {
+   "description": "Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "enemy": {
+      "items": {
+       "type": "string"
+      },
+      "type": [
+       "string",
+       "array"
+      ]
+     },
+     "limit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "enemy"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_war_risk": {
+   "description": "Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "country": {
+      "pattern": "^[A-Z0-9]{3}$",
+      "type": "string"
+     }
+    },
+    "required": [
+     "country"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_war_stats": {
+   "description": "Read-only (memory, no input, no pause): casualties per country in each war, as the war overview counts them. Each war is a group of war relations (sides inferred by who fights whom); per relation the losses of both countries (men), per war the sum per side, and per country the game's own total (the `casualties` trigger formula: sum over its wars plus the largest extra count). By default only the wars the player fights; all:true lists every war in the world. War score, leaders and goals are not read here (see hoi4_diplomacy_state).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "all": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_wars": {
+   "description": "Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "enemies": {
+      "items": {
+       "maxLength": 3,
+       "minLength": 3,
+       "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+     },
+     "max_states": {
+      "maximum": 1100,
+      "minimum": 1,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  }
+ }
+}

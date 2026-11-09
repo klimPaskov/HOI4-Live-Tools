@@ -39,6 +39,10 @@ each situation to the right file. Core files, in reading order:
    [Nationalist China FAIR](references/china-fair.md) or [Poland META](references/poland-meta.md).
 6. [Sources and version checks](references/sources.md) when verifying patch-dependent mechanics.
 
+To write, review or revise a campaign plan (plan.json, plan.md, plan.brief.md) for any tag, date
+and goal, use the [strategist skill](../hoi4-strategist/SKILL.md). It reads these references as its
+strategy knowledge base and does not copy them.
+
 Missing tools and reliability defects are tracked in
 [PLAYBOOK_TOOL_GAPS](../../docs/PLAYBOOK_TOOL_GAPS.md). Where a playbook rule needs a
 tool that does not exist, hand back with the exact gap; never improvise raw input.

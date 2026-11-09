@@ -22,6 +22,18 @@
 //! | `target_date_reached`     | true    | the plan's `stop_on_date` is reached or passed (needs `game_hour`) |
 //! | `own_state_occupied`, `border_uncovered`, `threatened_state_undefended` | true | the `hoi4_wars` alert of that code (a proxy-based stage A read) |
 //!
+//! The plan's strategy layer (`plan_run` step 0) raises its own alarms through [`strategy`]
+//! from what the runner judged, not from a read:
+//!
+//! | key                        | default | alarm raised when                                   |
+//! |----------------------------|---------|-----------------------------------------------------|
+//! | `goal_reached`             | true    | every `goal.predicates` holds (each run while so)   |
+//! | `goal_at_risk`             | true    | a `goal.fail_predicates` holds, or the deadline has passed or is less than `goal_risk_days` away (each run while so) |
+//! | `goal_risk_days`           | 30      | game days before `goal.deadline` that count as at risk |
+//! | `checkpoint_missed`        | true    | a checkpoint's date came with a `must` false (once) |
+//! | `phase_changed`            | true    | the active phase changed in this run (once)         |
+//! | `contingency_triggered`    | true    | a contingency's trigger held in this run (once)     |
+//!
 //! A boolean key set to `false`, or a numeric key set to `false`/`null`
 //! disables that alarm. Every alarm is `{code, message, fix:{tool, args_hint}}`;
 //! `args_hint` names the arguments the caller must still fill in (it never
@@ -311,9 +323,152 @@ pub fn compute(plan: &Value, seen: &Observations) -> Vec<Value> {
     out
 }
 
+/// `alarms.goal_risk_days` (default 30): game days before `goal.deadline` from which a goal not
+/// yet reached is at risk; None when disabled.
+pub fn goal_risk_days(plan: &Value) -> Option<f64> {
+    let config = &plan["alarms"];
+    threshold(config, "goal_risk_days", 30.0)
+}
+
+/// The strategy layer's alarms: `summary` is the runner's `strategy` block (goal status), `news`
+/// the changes of this run (`{kind, detail}`: phase_changed, checkpoint_missed,
+/// contingency_triggered). Every fix is a plan revision through `hoi4_plan`.
+pub fn strategy(plan: &Value, summary: &Value, news: &[Value]) -> Vec<Value> {
+    let config = &plan["alarms"];
+    let mut out = Vec::new();
+    let goal = &summary["goal"];
+    let why = goal["why"].as_str().unwrap_or("");
+    match goal["status"].as_str() {
+        Some("reached") if enabled(config, "goal_reached") => out.push(alarm(
+            "goal_reached",
+            format!("The plan's goal is reached: {why}; end the war or set the next goal"),
+            "hoi4_plan",
+            json!({"op": "set", "plan": {"goal": "<next goal>", "active": "<false to stop>"}}),
+        )),
+        Some("at_risk") if enabled(config, "goal_at_risk") => out.push(alarm(
+            "goal_at_risk",
+            format!("The plan's goal is at risk: {why}"),
+            "hoi4_plan",
+            json!({"op": "set", "plan": {"phases": "<revised>", "contingencies": "<revised>"}}),
+        )),
+        _ => {}
+    }
+    for change in news {
+        let d = &change["detail"];
+        let said = |k: &str| {
+            d[k].as_str()
+                .map_or_else(|| d[k].to_string(), str::to_string)
+        };
+        match change["kind"].as_str().unwrap_or("") {
+            "checkpoint_missed" if enabled(config, "checkpoint_missed") => out.push(alarm(
+                "checkpoint_missed",
+                format!(
+                    "Checkpoint {} (by {}) missed: {} false; else: {}",
+                    said("checkpoint"),
+                    said("by"),
+                    d["failed"],
+                    match said("else").as_str() {
+                        "" => "revise".to_string(),
+                        other => other.to_string(),
+                    }
+                ),
+                "hoi4_plan",
+                json!({"op": "set", "plan": {"checkpoints": "<revised>", "phases": "<revised>"}}),
+            )),
+            "phase_changed" if enabled(config, "phase_changed") => out.push(alarm(
+                "phase_changed",
+                format!(
+                    "Phase {} -> {} ({}){}",
+                    said("from"),
+                    said("to"),
+                    said("reason"),
+                    if d["revise_on_enter"] == json!(true) {
+                        "; the phase asks for a plan revision"
+                    } else {
+                        ""
+                    }
+                ),
+                "hoi4_plan",
+                json!({"op": "get"}),
+            )),
+            "contingency_triggered" if enabled(config, "contingency_triggered") => out.push(alarm(
+                "contingency_triggered",
+                format!(
+                    "Contingency {} triggered ({}); phase {}, overrides {}{}",
+                    said("contingency"),
+                    said("reason"),
+                    said("phase"),
+                    d["overrides"],
+                    match d["revise"].as_str() {
+                        Some(r) => format!("; revision asked: {r}"),
+                        None => String::new(),
+                    }
+                ),
+                "hoi4_plan",
+                json!({"op": "get"}),
+            )),
+            _ => {}
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strategy_alarms_follow_the_goal_status_and_this_runs_changes() {
+        let summary =
+            json!({"goal": {"status": "at_risk", "why": "the deadline 1937.01.01 has passed"}});
+        let news = vec![
+            json!({"kind": "phase_changed", "detail": {"from": "build", "to": "war", "reason": "r",
+                "revise_on_enter": true}}),
+            json!({"kind": "checkpoint_missed", "detail": {"checkpoint": "c1", "by": "1936.06.01",
+                "failed": ["controls_state:550"], "else": "phase:defend"}}),
+            json!({"kind": "contingency_triggered", "detail": {"contingency": "k", "reason": "r",
+                "phase": null, "overrides": ["war"], "revise": "quick"}}),
+        ];
+        let alarms = strategy(&json!({}), &summary, &news);
+        assert_eq!(
+            codes(&alarms),
+            [
+                "goal_at_risk",
+                "phase_changed",
+                "checkpoint_missed",
+                "contingency_triggered"
+            ]
+        );
+        assert!(alarms[1]["message"]
+            .as_str()
+            .unwrap()
+            .contains("asks for a plan revision"));
+        assert!(alarms[2]["message"]
+            .as_str()
+            .unwrap()
+            .contains("controls_state:550"));
+        assert!(alarms.iter().all(|a| a["fix"]["tool"] == "hoi4_plan"));
+        let quiet = json!({"alarms": {"goal_at_risk": false, "phase_changed": false}});
+        assert_eq!(
+            codes(&strategy(&quiet, &summary, &news)),
+            ["checkpoint_missed", "contingency_triggered"]
+        );
+        let reached = json!({"goal": {"status": "reached", "why": "w"}});
+        assert_eq!(
+            codes(&strategy(&json!({}), &reached, &[])),
+            ["goal_reached"]
+        );
+        assert!(strategy(&json!({}), &json!(null), &[]).is_empty());
+        assert_eq!(goal_risk_days(&json!({})), Some(30.0));
+        assert_eq!(
+            goal_risk_days(&json!({"alarms": {"goal_risk_days": 10}})),
+            Some(10.0)
+        );
+        assert_eq!(
+            goal_risk_days(&json!({"alarms": {"goal_risk_days": false}})),
+            None
+        );
+    }
 
     fn codes(alarms: &[Value]) -> Vec<&str> {
         alarms.iter().map(|a| a["code"].as_str().unwrap()).collect()
