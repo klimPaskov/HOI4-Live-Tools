@@ -1,0 +1,33 @@
+terrain_modifiers = {
+  mud = {
+    terrain = { type = "plains" value = 0.5 }
+  }
+}
+
+settings = {
+  temperature = {
+    weather_extreme_cold = { -100.0 -12.0 }
+    weather_very_cold = { -12.0 -4.0 }
+    weather_very_hot = { 20.0 28.0 }
+    weather_extreme_hot = { 28.0 100.0 }
+  }
+  mud = {
+    water_gain_on_rain_light = 0.5
+    water_gain_on_rain_heavy = 1.8
+    water_gain_max = 200.0
+    water_gain_min = 5.0
+    water_dryout_temperature = { 2.0 38.0 }
+    water_dryout_multiplier = { 0.0005 0.4 }
+    min_temperature = -1.0
+  }
+  snowing = {
+    snow_gain_on_snowing = 1.0
+    snow_gain_on_blizzard = 5.0
+    snow_gain_max = 80.0
+    snow_melt_temperature = { 0.0 12.0 }
+    snow_melt_multiplier = { 0.001 0.9 }
+    temperature = { 1.0 -4.0 }
+    weather_ground_snow_medium = { 20.0 40.0 }
+    weather_ground_snow_high = { 40.0 1000.0 }
+  }
+}

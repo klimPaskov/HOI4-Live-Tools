@@ -7,6 +7,13 @@ focus_tree = {
 	focus = { id = AAA_right cost = 5 prerequisite = { focus = AAA_root } mutually_exclusive = { focus = AAA_left }
 		available = { has_war_with = BBB } completion_reward = { create_wargoal = { type = annex_everything target = BBB } } }
 	focus = { id = AAA_dlc_only cost = 5 allow_branch = { has_dlc = "Fixture DLC" } }
+	focus = { id = AAA_army_focus cost = 10 prerequisite = { focus = AAA_root }
+		completion_reward = {
+			army_experience = 25
+			add_power_balance_value = { id = AAA_balance value = 0.1 }
+			if = { limit = { has_power_balance = { id = AAA_balance } } set_power_balance = { id = AAA_council set_default = yes } }
+			effect_tooltip = { add_power_balance_value = { id = AAA_balance value = 0.5 } }
+		} }
 	focus = { id = AAA_end cost = 7 prerequisite = { focus = AAA_left focus = AAA_right } completion_reward = { remove_ideas = aaa_spirit } }
 }
 focus_tree = {

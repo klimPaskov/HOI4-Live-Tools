@@ -17,6 +17,12 @@
     facts.py decisions <TAG>     facts.py missions <TAG>
     facts.py hooks <TAG>         facts.py event <id>
     facts.py grep <token>        facts.py defines <KEY>
+    facts.py terrain-width <TAG | state ids> [--route A B]   terrain mix, combat widths, width target
+    facts.py units [--category C] [--unlocked-by D --tag T]  battalions and companies: width, needs, rows
+    facts.py weather <state | --region ID | R<id> | name>     monthly mud, snow, cold, heat
+    facts.py bop <TAG>           balance of power: ranges, start value, focuses/decisions that move it
+    facts.py occupation-laws     occupation laws, resistance/compliance thresholds, own states at start
+    facts.py ports <TAG> [--enemy E]   naval bases, overseas theatres, sea routes, coastal port candidates
 
 Global options (before or after the command): --game DIR, --userdir DIR, --mod PATH (repeat),
 --date D, --mode fair|meta, --json, --tag T (our country, for DLC-aware and FAIR answers), --dlc.
@@ -30,6 +36,7 @@ defaults. Plain compact text by default; --json for machines. Stdlib only, Pytho
 import argparse
 import json
 import os
+import re
 import sys
 
 if __package__ in (None, ""):
@@ -41,9 +48,10 @@ from hoi4facts import focus as focusmod  # noqa: E402
 from hoi4facts import mapgraph  # noqa: E402
 from hoi4facts import research as researchmod  # noqa: E402
 from hoi4facts import scenario as scenariomod  # noqa: E402
+from hoi4facts import theatre as theatremod  # noqa: E402
 from hoi4facts.content import default_userdir, mod_from_arg, mods_from_userdir  # noqa: E402
 from hoi4facts.game import Game  # noqa: E402
-from hoi4facts.world import World  # noqa: E402
+from hoi4facts.world import World, gate_text  # noqa: E402
 
 GLOBALS = ("game", "userdir", "mod", "date", "mode", "json", "tag", "dlc", "out")
 
@@ -369,6 +377,8 @@ def cmd_state(args):
                vp_src=None)
     row["vp_sources"] = {str(k): v for k, v in st["vp_src"].items()}
     row.pop("vp_src", None)
+    occ = w.occupation_start(st["owner"]).get(args.id) if st["owner"] else None
+    row["occupation"] = occ or {}
 
     def text(r):
         return [f"{r['id']} {r['name']} owner {r['owner']} controller {r['controller']} cores {','.join(r['cores'])}"
@@ -381,6 +391,10 @@ def cmd_state(args):
                 "resources: " + ", ".join(f"{k} {v}" for k, v in r["resources"].items()),
                 "VP: " + ", ".join(f"{p} {w.province_name(p) or ''} {v:g}" for p, v in r["vps"].items()),
                 "provinces: " + " ".join(map(str, r["provinces"])),
+                "occupation at start: " + (", ".join(f"{k} {r['occupation'][k]}" for k in
+                                                     ("resistance_active", "resistance", "compliance", "garrison")
+                                                     if k in r["occupation"]) + f" [{', '.join(r['occupation']['srcs'])}]"
+                                           if r["occupation"] else "none set"),
                 "neighbours: " + "; ".join(f"{n['state']} {n['name']} ({n['owner']})" for n in r["neighbours"])]
 
     return emit(args, row, text)
@@ -548,9 +562,13 @@ def cmd_laws(args):
         for cat, row in sorted(x.items()):
             out.append(f"{cat} (now {row['current']})")
             for o in row["options"]:
+                g = gate_text(o.get("gates") or [])
                 out.append(f"  {'*' if o['id'] == row['current'] else ' '}{o['id']} \"{o['name']}\" {o['cost']}PP"
+                           + (f" | GATES {g}" if g else "")
                            + (f" | {o['modifier'][:120]}" if o.get("modifier") else "")
                            + (f" | needs {o['available'][:120]}" if o.get("available") else "") + f" [{o['src']}]")
+        out.append("GATES: numeric and named conditions of `available` with the static parts decided (has_dlc, tag, "
+                   "if-branches); 'any of' = an OR block")
         return out
 
     return emit(args, laws, text)
@@ -578,7 +596,10 @@ def _decision_text(rs):
             days = f"{days}={x['mission_days_value']['v']}"
         out.append(f"{x['id']} \"{x['name']}\" cost {x['cost']}" + (f" mission {days}d" if days is not None else "")
                    + (f" remove {x['days_remove']}d" if x.get("days_remove") else "")
-                   + (" once" if x.get("fire_only_once") else "") + f" [{x['src']}]")
+                   + (" once" if x.get("fire_only_once") else "")
+                   + (f" NEVER-TAKE ({'; '.join(x['never_take'][:3])})" if x.get("never_take") else "")
+                   + (" starts mission " + ", ".join(f"{m['id']} ({m['days']}d)" for m in x["starts_missions"])
+                      if x.get("starts_missions") else "") + f" [{x['src']}]")
         for k in ("available", "visible", "activation", "complete_effect", "timeout_effect", "remove_effect", "controls"):
             if x.get(k):
                 v = x[k]
@@ -586,10 +607,27 @@ def _decision_text(rs):
     return out
 
 
+def flag_decisions(w, tag, rows):
+    """Add never_take (scenariomod.never_take) and the missions a decision starts (with their timers)."""
+    never = {x["id"]: x for x in scenariomod.never_take(w, tag)}
+    timers = {m["id"]: m.get("mission_days") for m in w.decisions(tag, missions=True)}
+    for x in rows:
+        if x["id"] in never:
+            x["never_take"] = never[x["id"]]["reasons"]
+        starts = [e.split(":", 1)[1] for e in x.get("complete_effect", []) if e.startswith("activate_mission:")]
+        if starts:
+            x["starts_missions"] = [{"id": m, "days": timers.get(m)} for m in starts]
+    return rows
+
+
 def cmd_decisions(args):
     w = world(args, args.TAG)
-    rows = [x for x in w.decisions(args.TAG, missions=False) if x.get("specific") or args.all]
-    return emit(args, rows, _decision_text)
+    rows = flag_decisions(w, args.TAG, [x for x in w.decisions(args.TAG, missions=False)
+                                        if x.get("specific") or args.all])
+    if args.never:
+        rows = [x for x in rows if x.get("never_take")]
+    return emit(args, rows, lambda rs: _decision_text(rs) + [
+        "NEVER-TAKE: " + scenariomod.NEVER_METHOD])
 
 
 def cmd_missions(args):
@@ -660,6 +698,326 @@ def cmd_grep(args):
                                         for r in rs] or ["no match"])
 
 
+def cmd_terrain_width(args):
+    w = world(args)
+    g = w.graph()
+    if g is None:
+        return fail("no map graph")
+    subsets = {}
+    if args.route:
+        r = mapgraph.route(g, args.route[0], args.route[1])
+        if r is None:
+            return fail(f"no land route {args.route[0]} -> {args.route[1]}")
+        subsets["route"] = r["path"]
+    targets = [x for t in (args.target or []) for x in str(t).replace(",", " ").split()]
+    ids = [int(x) for x in targets if x.isdigit()]
+    tags = [x for x in targets if re.match(r"^[A-Z][A-Z0-9]{2}$", x)]
+    if ids:
+        st = w.states()
+        missing = [s for s in ids if s not in st]
+        if missing:
+            return fail(f"unknown states {missing}")
+        subsets["states " + ",".join(map(str, ids))] = [p for s in ids for p in st[s]["provinces"]]
+    for t in tags:
+        subsets[f"{t} territory"] = w.provinces_of([t])
+        ours = w.tag
+        pairs = [(ours, t)] if ours and ours != t else [(e, t) for e in (args.enemy or w.at_war_with(t))]
+        for attacker, defender in pairs:
+            th = theatremod.theatre(w, attacker, defender)
+            front = theatremod.front_provinces(w, attacker, defender) | theatremod.front_provinces(w, defender, attacker)
+            subsets[f"{attacker}-{defender} border"] = sorted(front)
+            subsets[f"{attacker}->{defender} routes"] = sorted({p for r in th["routes"] for p in r.get("path", [])})
+    if not subsets:
+        return fail("give a TAG, state ids or --route A B")
+    rows = []
+    for name, provs in subsets.items():
+        tw = theatremod.terrain_width(w, provs)
+        rows.append({"subset": name, "mix": tw["mix"], "width": tw["width"]})
+    fight = [p for name, provs in subsets.items() if not name.endswith("territory") for p in provs] or \
+        [p for provs in subsets.values() for p in provs]
+    total = theatremod.terrain_width(w, fight)
+    data = {"subsets": rows, "fighting": total, "terrains": {t: {k: r.get(k) for k in ("combat_width",
+            "combat_support_width", "movement_cost", "attack", "width_src")} for t, r in w.terrains().items()
+            if r.get("combat_width")}, "d": theatremod.WIDTH_METHOD}
+
+    def mixtext(m):
+        return ", ".join(f"{t} {round(s * 100)}%" for t, s in m["shares"].items()) + f" ({m['provinces']} provinces)"
+
+    def wtext(x):
+        if not x or x.get("target") is None:
+            return "no width target"
+        d = x["detail"]
+        fit = "; ".join(f"{t} " + "/".join(f"{v['divisions']}x{v['fill']:.2f}" for v in f.values())
+                        for t, f in d["fit"].items())
+        return (f"target width {x['target']} (dominant {x['dominant']} {round(x['dominant_share'] * 100)}%, battle widths "
+                f"{x['battle_widths'][x['dominant']]}; score {d['dominant_score']}, mix {d['mix_score']}); best for the mix "
+                + ", ".join(f"{b['width']} ({b['mix_score']})" for b in x["best_for_mix"])
+                + (f"; best <= 25: {x['best_small']['width']} ({x['best_small']['mix_score']})" if x.get("best_small") else "")
+                + f" | divisions x fill per 1/2 directions: {fit}")
+
+    def text(x):
+        out = ["terrain widths: " + "; ".join(f"{t} {r['combat_width']:g}+{r['combat_support_width']:g} "
+                                             f"[{r['width_src']}]" for t, r in x["terrains"].items())]
+        for r in x["subsets"]:
+            out.append(f"{r['subset']}: {mixtext(r['mix'])}")
+        out.append(f"fighting terrain: {mixtext(x['fighting']['mix'])}")
+        out.append(wtext(x["fighting"]["width"]))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_units(args):
+    if args.unlocked_by:
+        args.date = args.unlocked_by
+    w = world(args)
+    units = w.sub_units()
+    done = set(w.country(w.tag)["techs"]) if w.tag else set()
+    year = int(w.date.split(".")[0])
+    ready = set()
+    if w.tag:  # equipment archetypes with a variant enabled by the start techs
+        from hoi4facts import derive
+        from hoi4facts.world import _equipment_archetypes
+        arche = _equipment_archetypes(w.game)
+        for e, techs in derive.equipment_unlocks(w.game).items():
+            if techs & done:
+                ready |= {e, arche.get(e, e)}
+    rows = []
+    for uid, u in sorted(units.items(), key=lambda kv: (kv[1]["row"], kv[0])):
+        if args.category:
+            c = args.category.lower()
+            hay = [u["row"], u["group"] or "", uid] + u["categories"] + u["type"]
+            if not any(c in (h or "").lower() for h in hay):
+                continue
+        elif u["row"] in ("air", "naval") and not args.all:
+            continue
+        row = {k: u[k] for k in ("id", "name", "row", "group", "type", "combat_width", "manpower", "training_time",
+                                  "need", "special_forces", "allowed_battalion_groups", "categories", "stats",
+                                  "active", "src")}
+        row["unlocked_by"] = u["unlocked_by"]
+        if w.tag:
+            have = [x["tech"] for x in u["unlocked_by"] if x["tech"] in done]
+            row["unlocked"] = bool(u["active"] or have)
+            row["unlocked_via"] = have or (["active = yes"] if u["active"] else [])
+            row["by_year"] = row["unlocked"] or any((x["year"] or 0) <= year for x in u["unlocked_by"])
+            row["equipment_missing"] = [e for e in u["need"] if e not in ready]
+        rows.append(row)
+    if args.unlocked_by and w.tag:
+        rows = [r for r in rows if r["unlocked"]]
+    data = {"tag": w.tag or None, "date": w.date, "rows": rows,
+            "d": "common/units sub_units; row from group / divisional = no / regimental = no; unlocked = active = yes or "
+                 "a technology with enable_subunits the tag has at the date (history set_technology); by_year = "
+                 "an enabling technology's start_year <= the date's year (researchable without the ahead penalty); "
+                 "equipment_missing = needed archetypes with no variant enabled by those techs (a stockpile or "
+                 "licence may still hold some)"}
+
+    def text(x):
+        out = []
+        for r in x["rows"]:
+            need = ",".join(f"{k} {v:g}" for k, v in r["need"].items())
+            st = r["stats"]
+            bits = [f"{r['id']} \"{r['name']}\" {r['row']}", f"group {r['group']}", f"width {r['combat_width']:g}",
+                    f"mp {r['manpower']:g}"]
+            if need:
+                bits.append("needs " + need)
+            for k in ("max_organisation", "soft_attack", "hard_attack", "defense", "breakthrough", "maximum_speed",
+                      "suppression"):
+                if k in st:
+                    bits.append(f"{k} {st[k]:g}")
+            if r["special_forces"]:
+                bits.append("SPECIAL FORCES")
+            if r["allowed_battalion_groups"]:
+                bits.append("with " + "/".join(r["allowed_battalion_groups"]))
+            if "unlocked" in r:
+                bits.append(("UNLOCKED by " + ",".join(r["unlocked_via"])) if r["unlocked"] else
+                            ("locked; techs " + ",".join(f"{t['tech']}({t['year']})" for t in r["unlocked_by"][:3])))
+                if r["equipment_missing"]:
+                    bits.append("no equipment tech yet: " + ",".join(r["equipment_missing"]))
+            elif r["unlocked_by"]:
+                bits.append("techs " + ",".join(f"{t['tech']}({t['year']})" for t in r["unlocked_by"][:3]))
+            out.append(" | ".join(bits) + f" [{r['src']}]")
+        out.append(x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def _region_arg(w, arg, force_region=False):
+    """[(region id, provinces of the target in it)] for a state id, a region id (--region, R102, region:102)
+    or a region name."""
+    regs = w.strategic_regions()
+    a = str(arg).strip()
+    m = re.match(r"^(?:r|region:)(\d+)$", a, re.I)
+    if m or (force_region and a.isdigit()):
+        rid = int(m.group(1) if m else a)
+        return [(rid, len(regs[rid]["provinces"]))] if rid in regs else []
+    if a.isdigit():
+        st = w.states().get(int(a))
+        if not st:
+            return []
+        pr = theatremod.province_regions(w)
+        counts = {}
+        for p in st["provinces"]:
+            if p in pr:
+                counts[pr[p]] = counts.get(pr[p], 0) + 1
+        return sorted(counts.items(), key=lambda kv: -kv[1])
+    hits = [rid for rid, r in regs.items() if a.lower() in (r["name"] or "").lower()]
+    return [(rid, len(regs[rid]["provinces"])) for rid in sorted(hits)]
+
+
+def cmd_weather(args):
+    w = world(args)
+    regs = _region_arg(w, args.target, args.region)
+    if not regs:
+        return fail(f"no strategic region for {args.target!r} (a state id, --region ID, R<id> or a region name)")
+    data = {"target": args.target, "regions": [], "settings_src": w.weather_settings()["src"],
+            "terrain_modifiers": w.weather_settings()["terrain_modifiers"], "d": theatremod.WEATHER_METHOD}
+    for rid, n in regs:
+        r = w.strategic_regions()[rid]
+        data["regions"].append({"region": rid, "name": r["name"], "provinces": n, "src": r["src"],
+                                "months": theatremod.weather_months(w, rid),
+                                "summary": theatremod.weather_summary(w, rid)})
+
+    def text(x):
+        out = []
+        for r in x["regions"]:
+            s = r["summary"]
+            out.append(f"region {r['region']} {r['name']} ({r['provinces']} provinces) [{r['src']}]: mud {s['mud']} "
+                       f"(heavy {s['heavy_mud']}); ground snow {s['snow']}; extreme cold {s['cold']}; extreme heat {s['heat']}")
+            for m in r["months"]:
+                t = m["temperature"]
+                out.append(f"  {m['name']} {t[0]:g}..{t[1]:g}C rain {round(m['rain'] * 100)}% (heavy "
+                           f"{round(m['heavy_rain'] * 100)}%) snow {round(m['snowfall'] * 100)}% mud {m['mud']} "
+                           f"(wet {m['wet']:g} x{m['mud_factor']:g}) ground snow {m['ground_snow']}"
+                           + (f" cold {m['cold']}" if m["cold"] else "") + (f" heat {m['heat']}" if m["heat"] else "")
+                           + (f" sandstorm {round(m['sandstorm'] * 100)}%" if m["sandstorm"] else ""))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def _bop_text(rows, w=None):
+    out = []
+    for r in rows:
+        d = r["definition"] or {}
+        st = r["start"]
+        out.append(f"{r['id']} [{r['src']}]: sides {d.get('left_side')} (-1) / {d.get('right_side')} (+1); "
+                   f"initial {d.get('initial_value')}; decisions {d.get('decision_category')}")
+        out.append("  at start: " + (f"ACTIVE value {st['value']} range {st.get('range')} [{st.get('src')}]"
+                                     if st.get("active") else "not active"))
+        for g in r["gained_by"][:4]:
+            out.append(f"  gained by {g['kind']} {g['id']} ({g['effect']} "
+                       f"{g['value'] if g['value'] is not None else 'to the initial value'})"
+                       f" [{g['src']}]")
+        for rg in d.get("ranges", []):
+            mods = ", ".join(f"{k} {v}" for k, v in rg["modifier"].items() if v not in (0, 0.0))
+            out.append(f"  range {rg['id']} {rg['min']}..{rg['max']}" + (f": {mods}" if mods else "")
+                       + (f"; on enter {', '.join(rg['on_activate'][:3])}" if rg["on_activate"] else ""))
+        out.append(f"  moved by: " + ", ".join(f"{k} {n}" for k, n in r["mover_counts"].items()))
+        for m in r["movers"][:40]:
+            amount = m["value"] if m["value"] is not None else (f"{m['modifier']} {m['daily']}/day" if m["modifier"] else "")
+            out.append(f"    {m['kind']} {m['id']}: {m['effect']} {amount}" + (f" (via {m['via']})" if m["via"] else "")
+                       + f" [{m['src']}]")
+        if len(r["movers"]) > 40:
+            out.append(f"    ... {len(r['movers']) - 40} more (--json)")
+    if not rows:
+        out.append("no balance of power for this tag (common/bop, history, focuses, decisions)")
+    return out
+
+
+def cmd_bop(args):
+    w = world(args, args.TAG)
+    rows = scenariomod.bop(w, args.TAG)
+    return emit(args, {"tag": args.TAG, "balances": rows, "d": scenariomod.BOP_METHOD},
+                lambda x: _bop_text(x["balances"]) + ["method: " + x["d"]])
+
+
+def cmd_occupation_laws(args):
+    w = world(args)
+    data = {"laws": w.occupation_laws(), "modifiers": w.resistance_modifiers(),
+            "activities": w.resistance_activities(), "fair": "public"}
+    if w.tag:
+        data["own_states"] = {str(k): v for k, v in w.occupation_start(w.tag).items()}
+
+    def text(x):
+        out = ["Occupation laws (state_modifier; * default, ^ starting, ! main fallback):"]
+        for r in x["laws"]:
+            flags = ("*" if r.get("default") else "") + ("^" if r.get("starting") else "") + \
+                ("!" if r.get("main_fallback") else "")
+            mods = ", ".join(f"{k} {v}" for k, v in r["state_modifier"].items())
+            out.append(f"- {flags}{r['id']} \"{r['name']}\": {mods}" + (f"; visible {r['visible'][:90]}" if r.get("visible") else "")
+                       + (f"; available {r['available'][:90]}" if r.get("available") else "") + f" [{r['src']}]")
+        out.append("Resistance / compliance thresholds:")
+        for m in x["modifiers"]:
+            mods = ", ".join(f"{k} {v}" for k, v in m["state_modifier"].items())
+            out.append(f"- {m['id']} ({m['type']}) at {m['threshold']}: {mods or '-'}"
+                       + (f"; enabled {m['enabled'][:80]}" if m.get("enabled") else "") + f" [{m['src']}]")
+        out.append("Resistance activities: " + ", ".join(f"{a['id']}" for a in x["activities"]))
+        if "own_states" in x:
+            out.append(f"{w.tag} states with occupation settings at start (resistance on / resistance / compliance / garrison):")
+            for sid, r in x["own_states"].items():
+                out.append(f"- {sid} {r['name']}{'' if r['core'] else ' (non-core)'}: {r.get('resistance_active', '-')} / "
+                           f"{r.get('resistance', '-')} / {r.get('compliance', '-')} / {r.get('garrison', '-')} "
+                           f"[{', '.join(r['srcs'])}]")
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_ports(args):
+    w = world(args, args.TAG)
+    data = theatremod.ports(w, args.TAG, args.enemy, steps=args.steps, below=args.below)
+
+    def text(x):
+        out = [f"{x['tag']} naval bases (province name state level capacity sea zones):"]
+        for p in x["ports"]:
+            out.append(f"- {p['province']} {p['name'] or ''} st {p['state']} {p['state_name']} lvl {p['level']} cap "
+                       f"{p['capacity']:g} sea {p['sea'][:3]} region {p['region']}")
+        out.append(f"capacity: {x['d']} [{', '.join(x['capacity_sources'])}]")
+        for t in x["theatres"]:
+            out.append("")
+            out.append(f"vs {t['enemy']}: " + ("OVERSEAS (no land link from the capital)" if t.get("overseas") else
+                                               ("land-linked to the capital" if t.get("overseas") is False else "?")))
+            r = t.get("route")
+            if r:
+                out.append(f"  sea route port {r['from_port']} -> {r['to_port']}: {r['steps']} sea zones, {r['pixels']} px; "
+                           f"rules {', '.join(x['rule'] for x in r['rules']) or 'none'}")
+                for rr in t.get("rules", []):
+                    out.append(f"  rule {rr['rule']}: navy closed when {'/'.join(rr['navy_closed_when']) or 'never'}; "
+                               f"disabled if {rr.get('is_disabled') or '-'}; required provinces "
+                               + ", ".join(f"{p} ({o})" for p, o in rr["required_provinces"].items()) + f" [{rr['src']}]")
+                for alt in t.get("without", []):
+                    out.append(f"  without {alt['avoid']}: {alt['steps']} sea zones, {alt['pixels']} px, rules "
+                               f"{', '.join(alt['rules'] or []) or 'none'}" if alt["steps"] else
+                               f"  without {alt['avoid']}: no sea route")
+            elif t.get("note"):
+                out.append("  " + t["note"])
+            c = t.get("candidates") or {}
+            if c.get("rows"):
+                out.append(f"  coastal provinces within {c['steps']} steps of the front, naval base below {c['below_level']} "
+                           f"({c['count']}):")
+                for row in c["rows"]:
+                    out.append(f"  - {row['province']} {row['name'] or ''} st {row['state']} {row['state_name']}: "
+                               f"{row['steps']} steps, port lvl {row['level']}, infra {row['infrastructure']}, next level "
+                               f"{row['next_level_cost']:g} CP, done {row['finish']} ({row['days']}d)"
+                               + (f", hub {row['supply_hub']}" if row.get("supply_hub") else ""))
+            elif c.get("note"):
+                out.append("  " + c["note"])
+        s = x["supply"]
+        out.append("")
+        out.append("supply: " + "; ".join(f"{k} {v['v']} [{v['src']}]" for k, v in s["defines"].items()))
+        out.append("costs: " + "; ".join(f"{b} {c['base_cost']:g}" + (f" +{c['per_level_extra_cost']:g}/level"
+                                                                      if c.get("per_level_extra_cost") else "")
+                                         + f" [{c['src']}]" for b, c in s["costs"].items()))
+        out.append("reach after 1-4 provinces: " + "; ".join(f"{k} {v}" for k, v in s["reach_1_to_4"].items() if v))
+        out.append("method: " + s["d"])
+        return out
+
+    return emit(args, data, text)
+
+
 def cmd_defines(args):
     w = world(args)
     hits = w.defines.find(args.KEY)
@@ -725,6 +1083,7 @@ def parser():
     add("idea", cmd_idea, "id")
     p = add("decisions", cmd_decisions, "TAG")
     p.add_argument("--all", action="store_true", help="also generic decisions that do not name the tag")
+    p.add_argument("--never", action="store_true", help="only never-take decisions")
     p = add("missions", cmd_missions, "TAG")
     p.add_argument("--all", action="store_true")
     add("hooks", cmd_hooks, "TAG")
@@ -734,6 +1093,21 @@ def parser():
     p.add_argument("--folder", action="append", help="limit to a content folder (repeat)")
     p.add_argument("--all-languages", action="store_true", help="also non-English localisation")
     add("defines", cmd_defines, "KEY")
+    p = add("terrain-width", cmd_terrain_width, ("target", {"nargs": "*", "help": "a TAG or state ids"}))
+    p.add_argument("--route", nargs=2, type=int, metavar=("FROM", "TO"))
+    p.add_argument("--enemy", action="append", help="attacker tag when TAG is ours (default: wars at start)")
+    p = add("units", cmd_units)
+    p.add_argument("--category", help="row, group, id or category substring (regimental, support, armor, ...)")
+    p.add_argument("--unlocked-by", help="date: only sub-units the --tag has by then (start techs at that date)")
+    p.add_argument("--all", action="store_true", help="also air and naval sub-units")
+    p = add("weather", cmd_weather, "target")
+    p.add_argument("--region", action="store_true", help="the number is a strategic region id")
+    add("bop", cmd_bop, "TAG")
+    add("occupation-laws", cmd_occupation_laws)
+    p = add("ports", cmd_ports, "TAG")
+    p.add_argument("--enemy", action="append")
+    p.add_argument("--steps", type=int, default=3, help="land steps from the front for coastal candidates")
+    p.add_argument("--below", type=int, default=3, help="list naval bases below this level as candidates")
     return ap
 
 

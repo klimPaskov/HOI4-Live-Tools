@@ -689,6 +689,91 @@ def path_crossings(graph, path):
     return [[a, b] for a, b in zip(path, path[1:]) if graph["adj"][a][b].get("river_crossing")]
 
 
+def terrain_mix(graph, provinces):
+    """{"provinces": n, "counts": {terrain: n}, "shares": {terrain: share}} of the land provinces given
+    (definition.csv terrain column; unknown ids and sea provinces are skipped)."""
+    counts = {}
+    n = 0
+    for pid in dict.fromkeys(provinces):
+        p = graph["provinces"].get(pid)
+        if not p or p.get("type") != "land":
+            continue
+        counts[p["terrain"]] = counts.get(p["terrain"], 0) + 1
+        n += 1
+    shares = {t: round(c / n, 3) for t, c in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))} if n else {}
+    return {"provinces": n, "counts": dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))), "shares": shares}
+
+
+def land_reach(graph, sources, allowed=None):
+    """Set of land provinces reachable from `sources` over passable land borders and straits
+    (adjacencies.csv `sea` rows between land provinces), entering only provinces where `allowed(pid)`."""
+    provs = graph["provinces"]
+    seen = {s for s in sources if s in provs and provs[s].get("type") == "land"}
+    stack = list(seen)
+    while stack:
+        u = stack.pop()
+        for v, e in graph["adj"].get(u, {}).items():
+            if v in seen or e.get("impassable") or provs.get(v, {}).get("type") != "land":
+                continue
+            if allowed is not None and not allowed(v):
+                continue
+            seen.add(v)
+            stack.append(v)
+    return seen
+
+
+def sea_neighbours(graph, pid):
+    """Sea provinces touching a (coastal land) province."""
+    return sorted(nb for nb in graph["adj"].get(pid, {}) if graph["provinces"].get(nb, {}).get("type") == "sea")
+
+
+def _xy_dist(graph, a, b):
+    pa, pb = graph["provinces"][a].get("xy"), graph["provinces"][b].get("xy")
+    if not pa or not pb:
+        return 1.0
+    return ((pa[0] - pb[0]) ** 2 + (pa[1] - pb[1]) ** 2) ** 0.5
+
+
+def sea_route(graph, sources, targets, avoid_rules=()):
+    """Shortest sea path between two sets of sea provinces (Dijkstra over sea-to-sea edges: pixel borders,
+    straits and canal links of adjacencies.csv; cost = centroid distance in map pixels). Edges whose
+    adjacency rule is in `avoid_rules` are not used. Returns {path, steps, pixels, rules: [{rule, a, b}]}
+    or None."""
+    provs = graph["provinces"]
+    targets = set(targets)
+    avoid = set(avoid_rules)
+    dist, prev, heap = {}, {}, []
+    for s in sources:
+        if provs.get(s, {}).get("type") == "sea":
+            dist[s] = 0.0
+            heapq.heappush(heap, (0.0, s))
+    end = None
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist.get(u, float("inf")):
+            continue
+        if u in targets:
+            end = u
+            break
+        for v, e in graph["adj"].get(u, {}).items():
+            if provs.get(v, {}).get("type") != "sea" or e.get("impassable") or e.get("rule") in avoid:
+                continue
+            nd = d + _xy_dist(graph, u, v)
+            if nd < dist.get(v, float("inf")):
+                dist[v] = nd
+                prev[v] = u
+                heapq.heappush(heap, (nd, v))
+    if end is None:
+        return None
+    path = [end]
+    while path[-1] in prev:
+        path.append(prev[path[-1]])
+    path.reverse()
+    rules = [{"rule": graph["adj"][a][b]["rule"], "a": a, "b": b} for a, b in zip(path, path[1:])
+             if graph["adj"][a][b].get("rule")]
+    return {"path": path, "steps": len(path) - 1, "pixels": round(dist[end]), "rules": rules}
+
+
 def state_neighbours(graph, sid, land_only=True):
     """Sorted ids of states that share a passable border with state sid."""
     st = graph["states"].get(sid)

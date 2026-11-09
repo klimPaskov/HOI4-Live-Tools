@@ -19,6 +19,9 @@ hooks(world, tag) collects, from the effective files:
 event(world, id)   options with name, localised text, trigger, ai_chance and effect summary
 grep(world, token) every line of the effective text files that holds the token, with file:line, mod
 ai_strategy(world, tag)  common/ai_strategy blocks enabled for the tag (FAIR: private)
+bop(world, tag)    balance of power: definition, value and range at start, focuses/decisions that gain or
+                   move it (BOP_METHOD)
+never_take(world, tag)   decisions that end a war, cede states or withdraw (NEVER_METHOD)
 """
 import os
 import re
@@ -352,3 +355,200 @@ def ai_strategy(world, tag):
             out.append({"id": k, "enable": world.text(enable, 200, tag) if isinstance(enable, list) else None,
                         "strategies": strategies, "src": world.src(p, line_of(items, i)), "fair": "private"})
     return out
+
+
+# ---------------------------------------------------------------- balance of power
+
+BOP_EFFECTS = ("set_power_balance", "add_power_balance_value", "add_power_balance_modifier",
+               "remove_power_balance_modifier", "remove_power_balance")
+_NOT_RUN = ("limit", "ai_will_do", "available", "visible", "allowed", "trigger", "effect_tooltip",
+            "custom_trigger_tooltip", "ai_chance", "modifier")
+BOP_METHOD = ("value at start = initial_value of common/bop when the history's set_power_balance has set_default (or "
+              "no set_value), else set_value, plus add_power_balance_value; movers = the effects set_power_balance, "
+              "add_power_balance_value, add_power_balance_modifier, remove_power_balance(_modifier) in the loaded "
+              "focus tree's completion rewards and the tag's decisions (complete/remove effects), scripted effects "
+              "followed two levels; effect_tooltip blocks (display only) are not counted; a modifier's daily drift is "
+              "its power_balance_daily (common/modifiers; power_balance_weekly / 7)")
+
+
+def static_modifiers(world):
+    """{modifier name: {key: value}} of common/modifiers (numbers only)."""
+
+    def load():
+        out = {}
+        for p in world.game.files("common/modifiers"):
+            for k, v in parse_file(p):
+                if k and isinstance(v, list):
+                    out[k] = {a: num(b) for a, b in v if a and num(b) is not None}
+        return out
+
+    return world.cached("staticmods", load)
+
+
+def bop_moves(world, block, depth=0, via=None):
+    """[{"effect", "id", "value", "modifier", "via"}] of the power-balance effects an effect block runs
+    (if/else branches all counted; scripted effects followed two levels; effect_tooltip skipped)."""
+    scripted = scripted_effects(world)
+    out = []
+    if not isinstance(block, list):
+        return out
+    for k, v in block:
+        kl = (k or "").lower()
+        if kl in BOP_EFFECTS:
+            if isinstance(v, list):
+                val = get1(v, "value") if get1(v, "value") is not None else get1(v, "set_value")
+                out.append({"effect": kl, "id": get1(v, "id"), "value": num(val), "modifier": get1(v, "modifier"),
+                            "set_default": get1(v, "set_default") == "yes", "via": via})
+            else:
+                out.append({"effect": kl, "id": v, "value": None, "modifier": None, "via": via})
+        elif isinstance(v, list):
+            if kl not in _NOT_RUN:
+                out.extend(bop_moves(world, v, depth, via))
+        elif v == "yes" and k in scripted and depth < 2:
+            out.extend(bop_moves(world, scripted[k][0], depth + 1, via or k))
+    return out
+
+
+def bop(world, tag=None):
+    """Balance of power of a tag (BOP_METHOD): [{id, definition, start, gained_by, movers, mover_counts}]."""
+    from . import focus as focusmod  # local: keeps scenario importable without the focus module loaded
+
+    tag = tag or world.tag
+    return world.cached("bop:" + tag, lambda: _bop(world, tag, focusmod))
+
+
+def _bop(world, tag, focusmod):
+    defs = world.power_balances()
+    mods = static_modifiers(world)
+    rows = {}
+
+    def row(bid):
+        if bid not in rows:
+            d = defs.get(bid)
+            rows[bid] = {"id": bid, "definition": d, "start": None, "gained_by": [], "movers": [],
+                         "src": d["src"] if d else None, "fair": "public", "d": BOP_METHOD}
+        return rows[bid]
+
+    for f in world.country(tag)["power_balance"]:
+        r = row(f["v"])
+        d = r["definition"] or {}
+        if f["kind"] == "set":
+            value = d.get("initial_value") if (f.get("set_default") or f.get("value") is None) else f["value"]
+            r["start"] = {"active": True, "value": value, "src": f["src"]}
+        elif r["start"]:
+            r["start"]["value"] = round((r["start"]["value"] or 0) + (f.get("value") or 0), 4)
+    sources = []
+    tid = focusmod.tree_id(world, tag)
+    trees, shared = focusmod._focus_blocks(world)
+    loaded = set(focusmod.tree(world, tag)["focuses"])
+    for b, p, ln in (trees.get(tid) or {}).get("focuses", []) + [shared[x] for x in sorted(loaded) if x in shared]:
+        fid = get1(b, "id")
+        if fid in loaded:
+            sources.append(("focus", fid, get1(b, "completion_reward"), world.src(p, ln)))
+    for dd in world.decision_index():
+        if dd["id"].startswith(tag + "_") or _names_tag_text(dd, tag):
+            for key in ("complete_effect", "remove_effect"):
+                sources.append(("decision", dd["id"], get1(dd["block"], key), world.src(dd["path"], dd["line"])))
+    for kind, sid, block, src in sources:
+        for m in bop_moves(world, block):
+            bid = m["id"]
+            if not bid or (bid not in defs and not bid.startswith(tag + "_")):
+                continue
+            r = row(bid)
+            daily = None
+            if m.get("modifier"):
+                mm = mods.get(m["modifier"], {})
+                daily = mm.get("power_balance_daily")
+                if daily is None and mm.get("power_balance_weekly") is not None:
+                    daily = round(mm["power_balance_weekly"] / 7.0, 5)
+            mv = {"kind": kind, "id": sid, "effect": m["effect"], "value": m["value"], "modifier": m.get("modifier"),
+                  "daily": daily, "via": m["via"], "src": src}
+            r["movers"].append(mv)
+            if m["effect"] == "set_power_balance" and not (r["start"] or {}).get("active"):
+                r["gained_by"].append(mv)
+    for bid in defs:
+        if bid.startswith(tag + "_"):
+            row(bid)
+    out = []
+    for bid, r in sorted(rows.items()):
+        if r["start"] is None:
+            r["start"] = {"active": False, "value": None}
+        val = r["start"].get("value")
+        if val is not None and r["definition"]:
+            rng = [x for x in r["definition"]["ranges"] if x["min"] is not None and x["max"] is not None
+                   and x["min"] <= val <= x["max"]]
+            r["start"]["range"] = rng[0]["id"] if rng else None
+        counts = {}
+        for mv in r["movers"]:
+            counts[mv["kind"]] = counts.get(mv["kind"], 0) + 1
+        r["mover_counts"] = counts
+        out.append(r)
+    return out
+
+
+def _names_tag_text(d, tag):
+    allowed = get1(d["block"], "allowed")
+    return isinstance(allowed, list) and _mentions(render(allowed), tag)
+
+
+# ---------------------------------------------------------------- never-take decisions
+
+NEVER_NAME = re.compile(r"(withdraw|surrender|capitulat|abandon|evacuat|white_peace)", re.I)
+NEVER_METHOD = ("never-take = a decision whose complete or remove effect (effect_tooltip included: it states the "
+                "outcome; scripted effects followed two levels) makes white_peace, transfers a state to another "
+                "country (transfer_state inside another country's scope, transfer_state_to / set_state_owner to "
+                "another tag), releases a country from our states (release, release_puppet), or whose id names a "
+                "withdrawal or surrender; whether a listed decision is ever wanted is the planner's call [?]")
+_SELF = ("ROOT", "THIS", "PREV", "FROM")
+_NEVER_SKIP = ("limit", "ai_will_do", "available", "visible", "allowed", "trigger", "ai_chance", "modifier")
+
+
+def _never_reasons(world, block, tag, scope=None, depth=0):
+    scripted = scripted_effects(world)
+    out = []
+    if not isinstance(block, list):
+        return out
+    for k, v in block:
+        kl = (k or "").lower()
+        target = get1(v, "target") if isinstance(v, list) else v
+        if kl == "white_peace":
+            out.append(f"white_peace:{target}")
+        elif kl == "transfer_state" and scope and scope != tag and scope not in _SELF and not scope.isdigit():
+            out.append(f"transfer_state:{target}->{scope}")
+        elif kl in ("transfer_state_to", "set_state_owner") and isinstance(target, str) and target != tag and \
+                target not in _SELF:
+            out.append(f"{kl}:{scope or '?'}->{target}")
+        elif kl in ("release", "release_puppet", "release_on_controlled"):
+            out.append(f"{kl}:{target}")
+        elif isinstance(v, list):
+            if kl in _NEVER_SKIP:
+                continue
+            sub = k if (re.match(r"^[A-Z][A-Z0-9]{2}$", k or "") or (k or "").isdigit()) else scope
+            out.extend(_never_reasons(world, v, tag, sub, depth))
+        elif v == "yes" and k in scripted and depth < 2:
+            out.extend(f"{x} (via {k})" for x in _never_reasons(world, scripted[k][0], tag, scope, depth + 1))
+    return out
+
+
+def never_take(world, tag=None):
+    """Decisions of the tag that end a war, cede states or withdraw (NEVER_METHOD): [{id, name, reasons, src}]."""
+    tag = tag or world.tag
+
+    def load():
+        out = []
+        for d in world.decision_index():
+            if not (d["id"].startswith(tag + "_") or _names_tag_text(d, tag)):
+                continue
+            reasons = []
+            for key in ("complete_effect", "remove_effect"):
+                reasons += _never_reasons(world, get1(d["block"], key), tag)
+            if NEVER_NAME.search(d["id"]):
+                reasons.append("name")
+            reasons = list(dict.fromkeys(reasons))
+            if reasons:
+                out.append({"id": d["id"], "name": world.name(d["id"]), "category": d["category"],
+                            "reasons": reasons[:6], "src": world.src(d["path"], d["line"]),
+                            "mod": world.content.source(d["path"])})
+        return out
+
+    return world.cached("nevertake:" + tag, load)

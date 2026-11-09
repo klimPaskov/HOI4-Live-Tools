@@ -24,18 +24,18 @@ from . import scenario as scenariomod
 from . import theatre as theatremod
 from .game import Game
 from .script import get1
-from .world import World
+from .world import World, gate_text, xp_in
 
 GENERATOR = "hoi4facts.dossier 1"
 SECTIONS = [
     (0, "run", "Run context", 1200),
-    (1, "country", "Country at start", 8000),
+    (1, "country", "Country at start", 9000),
     (2, "states", "Own states", 12000),
     (3, "neighbours", "Neighbours and enemies", 16000),
     (4, "hooks", "Scenario hooks", 16000),
     (5, "focus", "Focus tree", 24000),
     (6, "research", "Research calendar and doctrines", 12000),
-    (7, "politics", "Laws, advisors, decisions", 9000),
+    (7, "politics", "Laws, advisors, decisions", 10500),
     (8, "oob", "Order of battle and commanders", 9000),
     (9, "theatres", "Theatres", 12000),
 ]
@@ -158,6 +158,7 @@ def state_rows(w, tag, enemies=None):
     enemy_steps = w.province_steps(w.provinces_of(enemies)) if enemies else {}
     foreign = [p for sid, r in states.items() if r["owner"] and r["owner"] != tag for p in r["provinces"]]
     border_steps = w.province_steps(foreign)
+    occ = w.occupation_start(tag)
     own = []
     for sid in w.owned_states(tag):
         r = states[sid]
@@ -172,7 +173,7 @@ def state_rows(w, tag, enemies=None):
                     "resources": r["resources"], "vp": sum(r["vps"].values()), "manpower": r["manpower"],
                     "naval_base": max([b.get("naval_base", 0) for b in r["province_buildings"].values()] or [0]),
                     "enemy_steps": min(es) if es else None, "border_steps": min(bs) if bs else None,
-                    "borders": nbs, "src": r["file"], "mod": r["mod"]})
+                    "borders": nbs, "occupation": occ.get(sid), "src": r["file"], "mod": r["mod"]})
     own.sort(key=lambda s: (not s["core"], not (s["free_slots"] or 0) > 0, -s["infrastructure"],
                             -(s["free_slots"] or 0), -(s["enemy_steps"] if s["enemy_steps"] is not None else 99),
                             s["id"]))
@@ -234,6 +235,18 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
         "dynamic_modifiers": c["dynamic_modifiers"], "doctrines": c["doctrines"], "oobs": c["oobs"],
         "guarantees": c["guarantees"], "faction": c["faction"], "subjects": c["subjects"],
         "events_scheduled": c["events"], "start_techs": c["techs"], "fair": "public"}
+    xp = w.experience(tag)
+    xp["focuses"] = focusmod.xp_rewards(w, tag)
+    xp["decisions"] = []
+    for dd in w.decision_index():
+        if dd["id"].startswith(tag + "_"):
+            got = xp_in(get1(dd["block"], "complete_effect"))
+            if got:
+                xp["decisions"].append(dict(got, decision=dd["id"], src=w.src(dd["path"], dd["line"])))
+    xp["d"] = ("start = history army/air/navy_experience up to the start; spirits = experience_gain_* modifiers of the "
+               "start ideas (daily when the key has no _factor); focus/decision rewards = army/air/navy_experience in "
+               "the completion reward / complete_effect, every branch counted (upper bound)")
+    d["country"]["experience"] = xp
 
     # 2 own states, ranked for factories
     d["states"] = {"rows": state_rows(w, tag, enemies), "d": STATES_METHOD, "fair": "public"}
@@ -262,6 +275,10 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
                "capital": ec["capital"], "stability": ec["stability"], "war_support": ec["war_support"],
                "ideas": [dict(w.idea_row(i["v"], t) or {"id": i["v"]}, set_by=i["src"]) for i in ec["ideas"]],
                "oob": _enemy_oob(w, t), "fair": "public"}
+        if w.visible("aggregate"):
+            row["tech_level"] = w.tech_level(t)
+        row["bop"] = [{"id": b["id"], "value": b["start"].get("value"), "range": b["start"].get("range"),
+                       "src": b["start"].get("src")} for b in scenariomod.bop(w, t) if b["start"].get("active")]
         if w.visible("private"):
             row["ai_strategy"] = scenariomod.ai_strategy(w, t)
         enemy_rows.append(row)
@@ -269,7 +286,8 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
     d["enemies"] = enemy_rows
 
     # 4 scenario hooks (ours and each enemy's)
-    d["hooks"] = {"own": scenariomod.hooks(w, tag), "enemies": {t: scenariomod.hooks(w, t) for t in enemies}}
+    d["hooks"] = {"own": scenariomod.hooks(w, tag), "enemies": {t: scenariomod.hooks(w, t) for t in enemies},
+                  "never_take": scenariomod.never_take(w, tag), "never_take_d": scenariomod.NEVER_METHOD}
 
     # 5 focus tree
     tree = focusmod.tree(w, tag)
@@ -304,8 +322,17 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
                                  "traits": r.get("traits", []), "available": r.get("available"),
                                  "idea_token": r.get("idea_token"), "src": ch["src"]})
     decs = [x for x in w.decisions(tag, missions=False) if x.get("specific")]
+    never = {x["id"]: x["reasons"] for x in d["hooks"]["never_take"]}
+    for x in decs:
+        if x["id"] in never:
+            x["never_take"] = never[x["id"]]
+    bops = []
+    for b in scenariomod.bop(w, tag):
+        if b["start"].get("active") or b["gained_by"]:
+            b = dict(b, movers=b["movers"][:30])
+            bops.append(b)
     d["politics"] = {"laws": w.laws(tag), "advisors": advisors, "decisions": decs,
-                     "missions": w.decisions(tag, missions=True), "fair": "public"}
+                     "missions": w.decisions(tag, missions=True), "bop": bops, "fair": "public"}
 
     # 8 OOB and commanders
     o = w.oob(tag)
@@ -392,7 +419,8 @@ def render_md(d):
     out = [f"# Dossier {tag} {d['run']['name']} at {d['_meta']['date']} ({d['_meta']['mode'].upper()})", "",
            "Facts from the effective game files, each with `[file:line]`. Derived numbers name their method. "
            "Deeper lookups: `python3 scripts/hoi4facts/facts.py <command>` (focus, tech, state, province, route, vp, "
-           "oob, characters, laws, idea, decisions, missions, hooks, event, grep, defines).", ""]
+           "oob, characters, laws, idea, decisions, missions, hooks, event, grep, defines, terrain-width, units, weather, "
+           "bop, occupation-laws, ports; `calc.py equipment` for template width).", ""]
     secs = {num: Section(num, title, budget) for num, _, title, budget in SECTIONS}
     _md_run(d, secs[0])
     _md_country(d, secs[1])
@@ -433,6 +461,7 @@ def _md_country(d, s):
     s.add(f"- Research slots {_v(c['research_slots'])}{_s(c['research_slots'])}; stability {_pct(_v(c['stability']))}"
           f"{_s(c['stability'])}; war support {_pct(_v(c['war_support']))}{_s(c['war_support'])}"
           + (f"; convoys {_v(c['convoys'])}" if c["convoys"] else ""))
+    _md_xp(c.get("experience"), s)
     pol = c["politics"]
     if pol:
         s.add("- Politics: " + ", ".join(f"{k} {_v(v)}" for k, v in pol.items()) +
@@ -466,19 +495,53 @@ def _md_country(d, s):
         s.add("- Global flags: " + ", ".join(f["v"] for f in c["global_flags"][:20]), "flags")
 
 
+def _md_xp(xp, s):
+    if not xp:
+        return
+    st = xp["start"]
+    cap = xp["max"].get("army") or {}
+    set_ = [f"{b} {_v(f):g} [{f['src']}]" for b, f in st.items() if not f.get("d")]
+    unset = [b for b, f in st.items() if f.get("d")]
+    s.add("- Experience at start: " + ", ".join(set_ + ([" ".join(unset) + " 0 (no army/air/navy_experience in the "
+                                                        "history up to the start; 0 assumed [?])"] if unset else []))
+          + (f"; cap {cap.get('v')} each [{cap.get('src')}]" if cap else ""))
+    if xp["spirits"]:
+        s.add("  - spirits: " + "; ".join(f"{m['idea']} {m['key']} {m['value']:g}" for m in xp["spirits"][:4]))
+    for b in ("army", "air", "navy"):
+        fs = [f for f in xp["focuses"] if (f.get(b) or 0) > 0]
+        ds = [x for x in xp["decisions"] if (x.get(b) or 0) > 0]  # negative values are XP costs
+        if fs or ds:
+            s.add(f"  - {b} XP rewards: focuses +{sum(f[b] for f in fs):g} over {len(fs)} ("
+                  + ", ".join(f"{f['focus']} +{f[b]:g}" for f in fs[:4]) + ")"
+                  + (f"; decisions +{sum(x[b] for x in ds):g} over {len(ds)} ("
+                     + ", ".join(f"{x['decision']} +{x[b]:g}" for x in ds[:2]) + ")" if ds else "")
+                  + " (every branch counted: upper bound)")
+
+
 def _md_states(d, s):
     rows = d["states"]["rows"]
     s.add(d["states"]["d"] + ".")
     s.add("")
-    s.add("| # | id | state | cat/slots | free | infra | civ/mil/dock | port | VP | res | enemy/border steps | borders | src |")
-    s.add("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    s.add("| # | id | state | cat/slots | free | infra | civ/mil/dock | port | VP | res | resist/comply | enemy/border steps "
+          "| borders | src |")
+    s.add("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in rows:
         res = ",".join(f"{k[:3]}{v}" for k, v in sorted(r["resources"].items()))
         s.add(f"| {r['rank']} | {r['id']} | {r['name']}{'' if r['core'] else ' (non-core)'} | {r['category']}/{r['slots']} | "
               f"{r['free_slots']} | {r['infrastructure']} | {r['civ']}/{r['mil']}/{r['dock']} | {r['naval_base'] or ''} | "
-              f"{r['vp'] or ''} | {res} | {r['enemy_steps'] if r['enemy_steps'] is not None else '-'}/"
+              f"{r['vp'] or ''} | {res} | {_occ(r.get('occupation'))} | "
+              f"{r['enemy_steps'] if r['enemy_steps'] is not None else '-'}/"
               f"{r['border_steps'] if r['border_steps'] is not None else '-'} | {' '.join(r['borders'])} | "
               f"{r['src'].split('/')[-1]} |", "states", f"facts states {d['_meta']['tag']}")
+
+
+def _occ(o):
+    """resist/comply cell: "on 0/20" (resistance on, resistance 0, compliance 20); blank without settings."""
+    if not o:
+        return ""
+    act = o.get("resistance_active")
+    on = "on" if act == "yes" else (f"by {act}" if act and act != "no" else "off")
+    return f"{on} {o.get('resistance', '-')}/{o.get('compliance', '-')}"
 
 
 def _md_neighbours(d, s):
@@ -506,6 +569,15 @@ def _md_neighbours(d, s):
               + ", ".join(f"{k} x{v}" for k, v in sorted(agg["per_template"].items(), key=lambda kv: -kv[1]))
               + f"; planes {agg['air_planes']}; ships {agg['ships']}; OOB "
               + ", ".join(f"{f['name']}" for f in agg["files"]))
+        tl = e.get("tech_level")
+        if tl:
+            s.add("- Tech level at start (fair aggregate: classes reached and newest tech year, no tech list): "
+                  + "; ".join(f"{k.replace('_', '-')} " + (
+                      f"{v['year']} ({', '.join(_kind(x) for x in v['kinds'][:3])})" if v["reached"] else "none")
+                      for k, v in tl["classes"].items()))
+        for b in e.get("bop") or []:
+            s.add(f"- Balance of power at start: {b['id']} {b['value']} ({b['range']}) [{b['src']}]; "
+                  f"`facts bop {e['tag']}`")
         s.add("- Spirits: " + "; ".join(f"{i['id']}" + (f" ({i['modifier'][:80]})" if i.get("modifier") else "")
                                        for i in e["ideas"]), "enemy spirits", f"facts idea <id>")
         if "private" in e["oob"]:
@@ -528,6 +600,14 @@ def _md_hooks(d, s):
                 wars.append(w)
     s.add("Wars at start: " + ("; ".join(f"{w['attacker']} -> {w['target']} ({w['type']}) [{w['src']}]" for w in wars)
                                or "none"))
+    nt = sorted(d["hooks"].get("never_take") or [],
+                key=lambda x: (not any(r.startswith("white_peace") for r in x["reasons"]), "name" not in x["reasons"],
+                               x["id"]))
+    if nt:
+        s.add(f"NEVER-TAKE decisions of {d['_meta']['tag']} (end a war, cede states, withdraw; "
+              f"`facts decisions {d['_meta']['tag']} --never`): " + "; ".join(
+                  f"{x['id']} ({x['reasons'][0]}{', ...' if len(x['reasons']) > 1 else ''}) [{x['src']}]" for x in nt[:6])
+              + (f"; ... {len(nt) - 6} more" if len(nt) > 6 else ""))
     # our tag gets 60% of the section, the enemies share the rest
     left = s.budget - s.size - 200
     shares = [0.6] + [0.4 / max(1, len(tags) - 1)] * (len(tags) - 1) if len(tags) > 1 else [1.0]
@@ -649,15 +729,28 @@ def _md_research(d, s):
 
 def _md_politics(d, s):
     p = d["politics"]
+    for b in p.get("bop") or []:
+        df = b["definition"] or {}
+        st = b["start"]
+        s.add(f"- Balance of power {b['id']} [{b['src']}]: {df.get('left_side')} (-1) vs {df.get('right_side')} (+1); "
+              + (f"ACTIVE at start {st['value']} in {st.get('range')} [{st.get('src')}]" if st.get("active") else
+                 "not active at start; gained by " + ", ".join(f"{g['kind']} {g['id']}" for g in b["gained_by"][:3]))
+              + "; moved by " + ", ".join(f"{k} {n}" for k, n in b["mover_counts"].items())
+              + f"; ranges, modifiers, movers: `facts bop {d['_meta']['tag']}`")
+        rng = [r for r in df.get("ranges", []) if r["id"] == st.get("range")]
+        if rng and rng[0]["modifier"]:
+            s.add("  - start range modifiers: " + ", ".join(f"{k} {v}" for k, v in rng[0]["modifier"].items() if v))
     for cat, row in sorted(p["laws"].items()):
         opts = []
         for o in row["options"]:
             if o["allowed"] is False:
                 continue
             mark = "*" if o["id"] == row["current"] else ""
-            opts.append(f"{mark}{o['id']} {o['cost'] if o['cost'] is not None else '?'}PP")
+            g = gate_text(o.get("gates") or [], 2)
+            opts.append(f"{mark}{o['id']} {o['cost'] if o['cost'] is not None else '?'}PP" + (f" ({g})" if g else ""))
         s.add(f"- {cat}: " + ", ".join(opts), "law categories", f"facts laws {d['_meta']['tag']}")
-    s.add("(* = at start; availability text: `facts idea <id>`)")
+    s.add("(* = at start; (gates) = numeric and named `available` conditions; full text: `facts laws`, "
+          "`facts idea <id>`)")
     s.add("")
     s.add("Advisors (slot cost traits; available):")
     for a in p["advisors"]:
@@ -669,6 +762,7 @@ def _md_politics(d, s):
     for x in p["decisions"]:
         s.add(f"- {x['id']} \"{x['name']}\" cost {x['cost']}" + (f", {x['days_remove']}d" if x.get("days_remove") else "")
               + (", once" if x["fire_only_once"] else "")
+              + (f", NEVER-TAKE ({x['never_take'][0]})" if x.get("never_take") else "")
               + (f"; avail {x['available'][:90]}" if x.get("available") else "") + f" [{x['src']}]", "decisions",
               f"facts decisions {d['_meta']['tag']}")
 
@@ -711,6 +805,7 @@ def _md_theatres(d, s):
         if t.get("error"):
             s.add("- " + t["error"])
             continue
+        _md_theatre_extra(d, t, s)
         s.add("- Borders (our state | their state | touching provinces, river pairs): " + "; ".join(
             f"{b['ours']} {b['our_name']} | {b['theirs']} {b['their_name']} | {b['pairs']},{b['river_pairs']}"
             for b in t["borders"]), "borders")
@@ -735,6 +830,55 @@ def _md_theatres(d, s):
                   "routes", f"facts route <from> <to>")
         if t["routes"]:
             s.add(f"- Route method: {t['routes'][0].get('d', '')}")
+
+
+def _kind(x):
+    return x.replace("_equipment", "").replace("_chassis", "").replace("_", " ")
+
+
+def _md_theatre_extra(d, t, s):
+    tag = d["_meta"]["tag"]
+    ov = t.get("overseas") or {}
+    if ov.get("overseas"):
+        r = ov.get("route")
+        line = "- OVERSEAS: no land link from the capital through our, subject and enemy territory"
+        if r:
+            line += (f"; sea route port {r['from_port']} -> {r['to_port']}: {r['steps']} sea zones"
+                     + (" via " + ", ".join(
+                         f"{x['rule']} (navy closed when {'/'.join(x['navy_closed_when']) or 'never'}; disabled if "
+                         f"{(x.get('is_disabled') or '-')[:110]}; owned by {sorted(set(x['required_provinces'].values()))}) "
+                         f"[{x['src']}]" for x in ov.get("rules", [])) if ov.get("rules") else "")
+                     + "".join(f"; without {a['avoid']}: {a['steps']} zones"
+                               + (f" via {', '.join(a['rules'])}" if a.get("rules") else "")
+                               for a in ov.get("without", []) if a.get("steps")))
+        elif ov.get("note"):
+            line += "; " + ov["note"]
+        s.add(line + f"; `facts ports {tag}`")
+    elif ov.get("overseas") is False:
+        s.add("- Land-linked to the capital (not overseas)")
+    c = t.get("port_candidates") or {}
+    if c.get("rows"):
+        s.add(f"- Port candidates (coast <= {c['steps']} steps from the front, naval base < {c['below_level']}; "
+              f"{c['count']} found): " + "; ".join(
+                  f"{x['province']}{' ' + x['name'] if x['name'] else ''} st {x['state']} lvl {x['level']} "
+                  f"{x['next_level_cost']:g}CP done {x['finish']}" for x in c["rows"][:4])
+              + f"; port vs hub vs railway costs and supply flow: `facts ports {tag}`")
+    tr = t.get("terrain") or {}
+    fm = tr.get("fighting") or {}
+    wd = tr.get("width") or {}
+    if fm.get("provinces"):
+        s.add(f"- Terrain ({tr.get('basis')}, {fm['provinces']} provinces): "
+              + ", ".join(f"{k} {round(v * 100)}%" for k, v in fm["shares"].items())
+              + "; battle widths 1/2 directions " + ", ".join(
+                  f"{k} {'/'.join(str(int(x)) for x in v.values())}" for k, v in (wd.get("battle_widths") or {}).items())
+              + (f" [{(wd.get('sources') or {}).get(wd.get('dominant'))}]" if wd.get("dominant") else "")
+              + (f"; width target {wd['target']} (dominant {wd['dominant']}), best for the mix "
+                 + ", ".join(str(b["width"]) for b in wd["best_for_mix"]) + f" [D facts terrain-width {t['enemy']}]"
+                 if wd.get("target") else ""))
+    for wr in t.get("weather") or []:
+        s.add(f"- Weather region {wr['region']} {wr['name']} ({wr['provinces']} prov): mud {wr['mud']} (heavy "
+              f"{wr['heavy_mud']}); ground snow {wr['snow']}; extreme cold {wr['cold']} [{wr['src']}]", "weather",
+              "facts weather <state>", cap=3)
 
 
 # ---------------------------------------------------------------- write

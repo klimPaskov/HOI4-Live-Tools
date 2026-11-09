@@ -1,0 +1,15 @@
+# a canal closed to enemies, disabled by a global flag
+adjacency_rule =
+{
+	name = "FIXTURE_CANAL"
+	contested = { army = no navy = no submarine = no trade = no }
+	enemy = { army = no navy = no submarine = no trade = no }
+	friend = { army = yes navy = yes submarine = yes trade = yes }
+	neutral = { army = yes navy = yes submarine = yes trade = yes }
+	required_provinces = { 11 20 }
+	is_disabled = {
+		has_global_flag = FIXTURE_CANAL_BLOCKED
+		tooltip = fixture_tt
+	}
+	icon = 11
+}

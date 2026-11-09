@@ -1,0 +1,33 @@
+AAA_balance = {
+	initial_value = 0.3
+	left_side = AAA_left_side
+	right_side = AAA_right_side
+	decision_category = AAA_cat
+	range = {
+		id = AAA_middle_range
+		min = -0.1
+		max = 0.1
+		modifier = { stability_factor = 0 }
+	}
+	side = {
+		id = AAA_left_side
+		range = { id = AAA_left_range min = -1 max = -0.1 modifier = { war_support_factor = 0.1 } }
+	}
+	side = {
+		id = AAA_right_side
+		range = {
+			id = AAA_right_range
+			min = 0.1
+			max = 1
+			modifier = { political_power_factor = 0.1 custom_modifier_tooltip = AAA_tt }
+			on_activate = { add_stability = 0.05 }
+		}
+	}
+}
+
+AAA_council = {
+	initial_value = -0.2
+	left_side = AAA_council_left
+	right_side = AAA_council_right
+	range = { id = AAA_council_mid min = -0.5 max = 0.5 modifier = { } }
+}

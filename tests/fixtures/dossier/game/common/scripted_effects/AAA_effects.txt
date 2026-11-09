@@ -5,3 +5,6 @@ AAA_end_war = {
 	}
 	ELSE = { set_country_flag = AAA_defeat_flag }
 }
+AAA_bop_shift_effect = {
+	add_power_balance_value = { id = AAA_balance value = -0.05 }
+}

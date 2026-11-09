@@ -12,4 +12,17 @@ if = {
 }
 set_politics = { ruling_party = fascism }
 recruit_character = AAA_general
+set_power_balance = {
+	id = AAA_balance
+	set_default = yes
+}
+navy_experience = 5
+4 = {
+	set_garrison_strength = 0.5
+}
+every_owned_state = {
+	limit = { is_core_of = BBB NOT = { state = 5 } }
+	start_resistance = yes
+	set_resistance = 10
+}
 1939.1.1 = { add_political_power = 500 }
