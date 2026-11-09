@@ -1,0 +1,3 @@
+duplicate_archetypes = {
+	light_tank_aa_chassis = { archetype = light_tank_chassis type = { armor anti_air } }
+}

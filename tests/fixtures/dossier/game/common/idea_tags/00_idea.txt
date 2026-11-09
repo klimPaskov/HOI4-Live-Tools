@@ -1,1 +1,3 @@
-idea_categories = { economy = { cost = 150 } country = { cost = 0 } }
+idea_categories = { economy = { cost = 150 } country = { cost = 0 }
+	academy_spirit = { type = army_spirit cost = 20 removal_cost = -1 slot = academy_spirit }
+	navy_spirit = { type = navy_spirit cost = 35 removal_cost = -1 slot = navy_spirit } }

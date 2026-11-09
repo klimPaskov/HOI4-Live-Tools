@@ -2,14 +2,14 @@
 """Facts CLI for the strategist: deterministic answers from the effective game files, with sources.
 
     facts.py dossier build --tag T --date D [--dlc auto|"A,B"] [--mods auto|none] --out DIR
-    facts.py dossier show <section 0-9 or name> [--out DIR]
+    facts.py dossier show <section 0-10 or name> [--out DIR]
     facts.py focus <id>
     facts.py focus-tree <TAG> [--branch id] [--depth N]
     facts.py focus-timeline <TAG> --date D <ids...>
     facts.py tech <id>
     facts.py research-calendar <TAG> --date D --years 1936-1938
     facts.py research-timeline PLAN.json [--rule all|any]
-    facts.py state <id>          facts.py states <TAG>
+    facts.py state <id>          facts.py states <TAG> [--energy]   (coal per state, energy estimate)
     facts.py province <id>       facts.py route <from> <to> [--avoid-rivers]
     facts.py vp <TAG>            facts.py oob <TAG>
     facts.py characters <TAG> [--role general|marshal|admiral|advisor|leader]
@@ -23,6 +23,15 @@
     facts.py bop <TAG>           balance of power: ranges, start value, focuses/decisions that move it
     facts.py occupation-laws     occupation laws, resistance/compliance thresholds, own states at start
     facts.py ports <TAG> [--enemy E]   naval bases, overseas theatres, sea routes, coastal port candidates
+    facts.py designs <TAG> [--kind tank|plane|ship] [--date D]   chassis/hulls/airframes and modules the date's
+                                 techs unlock, module XP costs, start variants
+    facts.py mio <TAG> [--id ORG]   military-industrial organisations, trait trees, policies
+    facts.py projects <TAG>      special projects, facilities, scientists
+    facts.py diplomacy <TAG>     world tension, ideology gates (justify, guarantee, volunteers, lend-lease, faction), war goals
+    facts.py factions <TAG>      faction templates, manifests, goals, rules, member upgrades
+    facts.py peace <TAG> [--enemy E]   peace-conference cost modifiers and defines
+    facts.py command <TAG>       military spirits, leader abilities, assignable traits, command-power costs
+    facts.py agency              intelligence agency upgrades and operations
 
 Global options (before or after the command): --game DIR, --userdir DIR, --mod PATH (repeat),
 --date D, --mode fair|meta, --json, --tag T (our country, for DLC-aware and FAIR answers), --dlc.
@@ -190,7 +199,7 @@ def cmd_dossier(args):
     with open(os.path.join(d, "dossier.md"), encoding="utf-8") as fh:
         text = dossiermod.section_text(fh.read(), args.section)
     if text is None:
-        return fail(f"unknown section {args.section!r} (0-9 or " +
+        return fail(f"unknown section {args.section!r} (0-10 or " +
                     ", ".join(k for _, k, _, _ in dossiermod.SECTIONS) + ")")
     print(text)
     return 0
@@ -400,17 +409,36 @@ def cmd_state(args):
     return emit(args, row, text)
 
 
+energy_line = dossiermod.energy_line
+
+
 def cmd_states(args):
     w = world(args, args.TAG)
+    if args.energy:
+        e = w.energy(args.TAG)
+
+        def etext(x):
+            out = ["id name coal factories infra local-consumption energy-buildings [src]"]
+            for s in x["states"]:
+                if s["coal"] or s["factories"] or s["local_consumption"]:
+                    out.append(f"{s['id']} {s['name']} {s['coal']:g} {s['factories']} {s['infrastructure']} "
+                               f"{s['local_consumption']:+g} {','.join(f'{b} {n}' for b, n in s['buildings'].items())} "
+                               f"[{s['src']}]")
+            out.append(energy_line(x))
+            out.append("method: " + x["d"])
+            return out
+
+        return emit(args, e, etext)
     rows = dossiermod.state_rows(w, args.TAG)
 
     def text(rs):
-        out = ["rank id name cat/slots free infra civ/mil/dock VP enemy/border-steps borders [src]"]
+        out = ["rank id name cat/slots free infra civ/mil/dock coal VP enemy/border-steps borders [src]"]
         for r in rs:
             out.append(f"{r['rank']} {r['id']} {r['name']}{'' if r['core'] else '*'} {r['category']}/{r['slots']} "
-                       f"{r['free_slots']} {r['infrastructure']} {r['civ']}/{r['mil']}/{r['dock']} {r['vp']:g} "
+                       f"{r['free_slots']} {r['infrastructure']} {r['civ']}/{r['mil']}/{r['dock']} {r['coal']:g} {r['vp']:g} "
                        f"{r['enemy_steps']}/{r['border_steps']} {' '.join(r['borders'])} [{r['src']}]")
         out.append("(* non-core) " + dossiermod.STATES_METHOD)
+        out.append(energy_line(w.energy(args.TAG)) + f"; per state: `facts states {args.TAG} --energy`")
         return out
 
     return emit(args, rows, text)
@@ -1018,6 +1046,337 @@ def cmd_ports(args):
     return emit(args, data, text)
 
 
+# ---------------------------------------------------------------- wave 2: rules and catalogues (F-12 .. F-20)
+
+def _nums(d, limit=6):
+    """"k +v, k2 x-v" text of a {stat: number} dict (first `limit` items)."""
+    return ", ".join(f"{k} {v:+g}" if isinstance(v, (int, float)) else f"{k} {v}" for k, v in list(d.items())[:limit])
+
+
+def _gate(v, n=90):
+    return "yes" if v is True else ("no" if v is False else str(v)[:n])
+
+
+def _defs(d):
+    return "; ".join(f"{k} {r['v']}" for k, r in d.items()) + (f" [{next(iter(d.values()))['src']}]" if d else "")
+
+
+def fair_foreign(args, w):
+    """True in FAIR mode when TAG is not our country (--tag or the manifest's): its private start state stays hidden."""
+    ours = resolve(args)[3]
+    return w.mode == "fair" and bool(ours) and args.TAG != ours
+
+
+FAIR_DROPPED = "hidden in FAIR mode: private start state of another country (use --mode meta)"
+
+
+def cmd_designs(args):
+    w = world(args, args.TAG)
+    if fair_foreign(args, w):
+        return fail(f"designs of {args.TAG} follow its research and variants: {FAIR_DROPPED}")
+    data = w.designs(args.TAG, args.kind)
+
+    def text(x):
+        c = x["costs"]
+        out = [f"{x['tag']} designers at {x['date']} (start technologies at that date). XP per change: "
+               + ", ".join(f"{k.replace('EQUIPMENT_MODULE_', '').replace('_XP_COST', '').lower()} {r['v']:g}"
+                           for k, r in c.items() if k.startswith("EQUIPMENT_MODULE_"))
+               + (f" [{c['EQUIPMENT_MODULE_ADD_XP_COST']['src']}]" if "EQUIPMENT_MODULE_ADD_XP_COST" in c else "")
+               + "; a module's own xp_cost replaces add/replace [?]"]
+        for k, kd in sorted(x["kinds"].items()):
+            xp = kd.get("xp") or {}
+            out.append("")
+            out.append(f"== {k} designer: modules {'loaded' if kd['loaded'] else 'NOT loaded (DLC limit false)'}; "
+                       f"{XP_NAME.get(k, k)} XP at start {xp.get('v')}")
+            fam = {}
+            for b in kd["bases"]:
+                fam.setdefault(b["family"], []).append(b)
+            for a, bs in sorted(fam.items()):
+                own = [b for b in bs if b["archetype"] == a] or bs
+                top = own[-1]
+                slots = " ".join(f"{s['slot']}{'*' if s['required'] else ''}({'/'.join(s['categories'][:2])}"
+                                 f"{'...' if len(s['categories']) > 2 else ''})" for s in top.get("slots") or [])
+                ups = ", ".join(f"{u['id']} max {u['max_level']}" + (f" {u['cost_by_level']:g}xp/level" if u.get("cost_by_level")
+                                                                    else "") for u in top["upgrades"])
+                dup = sorted({b["archetype"] for b in bs} - {a})
+                out.append(f"- {a}: {', '.join(b['id'] for b in own)} (newest {top['year']}, by {','.join(top['techs'][:2])})"
+                           + (f"; same slots as {', '.join(dup)}" if dup else "") + f"; slots {slots}"
+                           + (f"; upgrades {ups}" if ups else "") + f" [{top['src']}]")
+            if kd["next_bases"]:
+                out.append("  next bases: " + ", ".join(f"{b['id']} ({b['techs'][0]} {b['year']})" for b in kd["next_bases"][:10]))
+            cats = {}
+            for m in kd["modules"]:
+                cats.setdefault(m["category"], []).append(m)
+            out.append(f"modules unlocked ({len(kd['modules'])}; xp / dismantle IC / stats / resources):")
+            for cat, ms in sorted(cats.items()):
+                out.append(f"- {cat}: " + "; ".join(
+                    f"{m['id']} {m['xp_cost']:g}xp" if m["xp_cost"] is not None else f"{m['id']} default-xp"
+                    for m in ms) + " | " + "; ".join(
+                    f"{m['id']}: {_nums(m['add_stats'], 4)}" + (f" x({_nums(m['multiply_stats'], 3)})" if m["multiply_stats"] else "")
+                    + (f" res {_nums(m['build_cost_resources'], 3)}" if m["build_cost_resources"] else "")
+                    for m in ms[:4]) + (f" [{ms[0]['src']}]"))
+            if kd["next_modules"]:
+                out.append("  next modules: " + ", ".join(f"{m['id']} ({m['techs'][0]} {m['year']})"
+                                                         for m in kd["next_modules"][:12]))
+            for v in kd["variants"]:
+                out.append(f"  start variant \"{v['v']}\" {v['type']}"
+                           + (": " + ", ".join(f"{s}={m}" for s, m in v["modules"].items()) if v["modules"] else "")
+                           + (": " + ", ".join(f"{u} {n}" for u, n in v["upgrades"].items()) if v["upgrades"] else "")
+                           + (" (obsolete)" if v["obsolete"] else "") + f" [{v['src']}]")
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+XP_NAME = {"tank": "army", "plane": "air", "ship": "navy"}
+
+
+def cmd_mio(args):
+    w = world(args, args.TAG)
+    data = w.mio(args.TAG)
+    if args.id:
+        data["organisations"] = [o for o in data["organisations"] if o["id"] == args.id]
+
+    def trait_text(t):
+        bonus = "; ".join(_nums(t[k], 4) for k in ("equipment_bonus", "production_bonus", "organization_modifier") if t.get(k))
+        par = t["any_parent"] or t["all_parents"]
+        return f"{t['token']}" + (f" <- {'/'.join(par)}" if par else "") + (f" x {','.join(t['mutually_exclusive'])}"
+                                                                         if t["mutually_exclusive"] else "") + \
+            (f": {bonus}" if bonus else "") + (f" (needs {t['available'][:60]})" if t.get("available") else "")
+
+    def text(x):
+        out = [f"{x['tag']} military-industrial organisations ({len(x['organisations'])}; * foreign MIO):"]
+        for o in x["organisations"]:
+            it = o.get("initial_trait") or {}
+            ib = "; ".join(_nums(it[k], 4) for k in ("equipment_bonus", "production_bonus", "organization_modifier")
+                           if it.get(k))
+            out.append(f"- {'*' if o['foreign'] else ''}{o['id']} \"{o['name']}\": equipment {','.join(o['equipment_type'] or [])}; "
+                       f"research {','.join(o['research_categories'] or [])}; initial {ib or '-'}; visible {_gate(o['visible'])}; "
+                       f"available {_gate(o['available'])} [{o['src']}]")
+            if args.id:
+                for t in o["traits"]:
+                    out.append(f"    {trait_text(t)}")
+            else:
+                out.append(f"    traits ({len(o['traits'])}): " + "; ".join(trait_text(t) for t in o["traits"][:6])
+                           + (f"; ... (--id {o['id']})" if len(o["traits"]) > 6 else ""))
+        out.append("policies (attach cost PP / cooldown days): " + "; ".join(
+            f"{p['id']} {p['cost']}/{p['cooldown']}: " + "; ".join(_nums(b, 3) for b in p["bonuses"].values())
+            for p in x["policies"]))
+        out.append("defines: " + _defs(x["defines"]))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_projects(args):
+    w = world(args, args.TAG)
+    data = w.projects(args.TAG)
+    if fair_foreign(args, w):
+        data["scientists"] = []
+        data["scientists_note"] = FAIR_DROPPED
+
+    def text(x):
+        out = [f"{x['tag']} special projects ({len(x['projects'])} not statically excluded); facilities at start: "
+               + (", ".join(f"{f['building']} st {f['state']} {f['name']}" for f in x["facilities_at_start"]) or "none")]
+        for p in x["projects"]:
+            cx = p["complexity"] or {}
+            out.append(f"- {p['id']} \"{p['name']}\" ({(p['specialization'] or '').replace('specialization_', '')}"
+                       f"{', ' + ','.join(p['tags']) if p['tags'] else ''}): prototype {p['prototype_days']}d, complexity "
+                       f"{cx.get('min')}-{cx.get('max')}, breakthrough {_nums(p['breakthrough_cost'], 3) or '-'}"
+                       + (f", resources {_nums(p['resources'], 4)}" if p["resources"] else "")
+                       + (f", after {'+'.join(p['parent'])}" if p["parent"] else "")
+                       + "; gives " + ("; ".join(f"{k} {','.join(v[:4])}" for k, v in p["outputs"].items() if v) or "effects")
+                       + f"; available {_gate(p['available'], 100)} [{p['src']}]")
+        out.append("scientists: " + ("; ".join(f"{s['id']} {_nums(s['skills'], 3)} {','.join(s['traits'])}"
+                                              + (f" (visible {s['visible'][:50]})" if s.get("visible") else "")
+                                              for s in x["scientists"]) or x.get("scientists_note")
+                                     or "none in the tag's character files"))
+        out.append("facility buildings: " + "; ".join(f"{b} {','.join(r['specialization'])}{' coastal' if r['coastal'] else ''} "
+                                                      f"{r['cost']:g} +{r['per_controlled_cost'] or 0:g}/owned [{r['src']}]"
+                                                      for b, r in x["facility_buildings"].items()))
+        out.append("scientist traits: " + "; ".join(f"{t} ({_nums(r['modifier'], 3)})" for t, r in list(x["scientist_traits"].items())[:12])
+                   + (f"; ... {len(x['scientist_traits']) - 12} more (--json)" if len(x["scientist_traits"]) > 12 else ""))
+        out.append("defines: " + _defs(x["defines"]))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_diplomacy(args):
+    w = world(args, args.TAG)
+    data = w.diplomacy(args.TAG)
+
+    def text(x):
+        wt = x["world_tension"]
+        out = [f"{x['tag']} at {w.date}: ideology {x['ideology']} [{x['ideology_src']}]; rules "
+               + (", ".join(f"{k} {v}" for k, v in x["rules"].items()) or "none set")
+               + f"; war impact on world tension x{x['war_impact_on_world_tension']}",
+               f"World tension at start: {wt['total']:g}% from history threats "
+               + (", ".join(f"{t['tag']} {t['name']} {t['v']:g} [{t['src']}]" for t in wt["named"]) or "(none)")
+               + "; wars at start: " + (", ".join(f"{r['attacker']}->{r['target']} {r['type']} (threat {r['threat']}) "
+                                                  f"[{r['src']}]" for r in wt["wars"]) or "none"),
+               "Gates (world tension needed = ideology + start spirits):"]
+        for k, g in x["gates"].items():
+            parts = ([f"{x['ideology']} {g['ideology']:g}"] if g["ideology"] is not None else []) + \
+                [f"{s['idea']} {s['value']:+g} [{s['src']}]" for s in g["spirits"]]
+            out.append(f"- {g['text']}: {'any' if g['need'] <= 0 else str(round(g['need'] * 100)) + '%'} "
+                       f"({', '.join(parts) or 'no modifier: 0'})")
+        js = [s for s in x["spirits"] if s["key"].startswith("justify")]
+        if js:
+            out.append("- justification time: " + ", ".join(f"{s['idea']} {s['key']} {s['value']:+g}" for s in js))
+        out.append("War goals (justify cost base + per state; take states; expire; threat):")
+        for g in x["wargoals"]:
+            out.append(f"- {g['id']}: {g['generate_base_cost']} + {g['generate_per_state_cost']}/state"
+                       + (f"; take up to {g['take_states_limit']} ({g['take_states_cost']:+g} each)" if g["take_states_limit"] else "")
+                       + f"; expire {g['expire']}; threat {g['threat']}; allowed {_gate(g['allowed'])}"
+                       + (f"; available {_gate(g['available'])}" if g["available"] is not True else "") + f" [{g['src']}]")
+        out.append("defines: " + _defs(x["defines"]))
+        out.append("method: " + x["d"] + "; " + wt["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_factions(args):
+    w = world(args, args.TAG)
+    data = scenariomod.factions(w, args.TAG)
+
+    def goal_text(g):
+        r = g.get("ratio") or {}
+        secs = "; ".join(f"{k} {v['min']}-{v['max'] if v['max'] is not None else ''}: {_nums(v['modifier'], 3)}"
+                         for k, v in (g.get("sections") or {}).items())
+        return f"{g['id']} \"{g.get('name')}\"" + (f" ({g.get('category')})" if g.get("category") else "") + \
+            (f": {', '.join(f'{k} {v}' for k, v in r.items())}" if r else (f": {g.get('completed')[:90]}" if g.get("completed") else "")) + \
+            (f"; {secs}" if secs else "")
+
+    def text(x):
+        out = [f"{x['tag']} factions: at start " + (", ".join(f"{f['kind']} {f['v']}" for f in x["faction_at_start"]) or "none")]
+        for t in x["templates"]:
+            if not t["created_by"] and t["selectable"] is not True:
+                continue
+            by = ", ".join(f"{c['kind']} {c['id']}" for c in t["created_by"][:3]) or "selectable when creating a faction"
+            out.append(f"- {t['id']} \"{t['name']}\" ({by}) [{t['src']}]")
+            out.append(f"    manifest {goal_text(t['manifest'])}")
+            if t["goals"]:
+                out.append("    goals " + "; ".join(goal_text(g) for g in t["goals"]))
+            out.append("    rules " + "; ".join(f"{r['id']} ({r.get('type')})" + (f": {_nums(r.get('modifier') or {}, 3)}"
+                                                                                 if r.get("modifier") else "")
+                                             for r in t["default_rules"])
+                       + (f"; available {t['available'][:80]}" if t.get("available") else ""))
+        other = [t["id"] for t in x["templates"] if not t["created_by"] and t["selectable"] is None]
+        if other:
+            out.append("templates whose visibility needs the running game: " + ", ".join(other))
+        if x["joins"]:
+            out.append("join effects: " + "; ".join(f"{j['effect']} {j['target']} by {j['kind']} {j['id']}" for j in x["joins"][:8]))
+        out.append("rule groups: " + "; ".join(f"{g['id']} (default {g['default']}): {','.join(g['rules'][:5])}"
+                                              for g in x["rule_groups"]))
+        mu = x["member_upgrades"]
+        out.append("member upgrades: " + "; ".join(f"{g['id']} {g['type']}: " + ",".join(g["upgrades"]) for g in mu["groups"])
+                   + " (" + ", ".join(f"{u['id']} {u['bonus']}" for u in mu["upgrades"]) + ")")
+        out.append("defines: " + _defs(x["defines"]))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_peace(args):
+    w = world(args, args.TAG)
+    data = w.peace(args.TAG, args.enemy or None)
+
+    def text(x):
+        out = [f"{x['tag']} peace-conference cost modifiers (enemies {','.join(x['enemies']) or 'none'}; multipliers "
+               "multiply; < 1 cheaper):"]
+        for rel in ("own", "enemy", "generic"):
+            rows = [m for m in x["modifiers"] if m["relation"] == rel]
+            if not rows:
+                continue
+            out.append(f"{rel} ({len(rows)}):")
+            for m in rows[: (60 if rel != "generic" else 30)]:
+                out.append(f"- {m['id']} {'/'.join(m['types'])} x{m['cost_multiplier']} ({m['category']}): "
+                           f"{m['enable'][:140]} [{m['src']}]")
+            if rel == "generic" and len(rows) > 30:
+                out.append(f"- ... {len(rows) - 30} more (--json)")
+        out.append("defines: " + _defs(x["defines"]))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_command(args):
+    w = world(args, args.TAG)
+    data = w.command(args.TAG)
+    if fair_foreign(args, w):
+        data["command_power_at_start"] = None
+        data["command_power_note"] = FAIR_DROPPED
+
+    def text(x):
+        cp = x["command_power_at_start"]
+        cpt = cp["v"] if cp else (x.get("command_power_note") or "not set by the history (STARTING_COMMAND_POWER)")
+        out = [f"{x['tag']} command: command power at start {cpt}; "
+               "defines: " + _defs(x["defines"])]
+        slots = {}
+        for s in x["spirits"]:
+            slots.setdefault((s["branch"], s["slot"], s["cost"]), []).append(s)
+        out.append(f"Military spirits ({len(x['spirits'])}; cost in that branch's XP):")
+        for (branch, slot, cost), ss in sorted(slots.items()):
+            out.append(f"- {branch} {slot} {cost} XP: " + ", ".join(
+                s["id"] + (f" (visible {_gate(s['visible'], 40)})" if s["visible"] not in (True, None) else "") for s in ss))
+        out.append(f"Leader abilities ({len(x['abilities'])}; cost CP as in the file, duration h [?]):")
+        for a in x["abilities"]:
+            mods = "; ".join(_nums(m, 4) for m in a["modifiers"].values())
+            out.append(f"- {a['id']} ({a['type']}) cost {a['cost']}, duration {a['duration']}"
+                       + (f", cooldown {a['cooldown']}" if a["cooldown"] else "") + (f": {mods}" if mods else "")
+                       + (f"; allowed {_gate(a['allowed'], 70)}" if a["allowed"] is not True else "") + f" [{a['src']}]")
+        out.append(f"Assignable leader traits ({len(x['traits'])}; type row/col cost [?] parents x exclusive: modifiers):")
+        for t in x["traits"]:
+            par = t["any_parent"] or t["all_parents"] or t["parent"]
+            mods = "; ".join(_nums(m, 3) for m in t["modifiers"].values())
+            out.append(f"- {t['id']} {t['type']} {t['gui_row']}/{t['gui_column']} {t['cost']}"
+                       + (f" <- {'/'.join(par)}" if par else "") + (f" x {t['mutually_exclusive']}" if t["mutually_exclusive"] else "")
+                       + (f": {mods}" if mods else "") + (f"; ability {t['enable_ability']}" if t["enable_ability"] else ""))
+        sk = {}
+        for s in x["skills"]:
+            sk.setdefault(s["type"], []).append(f"{s['level']}:{s['cost']}")
+        out.append("leader skill level costs (XP): " + "; ".join(f"{k} {' '.join(v)}" for k, v in sk.items()))
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
+def cmd_agency(args):
+    w = world(args)
+    data = w.agency(w.tag or None)
+
+    def text(x):
+        out = [f"Intelligence agency: La Resistance {'active' if x['dlc_la_resistance'] else 'NOT active'}; "
+               + (f"{x['tag']} agency at start: {x['agency_at_start']['v'] if x['agency_at_start'] else 'none'}; " if x["tag"] else "")
+               + "defines: " + _defs(x["defines"])]
+        branch = None
+        for u in x["upgrades"]:
+            if u["branch"] != branch:
+                branch = u["branch"]
+                out.append(f"{branch}:")
+            out.append(f"- {u['id']} ({len(u['levels'])} levels: " + " | ".join(_nums(lv, 3) for lv in u["levels"][:4])
+                       + (f"; while upgrading {_nums(u['during_progress'], 2)}" if u["during_progress"] else "")
+                       + (f"; available {u['available'][:80]}" if u["available"] else "") + f") [{u['src']}]")
+        out.append(f"Operations ({len(x['operations'])}; days, network %, operatives, risk, equipment, phase groups):")
+        for o in x["operations"]:
+            out.append(f"- {o['id']}: {o['days']}d, net {o['network_strength']}, {o['operatives']} op, risk {o['risk_chance']}"
+                       + (f", equipment {_nums(o['equipment'], 3)}" if o["equipment"] else "")
+                       + f", phases {len(o['phases'])}" + (f"; needs {o['requirements'][:80]}" if o["requirements"] else "")
+                       + f" [{o['src']}]")
+        out.append("method: " + x["d"])
+        return out
+
+    return emit(args, data, text)
+
+
 def cmd_defines(args):
     w = world(args)
     hits = w.defines.find(args.KEY)
@@ -1071,7 +1430,8 @@ def parser():
     p = add("research-timeline", cmd_research_timeline, "plan")
     p.add_argument("--rule", choices=("all", "any"), default="all")
     add("state", cmd_state, ("id", {"type": int}))
-    add("states", cmd_states, "TAG")
+    p = add("states", cmd_states, "TAG")
+    p.add_argument("--energy", action="store_true", help="energy per state: coal, factories, energy buildings")
     add("province", cmd_province, ("id", {"type": int}))
     p = add("route", cmd_route, ("src", {"type": int}), ("dst", {"type": int}))
     p.add_argument("--avoid-rivers", action="store_true")
@@ -1108,6 +1468,17 @@ def parser():
     p.add_argument("--enemy", action="append")
     p.add_argument("--steps", type=int, default=3, help="land steps from the front for coastal candidates")
     p.add_argument("--below", type=int, default=3, help="list naval bases below this level as candidates")
+    p = add("designs", cmd_designs, "TAG")
+    p.add_argument("--kind", choices=("tank", "plane", "ship"))
+    p = add("mio", cmd_mio, "TAG")
+    p.add_argument("--id", help="one organisation with its whole trait tree")
+    add("projects", cmd_projects, "TAG")
+    add("diplomacy", cmd_diplomacy, "TAG")
+    add("factions", cmd_factions, "TAG")
+    p = add("peace", cmd_peace, "TAG")
+    p.add_argument("--enemy", action="append", help="enemy tag (default: wars at start)")
+    add("command", cmd_command, "TAG")
+    add("agency", cmd_agency)
     return ap
 
 

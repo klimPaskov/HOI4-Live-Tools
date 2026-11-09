@@ -1,0 +1,4 @@
+peace_action_categories = {
+	other = { default = yes name = PEACE_ACTION_CATEGORY_OTHER }
+	is_core = { name = PEACE_ACTION_CATEGORY_IS_CORE }
+}

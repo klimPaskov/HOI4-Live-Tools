@@ -1,0 +1,17 @@
+faction_template_aaa = {
+	name = aaa_league
+	manifest = fix_manifest
+	goals = { fix_goal }
+	default_rules = { fix_joining_rule }
+}
+faction_template_open = {
+	name = open_league
+	manifest = fix_manifest
+	visible = { has_dlc = "Fixture DLC" }
+	available = { has_war = yes }
+	default_rules = { fix_joining_rule }
+}
+faction_template_hidden = {
+	manifest = fix_manifest
+	visible = { always = no }
+}

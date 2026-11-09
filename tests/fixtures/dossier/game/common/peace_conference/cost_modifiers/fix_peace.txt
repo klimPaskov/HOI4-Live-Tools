@@ -1,0 +1,25 @@
+peace_action_modifiers = {
+	aaa_core_cheap = {
+		category = is_core
+		peace_action_type = take_states
+		enable = { ROOT = { tag = AAA } FROM.FROM.FROM = { is_core_of = ROOT } }
+		cost_multiplier = 0.5
+	}
+	bbb_defends = {
+		category = treaties_or_conferences
+		peace_action_type = { take_states puppet }
+		enable = { ROOT = { original_tag = BBB } }
+		cost_multiplier = 1.5
+	}
+	ccc_only = {
+		peace_action_type = puppet
+		enable = { CCC = { exists = yes } }
+		cost_multiplier = 0.9
+	}
+	generic_claim = {
+		category = has_claim
+		peace_action_type = take_states
+		enable = { FROM.FROM.FROM = { is_claimed_by = ROOT.FROM } }
+		cost_multiplier = 0.9
+	}
+}

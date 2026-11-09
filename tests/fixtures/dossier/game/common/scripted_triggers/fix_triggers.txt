@@ -1,0 +1,3 @@
+aaa_fix_trigger = {
+	OR = { original_tag = AAA original_tag = CCC }
+}

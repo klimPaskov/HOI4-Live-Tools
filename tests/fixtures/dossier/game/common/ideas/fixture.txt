@@ -1,6 +1,6 @@
 ideas = {
 	country = {
-		aaa_spirit = { modifier = { stability_factor = 0.05 } }
+		aaa_spirit = { modifier = { stability_factor = 0.05 lend_lease_tension = 0.2 justify_war_goal_time = -0.1 } }
 		bbb_spirit = { modifier = { surrender_limit = -0.1 } }
 		BBB_demoralized = { allowed = { always = no } modifier = { surrender_limit = -0.2 } }
 	}
