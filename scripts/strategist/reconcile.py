@@ -44,10 +44,15 @@ def norm(name):
 
 class Caller:
     def __init__(self, call_cmd):
-        self.argv = shlex.split(call_cmd)
+        # POSIX splitting would eat Windows backslashes; there, split without escapes and drop quotes.
+        if os.name == "nt":
+            self.argv = [a.strip('"') for a in shlex.split(call_cmd, posix=False)]
+        else:
+            self.argv = shlex.split(call_cmd)
 
     def __call__(self, tool, args):
-        p = subprocess.run(self.argv + [tool, json.dumps(args)], capture_output=True, text=True, timeout=120)
+        p = subprocess.run(self.argv + [tool, json.dumps(args)], capture_output=True, text=True, timeout=120,
+                           encoding="utf-8", errors="replace")
         if p.returncode != 0:
             raise RuntimeError("%s failed: %s" % (tool, (p.stderr or p.stdout)[-400:]))
         out = json.loads(p.stdout[p.stdout.index("{"):])

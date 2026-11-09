@@ -35,15 +35,18 @@ FAKE = textwrap.dedent('''
 class ReconcileTests(unittest.TestCase):
     def run_it(self, plan, extra=()):
         d = tempfile.mkdtemp()
-        with open(os.path.join(d, "plan.json"), "w") as f:
+        with open(os.path.join(d, "plan.json"), "w", encoding="utf-8") as f:
             json.dump(plan, f)
         fake = os.path.join(d, "fake_broker.py")
-        with open(fake, "w") as f:
+        with open(fake, "w", encoding="utf-8") as f:
             f.write(FAKE)
-        p = subprocess.run([sys.executable, SCRIPT, "--run", d, "--call-cmd", "%s %s" % (sys.executable, fake)]
-                           + list(extra), capture_output=True, text=True)
-        report = json.load(open(os.path.join(d, "reconcile.json")))
-        return p.returncode, report, json.load(open(os.path.join(d, "plan.json"))), d
+        cmd = '"%s" "%s"' % (sys.executable, fake)
+        p = subprocess.run([sys.executable, SCRIPT, "--run", d, "--call-cmd", cmd] + list(extra),
+                           capture_output=True, text=True, encoding="utf-8")
+        path = os.path.join(d, "reconcile.json")
+        self.assertTrue(os.path.exists(path), p.stdout + p.stderr)
+        report = json.load(open(path, encoding="utf-8"))
+        return p.returncode, report, json.load(open(os.path.join(d, "plan.json"), encoding="utf-8")), d
 
     def test_one_to_one_variants_are_patched_and_the_rest_listed(self):
         plan = {"army_layout": [{"name_hint": "North", "templates": ["divisione di fanteria", "Ascari Eritrea"],

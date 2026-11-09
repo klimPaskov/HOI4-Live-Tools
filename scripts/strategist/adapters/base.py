@@ -71,7 +71,7 @@ class Adapter:
     def binary_candidates(self):
         configured = self.settings.get("binary") or self.default_binary
         out = []
-        if configured and os.sep in configured:
+        if configured and ("/" in configured or os.sep in configured):
             out.append(configured)  # an explicit path is tried as given (the probe says if it runs)
         elif configured and shutil.which(configured):
             out.append(shutil.which(configured))
