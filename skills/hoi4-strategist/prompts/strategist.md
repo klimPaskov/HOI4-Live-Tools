@@ -12,14 +12,17 @@ Inputs:
 * `skills/hoi4-campaign-playbook/plan.schema.json` and the playbook references the skill names.
 * `skills/hoi4-campaign-playbook/references/lessons.jsonl`.
 
-Do steps 1 to 8 and step 10 of the procedure (step 9 runs only when the operator starts the live
-reconcile). Run the critic in step 8 with the command the skill gives.
+Do steps 1 to 7 of the procedure, then stop. The orchestrator (`scripts/strategist/strategize.py`)
+re-runs the gates, runs the critic in a fresh context (step 8), sends you its findings with
+`prompts/answer.md`, and freezes the plan (step 10). The dossier may already be built in
+`RUN/dossier/`; rebuild it only if its manifest does not match the run spec. Do not run the critic
+yourself.
 
 Outputs in RUN:
 * `plan.json` (valid against the schema, 0 validator and lint errors, `_meta` filled at step 10);
 * `plan.md` (every number tagged [V file:line], [D method] or [H]);
 * `plan.brief.md` (60 lines or fewer);
-* `lint.json`, `review/answers-<n>.json`.
+* `lint.json`.
 
 Rules: facts only from the dossier or `scripts/hoi4facts/facts.py`, never from memory; in fair mode no
 per-division enemy positions and no AI strategy files; plan keys only from the schema; never touch the

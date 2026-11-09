@@ -43,6 +43,8 @@ REQUIRED_FILES = [
     "prompts/strategist.md",
     "prompts/critic.md",
     "prompts/revise.md",
+    "prompts/fix.md",
+    "prompts/answer.md",
     "agents/openai.yaml",
     "examples/README.md",
 ]
@@ -147,7 +149,7 @@ class StrategistSkillTest(unittest.TestCase):
     def test_prompts_name_no_provider(self):
         prompts = os.path.join(SKILL, "prompts")
         names = sorted(os.listdir(prompts))
-        self.assertEqual(names, ["critic.md", "revise.md", "strategist.md"])
+        self.assertEqual(names, ["answer.md", "critic.md", "fix.md", "revise.md", "strategist.md"])
         for name in names:
             text = read(os.path.join(prompts, name))
             self.assertIn("skills/hoi4-strategist/SKILL.md", text, name)

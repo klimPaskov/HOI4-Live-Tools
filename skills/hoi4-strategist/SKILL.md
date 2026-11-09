@@ -107,7 +107,9 @@ re-run. Also `python3 scripts/hoi4facts/facts.py research-timeline RUN/plan.json
 `facts.py focus-timeline <TAG> --date <start_date> <focus_path ids...>` and copy their dates into
 plan.md. *Gate:* 0 errors from both; every remaining warning is in plan.md §11 with a reason.
 
-**8. Critic pass.** Run the critic in a fresh context:
+**8. Critic pass.** Normally `scripts/strategist/strategize.py` runs steps 1-10 in order and starts the
+critic itself (prompts `strategist.md`, `fix.md`, `critic.md`, `answer.md`). Run standalone, start the
+critic in a fresh context:
 `python3 scripts/strategist/run.py --role critic --run RUN --prompt skills/hoi4-strategist/prompts/critic.md`.
 It writes `RUN/review/critic-1.json`. Answer every finding in `RUN/review/answers-1.json` (fix, or rebut
 with a source), re-run step 7, then run the critic again for round 2. At most 2 rounds; protocol in
