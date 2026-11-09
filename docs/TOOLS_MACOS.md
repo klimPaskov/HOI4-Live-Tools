@@ -21,6 +21,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_construction_find_open` (A): Default-off Mac qualification:
 - `hoi4_construction_find_state` (A): Default-off Mac qualification:
 - `hoi4_construction_open` (A): Default-off Mac qualification:
+- `hoi4_construction_order` (A): Reorder or remove one own construction line with its row buttons in the construction panel:
 - `hoi4_construction_place` (A): Default-off Mac single-placement qualification:
 - `hoi4_construction_select` (A): Default-off Mac qualification:
 - `hoi4_design_set_production` (A): Change which design an existing own production line builds:
@@ -33,7 +34,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_resources` (R): Own strategic resources per day from memory:
 - `hoi4_state_slots` (A): Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it).
 - `hoi4_trade` (A): Read the Trade view (opens it with the R key, changes nothing):
-- `hoi4_trade_set` (A): Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it) through the Trade view:
+- `hoi4_trade_set` (A): Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it, or its three-letter tag such as USA) through the Trade view:
 
 ## Research, doctrines, special projects
 
@@ -76,9 +77,10 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 ## Army, templates, designs, supply
 
-- `hoi4_armies` (R): Own armies (name, division ids) and unassigned division ids.
+- `hoi4_armies` (R): Own armies (name, division ids, threat:
 - `hoi4_army_assign` (A): Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there.
 - `hoi4_army_assign_plan` (R): Pure read:
+- `hoi4_army_attack` (A): Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute).
 - `hoi4_army_commander` (A): Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list.
 - `hoi4_army_create` (A): (optional absorb_existing:
 - `hoi4_army_detach` (A): Move chosen divisions out of an army:
@@ -150,6 +152,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_peace_status` (R): Read-only:
 - `hoi4_peace_submit` (A): Submit Demands for the round (the conference's end-turn button;
 - `hoi4_peace_take` (A): In the open peace conference, choose the demand kind (default Take State;
+- `hoi4_railway_build` (A): Queue ONE railway with the game's railway construction mode:
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
 - `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
