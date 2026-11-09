@@ -11,7 +11,8 @@ Steps, each gated; the script owns the order so no step can be skipped or self-r
   1. dossier    facts.py dossier build -> RUN/dossier/ (deterministic, cached by its manifest)
   2. strategist run.py --role strategist, prompt skills/hoi4-strategist/prompts/strategist.md
                 (procedure steps 1-7; it stops before the critic)
-  3. gates      validate_plan.py --strict and lint_plan.py --json -> RUN/lint.json; on errors the
+  3. gates      validate_plan.py --strict, lint_plan.py --json -> RUN/lint.json, and check_calls.py
+                (every player tool call valid against the tool catalogue); on errors the
                 strategist gets prompts/fix.md with RUN/gates-<n>.txt, at most FIX_ROUNDS times
   4. critic     run.py --role critic (fresh context) -> RUN/review/critic-<n>.json
   5. answers    on a failed review the strategist gets prompts/answer.md, then gates and critic
@@ -135,6 +136,7 @@ def gates(runner, run_dir, args):
                               plan, "--strict"] + game_args(args))
     lcode, lout = runner.run([sys.executable, os.path.join(ROOT, "scripts", "hoi4facts", "lint_plan.py"),
                               plan, "--json"] + lint_args(args))
+    ccode, cout = runner.run([sys.executable, os.path.join(ROOT, "scripts", "hoi4facts", "check_calls.py"), run_dir])
     lint = {}
     if not runner.dry:
         try:
@@ -142,8 +144,10 @@ def gates(runner, run_dir, args):
         except ValueError:
             lint = {"unparsed": lout[-2000:]}
         write_json(os.path.join(run_dir, "lint.json"), lint)
-    text = "## validate_plan --strict (exit %s)\n%s\n## lint_plan (exit %s)\n%s\n" % (vcode, vout, lcode, lout)
-    return vcode == 0 and lcode == 0, text, lint
+    text = ("## validate_plan --strict (exit %s)\n%s\n## lint_plan (exit %s)\n%s\n"
+            "## check_calls: player tool calls against the tool catalogue (exit %s)\n%s\n"
+            % (vcode, vout, lcode, lout, ccode, cout))
+    return vcode == 0 and lcode == 0 and ccode == 0, text, lint
 
 
 def review_passes(critic):

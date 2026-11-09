@@ -33,6 +33,8 @@ class Fake(strategize.Runner):
                 self.validate_fails -= 1
                 return 1, "1 error(s)"
             return 0, "0 error(s)"
+        if "check_calls.py" in joined:
+            return 0, "checked 0 calls; 0 error(s)"
         if "lint_plan.py" in joined:
             return 0, json.dumps({"errors": 0, "warnings": 2})
         if "--role" in argv:
