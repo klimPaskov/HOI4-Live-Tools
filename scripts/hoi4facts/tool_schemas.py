@@ -148,7 +148,8 @@ def check_call(catalogue, tool, args):
         ok = kind is None or any(checks.get(k, True) for k in kinds)
         if not ok:
             problems.append("%s: argument %s should be %s" % (tool, key, kind))
-        if isinstance(spec.get("enum"), list) and value not in spec["enum"]:
+        placeholder = isinstance(value, str) and value.startswith("<") and value.endswith(">")
+        if isinstance(spec.get("enum"), list) and value not in spec["enum"] and not placeholder:
             problems.append("%s: argument %s=%r not in %s" % (tool, key, value, spec["enum"]))
     return problems
 
