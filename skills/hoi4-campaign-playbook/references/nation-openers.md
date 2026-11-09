@@ -21,8 +21,11 @@ change fort and faction-goal counts. Keep the battalion mix and re-fit the width
 Start laws: Germany, Italy, Japan, Poland and Hungary start on Partial Mobilisation; the USSR, UK, France and
 Romania on Civilian Economy; the USA on Undisturbed Isolation with the Great Depression and Free Trade. Research
 slots at start: Germany, Italy, UK and USA 4; USSR, Japan, France, Poland, Hungary and Romania 3; China 2.
-Balance of power exists only for BRA, CZE, DEN, ETH, FIN, ITA, PRC, SWE and SWI. Brazil plays the generic tree in
-this install.
+Balance of power exists only for BRA, CZE, DEN, ETH, FIN, ITA, PRC, SWE and SWI. Trees in this install (10 DLCs plus
+the integrated Together for Victory, Death or Dishonor, Waking the Tiger and Man the Guns): AFG, ARG, BRA, BUL, CHL,
+GRE, INS, IRQ, PAR, PER, SIA, TUR and URG play the generic tree (`generic_focus`), so never name a country focus for
+them; HUN plays the Götterdämmerung tree (`wuw_HUN_*`), MAN the NCNS tree (`MAN_tsr_*`); ROM, YUG, CZE, HOL, MEX and
+the dominions keep their own trees. Check the tag's tree before using an opener.
 
 ## Germany (GER)
 
@@ -131,6 +134,12 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
 - **Navy:** no new capital ships; torpedo destroyers, light cruisers with four light batteries and subs in groups of 10
   in deep Mediterranean regions; Base Strike with naval targeting first; one escort group on the Red Sea route while
   East Africa is supplied; train the fleet for navy XP.
+- **Gates:** no recon technology at the 1936 start: research it early if a template uses recon. Duce missions run 350
+  days: heavy industry needs the start civilian factories plus 4, the army mission 650k men instead of 750k after
+  Boost the Grand Council of Fascism, the air mission +300 fighters and +300 of one bomber type. Superesercito,
+  Superaereo and Supermarina open only at war with a major; Pact of Steel dismisses Guido Jung.
+- **After Ethiopia:** Naval Power Projection (+2 dockyards), Terni, synthetic rubber, Strengthen Northern Industry
+  (New Industrialization Program then upgrades the designers to their northern versions), Railway and Air Innovations.
 
 ## Japan (JAP)
 
@@ -144,18 +153,19 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
 - **Focus and PP:** Imperial Defense Plan, Showa Aircraft Industries (Naval Reform), Purge the Kodoha Faction, the
   Military Ministers' Attaché System (Illusive Gentleman, Political Loyalty), Develop New Fighters (Industrial
   Liaisons, Army Reformer), Revisit the Twenty-One Demands, Reinforce the East Hebei Garrisons (annex Manchukuo after
-  it finishes its settler focus; Incite Tensions in the Diet decision; Patrol Boats; the super-heavy battleship project
-  only for a battleship navy), Nanshin-ron, the Harakiri Debate (Guerilla War), Konoe's First Cabinet, National
-  Spiritual Mobilisation (Total Mobilisation), State General Mobilisation (Luxury is the Enemy), Religious
-  Organisations (Labour Patriot Corps), New Order Movement (State Serves the Military), Imperial Rule Assistance
-  Association, Ministry of Commerce and Industry (State Shinto in Education), Co-Prosperity Sphere (Extensive
-  Conscription, War Bonds), Demand Tonkinese Bases (finance minister; spymaster), Occupy Siam (endorse the civic
-  faction), Central Economic Council, Showa Research Association, Takahashi, Guide the Zaibatsus, Sumitomo (industrial
-  concern), RIKEN, Industrial Patriotic Association, Mitsubishi, Develop Chinese Resources, Mitsui (bonus on Tools 4),
-  the navy and army arsenals, Prepare the Southern Fronts, Occupy Indochina, Rely on Infantry Offensives, the assault
-  doctrine and infantry equipment focuses, Focus on Aircraft Carriers. Then the navy focuses (needed before any fleet
-  battle), Resource Security as soon as possible, 7075 Aluminium early in the war, the Senjinkun code at war (cheap last
-  stand), the Bullet Train Plan if the Axis needs supply help.
+  it finishes its settler focus; Incite Tensions in the Diet decision; Patrol Boats; the super-heavy battleship
+  project only for a battleship navy), Nanshin-ron, the Harakiri Debate (Guerilla War), Konoe's First Cabinet,
+  National Spiritual Mobilisation (Total Mobilisation), State General Mobilisation (needs an active war: queue it
+  before China can capitulate and leave Nanjing for last; Luxury is the Enemy), Religious Organisations (Labour
+  Patriot Corps), New Order Movement (State Serves the Military), Imperial Rule Assistance Association, Ministry of
+  Commerce and Industry (State Shinto in Education), Co-Prosperity Sphere (Extensive Conscription, War Bonds), Demand
+  Tonkinese Bases (finance minister; spymaster), Occupy Siam (endorse the civic faction), Central Economic Council,
+  Showa Research Association, Takahashi, Guide the Zaibatsus, Sumitomo (industrial concern), RIKEN, Industrial
+  Patriotic Association, Mitsubishi, Develop Chinese Resources, Mitsui (bonus on Tools 4), the navy and army arsenals,
+  Prepare the Southern Fronts, Occupy Indochina, Rely on Infantry Offensives, the assault doctrine and infantry
+  equipment focuses, Focus on Aircraft Carriers. Then the navy focuses (needed before any fleet battle), Resource
+  Security as soon as possible, 7075 Aluminium early in the war, the Senjinkun code at war (cheap last stand), the
+  Bullet Train Plan if the Axis needs supply help.
 - **Research:** Tools 1-4 and Concentrated 1-4 on time with the Mitsui and computing bonuses; Construction 3,
   Excavation 1-3 (aluminium decisions need Excavation 3; click them slowly); AA 1-2 and upgrades, AT 1-2, infantry
   equipment 1-2, gun 3; mountaineers 1 and support weapons; improved air torpedoes, improved carrier, magnetic
@@ -185,6 +195,8 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   garrisons; if the rubber cannot be taken, land in Africa to relieve the Axis.
 - **META:** mass 2-wide divisions trained only to convert into other templates, or converted to wide empty templates to
   meet the field-manpower focus gate (MX04).
+- **China air:** a fast China war needs no new aircraft: train the existing wings, carrier wings included, and base
+  them on Okinawa, Dairen and East Hebei.
 
 ## Soviet Union (SOV)
 
@@ -242,6 +254,9 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   reserve infantry). The FAIR USSR attacks the Axis from 1942.
 - **META:** 2-wide last-stand divisions (deployed divisions at war are at least 10 wide in FAIR); empty or disabled
   conversion templates for mastery (MX04).
+- **Gates:** each purge trial waits 175 days after the previous one, so ending paranoia takes about 18 months from the
+  first trial (fill the gaps with industry focuses); Finish the Five Year Plan needs 100 controlled factories, the
+  Third Five Year Plan 120.
 
 ## United Kingdom (ENG)
 
@@ -281,6 +296,9 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   Italy's fleet first; take the French fleet when France falls; raid Axis convoys. Navy: ASW destroyers on escort (1
   per 12 convoys per region) plus hunter patrols; carriers 2-4 per strike force; fighters at home with radar. Landing
   preparation and shore bombardment: NA38-NA41.
+- **Gates:** abdication crisis: choose the morganatic marriage, take the +100 PP event 50 days later, then back down
+  (net +100 PP for -5% stability; Steady As She Goes stays available). Partial Mobilisation needs war support above
+  25%; the UK starts at 10%.
 
 ## United States (USA)
 
@@ -317,6 +335,9 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   reserve waves land behind to encircle, best for Allied air); after landfall push from several directions (Low
   Countries, southern France, Norway); rangers on fronts, not on battle plans across rivers (OP49).
 - **META:** an early war to drop the Depression; civ boosting to allies (MX08).
+- **Gates:** the Two Ocean Navy Act adds 5 dockyards each in two states with 5 free slots: keep those slots free.
+  Limited Intervention, War Propaganda and Focus on Europe open the intervention-mandate decisions; the war goal on
+  Germany needs war support above 25% and congress support.
 
 ## France (FRA)
 
@@ -324,14 +345,17 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   Government (+0.8 PP daily cost, -10% stability, -50% surrender limit); Full Employment (going past Limited
   Conscription turns it into a -10% output Worker Shortage).
 - **1936:** Local Autonomy; agency; civilian factories in Normandy, Loire, Champagne (infrastructure in Calais first);
-  Revive the National Bloc, Laissez-Faire (bonus lands two years later); take the 1 May 1936 election event (free Early
-  Mobilisation); Review Foreign Policy, Silent Workhorse; dockyards on convoys.
+  Revive the National Bloc, Laissez-Faire (three 150% industry bonuses on completion: hold them for tools and
+  concentrated industry; two years later Inefficient Economy steps down from -20% to -10% output); take the 1 May 1936
+  election event (free Early Mobilisation); Review Foreign Policy, Silent Workhorse; dockyards on convoys.
 - **1937-38:** Begin Rearmament; the flame-tank project (cheap design now, converted later); attaché to China;
   Strengthen Government (PP-starved until 1938); Blum-Viollette, Encourage Immigration (removes Full Employment before
   Extensive Conscription); Defensive Stratagems a year after Strengthen Government (removes Disjointed Government);
   bank 300 PP for War Economy and Extensive Conscription on war day.
 - **1939:** join the Allies; Colonial Industry (+12 factories); against the AI, counter-attack into the Rhineland with
   tanks or SP guns while Germany is in Poland.
+- **Third Empire:** Repeal the Law of Exile (+120 PP) also removes Disjointed Government once the 365-day
+  constitutional revision has expired; join the Allies before proclaiming the Third Empire.
 
 ## Poland (POL)
 
@@ -354,6 +378,9 @@ Monarchy route and META plan: [poland-meta.md](poland-meta.md).
   Manfréd Weiss steel, first military factories), Pécs oil; infrastructure and a facility once slots run out (~1940).
 - **1938-41:** First Vienna Award, Carpathian Ruthenia, Second Vienna Award without war; Tripartite Pact only after
   France falls; Yugoslavia with Germany in 1941; joining the Allies cuts rubber, so build air first or refineries.
+- **Götterdämmerung gates:** territorial demands need army manpower (Southern Slovakia 120k, Carpathian Ruthenia 150k,
+  Burgenland 185k before the Anschluss, Transylvania 200k); a refusal gives a war goal; meet the gates with real
+  infantry (one-battalion spam is META, MX21).
 
 ## Romania (ROM)
 
@@ -386,6 +413,16 @@ Full FAIR plan: [china-fair.md](china-fair.md).
   Narvik crisis (+40% war support), puppet Norway; Bornholm, puppet Denmark; integrate both before German interests in
   Scandinavia; Winter War, Åland, puppet Finland; infrastructure in the three northern resource states, then Gävleborg
   (dam).
+- **Fascist line (non-historical showcase):** `SWE_defense_act`, `SWE_urbanization`,
+  `SWE_government_weapons_contract`, bank 150 PP, `SWE_sieze_landsverk`, `SWE_the_old_enemy_stirs`,
+  `SWE_prevent_a_red_dictatorship`, `SWE_radiojanst`, `SWE_appeal_for_support`, `SWE_organize_a_putsch`,
+  `SWE_defense_above_all`.
+
+## Finland (FIN)
+
+- **Winter War:** hold Leningrad (state 195) for 30 days while outside any faction (or leading one): the peace
+  decision then offers a white peace or Murmansk, Onega and Olonets if Finnish-held; pure border defence usually
+  breaks when winter ends.
 
 ## Ethiopia (ETH)
 
@@ -399,14 +436,23 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   for instant units; walk into Aussa once Italy holds Tigray; rotate, small southern pockets, War Economy, refuse Italy's
   peace; take Massawa; the Fait Accompli focus (`ETH_fait_accompli`) cedes held Eritrea, Somaliland and Jubaland (SC04-SC06).
 - **After:** infrastructure focuses before the Federal Empire; reintegrate puppets at 75 PP.
+- **Communist route:** `ETH_military_communism` excludes `ETH_rally_around_the_emperor`; it leads to Soviet Aid
+  (italo-ethiopian-war.md §6).
 
 ## Manchukuo (MAN)
 
 - **Start:** 3 military, 2 civilian factories; Kwantung Veto (+25% law and advisor costs); Low Legitimacy (-50%
   stability and war support).
-- **Order:** Pacify the Countryside, the subject-law change (Japan cannot call you into the China war), Local Arms
+- **Order (names):** Pacify the Countryside, the subject-law change (Japan cannot call you into the China war), Local Arms
   Procurement (+4 military factories), Purge the General Affairs Council (removes the veto), then Seize Japanese Arms
   Depots repeatedly (about 10k guns the first time); independence war when Japan is about half way into China.
+- **NCNS ids (525 days straight):** `MAN_tsr_pacify_the_countryside` (35) -> `MAN_tsr_trade_delegation` (35) ->
+  `MAN_tsr_assertiveness` (35) -> `MAN_tsr_request_control_of_the_railways` (70) ->
+  `MAN_tsr_staff_the_court_with_manchus` (35) -> `MAN_tsr_expand_the_imperial_guards` (70) ->
+  `MAN_tsr_local_arms_procurement` (70) -> `MAN_tsr_bolster_nationalism` (70) ->
+  `MAN_tsr_purge_the_general_affairs_council` (70) -> `MAN_tsr_independence_war` (35); before the war run Divert
+  Machine Tools four times (50 PP each, +1 civilian factory and slot) and Prepare to Seize Arms to 50 (30 command
+  power per step).
 
 ## Yugoslavia (YUG)
 
@@ -421,3 +467,8 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
 - **Mexico (fascist line):** Improve Worker Conditions, Spain volunteers, Social Reformer, arrest Cedillo, prosecute the
   clergy, fascist government (+150 PP), Partial Mobilisation; Central American wars while keeping your own generated
   tension under about 10% are META. Communist line: Red Shirts, invite Trotsky, revolution at 40% communism.
+
+## Siam (SIA)
+
+- Generic tree here (no Thunder at Our Gates): use the generic industry line. When Japan completes
+  `JAP_sea_pressure_siam`, accept its faction offer; the exclusive `JAP_occupy_siam` means war on Siam.

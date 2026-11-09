@@ -234,7 +234,7 @@ when it has no row here.
 | MX13 | Planning without a front | Building planning on a garrison order, with unassigned divisions, or on a land front and then switching the army to a naval invasion | META |
 | MX14 | Volunteer manpower laundering | Volunteers used to park or recover manpower | META |
 | MX15 | Equipment-disable loopholes | Switching off support or regimental equipment to keep the bonus; training without the expensive equipment and filling it later | BAN in FAIR |
-| MX16 | Cheap-ability armies | A one-battalion army to buy Force Attack or Last Stand cheaply, then stacking the attack on it | META |
+| MX16 | Cheap-ability armies | A one-battalion army to buy Force Attack or Last Stand cheaply, then stacking the attack on it; since 1.19.0 abilities cost per battalion and apply only to the general's own army, so a small army using its own ability is ordinary play | Patched (1.19.0) |
 | MX17 | AA reserve division | A line-AA division kept in reserve so it never loses its AA | META |
 | MX18 | Reserve re-order | Cancelling and re-issuing orders so every waiting reserve joins at once: once to commit reserves is ordinary, repeated to farm is META | Journal it |
 | MX19 | Allied spy-network stacking | Several allies' networks on one state to strip entrenchment and planning | FAIR in single-player |
@@ -242,7 +242,7 @@ when it has no row here.
 | MX21 | Mission-gate spam | One-battalion divisions (Anschluss cavalry, Romanian focus gates) only to pass an army-size gate; below 10 width they are also banned at war | META |
 | MX22 | Contrived own civil war | Pre-splitting the army before a scripted civil war | META |
 | MX23 | Faction-goal reveal | Dropping below a goal's threshold to make it selectable, then exceeding it again | META |
-| MX24 | One-submarine task forces | Single-sub task forces to stay undetected, drain enemy fuel or act as decoys (FAIR needs 5 per fleet) | META |
+| MX24 | Small submarine task forces | Task forces of 1-4 submarines spread over many zones to stay undetected, drain enemy fuel or act as decoys (FAIR needs 5 per fleet) | META |
 | MX25 | Dominance-only hulls | Empty carriers or battlecruisers built only for dominance per IC | META |
 | MX26 | Flicker bombing | Switching bomber regions whenever fighters appear | BAN in FAIR, META allowed |
 | MX27 | Neutral-territory invasion | Invading through a neutral's military access | META |
@@ -258,4 +258,8 @@ when it has no row here.
 | MX37 | No-garrison bleeding | Leaving non-core land ungarrisoned to wreck an invader's equipment | META |
 | MX38 | Release to skip a gate | Poland releases Lithuania to bypass a compliance requirement | META |
 | MX39 | Save copying | Copying ironman saves before a risky declaration | Unavailable (file manipulation) |
-| MX40 | Patched tricks | Faction leave-and-rejoin manpower, army-leader cost stacking, design cost below -100%, task forces in two places, HQ disband trickleback, Distribute Taskforces force-retreat, halted-wing range, the Force Attack exploit, strike-force disengage spam, tech dragging for bonuses, peacetime mines, the Hungarian capitulation path, licensed ship modules | Patched or blocked: never plan on them |
+| MX40 | Patched tricks | Faction leave-and-rejoin manpower, army-leader cost stacking, design cost below -100%, task forces in two places, HQ disband trickleback, Distribute Taskforces force-retreat, halted-wing range, the Force Attack exploit, strike-force disengage spam, tech dragging for bonuses, peacetime mines, the Hungarian capitulation path, licensed ship modules, re-completing faction goals by dismantling and recreating the faction, subjects blockading their overlord | Patched or blocked: never plan on them |
+| MX41 | Volunteer-recall duplicate HQ | Recalling volunteers while their general is deployed as an Army HQ leaves a second, permanent HQ unit (1.19.4 bug); withdraw the HQ first | BAN |
+| MX42 | State-transfer shelter | Transferring or selling states to a third country to keep them from an invader or to make artificial buffer borders, then taking them back | BAN |
+| MX43 | Paradrop retreat trick | Dropping one tile behind the front only to force a retreat glitch, or converting paratroopers to another template right after landing; supported drops on hubs, rail junctions, ports and victory points stay FAIR | BAN |
+| MX44 | Parked-mission efficiency | Holding air wings on a mission they cannot fly (wrong region or mission type) to build mission efficiency, then switching to the real mission | META |

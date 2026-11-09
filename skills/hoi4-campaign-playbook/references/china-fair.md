@@ -119,7 +119,7 @@ Fillers when nothing above can start: relocate_factories_from_the_coast (5), the
 guerrilla_warfare (5), introduce_the_baojia_system (10; exclusive with expand_the_tongzi_jun) ->
 inspect_the_troops (5; needs a faction) -> from_many_to_one (10), formalize_field_promotions (10; exclusive with
 set_up_an_nco_school) -> crackdown_on_corruption_in_recruitment (10), reinforce_connections_with_shanghai_elites
-(5), extend_compulsory_education (5), institute_a_national_registry_of_property (10).
+(5), institute_a_national_registry_of_property (10).
 
 After 1938: **CHI_towards_a_professional_army** (10) or **CHI_towards_a_popular_army** (10; needs 1,000,000
 army manpower), lend-lease branches (section 9), the remaining defence and army reform focuses.
@@ -129,6 +129,11 @@ south = YUN, GXC or GDC) -> **CHI_victory_over_the_invaders** (5; needs faction 
 **CHI_a_generalissimo_for_all_of_china** (10) -> **CHI_subjugate_korea** (10, exclusive with Joining the International Community) -> **CHI_reclaim_the_north** (10). Also **CHI_request_handover_of_coastal_cities** (5; states 326 Hong Kong,
 729 Macau, 728 Guangzhouwan) and **CHI_petition_territorial_restoration** (5). Alternative conventional route: **CHI_preemptive_strike** (10; creates annex war goals on every non-allied warlord; do not take while Japan
 is the main front).
+
+**CHI_extend_compulsory_education** (5) is the second focus, not a filler: the third research slot needs the countryside
+variable at -0.05 (start -0.20) and the focus's mission adds +0.01 every 180 days. More slots later:
+**CHI_expand_national_sun_yat_sen_university** (more than 74 factories plus the steel, tungsten and fertiliser focuses) and
+**CHI_unify_the_admissions_process**.
 
 ## 5. Warlords: mechanics, faction goals and sequence
 
@@ -151,6 +156,9 @@ outside China (all their core states owned by CHI); `faction_goal_west_subjugate
 (unlocked by `CHI_from_many_to_one`) exist; the long-term `faction_goal_no_japanese_in_china` (no Japanese-controlled state in mainland China) completes with +100 power projection, +20 faction influence to big members and
 rewards 100 PP / 100 army XP / 100k manpower to qualifying members. Use these as the measurable unification checklist, together with ownership checks per state.
 
+On the `CHI_dang_guo` route pick the first option of the Liangguang incident: it forms the Chinese United Front and invites
+the warlords early; the second option kills Chiang after `CHI_strengthening_our_resolve`.
+
 ## 6. Communists
 
 `PRC` starts with 2 weak states and a hostile opinion modifier. The Xi'an incident is started by a warlord's
@@ -164,6 +172,10 @@ Later: watch `CHI_communist_infiltration_in_*` decisions (Gansu, Shandong, Jiang
 Shanxi, Suiyuan, Xi'an, Ordos); after Victory over the Invaders take **Crush the Communists** (available
 while PRC exists and is not at war with us; its war goal never expires); the Blue Shirt path's
 `CHI_put_an_end_to_PRC` is not on this route. Do not fight PRC and Japan at the same time.
+
+Counter-infiltration costs 50 PP each: `CHI_develop_counterinsurgency_tactics` halves it (needs
+`CHI_empower_the_bureau_of_investigation_and_statistics`), `CHI_arrest_the_seven_gentlemen` divides it by 1.5 and
+`CHI_co_opt_the_koh_hsin_movement` cuts it by a quarter; finish the Bureau-Counterinsurgency pair before the 1939 waves.
 
 ## 7. Japan
 
@@ -190,6 +202,13 @@ Taiwan 524 (all China cores or Japanese/puppet holdings). Expelling Japan from t
 [strategy](strategy.md); Kyushu or Shikoku first, then Kansai/Kanto. Invasion capacity by tech (divisions / plans / prep days): base 4/1/60, transport 6/2/50, landing craft 10/5/40, tank landing
 craft 15/9/30; launch needs 50%+ supremacy in every crossed region and 40% naval intel. Japan capitulates only after the capital region and victory points are held; confirm with a fresh read.
 
+**Jinan**: if Japan takes it, the Han Fuju event lets China annex Shandong with its divisions; do not spend the main army
+holding Jinan: hold the Yellow River line and retake the city once the Japanese attackers are worn down.
+
+**Fast Japan**: declares in late February 1937, lands at Shanghai-Suzhou and Hangzhou-Ningbo 5-10 days after the northern
+attack draws China north and aims to capitulate China by April: keep a coastal reserve for Shanghai, Hangzhou and Nanjing
+whatever happens in Hebei.
+
 ## 8. Laws, advisors, research, production, army
 
 - Laws: base cost 150 PP, times (1 + economy cost factor): ~248 PP at start (+65%), ~233 after the currency focus.
@@ -214,6 +233,7 @@ craft 15/9/30; launch needs 50%+ supremacy in every crossed region and 40% naval
   generals lead 24 or fewer divisions; army groups under field marshals; separate tank and motorised formations (FAIR).
   Keep garrison templates for resistance areas. Template names carry an accent ("Juntuán"); check that
   `hoi4_division_templates` reads them before automating training.
+- Disband the weakest 20-35 starting divisions for their rifles before training new ones.
 
 ## 9. Foreign assistance, air and navy
 

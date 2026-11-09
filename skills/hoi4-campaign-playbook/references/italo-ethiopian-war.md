@@ -162,6 +162,10 @@ Ethiopia" (~22-27 December 1936).
   still controls 835; goal 835 controlled by Italy; timer = south timer.
 * `ITA_attack_addis` AI front on 271 while Italy's Addis mission runs.
 
+**Pacify Ethiopia** (after the war, 720 days): succeeds when every original Ethiopian state has compliance above 60% or
+is controlled by an Italian subject (+75 PP, +5% stability, +35 command power; failure -25 PP). Handing every Ethiopian
+state to puppets completes it at once; a state Italy keeps needs a compliance plan.
+
 ## 5. War escalation
 
 Counter `ETH.ETH_war_escalation_level`, starts 0. Every +1 comes from `ETH_escalate_the_war_effect`.
@@ -236,6 +240,10 @@ ETH_expand_the_levy (Chitet cap 48, +6 irregular battalions to the template).
 `Chitet Sefari` (6 irregular infantry) is force-allowed for recruiting, cap 20 (48 after Expand the Levy).
 Irregular infantry: 80 rifles per battalion (480 per division), 30 days training, supply 0.04 (regular 0.06), +25%
 attack in desert, +15% in hills/mountains/forest, max organisation 45.
+
+Communist route: `ETH_military_communism` excludes `ETH_rally_around_the_emperor`; then `ETH_in_the_name_of_the_people`
+-> `ETH_soviet_aid` (excludes `ETH_callout_to_the_world`): with a communist Soviet Union not in civil war and Ethiopia
+at war with Italy, the Soviets send 10,000 infantry equipment I.
 
 ## 7. Map: provinces, terrain, rivers, supply
 
@@ -418,8 +426,8 @@ Prince Filiberto.
 |---|---|---|---|---|
 | SC01 | Italy: one fast war | Win by April-May 1936 before Ethiopia's exile focus (about six months) or no conference opens. North: mountaineers and infantry attack hard toward Addis Ababa with all tactical bombers and fighters; south: probe and pin with the weaker troops; ship the three tank divisions from Venice to the front and close 2-3 pockets; attack single tiles from several directions; never let Ethiopia dig in | Italy 1936 | FAIR |
 | SC02 | Italy: supply | Motorisation 2 from day 1, railway levels on the Eritrean and Somali trunk lines (weeks, not a hub), an Organizer marshal; one escort task force on the Red Sea route from day 1; the rest of the mainland army is not needed | Italy 1936 | FAIR |
-| SC03 | Italy: politics and peace | Keep the balance of power on the Mussolini side (0.6+); accept the Tigray submission ultimatum (free land and units); colonial police occupation laws once unlocked; peace: split Ethiopia into small puppets (no single Ethiopia puppet), take reparations and resource rights, release Eritrea and Somaliland; remove the two Littorio lines in an Ethiopia-only plan | Italy 1936 | FAIR |
+| SC03 | Italy: politics and peace | Keep the balance of power on the Mussolini side (0.6+); accept the Tigray submission ultimatum (free land and units); colonial police occupation laws once unlocked; peace: split Ethiopia into small puppets (no single Ethiopia puppet), take reparations and resource rights, release Eritrea and Somaliland (the puppets get the Horn of Africa tree, several of whose focuses add 8 oil, steel, aluminium or rubber each, which flows to Italy with resource rights); remove the two Littorio lines in an Ethiopia-only plan | Italy 1936 | FAIR |
 | SC04 | Ethiopia: defend first | Convert to mountaineers; north: 3 divisions on the Aussa border and the rest on a mountain fallback line around Gondar; abandon Tigray to three hill tiles; south: hold the Harar river line and keep 4-6 divisions on the southern ports; all factories on infantry equipment; trade with France over land | Ethiopia 1936 | FAIR |
-| SC05 | Ethiopia: counter-attack | Let Italy bleed, then counter-attack only where Italian supply is poor and the ground flatter, massed on one front; walk into Aussa once Italy holds Tigray (+1 military factory); take Massawa (Eritrea's only port) and the north collapses; Northern Thrust (+25% attack, +50% breakthrough for 90 days) for the push | Ethiopia 1936 | FAIR |
+| SC05 | Ethiopia: counter-attack | Let Italy bleed, then counter-attack only where Italian supply is poor and the ground flatter, massed on one front; walk into Aussa once Italy holds Tigray (+1 military factory); take Massawa (Eritrea's only port) and the north collapses; Northern Thrust (+25% attack, +50% breakthrough for 90 days) for the push; Force Attack only to take Aussa or save a breaking key tile, because its casualties cost 20% extra war support | Ethiopia 1936 | FAIR |
 | SC06 | Ethiopia: politics and peace | Mesafint power (-0.35 to -0.65) during the war; the 10 PP recall decision for instant units; refuse Italy's peace; the Fait Accompli focus (`ETH_fait_accompli`) cedes held Eritrea, Somaliland and Jubaland; afterwards infrastructure focuses before the Federal Empire, reintegrating puppets at 75 PP | Ethiopia 1936 | FAIR |
 | SC07 | Italy: after the conquest | Harsh Quotas and forced labour on the conquered rubber states; colonial police occupation law once unlocked; a general fighting the real mountain war earns the Mountaineer trait; then Servizio Informazioni Militare and Triumph in Africa once the war flag clears; hold Ethiopia with cheap port garrisons and move the strike divisions home | Italy after the war | FAIR |

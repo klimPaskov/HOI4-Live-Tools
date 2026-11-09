@@ -101,6 +101,13 @@ support, (4) armor. Keep 35 XP in reserve for variant creation when a design is 
 When NOT to apply: do not swap subdoctrines mid-war unless the current track's rewards are done (mastery restarts);
 do not buy a subdoctrine the game greys out.
 
+Operations by army type: `grand_assault` (always available; +10% max planning, +10% breakthrough, +5% soft attack at
+once) for armour or special-forces offensives; `mission_type_tactics` (+15 infantry organisation, +20% command power
+gain) for infantry armies. `last_stand` opens only in a defensive war or above 10% surrender progress with war support
+above 50% (never a pre-war fix); its rewards (+10% infantry defence, +10% entrenchment, 72 h no-supply grace, +15% soft
+attack) make it the pick as soon as an invaded defender qualifies. `large_unit_tactics` cuts width only for line
+infantry battalions, not mountaineers, marines or other special forces.
+
 ### 2.3 Experience budget (every spend of army, air and navy XP)
 
 - Pools: army, navy and air XP each cap at **500**; XP above the cap is lost, so plan spends before a pool fills.
@@ -374,3 +381,4 @@ No tool yet:
 | RE21 | Skip techs the build does not use | An armour nation skips line-artillery equipment techs (radar instead); a carrier navy skips battleship techs; research only the module techs the planned designs need | Research plan | FAIR |
 | RE22 | MIO policy timing | Assembly Line Optimisers while the MIO's lines produce; Armor Welding Specialists once its tanks stop; Cutting Corners on the main tank designer at level 6, then upgrade its equipment once and never again; switch "update variants with the latest design team traits" off; save trait points for traits a focus unlocks | AAT | FAIR |
 | RE23 | Bank XP and manpower on starter subdoctrines | Take the subdoctrines whose rewards come early (Guerilla War: war support and stability; Irregulars and Desperate Defense: manpower), max them, then switch to the war doctrine (Grand Assault, Individual Excellence) before the war; a war-support decision that grants army XP on the Spanish Civil War pays for it | 1936-39, all majors | FAIR |
+| RE24 | Human Wave Tactics | Mass Assault's infantry milestone unlocks the combat tactic: +50% combat width with +10% attack and defence, picked only when the frontage is full and reserves wait | Mass Assault attacks commit more divisions than the width holds | FAIR |

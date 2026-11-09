@@ -69,6 +69,14 @@ Germany, Poland and China appear only as worked examples.
    force grows. Use the newest design key offered (`_2`, `_3`) for new lines.
 7. **Train continuously** (15–20 divisions in the queue) with locations set, and
    form armies and army groups as they deploy.
+8. **Generic-tree research slot.** `extra_tech_slot` needs `industrial_effort`,
+   `construction_effort` I-II and `infrastructure_effort` I-II first (420 days,
+   about late February 1937); construction and armament efforts are bypassed
+   when no state has a free slot; `extra_tech_slot_2` needs more than 50
+   factories.
+9. **Minor fort focuses.** Instant-bunker focuses are a minor's cheapest
+   defence: take them in the year before the expected attack, on river or
+   mountain lines, with anti-air, because combat and bombing wear forts down.
 
 ## 4. War execution
 
