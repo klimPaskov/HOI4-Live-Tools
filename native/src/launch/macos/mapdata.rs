@@ -8,7 +8,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
-type Positions = HashMap<i32, (f64, f64)>;
+pub(super) type Positions = HashMap<i32, (f64, f64)>;
 
 /// Game install directory of an executable at `<dir>/hoi4.app/Contents/MacOS/hoi4`
 /// (macOS) or `<dir>/hoi4` (Linux).

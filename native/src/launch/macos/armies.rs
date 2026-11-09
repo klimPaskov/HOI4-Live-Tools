@@ -17,6 +17,8 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod select;
+
 #[derive(Clone, Copy)]
 struct Ui {
     country_divisions: u64,
@@ -747,15 +749,8 @@ pub(super) fn unassigned_ids(view: &Value, state: i32) -> Vec<String> {
 pub(super) fn assign_preflight(_plan: &AssignPlan) -> Result<()> {
     Ok(())
 }
-/// Carry out a plan. A new army uses the ordinary new-army card. Absorbing is
-/// the game's own affordance, found live: with the unassigned divisions
-/// selected, a RIGHT-click on the standing army's card assigns the selection
-/// ("Click to select / Right-click to assign the selected Divisions").
-/// The box selection also takes divisions of other armies standing nearby, and
-/// the right-click would move those too, so the selection size must equal the
-/// unassigned plus the target army's divisions in this state; otherwise nothing
-/// is clicked on the card.
-/// Selection boxes (game points) for gathering a state's divisions, usual size first.
+/// Selection boxes (game points) for gathering a state's divisions, usual size first (the older
+/// path, without map data).
 const ASSIGN_BOXES: [((f64, f64), (f64, f64)); 7] = [
     ((560.0, 260.0), (1360.0, 860.0)),
     ((560.0, 260.0), (1400.0, 980.0)),
@@ -765,11 +760,95 @@ const ASSIGN_BOXES: [((f64, f64), (f64, f64)); 7] = [
     ((420.0, 190.0), (1640.0, 980.0)),
     ((640.0, 300.0), (1300.0, 980.0)),
 ];
+/// Carry out a plan. A new army uses the new-army path (`create`). Absorbing is the game's own
+/// affordance, found live: with the unassigned divisions selected, a RIGHT-click on the standing
+/// army's card assigns the selection ("Click to select / Right-click to assign the selected
+/// Divisions"). The right-click moves the whole selection, so it is sent only when the selection
+/// read back holds nothing but this state's unassigned divisions and the army's own; the one
+/// selection is `select`'s (camera framed once, one box or one click round).
 pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignPlan) -> Result<()> {
     let army = match &plan.mode {
         AssignMode::CreateNew => return create(process, keys, plan.state, false),
         AssignMode::Absorb { army } => army,
     };
+    let t0 = std::time::Instant::now();
+    let view = armies(process)?;
+    let pool = unassigned_ids(&view, plan.state);
+    // The receiving army's own divisions may come along: assigning them to it changes nothing.
+    let own: Vec<String> = view["armies"]
+        .as_array()
+        .and_then(|a| a.iter().find(|x| x["army"] == json!(army)))
+        .and_then(|a| a["divisions"].as_array())
+        .map(|d| {
+            d.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    clear_notices(process, keys)?;
+    let picked = match select::select(process, keys, plan.state, &pool, &own) {
+        Ok(picked) => picked,
+        Err(e) if matches!(e.code, "map_data_unavailable" | "camera_unavailable") => {
+            return assign_boxes(process, keys, plan, army);
+        }
+        Err(e) => return Err(e),
+    };
+    // The settlement allows only this state's unassigned divisions to join.
+    if !picked.verdict.loose.is_empty() {
+        return Err(Error::new(
+            "selection_mismatch",
+            format!(
+                "The {} in state {} also took {} unassigned division(s) standing in another state; \
+                 the army card was not right-clicked, nothing was assigned.",
+                picked.how,
+                plan.state,
+                picked.verdict.loose.len()
+            ),
+        ));
+    }
+    let before = read(process, membership)?;
+    right_click_card(process, keys, army, &before)?;
+    eprintln!(
+        "army_assign timing: state {} {} (find {}, zoom {}) {:?}: {} of {} into {army}",
+        plan.state,
+        picked.how,
+        picked.found,
+        picked.zoom_events,
+        t0.elapsed(),
+        picked.verdict.taken.len(),
+        pool.len()
+    );
+    Ok(())
+}
+/// Right-click `army`'s card with the selection standing (the game's "Right-click to assign the
+/// selected Divisions"), verified by a membership change.
+fn right_click_card(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    before: &BTreeMap<String, u64>,
+) -> Result<()> {
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    clear_notices(process, keys)?;
+    let (x, y) = card.center();
+    keys.right_click(GAME, x, y)?;
+    wait(process, "divisions assigned", |r, i| {
+        Ok(&membership(r, i)? != before)
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "The right-click on the army card changed no division membership within 3 s; re-read hoi4_armies before trying again",
+        )
+    })
+}
+/// The older absorb path (no map data): Find view, counter clicks, then box sweeps.
+fn assign_boxes(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plan: &AssignPlan,
+    army: &str,
+) -> Result<()> {
     clear_notices(process, keys)?;
     default_map_mode(keys)?;
     find_state(process, keys, plan.state)?;
@@ -884,20 +963,7 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
         ));
     }
     let before = read(process, membership)?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
-    clear_notices(process, keys)?;
-    let (x, y) = card.center();
-    keys.right_click(GAME, x, y)?;
-    wait(process, "divisions assigned", |r, i| {
-        let now = membership(r, i)?;
-        Ok(now != before)
-    })
-    .map_err(|_| {
-        Error::new(
-            "input_readback_failed",
-            "The right-click on the army card changed no division membership within 3 s; re-read hoi4_armies before trying again",
-        )
-    })
+    right_click_card(process, keys, army, &before)
 }
 
 /// Refusals for `hoi4_army_create` that need no input, decided from the
@@ -1027,63 +1093,116 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
     gui_tree::rect(r, image, button, GAME)
 }
 
-/// Create an army from own divisions around state `state`, then fold the state's
-/// remaining unassigned divisions into it: one box rarely holds all of a large state's
-/// divisions (seen live 5 November 2026: Eritrea needed one create and four assigns).
+/// Create one army from the unassigned own divisions standing in state `state`: one selection
+/// takes all of them (`select`: the camera framed once, one box or one click round, read back
+/// from memory, at most one Shift+click correction), then one click on the new-army card. The
+/// selection never holds a division of another army: then nothing is clicked. Without map data
+/// (or with `absorb`, which folds the armies standing there) the older box path runs.
 pub(super) fn create(
     process: &dyn Process,
     keys: &dyn GameInput,
     state: i32,
     absorb: bool,
 ) -> Result<()> {
-    let names_before: BTreeSet<String> = armies(process)
-        .ok()
-        .map(|view| army_names(&view))
-        .unwrap_or_default();
     let t0 = std::time::Instant::now();
-    create_once(process, keys, state, absorb)?;
-    eprintln!("army_create timing: create_once {:?}", t0.elapsed());
-    if absorb {
-        return Ok(());
+    let pool = if absorb {
+        Vec::new()
+    } else {
+        unassigned_ids(&armies(process)?, state)
+    };
+    if pool.is_empty() {
+        let out = create_once(process, keys, state, absorb);
+        eprintln!("army_create timing: box path {:?}", t0.elapsed());
+        return out;
     }
-    // Best effort: the army exists; a fold that cannot be done safely leaves the rest
-    // unassigned for hoi4_army_assign, never fails the create.
-    for _ in 0..6 {
-        let Ok(view) = armies(process) else { break };
-        let Some(name) = army_names(&view).difference(&names_before).next().cloned() else {
-            break;
-        };
-        let plan = match plan_assign(&view, state, Some(&name), 24) {
-            Ok(plan) => plan,
-            Err(e) => {
-                eprintln!("army_create fold: plan_assign {}: {}", e.code, e.message);
-                break;
-            }
-        };
-        if plan.unassigned == 0 || plan.take == 0 {
-            break;
+    clear_notices(process, keys)?;
+    let picked = match select::select(process, keys, state, &pool, &[]) {
+        Ok(picked) => picked,
+        Err(e) if matches!(e.code, "map_data_unavailable" | "camera_unavailable") => {
+            let out = create_once(process, keys, state, absorb);
+            eprintln!(
+                "army_create timing: box path ({}) {:?}",
+                e.code,
+                t0.elapsed()
+            );
+            return out;
         }
-        let t1 = std::time::Instant::now();
-        let res = assign(process, keys, &plan);
-        eprintln!(
-            "army_create timing: fold assign {:?} -> {:?}",
-            t1.elapsed(),
-            res.as_ref().map(|_| ()).map_err(|e| e.code)
-        );
-        if let Err(e) = res {
-            eprintln!("army_create fold: assign {}: {}", e.code, e.message);
-            break;
-        }
-    }
+        Err(e) => return Err(e),
+    };
+    let selected = t0.elapsed();
+    let before = read(process, membership)?;
+    click_new_army(process, keys, &before, false)?;
+    let after = read(process, membership)?;
+    let groups_before: BTreeSet<u64> = before.values().copied().collect();
+    let joined = after
+        .iter()
+        .filter(|(_, g)| **g != 0 && !groups_before.contains(*g))
+        .count();
+    let left = pool.iter().filter(|d| after.get(*d) == Some(&0)).count();
+    eprintln!(
+        "army_create timing: state {state} {} (find {}, zoom {}) selected {selected:?}, created {:?}: \
+         {joined} in the new army, {left} of {} left unassigned",
+        picked.how,
+        picked.found,
+        picked.zoom_events,
+        t0.elapsed(),
+        pool.len()
+    );
     Ok(())
 }
-fn army_names(view: &Value) -> BTreeSet<String> {
-    view["armies"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|a| a["army"].as_str().map(str::to_string))
-        .collect()
+/// Click the new-army card with the selection standing and wait for the new army. "Reassign
+/// Armies" (the selection took every division of an existing army, which would be deleted) is
+/// accepted only with `absorb`, else declined.
+fn click_new_army(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    before: &BTreeMap<String, u64>,
+    absorb: bool,
+) -> Result<()> {
+    let groups_before: BTreeSet<u64> = before.values().copied().collect();
+    let card = read(process, |r, i| new_card(r, i, false))?;
+    clear_notices(process, keys)?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    // "Reassign Armies" appears when the box selection took every division
+    // of an existing army, which would be deleted with its orders. Never
+    // accept: decline and say what to do instead (accepting once merged two
+    // armies of 24 and 19 divisions into one of 52). Either the dialog or the new army shows
+    // within 500 ms; stop waiting at the first of them.
+    let created = |r: &Reader<'_>, i: u64| -> Result<bool> {
+        Ok(membership(r, i)?
+            .values()
+            .any(|g| *g != 0 && !groups_before.contains(g)))
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    while std::time::Instant::now() < deadline
+        && !read(process, |r, i| {
+            Ok(super::ui::reassign_open(r, i)? || created(r, i)?)
+        })?
+    {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    if read(process, super::ui::reassign_open)? {
+        if absorb {
+            // The caller asked for the armies standing here to be folded in.
+            super::ui::accept_command(process, keys)?;
+            return wait(process, "army created", created);
+        }
+        super::ui::decline_stale(process, keys)?;
+        return Err(Error::new(
+            "invalid_target",
+            "Divisions of an existing army stand here, so a new army would delete it: deploy new divisions \
+             to another state (hoi4_train deploy_state_id) or use hoi4_army_split on that army",
+        ));
+    }
+    wait(process, "army created", created).map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "No new army appeared within 3 s of the new-army card click. The pre-input check found \
+             own divisions standing in this state, so this is not proof of any single cause: \
+             re-read hoi4_armies before trying again (the divisions may have moved or been assigned)",
+        )
+    })
 }
 fn create_once(
     process: &dyn Process,
@@ -1176,59 +1295,7 @@ fn create_once(
         }
     }
     let before = read(process, membership)?;
-    let groups_before: BTreeSet<u64> = before.values().copied().collect();
-    let card = read(process, |r, i| new_card(r, i, false))?;
-    clear_notices(process, keys)?;
-    let (x, y) = card.center();
-    keys.click(GAME, x, y)?;
-    // "Reassign Armies" appears when the box selection took every division
-    // of an existing army, which would be deleted with its orders. Never
-    // accept: decline and say what to do instead (accepting once merged two
-    // armies of 24 and 19 divisions into one of 52). Either the dialog or the new army shows
-    // within 500 ms; stop waiting at the first of them.
-    let created = |r: &Reader<'_>, i: u64| -> Result<bool> {
-        Ok(membership(r, i)?
-            .values()
-            .any(|g| *g != 0 && !groups_before.contains(g)))
-    };
-    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
-    while std::time::Instant::now() < deadline
-        && !read(process, |r, i| {
-            Ok(super::ui::reassign_open(r, i)? || created(r, i)?)
-        })?
-    {
-        std::thread::sleep(std::time::Duration::from_millis(30));
-    }
-    if read(process, super::ui::reassign_open)? {
-        if absorb {
-            // The caller asked for the armies standing here to be folded in.
-            super::ui::accept_command(process, keys)?;
-            return wait(process, "army created", |r, i| {
-                Ok(membership(r, i)?
-                    .values()
-                    .any(|g| *g != 0 && !groups_before.contains(g)))
-            });
-        }
-        super::ui::decline_stale(process, keys)?;
-        return Err(Error::new(
-            "invalid_target",
-            "Divisions of an existing army stand here, so a new army would delete it: deploy new divisions \
-             to another state (hoi4_train deploy_state_id) or use hoi4_army_split on that army",
-        ));
-    }
-    wait(process, "army created", |r, i| {
-        Ok(membership(r, i)?
-            .values()
-            .any(|g| *g != 0 && !groups_before.contains(g)))
-    })
-    .map_err(|_| {
-        Error::new(
-            "input_readback_failed",
-            "No new army appeared within 3 s of the new-army card click. The pre-input check found \
-             own divisions standing in this state, so this is not proof of any single cause: \
-             re-read hoi4_armies before trying again (the divisions may have moved or been assigned)",
-        )
-    })
+    click_new_army(process, keys, &before, absorb)
 }
 
 /// Probe-only: hex words of an own army object (`NAME` or `NAME:LEN`).
@@ -1270,8 +1337,9 @@ pub(super) fn motorization(r: &Reader<'_>, image: u64, army: &str) -> Result<u32
     Ok((r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff)
 }
 
-/// The motorization button on the badge of `army`, which must be the only selected army.
-fn motorization_button(r: &Reader<'_>, image: u64, army: &str) -> Result<Rect> {
+/// Widget `name` on the badge of `army` (army_badge_view, unitview.gui), which must be the only
+/// selected army.
+fn badge_widget(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<u64> {
     let abi = r.string_abi();
     let u = ui(r)?;
     let handle = r.u64(group_named(r, image, army)? + u.group_handle)?;
@@ -1291,20 +1359,125 @@ fn motorization_button(r: &Reader<'_>, image: u64, army: &str) -> Result<Rect> {
         }
         let root = gui_tree::container(r, r.u64(badge + fld(abi, &BADGE, BADGE_ROOT)?)?, image)?
             .ok_or_else(|| Error::new("invalid_gui", "Army badge window required"))?;
-        let button = super::panelkit::find(r, image, root, "army_motorization_priority_button", 6)?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Motorization button not found"))?;
-        if !gui_tree::shown(r, button)? {
+        let widget = super::panelkit::find(r, image, root, name, 6)?.ok_or_else(|| {
+            Error::new("gui_target_unavailable", format!("Badge {name} not found"))
+        })?;
+        if !gui_tree::shown(r, widget)? {
             return Err(Error::new(
                 "gui_target_unavailable",
-                "Motorization button not shown",
+                format!("Badge {name} not shown"),
             ));
         }
-        return gui_tree::rect(r, image, button, GAME);
+        return Ok(widget);
     }
     Err(Error::new(
         "gui_target_unavailable",
         format!("No badge for {army} is shown after selecting it"),
     ))
+}
+/// The motorization button on the badge of `army`, which must be the only selected army.
+fn motorization_button(r: &Reader<'_>, image: u64, army: &str) -> Result<Rect> {
+    let button = badge_widget(r, image, army, "army_motorization_priority_button")?;
+    gui_tree::rect(r, image, button, GAME)
+}
+
+/// The centre of the badge's name box. An edit box has no reviewed renderer, so it is placed from
+/// a sibling the badge draws with a sprite: army_badge_view (unitview.gui) puts `army_bg` at
+/// (0, 0), `army_item_bg` at (15, 0) and `group_name` at (66, 10), 135 x 23 px.
+fn name_box_point(r: &Reader<'_>, image: u64, army: &str) -> Result<(f64, f64)> {
+    let mut last = None;
+    for (sibling, dx, dy) in [("army_bg", 0.0, 0.0), ("army_item_bg", 15.0, 0.0)] {
+        let rect =
+            badge_widget(r, image, army, sibling).and_then(|w| gui_tree::rect(r, image, w, GAME));
+        match rect {
+            Ok(rect) => {
+                return Ok((
+                    f64::from(rect.x) - dx + 66.0 + 135.0 / 2.0,
+                    f64::from(rect.y) - dy + 10.0 + 23.0 / 2.0,
+                ))
+            }
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| Error::new("gui_target_unavailable", "Army name box not placed")))
+}
+/// Most characters of an army name typed into the badge's name box (135 px wide).
+pub(super) const NAME_MAX: usize = 24;
+/// Why `name` cannot become the name of `army` (checked before any input): not typable, too
+/// long, or the name of another own army or army group.
+pub(super) fn rename_refusal(view: &Value, army: &str, name: &str) -> Option<Error> {
+    if !super::designer::typable(name) || name.trim() != name || name.chars().count() > NAME_MAX {
+        return Some(Error::new(
+            "name_not_typable",
+            format!(
+                "Army names may use letters, digits, space and - _ . , / ' ( ), at most {NAME_MAX} \
+                 characters, no leading or trailing space. Nothing was typed."
+            ),
+        ));
+    }
+    let taken = view["armies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["army"].as_str())
+        .chain(
+            view["army_groups"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|g| g["army_group"].as_str()),
+        )
+        .any(|n| n == name && n != army);
+    taken.then(|| {
+        Error::new(
+            "name_taken",
+            format!("Another own army or army group is already named {name:?}. Nothing was typed."),
+        )
+    })
+}
+/// Rename `army` with the game's own control: its card selects it, the badge's name box
+/// (`group_name`) takes a click, the old text is erased and the new name typed one verified key
+/// at a time (design_edit::type_name: a letter is typed only once the box has proven the
+/// keyboard focus), then Return. Verified when the army's orders group carries the new name.
+pub(super) fn rename(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    name: &str,
+) -> Result<()> {
+    let group = read(process, |r, i| group_named(r, i, army))?;
+    clear_notices(process, keys)?;
+    select_army(process, keys, army)?;
+    let (widget, point) = settled(process, "army name box", |r, i| {
+        Ok((
+            badge_widget(r, i, army, "group_name")?,
+            name_box_point(r, i, army)?,
+        ))
+    })?;
+    // The box's own buffer, spaces kept; it must hold the army's name before anything is typed,
+    // so the first erased character proves the keyboard focus (type_name).
+    let text = |r: &Reader<'_>, _: u64| super::navalui::edit_text_raw(r, widget);
+    let shown = read(process, text)?;
+    if shown != army {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!("The badge name box reads {shown:?}, not {army:?}; nothing was typed"),
+        ));
+    }
+    super::design_edit::type_name(process, keys, point, name, &text)?;
+    keys.press(crate::platform::game_input::Key::Return)?;
+    wait(process, "army renamed", |r, _| {
+        Ok(army_name(r, group)? == name)
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            format!(
+                "The name box reads {:?} but the army kept another name within 3 s",
+                read(process, text).unwrap_or_default()
+            ),
+        )
+    })
 }
 
 /// Set the supply motorization level of `army` with the badge's ordinary toggle button
@@ -3089,5 +3262,33 @@ mod tests {
             check_create(&empty, 1, false).unwrap_err().code,
             "no_own_divisions"
         );
+    }
+    #[test]
+    fn a_rename_is_refused_before_input_for_untypable_long_or_taken_names() {
+        let view = json!({"armies": [{"army": "Army 1"}, {"army": "Army 2"}],
+            "army_groups": [{"army_group": "Army Group 1"}]});
+        assert!(rename_refusal(&view, "Army 1", "North_strike").is_none());
+        // its own name again is no refusal (nothing to type)
+        assert!(rename_refusal(&view, "Army 1", "Army 1").is_none());
+        for bad in [
+            "",
+            " North",
+            "North ",
+            "Ätna",
+            "North;strike",
+            "abcdefghijklmnopqrstuvwxy",
+        ] {
+            assert_eq!(
+                rename_refusal(&view, "Army 1", bad).map(|e| e.code),
+                Some("name_not_typable"),
+                "{bad:?}"
+            );
+        }
+        for taken in ["Army 2", "Army Group 1"] {
+            assert_eq!(
+                rename_refusal(&view, "Army 1", taken).map(|e| e.code),
+                Some("name_taken")
+            );
+        }
     }
 }

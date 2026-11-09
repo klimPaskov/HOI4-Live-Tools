@@ -326,7 +326,7 @@
    "source": "--list-tools"
   },
   "hoi4_armies": {
-   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed.",
+   "description": "Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -471,7 +471,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_create": {
-   "description": "(optional absorb_existing: true folds armies standing there into the new one) Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.",
+   "description": "(optional absorb_existing: true folds armies standing there into the new one) Create one army from the unassigned own divisions standing in a state with ONE selection: the camera frames them once (the Find view only when they are not on screen, then one zoom-out swoop at most), one box around all of them (one click per stack when another army stands among them) selects them, read back from memory (a division of another army refuses the action before the card is clicked; missed stacks get one Shift+click round), then the new-army card. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -743,6 +743,37 @@
     "required": [
      "army",
      "execute",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_army_rename": {
+   "description": "Rename an own army with the game's own control: the army's card selects it, its badge's name box takes a click, the old name is erased and the new one typed key by key (each key verified in the box), then Return. Verified when the army carries the new name. `army` may be the army's name or its plan role (army_layout name_hint). Refused before input with army_unknown, name_taken (another army or army group has it) or name_not_typable (letters, digits, space and - _ . , / ' ( ), at most 24 characters).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "name": {
+      "maxLength": 24,
+      "minLength": 1,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "army",
+     "name",
      "request_id",
      "lease_token"
     ],

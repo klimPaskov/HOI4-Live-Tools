@@ -230,6 +230,14 @@ pub(super) fn typed_text(r: &Reader<'_>, widget: u64, mac_text: u64) -> Result<S
     }
     r.string_bounded(widget + fld(abi, &EDIT_BOX, mac_text)?, 160)
 }
+/// The text typed into an edit box exactly, spaces kept (edit_text collapses runs of spaces and
+/// drops a trailing one, so a typed space cannot be verified through it).
+pub(super) fn edit_text_raw(r: &Reader<'_>, widget: u64) -> Result<String> {
+    Ok(typed_text(r, widget, EDIT_TEXT)?
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect())
+}
 pub(super) fn edit_text(r: &Reader<'_>, image: u64, widget: u64) -> Result<String> {
     let abi = r.string_abi();
     let typed = super::special_projects::plain(&typed_text(r, widget, EDIT_TEXT)?);

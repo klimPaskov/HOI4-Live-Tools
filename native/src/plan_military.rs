@@ -188,6 +188,21 @@ struct HoldOrder {
     under_way: bool,
 }
 
+/// An army was renamed (army_layout gives it its role's name): its rests and holds follow it.
+pub(super) fn army_renamed(memory: &mut Memory, old: &str, new: &str) {
+    if memory.cooled.remove(old) {
+        memory.cooled.insert(new.to_string());
+    }
+    if let Some(v) = memory.held.remove(old) {
+        memory.held.insert(new.to_string(), v);
+    }
+    for order in memory.hold_orders.values_mut() {
+        if order.army == old {
+            order.army = new.to_string();
+        }
+    }
+}
+
 /// The wake alarms raised since the last call (the run result's `alarms`).
 pub(super) fn take_alarms(state: &mut State) -> Vec<Value> {
     std::mem::take(&mut state.military.alarms)
