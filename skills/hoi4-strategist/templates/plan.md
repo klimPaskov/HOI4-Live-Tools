@@ -42,6 +42,8 @@ Every checklist item is resolved in the coverage table (§25).
 |---|---|---|---|
 | <name_hint> | <templates × count> [V oob] | <name> [V characters] | strike / guard: <targets or states> |
 
+Army groups (`army_group`): <name>: <name_hints> under <marshal>, else <marshal> [V characters --role marshal].
+
 ### 2.1 Political power and laws
 
 | Purchase | Cost | Condition | Date |
@@ -98,6 +100,10 @@ Alternatives considered for the overall approach: <option> — rejected because 
 
 <guards per border state, corridor rule, supply rule, organisation rule; lesson ids covered>.
 
+| Hold post (`hold_targets` id) | Army | Provinces, rear first [D route] | When / until | Why |
+|---|---|---|---|---|
+| <id> | <name_hint> | <p1> -> <p2> -> <p3> | `<predicate>` / `<predicate>` | <mission, river or mountain line> |
+
 ## 9. Contingencies
 
 | Trigger | Do | Lesson |
@@ -143,10 +149,10 @@ Garrison template: <name and count> (section 22).
 
 ## 15. Equipment designs and MIOs
 
-| Design or MIO | Family / line | When | XP or PP | Line that switches | Call |
+| Design or MIO | Family / line | When | XP or PP | Line that switches | plan.json |
 |---|---|---|---|---|---|
-| <design> | tank / plane / ship | <date> | <n> XP | <line index> | `hoi4_design_create {"kind":"tank","base":"<base>","name":"<design>"}` |
-| <organisation> | <line> | <date> | traits in order | — | `hoi4_mio_trait {"organization":"<organisation>","trait_index":0}` |
+| <design> | tank / plane / ship | <date> | <n> XP [V designs] | <line equipment> | `designs[]` `{"id":"<id>","kind":"tank","base":"<base>","name":"<design>","modules":{"<slot>":"<module>"},"production":"<line equipment>"}` |
+| <organisation> [V mio] | <line> | <date> | traits in order | — | `mio[]` `{"organisation":"<organisation>","traits":[0,2],"policy":"<policy>"}` |
 
 ## 16. Stability, war support, manpower and balance of power
 
@@ -176,21 +182,28 @@ offensives; ground AA. Or: not applicable: <reason>.
 
 ## 19. Navy
 
-Fleets and missions per sea region, convoy escort, sea transfers (`hoi4_army_move`), naval invasions,
-dockyards, repair rule. Or: **no navy: <reason>** [V states / dossier §3].
+| Fleet [V oob] | Admiral | Missions (task force, sea regions, when) | Repair |
+|---|---|---|---|
+| <fleet> | <admiral> [V characters --role admiral] | <mission> over <sea region> from <when> | below <0.5>, back at <0.9> |
+
+Naval invasions (`invasions`): <id>: <armies> from state <from_state> to <target_state> (province
+<target_province>) [V province], fleet <fleet>, when `<predicate>`. Convoy escort, sea transfers
+(`hoi4_army_move`), dockyards. Or: **no navy: <reason>** (`navy` `{"posture":"none","reason":"<reason>"}`)
+[V states / dossier §3].
 
 ## 20. Diplomacy
 
-| Action | Target | When (gate) | Call | Why |
-|---|---|---|---|---|
-| <justify / declare / join faction / guarantee / access> | <TAG> | <date or predicate> | `hoi4_diplomacy_act {"country":"<TAG>","action":"<action>"}` | <reason> |
+| `diplomacy` id | Action | Target | When (gate) | Fields | Why |
+|---|---|---|---|---|---|
+| <id> | <justify / declare / guarantee / nap / access> | <TAG> | <date or predicate>, world tension ≤ <x> [V diplomacy] | justify: `war_goal`, `states`; declare: `justify_days`, `joiners_ok` | <reason> |
 
-Answer policy for incoming proposals: <accept / refuse by kind>.
+Faction (`faction`): join <TAG / ANY> or create <name> from <template> [V factions], when `<predicate>`.
+Answer policy for incoming proposals (brief, `hoi4_diplomacy_incoming`): <accept / refuse by kind>.
 
 ## 21. Intelligence
 
-Agency (yes/no, date), upgrade order, operatives and missions, decryption target. Or: not applicable:
-<reason>.
+Agency (yes/no, date), upgrade order (`<branch>:<upgrade>` [V agency]), operatives and missions with their
+targets (`intelligence`), decryption target (plan.md only: no tool). Or: not applicable: <reason>.
 
 ## 22. Occupation
 
@@ -208,7 +221,7 @@ Agency (yes/no, date), upgrade order, operatives and missions, decryption target
 
 | Rule (procedure item 28) | Value for this campaign | Key / brief line |
 |---|---|---|
-| <rule> | <threshold> or default (<reason>) | `alarms` / `war.<key>` / `manage` (pending) / brief: <read, call> |
+| <rule> | <threshold> or default (<reason>) | `alarms` / `war.<key>` / `manage.<key>` / brief: <read, call> |
 
 ## 25. Coverage table
 

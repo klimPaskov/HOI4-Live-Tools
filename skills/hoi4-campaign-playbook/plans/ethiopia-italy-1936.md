@@ -32,9 +32,9 @@ NEW keys, for an executor extension (the player applies them until then):
 | `training_rules` | `{only_if_stockpile: {archetype: n}, cap_template, cap}` | queue `training` only when the stockpile holds n of that equipment; never above the template cap |
 | `doctrines` | `{id, folder, grand_doctrine or track+subdoctrine, xp}` | adopt once army XP reaches `xp` |
 | `army_layout` | `{name_hint, state, templates, count, general, role: guard, guard_states_in_order, note}` | one guard army per region holding its state; `note` keeps the planned role, divisions and provinces to hold. Layout guards stay bound to their post, so the P3/P4 attacks need the phase overrides (build item 15) or the player |
-| `army_group` | list of `{name_hint, field_marshal, members}` | two fronts |
+| `army_group` | list of `{id, name, armies, marshal}` (executor, plan_military.rs) | two fronts; `armies` are layout name_hints, `marshal` a name or names tried in order |
 | `war_by_phase` | `{phase: {axes, guard_states}}` | the exact `plan set` payload for `war` at each phase switch |
-| `hold_targets` | `{mission, provinces[], keep_at_least, until}` | provinces whose loss fails an Ethiopian mission |
+| `hold_targets` | `{id, army, provinces[], until?}` (executor, plan_military.rs) | one army per province whose loss fails an Ethiopian mission (provinces rear first; the post is the most forward one held); `note` names the mission and how many provinces it must keep |
 | `vp_targets` | ordered `{order, province, name, state, from[]}` | the provinces to take, and from where |
 | `win_condition` | `{decision, needs}` | take the decision the day it is available |
 | `retake_rules`, `phases` | as in italy-plan.md | phase machine (section 6) |

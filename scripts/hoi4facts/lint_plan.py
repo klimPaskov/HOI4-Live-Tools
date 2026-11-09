@@ -32,11 +32,14 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   production.equipment     unknown equipment, or equipment no planned tech unlocks
   production.trucks        war.motorization set but no motorized (truck) line
   army.guards              own state bordering an enemy with no guard (layout guard role,
-                           war.guard_states or war.guards)
+                           war.guard_states or war.guards); warning: a hold_targets post outside the guard
+                           states of the layout guard it moves (that border loses the guard while the hold runs)
   army.templates           layout template not in the start order of battle
   army.counts              layout count above the divisions of its templates in its state (warning
                            when the entries of one state together need more than it has)
-  army.generals            general unknown or not a commander of the tag; one general in two places
+  army.generals            general, army_group marshal or navy admiral unknown or not a commander of the tag; a
+                           marshal with no land role, an admiral with no navy_leader role; one person in two
+                           posts (info: a marshal who is a general is promoted by hoi4_army_commander)
   army.strike_size         strike entry above 24 divisions
   conquest.threshold       vp_targets below the enemy's surrender threshold (base limit plus its
                            starting surrender_limit modifiers), when the goal is a capitulation
@@ -664,6 +667,23 @@ class Lint:
                      f"state {sid} borders {'/'.join(enemies)} and has no guard (a guard role in army_layout, "
                      f"war.guard_states or war.guards)")
         self.facts["border_states"] = sorted(borders)
+        # a hold post replaces the layout guard post of its army
+        posts = {}
+        for e in layout:
+            if e.get("role") == "guard" and isinstance(e.get("name_hint"), str):
+                home = {e["state"]} if isinstance(e.get("state"), int) else set()
+                posts[e["name_hint"]] = set(_ints(e.get("guard_states_in_order"))) or home
+        pstate = game.province_state()
+        for i, h in enumerate(self.list_of("hold_targets")):
+            post = posts.get(h.get("army"))
+            held = {pstate.get(p) for p in _ints(h.get("provinces"))} - {None}
+            if post and held and not held & post:
+                left = sorted(post & borders)
+                if left:
+                    self.add("warning", "army.guards", f"hold_targets[{i}] {h.get('id')}",
+                             f"{h.get('army')!r} guards state(s) {', '.join(map(str, sorted(post)))} but its hold post "
+                             f"is in state(s) {', '.join(map(str, sorted(held)))}; border state(s) "
+                             f"{', '.join(map(str, left))} lose that guard while the hold runs")
         # templates and counts against the start OOB
         oobs = start_oobs(game, self.meta)
         pstate = game.province_state()
@@ -706,21 +726,37 @@ class Lint:
             self.add("error", "army.strike_size", "armies.max", f"armies.max {armies['max']} is above {MAX_STRIKE}")
         self.generals(layout, armies)
 
-    def generals(self, layout, armies):
-        table = derive.commanders(self.game, self.tag, self.ctx, self.start, self.meta.get("history_file"))
-        uses = []  # (where, name, needs field marshal)
+    def commander_uses(self, layout, armies):
+        """[(where, name, post, kind)]: post general | marshal | admiral; kind command (one post per person),
+        fallback (a later marshal candidate) or pool (armies.generals)."""
+        uses = []
         for i, n in enumerate(armies.get("generals") or []):
-            uses.append((f"armies.generals[{i}]", n, False, "pool"))
+            uses.append((f"armies.generals[{i}]", n, "general", "pool"))
         for i, e in enumerate(layout):
             if isinstance(e.get("general"), str):
-                uses.append((f"army_layout[{i}]", e["general"], False, "command"))
+                uses.append((f"army_layout[{i}]", e["general"], "general", "command"))
         for i, e in enumerate(self.list_of("army_group")):
-            for key in ("field_marshal", "fallback_field_marshal"):
-                if isinstance(e.get(key), str):
-                    uses.append((f"army_group[{i}].{key}", e[key], True, "command" if key == "field_marshal" else "fallback"))
+            m = e.get("marshal")
+            names = [m] if isinstance(m, str) else [x for x in m if isinstance(x, str)] if isinstance(m, list) else []
+            for j, name in enumerate(names):
+                where = f"army_group[{i}].marshal" + (f"[{j}]" if isinstance(m, list) else "")
+                uses.append((where, name, "marshal", "command" if j == 0 else "fallback"))
+        nv = self.plan.get("navy") if isinstance(self.plan.get("navy"), dict) else {}
+        for j, f in enumerate(nv.get("fleets") or []):
+            if isinstance(f, dict) and isinstance(f.get("admiral"), str):
+                uses.append((f"navy.fleets[{j}].admiral", f["admiral"], "admiral", "command"))
+        ad = nv.get("admirals")
+        rows = list(ad.items()) if isinstance(ad, dict) else [(r.get("fleet"), r.get("admiral")) for r in ad or []
+                                                              if isinstance(r, dict)] if isinstance(ad, list) else []
+        for fleet, name in rows:
+            uses.append((f"navy.admirals[{fleet}]", name, "admiral", "command"))
+        return uses
+
+    def generals(self, layout, armies):
+        table = derive.commanders(self.game, self.tag, self.ctx, self.start, self.meta.get("history_file"))
         commands = defaultdict(list)
         pool = Counter()
-        for where, name, fm, kind in uses:
+        for where, name, post, kind in self.commander_uses(layout, armies):
             if not isinstance(name, str):
                 continue
             cid = match_or_none(name, table)
@@ -730,15 +766,24 @@ class Lint:
             c = table[cid]
             if not c["recruited"]:
                 self.add("warning", "army.generals", where, f"{name!r} ({cid}) is not recruited by the history at the start")
-            if fm and "field_marshal" not in c["roles"]:
-                self.add("error", "army.generals", where, f"{name!r} ({cid}) has no field_marshal role")
+            if post == "marshal" and "field_marshal" not in c["roles"]:
+                if "corps_commander" in c["roles"]:
+                    self.add("info", "army.generals", where,
+                             f"{name!r} ({cid}) is a general, not a field marshal: hoi4_army_commander promotes him "
+                             f"(command power; the executor waits 7 game days while it is short)")
+                else:
+                    self.add("error", "army.generals", where, f"{name!r} ({cid}) has no field_marshal or "
+                                                              f"corps_commander role")
+            if post == "admiral" and "navy_leader" not in c["roles"]:
+                self.add("error", "army.generals", where, f"{name!r} ({cid}) has no navy_leader role")
             if kind == "command":
-                commands[cid].append(where)
+                commands[(cid, post == "admiral")].append(where)
             elif kind == "pool":
                 pool[cid] += 1
-        for cid, wheres in commands.items():
+        for (cid, navy), wheres in commands.items():
             if len(wheres) > 1:
-                self.add("error", "army.generals", ", ".join(wheres), f"{table[cid]['display']} commands more than one army")
+                what = "more than one fleet" if navy else "more than one army"
+                self.add("error", "army.generals", ", ".join(wheres), f"{table[cid]['display']} commands {what}")
         for cid, n in pool.items():
             if n > 1:
                 self.add("error", "army.generals", "armies.generals", f"{table[cid]['display']} is listed {n} times")

@@ -8,7 +8,13 @@ x-atoms of the schema, as native/src/plan_predicate.rs reads them) and names kno
 tags, focuses, techs, phases, equipment and missions; templates (units in the right rows, one group a
 column, width <= 40, regimental supports under 3-battalion columns); production remove/replace; training
 lists; stockpile_targets, xp_budget refs, force_posture phases and sums, occupation laws, peace state ids,
-sea_transfer states, event_rules fallback_index.
+sea_transfer states, event_rules fallback_index. Wave-2 executor keys (plan_military.rs, plan_affairs.rs):
+army_group and hold_targets armies (army_layout name_hints, else a warning), one group per army, hold
+corridors that touch on the map graph; navy and invasion fleets in the start naval OOB, sea region names,
+invasion states coastal and the target province in its state; designs kind against the base's designer,
+module slots, modules and upgrades; production[].design names; diplomacy and faction tags, justify fields;
+agency upgrades and their branch and levels, operative missions; MIO organisations allowed for the tag,
+policies, trait indexes; trade resources and partners; research_bonuses techs.
 """
 import json
 import os
@@ -330,6 +336,8 @@ def check_production(game, plan, rep):
             if line.get("remove") and "replace" in line:
                 rep.error(f"production[{i}] {k}: give remove or replace, not both")
             continue  # a change to a line, not a new line (factories optional, no duplicate)
+        if "design" in line and "factories" not in line:
+            continue  # a design switch of a line (plan_affairs.rs); step 7 adds a missing line with 5 factories
         n = line.get("factories")
         if not isinstance(n, int) or not 1 <= n <= 150:
             rep.error(f"production[{i}] {k}: factories must be an integer 1..150")
@@ -1289,6 +1297,428 @@ def check_coverage_keys(game, plan, meta, rep):
 
 
 # --------------------------------------------------------------------------
+# Wave-2 executor keys (native/src/plan_military.rs, plan_affairs.rs): army_group, hold_targets, navy,
+# invasions, designs, production[].design, diplomacy, faction, intelligence, mio, trade, research_bonuses
+
+STATE_MISSIONS = ("build_intel_network", "quiet_intel_network", "root_out_resistance")
+COUNTRY_MISSIONS = ("counter_intelligence", "control_trade", "diplomatic_pressure", "propaganda")
+JUSTIFY = ("justify", "justify_war_goal", "war_goal")
+_TAG = re.compile(r"^[A-Z][A-Z0-9]{2}$")
+
+
+def _world(game, meta):
+    """A hoi4facts World for the plan's tag and start (designers, MIOs, agency, factions, naval OOB)."""
+    from .world import World
+    dlcs = tuple(d for d in meta.get("dlcs") or () if isinstance(d, str))
+    key = f"validate:world:{meta.get('tag', '')}:{start_of(meta)}:{dlcs}"
+    return game.cached(key, lambda: World(game, meta.get("tag", ""), start_of(meta), dlcs, "fair"))
+
+
+def _dicts(v):
+    return [(i, x) for i, x in enumerate(v) if isinstance(x, dict)] if isinstance(v, list) else []
+
+
+def _dup_ids(rep, key, entries):
+    seen = defaultdict(list)
+    for i, e in entries:
+        if "id" in e:
+            seen[str(e["id"])].append(i)
+    for k, idx in seen.items():
+        if len(idx) > 1:
+            rep.error(f"{key}: id {k} is used by entries {idx} (done-memory is keyed by id)")
+
+
+def layout_roles(plan):
+    """{army_layout name_hint: role} of the plan and its phase overrides."""
+    out = {}
+    lists = [plan.get("army_layout")]
+    for p in plan.get("phases") or []:
+        if isinstance(p, dict) and isinstance(p.get("overrides"), dict):
+            lists.append(p["overrides"].get("army_layout"))
+    for lst in lists:
+        for _, e in _dicts(lst):
+            if isinstance(e.get("name_hint"), str):
+                out.setdefault(e["name_hint"], e.get("role"))
+    return out
+
+
+def _army_ref(rep, label, name, hints):
+    if isinstance(name, str) and name not in hints:
+        rep.warn(f"{label}: {name!r} is no army_layout name_hint, so it must be an army name as hoi4_armies lists "
+                 f"it (the executor waits until that army exists)")
+
+
+def start_fleets(game, meta):
+    """Fleet names of the start naval OOB (the history's set_naval_oob / set_oob files), or None when the
+    tag's history loads no OOB file."""
+    w = _world(game, meta)
+    try:
+        ob = w.oob(meta.get("tag", ""))
+    except (OSError, ValueError, KeyError):
+        return None
+    if not any(not f.get("missing") for f in ob["files"]):
+        return None
+    return {f["name"] for f in ob["fleets"] if isinstance(f.get("name"), str)}
+
+
+def sea_region_names(game, meta):
+    """Display names of the strategic regions that hold a sea province (empty without a map)."""
+    graph = game.map_graph()
+    if graph is None:
+        return set()
+    sea = {p for p, r in graph["provinces"].items() if r.get("type") == "sea"}
+    regions = _world(game, meta).strategic_regions()
+    return {r["name"] for r in regions.values() if isinstance(r.get("name"), str) and sea & set(r["provinces"])}
+
+
+def _fleet_ref(rep, label, name, fleets):
+    if not isinstance(name, str) or fleets is None:
+        return
+    if not any(name.strip().lower() == f.strip().lower() for f in fleets):
+        have = ", ".join(sorted(fleets)) or "none"
+        rep.warn(f"{label}: fleet {name!r} is not in the start OOB (fleets: {have}); fine only if it is formed in "
+                 f"game first")
+
+
+def _region_refs(rep, label, regions, names):
+    for k, r in enumerate(regions or []):
+        name = r.get("region") if isinstance(r, dict) else r
+        if names and isinstance(name, str) and name not in names:
+            rep.warn(f"{label}.regions[{k}]: {name!r} is not the name of a sea strategic region (hoi4_fleet_region "
+                     f"takes the exact display name)")
+
+
+def check_military_keys(game, plan, meta, rep):
+    """army_group, hold_targets, navy and invasions against the layout, the map and the start OOB."""
+    states, pstate = game.states(), game.province_state()
+    hints = layout_roles(plan)
+    n = 0
+    groups = _dicts(plan.get("army_group"))
+    member = {}
+    for i, e in groups:
+        n += 1
+        label = f"army_group[{i}] {e.get('id')}"
+        armies = [a for a in e.get("armies") or [] if isinstance(a, str)]
+        for a in sorted({a for a in armies if armies.count(a) > 1}):
+            rep.error(f"{label}: army {a!r} is listed twice")
+        for a in dict.fromkeys(armies):
+            _army_ref(rep, label, a, hints)
+            if a in member:
+                rep.error(f"{label}: army {a!r} is also in army_group[{member[a]}]; an army already in a group is "
+                          f"never regrouped, so the later group waits for ever")
+            member.setdefault(a, i)
+    _dup_ids(rep, "army_group", groups)
+
+    holds = _dicts(plan.get("hold_targets"))
+    adj = game.neighbours(straits=True) if holds else None
+    if holds and not adj:
+        rep.warn("hold_targets: no map adjacency (map/provinces.bmp, definition.csv); corridors not checked")
+    for i, e in holds:
+        n += 1
+        label = f"hold_targets[{i}] {e.get('id')}"
+        army = e.get("army")
+        _army_ref(rep, label, army, hints)
+        if hints.get(army) == "strike":
+            rep.warn(f"{label}: {army!r} is a strike role in army_layout; a hold post replaces the guard post the "
+                     f"layout gives a guard army (the war step drives strike armies)")
+        provs = [p for p in e.get("provinces") or [] if _is_int(p)]
+        for p in sorted({p for p in provs if provs.count(p) > 1}):
+            rep.error(f"{label}: province {p} is listed twice")
+        unknown = [p for p in provs if p not in pstate]
+        for p in unknown:
+            rep.error(f"{label}: province {p} is in no state")
+        if adj and not unknown:
+            for a, b in zip(provs, provs[1:]):
+                if a != b and b not in adj.get(a, ()):
+                    rep.error(f"{label}: provinces {a} and {b} do not touch (the corridor runs rear first, each "
+                              f"province next to the one before)")
+    _dup_ids(rep, "hold_targets", holds)
+
+    nv = plan.get("navy") if isinstance(plan.get("navy"), dict) else {}
+    invasions = _dicts(plan.get("invasions"))
+    fleets = start_fleets(game, meta) if (nv.get("fleets") or nv.get("convoy_escort") or invasions) else None
+    seas = sea_region_names(game, meta) if nv.get("fleets") or nv.get("convoy_escort") else set()
+    for j, f in _dicts(nv.get("fleets")):
+        n += 1
+        label = f"navy.fleets[{j}]"
+        _fleet_ref(rep, label, f.get("fleet"), fleets)
+        if _is_int(f.get("state_id")) and f["state_id"] not in states:
+            rep.error(f"{label}.state_id: {f['state_id']} is not a state id")
+        for k, m in _dicts(f.get("missions")):
+            if _is_int(m.get("state_id")) and m["state_id"] not in states:
+                rep.error(f"{label}.missions[{k}].state_id: {m['state_id']} is not a state id")
+            _region_refs(rep, f"{label}.missions[{k}]", m.get("regions"), seas)
+            for r, spec in _dicts(m.get("regions")):
+                if _is_int(spec.get("state_id")) and spec["state_id"] not in states:
+                    rep.error(f"{label}.missions[{k}].regions[{r}].state_id: {spec['state_id']} is not a state id")
+    ce = nv.get("convoy_escort")
+    if isinstance(ce, dict):
+        _fleet_ref(rep, "navy.convoy_escort", ce.get("fleet"), fleets)
+        _region_refs(rep, "navy.convoy_escort", ce.get("regions"), seas)
+    ad = nv.get("admirals")
+    named = list(ad) if isinstance(ad, dict) else [r.get("fleet") for _, r in _dicts(ad)]
+    for name in named:
+        _fleet_ref(rep, "navy.admirals", name, fleets)
+
+    coastal = derive.coastal_provinces(game) if invasions else set()
+    for i, e in invasions:
+        n += 1
+        label = f"invasions[{i}] {e.get('id')}"
+        for key, refusal in (("from_state", "source_not_coastal"), ("target_state", "not_coastal")):
+            s = e.get(key)
+            if not _is_int(s):
+                continue
+            if s not in states:
+                rep.error(f"{label}: {key} {s} is not a state id")
+            elif coastal and not set(states[s].get("provinces", [])) & coastal:
+                rep.error(f"{label}: {key} {s} has no coastal province (hoi4_naval_invasion refuses {refusal})")
+        tp, ts = e.get("target_province"), e.get("target_state")
+        if _is_int(tp):
+            if tp not in pstate:
+                rep.error(f"{label}: target_province {tp} is in no state")
+            elif _is_int(ts) and pstate[tp] != ts:
+                rep.error(f"{label}: target_province {tp} is in state {pstate[tp]}, not target_state {ts} (the tool "
+                          f"lands on a state: facts.py province {tp})")
+        for a in e.get("armies") or []:
+            _army_ref(rep, label, a, hints)
+        _fleet_ref(rep, label, e.get("fleet"), fleets)
+    _dup_ids(rep, "invasions", invasions)
+    return n
+
+
+def _row_key(text):
+    return re.sub(r"[^a-z0-9]+", "_", str(text).lower()).strip("_")
+
+
+def upgrade_rows(world):
+    """{row name: {upgrade keys}}: the names hoi4_design_create accepts for an upgrade row (the key, the key
+    without _upgrade, and that without its first word, as native design_edit.rs upgrade_keys reads them)."""
+    out = defaultdict(set)
+    for k in world.equipment_upgrades():
+        full = k[:-len("_upgrade")] if k.endswith("_upgrade") else k
+        for name in (k, full, full.split("_", 1)[-1]):
+            out[_row_key(name)].add(k)
+    return out
+
+
+def _norm_action(action):
+    a = str(action or "").strip().lower()
+    return "justify" if a in JUSTIFY else ("declare" if a in ("declare", "declare_war", "war") else a)
+
+
+def check_affairs_keys(game, plan, meta, rep):
+    """designs (and production[].design), diplomacy, faction, intelligence, mio, trade and research_bonuses
+    against the effective game content."""
+    tag = meta.get("tag", "")
+    tags = game.country_tags()
+    states = game.states()
+    n = 0
+    w = None
+
+    def world():
+        nonlocal w
+        w = w or _world(game, meta)
+        return w
+
+    designs = _dicts(plan.get("designs"))
+    variants = set()
+    if designs or any(isinstance(x.get("design"), str) for _, x in _dicts(plan.get("production"))):
+        variants = {v["v"] for v in world().country(tag)["variants"] if isinstance(v.get("v"), str)}
+    for i, e in designs:
+        n += 1
+        label = f"designs[{i}] {e.get('id')}"
+        kind = e.get("kind", e.get("type"))
+        if "kind" in e and "type" in e and e["kind"] != e["type"]:
+            rep.warn(f"{label}: kind {e['kind']} and type {e['type']} differ; the executor uses kind")
+        base = e.get("base")
+        if isinstance(base, str):
+            defs = world().equipment_defs()
+            if base in defs:
+                k = world().eq_kind(base)
+                want = k if k in ("tank", "plane", "ship") else "other"
+                if kind in ("tank", "plane", "ship", "other") and kind != want:
+                    rep.error(f"{label}: base {base} is {want} equipment (designer {k}), not kind {kind}")
+                slots = {s["slot"] for s in world().eq_slots(base) or []}
+                mods = world().equipment_modules()
+                for slot, module in (e.get("modules") or {}).items():
+                    if not slots:
+                        rep.error(f"{label}: base {base} has no module slots; give upgrades instead of modules")
+                        break
+                    if slot not in slots:
+                        rep.error(f"{label}: modules.{slot} is not a module slot of {base} ({', '.join(sorted(slots))})")
+                    if isinstance(module, str) and mods and module not in mods:
+                        rep.error(f"{label}: modules.{slot}: no equipment module {module} in "
+                                  f"common/units/equipment/modules")
+            elif base not in variants:
+                rep.warn(f"{label}: base {base!r} is neither an equipment key nor a start variant of {tag}; it must "
+                         f"be a design name as hoi4_designs lists it")
+        rows = upgrade_rows(world()) if e.get("upgrades") else {}
+        for row, level in (e.get("upgrades") or {}).items():
+            keys = rows.get(_row_key(row), set())
+            if rows and not keys:
+                rep.warn(f"{label}: upgrades.{row} names no upgrade of common/units/equipment/upgrades (a row is the "
+                         f"key, the key without _upgrade, or its last part such as reliability); the tool refuses "
+                         f"upgrade_unknown unless it is the row's label")
+                continue
+            ups = world().equipment_upgrades()
+            caps = [ups[k]["max_level"] for k in keys if isinstance(ups[k].get("max_level"), int)]
+            if _is_int(level) and caps and level > max(caps):
+                rep.error(f"{label}: upgrades.{row} {level} is above its max_level {max(caps)}")
+        if isinstance(e.get("production"), str) and e["production"] not in game.equipment():
+            rep.error(f"{label}: production {e['production']} is not an equipment key")
+    _dup_ids(rep, "designs", designs)
+    known = {str(e.get("id")) for _, e in designs} | {e.get("name") for _, e in designs} | variants
+    for i, x in _dicts(plan.get("production")):
+        d = x.get("design")
+        if isinstance(d, str) and d not in known:
+            rep.warn(f"production[{i}].design {d!r} is no designs[] id or name and no start variant; it must be a "
+                     f"design name as hoi4_designs lists it")
+
+    dip = _dicts(plan.get("diplomacy"))
+    for i, e in dip:
+        n += 1
+        label = f"diplomacy[{i}] {e.get('id')}"
+        t = e.get("target")
+        if isinstance(t, str) and tags and t not in tags:
+            rep.error(f"{label}: target {t} is not a country tag")
+        if t == tag:
+            rep.error(f"{label}: target {t} is the player's own tag")
+        for j in e.get("joiners_ok") or []:
+            if isinstance(j, str) and tags and j not in tags:
+                rep.error(f"{label}: joiners_ok {j} is not a country tag")
+        action = _norm_action(e.get("action"))
+        if action == "justify" and (not e.get("war_goal") or not e.get("states")):
+            rep.error(f"{label}: justify needs war_goal and states (names as hoi4_diplomacy lists them); without them "
+                      f"the executor waits 30 days at a time")
+        elif action != "justify" and ("war_goal" in e or "states" in e):
+            rep.warn(f"{label}: war_goal and states are read only by a justify item")
+        extra = [k for k in ("joiners_ok", "widen_ratio", "accept_widening", "expiry_warn_days", "rejustify")
+                 if k in e]
+        if extra and action != "declare":
+            rep.warn(f"{label}: {', '.join(extra)} are read only by a declare item")
+    _dup_ids(rep, "diplomacy", dip)
+
+    fac = plan.get("faction")
+    if isinstance(fac, dict):
+        n += 1
+        j = fac.get("join")
+        if isinstance(j, str) and j != "ANY" and tags and j not in tags:
+            rep.error(f"faction.join: {j} is not a country tag")
+        tpl = (fac.get("create") or {}).get("template") if isinstance(fac.get("create"), dict) else None
+        if isinstance(tpl, str):
+            templates = world().faction_content()["templates"]
+            names = {r.get("name") for r in templates.values()}
+            if templates and tpl not in templates and tpl not in names:
+                rep.warn(f"faction.create.template {tpl!r} is not a template of common/factions/templates "
+                         f"({', '.join(sorted(templates)[:8])}); hoi4_faction_create refuses template_unknown")
+
+    intel = plan.get("intelligence")
+    if isinstance(intel, dict):
+        n += 1
+        upgrades = intel.get("upgrades") or []
+        by_id = {}
+        if upgrades:
+            for u in world().agency(tag)["upgrades"]:
+                by_id.setdefault(u["id"], u)
+        count = defaultdict(int)
+        for j, u in enumerate(upgrades):
+            if isinstance(u, dict):
+                branch, key = u.get("branch"), u.get("upgrade")
+            elif isinstance(u, str):
+                branch, key = u.split(":", 1) if ":" in u else (None, u)
+            else:
+                continue
+            key = (key or "").strip()
+            branch = branch.strip() if isinstance(branch, str) else None
+            where = f"intelligence.upgrades[{j}]"
+            if not by_id:
+                break
+            if key not in by_id:
+                rep.error(f"{where}: no agency upgrade {key} in common/intelligence_agency_upgrades")
+                continue
+            if branch and by_id[key]["branch"] != branch:
+                rep.error(f"{where}: {key} is in branch {by_id[key]['branch']}, not {branch}")
+            count[key] += 1
+            levels = len(by_id[key]["levels"])
+            if levels and count[key] > levels:
+                rep.error(f"{where}: {key} is listed {count[key]} times but has {levels} level(s)")
+        ops = intel.get("operatives")
+        for j, op in _dicts(ops):
+            where = f"intelligence.operatives[{j}]"
+            mission = op.get("mission")
+            target = op.get("target", op.get("country"))
+            if isinstance(target, str) and tags and target not in tags:
+                rep.error(f"{where}: {target} is not a country tag")
+            if _is_int(op.get("state_id")) and op["state_id"] not in states:
+                rep.error(f"{where}: state_id {op['state_id']} is not a state id")
+            if mission in STATE_MISSIONS and "state_id" not in op:
+                rep.error(f"{where}: {mission} is a state mission and needs state_id")
+            elif mission in COUNTRY_MISSIONS and mission != "counter_intelligence" and target is None:
+                rep.error(f"{where}: {mission} is a country mission and needs target")
+            elif isinstance(mission, str) and mission not in STATE_MISSIONS + COUNTRY_MISSIONS:
+                rep.warn(f"{where}: mission {mission} is not one hoi4_operative_assign builds "
+                         f"({', '.join(STATE_MISSIONS + COUNTRY_MISSIONS)})")
+        if intel.get("agency") is False and (upgrades or ops) and not world().country(tag)["agency"]:
+            rep.warn("intelligence: agency false and no agency at the start, so the upgrades and operatives wait for "
+                     "an agency the plan never creates")
+
+    mio = _dicts(plan.get("mio"))
+    if mio:
+        orgs = world().mio_organisations()
+        allowed = {r["id"] for r in world().mio(tag)["organisations"]}
+        policies = {p["id"] for p in world().mio_policies()}
+        for i, e in mio:
+            n += 1
+            org = e.get("organisation", e.get("organization"))
+            label = f"mio[{i}] {org}"
+            if not orgs or not isinstance(org, str):
+                continue
+            if org not in orgs:
+                rep.error(f"{label}: no organisation {org} in common/military_industrial_organization/organizations")
+                continue
+            if org not in allowed:
+                rep.error(f"{label}: {org} is not allowed for {tag} (its allowed block; the MIO tools refuse "
+                          f"organization_not_allowed)")
+            if isinstance(e.get("policy"), str) and policies and e["policy"] not in policies:
+                rep.error(f"{label}: no MIO policy {e['policy']} in common/military_industrial_organization/policies")
+            entries = len(orgs[org]["traits"]) + 1  # the tree window lists the initial trait and the traits
+            for t in e.get("traits") or []:
+                idx = int(t) if isinstance(t, str) and t.isdigit() else t
+                if _is_int(idx) and idx >= entries:
+                    rep.error(f"{label}: trait_index {idx} but the tree has {entries} entries (initial trait included)")
+
+    tr = plan.get("trade")
+    deals = tr if isinstance(tr, list) else (tr.get("deals") if isinstance(tr, dict) else None)
+    deals = _dicts(deals)
+    if deals:
+        resources = derive._top_keys(game, "common/resources", "resources")
+        for j, d in deals:
+            n += 1
+            where = f"trade[{j}]" if isinstance(tr, list) else f"trade.deals[{j}]"
+            res = d.get("resource")
+            if resources and isinstance(res, str) and res.lower() not in resources:
+                rep.error(f"{where}: no resource {res} in common/resources ({', '.join(sorted(resources))})")
+            p = d.get("from", d.get("partner"))
+            if isinstance(p, str) and _TAG.match(p):
+                if tags and p not in tags:
+                    rep.error(f"{where}: partner {p} is not a country tag")
+                elif p == tag:
+                    rep.error(f"{where}: partner {p} is the player's own tag")
+
+    rb = plan.get("research_bonuses")
+    if isinstance(rb, dict):
+        techs = game.techs()
+        for k, v in rb.items():
+            if k in ("why", "note") or not isinstance(v, list):
+                continue
+            n += 1
+            for t in v:
+                if isinstance(t, str) and t not in techs:
+                    rep.error(f"research_bonuses.{k}: unknown technology {t}")
+    return n
+
+
+# --------------------------------------------------------------------------
 
 
 def check_misc(plan, rep):
@@ -1368,8 +1798,10 @@ def validate(plan, game, schema=None):
     counts["predicates"] = check_predicates(game, plan, rep, schema)
     counts["templates"] = check_templates(game, plan, rep)
     check_coverage_keys(game, plan, meta, rep)
+    counts["military"] = check_military_keys(game, plan, meta, rep)
+    counts["affairs"] = check_affairs_keys(game, plan, meta, rep)
     for k in ("research_path", "construction_plan", "vp_targets", "army_layout", "doctrines", "event_rules",
-              "predicates", "templates"):
+              "predicates", "templates", "military", "affairs"):
         if not counts[k] and k not in plan:
             del counts[k]
     return rep, counts

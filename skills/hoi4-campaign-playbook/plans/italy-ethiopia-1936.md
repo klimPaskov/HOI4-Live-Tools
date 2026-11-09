@@ -29,7 +29,7 @@ NEW keys (not read by the executor yet; the player applies them, the executor ca
 | `construction_plan` | ordered list of `{id, order, building, state, province?, path?, from_state?, to_state?, when, priority, why}` | `when` is `"YYYY.MM.DD"`, `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`; `priority: "top"` moves the project to the top of the queue the moment it is queued; `path` lists the provinces a railway must follow |
 | `doctrines` | list of `{id, folder, track, subdoctrine, xp}` | adopt with `hoi4_doctrine_adopt` once army XP reaches `xp` |
 | `army_layout` | list of `{name_hint, state, templates, count, general, role, axis or guard_states_in_order, when?}` | how to split the per-state armies into strike and guard armies on day one |
-| `army_group` | `{name_hint, field_marshal, fallback_field_marshal, members}` | army group over the northern armies |
+| `army_group` | `{id, name, armies, marshal}` (executor, plan_military.rs) | army group over the northern armies; `marshal` lists Graziani, then Badoglio |
 | `air_plan` | list of `{base_state, airframe, version, count, mission, region, then_region, switch_when}` plus rules | air missions per wing type and when to move them |
 | `war_by_phase` | `{phase_id: {axes, guard_states, guards}}` | the exact `plan set` payload for the `war` object at each phase switch (section 6) |
 | `vp_targets` | ordered list of `{order, province, name, state, vp, army, by, mission?, path?}` | the province each strike army goes for, with the date it should fall |
