@@ -488,6 +488,14 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertHit(plan, "predicates.unreadable", "warning", "checkpoints[0].must[0]")
         self.assertFalse(self.hits(plan, "predicates.unreadable", None, "goal.predicates[1]"))  # any[] with a readable atom
 
+    # -------------------------------------------------------------- conquest.skipped_near
+    def test_near_vp_province_left_untaken_warns(self):
+        plan = copy.deepcopy(self.ita)
+        plan["vp_targets"] = [e for e in plan["vp_targets"] if e.get("province") != 1984]
+        f = self.assertHit(plan, "conquest.skipped_near", "warning", "province 1984")
+        self.assertIn("never targeted", f["message"])
+        self.assertFalse(self.hits(self.ita, "conquest.skipped_near", None, "province 1984"))
+
     # -------------------------------------------------------------- production remove / replace
     def test_production_remove(self):
         plan = copy.deepcopy(self.ita)

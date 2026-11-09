@@ -46,6 +46,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            earlier target; path provinces not touching
   conquest.rivers          (warning) more than 2 river crossings on one leg
   conquest.by_order        (warning) `by` dates going backwards for one army
+  conquest.skipped_near    (warning) an enemy VP province next to own land or a planned target is never
+                           taken while the plan takes targets farther away
   win.goal                 no goal.predicates
   win.deadline             goal.deadline differs from a scenario mission timer (info when the goal
                            has no deadline and timers exist)
@@ -799,6 +801,7 @@ class Lint:
                          f"targets hold {got:g} of {enemy}'s {s['total_vp']:g} VP; capitulation needs {s['vp_needed']} "
                          f"(limit {s['limit']:g}: base {s['base']:g}, {mods})")
         self.facts["surrender"] = surr
+        self.conquest_skipped_near(targets, vps, owners, pstate)
         must = self.goal_states()
         self.facts["goal_states"] = {str(k): v for k, v in sorted(must.items())}
         start_ctl = self.start_control()
@@ -837,6 +840,44 @@ class Lint:
                     self.add("warning", "conquest.by_order", where,
                              f"by {e['by']} is before the previous target of {army or 'any army'} ({last_by[army][1]})")
                 last_by[army] = (d, e["by"])
+
+    def conquest_skipped_near(self, targets, vps, owners, pstate):
+        """(warning) an enemy VP province next to own land or to a planned target is never taken,
+        while the plan takes targets farther from its start front (the w-run critic finding: Gondar,
+        2 VP one step from Eritrea, skipped while the threshold rested on far-western targets)."""
+        enemies = set(self.capitulation_targets())
+        if not enemies or not targets:
+            return
+        adj = self.adjacency()
+        start = set(self.start_control())
+        taken = set()
+        for e in targets:
+            taken.update(self.captures(e))
+        near_of = {}
+        for p in start | taken:
+            for n in adj.get(p, ()):
+                near_of.setdefault(n, p)
+        dist = {}
+        frontier, seen, step = list(start), set(start), 0
+        while frontier and step < 40:
+            step += 1
+            nxt = []
+            for a in frontier:
+                for b in adj.get(a, ()):
+                    if b not in seen:
+                        seen.add(b)
+                        dist[b] = step
+                        nxt.append(b)
+            frontier = nxt
+        far = max((dist.get(e["province"], 0) for e in targets), default=0)
+        for prov, vp in sorted(vps.items()):
+            if vp < 1 or prov in taken or prov in start or owners.get(pstate.get(prov)) not in enemies:
+                continue
+            if prov in near_of and far > dist.get(prov, 0) + 1:
+                self.add("warning", "conquest.skipped_near", f"province {prov}",
+                         f"{vp:g} VP province {prov} (state {pstate.get(prov)}) touches {near_of[prov]} (own or a target) "
+                         f"but is never targeted, while targets reach {far} steps from the start front; take it on the "
+                         f"way or say why not (cost, river, mission)")
 
     def win(self):
         preds = self.goal.get("predicates")
