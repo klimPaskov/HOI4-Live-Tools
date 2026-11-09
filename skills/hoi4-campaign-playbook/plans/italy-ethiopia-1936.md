@@ -150,7 +150,10 @@ After the war: `ITA_develop_ethiopia/eritrea/somaliland` give infrastructure and
 | artillery_equipment_1 | 4 | 1 Jan |
 | support_equipment_1 | 2 | 1 Jan |
 | motorized_equipment_1 | 5 | 1 Jan |
-| artillery_equipment_2 | 3 (the factories from Army Primacy, Fiocchi, Artillery Production) | after interwar_artillery (about June) |
+
+No artillery_equipment_2 line: it is unlocked by `artillery1` (start_year 1939), not by
+interwar_artillery [V common/technologies/artillery.txt, lint production.equipment]. The 3 factories
+from Army Primacy, Fiocchi and Artillery Production go to the `production_priority` lines.
 
 Every military factory is on a line (`production_min_idle 1`). No new divisions until every African
 division is above 90% equipment; trucks before planes.

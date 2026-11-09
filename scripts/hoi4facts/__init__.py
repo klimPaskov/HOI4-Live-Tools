@@ -11,6 +11,9 @@ Modules:
     mapgraph   province graph (adjacency, rivers, supply, routes); Game.map_graph() layers it
     schema_check  JSON Schema subset validator for plan.schema.json
     validate   plan checks (scripts/validate_plan.py is the CLI)
+    derive     computed facts: 365-day calendar, defines, localisation, front distance, border
+               states, surrender threshold, commanders, scenario mission timers
+    lint_plan  strategy lint of a plan (design 4.2); CLI python3 scripts/hoi4facts/lint_plan.py PLAN.json
 
 Callers outside scripts/ put the scripts folder on sys.path and `import hoi4facts`.
 """

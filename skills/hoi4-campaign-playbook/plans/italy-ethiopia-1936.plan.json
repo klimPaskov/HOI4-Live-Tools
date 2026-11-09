@@ -343,11 +343,6 @@
     {
       "equipment": "motorized_equipment_1",
       "factories": 5
-    },
-    {
-      "equipment": "artillery_equipment_2",
-      "factories": 3,
-      "from": "1936.06.01"
     }
   ],
   "production_min_idle": 1,
