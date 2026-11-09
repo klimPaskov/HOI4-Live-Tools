@@ -28,7 +28,12 @@ sys.path.insert(0, os.path.dirname(HERE))
 from hoi4_live import config  # noqa: E402
 from strategist import adapters  # noqa: E402
 
-SKILL_DIR = os.path.join(ROOT, "skills", "hoi4-campaign-playbook")
+PLAYBOOK_DIR = os.path.join(ROOT, "skills", "hoi4-campaign-playbook")
+STRATEGIST_DIR = os.path.join(ROOT, "skills", "hoi4-strategist")
+# The skill each role works from: planning roles use the strategist skill (which points into the
+# playbook references); the player uses the playbook.
+SKILL_FOR_ROLE = {"strategist": STRATEGIST_DIR, "critic": STRATEGIST_DIR, "player": PLAYBOOK_DIR}
+SKILL_DIR = PLAYBOOK_DIR
 TOOLS_DIR = os.path.join(ROOT, "scripts")
 MANIFEST = "agents-manifest.json"
 
@@ -59,9 +64,10 @@ def plan(args, env=None, probe=None):
     binary, version = adapter.resolve_binary(probe)
     run_dir = os.path.abspath(args.run)
     invocation = adapter.build(binary, args.role, effort, os.path.abspath(args.prompt), run_dir, ROOT,
-                               add_dirs=[SKILL_DIR, TOOLS_DIR])
+                               add_dirs=[STRATEGIST_DIR, PLAYBOOK_DIR, TOOLS_DIR])
+    skill = SKILL_FOR_ROLE.get(args.role, PLAYBOOK_DIR)
     invocation.env.update({"HOI4_LIVE_RUN": run_dir, "HOI4_LIVE_AGENT_ROLE": args.role,
-                           "HOI4_LIVE_SKILL_DIR": SKILL_DIR, "HOI4_LIVE_TOOLS_DIR": TOOLS_DIR})
+                           "HOI4_LIVE_SKILL_DIR": skill, "HOI4_LIVE_TOOLS_DIR": TOOLS_DIR})
     return adapter, settings, effort, binary, version, invocation
 
 
