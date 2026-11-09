@@ -5,7 +5,10 @@
     build items create (EXPECTED_LATER);
 (c) templates/run_spec.json parses and has the run-spec keys;
 (d) the role prompts name no model provider (they are fed to any launcher);
-(e) the playbook SKILL.md, its INDEX.md and AGENTS.md point to the skill.
+(e) the playbook SKILL.md, its INDEX.md and AGENTS.md point to the skill;
+(f) the 29-item campaign checklist is in procedure.md (one section per item with its facts command and
+    resolution), in the plan.md coverage table, and enforced by SKILL.md step 5; the brief template has
+    an exact call for every player-owned key; the rubric has 16 rows and the 22 of 32 pass mark.
 """
 
 import json
@@ -48,6 +51,32 @@ REQUIRED_FILES = [
     "agents/openai.yaml",
     "examples/README.md",
 ]
+
+# The campaign checklist (coverage audit, section 3), in order. procedure.md has "### <n>. <name>" for each
+# and templates/plan.md a coverage row "| <n> | <name> |".
+CHECKLIST = [
+    "Goal", "Situation", "Force posture", "Doctrine path", "XP budget", "Templates", "Equipment designs",
+    "Production", "MIOs", "Economy timing", "Research", "Focus and balance of power", "Gated laws",
+    "Stability and war support", "Advisors and high command", "Army organisation", "Manpower", "Operations",
+    "Supply and logistics", "Air plan", "Naval plan", "Diplomacy", "Occupation", "Intelligence", "Peace aims",
+    "Events and decisions", "Checkpoints and contingencies", "Continuous management", "FAIR boundary",
+]
+
+# Fact readers the procedure names before they exist (another build item adds them); each must come with a
+# fallback ("until available").
+PENDING_FACTS = ["terrain-width", "units", "weather", "occupation-laws", "bop", "ports"]
+
+# Player-owned plan keys and the tool the brief template gives for each.
+BRIEF_CALLS = {
+    "templates": "hoi4_template_create", "politics.when": "hoi4_politics_choose",
+    "decision_rules": "hoi4_decision_take", "army_group": "hoi4_army_group_create",
+    "hold_targets": "hoi4_army_front", "retake_rules": "hoi4_army_move", "air_plan": "hoi4_air_mission",
+    "sea_transfer": "hoi4_army_move",
+    "navy": "hoi4_fleet_mission", "designs": "hoi4_design_create", "mio": "hoi4_mio_trait",
+    "production replace": "hoi4_production_set", "auto_import": "hoi4_auto_import",
+    "occupation": "hoi4_occupation_law", "diplomacy": "hoi4_diplomacy_act",
+    "intelligence": "hoi4_agency_upgrade", "peace": "hoi4_peace_take",
+}
 
 REPO_PATH = re.compile(r"(?<![\w./-])((?:skills|scripts|tests|docs|native|hoi4_live)/[A-Za-z0-9_./-]+"
                        r"\.(?:md|py|jsonl|json|rs|yaml|txt))(?![A-Za-z0-9_])")
@@ -166,10 +195,73 @@ class StrategistSkillTest(unittest.TestCase):
     def test_rubric_rows_and_threshold(self):
         text = read(os.path.join(SKILL, "references", "rubric.md"))
         rows = re.findall(r"^\| (\d+) \|", text, re.M)
-        self.assertEqual(rows, [str(i) for i in range(1, 12)])
-        self.assertIn("16 of 22", text)
+        self.assertEqual(rows, [str(i) for i in range(1, 17)])
+        self.assertIn("22 of 32", text)
+        self.assertNotIn("16 of 22", text)
+        self.assertIn("no 0 in rows 1, 2, 7 or\n13", text)
+        self.assertIn('"max": 32', text)
         for sev in ("blocker", "major", "minor"):
             self.assertIn(sev, text)
+        for name in ("Force posture and XP budget", "Templates and doctrines", "Air, naval and overseas supply",
+                     "Occupation, peace", "Continuous-management thresholds"):
+            self.assertIn(name, text)
+        skill = read(os.path.join(SKILL, "SKILL.md"))
+        self.assertIn("22 of 32", skill)
+        self.assertIn("0 in rows 1, 2, 7 or 13", skill)
+        for rel in ("prompts/critic.md", "prompts/answer.md"):
+            self.assertNotIn("of 22", read(os.path.join(SKILL, rel)), rel)
+
+    def test_checklist_in_procedure(self):
+        text = read(os.path.join(SKILL, "references", "procedure.md"))
+        headings = re.findall(r"^### (\d+)\. (.+)$", text, re.M)
+        self.assertEqual(headings, [(str(i), name) for i, name in enumerate(CHECKLIST, 1)])
+        sections = re.split(r"^### \d+\. .+$", text, flags=re.M)[1:]
+        for (num, name), body in zip(headings, sections):
+            self.assertIn("Resolution", body, "item %s %s names no resolution" % (num, name))
+            self.assertIn("Check", body, "item %s %s names no check" % (num, name))
+            self.assertRegex(body, r"`(F|C) [a-z]|SKILL\.md step|rules-and-modes\.md|lessons\.md",
+                             "item %s %s names no facts command" % (num, name))
+        for word in ("executor", "player", "not applicable", "call"):
+            self.assertIn(word, text.split("## Commands")[0])
+
+    def test_pending_fact_readers_have_fallbacks(self):
+        text = read(os.path.join(SKILL, "references", "procedure.md"))
+        table = text.split("Until available |", 1)[1].split("\n\n", 1)[0]
+        for cmd in PENDING_FACTS:
+            row = [line for line in table.splitlines() if line.startswith("| `F %s" % cmd)]
+            self.assertEqual(len(row), 1, cmd)
+            self.assertRegex(row[0].rsplit("|", 2)[1], r"`F (grep|defines|province|state|laws|idea)|C ", cmd)
+        for label in ("starting experience", "law gates"):
+            self.assertIn(label, table)
+
+    def test_checklist_in_plan_template(self):
+        text = read(os.path.join(SKILL, "templates", "plan.md"))
+        coverage = text.split("## 25. Coverage table", 1)[1]
+        for i, name in enumerate(CHECKLIST, 1):
+            self.assertIn("| %d | %s |" % (i, name), coverage, name)
+        for section in ("Force posture", "Doctrine path and XP budget", "Templates", "Equipment designs and MIOs",
+                        "Air", "Navy", "Diplomacy", "Intelligence", "Occupation", "Peace aims",
+                        "Continuous management", "Coverage table"):
+            self.assertRegex(text, r"(?m)^## \d+\. %s$" % re.escape(section), section)
+        self.assertIn("## 11. Lint warnings", text)
+
+    def test_skill_step5_hard_rule(self):
+        text = read(os.path.join(SKILL, "SKILL.md"))
+        step5 = text.split("**5. Domain plans", 1)[1].split("**6. Emit.**", 1)[0]
+        for phrase in ("29-item checklist", "exactly one resolution", "executor key", "exact `call`",
+                       "not applicable: <reason>", "coverage table", "all 29 items"):
+            self.assertIn(phrase, step5)
+
+    def test_brief_has_a_call_per_player_key(self):
+        text = read(os.path.join(SKILL, "templates", "brief.md"))
+        for key, tool in BRIEF_CALLS.items():
+            self.assertIn("`%s {" % tool, text, key)
+        schema = json.loads(read(os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")))
+        player = [k for k, v in schema["properties"].items() if v.get("x-owner") == "player"
+                  and "call" in ((v.get("items") or v).get("properties") or {})]
+        self.assertIn("templates", player)
+        for key in player:
+            self.assertTrue(any(k.split(".")[0] == key for k in BRIEF_CALLS), "no brief call for " + key)
 
     def test_pointers(self):
         for rel in ("skills/hoi4-campaign-playbook/SKILL.md", "skills/hoi4-campaign-playbook/references/INDEX.md",

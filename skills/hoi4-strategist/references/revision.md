@@ -83,7 +83,9 @@ the candidate so it passes every check below.
 
 Write into `RUN/revisions/v<N+1>/`:
 * `plan.json`: the full candidate (not a patch);
-* `plan.md`: the updated human plan (change the affected sections; §11 lists the revision);
+* `plan.md`: the updated human plan (change the affected sections; §11 lists the revision; the
+  coverage table §25 is re-checked for every checklist item the change touches, and in a full
+  revision for all 29);
 * `plan.brief.md`: the re-rendered brief, ≤ 60 lines, first line "Revised v<N+1>: <one-line summary>";
 * `revision.md`: trigger, mode, what changed and why (one line per changed key), invariants checked,
   lint summary, wall time, and anything you could not fix.

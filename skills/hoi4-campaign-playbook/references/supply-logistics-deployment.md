@@ -33,6 +33,10 @@ Flow starts at a node's initial value and loses a penalty per province:
 | Naval base (port) | 3.3 | 0.84 | +1.1 |
 | Floating harbour | 2.6 | 0.8 | +0.8 |
 
+Source: `common/defines/00_defines.lua:4291-4303` (`CAPITAL_*`, `NODE_*`, `NAVAL_BASE_*_SUPPLY_FLOW` and
+`_PENALTY_PER_PROVINCE`), 1.19.4.1 [V]. A port starts stronger than a hub but its reach falls off faster
+inland.
+
 Reach >= 1.0 counts as "perfect". Penalties are modified by terrain, rivers, infrastructure and a
 distance sigmoid (`SUPPLY_FLOW_*`). Back-of-envelope on flat ground **[uncertain]**:
 a plain hub gives >= 1.0 for about 2 provinces; a fully motorised hub about 5-6; the capital about 3
@@ -176,9 +180,37 @@ front rather than stacking.
 |---|---|---|---|
 | Infrastructure level (1-5) | 6000 per level | +0.3 supply, +15% resources per level, fewer mud, speed, cheaper shared builds | In war theatre states and any state you will fight over. 3+ before the offensive, 4-5 in industrial cores |
 | Railway level (1-5) | 170 + 130 per level (path based) | Throughput 15-35; connects hubs to capital | Upgrade the one trunk route to each planned front to level 3-4. The weakest link sets throughput |
-| Supply hub | 20000, one per province | New supply node | Place within 1-3 provinces of the planned frontline on an existing railway, in a province where the enemy cannot reach it quickly |
-| Port/naval base | per file | +3 throughput per level | Overseas fronts |
+| Supply hub | 20000, one per province | New supply node | Last resort (supply order below): only after a cost and time check; within 1-3 provinces of the planned frontline on an existing railway, in a province the enemy cannot reach quickly |
+| Port/naval base | 5000 + 1000 per level, coastal provinces only | +3 throughput per level; start flow 3.3 | Where no supply reaches a shore near the front; overseas fronts |
 | Bunker/coastal fort | 500 + 500 per level | Defence, not supply | Defence lines |
+
+Costs: `common/buildings/00_buildings.txt` (`infrastructure` 6000, `rail_way` 170 and
+`per_level_extra_cost` 130, `naval_base` 5000 and 1000 with `only_costal`, `is_port`, `allied_build`,
+`supply_node` 20000; all four have `infrastructure_construction_effect`) [V]. Build time with 15 civilian
+factories (`calc.py build-order`: 5 points per factory per day, at most 15 factories per project
+`defines:690`, × (1 + 0.2 × state infrastructure)) [D]:
+
+| Building | Infrastructure 0 | Infrastructure 2 |
+|---|---|---|
+| Railway level 1 | 3 days | 2 days |
+| Port, first level | 67 days | 48 days |
+| Supply hub | 268 days | 191 days |
+
+A construction-speed malus (Civilian Economy -30%) stretches the hub to about 270-380 days. A short war
+is over before a day-1 hub finishes.
+
+**Supply construction order** (each recommendation states its cost in points, the estimated finish
+date from `calc.py build-order`, and the source):
+1. Railway levels on the target route from existing or captured hubs and ports.
+2. A new port, or a port level, on a coastal province near the front where no supply reaches the
+   shore: a quarter of a hub's cost, a higher start flow, weeks to build. Conditions: the province is
+   coastal and owned or controlled; free convoys cover 0.25 per supply point (`SUPPLY_CONVOY_FACTOR`,
+   `defines:334`; naval delivery efficiency never below `MIN_NAVAL_SUPPLY_EFFICIENCY` 0.1,
+   `defines:385`); the sea route is not blocked by an enemy navy or air force; reach falls off faster
+   inland than a hub's.
+3. Motorisation and trucks (section 6).
+4. A supply hub only when the calculation shows it finishes before it is needed and no port or railway
+   can serve the same provinces.
 
 AI construction priorities (shows what it values): railway 4.0, supply buildings 1.1, infrastructure 0.2
 (`CONSTRUCTION_PRIO_*`). Infrastructure also gives +15% resources per level and a +20% resource
@@ -187,13 +219,15 @@ bonus when the state is rail-linked to the capital (`INFRASTRUCTURE_RESOURCE_BON
 
 Dated checklist **[playbook]** (adapt to nation; do not starve factories in 1936-37):
 1. 1936 to mid 1937: infrastructure only where it unlocks factory slots or on a planned corridor.
-2. Late 1937 to mid 1938: rail to the planned first-war border (level 3), one hub 1-2 provinces behind it.
+2. Late 1937 to mid 1938: rail to the planned first-war border (level 3); one hub 1-2 provinces behind it
+   only when `calc.py build-order` finishes it before the war and no port or railway serves those provinces.
 3. Early 1939: train and truck production to cover the planned army (trucks stock >= need x1.5); verify
    hub is complete.
 4. Month before the war: motorise hubs nearest the frontline; keep construction queue short and
    finishing ones in front.
-5. During the war: after each major advance, queue a hub in the newly held rail line, then the rail
-   upgrade; expect 10 day conversion cooldown after capture.
+5. During the war: after each major advance, extend railway levels from the captured hub or port, add a
+   port where the coast lies near the new front, motorise; a new hub only after the cost and time check
+   above (a wartime hub rarely finishes in time). Expect 10 day conversion cooldown after capture.
 6. Before winter (September for the Eastern Front): raise infra and hubs in held territory; plan
    pullback lines if the front outruns supply.
 
@@ -239,6 +273,26 @@ Choice rule **[playbook]**: states on your supply route, or that your armies mus
 Quiet rear states with factories you want: forced labour or harsh quotas only if resistance stays below
 25% for 60 days. Resistance rising despite law = add garrison divisions or switch up one tier.
 Some laws are conditional on government or focus (`visible` blocks): verify what the law panel lists.
+
+Resistance and compliance thresholds (`common/resistance_compliance_modifiers/resistance_modifiers.txt`,
+`compliance_modifiers.txt`, 1.19.4.1; each level switches off again 2 points below its threshold,
+`margin = 2`) [V]:
+
+| Level | Effect on the state |
+|---|---|
+| Resistance 25% | garrison penetration chance +50% |
+| Resistance 50% | resistance damage to the garrison +100% |
+| Resistance 75% | for the controller: army speed -50%, local supplies -50%, attrition +30%, no strategic redeployment |
+| Resistance 90% | local factories -3%; on a core state the resistance declares independence (`resistance_90_effect_tooltip`, `events/LAR_occupation.txt` `occupied_countries.2`) |
+| Compliance 15% | enemy operative detection +25% |
+| Compliance 25% | required garrison -25%, recruitable population +0.5% |
+| Compliance 40% | local factories and resources +10% |
+| Compliance 60% | recruitable population factor +20% |
+| Compliance 80% | collaboration government possible (La Resistance and the game rule `can_create_collaboration_government`) |
+
+Switch rule for a plan (the strategist's `occupation` item and the continuous rule): resistance at or
+above 50% in any state on a supply route, or a garrison alert → one law harsher; compliance at or above
+40% with resistance below 25% for 60 days → one law milder; never let a supply-route state reach 75%.
 
 Garrison strength: 1 garrison division (cheap template, high suppression) per VP-rich state; the
 `GARRISON_ORDER_ARMY_CAP_FACTOR` of 3 lets an army on garrison orders exceed the usual cap. Garrison

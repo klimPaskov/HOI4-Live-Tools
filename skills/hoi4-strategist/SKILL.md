@@ -46,6 +46,9 @@ them. Use `--json` when you will parse the output.
    plan.md how each applicable lesson is prevented.
 8. **Never wait for input.** If a gate cannot pass, write `RUN/strategist-blocked.md` with the gate,
    the evidence and what is needed, and stop.
+9. **Forget nothing.** The user does not list every small decision; the plan makes all of them. Every
+   item of the step 5 checklist is resolved in the coverage table, including the ones the goal's words
+   do not mention (templates, XP, occupation, peace, thresholds).
 
 ## Inputs
 
@@ -88,10 +91,21 @@ source, and months to that war.
 alternatives considered with the reason each was rejected (plan.md §7 intro). *Gate:* every phase exit
 is a schema predicate; the last phase's exit implies the goal predicates.
 
-**5. Domain plans.** Work through every checklist in [references/procedure.md](references/procedure.md):
-economy, research, focus, laws and advisors, production, army, conquest, events, contingencies. Each
-checklist names the command to run and the lint rule it must satisfy. *Gate:* every checklist item is
-done or marked not applicable with a reason.
+**5. Domain plans: the 29-item checklist.** Work through every item of
+[references/procedure.md](references/procedure.md) in order: goal, situation, force posture, doctrine
+path, XP budget, templates, equipment designs, production, MIOs, economy timing, research, focus and
+balance of power, gated laws, stability and war support, advisors and high command, army organisation,
+manpower, operations, supply and logistics, air plan, naval plan, diplomacy, occupation, intelligence,
+peace aims, events and decisions, checkpoints and contingencies, continuous management, FAIR boundary.
+Each item names the facts command to run and the check it must pass.
+**Hard rule: every item ends in exactly one resolution:** an executor key (preferred); a player item
+with an exact `call` (`{tool, args}`) and the same call in the brief; or `not applicable: <reason>`
+where the reason cites a fact or a missing tool. A decision whose key or predicate atom is not in the
+schema yet is a player line in the brief, never an invented key (procedure "Key or atom not in the
+schema yet"). Nothing is left for the player to notice on their own.
+*Gate:* the coverage table (plan.md §25) lists all 29 items, each with its resolution, where it lives
+and the facts command used; no empty row, no "later" or "TBD", and items 1, 2 and 29 are never "not
+applicable".
 
 **6. Emit.**
 * `RUN/plan.json`: valid against the schema; `_meta.version` 1 (step 10 fills the rest).
@@ -113,8 +127,8 @@ critic in a fresh context:
 `python3 scripts/strategist/run.py --role critic --run RUN --prompt skills/hoi4-strategist/prompts/critic.md`.
 It writes `RUN/review/critic-1.json`. Answer every finding in `RUN/review/answers-1.json` (fix, or rebut
 with a source), re-run step 7, then run the critic again for round 2. At most 2 rounds; protocol in
-[references/rubric.md](references/rubric.md). *Gate:* no open `blocker`, rubric total ≥ 16 of 22, and no
-0 in rows 1, 2 or 7. If round 2 still fails, write `RUN/strategist-blocked.md` and stop.
+[references/rubric.md](references/rubric.md). *Gate:* no open `blocker`, rubric total ≥ 22 of 32, and no
+0 in rows 1, 2, 7 or 13. If round 2 still fails, write `RUN/strategist-blocked.md` and stop.
 
 **9. Reconcile live.** Only when the game is loaded and paused on day 1 (allowed pre-start setup) and
 the operator runs `scripts/strategist/reconcile.py` (build item 17). It compares plan references
@@ -136,14 +150,14 @@ Time budget: steps 1 to 8 in about 30 minutes of wall time.
 | File | Content | Checked by |
 |---|---|---|
 | `RUN/plan.json` | executor keys plus player items; `_meta`, `goal`, `phases`, `checkpoints`, `contingencies` | `validate_plan.py --strict`, `lint_plan.py` |
-| `RUN/plan.md` | the human plan, [templates/plan.md](templates/plan.md); §0 goal reading and alternatives; §11 warnings and critic answers | critic (rubric rows 1-9) |
+| `RUN/plan.md` | the human plan, [templates/plan.md](templates/plan.md); §0 goal reading and alternatives; §11 warnings and critic answers; §12-§24 the checklist sections; §25 coverage table (29 items) | critic (rubric rows 1-9, 12-16) |
 | `RUN/plan.brief.md` | the player section, ≤ 60 lines, [templates/brief.md](templates/brief.md) | critic (rubric rows 10-11) |
 | `RUN/lint.json` | the last lint output | step 7 |
 | `RUN/review/critic-<n>.json`, `answers-<n>.json` | critic findings and the answers | step 8 |
 
 ## References
 
-* [references/procedure.md](references/procedure.md): per-domain checklists (step 5).
+* [references/procedure.md](references/procedure.md): the 29-item checklist with facts commands (step 5).
 * [references/goal-patterns.md](references/goal-patterns.md): user phrases to predicates (step 2).
 * [references/rubric.md](references/rubric.md): critic rubric, output format, answer protocol (step 8).
 * [references/revision.md](references/revision.md): mid-game revision.

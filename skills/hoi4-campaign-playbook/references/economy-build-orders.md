@@ -34,6 +34,15 @@ re-check on screen); **[?]** uncertain or version-dependent, verify in the toolt
 | Fuel silo | 5000 | no state cap | yes | [F] same |
 | Energy / industrial infrastructure ("keystone") | 12000 | 1 per state, either one | yes | [F] same (`energy_infrastructure`, `industrial_infrastructure`) |
 | Railway | 170 + 130 per level | province | no | [W]; `per_level_extra_cost = 130` [F] |
+| Naval base (port) | 5000 + 1000 per level, coastal provinces only | 10 per province | no | [F] same (`naval_base`, `only_costal`, `is_port`) |
+| Supply hub | 20000 | 1 per province | no | [F] same (`supply_node`) |
+
+[D] with 15 civilian factories (`calc.py build-order`, no speed bonus): a railway level takes 2-3 days,
+a first port level 48-67 days, a supply hub 191-268 days at state infrastructure 2 to 0 (about 270-380
+days under Civilian Economy's -30%). Supply construction follows the order in
+`supply-logistics-deployment.md` §5: railways, then a port where no supply reaches the shore, then
+trucks, and a hub only when the calculation shows it finishes before it is needed. Every construction
+recommendation states its cost in points, its estimated finish date and the source.
 
 Speed (approximate): a civ gives roughly 4 to 5 points a day (unpowered or powered;
 `BASE_FACTORY_SPEED 4`, `POWERED_FACTORY_SPEED 5`, `defines/00_defines.lua:630-635`)
@@ -125,13 +134,13 @@ capital (supply +20% resources over rail to the capital, `SUPPLY_ROUTE_RESOURCE_
 |---|---|
 | Industrial state with infra <= 2 and >= 5 planned factory levels | Infra to 4 before factories (section 1.2). |
 | State with strategic resource (oil, rubber, steel, chromium, aluminium) and infra < 5 | +15% extracted resources per infra level [F `INFRASTRUCTURE_RESOURCE_BONUS 0.15`]; worth building when the resource is short. |
-| Front-line or invasion axis within 12 months | Rails and infra on the supply path, supply hubs [F prio 1.1, 4.0 for rail]. |
+| Front-line or invasion axis within 12 months | Railway levels on the supply path from existing hubs and ports; a port on the coast nearest the front; a supply hub only when `calc.py build-order` finishes it before the war (`supply-logistics-deployment.md` §5) [F AI prio 1.1 supply buildings, 4.0 rail]. |
 | Factory state without a rail line to the capital | Add rail; connected states get +20% resources [F]. |
 | Enemy air/naval raids on the state | Rebuild only after the threat; repairs are low priority (x0.3) [F]. |
 
 Dummy-proof rule: if `free civs` > 0 and no slot is free, queue infra (up to 5) in
-the largest industrial states. If infra is already 5 everywhere, queue rail and
-supply hubs along the planned attack axis.
+the largest industrial states. If infra is already 5 everywhere, queue railway levels
+along the planned attack axis (a supply hub only after the cost and time check).
 
 **Does NOT apply:** states you will lose in the first war (border states of a
 doomed front) - spend nothing there.

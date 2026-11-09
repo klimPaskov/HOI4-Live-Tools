@@ -8,8 +8,12 @@ same `--mode` (the FAIR boundary in SKILL.md applies to the critic too). It neve
 
 ## 1. Scores
 
-Each row scores 0, 1 or 2. **Pass: total ≥ 16 of 22 and no 0 in rows 1, 2 or 7.** A score needs
-evidence: a plan item, a facts or lint output, or a dossier line. "Looks fine" is not evidence.
+Each row scores 0, 1 or 2 (16 rows, maximum 32). **Pass: total ≥ 22 of 32 and no 0 in rows 1, 2, 7 or
+13.** A score needs evidence: a plan item, a facts or lint output, or a dossier line. "Looks fine" is
+not evidence. Rows 12-16 check the checklist items of `procedure.md` that rows 1-11 do not; the
+coverage table (plan.md §25) is the starting point for them and for row 10. A goal without a land war
+scores row 13 on its doctrines alone; a row whose whole subject is not applicable with a cited
+reason scores 2.
 
 | # | Row | 2 | 1 | 0 |
 |---|---|---|---|---|
@@ -22,8 +26,13 @@ evidence: a plan item, a facts or lint output, or a dossier line. "Looks fine" i
 | 7 | Conquest | VP order by value and adjacency to the threshold (with and without modifiers); mandatory states included; routes and river counts given; supply construction triggered along the axis | order works but one leg unjustified or supply follows late | threshold not reached, mandatory state missing, or targets not reachable |
 | 8 | Defence | every enemy-bordering own state guarded; corridor rule when targets go beyond 2 provinces; encirclement risks named with a response | one border or corridor thin | an enemy-bordering state without a guard, or guards removed during a phase |
 | 9 | Contingencies | each likely failure (lessons that apply, scenario escalations, stalls, core loss, new war) has a trigger predicate and a phase / overrides / revise response; checkpoints at mission deadlines | some failures covered only in text | none, or triggers the executor cannot evaluate and no player fallback |
-| 10 | Executor readiness | most decisions in executor-owned keys; player items name exact tool calls; ids stable; schema and lint clean | some player text that an executor key could carry | key decisions only in prose, or player items without calls |
+| 10 | Executor readiness | most decisions in executor-owned keys; player items name exact tool calls; ids stable; schema and lint clean; the coverage table resolves all 29 items (executor key, player call, or not applicable with a cited reason) | some player text that an executor key could carry, or one item resolved without a fact | key decisions only in prose, player items without calls, or checklist items missing from the coverage table |
 | 11 | Brief usefulness | ≤ 60 lines; win check, next 3 checkpoints, what the executor does, player calls, judgement events with predicates, do-not list, `plan_revised` step; actionable in one batch per turn | complete but long-winded or one part missing | over 60 lines, or the player cannot tell what to do |
+| 12 | Force posture and XP budget | land / air / naval shares by phase follow the goal and the enemy aggregates; production, research folders and doctrine folders match them; XP forecast per branch with every spend dated, no month over the forecast, no pool left at the cap | posture stated but one arm unjustified, or the XP schedule not checked against the forecast | no posture, or planned XP spends the forecast cannot pay before they matter |
+| 13 | Templates and doctrines | a template per role and phase with width from the theatre's terrain mix (within 10% of a clean fit), support and regimental support justified, priority and XP cost given, equipment unlocked and covered, fielded divisions' switch dated; doctrine per folder and track order from the dossier, no grand-doctrine change without a reason that beats the mastery reset | templates exist but one role is missing or the width is not derived from terrain | a land war with no template decision, widths that do not fit the main terrain, or doctrines not in the dossier |
+| 14 | Air, naval and overseas supply | air plan (wings, bases with capacity, regions, missions by phase, superiority before offensives) or not applicable with a reason; naval plan or "no navy" with a reason; every overseas theatre has ports, convoys, escort and sea transfers | one of these thin (a base over capacity, convoys not sized) | an overseas theatre without a convoy and port plan, or an air force with no plan |
+| 15 | Occupation, peace, intelligence | occupation law per phase with resistance and compliance switch rules and a garrison template; peace demands ranked per enemy with the answer to scripted peace offers; never-take list; intelligence decided (agency and upgrades, or not applicable) | one of these missing | a conquest with no occupation item, or an enemy with no peace item |
+| 16 | Continuous-management thresholds | every rule of procedure item 28 has a campaign value or "default" with a reason; rules the executor does not watch yet are brief lines with read, threshold and call | some rules left at default without a reason | no thresholds decided (`alarms` untouched and no `manage` decisions) |
 
 ## 2. Output format
 
@@ -32,8 +41,10 @@ The critic writes `RUN/review/critic-<n>.json` (n = 1 + the number of existing `
 ```json
 {
   "round": 1,
-  "scores": {"1": 2, "2": 1, "3": 2, "4": 1, "5": 2, "6": 1, "7": 2, "8": 2, "9": 1, "10": 2, "11": 2},
-  "total": 18,
+  "scores": {"1": 2, "2": 1, "3": 2, "4": 1, "5": 2, "6": 1, "7": 2, "8": 2, "9": 1, "10": 2, "11": 2,
+             "12": 1, "13": 2, "14": 1, "15": 2, "16": 1},
+  "total": 25,
+  "max": 32,
   "pass": true,
   "findings": [
     {
@@ -49,9 +60,13 @@ The critic writes `RUN/review/critic-<n>.json` (n = 1 + the number of existing `
 }
 ```
 
+`max` is 32 (2 points × 16 rows); `scripts/strategist/strategize.py` reads `total`, `max`, `scores` and
+the open blockers.
+
 Severities:
 * `blocker`: the plan cannot reach the goal or breaks a hard rule (wrong goal, contradicted fact, FAIR
-  breach, threshold not reached, unguarded border, lint error missed). Any open blocker fails the gate.
+  breach, threshold not reached, unguarded border, lint error missed, a checklist item with no
+  resolution, an overseas theatre with no convoy plan). Any open blocker fails the gate.
 * `major`: likely to cost the goal or weeks of game time (timing off, supply late, a likely failure
   without a contingency).
 * `minor`: clarity, tagging or efficiency.
@@ -67,7 +82,7 @@ the answers changed, and keeps the ids.
    A rebuttal needs a source; "I disagree" is not an answer.
 2. Re-run step 7 (validate and lint) after the fixes.
 3. Run the critic for round 2 with the same command. It reads the answers.
-4. At most 2 rounds. Gate: no open blocker, total ≥ 16, no 0 in rows 1, 2, 7. If round 2 fails, write
-   `RUN/strategist-blocked.md` (failed rows, open findings, what would fix them) and stop; do not run a
-   third round and do not freeze.
+4. At most 2 rounds. Gate: no open blocker, total ≥ 22 of 32, no 0 in rows 1, 2, 7, 13. If round 2
+   fails, write `RUN/strategist-blocked.md` (failed rows, open findings, what would fix them) and stop;
+   do not run a third round and do not freeze.
 5. List every finding and its answer in plan.md §11.
