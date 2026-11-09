@@ -75,9 +75,7 @@ NESTED_VARS = {
 }
 # Executor-owned keys whose step is being built in parallel to an agreed shape: tagged executor before the
 # code reads them (the unread check skips them; their fields are checked once the code lands).
-LANDING = {
-    "hold_targets": "plan_military.rs hold posts, agreed shape {id, army, provinces, when?, until?}",
-}
+LANDING = {}
 # Fields the executor still reads that the schema deliberately leaves out.
 KNOWN_GAPS = {
     "doctrines[].doctrine": "old {doctrine, track} entry, still read for one release; plans use the new "

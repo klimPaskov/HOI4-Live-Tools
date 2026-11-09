@@ -76,6 +76,12 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(patched["air_plan"][0]["selector"], "CR.32 at 550")
         self.assertEqual([u["name"] for u in report["unresolved"]], ["SM.79 at 550"])
 
+    def test_marshals_are_checked(self):
+        plan = {"army_group": [{"id": "g", "armies": ["A"], "marshal": ["rodolfo graziani", "Pietro Badoglio"]}]}
+        code, report, patched, _ = self.run_it(plan)
+        self.assertEqual(patched["army_group"][0]["marshal"][0], "Rodolfo Graziani")
+        self.assertEqual([u["name"] for u in report["unresolved"]], ["Pietro Badoglio"])
+
     def test_norm(self):
         self.assertEqual(reconcile.norm("12° Stormo"), reconcile.norm("12 stormo"))
         self.assertEqual(reconcile.norm("Divisione Ascari Libica"), "divisione ascari libica")

@@ -12,7 +12,8 @@ Only read tools are called (no lease, no input). The game should be paused on da
 pre-start setup. What it checks, against the names the plan uses:
   * division templates  (army_layout[].templates, training template(s), templates[].base)
                         vs hoi4_division_templates
-  * generals            (army_layout[].general, armies.generals) vs hoi4_commanders
+  * generals            (army_layout[].general, armies.generals, army_group[].marshal) vs
+                        hoi4_commanders
   * air wings           (air_plan[].wing: a live name, or "<variant> at <state id>", which expands
                         to one entry per matching wing from hoi4_air) vs hoi4_air_wings
   * production targets  (production[].remove / replace) vs hoi4_production_lines
@@ -110,6 +111,9 @@ def references(plan):
     for i, e in enumerate(plan.get("templates") or []):
         if isinstance(e, dict):
             add("template", e, "base", "templates[%d].base" % i)
+    for i, e in enumerate(plan.get("army_group") or []):
+        if isinstance(e, dict):
+            add("general", e, "marshal", "army_group[%d].marshal" % i)
     armies = plan.get("armies") or {}
     if isinstance(armies, dict):
         gens = armies.get("generals")
