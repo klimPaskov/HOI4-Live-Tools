@@ -1,0 +1,1 @@
+NDefines.NCountry.MIN_SURRENDER_LIMIT = 0.25

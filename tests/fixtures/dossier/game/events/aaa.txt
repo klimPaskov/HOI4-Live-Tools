@@ -1,0 +1,5 @@
+add_namespace = aaa
+country_event = { id = aaa.5 title = aaa.5.t is_triggered_only = yes
+	option = { name = aaa.5.a add_political_power = 10 }
+	option = { name = aaa.5.b ai_chance = { base = 0 } add_stability = -0.05 }
+}

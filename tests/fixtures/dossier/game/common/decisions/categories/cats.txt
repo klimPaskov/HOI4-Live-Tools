@@ -1,0 +1,2 @@
+BBB_cat = { allowed = { tag = BBB } }
+AAA_cat = { }
