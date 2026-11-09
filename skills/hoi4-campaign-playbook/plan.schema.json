@@ -1,0 +1,1929 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/klimPaskov/HOI4-Live-Tools/skills/hoi4-campaign-playbook/plan.schema.json",
+  "title": "HOI4 Live Tools campaign plan",
+  "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief; x-planned-owner names keys the executor will take over). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
+  "type": "object",
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "campaign": {
+          "type": "string",
+          "x-owner": "executor",
+          "description": "campaign identity; plan_state.json is ignored for another campaign"
+        },
+        "parent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "dossier_hash": {
+          "type": "string"
+        },
+        "models": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "launcher": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "resolved_model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "effort": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "model"
+            ]
+          }
+        },
+        "created": {
+          "type": "string"
+        },
+        "lint_summary": {
+          "type": "object",
+          "properties": {
+            "errors": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "warnings": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version"
+      ],
+      "x-owner": "executor",
+      "description": "Plan metadata for the strategist and the revision protocol (version is the compare-and-swap key)."
+    },
+    "active": {
+      "type": "boolean",
+      "x-owner": "executor",
+      "description": "false pauses the runner"
+    },
+    "stop_on_date": {
+      "$ref": "#/definitions/date_or_ymd",
+      "x-owner": "executor",
+      "description": "pause once and stop acting at this date (alarm target_date_reached)"
+    },
+    "stop_on_date_pause": {
+      "type": "boolean",
+      "x-owner": "executor",
+      "description": "false: stop acting at stop_on_date but never pause"
+    },
+    "stop_on_failure": {
+      "type": "boolean",
+      "x-owner": "executor"
+    },
+    "alarms": {
+      "$ref": "#/definitions/alarms",
+      "x-owner": "executor"
+    },
+    "auto_events": {
+      "type": [
+        "boolean",
+        "string"
+      ],
+      "enum": [
+        true,
+        false,
+        "all"
+      ],
+      "x-owner": "executor",
+      "description": "answer news and single-option events (default true); \"all\" also answers every event after wait_events_days"
+    },
+    "wait_events_days": {
+      "type": "integer",
+      "minimum": 0,
+      "x-owner": "executor"
+    },
+    "event_options": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "x-owner": "executor",
+      "description": "event id -> option index"
+    },
+    "event_prefix_options": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "const": "last"
+          }
+        ]
+      },
+      "x-owner": "executor",
+      "description": "event id prefix -> option index or \"last\""
+    },
+    "research_priority": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "research_path": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "integer",
+            "x-owner": "executor"
+          },
+          "not_before": {
+            "$ref": "#/definitions/date",
+            "x-owner": "executor"
+          },
+          "techs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-owner": "executor"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "techs"
+        ]
+      },
+      "x-owner": "executor"
+    },
+    "research_fallback": {
+      "type": [
+        "boolean",
+        "string"
+      ],
+      "enum": [
+        true,
+        false,
+        "priority_only"
+      ],
+      "x-owner": "executor"
+    },
+    "research_fallback_prefixes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "research_fallback_categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "research_fallback_exclude": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "research_blind_catalogue": {
+      "type": "boolean",
+      "x-owner": "executor"
+    },
+    "focus_path": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "focus_fallback": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "skip_hours": {
+      "type": "object",
+      "properties": {
+        "tech": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tech_fallback": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "focus": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "focus_blocked": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "executor"
+    },
+    "politics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id",
+            "x-owner": "executor"
+          },
+          "category": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "slot": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "x-owner": "executor"
+          },
+          "idea": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "cost": {
+            "type": "number",
+            "x-owner": "executor",
+            "description": "political power needed before trying"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate",
+            "x-owner": "player",
+            "description": "executor support is build item 14"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "category",
+          "idea"
+        ]
+      },
+      "x-owner": "executor",
+      "description": "one-shot picks in order; done-memory keyed by id"
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor",
+      "description": "decision keys taken whenever enabled"
+    },
+    "training": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string"
+        },
+        "queue": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "batch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "deploy_state": {
+          "$ref": "#/definitions/state_id"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "template"
+      ],
+      "x-owner": "executor"
+    },
+    "production_priority": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "x-owner": "executor"
+    },
+    "production_min_idle": {
+      "type": "integer",
+      "minimum": 0,
+      "x-owner": "executor"
+    },
+    "production": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "equipment": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "factories": {
+            "type": "integer",
+            "minimum": 0,
+            "x-owner": "executor"
+          },
+          "from": {
+            "$ref": "#/definitions/date_or_ymd",
+            "x-owner": "executor"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "equipment"
+        ]
+      },
+      "x-owner": "executor"
+    },
+    "construction": {
+      "$ref": "#/definitions/construction",
+      "x-owner": "executor"
+    },
+    "construction_min_idle": {
+      "type": "integer",
+      "minimum": 0,
+      "x-owner": "executor"
+    },
+    "construction_queue_depth": {
+      "type": "integer",
+      "minimum": 0,
+      "x-owner": "executor"
+    },
+    "construction_full_days": {
+      "type": "integer",
+      "minimum": 0,
+      "x-owner": "executor"
+    },
+    "construction_probe_slots": {
+      "type": "boolean",
+      "x-owner": "executor"
+    },
+    "construction_fallback_any_own_state": {
+      "type": "boolean",
+      "x-owner": "executor"
+    },
+    "construction_plan": {
+      "$ref": "#/definitions/construction_plan",
+      "x-owner": "executor",
+      "description": "queued once each when its trigger holds, in peace and at war"
+    },
+    "war": {
+      "$ref": "#/definitions/war",
+      "x-owner": "executor"
+    },
+    "disband": {
+      "type": "object",
+      "properties": {
+        "templates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "keep_states": {
+          "$ref": "#/definitions/state_ids"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "templates"
+      ],
+      "x-owner": "executor"
+    },
+    "armies": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_for_general": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "states": {
+          "$ref": "#/definitions/state_ids"
+        },
+        "absorb": {
+          "type": [
+            "boolean",
+            "string"
+          ],
+          "enum": [
+            true,
+            false,
+            "assign"
+          ]
+        },
+        "consolidate": {
+          "type": "boolean"
+        },
+        "generals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "executor"
+    },
+    "army_layout": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "name_hint": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "state": {
+            "$ref": "#/definitions/state_id",
+            "x-owner": "executor"
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-owner": "executor"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "x-owner": "executor"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "strike",
+              "guard"
+            ],
+            "x-owner": "executor"
+          },
+          "general": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "guard_states_in_order": {
+            "$ref": "#/definitions/state_ids",
+            "x-owner": "executor"
+          },
+          "when": {
+            "$ref": "#/definitions/trigger",
+            "x-owner": "executor",
+            "description": "only the owner:<state>=<TAG> form is read for layout entries"
+          },
+          "axis": {
+            "$ref": "#/definitions/state_ids",
+            "x-owner": "player"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name_hint",
+          "state",
+          "templates",
+          "role"
+        ]
+      },
+      "x-owner": "executor"
+    },
+    "vp_targets": {
+      "$ref": "#/definitions/vp_targets",
+      "x-owner": "executor"
+    },
+    "special_projects": {
+      "type": "object",
+      "properties": {
+        "priority": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "executor"
+    },
+    "doctrines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id",
+            "x-owner": "executor"
+          },
+          "folder": {
+            "type": "string",
+            "enum": [
+              "land",
+              "special_forces",
+              "naval",
+              "navy",
+              "air"
+            ],
+            "x-owner": "executor"
+          },
+          "grand_doctrine": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "track": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "subdoctrine": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "xp": {
+            "type": "number",
+            "minimum": 0,
+            "x-owner": "executor"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "folder",
+          "xp"
+        ]
+      },
+      "x-owner": "executor",
+      "description": "adopted in order once the folder's experience reaches xp: grand_doctrine is sent as {doctrine}, subdoctrine as {doctrine, track}; an entry with both adopts the grand doctrine first. The executor still reads the old {doctrine, track} entry for one release; the schema allows only the new shape"
+    },
+    "air": {
+      "type": "object",
+      "properties": {
+        "war_missions": {
+          "type": "boolean"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "executor"
+    },
+    "goal": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "reading": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "predicates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/predicate"
+          },
+          "minItems": 1
+        },
+        "deadline": {
+          "$ref": "#/definitions/date"
+        },
+        "fail_predicates": {
+          "$ref": "#/definitions/predicates"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "predicates"
+      ],
+      "x-owner": "player",
+      "description": "what done means; alarms goal_reached / goal_at_risk in build item 15",
+      "x-planned-owner": "executor"
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "by": {
+            "$ref": "#/definitions/date"
+          },
+          "must": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/predicate"
+            },
+            "minItems": 1
+          },
+          "else": {
+            "type": "string",
+            "pattern": "^(revise|phase:[A-Za-z0-9_]+|contingency:[A-Za-z0-9_.:-]+)$"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "by",
+          "must"
+        ]
+      },
+      "x-owner": "player",
+      "description": "alarm checkpoint_missed in build item 15",
+      "x-planned-owner": "executor"
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "goal": {
+            "type": "string",
+            "description": "what the phase is for (text)"
+          },
+          "enter": {
+            "$ref": "#/definitions/predicate"
+          },
+          "exit": {
+            "$ref": "#/definitions/predicate"
+          },
+          "overrides": {
+            "$ref": "#/definitions/overrides"
+          },
+          "revise_on_enter": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id"
+        ]
+      },
+      "x-owner": "player",
+      "description": "ordered phases; the active phase's overrides apply over the base plan (build item 15)",
+      "x-planned-owner": "executor"
+    },
+    "contingencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "trigger": {
+            "$ref": "#/definitions/predicate"
+          },
+          "phase": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]+$"
+          },
+          "overrides": {
+            "$ref": "#/definitions/overrides"
+          },
+          "revise": {
+            "type": "string",
+            "enum": [
+              "quick",
+              "full"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "trigger"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "phase"
+            ]
+          },
+          {
+            "required": [
+              "overrides"
+            ]
+          },
+          {
+            "required": [
+              "revise"
+            ]
+          }
+        ]
+      },
+      "x-owner": "player",
+      "description": "switched to at once when the trigger holds, while a revision runs",
+      "x-planned-owner": "executor"
+    },
+    "event_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "event": {
+            "type": "string"
+          },
+          "option_name": {
+            "type": "string",
+            "description": "option name key (localisation key) from the event file"
+          },
+          "condition": {
+            "$ref": "#/definitions/predicate"
+          },
+          "else_option_name": {
+            "type": "string"
+          },
+          "fallback_option_name": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "event",
+          "option_name"
+        ]
+      },
+      "x-owner": "player",
+      "description": "event choices by option name (build item 13)",
+      "x-planned-owner": "executor"
+    },
+    "decision_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "target": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          },
+          "max": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "never": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "decision"
+        ]
+      },
+      "x-owner": "player",
+      "description": "guarded decisions (build item 14)",
+      "x-planned-owner": "executor"
+    },
+    "army_group": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "name_hint": {
+            "type": "string"
+          },
+          "field_marshal": {
+            "type": "string"
+          },
+          "fallback_field_marshal": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name_hint"
+        ]
+      },
+      "x-owner": "player"
+    },
+    "air_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "wing": {
+            "type": "string"
+          },
+          "base_state": {
+            "$ref": "#/definitions/state_id"
+          },
+          "airframe": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mission": {
+            "type": "string"
+          },
+          "region": {
+            "type": "integer"
+          },
+          "then_region": {
+            "type": "integer"
+          },
+          "switch_when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "fallback_mission": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false
+      },
+      "x-owner": "player"
+    },
+    "hold_targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "state": {
+            "$ref": "#/definitions/state_id"
+          },
+          "provinces": {
+            "$ref": "#/definitions/province_ids"
+          },
+          "keep_at_least": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mission": {
+            "type": "string"
+          },
+          "until": {
+            "$ref": "#/definitions/predicate"
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "provinces"
+        ]
+      },
+      "x-owner": "player"
+    },
+    "retake_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "if": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "do": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "if",
+          "do"
+        ]
+      },
+      "x-owner": "player"
+    },
+    "training_rules": {
+      "type": "object",
+      "properties": {
+        "only_if_stockpile": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "cap_template": {
+          "type": "string"
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "player",
+      "description": "stockpile guard and cap (executor support is build item 14)"
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "name": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "regiments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "support": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ]
+      },
+      "x-owner": "player"
+    },
+    "diplomacy": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "action": {
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/definitions/tag"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "call": {
+            "$ref": "#/definitions/call"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "action"
+        ]
+      },
+      "x-owner": "player"
+    },
+    "occupation": {
+      "type": "object",
+      "properties": {
+        "law": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/predicate"
+        },
+        "call": {
+          "$ref": "#/definitions/call"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "law"
+      ],
+      "x-owner": "player"
+    },
+    "peace": {
+      "type": "object",
+      "properties": {
+        "take": {
+          "$ref": "#/definitions/state_ids"
+        },
+        "puppet": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/tag"
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "x-owner": "player"
+    },
+    "war_by_phase": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/war"
+      },
+      "x-owner": "player",
+      "description": "deprecated: use phases[].overrides.war",
+      "x-deprecated": "phases[].overrides.war"
+    },
+    "surrender_goal": {
+      "type": "object",
+      "x-owner": "player",
+      "description": "deprecated: use goal",
+      "x-deprecated": "goal"
+    },
+    "win_condition": {
+      "type": "object",
+      "x-owner": "player",
+      "description": "deprecated: use goal",
+      "x-deprecated": "goal"
+    }
+  },
+  "patternProperties": {
+    "^_": {}
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "id": {
+      "type": [
+        "string",
+        "integer"
+      ],
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:-]*$",
+      "minLength": 1,
+      "description": "Stable item id (a string, or a number). The executor keys its done-memory on it (plan_run.rs item_id, plan_state.json), so a revision keeps the id of an unchanged item and never reuses one."
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]{2}$"
+    },
+    "state_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "province_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "state_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/state_id"
+      }
+    },
+    "province_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/province_id"
+      }
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}(\\.\\d{1,2})?$",
+      "description": "Game date YYYY.MM.DD (dots or dashes); a trailing hour field is ignored."
+    },
+    "date_or_ymd": {
+      "type": [
+        "string",
+        "object"
+      ],
+      "pattern": "^\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}(\\.\\d{1,2})?$",
+      "properties": {
+        "year": {
+          "type": "integer"
+        },
+        "month": {
+          "type": "integer"
+        },
+        "day": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "year",
+        "month",
+        "day"
+      ],
+      "additionalProperties": false
+    },
+    "trigger": {
+      "type": "string",
+      "pattern": "^(|\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|province_controlled:\\d+|state_fully_controlled:\\d+|owner:\\d+=[A-Z][A-Z0-9]{2})$",
+      "description": "Executor trigger read today (plan_run.rs construction_plan_step): empty (always), a date, province_controlled:<province>, state_fully_controlled:<state> or owner:<state>=<TAG>."
+    },
+    "predicate": {
+      "type": [
+        "string",
+        "object"
+      ],
+      "pattern": "^(\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|province_controlled:\\d+|state_fully_controlled:\\d+|owner:\\d+=[A-Z][A-Z0-9]{2}|state_controller:\\d+=[A-Z][A-Z0-9]{2}|province_controller:\\d+=[A-Z][A-Z0-9]{2}|(at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|vp_share:[A-Z][A-Z0-9]{2}(<=|>=|<|>)(0(\\.\\d+)?|1(\\.0+)?)|(focus_completed|tech_researched):[A-Za-z0-9_.]+|phase:[A-Za-z0-9_]+)$",
+      "description": "A check on the game state. Atoms: a date (reached), province_controlled:<p> (by us), state_fully_controlled:<s>, owner:<s>=<TAG>, state_controller:<s>=<TAG> (TAG controls every province), province_controller:<p>=<TAG>, at_war|not_at_war|capitulated|exists|not_exists:<TAG>, vp_share:<TAG><op><0..1> (share of TAG's victory points TAG still controls, hoi4_states), focus_completed:<key>, tech_researched:<key>, phase:<id> (that phase is active). Composites: {\"all\":[...]}, {\"any\":[...]}, {\"not\":p}. The first four atoms are what the executor evaluates today; the evaluator for the rest is build item 15.",
+      "properties": {
+        "all": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/predicate"
+          },
+          "minItems": 1
+        },
+        "any": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/predicate"
+          },
+          "minItems": 1
+        },
+        "not": {
+          "$ref": "#/definitions/predicate"
+        }
+      },
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false
+    },
+    "predicates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/predicate"
+      }
+    },
+    "call": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "pattern": "^hoi4_[a-z0-9_]+$"
+        },
+        "args": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool"
+      ],
+      "description": "The exact tool call a player-owned item stands for (lint: player items list a tool call)."
+    },
+    "war": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "x-owner": "executor",
+          "description": "false switches the war executive off (default on when war is an object)"
+        },
+        "first": {
+          "type": "boolean",
+          "x-owner": "executor",
+          "description": "false runs the war step after the economy steps (default: war first)"
+        },
+        "me": {
+          "$ref": "#/definitions/tag",
+          "x-owner": "executor",
+          "description": "own tag (default: hoi4_overview player)"
+        },
+        "enemies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/tag"
+          },
+          "x-owner": "executor",
+          "description": "count only while at war with them (hoi4_wars validated)"
+        },
+        "min_army": {
+          "type": "integer",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "divisions an army needs to be driven (default 6)"
+        },
+        "per_target": {
+          "type": "integer",
+          "minimum": 1,
+          "x-owner": "executor",
+          "description": "armies per target state (default 2)"
+        },
+        "cooldown_hours": {
+          "type": "integer",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "game hours between orders to one army (default 12)"
+        },
+        "reserve": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-owner": "executor",
+          "description": "army names the executor never drives"
+        },
+        "player_claim_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "an army the player ordered within this many seconds is left alone (default 300)"
+        },
+        "axes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/state_ids"
+          },
+          "x-owner": "executor",
+          "description": "ordered target state lists; an army follows the axis whose next enemy-held state is nearest"
+        },
+        "theatre": {
+          "$ref": "#/definitions/state_ids",
+          "x-owner": "executor",
+          "description": "own states an army must stand in to be driven"
+        },
+        "guard_states": {
+          "$ref": "#/definitions/state_ids",
+          "x-owner": "executor",
+          "description": "the first army standing in such a state guards it"
+        },
+        "guards": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/state_id"
+          },
+          "x-owner": "executor",
+          "description": "army name -> own state it holds (never attacks)"
+        },
+        "motorization": {
+          "type": "integer",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "supply trucks level set once on every driven army"
+        },
+        "stall_days": {
+          "type": "integer",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "days without progress before a direct move (default 8)"
+        },
+        "rest": {
+          "type": "boolean",
+          "x-owner": "executor",
+          "description": "false turns resting off"
+        },
+        "rest_below": {
+          "type": "number",
+          "x-owner": "executor",
+          "description": "organisation below which an army rests (default 12)"
+        },
+        "resume_above": {
+          "type": "number",
+          "x-owner": "executor",
+          "description": "organisation at which it resumes (default 30)"
+        },
+        "supply_floor": {
+          "type": "number",
+          "x-owner": "executor",
+          "description": "supply percent below which an army rests (default 25)"
+        },
+        "rest_max_days": {
+          "type": "integer",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "resume anyway after this many days (default 20)"
+        },
+        "direct_moves": {
+          "type": "boolean",
+          "x-owner": "executor",
+          "description": "true: direct hoi4_army_move orders instead of battle plans"
+        },
+        "supply_first": {
+          "type": "boolean",
+          "x-owner": "executor",
+          "description": "false: do not raise supply lines in the construction queue"
+        },
+        "avoid_pockets": {
+          "type": "boolean",
+          "x-owner": "executor",
+          "description": "false: do not pull encircled armies back"
+        }
+      },
+      "additionalProperties": false
+    },
+    "overrides": {
+      "type": "object",
+      "properties": {
+        "war": {
+          "$ref": "#/definitions/war"
+        },
+        "vp_targets": {
+          "$ref": "#/definitions/vp_targets"
+        },
+        "construction": {
+          "$ref": "#/definitions/construction"
+        },
+        "construction_plan": {
+          "$ref": "#/definitions/construction_plan"
+        },
+        "production_priority": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "research_priority": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "focus_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "alarms": {
+          "$ref": "#/definitions/alarms"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Keys merged over the base plan while a phase or contingency is active (top-level keys replaced, war merged key by key). Executor support is build item 15."
+    },
+    "alarms": {
+      "type": "object",
+      "properties": {
+        "research_slot_empty": {
+          "type": "boolean"
+        },
+        "no_active_focus": {
+          "type": "boolean"
+        },
+        "idle_civilian_factories": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "idle_military_factories": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "political_power": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "unassigned_divisions": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "consumer_goods_ratio": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "armies_over_max": {
+          "type": "boolean"
+        },
+        "armies_without_general": {
+          "type": "boolean"
+        },
+        "open_events": {
+          "type": "boolean"
+        },
+        "peace_conference_open": {
+          "type": "boolean"
+        },
+        "target_date_reached": {
+          "type": "boolean"
+        },
+        "own_state_occupied": {
+          "type": "boolean"
+        },
+        "border_uncovered": {
+          "type": "boolean"
+        },
+        "threatened_state_undefended": {
+          "type": "boolean"
+        },
+        "construction_stalled": {
+          "type": "boolean"
+        },
+        "construction_stall_days": {
+          "type": [
+            "number",
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "number",
+          "null"
+        ]
+      },
+      "description": "Alarm thresholds (native/src/alarms.rs table); any alarm code set to false is silenced."
+    },
+    "vp_targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "province": {
+            "$ref": "#/definitions/province_id",
+            "x-owner": "executor"
+          },
+          "state": {
+            "$ref": "#/definitions/state_id",
+            "x-owner": "executor"
+          },
+          "army": {
+            "type": "string",
+            "x-owner": "executor",
+            "description": "army_layout name_hint or a substring of an army name; empty: any army"
+          },
+          "order": {
+            "type": "integer",
+            "x-owner": "player"
+          },
+          "name": {
+            "type": "string",
+            "x-owner": "player"
+          },
+          "vp": {
+            "type": "integer",
+            "minimum": 0,
+            "x-owner": "player"
+          },
+          "by": {
+            "$ref": "#/definitions/date",
+            "x-owner": "player",
+            "description": "planned date; feeds checkpoints"
+          },
+          "path": {
+            "$ref": "#/definitions/province_ids",
+            "x-owner": "player",
+            "description": "waypoint provinces (executor support later)"
+          },
+          "from": {
+            "$ref": "#/definitions/province_ids",
+            "x-owner": "player",
+            "description": "provinces to attack from"
+          },
+          "mission": {
+            "type": "string",
+            "x-owner": "player"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "province",
+          "state"
+        ]
+      }
+    },
+    "construction": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "building": {
+            "type": "string",
+            "x-owner": "executor"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": [
+                "integer",
+                "string"
+              ]
+            },
+            "x-owner": "executor",
+            "description": "state ids, numeric strings or exact state names"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "x-owner": "executor"
+          },
+          "fallback_any_own_state": {
+            "type": "boolean",
+            "x-owner": "executor"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "building",
+          "states"
+        ]
+      }
+    },
+    "construction_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id",
+            "x-owner": "executor"
+          },
+          "order": {
+            "type": "integer",
+            "x-owner": "executor",
+            "description": "done-memory key when the item has no id (plan_run.rs construction_plan_step)"
+          },
+          "building": {
+            "type": "string",
+            "x-owner": "executor",
+            "description": "building key; rail_way or railway uses hoi4_railway_build"
+          },
+          "state": {
+            "$ref": "#/definitions/state_id",
+            "x-owner": "executor"
+          },
+          "province": {
+            "$ref": "#/definitions/province_id",
+            "x-owner": "executor"
+          },
+          "path": {
+            "$ref": "#/definitions/province_ids",
+            "x-owner": "executor",
+            "description": "railway: first and last provinces are the end points"
+          },
+          "from_state": {
+            "$ref": "#/definitions/state_id",
+            "x-owner": "executor"
+          },
+          "to_state": {
+            "$ref": "#/definitions/state_id",
+            "x-owner": "executor"
+          },
+          "when": {
+            "$ref": "#/definitions/trigger",
+            "x-owner": "executor"
+          },
+          "priority": {
+            "type": "string",
+            "x-owner": "player",
+            "description": "not read by the executor"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "building"
+        ]
+      }
+    }
+  }
+}
