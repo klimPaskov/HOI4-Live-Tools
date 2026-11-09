@@ -1273,3 +1273,19 @@ applied), `loc.rs` (English display names with `$reference$` expansion).
 
 Not built, by design: operation launch (`operation` argument), `boost_ideology`, a mastery reward choice (the window
 has no button for it) and `hoi4_intel_network` (the per-country network values are not mapped in memory).
+
+## 15. Gaps found while adding the round-2 playbook tactics (9 November 2026)
+
+Playbook rows that name an action no tool performs yet. The player falls back to the plain alternative and journals it.
+
+| Playbook row | Missing action | Proposed tool |
+| --- | --- | --- |
+| GN11, GN12, OP37 | Leader and HQ abilities: Force Attack, Last Stand, Deeper Dig-In, Defense in Depth, Rotating Reserves, Front Overrun, Extra Medics, Staff Office Plan, Makeshift Bridges, Probing Attack, Extra Supplies, Siege Artillery | `hoi4_leader_ability {army, ability, on?}` A with the command-power cost and the active/toggled state as receipt; abilities offered per general in `hoi4_commanders` |
+| GN03, GN10 | Deploy or withdraw an Army HQ, set its proximity (close, medium, far), read the HQ's distance to the front | `hoi4_army_hq {army, action: deploy/withdraw, proximity?}` A; HQ position and comms scaling in `hoi4_army` |
+| GN10 | Army HQ template design (HQ company and the 4 support slots) | extend the division-template tool to HQ templates (the designer section notes HQ templates are not covered) |
+| GN03 | Rescue raid for a captured general (20 command power, 60 days) | raid launch in a `hoi4_raid` tool; captured generals listed in `hoi4_commanders` |
+| DI22, MX41 | Recall volunteers (only expeditionary returns exist); refuse while a volunteer general is deployed as an HQ | `hoi4_diplomacy` action `recall_volunteers` with the 180-day lock as a typed refusal |
+| war-air-naval-peace section 5.3, germany-fair section 10 | Request air base access (no diplomacy key) | `hoi4_diplomacy` actions `ask_air_access` / `offer_air_access` |
+| politics section 7 | Faction theaters with a theater commander | `hoi4_faction_theater {regions, commander, ally}` A |
+| LO17 | Supply-area flow against demand per area, to spot areas above 1.5x maximum flow | add demand/flow ratio per supply area to `hoi4_supply` |
+| EC27 | Re-set the auto-import budget after a civilian-factory change | `hoi4_auto_import` exists; add a sitrep trigger when usable civilian factories fall |

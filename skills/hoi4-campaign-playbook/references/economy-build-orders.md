@@ -64,6 +64,9 @@ Switch date = war date - 2.9 x civilian payback, in practice about 2-3 years bef
 the focus gives instant factories, so spend your own civs only where the focus did not. Also not when a focus or
 event deadline demands a certain mil count in a given month.
 
+Small nations: infrastructure first only in states with many free slots and few civilian factories assigned; a 5-slot
+state gains one slot per industry tech, so with 9 or more civilian factories building there, build factories directly.
+
 ### 1.3 Target factory counts by year (generic mid-size; adjust to the country)
 
 Counts are totals (civ / mil). Approximate 1936 starts: Germany ~35 civ / 28 mil / 10 dockyards, Poland ~18 / 11 /
@@ -98,7 +101,9 @@ Rules:
 - Civ, mil, dockyard, refinery, silo, facility and reactor **share** one slot pool per state. Infrastructure, rails
   and forts do not. Shared slots cap at 25 per state.
 - Every concentrated or dispersed industry level gives +20% building slots: five levels double a state's slots.
-  Count these future slots when ranking states.
+  Count these future slots, but rank factory states by current infrastructure first and free slots second:
+  infrastructure built ahead for slots that open years later rarely repays, except on Civilian Economy (factories
+  -30% speed, infrastructure unaffected).
 - Other extra slots: focuses (many in the Germany, Poland and China trees), some ideas, dams (+15%) and reactors (+15%).
 - Building infrastructure does not raise a state's category.
 - Buildings need ~50% of the state's VP controlled; occupied and bombed states rebuild only under your control.
@@ -181,6 +186,10 @@ Free Trade is the cheapest +15% output and +15% construction in peace: take it (
 +50%. Output cost: Service by Requirement -10%, All Adults Serve -30%, Scraping the Barrel -40% factory, dockyard and
 construction output. Take only the law the manpower plan needs; one step (Limited -> Extensive) about 12 months before
 war. Gates: `politics-diplomacy-espionage.md` §3.
+
+A new law raises only the ceiling: recruitable population then climbs about 0.01 percentage points a day (up to 30%
+faster with war support above 50%, up to half as fast below it), so Limited to Extensive (2.5% to 5%) fills in about
+6-10 months; time the step from the date the manpower is needed.
 
 ## 6. Political power: spend vs bank
 
@@ -391,3 +400,4 @@ No tool yet:
 | EC24 | Build in conquered land before its gold | Decisions that seize a capitulated country's gold or reserves lower consumer goods more the more factories you already own there: build military factories in the conquered states first, then click the decision | Germany after Poland and France | FAIR |
 | EC25 | Forward bases before an overseas war | A year before the war: ports on the far shore and the stepping-stone islands, level-2 railways linking every hub and port to the network, motorised hubs, max air bases near the front; spare IC to AA and coastal forts at the exposed bases | Japan 1940 (Malaya, Taiwan, Hainan, Siam), any overseas offensive | FAIR |
 | EC26 | Never build where the front will pass | New factories go behind the planned defence line (the USSR builds east of Moscow, never in the western border states; Japan never in Korea); max infrastructure in the fuel state before the war | Countries expecting an invasion | FAIR |
+| EC27 | Re-set the auto-import budget | The budget is a factory count that shrinks when usable civilian factories fall (consumer-goods rises, spirits, lost states) and never grows back by itself; in peace it may buy from future enemies, handing them the factories | After any change in usable civilian factories | FAIR |

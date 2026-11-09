@@ -105,6 +105,9 @@ Danzig/Memel claims. The Danzig war goal comes from event germany.88 and does no
 A justified (take-state) war goal expires 60 days after completion, and justification is slow at low world tension
 (~160 days at 50%, ~10 days at 91%), so avoid it.
 
+**High Seas Fleet**: completing `GER_high_seas_fleet` makes `GER_construct_aircraft_carriers` and
+`GER_grosskampfschiff_construction` unavailable; take either first if the plan needs it.
+
 ## 4. Dated focus plan (earliest-start dates if nothing gates)
 
 Order and why:
@@ -145,11 +148,16 @@ Order and why:
 
 Then: **GER_around_maginot** (4; creates war goals vs Belgium state 6 and Netherlands state 7; exclusive with Influence the Benelux),
 **GER_war_with_france** (10; goal on state 28), optional **GER_operation_weserubung** (4; goals vs Denmark state 37 and Norway state 110;
-needs Warsaw controlled and war with the UK), **GER_operation_sea_lion** (5), **GER_anti_comintern_pact** (5), **GER_war_with_the_ussr** (10; goal
+needs Warsaw and Danzig 85 controlled and war with the UK; its reward includes a 100% transport research bonus, best spent on landing craft), **GER_operation_sea_lion** (5), **GER_anti_comintern_pact** (5), **GER_war_with_the_ussr** (10; goal
 `annex_everything`, exclusive with Alliance with the USSR).
 
 Later economy once a war economy: Zentrale Planung -> Rustungsstab / Armament Rationalization -> Totaler Krieg (need war with a major,
 Totaler Krieg war support 0.89 or surrender progress). Mass Production / Build Defense Industry need threat above 0.15 / 0.3 or war.
+
+**GER_legion_condor** (5 weeks, after Rhineland): 25 army XP and a 545-day volunteer idea; take it as soon as the
+Spanish Civil War starts. **GER_prioritize_economic_growth** is the long-war alternative to the Four-Year Plan: +2
+civilian factories, Civilian Economy, MEFO ended with Schacht removed, Erhard unlocked (-33% economy and trade law
+cost); it gives up the 100% industry bonus and the rearmament focuses.
 
 ## 5. Do-not list
 
@@ -174,7 +182,7 @@ non-demilitarized and controlled) then `GER_construct_the_ostwall`, `GER_constru
 chromium/tungsten; `form_greater_german_reich` at the end. Spend PP weekly: laws, advisors, decisions.
 
 **Politics**: DNSAP event: take the 50 PP option; take every price-control decision except the Gömbös one (they slow the
-consumer-goods rise); Hess regional decisions at 50 PP each; seize gold after each capitulation (Poland: about -30%
+consumer-goods rise); the 50-PP state-development decisions (west, north, east) from `GER_optimize_reich_labour_service`, which opens after Party Chancellor Hess or Bormann; seize gold after each capitulation (Poland: about -30%
 consumer goods; France: 50 PP). Never call allies into the Poland war.
 
 **Research** (4 slots, 5th via Heraeus): 1936 construction1, basic_machine_tools, infantry_weapons2, tech_engineers,
@@ -192,6 +200,12 @@ factory at ~85% makes about 7-8 rifles a day. Targets: 1936 12-15 factories on r
 **Army sizing**: ~30 divisions in 1936 -> 45 (end 1936) -> 60 (end 1937) -> 80 (mid 1938) -> 95+ (June 1939). Template: stock "Infanterie-Division" is 9 infantry
 battalions plus engineer and artillery support; prefer 7 infantry + 2 artillery with engineers/recon/AA support (generic-playbook section 2). Separate tank and
 motorized/mechanized assault divisions (FAIR). Army groups under field marshals, armies of 24 or fewer, a deployment state on every training line.
+
+**Organization Todt**: `GER_form_organization_todt` (75 PP) gives +10% infrastructure, rail and fort speed and +5%
+military-factory speed; `GER_autonomous_organization_todt` upgrades it to +10% military-factory speed and +1 building
+slot in every state: take both before the 1937-1938 military-factory wave. Armaments minister Todt adds +10%
+construction speed for every building; Speer adds +10% factory and dockyard output: switch once construction no longer
+decides the war.
 
 ## 7. Poland and the defended-border rule
 
@@ -230,6 +244,8 @@ Gate list before Anti-Comintern/War with the USSR: UK capitulated or contained; 
 2-month offensive; 3000+ aircraft-equivalent air force; supply hubs and rail in Poland/Romania ready; non-aggression pact either expired or deliberately broken after 12 months. Focus
 chain: Anti-Comintern Pact (5) -> War with the USSR (10; `annex_everything` goal, no expiry; mutually exclusive with Alliance). Execution: three army groups on Leningrad (195), Moscow (219),
 Stalingrad/south (217); infantry holds the widening front, tanks pocket; avoid winter/mud pushes. Soviet capitulation list: record each.
+
+When the UK and the USSR fight Germany together, the AI USSR grants the Allies air base access and their fighters and CAS fly from Soviet bases: keep a fighter reserve for the Eastern Front.
 
 ## 11. Greater Germanic Reich and completion
 

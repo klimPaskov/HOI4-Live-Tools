@@ -95,6 +95,10 @@ Tier 2 (Commonwealth, 1938-39): **POL_claiming_lithuania** (10), **POL_restorati
 (the monarchy decisions are targeted at LIT: `hoi4_decision_take` with `target`, or a plan `decision_rules` entry with `target`) then **POL_claim_livonia** (10; annex goals on Estonia/Latvia), **POL_claim_prussia**, **POL_claim_greater_lithuania**, **POL_greater_commonwealth** (10). Swap rule: if Germany has already annexed Austria or the manpower gate is missed, move Plan West forward
 and postpone Tier 2.
 
+1936 Danzig line: Clamp Down on Danzig, Ban the Nazi Party (Danzig compliance above 80, resistance below 50), Integrate
+Gdańsk Industries, the only switch from Uncontrolled Exports to Export Focus. Expand Katowice Mines (+24 steel, +12
+aluminium) needs Katowice controlled: take it before the war.
+
 ## 6. Intermarium and the Commonwealth: exact conditions
 
 **Intermarium**: `POL_the_between_the_seas_concept` available if not a subject, major or faction leader or unaligned, army manpower above 699,999, and if Baltic/Falange/Morges
@@ -131,6 +135,8 @@ Crimea, East Prussia 5/763, Silesia 66/67, Pomerania 63, Ostmark 68): a victory-
 Cheating (forbidden in META too): console or debug decisions, forcing events (monarch election, Danzig), editing saves or game files, memory writes, privileged command posting, reload-to-undo, tag switching,
 unreproducible "exploit" claims. A tactic only counts as the required META demonstration with a named objective, measured contribution and cost.
 
+META: if Danzig revolts, puppet it as Kashubia; Germany's Danzig or War needs Poland to own and control Danzig and then never fires.
+
 ## 9. Defeating Germany and the USSR, war timeline, exile fallback
 
 Germany: absorb the opening on prepared lines; exhaust attacks with defensive fighting; counter-attack exposed salients; take East Prussia and Silesia hubs first, then Berlin via Poznan-Frankfurt; use air superiority and encirclements; list capitulation and settlement.
@@ -149,6 +155,8 @@ Peace: rank the Polish core checklist first, then Lithuania/Prussia/Ukraine obje
 
 **Exile fallback** (`POL_prepare_for_the_inevitable`, cost 10, available if capitulated or at war with GER/SOV in a faction with surrender progress above 0.6): foreign air support, foreign army support, aces in exile, foreign naval support, resistance industries,
 exile industries, intelligence branch (`POL_expand_polish_intelligence`, `POL_niech_zyje_opor`, `POL_the_long_push_home`, `POL_the_bombe`, `POL_the_cyclometer`). Use it to keep the war and the settlement alive; record the loss honestly. No reload.
+
+An exiled Poland takes no part in the final peace conference, and its liberated states revert only if the liberator is in its faction or has military access: grant the liberating ally military access and get Warsaw back before the war ends.
 
 ## 10. Do-not list
 

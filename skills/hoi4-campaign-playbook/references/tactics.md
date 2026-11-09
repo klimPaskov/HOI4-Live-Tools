@@ -47,6 +47,9 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PR39 New line for the next gun tier
 - PR40 Base airframe, then convert
 - PR41 Lines of ten for later swaps
+- PR42 Skip secondary turrets on gun tanks
+- PR43 Armour type
+- PR44 Reliability for long drives
 
 ## Division design, training and experience: [templates-equipment-production.md §11](templates-equipment-production.md#11-tactics-division-design-training-and-experience)
 
@@ -74,6 +77,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AR22 Support companies by job
 - AR23 Wide multiplayer templates
 - AR24 Regimental row on armour
+- AR25 Wide infantry against armour
+- AR26 Role battalion penalties
 
 ## Construction, energy, trade and fuel: [economy-build-orders.md §15](economy-build-orders.md#15-tactics-construction-energy-trade-and-fuel)
 
@@ -103,6 +108,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - EC24 Build in conquered land before its gold
 - EC25 Forward bases before an overseas war
 - EC26 Never build where the front will pass
+- EC27 Re-set the auto-import budget
 
 ## Research, doctrines and MIOs: [research-doctrines-projects.md §10](research-doctrines-projects.md#10-tactics-research-doctrines-and-mios)
 
@@ -129,6 +135,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - RE21 Skip techs the build does not use
 - RE22 MIO policy timing
 - RE23 Bank XP and manpower on starter subdoctrines
+- RE24 Human Wave Tactics
 
 ## Supply and logistics: [supply-logistics-deployment.md §11](supply-logistics-deployment.md#11-tactics-supply-and-logistics)
 
@@ -148,6 +155,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - LO14 Air supply only for a relief
 - LO15 Rear moves only
 - LO16 Barbarossa rail plan
+- LO17 Overdrawn supply starves armour
 
 ## Generals, HQs and command power: [army-organisation.md §8](army-organisation.md#8-tactics-generals-hqs-and-command-power)
 
@@ -160,6 +168,9 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - GN07 Best assignable traits
 - GN08 Command limits
 - GN09 Sick and wounded generals
+- GN10 Army HQ template by role
+- GN11 HQ abilities
+- GN12 Trait abilities and Staff Office Plan
 
 ## Land operations: [war-air-naval-peace.md §15](war-air-naval-peace.md#15-tactics-land-operations)
 
@@ -238,6 +249,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AI21 Spotting
 - AI22 Port strike
 - AI23 CAS factory for a landing
+- AI24 Speed wins fighter duels
+- AI25 Fighters past 3:1 are wasted
 
 ## Navy and invasions: [war-air-naval-peace.md §17](war-air-naval-peace.md#17-tactics-navy-and-invasions)
 
@@ -283,6 +296,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - NA40 Escort doctrine before a fleet battle
 - NA41 Simultaneous landings
 - NA42 Heavy batteries for bombardment
+- NA43 Merchant-raider refit has a price
 
 ## Peace conference: [war-air-naval-peace.md §18](war-air-naval-peace.md#18-tactics-peace-conference)
 
@@ -351,6 +365,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - DI18 Supervised states
 - DI19 Faction goal order
 - DI20 Spymaster as a relay
+- DI21 Subjects cannot stay out
+- DI22 Volunteer recall timing
 
 ## Intelligence: [politics-diplomacy-espionage.md §13](politics-diplomacy-espionage.md#13-tactics-intelligence)
 
@@ -417,7 +433,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - MX13 Planning without a front (META)
 - MX14 Volunteer manpower laundering (META)
 - MX15 Equipment-disable loopholes (BAN in FAIR)
-- MX16 Cheap-ability armies (META)
+- MX16 Cheap-ability armies (Patched (1.19.0))
 - MX17 AA reserve division (META)
 - MX18 Reserve re-order (Journal it)
 - MX19 Allied spy-network stacking (FAIR in single-player)
@@ -425,7 +441,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - MX21 Mission-gate spam (META)
 - MX22 Contrived own civil war (META)
 - MX23 Faction-goal reveal (META)
-- MX24 One-submarine task forces (META)
+- MX24 Small submarine task forces (META)
 - MX25 Dominance-only hulls (META)
 - MX26 Flicker bombing (META)
 - MX27 Neutral-territory invasion (META)
@@ -442,3 +458,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - MX38 Release to skip a gate (META)
 - MX39 Save copying (Unavailable (file manipulation))
 - MX40 Patched tricks (Patched or blocked: never plan on them)
+- MX41 Volunteer-recall duplicate HQ (BAN)
+- MX42 State-transfer shelter (BAN)
+- MX43 Paradrop retreat trick (BAN)
+- MX44 Parked-mission efficiency (META)

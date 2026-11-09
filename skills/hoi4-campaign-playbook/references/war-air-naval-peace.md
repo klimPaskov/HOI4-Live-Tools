@@ -40,6 +40,7 @@ Everything below is FAIR unless it says META.
 | Taking a province | conqueror loses 20% of max org per province taken |
 | Night | -50% attacks, both sides |
 | Commander | about +2.5% per skill point; 24 divisions per general, 5 armies per marshal; marshal stats reach armies at 50% |
+| Division air attack | cancels 0.75 x AA^1.5 / (AA^1.5 + 625) of the enemy-air-superiority penalty: 20 AA 9%, 40 22%, 60 32%, 100 46%, never above 75% |
 
 ### 1.2 How to read a battle in one glance
 
@@ -153,6 +154,10 @@ Cheap defender stack: river + fort + dig-in + air superiority + a defence genera
 simultaneous combats is at -50%: avoid lines where one division is attacked from
 two provinces.
 
+Under enemy air superiority infantry retreats 30% slower and is easy to pocket; under about 10 divisions per front tile
+treat the line as open to tanks, so win or contest the air before holding a plain front. With enough divisions hold in
+two lines so the rear line regains organisation while the front fights.
+
 ---------------------------------------------------------------------------
 
 ## 5. Air war
@@ -198,6 +203,8 @@ contains a named state. `hoi4_air_hold` stops a wing.
   fighters and CAS freely; leave bombers where the war will stay.
 - Division AA cuts CAS damage up to 75% at about 55 division air attack; token AA
   does little. Static AA hits bombers, port and logistics strikes, not CAS.
+- Air base access is a diplomatic request: ask allies and co-belligerents before an air
+  campaign; each access already granted makes the AI less willing to grant the next.
 
 ### 5.4 Air versus ships
 
@@ -225,6 +232,7 @@ balance/delete` shape fleets; `hoi4_fleet_admiral` assigns admirals.
 | Dominance modifiers | Radar +5%, air base +2%, naval base +1% per level toward the region target |
 | Air superiority over the sea | Adds up to +100% to a fleet's effective ship count |
 | Convoy | Each division moved by sea and each supply shipment needs convoys; losses cut efficiency by 1.25x the loss |
+| Piercing against armour | 100% damage when piercing is at least the armour, 70% at 75-99%, 40% at 50-74%, 30% at 10-49%, 10% below; heavy battery I-IV piercing 31/36/40/45; battleship armour I-III 30/36/40, battlecruiser 22/28/34, super-heavy 55; heavy battery II is the minimum against 1936 Royal Navy battleships |
 
 ### 6.2 Missions and what to use them for
 
@@ -689,7 +697,7 @@ Never improvise raw input for a gap.
 | OP34 | Poke defence and support attacks | Attack the tile in front and halt before winning: the enemy retreats while you keep planning and entrenchment; a support attack joins a battle without advancing | Defensive chokes | FAIR |
 | OP35 | Counter-attack after a failed attack | The attacker's org is lowest right after a repulsed attack; let the AI bleed on rivers and forest, then counter-attack that province; never defend open plains | Defensive wars | FAIR |
 | OP36 | Mobile reserve one state behind | Reserves join a battle at about 2% an hour and do not recover org in reserve; keep a mobile reserve behind threatened hubs | Defence | FAIR |
-| OP37 | Force Attack and Last Stand | +20% attack and +25% breakthrough (or +20% defence and +25% entrenchment) for 7 days, no retreat, more strength losses; costs per battalion since 1.19, so only on a small army at the decisive tile | Closing a pocket, holding a choke | FAIR |
+| OP37 | Force Attack and Last Stand | +20% attack and +25% breakthrough (or +20% defence and +25% entrenchment) for 7 days; no organisation damage, so a losing division cannot break and retreat and fights on with +60% strength damage until it dies, every casualty costing 20% more war support; costs per battalion since 1.19, so only on a small army at the decisive tile | Closing a pocket, holding a choke; never on a tile you are clearly losing | FAIR |
 | OP38 | Overrun | Entering a province a unit retreats into destroys it; motorised divisions follow the tanks to catch retreats | After a breakthrough | FAIR |
 | OP39 | Intel network on the target | Own planning speed rises and enemy divisions lose max planning and up to 5 entrenchment levels in a networked state | Attacking a prepared line (La Resistance) | FAIR |
 | OP40 | Hit tanks on the move | A moving defender has no entrenchment while the attacker has planning | Armoured wars on plains | FAIR |
@@ -730,6 +738,8 @@ Never improvise raw input for a gap.
 | AI21 | Spotting | One 100-plane naval patrol wing per target sea region; the rest on naval strike | Naval air | FAIR |
 | AI22 | Port strike | Over the port's land region while the enemy fleet is in port and own superiority is 70%+; Base Strike +40% | GER, JAP, UK, USA | FAIR |
 | AI23 | CAS factory for a landing | The cheapest CAS design on 100+ military factories by the landing year, in lines of 10 (PR41); CAS to the width cap over every landing tile with fighters above | Allied landings in France, Axis Barbarossa | FAIR |
+| AI24 | Speed wins fighter duels | A wing faster than its opponent gets top speed x 0.025 as a damage bonus (600 km/h = +15%) on top of up to +162% from the speed gap | Pick the fighter design, designer and doctrine that end faster than the enemy's main fighter | FAIR |
+| AI25 | Fighters past 3:1 are wasted | Detection needed = our fighters / (3 x enemy fighters): about 33% at equal numbers, 100% at 3:1; past that, extra fighters cannot engage | Move the surplus or add radar instead of stacking | FAIR |
 
 ## 17. Tactics: navy and invasions
 
@@ -777,6 +787,7 @@ Never improvise raw input for a gap.
 | NA40 | Escort doctrine before a fleet battle | Switch the fighter subdoctrine to the escort branch (Medium-Range Escort: +15% sortie efficiency, carrier fighter agility and speed) and take a sortie-efficiency advisor before a carrier engagement | Carrier navies (Japan, USA) | FAIR |
 | NA41 | Simultaneous landings | Launch every landing the same day so the defender's command power and reserves cannot answer all; 2 divisions per tile, backup waves planned, Force Attack or a commander with command power on the first wave | Big amphibious operations | FAIR |
 | NA42 | Heavy batteries for bombardment | Refit heavy cruisers' secondary slots and torpedo or plane slots to heavy cruiser batteries and build new heavy-battery cruisers; admiral and high-command bombardment bonuses (naval gunfire support subdoctrine, a Ground Pounder admiral, Naval Liaison generals) stack toward the cap | Before a landing | FAIR |
+| NA43 | Merchant-raider refit has a price | The decision costs 25 PP, 20 convoys and 10 navy experience each time and returns an early cruiser after 25 days | A screen source, not free | FAIR |
 
 ## 18. Tactics: peace conference
 

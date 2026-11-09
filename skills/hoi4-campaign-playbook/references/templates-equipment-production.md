@@ -484,6 +484,9 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR39 | New line for the next gun tier | Keep the mature infantry-equipment line running and open a separate line for the next tier; switching the old line starves the stockpile while it regrows. Merge only when the stockpile is safe | Gun 2 to gun 3, artillery tiers | FAIR |
 | PR40 | Base airframe, then convert | Put many factories on a base design of the final airframe with the modules researched so far; add each new module as a variant (90%); when the final design is done, convert every base plane in stock to it | Fighters, CAS 1937-41 | FAIR |
 | PR41 | Lines of ten for later swaps | Run big plane lines as several lines of about 10 factories so part can switch role (fighter to CAS) without touching the rest | Allied CAS build-up, Axis Barbarossa CAS | FAIR |
+| PR42 | Skip secondary turrets on gun tanks | Secondaries multiply the whole tank's attack down (small cannon x0.95 soft and hard, HMG x0.96 soft) | Any design with 100+ soft attack before secondaries | FAIR |
+| PR43 | Armour type | Welded: +30% armour, +5% HP, +4 defence and breakthrough, no IC multiplier, 1 chromium; cast: +30% armour, +10% HP, +20% IC; riveted: -20% IC, no armour gain | Line tanks welded when chromium is covered, else riveted; cast only when HP binds | FAIR |
+| PR44 | Reliability for long drives | Reliability also sets organisation loss while moving and the weight of weather penalties | Armour that drives far or fights in autumn mud and winter snow: about 75-80% | FAIR |
 
 ## 11. Tactics: division design, training and experience
 
@@ -513,3 +516,5 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | AR22 | Support companies by job | Engineer, artillery, recon in 1936; signal on assault templates; logistics on armour and colonial theatres; field hospital on strike templates from 1940; maintenance on armour | Every template | FAIR |
 | AR23 | Wide multiplayer templates | 36-38-wide armour (T16), mountaineer (T17), marine (T18), ranger (T19) and port (T20) divisions with all support slots and a full regimental row; two fill a plains fight with an extra direction. Use them where the front is plains or multi-direction; keep 14-25 for one-direction mountain and marsh fights | Multiplayer-scale wars, landings, 1939+ armour | FAIR |
 | AR24 | Regimental row on armour | Tank or TD companies under the tank columns, SPAA under the mechanised columns; a column needs 3 or more battalions for its slot | T16 and other armour | FAIR |
+| AR25 | Wide infantry against armour | Once a narrow division's defence runs out it takes hits 4x as often, and two narrow divisions pay for two sets of support companies | Against armour-heavy attackers: 20-30 width line infantry with AT and AA, not 10-width screens | FAIR |
+| AR26 | Role battalion penalties | TD battalions -75% breakthrough and -10% soft attack; SP artillery -75% breakthrough and -10% hard attack; SPAA -90% breakthrough | Never count them toward a template's breakthrough | FAIR |

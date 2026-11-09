@@ -236,6 +236,7 @@ Democracies justify only on threat countries, cannot puppet, cannot declare on a
 - **Leadership takeover**: 200 PP, 2x the leader's manpower, 1.5x its factories and 40% faction influence; 180-day cooldown. Only when the AI leader is passive and failing (DI14).
 - **Goals and initiative**: one short, one medium and one long goal; initiative 0.015 a day scaled by manifest progress; replacing an unfinished goal, changing a rule, unlocking theatre commanders or becoming spymaster costs 1 initiative each.
 - Join or found the faction before the planned war; it decides who is called to war and who shares the peace. Never kick a strong member within 3 months of a campaign.
+- **Faction theaters**: a leader can open up to four, each with a field marshal or admiral as theater commander; the assigned ally gets -1% supply use per commander skill level in the chosen regions, and an AI ally commits more forces there.
 
 ## 8. Intelligence agency and operatives (La Resistance)
 
@@ -392,6 +393,8 @@ Gaps:
 | DI18 | Supervised states | 1.19 democratic puppets may refuse a call to arms | Democracies | FAIR |
 | DI19 | Faction goal order | Short: Joint Command Structure, Appoint a Spymaster, Develop Joint Research Practices (then every member puts scientists into the leader's land and air facilities and a second member's facility), Build Stronger Fortifications (30 bunker and coastal-bunker levels in the faction or level-2 fort techs); medium: Industrial Expansion (150 civilian factories faction-wide; members with 50+ get 2 x 50% industry), then the excavation goal; Arteries of Trade for the UK. Finish two annexations of a goal's targets shortly before the third to swap a mid-term goal without spending an initiative | Faction members and leaders | FAIR |
 | DI20 | Spymaster as a relay | The leader claims spymaster for the faction goal and hands it to a member later (Germany to Bulgaria, UK to the USA); a member with the role gets the decryption and agency bonuses | Faction play | FAIR |
+| DI21 | Subjects cannot stay out | Puppets, colonies, satellites, integrated puppets and reichskommissariats join their overlord's wars automatically; only dominions, supervised states and a few DLC subject types may stay out; a war on a major includes its non-dominion subjects | Choosing targets and buffers: an own puppet is never a neutral buffer | FAIR |
+| DI22 | Volunteer recall timing | Recall takes 2 days per division; none in the first 180 days, no return to the same country for 180 days after a recall; 95% of equipment comes back | Recall while a port link exists, never with a deployed HQ among them (MX41) | FAIR |
 
 ## 13. Tactics: intelligence
 
