@@ -15,8 +15,11 @@ or the files, so a mod's content is read the same way.
     characters    commanders(game, tag, ctx, date), match_commander(name, commanders)
     missions      decision_index(game), control_states(block), scenario_timers(game, tag, ...)
     units         unit_types(game), subunit_unlocks(game), equipment_archetypes, equipment_domains,
-                  template_width(game, regiments)
-    terrain       terrain_widths(game) (common/terrain combat_width), theatre_width_target(game, states)
+                  equipment_rows (archetype, parent, year, inherited cost), equipment_family,
+                  equipment_tier_link(game, a, b), template_width(game, regiments), tech_modifiers(game)
+    production    start_production(world, tag) (start lines with factories and progress)
+    terrain       terrain_widths(game) (common/terrain combat_width), terrain_mix(game, states),
+                  width_fill / terrain_fill / width_score / width_scores (over-width and stacking penalties)
     laws, map     law_ideas(game), capital_state, coastal_states, overseas_states, resisting_states,
                   air_base_levels, supply_hubs, coastal_provinces
     construction  building_costs(game), construction_constants (calc.py labels),
@@ -30,7 +33,7 @@ import re
 from collections import deque
 
 from .script import (DEFAULT_START, Ctx, bare, date_tuple, get, get1, history_walk, op_of, parse_file, read,
-                     trigger)
+                     run_effects, trigger)
 
 # --------------------------------------------------------------------------- calendar
 
@@ -144,7 +147,8 @@ def loc(game, key, default=None):
 
 def tech_meta(game):
     """{tech: {"folder": name or None, "enables": set(equipment), "cost": float, "year": int,
-    "categories": set}} from common/technologies."""
+    "categories": set, "xor": set(mutually exclusive techs), "gated": bool (an allow or allow_branch
+    block decides who may research it)}} from common/technologies."""
 
     def load():
         out = {}
@@ -164,12 +168,19 @@ def tech_meta(game):
                         cost = 1.0
                     year = get1(body, "start_year", "0")
                     cats = get1(body, "categories")
+                    xor = set()
+                    for key in ("XOR", "xor"):
+                        for block in get(body, key):
+                            if isinstance(block, list):
+                                xor.update(bare(block))
                     out[name] = {
                         "folder": fname,
                         "enables": set(bare(en)) if isinstance(en, list) else set(),
                         "cost": cost,
                         "year": int(year) if str(year).isdigit() else 0,
                         "categories": set(bare(cats)) if isinstance(cats, list) else set(),
+                        "xor": xor - {name},
+                        "gated": any(get1(body, k) is not None for k in ("allow", "allow_branch")),
                     }
         return out
 
@@ -946,6 +957,136 @@ def equipment_domain(game, key):
     return table.get(base)
 
 
+def equipment_rows(game):
+    """{equipment key: {"archetype", "parent", "year", "cost"}} from common/units/equipment, the cost
+    (build_cost_ic) inherited along parent and archetype links; generated duplicate families
+    (duplicate_archetypes, e.g. small_plane_cas_airframe_1) take the row of the variant they copy."""
+
+    def load():
+        raw, dup = {}, {}
+        for f in game.files("common/units/equipment"):
+            for k, v in parse_file(f):
+                if not isinstance(v, list):
+                    continue
+                if k == "equipments":
+                    for name, body in v:
+                        if name and isinstance(body, list):
+                            raw[name] = {"archetype": get1(body, "archetype"), "parent": get1(body, "parent"),
+                                         "year": _num(get1(body, "year")), "cost": _num(get1(body, "build_cost_ic")),
+                                         "is_archetype": get1(body, "is_archetype") == "yes"}
+                elif k == "duplicate_archetypes":
+                    for name, body in v:
+                        if name and isinstance(body, list) and get1(body, "archetype"):
+                            dup[name] = get1(body, "archetype")
+
+        def cost(name, seen=()):
+            r = raw.get(name)
+            if not r or name in seen:
+                return None
+            if r["cost"] is not None:
+                return r["cost"]
+            up = r["parent"] or r["archetype"]
+            return cost(up, seen + (name,)) if up else None
+
+        out = {}
+        for name, r in raw.items():
+            out[name] = {"archetype": name if r["is_archetype"] else r["archetype"], "parent": r["parent"],
+                         "year": r["year"], "cost": cost(name)}
+        for fam, src in dup.items():
+            out.setdefault(fam, dict(out.get(src, {}), archetype=fam, parent=None))
+            for name, row in list(out.items()):
+                m = re.match(re.escape(src) + r"_(\d+)$", name)
+                if m and f"{fam}_{m.group(1)}" not in out:
+                    out[f"{fam}_{m.group(1)}"] = dict(row, archetype=fam,
+                                                      parent=f"{fam}_{row['parent'].rsplit('_', 1)[1]}"
+                                                      if row.get("parent") and row["parent"].startswith(src + "_")
+                                                      else None)
+        return out
+
+    return game.cached("derive:equiprows", load)
+
+
+def equipment_family(game, key):
+    """The archetype of an equipment key (a generated duplicate family by its name without the
+    trailing number), or the key itself."""
+    row = equipment_rows(game).get(key) or {}
+    return row.get("archetype") or equipment_archetypes(game).get(key) or re.sub(r"_\d+$", "", key or "") or key
+
+
+def equipment_tier_link(game, a, b):
+    """How a production line of equipment a relates to equipment b: "same", "parent" (one is the
+    other's parent or child), "family" (same archetype, another tier), or None (unrelated)."""
+    if a == b:
+        return "same"
+    rows = equipment_rows(game)
+    if (rows.get(a) or {}).get("parent") == b or (rows.get(b) or {}).get("parent") == a:
+        return "parent"
+    if equipment_family(game, a) == equipment_family(game, b):
+        return "family"
+    return None
+
+
+def tech_modifiers(game):
+    """{tech: {modifier: value}} of the numeric top-level entries of each technology (e.g.
+    naval_invasion_prep_days, naval_invasion_division_cap); research_cost and start_year left out."""
+
+    def load():
+        out = {}
+        for f in game.files("common/technologies"):
+            for k, v in parse_file(f):
+                if k != "technologies" or not isinstance(v, list):
+                    continue
+                for name, body in v:
+                    if not name or not isinstance(body, list) or name.startswith("@"):
+                        continue
+                    mods = {}
+                    for a, b in body:
+                        if a and a not in ("research_cost", "start_year") and not isinstance(b, list):
+                            x = _num(b)
+                            if x is not None:
+                                mods[a] = mods.get(a, 0.0) + x
+                    out[name] = mods
+        return out
+
+    return game.cached("derive:techmods", load)
+
+
+def start_production(world, tag):
+    """Production lines a tag starts with (add_equipment_production in the instant_effect of the OOBs
+    its history loads, land, naval and air): [{"type", "version", "factories", "progress", "amount",
+    "efficiency", "src"}] (missing numbers None)."""
+    def load():
+        out = []
+        ctx = world.ctx_for(tag)
+        for o in world.country(tag)["oobs"]:
+            path = world.game.file(f"history/units/{o['v']}.txt")
+            if not path:
+                continue
+
+            def prod(a, b, ln, path=path):
+                if a == "add_equipment_production" and isinstance(b, list):
+                    eq = get1(b, "equipment", [])
+                    row = {"type": get1(eq, "type") if isinstance(eq, list) else None,
+                           "version": get1(eq, "version_name") if isinstance(eq, list) else None,
+                           "src": world.src(path, ln)}
+                    for key, field in (("requested_factories", "factories"), ("progress", "progress"),
+                                       ("amount", "amount"), ("efficiency", "efficiency")):
+                        row[field] = _num(get1(b, key))
+                    if row["type"]:
+                        out.append(row)
+
+            def visit(k, v, ln, prod=prod):
+                if k == "instant_effect" and isinstance(v, list):
+                    run_effects(v, ctx, prod, with_line=True)
+                elif k == "units" and isinstance(v, list):
+                    run_effects(v, ctx, visit, with_line=True)
+
+            run_effects(parse_file(path), ctx, visit, with_line=True)
+        return out
+
+    return world.cached("derive:startproduction:" + tag, load)
+
+
 def template_width(game, regiments):
     """Combat width of a template from its regiment columns (support companies have width 0);
     None when a unit is unknown. regiments: [[unit, ...], ...] or a flat [unit, ...]."""
@@ -956,26 +1097,59 @@ def template_width(game, regiments):
     return sum(units[u]["width"] for u in flat)
 
 
-def _fill(width, frontage):
-    """How well divisions of `width` fill `frontage`: the best n x width against frontage ratio
-    (1 = exact, over- and under-filling count alike)."""
-    if width <= 0 or frontage <= 0:
+WIDTH_FILL_METHOD = ("battle width of a terrain = combat_width (+ combat_support_width per extra attack direction; "
+                     "1 and 2 directions weigh alike); n divisions of width w join while the over-width penalty "
+                     "(COMBAT_OVER_WIDTH_PENALTY per 1 of over-width) stays within COMBAT_OVER_WIDTH_PENALTY_MAX; "
+                     "fill = n x w / battle width x (1 + over-width penalty) x (1 + COMBAT_STACKING_PENALTY per "
+                     "division above COMBAT_STACKING_START + COMBAT_STACKING_EXTRA per extra direction), best n; "
+                     "a theatre's fill is the province-share weighted mean over its land terrains")
+
+
+def _width_defines(game):
+    return {k: float(define(game, k, d)) for k, d in (
+        ("COMBAT_STACKING_START", 5), ("COMBAT_STACKING_EXTRA", 3), ("COMBAT_STACKING_PENALTY", -0.02),
+        ("COMBAT_OVER_WIDTH_PENALTY", -1), ("COMBAT_OVER_WIDTH_PENALTY_MAX", -0.33))}
+
+
+def width_fill(game, width, battle, directions=1):
+    """Share of a battle of width `battle` that divisions of `width` fill at their best count, after the
+    over-width and stacking penalties (WIDTH_FILL_METHOD); 0 for a width or battle of 0."""
+    if not width or width <= 0 or not battle or battle <= 0:
         return 0.0
-    n = max(1, int(round(frontage / width)))
-    return max(min(k * width, frontage) / max(k * width, frontage) for k in (n - 1, n, n + 1) if k >= 1)
+    k = _width_defines(game)
+    limit = k["COMBAT_STACKING_START"] + k["COMBAT_STACKING_EXTRA"] * (directions - 1)
+    cap = k["COMBAT_OVER_WIDTH_PENALTY_MAX"]
+    best, n = 0.0, 1
+    while n <= 200:
+        ratio = n * width / float(battle)
+        pen = k["COMBAT_OVER_WIDTH_PENALTY"] * max(0.0, ratio - 1)
+        if pen < cap - 1e-9:
+            if n > 1:
+                break  # no more divisions can join
+            ratio, pen = 1.0, cap  # one division wider than the battle fights at the full penalty
+        stack = max(0.0, 1 + k["COMBAT_STACKING_PENALTY"] * max(0, n - limit))
+        best = max(best, ratio * (1 + pen) * stack)
+        n += 1
+    return round(best, 4)
 
 
-def theatre_width_target(game, states, lo=10, hi=40, tolerance=0.02):
-    """Placeholder width target for a theatre (until facts.py terrain-width lands): the terrain mix
-    of the states' land provinces (map/definition.csv terrain) weighted by province count, each
-    terrain fought on its base width and with one extra direction (width + support width). Small
-    widths always fill well, so the target is the widest template width in [lo, hi] (40 is the
-    template tool's limit) whose fill is within `tolerance` of the best fill.
-    {"target", "mix": {terrain: share}, "fill": score} or None without terrain data."""
+def terrain_fill(game, width, terrain):
+    """Mean fill of `width` on one terrain over 1 and 2 attack directions, or None for a terrain
+    without a combat width."""
+    t = terrain_widths(game).get(terrain)
+    if not t:
+        return None
+    return round((width_fill(game, width, t["width"], 1) + width_fill(game, width, t["width"] + t["support"], 2)) / 2,
+                 4)
+
+
+def terrain_mix(game, states):
+    """{terrain: share} of the land provinces of the states (map/definition.csv terrain, terrains with a
+    combat width only), or {} without map data."""
     graph = game.map_graph()
     widths = terrain_widths(game)
     if graph is None or not widths:
-        return None
+        return {}
     counts = {}
     all_states = game.states()
     for sid in states or []:
@@ -984,15 +1158,20 @@ def theatre_width_target(game, states, lo=10, hi=40, tolerance=0.02):
             if t in widths:
                 counts[t] = counts.get(t, 0) + 1
     total = sum(counts.values())
-    if not total:
-        return None
-    mix = {t: n / total for t, n in sorted(counts.items())}
-    fronts = [(share, f) for t, share in mix.items()
-              for f in (widths[t]["width"], widths[t]["width"] + widths[t]["support"])]
-    scores = {w: sum(share * _fill(w, f) for share, f in fronts) / 2.0 for w in range(lo, hi + 1)}
-    top = max(scores.values())
-    target = max(w for w, s in scores.items() if s >= top - tolerance)
-    return {"target": target, "mix": {t: round(s, 3) for t, s in mix.items()}, "fill": round(scores[target], 3)}
+    return {t: round(n / total, 4) for t, n in sorted(counts.items())} if total else {}
+
+
+def width_score(game, width, mix):
+    """Theatre fill of a division width: the terrain fills weighted by the mix ({terrain: share})."""
+    rows = [(s, terrain_fill(game, width, t)) for t, s in mix.items()]
+    rows = [(s, f) for s, f in rows if f is not None]
+    total = sum(s for s, _ in rows)
+    return round(sum(s * f for s, f in rows) / total, 4) if total else None
+
+
+def width_scores(game, mix, lo=10, hi=45):
+    """{width: theatre fill} for the template widths lo..hi (WIDTH_FILL_METHOD)."""
+    return {w: width_score(game, w, mix) for w in range(lo, hi + 1)}
 
 
 # --------------------------------------------------------------------------- laws, capital, coast, resistance

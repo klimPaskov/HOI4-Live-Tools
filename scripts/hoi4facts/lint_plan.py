@@ -80,9 +80,7 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            finding names the port alternative when an own coastal province is 3 steps away
   air.base_capacity        (warning) air_plan planes on a base above its capacity (level at the start plus
                            queued levels, x AIRBASE_CAPACITY_MULT)
-  templates.width          (warning) template width more than 10% from the theatre target (placeholder:
-                           derive.theatre_width_target over common/terrain combat widths)
-  templates.equipment      a template unit or its equipment unlocked by no tech at the start or in the
+  templates.equipment     a template unit or its equipment unlocked by no tech at the start or in the
                            research plan (warning when the tech comes after the template's date)
   templates.xp             a template with xp and no xp_budget.army spend ref template:<id>
   politics.law_gates       an economy or conscription law with an `available` gate bought without a
@@ -95,20 +93,75 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   manage.thresholds        no manage key (plan_manage.rs runs the manpower, stability, equipment and
                            stockpile rules only with it; {} takes every default); warning for a threshold
                            whose rule is in manage.off or that the executor does not run yet
-  production.remove        (warning) a `replace` entry (not run by the executor), or a naval line removal
-                           without a `from` date (its ships in progress must finish first)
+  production.remove        (warning) a `replace` entry (not run by the executor yet; removals are
+                           production.in_progress)
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: convoys_free, stockpile_days, var, bop, mission_days)
 
-Hand plans: with _meta.source "hand" (or --hand) every coverage-build error above is reported as a
-warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
+Tactics rules (the strong-player habits the plan can state; numbers from the defines and files):
+  production.mature_switch an entry that moves a mature line (a start line, or one 30+ days old) to another
+                           tier of its family (replace, a design on another tier, or a remove plus an add
+                           within 14 days) instead of starting the new tier on new factories: a switch keeps
+                           30% (parent/child) or 20% (same archetype) of the line's efficiency, new factories
+                           start at 10%
+  production.cull          a start line whose equipment no template (plan or kept start template), air_plan
+                           wing, design, stockpile target, training guard, plan line or production_priority
+                           prefix uses, and no remove entry (naval lines: when navy.posture is none; trucks
+                           with war.motorization; convoys for overseas supply); and any line, start or plan,
+                           of a domain a force_posture phase gives 0% on that phase's date
+  production.day0          free military factories at the start (military factories minus the start lines,
+                           plus those freed by start removals) not put on kept start lines by the day-0
+                           production entries (they join a start line at its efficiency while paused)
+  production.in_progress   a removal that throws away a unit in progress: a start line's ship or expensive
+                           item past the game's own finish threshold (10%; cheap items 75%) removed without a
+                           `from` or before it finishes (base factory speed, hull cost); (warning) any naval
+                           line removed without a `from`
+  production.naval_cap     a naval line asking for more dockyards than one line takes (capital ships 5,
+                           convoys 15, others 10: *_MAX_NAV_FACTORIES_PER_LINE)
+  army.width_terrain       a plan template (not garrison), or the start templates army_layout fields, whose
+                           width fills the theatre's battles (terrain mix of war.theatre, axes and target
+                           states; over-width and stacking penalties) 0.05 below the best width (error at 0.10)
+  war.supply_floor         war.supply_floor (base, war_by_phase, overrides) below the supply where attrition
+                           starts (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION, 35%); (warning) the attack threshold
+                           (supply_floor, or an attack-supply key) below 50%
+  war.planning_wait        offensives (vp_targets or axes) with no planning wait: a planning-days key missing
+                           or 0 (warning below two thirds of PLANNING_MAX / PLANNING_GAIN days); (warning)
+                           war.direct_moves; (info) no such key in the schema yet
+  war.pocket_threshold     pocket fall-back switched off (avoid_pockets false) or a pocket-share key above
+                           50%; (info) the executor's 70% when no key exists
+  politics.pp_budget       politics, decisions and decision_rules costs that the net PP income cannot pay by the
+                           horizon (calc.pp_rates: (base + gain) x (1 + factor + stability) minus the running
+                           focus's cost); (warning) a dated buy affordable more than 30 days late
+  politics.unneeded_conscription  a politics conscription law above the lowest law whose recruitable
+                           manpower covers the plan's divisions plus manage.manpower_months of losses (15% a
+                           month assumed); (warning) manage.conscription_laws unset or listing laws with an
+                           output penalty above that need
+  research.ahead           (warning; error from a year) a tech of a year-less research_path block started more
+                           than half a year before its start year on the plan's slot timeline (each year ahead
+                           adds BASE_YEAR_AHEAD_PENALTY_FACTOR times the time) while startable in-year techs of
+                           the plan's folders stay unplanned; techs listed in research_bonuses are left out
+  navy.invasion_prep       an invasion with prepare_days below the preparation the start techs allow
+                           (NAVAL_INVASION_PREPARE_DAYS plus naval_invasion_prep_days), or armies above the
+                           division cap (BASE_NAVAL_INVASION_DIVISION_CAP plus naval_invasion_division_cap)
+  navy.sea_control         an invasion whose shortest sea route crosses a region no navy patrol or
+                           strike_force mission names (control needs DOMINANCE_CONTROLLED_THRESHOLD_RATIO)
+  construction.war_civs    (warning) a civilian factory queued at war with less than a year to the goal
+                           deadline or plan horizon
+  navy.strike_without_patrol  (warning) a strike_force mission in a sea region no own patrol mission covers
+                           (a strike force engages only what patrols spot)
+  peace.order              (info) peace.take ranks states the plan does not hold at the conference (no vp target
+                           or axis there, not owned) ahead of a state it holds
+
+Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
+a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
 unchanged.
 
 Stdlib only, Python 3.9+. Exit status 1 when there are errors, 2 on usage problems.
 """
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -116,20 +169,24 @@ from collections import Counter, defaultdict, deque
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from hoi4facts import content, derive, schema_check  # noqa: E402
+    from hoi4facts import calc as calcmod  # noqa: E402
+    from hoi4facts import content, derive, mapgraph, schema_check  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
     from hoi4facts.validate import (Report, ctx_of, load_schema, parse_predicate, parse_when,  # noqa: E402
                                     predicate_dates, predicate_table, resolve_meta, start_of, start_oobs,
                                     start_tech_set, template_columns,
                                     predicate_can_hold)
+    from hoi4facts.validate import _world as world_of  # noqa: E402
 else:
-    from . import content, derive, schema_check
+    from . import calc as calcmod
+    from . import content, derive, mapgraph, schema_check
     from . import tech as techrule
     from .game import Game
     from .validate import (Report, ctx_of, load_schema, parse_predicate, parse_when, predicate_dates,
                            predicate_table, resolve_meta, start_of, start_oobs, start_tech_set, template_columns,
                            predicate_can_hold)
+    from .validate import _world as world_of
 
 DEFAULT_GAME_DIR = os.path.expanduser("~/Library/Application Support/Steam/steamapps/common/Hearts of Iron IV")
 FRONT_K = 2
@@ -137,14 +194,30 @@ MAX_STRIKE = 24
 LOW_INFRA = 2
 MAX_RIVERS = 2
 POSTURE_POINTS = 15        # posture.shares: percentage points a production share may differ
-WIDTH_TOLERANCE = 0.10     # templates.width: share of the theatre target
 HUB_COST = 15000           # construction.hub_cost: base_cost from which a building counts as a hub-sized job
 HUB_DAYS = 120             # construction.hub_cost: warning above this many days
 HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal province that could serve instead
+MATURE_DAYS = 30          # production.mature_switch: a line this old (or a start line) is mature
+SWITCH_MATCH_DAYS = 14    # production.mature_switch: a remove and an add this close are one switch
+WIDTH_WARN = 0.05         # army.width_terrain: theatre fill this far below the best width warns
+WIDTH_ERROR = 0.10        # ... and this far is an error
+ATTACK_SUPPLY = 0.5       # war.supply_floor: no new offensive below this supply (the game's low-supply alert)
+POCKET_SHARE = 0.5        # war.pocket_threshold: fall back at this hostile share around an army
+EXECUTOR_POCKET_SHARE = 0.7  # the encirclement_risk read of hoi4_armies the executor falls back on
+AHEAD_YEARS = 0.5         # research.ahead: warning from half a year ahead, error from one year
+PP_LATE_DAYS = 30         # politics.pp_budget: a purchase this late against its date warns
+MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
+WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
-             "construction.hub_cost", "air.base_capacity", "templates.width", "templates.equipment", "templates.xp",
+             "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp",
              "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
-             "predicates.unreadable"}
+             "predicates.unreadable",
+             # tactics research rules
+             "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
+             "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
+             "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "research.ahead",
+             "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
+             "peace.order"}
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -1408,10 +1481,6 @@ class Lint:
             return
         game = self.game
         units = derive.unit_types(game)
-        theatre = _ints(self.war.get("theatre")) or sorted({e.get("state") for e in self.targets()}
-                                                           | {e.get("state") for e in self.list_of("army_layout")} - {None})
-        target = derive.theatre_width_target(game, theatre) if theatre else None
-        self.facts["width_target"] = target
         have = start_tech_set(game, self.meta)
         planned = self.planned_techs()
         subs = derive.subunit_unlocks(game)
@@ -1425,13 +1494,6 @@ class Lint:
         for i, t in enumerate(temps):
             where = f"templates[{i}] {t.get('id', t.get('name'))}"
             cols = template_columns(t.get("regiments")) or []
-            width = derive.template_width(game, cols)
-            if target and width and t.get("role") != "garrison" \
-                    and abs(width - target["target"]) > WIDTH_TOLERANCE * target["target"]:
-                mix = ", ".join(f"{k} {v:.0%}" for k, v in target["mix"].items())
-                self.add("warning", "templates.width", where,
-                         f"width {width:g} is more than {WIDTH_TOLERANCE:.0%} from the theatre target "
-                         f"{target['target']} (terrain {mix}; placeholder until facts.py terrain-width)")
             dates = predicate_dates(t["when"], self.table) if t.get("when") is not None else []
             year = max(dates)[0] if dates else start_year
             flat = [u for c in cols for u in c] + list(t.get("support") or []) + list(t.get("regimental_support") or [])
@@ -1573,24 +1635,997 @@ class Lint:
                          f"use a readable atom (x-atoms readable) or an any[] with one")
 
     def production_changes(self):
-        naval = ("ship_hull", "convoy", "submarine", "destroyer", "cruiser", "battleship", "carrier", "_hull")
+        """production.remove: a `replace` entry the executor does not run yet (removals: production.in_progress)."""
         for i, x in enumerate(self.list_of("production")):
             eq = str(x.get("equipment") or "")
             if "replace" in x:
                 self.add("warning", "production.remove", f"production[{i}]",
                          f"replace of {eq} is not read by the executor yet: remove the line and add the new "
                          f"equipment as two entries, or start the new line small next to it (efficiency)")
-            elif x.get("remove") and any(n in eq for n in naval) and not x.get("from"):
-                self.add("warning", "production.remove", f"production[{i}]",
-                         f"removing naval line {eq} needs a `from` date after its ships in progress finish; the "
+
+    # ------------------------------------------------------------------ tactics research rules: helpers
+    @property
+    def world(self):
+        if getattr(self, "_world_obj", None) is None:
+            self._world_obj = world_of(self.game, self.meta)
+        return self._world_obj
+
+    def start_lines(self):
+        """Production lines at the start (derive.start_production), [] without a tag."""
+        return derive.start_production(self.world, self.tag) if self.tag else []
+
+    def define(self, name, default):
+        v = derive.define(self.game, name, default)
+        return float(v) if isinstance(v, (int, float)) else default
+
+    def phase_days(self):
+        """{phase id: day its `enter` date fires} for the phases with a date in `enter`."""
+        out = {}
+        for p in self.list_of("phases"):
+            ds = predicate_dates(p["enter"], self.table) if p.get("enter") is not None else []
+            if ds:
+                out[str(p.get("id"))] = derive.day(max(ds))
+        return out
+
+    def removal_days(self):
+        """{equipment: [(production index, from day or None)]} of the remove entries."""
+        out = defaultdict(list)
+        for i, x in enumerate(self.list_of("production")):
+            if x.get("remove") and isinstance(x.get("equipment"), str):
+                out[x["equipment"]].append((i, derive.day(x.get("from")) if x.get("from") else None))
+        return out
+
+    def start_templates(self):
+        """{name: {"regiments": {unit: n}, "support": [...], "regimental_support": [...]}} of the start OOBs."""
+        return self.world.oob(self.tag)["templates"] if self.tag else {}
+
+    def kept_start_templates(self):
+        """Start templates the plan keeps fielding: army_layout and training templates, and the
+        templates of start divisions the disband list does not name."""
+        names = {t for e in self.list_of("army_layout") for t in e.get("templates") or [] if isinstance(t, str)}
+        tr = self.plan.get("training")
+        for line in tr if isinstance(tr, list) else [tr]:
+            if isinstance(line, dict) and isinstance(line.get("template"), str):
+                names.add(line["template"])
+        db = self.plan.get("disband") if isinstance(self.plan.get("disband"), dict) else {}
+        gone = {t for t in db.get("templates") or [] if isinstance(t, str)}
+        if self.tag:
+            names |= {d["template"] for d in self.world.oob(self.tag)["divisions"] if d["template"] not in gone}
+        return names - {None}
+
+    def used_families(self):
+        """(equipment families the plan uses, reasons): template and kept start-template battalions,
+        air_plan airframes, designs, stockpile targets, training guards and the plan's own lines."""
+        g = self.game
+        units = derive.unit_types(g)
+        used = set()
+
+        def need(names):
+            for u in names:
+                for eq in (units.get(u) or {}).get("need", {}):
+                    used.add(derive.equipment_family(g, eq))
+
+        for t in self.list_of("templates"):
+            cols = template_columns(t.get("regiments")) or []
+            need([u for c in cols for u in c] + list(t.get("support") or []) + list(t.get("regimental_support") or []))
+        start = self.start_templates()
+        for name in self.kept_start_templates():
+            t = start.get(name)
+            if t:
+                need(list(t["regiments"]) + list(t["support"]) + list(t.get("regimental_support") or []))
+        for e in self.list_of("air_plan"):
+            if isinstance(e.get("airframe"), str):
+                used.add(derive.equipment_family(g, e["airframe"]))
+        for d in self.list_of("designs"):
+            if isinstance(d.get("base"), str):
+                used.add(derive.equipment_family(g, d["base"]))
+        st = self.plan.get("stockpile_targets")
+        for k in st if isinstance(st, dict) else {}:
+            if k not in ("why", "note"):
+                used.add(derive.equipment_family(g, k))
+        tr = self.plan.get("training")
+        for line in tr if isinstance(tr, list) else [tr]:
+            guard = (line or {}).get("only_if_stockpile") if isinstance(line, dict) else None
+            used.update(derive.equipment_family(g, k) for k in guard or {})
+        rules = self.plan.get("training_rules")
+        if isinstance(rules, dict) and isinstance(rules.get("only_if_stockpile"), dict):
+            used.update(derive.equipment_family(g, k) for k in rules["only_if_stockpile"])
+        for x in self.list_of("production"):
+            if not x.get("remove"):
+                for k in (x.get("equipment"), x.get("replace")):
+                    if isinstance(k, str):
+                        used.add(derive.equipment_family(g, k))
+        return used
+
+    # ------------------------------------------------------------------ production (tactics)
+    def production_mature_switch(self):
+        """A plan entry that moves an existing, mature line to another tier of its family (replace, a
+        design on another tier, or a remove plus an add) instead of starting the new tier on new factories."""
+        g = self.game
+        start = derive.day(self.start)
+        lines = self.list_of("production")
+        since = {r["type"]: start - MATURE_DAYS for r in self.start_lines()}
+        for x in lines:
+            eq = x.get("equipment")
+            if isinstance(eq, str) and not x.get("remove") and "replace" not in x and isinstance(x.get("factories"), int):
+                d = derive.day(x.get("from")) or start
+                since[eq] = min(since.get(eq, d), d)
+        designs = {}
+        for d in self.list_of("designs"):
+            for k in ("id", "name"):
+                if d.get(k) is not None:
+                    designs[str(d[k])] = d
+        keep = {"parent": ("PARENT", 30), "family": ("ARCHETYPE", 20)}
+        base_eff = self.define("BASE_FACTORY_START_EFFICIENCY_FACTOR", 10)
+
+        def kept(link):
+            name, dflt = keep[link]
+            key = f"BASE_FACTORY_EFFICIENCY_{name}_CHANGE_FACTOR"
+            return self.define(key, dflt), key
+
+        def mature(eq, d):
+            return eq in since and d - since[eq] >= MATURE_DAYS
+
+        for i, x in enumerate(lines):
+            eq = x.get("equipment")
+            if not isinstance(eq, str):
+                continue
+            d = derive.day(x.get("from")) or start
+            when = derive.fmt(derive.date_of(d))
+            new, how = None, None
+            if isinstance(x.get("replace"), str):
+                new, how = x["replace"], "replace"
+            elif x.get("design") is not None and isinstance((designs.get(str(x["design"])) or {}).get("base"), str):
+                new, how = designs[str(x["design"])]["base"], f"design {x['design']}"
+            if new:
+                link = derive.equipment_tier_link(g, eq, new)
+                if link in keep and mature(eq, d):
+                    pct, key = kept(link)
+                    self.add("error", "production.mature_switch", f"production[{i}]",
+                             f"{how} switches the mature {eq} line to {new} on {when}, another tier of "
+                             f"{derive.equipment_family(g, eq)}: the line keeps {pct:g}% of its efficiency ({key}) "
+                             f"and loses the unit in progress; start {new} on new or idle factories (3-5) and keep "
+                             f"the {eq} line while its gear is still needed, then switch it whole")
+                continue
+            if not x.get("remove") or not mature(eq, d):
+                continue
+            for j, y in enumerate(lines):
+                ny = y.get("equipment")
+                if j == i or y.get("remove") or not isinstance(ny, str) or not isinstance(y.get("factories"), int):
+                    continue
+                dy = derive.day(y.get("from")) or start
+                link = derive.equipment_tier_link(g, eq, ny)
+                if link in keep and abs(dy - d) <= SWITCH_MATCH_DAYS and not mature(ny, dy):
+                    pct, key = kept(link)
+                    self.add("error", "production.mature_switch", f"production[{i}]",
+                             f"production[{i}] removes the mature {eq} line on {when} and production[{j}] adds {ny} "
+                             f"({y['factories']} factories) on {derive.fmt(derive.date_of(dy))}: the factories restart "
+                             f"at {base_eff:g}% (BASE_FACTORY_START_EFFICIENCY_FACTOR), worse than the {pct:g}% a "
+                             f"switched line keeps ({key}); start {ny} on new factories and keep {eq} until its gear "
+                             f"covers the need")
+
+    def production_cull(self):
+        """Start lines the plan never uses and does not remove; lines of a domain the force posture gives 0%."""
+        g = self.game
+        lines = self.start_lines()
+        removed = self.removal_days()
+        nv = self.plan.get("navy")
+        naval_used = isinstance(nv, dict) and nv.get("posture") != "none"
+        used = self.used_families()
+        prefixes = [p for p in self.plan.get("production_priority") or [] if isinstance(p, str) and p]
+        types = derive.equipment_types(g)
+        mot = self.war.get("motorization")
+        sea = bool(self.overseas()) or isinstance(self.plan.get("sea_transfer"), dict)
+        air = self.plan.get("air") if isinstance(self.plan.get("air"), dict) else {}
+        air_any = bool(air.get("war_missions")) and not self.list_of("air_plan")
+        by_eq = defaultdict(list)
+        for r in lines:
+            by_eq[r["type"]].append(r)
+        rows = []
+        for eq, rs in sorted(by_eq.items()):
+            dom = derive.equipment_domain(g, eq) or "land"
+            if eq in removed:
+                continue
+            if dom == "navy" and nv is None:
+                continue  # navy.required asks for the naval plan first
+            t = types.get(eq, set())
+            if derive.equipment_family(g, eq) in used or any(eq.startswith(p) for p in prefixes) \
+                    or (dom == "navy" and naval_used and "convoy" not in t) or (dom == "air" and air_any) \
+                    or ("motorized" in t and isinstance(mot, (int, float)) and mot > 0) or ("convoy" in t and sea):
+                continue
+            n = sum(int(r.get("factories") or 0) for r in rs)
+            names = sorted({r["version"] for r in rs if r.get("version")})
+            fin = self.unit_finish(eq)
+            rows.append(eq)
+            what = ("dockyards" if n != 1 else "dockyard") if dom == "navy" else \
+                ("military factories" if n != 1 else "military factory")
+            self.add("error", "production.cull", f"start line {eq}",
+                     f"start line {eq}{' (' + ', '.join(names) + ')' if names else ''} keeps {n} {what} on {dom} "
+                     f"equipment that no template, air wing, fleet or stockpile target of the plan uses; remove it at "
+                     f"the start or a phase change (production[] {{equipment, remove: true}}"
+                     + (f", from {derive.fmt(derive.date_of(fin[0]))} when its unit in progress is done" if fin else "")
+                     + ") and give the factories to a kept start line")
+        self.facts["unused_start_lines"] = rows
+        fp = self.plan.get("force_posture")
+        if not isinstance(fp, dict):
+            return
+        days = self.phase_days()
+        start = derive.day(self.start)
+        for j, ph in enumerate(fp.get("phases") or []):
+            if not isinstance(ph, dict):
+                continue
+            zero = [k for k in ("land", "air", "navy") if ph.get(k) == 0]
+            d = start if ph.get("phase") == "base" else days.get(str(ph.get("phase")))
+            if not zero or d is None:
+                continue
+            live = dict(self.active_lines(d))
+            for eq, rs in by_eq.items():
+                if not any(f is None or f <= d for _, f in removed.get(eq, [])):
+                    live[eq] = live.get(eq, 0) + sum(int(r.get("factories") or 0) for r in rs)
+            for dom in zero:
+                hit = sorted(eq for eq, n in live.items() if n and (derive.equipment_domain(g, eq) or "land") == dom)
+                if hit:
+                    self.add("error", "production.cull", f"force_posture.phases[{j}]",
+                             f"phase {ph.get('phase')} gives {dom} 0% but lines {', '.join(hit)} build {dom} "
+                             f"equipment on {derive.fmt(derive.date_of(d))}: remove them by then")
+
+    def production_day0(self):
+        """Free (and freed) military factories at the start not put on kept start lines before the
+        first unpause (factories added to a start line on day 0 join at its efficiency)."""
+        g = self.game
+        mils = (self.facts.get("military_factories") or {}).get("start")
+        lines = [r for r in self.start_lines() if (derive.equipment_domain(g, r["type"]) or "land") != "navy"]
+        if mils is None or not self.tag:
+            return
+        start = derive.day(self.start)
+        on_lines = defaultdict(int)
+        for r in lines:
+            on_lines[r["type"]] += int(r.get("factories") or 0)
+        free = max(0, mils - sum(on_lines.values()))
+        gone = {eq for eq, rows in self.removal_days().items() if any(f is None or f <= start for _, f in rows)}
+        freed = sum(n for eq, n in on_lines.items() if eq in gone)
+        kept = {eq: n for eq, n in on_lines.items() if eq not in gone}
+        want = defaultdict(int)
+        new = {}
+        for x in self.list_of("production"):
+            eq = x.get("equipment")
+            d = derive.day(x.get("from")) if x.get("from") else start
+            if not isinstance(eq, str) or x.get("remove") or "replace" in x or d is None or d > start \
+                    or not isinstance(x.get("factories"), int):
+                continue
+            if eq in kept:
+                want[eq] += x["factories"]
+            else:
+                new[eq] = new.get(eq, 0) + x["factories"]
+        pool = free + freed
+        added = sum(max(0, n - kept[eq]) for eq, n in want.items())
+        left = pool - min(pool, added)
+        self.facts["day0"] = {"military_factories": mils, "on_start_lines": sum(on_lines.values()), "free": free,
+                              "freed": freed, "to_start_lines": min(pool, added), "new_lines": new}
+        if left <= 0:
+            return
+        msg = (f"{left} of the {pool} free military factories at the start ({mils} military factories, "
+               f"{sum(on_lines.values())} on start lines" + (f", {freed} freed by start removals" if freed else "")
+               + f") {'is' if left == 1 else 'are'} not put on kept start lines before the first unpause; a factory "
+               f"added to a start line on day 0 joins at the line's efficiency")
+        if new:
+            msg += (f", while the new line(s) {', '.join(f'{k} ({n})' for k, n in sorted(new.items()))} take day-0 "
+                    f"factories at the base {self.define('BASE_FACTORY_START_EFFICIENCY_FACTOR', 10):g}%")
+        useful = sorted(set(kept) - set(self.facts.get("unused_start_lines") or []))
+        msg += f"; size up kept start lines ({', '.join(useful) or 'none kept'}) in production"
+        self.add("error", "production.day0", "production", msg)
+
+    def unit_finish(self, eq):
+        """(finish day, progress, start line, threshold) of the latest unit in progress on the start
+        lines of eq that the game itself would finish first (ships and expensive items past 10%, cheap
+        ones past 75%: PRODUCTION_MAX_PROGRESS_TO_SWITCH_NAVAL, PRODUCTION_WAIT_TO_FINISH_IF_*), at the
+        base factory speed; None when no such unit is known."""
+        g = self.game
+        cost = (derive.equipment_rows(g).get(eq) or {}).get("cost")
+        naval = (derive.equipment_domain(g, eq) or "land") == "navy"
+        start = derive.day(self.start)
+        out = []
+        for r in self.start_lines():
+            p, n = r.get("progress"), r.get("factories") or 0
+            if r["type"] != eq or p is None or not cost or not n:
+                continue
+            if naval:
+                per_day = n * self.define("BASE_FACTORY_SPEED_NAV", 2.0)
+                cut = self.define("PRODUCTION_MAX_PROGRESS_TO_SWITCH_NAVAL", 0.1)
+            else:
+                eff = r.get("efficiency") or self.define("BASE_FACTORY_START_EFFICIENCY_FACTOR", 10)
+                per_day = n * self.define("BASE_FACTORY_SPEED_MIL", 3.5) * eff / 100.0
+                # the game's line between expensive and cheap items: fewer than one a week
+                cut = self.define("PRODUCTION_WAIT_TO_FINISH_IF_EXPENSIVE", 0.1) if cost / per_day > 7 else \
+                    self.define("PRODUCTION_WAIT_TO_FINISH_IF_CHEAP", 0.75)
+            if p > cut:
+                out.append((start + int(math.ceil((1 - p) * cost / per_day)), p, r, cut))
+        return max(out, key=lambda f: f[0]) if out else None
+
+    def production_in_progress(self):
+        """A removal that throws away a unit in progress: a naval or expensive start line whose unit is
+        past the game's finish threshold, removed before it is done or without a `from`; a naval line
+        removed without a `from`."""
+        g = self.game
+        for i, x in enumerate(self.list_of("production")):
+            eq = x.get("equipment")
+            if not x.get("remove") or not isinstance(eq, str):
+                continue
+            naval = (derive.equipment_domain(g, eq) or "land") == "navy"
+            frm = derive.day(x.get("from")) if x.get("from") else None
+            fin = self.unit_finish(eq)
+            if fin:
+                end, p, r, cut = fin
+                if frm is None or frm < end:
+                    what = f"{r.get('version') or eq} ({p:.0%} done on {int(r.get('factories') or 0)} " \
+                           f"{'dockyards' if naval else 'factories'})"
+                    self.add("error", "production.in_progress", f"production[{i}]",
+                             f"removing {eq} {'at once' if frm is None else 'on ' + derive.fmt(derive.date_of(frm))} "
+                             f"throws away {what}, which finishes about {derive.fmt(derive.date_of(end))}"
+                             + (" (hull cost only: the full design takes longer)" if naval else "")
+                             + f"; give `from` on or after that date (the game itself keeps an item past "
+                               f"{cut * 100:g}% done)")
+            elif naval and frm is None:
+                self.add("warning", "production.in_progress", f"production[{i}]",
+                         f"removing naval line {eq} needs a `from` date after its ship in progress finishes; the "
                          f"executor waits without one")
+
+    def production_naval_cap(self):
+        """A naval line asking for more dockyards than one line takes (capital ships 5, convoys 15, others 10)."""
+        g = self.game
+        types = derive.equipment_types(g)
+        for i, x in enumerate(self.list_of("production")):
+            eq = x.get("equipment")
+            n = x.get("factories")
+            if not isinstance(eq, str) or not isinstance(n, int) or derive.equipment_domain(g, eq) != "navy":
+                continue
+            t = types.get(eq, set())
+            key, dflt = (("CAPITAL_SHIP_MAX_NAV_FACTORIES_PER_LINE", 5) if t & {"capital_ship", "carrier"} else
+                         ("CONVOY_MAX_NAV_FACTORIES_PER_LINE", 15) if "convoy" in t else
+                         ("FLOATING_HARBOR_MAX_NAV_FACTORIES_PER_LINE", 5) if "floating_harbor" in t else
+                         ("DEFAULT_MAX_NAV_FACTORIES_PER_LINE", 10))
+            cap = self.define(key, dflt)
+            if n > cap:
+                self.add("error", "production.naval_cap", f"production[{i}]",
+                         f"{eq} asks for {n} dockyards but one line takes at most {cap:g} ({key}); split it into "
+                         f"{int(math.ceil(n / cap))} lines")
+
+    # ------------------------------------------------------------------ army (tactics)
+    def theatre_states(self):
+        out = set(_ints(self.war.get("theatre"))) | self.axis_states() | {e["state"] for e in self.targets()
+                                                                           if isinstance(e.get("state"), int)}
+        return sorted(out or {e["state"] for e in self.list_of("army_layout") if isinstance(e.get("state"), int)})
+
+    def army_width_terrain(self):
+        """Template widths far from the best fill of the theatre's terrain mix, or of its main terrain
+        (over-width and stacking penalties included): the plan's templates, and the start templates
+        its armies field."""
+        g = self.game
+        mix = derive.terrain_mix(g, self.theatre_states())
+        if not mix:
+            return
+        scores = derive.width_scores(g, mix)
+        best = max(scores.values())
+        top = sorted(scores, key=lambda w: (-scores[w], w))[:3]
+        main = max(mix, key=lambda t: (mix[t], t))
+        main_best = max(derive.terrain_fill(g, w, main) for w in scores)
+        units = derive.unit_types(g)
+        mixtext = ", ".join(f"{t} {s:.0%}" for t, s in sorted(mix.items(), key=lambda kv: -kv[1]))
+        tail = (f"width {top[0]} fills {scores[top[0]]:.2f} ({', '.join(f'{w} {scores[w]:.2f}' for w in top[1:])}), "
+                f"the best on {main} {main_best:.2f}; terrain {mixtext}")
+        self.facts["width_fill"] = {"mix": mix, "best": {str(w): scores[w] for w in top}, "main": main}
+
+        def judge(width):
+            """(severity or None, theatre fill, main-terrain fill)."""
+            if not width:
+                return None, None, None
+            s, m = derive.width_score(g, width, mix), derive.terrain_fill(g, width, main)
+            gap = max(best - s, main_best - m)
+            if gap < WIDTH_WARN - 1e-9:
+                return None, s, m
+            return ("error" if gap >= WIDTH_ERROR - 1e-9 else "warning"), s, m
+
+        edited = set()
+        for i, t in enumerate(self.list_of("templates")):
+            if isinstance(t.get("base"), str):
+                edited.add(t["base"])
+            if t.get("role") == "garrison":
+                continue
+            width = derive.template_width(g, template_columns(t.get("regiments")) or [])
+            sev, s, m = judge(width)
+            if sev:
+                self.add(sev, "army.width_terrain", f"templates[{i}] {t.get('id', t.get('name'))}",
+                         f"width {width:g} fills the theatre's battles at {s:.2f} ({main} {m:.2f}) after the over-width "
+                         f"and stacking penalties; {tail}")
+        start = self.start_templates()
+        names = {n for e in self.list_of("army_layout") if e.get("role") != "garrison"
+                 for n in e.get("templates") or [] if isinstance(n, str)} - edited
+        bad, worst = [], None
+        for name in sorted(names):
+            t = start.get(name)
+            if not t or any(u not in units for u in t["regiments"]):
+                continue
+            width = sum(units[u]["width"] * n for u, n in t["regiments"].items()) + \
+                sum((units.get(x) or {}).get("width", 0) for x in list(t["support"]) + list(t.get("regimental_support") or []))
+            sev, s, m = judge(width)
+            if sev:
+                bad.append(f"{name} width {width:g} (fill {s:.2f}, {main} {m:.2f})")
+                worst = "error" if "error" in (sev, worst) else "warning"
+        if bad:
+            self.add(worst, "army.width_terrain", "army_layout",
+                     f"start templates the armies field fill the theatre's battles poorly: {'; '.join(bad)}; {tail}: "
+                     f"plan templates near the best width (templates[] with base) or merge the small divisions")
+
+    # ------------------------------------------------------------------ war (tactics)
+    def war_blocks(self):
+        """[(label, war object)]: war, war_by_phase entries and phases / contingencies overrides.war."""
+        out = [("war", self.war)] if self.war else []
+        wbp = self.plan.get("war_by_phase")
+        if isinstance(wbp, dict):
+            out += [(f"war_by_phase.{k}", v) for k, v in wbp.items() if isinstance(v, dict)]
+        for key in ("phases", "contingencies"):
+            for j, p in enumerate(self.list_of(key)):
+                ov = p.get("overrides")
+                if isinstance(ov, dict) and isinstance(ov.get("war"), dict):
+                    out.append((f"{key}[{j}].overrides.war", ov["war"]))
+        return out
+
+    def war_schema(self):
+        return ((((self.schema or {}).get("definitions") or {}).get("war") or {}).get("properties") or {})
+
+    def war_key(self, pattern, numeric=True):
+        """The war key of the schema whose name matches pattern (numeric ones only), else None."""
+        for k, v in self.war_schema().items():
+            if re.search(pattern, k) and (not numeric or v.get("type") in ("number", "integer")):
+                return k
+        return None
+
+    def schema_default(self, key, fallback):
+        desc = str((self.war_schema().get(key) or {}).get("description") or "")
+        m = re.search(r"default\s+(-?\d+(?:\.\d+)?)", desc)
+        return float(m.group(1)) if m else fallback
+
+    @staticmethod
+    def share(v):
+        """A fraction from a fraction or a percent (values above 1 are percent)."""
+        return v / 100.0 if v > 1 else float(v)
+
+    def offensives(self):
+        return bool(self.targets()) or bool(self.axis_states())
+
+    def war_supply_floor(self):
+        """war.supply_floor below the supply where attrition starts, or the attack threshold below 50%."""
+        if not self.war:
+            return
+        attrition = self.define("SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION", 0.35)
+        attack_key = self.war_key(r"attack.*supply|supply.*attack")
+        for label, w in self.war_blocks():
+            base = label == "war"
+            if "supply_floor" not in w and not base:
+                continue
+            raw = w.get("supply_floor", self.schema_default("supply_floor", 25))
+            if not isinstance(raw, (int, float)):
+                continue
+            floor = self.share(raw)
+            attack = floor
+            if attack_key and isinstance(w.get(attack_key), (int, float)):
+                attack = self.share(w[attack_key])
+            src = f"war.supply_floor {raw:g}" + ("" if "supply_floor" in w else " (the executor default)")
+            if floor < attrition:
+                self.add("error", "war.supply_floor", f"{label}.supply_floor",
+                         f"{src}: armies rest only below {floor:.0%} supply, so they keep fighting under the "
+                         f"{attrition:.0%} where attrition starts (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION) and an "
+                         f"attacker out of supply loses attack and defence; set it to 50 (no new offensive below "
+                         f"50%, stop below 35%)")
+            elif attack < ATTACK_SUPPLY:
+                self.add("warning", "war.supply_floor", f"{label}.{attack_key or 'supply_floor'}",
+                         f"{(attack_key or 'supply_floor')} {attack:.0%}: new offensives start below "
+                         f"{ATTACK_SUPPLY:.0%} supply; set the attack threshold to 50")
+
+    def war_planning_wait(self):
+        """Offensives executed with no planning wait: direct moves, or no wait key / a wait of 0."""
+        if not self.war or not self.offensives():
+            return
+        gain = self.define("PLANNING_GAIN", 0.02)
+        cap = self.define("PLANNING_MAX", 0.3)
+        full = int(math.ceil(cap / gain)) if gain else 15
+        key = self.war_key(r"^plan(ning)?_(days|wait)")
+        why = (f"a battle plan gains {gain:.0%} planning a day up to {cap:.0%} after {full} days (PLANNING_GAIN, "
+               f"PLANNING_MAX); manual orders lose {self.define('PLAYER_ORDER_PLANNING_DECAY', 0.03):.0%} a day")
+        if self.war.get("direct_moves") is True:
+            self.add("warning", "war.planning_wait", "war.direct_moves",
+                     f"offensives are direct moves, so no planning builds before an attack: {why}; use battle "
+                     f"plans and wait 12-{full} days after drawing them")
+            return
+        if key:
+            v = self.war.get(key)
+            if not isinstance(v, (int, float)) or v <= 0:
+                self.add("error", "war.planning_wait", f"war.{key}",
+                         f"offensives execute with no planning wait (war.{key} {'missing' if v is None else v}): "
+                         f"{why}; wait 12-{full} days")
+            elif v < full * 2 / 3:
+                self.add("warning", "war.planning_wait", f"war.{key}",
+                         f"war.{key} {v:g} days builds {min(cap, v * gain):.0%} planning of {cap:.0%}: {why}")
+            return
+        self.add("info", "war.planning_wait", "war",
+                 f"the executor executes an offensive the tick after drawing it (no planning-wait key yet): {why}; "
+                 f"name the 12-{full} day wait in a brief line")
+
+    def war_pocket_threshold(self):
+        """Pocket fall-back above 50% hostile share (or switched off)."""
+        if not self.war:
+            return
+        key = self.war_key(r"pocket")
+        for label, w in self.war_blocks():
+            if w.get("avoid_pockets") is False:
+                self.add("error", "war.pocket_threshold", f"{label}.avoid_pockets",
+                         "the pocket fall-back is off: an encircled army gets no manpower, equipment or fuel and "
+                         f"loses its HQ general; keep it on and fall back at {POCKET_SHARE:.0%} hostile share")
+            if key and isinstance(w.get(key), (int, float)) and self.share(w[key]) > POCKET_SHARE:
+                self.add("error", "war.pocket_threshold", f"{label}.{key}",
+                         f"pocket fall-back at {self.share(w[key]):.0%} hostile share fires after the neck closes; "
+                         f"fall back at {POCKET_SHARE:.0%} or when the neck to the rear is 2 own provinces or fewer")
+        if key and not isinstance(self.war.get(key), (int, float)):
+            dflt = self.schema_default(key, EXECUTOR_POCKET_SHARE)
+            if self.share(dflt) > POCKET_SHARE:
+                self.add("warning", "war.pocket_threshold", f"war.{key}",
+                         f"war.{key} unset: the default {self.share(dflt):.0%} hostile share is late; set "
+                         f"{POCKET_SHARE:.0%}")
+        elif not key and self.war.get("avoid_pockets") is not False and self.offensives():
+            self.add("info", "war.pocket_threshold", "war",
+                     f"the executor falls back at the {EXECUTOR_POCKET_SHARE:.0%} hostile share of the armies read "
+                     f"(no threshold key yet); {POCKET_SHARE:.0%} or a neck of 2 own provinces belongs in a brief line")
+
+    # ------------------------------------------------------------------ politics (tactics)
+    def pp_cost(self, p):
+        if isinstance(p.get("cost"), (int, float)) and not isinstance(p.get("cost"), bool):
+            return float(p["cost"])
+        idea = p.get("idea")
+        c = self.world.idea_cost(idea) if isinstance(idea, str) else None
+        if c is not None:
+            return float(c)
+        for ch in self.world.characters(self.tag, "advisor") if isinstance(idea, str) else []:
+            for r in ch["roles"]:
+                if r["role"] == "advisor" and idea in (ch["id"], r.get("idea_token")) and r.get("cost") is not None:
+                    return float(r["cost"])
+        return None
+
+    def politics_pp_budget(self):
+        """Planned PP spending (politics, decisions) against the net income: base x factors minus the
+        running focus's cost (calc.pp_rates); unaffordable by the horizon or bought late."""
+        if not self.tag:
+            return
+        buys = []
+        for i, p in enumerate(self.list_of("politics")):
+            c = self.pp_cost(p)
+            if c:
+                ds = predicate_dates(p["when"], self.table) if p.get("when") is not None else []
+                buys.append((f"politics[{i}] {p.get('idea')}", c, derive.day(max(ds)) if ds else None))
+        w = self.world
+        for i, d in enumerate(self.plan.get("decisions") or []):
+            row = w.find_decision(d) if isinstance(d, str) else None
+            c = w.decision_row(row).get("cost") if row else None
+            if isinstance(c, (int, float)) and c > 0:
+                buys.append((f"decisions[{i}] {d}", float(c), None))
+        for i, r in enumerate(self.list_of("decision_rules")):
+            row = w.find_decision(r.get("decision")) if isinstance(r.get("decision"), str) and not r.get("never") else None
+            c = w.decision_row(row).get("cost") if row else None
+            if isinstance(c, (int, float)) and c > 0:
+                ds = predicate_dates(r["when"], self.table) if r.get("when") is not None else []
+                for _ in range(max(1, r["max"]) if isinstance(r.get("max"), int) else 1):
+                    buys.append((f"decision_rules[{i}] {r.get('decision')}", float(c), derive.day(max(ds)) if ds else None))
+        if not buys:
+            return
+        gain, factor = calcmod.pp_modifiers(w, self.tag)
+        rates = calcmod.pp_rates(w, gain, factor, calcmod.start_stability(w, self.tag), None,
+                                 calcmod.pp_costs(w, self.tag))
+        start = derive.day(self.start)
+        end = derive.day(self.stop) if self.stop else (derive.day(self.goal["deadline"]) if self.goal.get("deadline")
+                                                       else start + 365)
+        timeline = (self.facts.get("focus") or {}).get("timeline") or []
+        focus_end = end if self.plan.get("focus_fallback") else (derive.day(timeline[-1]["end"]) if timeline else start)
+        f = w.country(self.tag).get("political_power")
+        balance = float(f["v"]) if f and isinstance(f.get("v"), (int, float)) else 0.0
+        pending = list(buys)
+        bought = {}
+        day = start
+        while day <= end and pending:
+            for b in list(pending):
+                label, c, due = b
+                if (due is None or due <= day) and balance >= c:
+                    balance -= c
+                    bought[label] = (day, due)
+                    pending.remove(b)
+            day += 1
+            balance += rates["per_day_focus"] if day <= focus_end else rates["per_day_idle"]
+        how = (f"{rates['per_day_focus']:g} PP a day with a focus running ((base {rates['base']['v']:g} + gain "
+               f"{gain:g}) x (1 + {factor + rates['stability_factor']:g}) - {rates['focus_cost']:g} for the focus"
+               + (f" - {rates['cost']:g} daily costs" if rates["cost"] else "") + ")")
+        self.facts["pp_budget"] = {"per_day_focus": rates["per_day_focus"], "per_day_idle": rates["per_day_idle"],
+                                   "bought": {k: derive.fmt(derive.date_of(v[0])) for k, v in bought.items()},
+                                   "not_bought": [b[0] for b in pending]}
+        for label, c, due in pending:
+            self.add("error", "politics.pp_budget", label.split(" ")[0],
+                     f"{label} ({c:g} PP) is not affordable by {derive.fmt(derive.date_of(end))}: {how}; "
+                     f"{sum(x[1] for x in buys if x[0] in bought):g} PP go to earlier buys")
+        for label, (d, due) in bought.items():
+            if due is not None and d - due > PP_LATE_DAYS:
+                self.add("warning", "politics.pp_budget", label.split(" ")[0],
+                         f"{label} is affordable only on {derive.fmt(derive.date_of(d))}, {d - due} days after its "
+                         f"date {derive.fmt(derive.date_of(due))}: {how}")
+
+    def politics_conscription(self):
+        """A conscription law above what the plan's divisions need, or a manpower rule free to climb the
+        whole ladder (manage.conscription_laws unset) into laws that cost factory output."""
+        if not self.tag:
+            return
+        w = self.world
+        laws = w.laws(self.tag)
+        cat, ladder = None, []
+        for c, row in laws.items():
+            opts = [(w.modifier_value(o["id"], "conscription"), o["id"]) for o in row["options"]]
+            opts = sorted((v, k) for v, k in opts if isinstance(v, (int, float)))
+            if len(opts) > len(ladder):
+                cat, ladder = c, opts
+        if not ladder:
+            return
+        share = {k: v for v, k in ladder}
+        current = laws[cat]["current"]
+        mods = derive.idea_modifiers(self.game)
+        ideas = [f["v"] for f in w.country(self.tag)["ideas"]]
+        other = sum(mods.get(i, {}).get("conscription", 0.0) for i in ideas if i != current)
+        factor = sum(mods.get(i, {}).get("conscription_factor", 0.0) for i in ideas)
+        noncore = self.define("LOCAL_MANPOWER_ACCESSIBLE_NON_CORE_FACTOR", 0.02)
+        pop = 0.0
+        for r in w.states().values():
+            if r["owner"] == self.tag:
+                pop += r["manpower"] * (1.0 if self.tag in r["cores"] else noncore)
+        recruit = {k: pop * (other + v) * (1 + factor) for k, v in share.items()}
+        # manpower the plan fields: start divisions not disbanded, training up to its caps, two months of losses
+        subs = w.sub_units()
+        start_t = self.start_templates()
+
+        def mp(name):
+            t = start_t.get(name)
+            if t:
+                return sum((subs.get(u) or {}).get("manpower", 0) * n for u, n in t["regiments"].items()) + \
+                    sum((subs.get(s) or {}).get("manpower", 0) for s in t["support"])
+            for x in self.list_of("templates"):
+                if name in (x.get("name"), x.get("id")):
+                    flat = [u for c in template_columns(x.get("regiments")) or [] for u in c] + list(x.get("support") or [])
+                    return sum((subs.get(u) or {}).get("manpower", 0) for u in flat)
+            return 0
+
+        divs = Counter(d["template"] for d in w.oob(self.tag)["divisions"])
+        db = self.plan.get("disband") if isinstance(self.plan.get("disband"), dict) else {}
+        left = db.get("max") if isinstance(db.get("max"), int) else sum(divs[t] for t in db.get("templates") or [])
+        for t in db.get("templates") or []:
+            k = min(divs.get(t, 0), left)
+            divs[t] -= k
+            left -= k
+        tr = self.plan.get("training")
+        rules = self.plan.get("training_rules") if isinstance(self.plan.get("training_rules"), dict) else {}
+        for line in tr if isinstance(tr, list) else [tr]:
+            if isinstance(line, dict) and isinstance(line.get("template"), str):
+                cap = line.get("cap") if isinstance(line.get("cap"), int) else (
+                    rules.get("cap") if rules.get("cap_template") in (None, line["template"]) else None)
+                if isinstance(cap, int):
+                    divs[line["template"]] = max(divs[line["template"]], cap)
+        fielded = sum(mp(t) * n for t, n in divs.items())
+        m = self.plan.get("manage") if isinstance(self.plan.get("manage"), dict) else None
+        months = m["manpower_months"] if m and isinstance(m.get("manpower_months"), (int, float)) else 2
+        need = fielded * (1 + months * MONTHLY_LOSS_SHARE)
+        enough = next((k for v, k in ladder if recruit[k] >= need), ladder[-1][1])
+        self.facts["manpower"] = {"population": round(pop), "fielded": fielded, "need": round(need),
+                                  "law_needed": enough, "current": current}
+        basis = (f"the plan fields {sum(divs.values())} divisions, {fielded:,.0f} manpower, plus {months:g} months of "
+                 f"losses at {MONTHLY_LOSS_SHARE:.0%} a month = {need:,.0f}; {enough} recruits "
+                 f"{recruit[enough]:,.0f} ({pop:,.0f} population x {other + share[enough]:.3g})")
+
+        def cost(law):
+            v = w.modifier_value(law, "industrial_capacity_factory")
+            return f" ({v:+.0%} factory output)" if isinstance(v, (int, float)) and v < 0 else ""
+
+        for i, p in enumerate(self.list_of("politics")):
+            law = p.get("idea")
+            if law in share and share[law] > share[enough] and share[law] > share.get(current, -1):
+                self.add("error", "politics.unneeded_conscription", f"politics[{i}] {law}",
+                         f"{law}{cost(law)} is above what the plan needs: {basis}")
+        if m is None or "manpower" in (m.get("off") or []):
+            return
+        allowed = [x for x in m.get("conscription_laws") or [] if isinstance(x, str)]
+        ladder_used = allowed or [k for _, k in ladder]
+        dear = [k for k in ladder_used if k in share and share[k] > share[enough] and cost(k)]
+        if dear:
+            src = "manage.conscription_laws" if allowed else "manage.conscription_laws is unset: the default ladder"
+            self.add("warning", "politics.unneeded_conscription", "manage.conscription_laws",
+                     f"{src} lets the manpower rule take {', '.join(k + cost(k) for k in dear)}, above what the plan "
+                     f"needs: {basis}; list only the laws the plan allows")
+
+    # ------------------------------------------------------------------ research (tactics)
+    def research_ahead(self):
+        """Techs researched more than half a year before their start year (each year ahead adds
+        BASE_YEAR_AHEAD_PENALTY_FACTOR times the cost) while in-year techs of the plan's fields stay
+        unplanned. Start days come from a slot timeline of the plan (base research days)."""
+        g = self.game
+        techs = g.techs()
+        meta = derive.tech_meta(g)
+        have = start_tech_set(g, self.meta)
+        start = derive.day(self.start)
+        end = derive.day(self.stop) if self.stop else start + 730
+        slots = derive.research_slots(g, self.tag, self.ctx, self.start, self.meta.get("history_file")) or 1
+        penalty = self.define("BASE_YEAR_AHEAD_PENALTY_FACTOR", 2)
+        blocks = []
+        for i, e in enumerate(self.plan.get("research_path") or []):
+            if not isinstance(e, dict):
+                continue
+            dated = bool(e.get("not_before")) or isinstance(e.get("year"), int)
+            due = derive.day(e["not_before"]) if e.get("not_before") and derive.day(e["not_before"]) else (
+                derive.day((e["year"], 1, 1)) if isinstance(e.get("year"), int) else start)
+            blocks.append((max(start, due), f"research_path[{i}]", dated,
+                           [t for t in e.get("techs") or [] if t in techs]))
+        prio = [t for t in self.plan.get("research_priority") or [] if t in techs]
+        planned = {t for b in blocks for t in b[3]} | set(prio)
+        rb = self.plan.get("research_bonuses")
+        bonus = {t for k, v in rb.items() if k not in ("why", "note") and isinstance(v, list) for t in v} \
+            if isinstance(rb, dict) else set()
+        year_day = lambda t: derive.day((techs[t]["year"], 1, 1))  # noqa: E731
+        finish, started = {}, {}
+        free = [start] * slots
+        while True:
+            k = min(range(slots), key=lambda s: free[s])
+            now = free[k]
+            if now > end:
+                break
+            done = have | {t for t, f in finish.items() if f <= now}
+            pick = None
+            for _, where, dated, ts in [b for b in blocks if b[0] <= now] + [(start, "research_priority", False, prio)]:
+                for t in ts:
+                    if t in have or t in started or techrule.missing(techs[t], done, "any"):
+                        continue
+                    pick = (t, where, dated)
+                    break
+                if pick:
+                    break
+            if pick is None:
+                later = [x for x in list(finish.values()) + [b[0] for b in blocks] + free if x > now]
+                if not later:
+                    break
+                free[k] = min(later)
+                continue
+            t, where, dated = pick
+            ahead = max(0.0, (year_day(t) - now) / 365.0) if techs[t]["year"] else 0.0
+            started[t] = (now, where, dated, ahead)
+            finish[t] = free[k] = now + derive.tech_days(g, t) * (1 + penalty * ahead)
+        goals = self.domain_goals()
+        folders = {(meta.get(t) or {}).get("folder") for t in planned} - {None}
+        last_year = derive.as_tuple(self.stop)[0] if self.stop else derive.as_tuple(self.start)[0] + 1
+        out = defaultdict(list)
+        for t, (now, where, dated, ahead) in started.items():
+            if ahead <= AHEAD_YEARS or t in bonus or dated or (where == "research_priority" and techs[t]["year"] > last_year):
+                continue  # dated blocks: research.start_year; far-future priority techs: its window warning
+            year = derive.date_of(now)[0]
+            known = have | planned
+            idle = []
+            for c, info in techs.items():
+                m = meta.get(c) or {}
+                f = m.get("folder") or ""
+                if c in known or not info["year"] or info["year"] > year or m.get("gated") or (m.get("xor") or set()) & known \
+                        or f not in folders or techrule.missing(info, known, "any"):
+                    continue
+                if any(re.search(r"(^|_)" + d + r"(_|$)", f) and not goals[d] for d in ("naval", "air")):
+                    continue
+                idle.append(c)
+            if idle:
+                out[where].append((ahead, t, now, sorted(idle)))
+        for where, rows in sorted(out.items()):
+            rows.sort(key=lambda r: -r[0])
+            idle = sorted({c for r in rows for c in r[3]})
+            sev = "error" if rows[0][0] >= 2 * AHEAD_YEARS else "warning"
+            self.add(sev, "research.ahead", where,
+                     "researched ahead of time: " + "; ".join(
+                         f"{t} ({techs[t]['year']}) from about {derive.fmt(derive.date_of(now))}, {a:.1f} year(s) "
+                         f"ahead, x{1 + penalty * a:.1f} the time" for a, t, now, _ in rows[:6])
+                     + f" (BASE_YEAR_AHEAD_PENALTY_FACTOR {penalty:g} a year), while in-year techs of the same fields "
+                       f"stay unplanned: {', '.join(idle[:8])}{' ...' if len(idle) > 8 else ''}; research those first "
+                       f"or pair the pull-forward with an ahead-of-time bonus (research_bonuses)")
+
+    # ------------------------------------------------------------------ navy (tactics)
+    def navy_invasions(self):
+        """navy.invasion_prep (preparation and division cap from the start techs) and navy.sea_control
+        (patrol or strike force on every sea region the invasion crosses)."""
+        invs = self.list_of("invasions")
+        if not invs:
+            return
+        g = self.game
+        have = start_tech_set(g, self.meta)
+        tmods = derive.tech_modifiers(g)
+        imods = derive.idea_modifiers(g)
+        ideas = derive.start_ideas(g, self.tag, self.ctx, self.start, self.meta.get("history_file"))
+
+        def total(key):
+            parts = [(t, tmods.get(t, {}).get(key, 0.0)) for t in sorted(have)] + \
+                [(i, imods.get(i, {}).get(key, 0.0)) for i in sorted(ideas)]
+            return sum(v for _, v in parts), [n for n, v in parts if v]
+
+        prep_mod, prep_by = total("naval_invasion_prep_days")
+        cap_mod, cap_by = total("naval_invasion_division_cap")
+        prep = self.define("NAVAL_INVASION_PREPARE_DAYS", 60) + prep_mod
+        cap = self.define("BASE_NAVAL_INVASION_DIVISION_CAP", 4) + cap_mod
+        later = sorted(t for t in self.planned_techs() if tmods.get(t, {}).get("naval_invasion_division_cap"))
+        spec = ((((self.schema or {}).get("properties") or {}).get("invasions") or {}).get("items") or {}).get(
+            "properties") or {}
+        dflt = (spec.get("prepare_days") or {}).get("default", 14)
+        layout = Counter()
+        for e in self.list_of("army_layout"):
+            if isinstance(e.get("name_hint"), str):
+                layout[e["name_hint"]] += e.get("count", 1) if isinstance(e.get("count"), int) else 1
+        self.facts["invasion"] = {"prepare_days": prep, "division_cap": cap}
+        for i, inv in enumerate(invs):
+            where = f"invasions[{i}] {inv.get('id', '')}".strip()
+            days = inv.get("prepare_days", dflt)
+            if isinstance(days, (int, float)) and days < prep:
+                self.add("error", "navy.invasion_prep", where,
+                         f"prepare_days {days:g}{'' if 'prepare_days' in inv else ' (the default)'} but an invasion "
+                         f"needs {prep:g} days of preparation (NAVAL_INVASION_PREPARE_DAYS"
+                         + (f" with {', '.join(prep_by)}" if prep_by else "") + "); the plan cannot execute before then")
+            armies = [a for a in inv.get("armies") or [] if isinstance(a, str)]
+            n = sum(layout.get(a, 0) for a in armies)
+            if n > cap:
+                self.add("error", "navy.invasion_prep", where,
+                         f"{n} divisions in {', '.join(armies)} but an invasion takes at most {cap:g} with the start "
+                         f"techs (BASE_NAVAL_INVASION_DIVISION_CAP" + (f" with {', '.join(cap_by)}" if cap_by else "")
+                         + ")" + (f"; the planned {', '.join(later)} raise it" if later else "")
+                         + f": split it into invasions of {cap:g} or research the transport techs first")
+            self.sea_control(where, inv)
+
+    def sea_regions(self, inv):
+        """[(region id, name)] of the sea regions on the shortest sea route from from_state to the target."""
+        graph = self.game.map_graph()
+        if graph is None:
+            return []
+        states = self.states()
+
+        def seas(provs):
+            return {s for p in provs for s in mapgraph.sea_neighbours(graph, p)}
+
+        src = seas(states.get(inv.get("from_state"), {}).get("provinces", []))
+        tp = inv.get("target_province")
+        dst = seas([tp] if isinstance(tp, int) else states.get(inv.get("target_state"), {}).get("provinces", []))
+        if not src or not dst:
+            return []
+        route = mapgraph.sea_route(graph, sorted(src), sorted(dst))
+        if not route:
+            return []
+        regions = self.world.strategic_regions()
+        out = []
+        for p in route["path"]:
+            rid = (graph["provinces"].get(p) or {}).get("region")
+            if rid is not None and rid not in [r for r, _ in out]:
+                out.append((rid, (regions.get(rid) or {}).get("name") or str(rid)))
+        return out
+
+    def sea_control(self, where, inv):
+        route = self.sea_regions(inv)
+        if not route:
+            return
+        nv = self.plan.get("navy") if isinstance(self.plan.get("navy"), dict) else {}
+        covered = set()
+        for fl in nv.get("fleets") or []:
+            for msn in (fl or {}).get("missions") or [] if isinstance(fl, dict) else []:
+                if isinstance(msn, dict) and msn.get("mission") in ("patrol", "strike_force"):
+                    for r in msn.get("regions") or []:
+                        name = r.get("region") if isinstance(r, dict) else r
+                        if isinstance(name, (str, int)):
+                            covered.add(str(name).strip().lower())
+        miss = [(rid, name) for rid, name in route if name.lower() not in covered and str(rid) not in covered]
+        if miss:
+            ratio = self.define("DOMINANCE_CONTROLLED_THRESHOLD_RATIO", 0.6)
+            self.add("error", "navy.sea_control", where,
+                     f"the invasion crosses {', '.join(n for _, n in route)}; a region counts as controlled at "
+                     f"{ratio:.0%} of the needed naval dominance (DOMINANCE_CONTROLLED_THRESHOLD_RATIO), which only "
+                     f"patrol and strike force build, but no navy patrol or strike_force mission covers "
+                     f"{', '.join(f'{n} ({r})' for r, n in miss)}")
+
+    # ------------------------------------------------------------------ construction (tactics)
+    def construction_war_civs(self):
+        """A civilian factory queued after the war starts with less than a year left to the goal."""
+        costs = derive.building_costs(self.game)
+        civ = {b for b, r in costs.items() if r["civilian"]}
+        start = derive.day(self.start)
+        war_days = [start] if self.tag and self.world.country(self.tag)["wars"] else []
+        for d in self.list_of("diplomacy"):
+            if d.get("action") == "declare":
+                ds = predicate_dates(d["when"], self.table) if d.get("when") is not None else []
+                if ds:
+                    war_days.append(derive.day(max(ds)))
+        horizon = self.horizon()
+        if not war_days or not horizon:
+            return
+        war = min(war_days)
+        end, label = min(horizon)
+        jobs = []
+        for prefix, items in self.construction_lists():
+            for i, e in enumerate(items):
+                if e.get("building") in civ:
+                    jobs.append((f"{prefix}[{i}] {e.get('id', '')}".strip(), e["building"],
+                                 max(war, self.trigger_day(e.get("when", "")))))
+        for i, e in enumerate(self.list_of("construction")):
+            if e.get("building") in civ:
+                jobs.append((f"construction[{i}]", e["building"], war))  # the filler runs whenever civs are idle
+        for where, b, d in jobs:
+            if end - d < WAR_CIV_DAYS:
+                self.add("warning", "construction.war_civs", where,
+                         f"{b} ({costs[b]['cost']:g} points) queued at war on {derive.fmt(derive.date_of(d))}, "
+                         f"{end - d} days before the {label} {derive.fmt(derive.date_of(end))}: a civilian factory "
+                         f"cannot pay back by then; queue military factories, railways or supply instead")
+
+    # ------------------------------------------------------------------ navy and peace (tactics)
+    def navy_strike_without_patrol(self):
+        """navy.strike_without_patrol: a strike force reacts only to what the patrols spot, so each of its
+        regions needs an own patrol mission."""
+        nv = self.plan.get("navy") if isinstance(self.plan.get("navy"), dict) else {}
+
+        def regions(msn):
+            out = []
+            for r in msn.get("regions") or []:
+                name = r.get("region") if isinstance(r, dict) else r
+                if isinstance(name, (str, int)) and not isinstance(name, bool):
+                    out.append(str(name).strip())
+            return out
+
+        patrolled, strikes = set(), []
+        for fi, fl in enumerate(nv.get("fleets") or []):
+            if not isinstance(fl, dict):
+                continue
+            for mi, msn in enumerate(fl.get("missions") or []):
+                if not isinstance(msn, dict):
+                    continue
+                if msn.get("mission") == "patrol":
+                    patrolled |= {r.lower() for r in regions(msn)}
+                elif msn.get("mission") == "strike_force":
+                    strikes.append((f"navy.fleets[{fi}].missions[{mi}]", regions(msn)))
+        for where, regs in strikes:
+            miss = [r for r in regs if r.lower() not in patrolled]
+            if miss:
+                self.add("warning", "navy.strike_without_patrol", where,
+                         f"strike force in {', '.join(miss)} with no own patrol mission there: a strike force only "
+                         f"engages what patrols spot; add a patrol entry (submarines or light cruisers) for "
+                         f"{'that region' if len(miss) == 1 else 'those regions'}")
+
+    def peace_order(self):
+        """peace.order (info): peace.take ranks a state the plan does not hold at the conference ahead of one
+        it holds (an occupied state is cheaper and the first picks decide what is left)."""
+        p = self.plan.get("peace") if isinstance(self.plan.get("peace"), dict) else {}
+        take = _ints(p.get("take"))
+        if len(take) < 2 or not self.tag:
+            return
+        owners = self.game.state_owners(self.ctx, self.start)
+        held = {s for s, t in owners.items() if t == self.tag}
+        held |= {e["state"] for e in self.targets() if isinstance(e.get("state"), int)}
+        held |= set(self.axis_states())
+        first_held = next((i for i, s in enumerate(take) if s in held), None)
+        early = [s for s in take[:first_held] if s not in held] if first_held is not None else []
+        if early:
+            self.add("info", "peace.order", "peace.take",
+                     (f"state {early[0]} is" if len(early) == 1 else f"states {', '.join(map(str, early))} are")
+                     + f" ranked ahead of state {take[first_held]}, but the plan "
+                     f"does not take them before the conference (no vp target or axis there); rank the states the "
+                     f"armies hold first, they cost fewer points")
 
     # ------------------------------------------------------------------
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
                  self.hub_cost, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
-                 self.production_changes, self.unreadable]
+                 self.production_changes, self.unreadable,
+                 # tactics research rules (production.day0 reads production's factory count, pp_budget the focus
+                 # timeline)
+                 self.production_mature_switch, self.production_cull, self.production_day0,
+                 self.production_in_progress, self.production_naval_cap, self.army_width_terrain,
+                 self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.politics_pp_budget,
+                 self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
+                 self.navy_strike_without_patrol, self.peace_order]
         for step in steps:
             step()
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)

@@ -8,8 +8,10 @@
     calc.py equipment   (--tag T --template NAME | --regiments infantry=6,artillery=1 --support engineer)
                         [--regimental field_guns] [--divisions N] [--year Y]
                         (equipment, manpower, IC, width, divisions per terrain width, designer problems)
-    calc.py pp          [--tag T --date D] [--start PP] [--gain PP_PER_DAY] [--factor F]
+    calc.py pp          [--tag T --date D] [--start PP] [--gain PP_PER_DAY] [--factor F] [--stability S]
+                        [--difficulty normal] [--cost PP_PER_DAY] [--no-focus | --focus-until D]
                         --until D [--buy 1936.2.1:150:free_trade ...]
+                        (net income: a running focus costs its political_power_cost, 1 a day in vanilla)
 
 Every constant is read from the effective game files where it exists (common/defines, common/buildings,
 common/units, common/ideas) and printed with its source. Constants the files do not hold are labelled
@@ -21,7 +23,9 @@ common/units, common/ideas) and printed with its source. Constants the files do 
                                                               number as NMarket.MAX_CIV_FACTORIES_PER_CONTRACT
                                                               (economy-build-orders.md section 0, user-verified)
     political power per day                            NPolitics.BASE_POLITICAL_POWER_INCREASE (the comment
-                                                              says weekly; the game shows it per day)
+                                                              says weekly; the game shows it per day), less
+                                                              the static modifier gain_focus political_power_cost
+                                                              while a focus runs (common/modifiers)
 
 Global options as facts.py: --game, --userdir, --mod, --dlc, --json. Stdlib only, Python 3.9+.
 """
@@ -363,29 +367,64 @@ def equipment(w, regiments, support, divisions=1, year=1936, regimental=()):
 
 # ---------------------------------------------------------------- political power
 
-def pp(w, start_pp, gain, factor, start, until, buys):
-    """Daily PP balance from start to until; purchases [(date, cost, label)] wait until affordable."""
+PP_METHOD = ("per day = (BASE_POLITICAL_POWER_INCREASE + gain) x (1 + factor + stability factor + difficulty factor) "
+             "- daily costs - the running focus's political_power_cost (static modifier gain_focus) while a focus "
+             "runs; stability above 50% scales stability_good_modifier's political_power_factor up to its full value "
+             "at 100%, below 50% stability_bad_modifier's down to its full value at 0%; a purchase happens on its "
+             "date or the first day the balance covers it")
+
+
+def pp_rates(w, gain=0.0, factor=0.0, stability=None, difficulty=None, cost=0.0, focus_cost=None):
+    """The PP income terms with their sources: {"base", "gain", "factor", "stability_factor",
+    "difficulty_factor", "cost", "focus_cost", "per_day_focus", "per_day_idle"}. focus_cost None reads
+    gain_focus political_power_cost from common/modifiers (0 when the files have none)."""
+    from hoi4facts import scenario
     base, base_f = w.define("BASE_POLITICAL_POWER_INCREASE", 2)
-    per_day = (base + gain) * (1 + factor)
+    mods = scenario.static_modifiers(w)
+    if focus_cost is None:
+        focus_cost = float((mods.get("gain_focus") or {}).get("political_power_cost") or 0.0)
+    stab = 0.0
+    if stability is not None:
+        s = stability / 100.0 if stability > 1 else float(stability)
+        good = float((mods.get("stability_good_modifier") or {}).get("political_power_factor") or 0.0)
+        bad = float((mods.get("stability_bad_modifier") or {}).get("political_power_factor") or 0.0)
+        stab = good * max(0.0, (s - 0.5) / 0.5) + bad * max(0.0, (0.5 - s) / 0.5)
+    diff = 0.0
+    if difficulty:
+        diff = float((mods.get(f"diff_{difficulty}_player") or {}).get("political_power_factor") or 0.0)
+    gross = (base + gain) * (1 + factor + stab + diff)
+    return {"base": dict(base_f or {}, v=base, note="the define comment says weekly; the game adds it daily"),
+            "gain": gain, "factor": factor, "stability": stability, "stability_factor": round(stab, 4),
+            "difficulty": difficulty or "normal", "difficulty_factor": diff, "cost": cost, "focus_cost": focus_cost,
+            "per_day_focus": round(gross - cost - focus_cost, 4), "per_day_idle": round(gross - cost, 4)}
+
+
+def pp(w, start_pp, gain, factor, start, until, buys, stability=None, difficulty=None, cost=0.0, focus_cost=None,
+       focus_until=None):
+    """Daily PP balance from start to until; purchases [(date, cost, label)] wait until affordable.
+    A focus runs the whole time unless focus_until (a date) ends it earlier; focus_cost 0 leaves the
+    focus cost out (no focus running)."""
+    rates = pp_rates(w, gain, factor, stability, difficulty, cost, focus_cost)
     balance = float(start_pp)
     today, stop = day_number(start), day_number(until)
+    focus_end = day_number(focus_until) if focus_until else stop
     pending = sorted(((day_number(d), c, label) for d, c, label in buys), key=lambda x: x[0])
     rows = []
     while today <= stop:
         while pending and pending[0][0] <= today and balance >= pending[0][1]:
-            when, cost, label = pending.pop(0)
-            balance -= cost
-            rows.append({"date": _fmt(today), "buy": label, "cost": cost, "planned": _fmt(when),
+            when, price, label = pending.pop(0)
+            balance -= price
+            rows.append({"date": _fmt(today), "buy": label, "cost": price, "planned": _fmt(when),
                          "late_days": today - when, "balance": round(balance, 1)})
         today += 1
         if today <= stop:
-            balance += per_day
-    return {"per_day": round(per_day, 3), "base": dict(base_f or {}, v=base,
-                                                       note="the define comment says weekly; the game adds it daily"),
-            "gain": gain, "factor": factor, "rows": rows, "end": {"date": _fmt(stop), "balance": round(balance, 1)},
-            "not_bought": [{"planned": _fmt(d), "cost": c, "buy": l} for d, c, l in pending],
-            "d": "per day = (BASE_POLITICAL_POWER_INCREASE + gain) x (1 + factor); a purchase happens on its date or "
-                 "the first day the balance covers it"}
+            balance += rates["per_day_focus"] if today <= focus_end else rates["per_day_idle"]
+    return {"per_day": rates["per_day_focus"], "per_day_without_focus": rates["per_day_idle"],
+            "base": rates["base"], "gain": gain, "factor": factor, "stability_factor": rates["stability_factor"],
+            "difficulty": rates["difficulty"], "difficulty_factor": rates["difficulty_factor"], "cost": cost,
+            "focus_cost": rates["focus_cost"], "focus_until": _fmt(focus_end), "rows": rows,
+            "end": {"date": _fmt(stop), "balance": round(balance, 1)},
+            "not_bought": [{"planned": _fmt(d), "cost": c, "buy": l} for d, c, l in pending], "d": PP_METHOD}
 
 
 def pp_modifiers(w, tag):
@@ -397,6 +436,18 @@ def pp_modifiers(w, tag):
         gain += m.get("political_power_gain", 0.0)
         factor += m.get("political_power_factor", 0.0)
     return gain, factor
+
+
+def pp_costs(w, tag):
+    """Daily political_power_cost of the tag's starting ideas."""
+    mods = derive.idea_modifiers(w.game)
+    return sum(mods.get(f["v"], {}).get("political_power_cost", 0.0) for f in w.country(tag)["ideas"])
+
+
+def start_stability(w, tag):
+    """The tag's starting stability (history set_stability), else 0.5 (the game's default)."""
+    f = w.country(tag).get("stability") if tag else None
+    return f["v"] if f and isinstance(f.get("v"), (int, float)) else 0.5
 
 
 # ---------------------------------------------------------------- CLI
@@ -439,6 +490,11 @@ def main(argv=None):
     q.add_argument("--factor", type=float, help="political_power_factor (default: starting ideas)")
     q.add_argument("--until", required=True)
     q.add_argument("--buy", action="append", default=[], help="DATE:COST:LABEL (repeat)")
+    q.add_argument("--stability", type=float, help="stability (0.6 or 60; default: the tag's start, else 0.5)")
+    q.add_argument("--difficulty", default=None, help="very_easy, easy, normal, hard, very_hard (default normal)")
+    q.add_argument("--cost", type=float, help="daily PP costs (default: starting ideas' political_power_cost)")
+    q.add_argument("--no-focus", action="store_true", help="no national focus runs (no focus cost)")
+    q.add_argument("--focus-until", help="date the last planned focus ends (focus cost until then)")
     args = ap.parse_args(argv)
     w = factsmod.world(args, args.tag)
     tag = w.tag
@@ -532,12 +588,16 @@ def main(argv=None):
     for b in args.buy:
         d, c, label = (b.split(":", 2) + [""])[:3]
         buys.append((d, float(c), label or f"buy {c}"))
-    r = pp(w, start_pp, gain, factor, start, args.until, buys)
+    stability = args.stability if args.stability is not None else (start_stability(w, tag) if tag else None)
+    cost = args.cost if args.cost is not None else (pp_costs(w, tag) if tag else 0.0)
+    r = pp(w, start_pp, gain, factor, start, args.until, buys, stability=stability, difficulty=args.difficulty,
+           cost=cost, focus_cost=0.0 if args.no_focus else None, focus_until=args.focus_until)
     if args.json:
         print(json.dumps(r, indent=1))
         return 0
-    print(f"{r['per_day']} PP/day (base {r['base']['v']} [{r['base'].get('src')}] + gain {gain}, factor {factor}); "
-          f"start {start_pp}")
+    print(f"{r['per_day']} PP/day with a focus running, {r['per_day_without_focus']} without (base {r['base']['v']} "
+          f"[{r['base'].get('src')}] + gain {gain}, factor {factor} + stability {r['stability_factor']:g} + "
+          f"difficulty {r['difficulty_factor']:g}; costs {cost:g} + focus {r['focus_cost']:g}); start {start_pp}")
     for row in r["rows"]:
         print(f"{row['date']:>10} {row['buy']} -{row['cost']:g} -> {row['balance']}"
               + (f" ({row['late_days']} days after {row['planned']})" if row["late_days"] else ""))
