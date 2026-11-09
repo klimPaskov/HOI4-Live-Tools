@@ -49,7 +49,15 @@
 //!                          "cost": political power needed first. Done-memory is keyed by `id`
 //!                          (stable across a reorder or a revision), else by list position and idea
 //!   decisions              decision keys taken whenever enabled
-//!   training               {"template","queue","batch","deploy_state"} keep a training queue
+//!   training               {"template","queue","batch","deploy_state","when"?} keep a training queue, or a
+//!                          list of them (plan_manage.rs, with `training_rules`)
+//!   training_rules         {"only_if_stockpile","cap_template","cap"} guard and cap for training (plan_manage.rs)
+//!   templates              [{"id","name","base"?,"regiments","support",..}] templates made once by plan (plan_manage.rs)
+//!   occupation             {"default_law","harsher_at_resistance","milder_at_compliance",..} law steps (plan_manage.rs)
+//!   peace                  {"take","puppet"?,"liberate"?} demands when a conference opens, else the stop (plan_manage.rs)
+//!   auto_import            {"budget"} automatic importing on a resource deficit (plan_manage.rs)
+//!   air_plan               [{"wing"|"airframe","region","mission","base_state"|"base_region",..}] (plan_manage.rs)
+//!   manage                 thresholds of the standing rules: alerts, manpower, stability, equipment (plan_manage.rs)
 //!   production_priority    equipment prefixes that receive military factories on no line
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
 //!   production             [{"equipment","factories"}] lines added once
@@ -114,6 +122,10 @@ use std::{
     path::Path,
     time::Duration,
 };
+
+/// Continuous management (alerts, templates, occupation, peace, resources, air plan, `manage`).
+#[path = "plan_manage.rs"]
+mod plan_manage;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -196,6 +208,8 @@ pub struct State {
     plan_built: HashMap<String, GameHour>,
     /// `army_layout`: name_hint -> the army that plays that role.
     layout: HashMap<String, String>,
+    /// Continuous management (plan_manage.rs): wake alarms, digest lines, the peace conference.
+    manage: plan_manage::Memory,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
@@ -300,6 +314,7 @@ impl Default for State {
             war_province: HashMap::new(),
             plan_built: HashMap::new(),
             layout: HashMap::new(),
+            manage: Default::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -509,7 +524,8 @@ pub fn tick(
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
     if events["peace_conference_open"] == json!(true) {
-        return Ok(Tick::Stop("peace conference open".into()));
+        // the plan's `peace` demands, else the stop (plan_manage.rs)
+        return plan_manage::peace(state, tools, plan, lease, now);
     }
     if let Some(top) = list(&events, "events").last() {
         let key = text(&top["event"]).to_string();
@@ -967,31 +983,10 @@ pub fn tick(
             }
         }
     }
-    // 6. training
-    if plan["training"].is_object() {
-        let tr = &plan["training"];
-        let template = text(&tr["template"]).to_string();
-        let templates = tools.call("hoi4_division_templates", &json!({}))?;
-        let have = list(&templates, "templates")
-            .iter()
-            .find(|t| text(&t["template"]) == template)
-            .and_then(|t| t["queued_lines"].as_u64());
-        let queue = tr["queue"].as_u64().unwrap_or(6);
-        if let Some(have) = have {
-            if have < queue && !state.skipped(now, "train", &template) {
-                let count = tr["batch"].as_u64().unwrap_or(2).min(queue - have);
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_train",
-                    json!({"template": template, "count": count, "deploy_state_id": tr["deploy_state"]}),
-                    "tr",
-                )?;
-                if !ok {
-                    state.skip(now, "train", &template, 2 * DAY);
-                }
-                return Ok(Tick::Acted(format!("train {count} {template}: {ok} {why}")));
-            }
+    // 6. training: one template or a list, with training_rules (plan_manage.rs)
+    if !plan["training"].is_null() {
+        if let Some(step) = plan_manage::training_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
         }
     }
     // 6b. military factories on no line go to the first priority line that exists
@@ -1104,6 +1099,11 @@ pub fn tick(
     }
     // 8a. special projects, doctrines, air missions in war (one action at most)
     if let Some(step) = extras_step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a'. continuous management (plan_manage.rs): alerts, templates, occupation, resources,
+    // air_plan, manage
+    if let Some(step) = plan_manage::step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
     // 9. armies (here unless the war runs first, which runs them right after itself)
@@ -2336,7 +2336,10 @@ fn extras_step(
             let air = tools.call("hoi4_air", &json!({}))?;
             for wing in list(&air, "wings") {
                 let name = text(&wing["wing"]).to_string();
-                if wing["standing_by"] != json!(true) || state.skipped(now, "airwing", &name) {
+                if wing["standing_by"] != json!(true)
+                    || state.skipped(now, "airwing", &name)
+                    || plan_manage::air_plan_claims(plan, wing)
+                {
                     continue;
                 }
                 let Some(mission) = war_mission(text(&wing["aircraft_type"])) else {
@@ -3461,6 +3464,7 @@ pub fn run(
     };
     let plan = read_plan(plan_path).unwrap_or_else(|_| json!({}));
     let mut alarms = observe_alarms(tools, &plan);
+    alarms.extend(plan_manage::take_alarms(state));
     if let Some(alarm) = construction_alarm(state, tools, &plan, construction.as_deref()) {
         alarms.push(alarm);
     }
@@ -3524,6 +3528,9 @@ pub fn run(
     }
     if let Some(note) = state.persist.note.take() {
         result["plan_state"] = json!(note);
+    }
+    if let Some(manage) = plan_manage::digest(state) {
+        result["manage"] = manage;
     }
     if stopped_on_date {
         result["stopped_on_date"] = json!(true);
