@@ -1363,11 +1363,22 @@ fn armies_step(
             }
         }
         // Consolidate: fold the smallest army below `min_for_general` into the army that ends
-        // fullest without passing `max` (hoi4_army_merge), so generals lead real armies.
+        // fullest without passing `max` (hoi4_army_merge), so generals lead real armies. Armies
+        // with a planned role (layout, guard, hold) are left out on both sides.
         // An army with battle-plan orders is never emptied (the game deletes its orders).
         if cfg["consolidate"] != json!(false) {
+            // Armies with a planned role (army_layout, a guard post or a hold_targets post) are
+            // small on purpose: never fold them into others or others into them.
+            let roles: HashSet<String> = state
+                .layout
+                .values()
+                .filter(|a| !a.is_empty())
+                .cloned()
+                .chain(state.war_guard.keys().cloned())
+                .collect();
             let mut sizes: Vec<(String, u64, bool)> = list(&roster, "armies")
                 .iter()
+                .filter(|a| !roles.contains(text(&a["army"])))
                 .map(|a| {
                     (
                         text(&a["army"]).to_string(),
@@ -5536,6 +5547,43 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 1 -> Army 3: true")),
             "{step:?}"
         );
+    }
+
+    #[test]
+    fn armies_with_a_planned_role_are_never_consolidated() {
+        struct Roster(RefCell<Vec<Value>>);
+        impl Tools for Roster {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                        {"army": "Guard 1", "division_count": 2, "commander": null},
+                        {"army": "Held 1", "division_count": 3, "commander": null},
+                        {"army": "Army 2", "division_count": 20, "commander": "A"},
+                        {"army": "Army 3", "division_count": 1, "commander": null}]})),
+                    "hoi4_army_merge" => {
+                        self.0.borrow_mut().push(args.clone());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"generals": ["C"]}});
+        let mut state = State::default();
+        state.layout.insert("North guard".into(), "Guard 1".into());
+        state.war_guard.insert("Held 1".into(), 550);
+        let tools = Roster(RefCell::new(vec![]));
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        // only the role-less small army is folded, and never into a role army
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 3 -> Army 2: true")),
+            "{step:?}"
+        );
+        assert_eq!(tools.0.borrow().len(), 1);
     }
 
     struct War {
