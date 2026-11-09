@@ -70,7 +70,9 @@ timed duplicate. `check_calls.py` fails any brief call that duplicates the execu
   `skills/hoi4-campaign-playbook/plan.schema.json`. Print it with
   `python3 -c "import json;s=json.load(open('skills/hoi4-campaign-playbook/plan.schema.json'));[print(k,v.get('x-owner'),v.get('description','')) for k,v in s['properties'].items()]"`.
 * Strategy knowledge: the playbook references listed in [references/procedure.md](references/procedure.md),
-  and a scenario reference when one exists (`skills/hoi4-campaign-playbook/references/INDEX.md`).
+  the tactic index `skills/hoi4-campaign-playbook/references/tactics.md` (every tactic in one line; scan it
+  before step 5), the tag's entry in `skills/hoi4-campaign-playbook/references/nation-openers.md`, and a
+  scenario reference when one exists (`skills/hoi4-campaign-playbook/references/INDEX.md`).
 * Lessons: `skills/hoi4-campaign-playbook/references/lessons.jsonl` (path also in `run_spec.lessons`).
 
 ## Procedure (each step has a gate; do not start the next step before it passes)

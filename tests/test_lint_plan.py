@@ -61,21 +61,41 @@ class CalendarAndHelpers(unittest.TestCase):
         self.assertIsNone(derive.match_commander("Nobody", table))
 
 
+# Lint rules and executor standing rules that lessons L13-L23 name and that other build items add. A lesson may
+# name a rule from these lists before lint_plan.py or the executor has it; drop a name here once it lands.
+PENDING_LINT_RULES = {"production.mature_switch", "production.cull", "production.day0", "army.width_terrain",
+                      "war.supply_floor", "war.planning_wait", "politics.unneeded_conscription", "navy.invasion_prep"}
+EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
+                  "factory_rebalance_steps"}
+
+
 class Lessons(unittest.TestCase):
     def test_ledger_lines_name_real_rules(self):
         rules = set(re.findall(r"^  ([a-z]+\.[a-z_]+)\s", lint_plan.__doc__, re.M))
         self.assertIn("construction.front", rules)
         with open(LESSONS, encoding="utf-8") as fh:
             rows = [json.loads(line) for line in fh if line.strip()]
-        self.assertEqual(len(rows), 12)  # design table 4.4 plus L12_early_hub_cost
+        self.assertEqual(len(rows), 23)  # design table 4.4, L12_early_hub_cost, L13-L23 from the tactics research
         ids = set()
         for r in rows:
-            self.assertEqual(set(r), {"id", "failure", "runs", "prevention", "lint_rule"})
+            self.assertLessEqual({"id", "failure", "runs", "prevention", "lint_rule"}, set(r))
+            self.assertLessEqual(set(r), {"id", "failure", "runs", "prevention", "lint_rule", "executor_rule"})
             self.assertNotIn(r["id"], ids)
             ids.add(r["id"])
             self.assertTrue(r["runs"] and isinstance(r["runs"], list))
+            self.assertIsInstance(r["lint_rule"], list)
+            self.assertTrue(r["lint_rule"] or r.get("executor_rule"), f"{r['id']}: no lint or executor rule")
             for rule in r["lint_rule"]:
-                self.assertIn(rule, rules, f"{r['id']}: {rule} is not a lint rule")
+                self.assertIn(rule, rules | PENDING_LINT_RULES, f"{r['id']}: {rule} is not a lint rule")
+            for rule in r.get("executor_rule", []):
+                self.assertIn(rule, EXECUTOR_RULES, f"{r['id']}: {rule} is not an executor rule")
+
+    def test_pending_rules_are_used(self):
+        with open(LESSONS, encoding="utf-8") as fh:
+            rows = [json.loads(line) for line in fh if line.strip()]
+        named = {rule for r in rows for rule in r["lint_rule"] + r.get("executor_rule", [])}
+        self.assertEqual(PENDING_LINT_RULES - named, set())
+        self.assertEqual(EXECUTOR_RULES - named, set())
 
 
 class EvalWithoutGame(unittest.TestCase):

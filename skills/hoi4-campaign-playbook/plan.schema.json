@@ -634,7 +634,7 @@
             "type": "string",
             "x-owner": "player",
             "x-executor-planned": "W1-9",
-            "description": "equipment key that replaces this line's equipment from `from`, keeping its factories (a variant change keeps 90% efficiency, defines PRODUCTION_EQUIPMENT_VARIANT_CHANGE_EFFICIENCY)"
+            "description": "equipment key that replaces this line's equipment from `from`, keeping its factories (efficiency kept: same-model variant 90%, same family 70%, a tier change such as infantry_equipment_1 to _2 30%, same archetype 20%; a tier change on a mature line starts the new model on new factories first)"
           }
         },
         "additionalProperties": false,
@@ -1863,7 +1863,7 @@
             "items": {
               "type": "string"
             },
-            "description": "1.19 regimental support row, one per column; a column needs 3 battalions (defines REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS); the executor skips it with a note (no tool fills the row)"
+            "description": "1.19 regimental support row, one per column; a column needs 3 battalions; the executor skips it with a note (no tool fills the row)"
           },
           "role": {
             "type": "string",
@@ -1891,7 +1891,7 @@
               "regular",
               "elite"
             ],
-            "description": "reinforcement priority (3 levels, defines REINFORCEMENT_PRIORITY)"
+            "description": "reinforcement priority (3 levels)"
           },
           "upgrade_fielded": {
             "type": "boolean",

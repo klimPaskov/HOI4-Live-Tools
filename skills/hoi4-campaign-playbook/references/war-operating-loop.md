@@ -44,9 +44,9 @@ For the chosen pocket (from step 5):
    **neck**, never at the pocket itself.
 4. Wait for planning (about 10 game days; `hoi4_wait_for`), then `hoi4_army_plan` execute on
    both pincers on the same day.
-5. Every 3-5 game days: `hoi4_wars` (occupied/threatened states), `hoi4_supply` (below 70% =
-   stop that pincer, `hoi4_army_plan execute:false`), `hoi4_encirclement_candidates` (did the
-   pocket close? `already_cut_off:true`).
+5. Every 3-5 game days: `hoi4_wars` (occupied/threatened states), `hoi4_supply` (under 50% =
+   stop that pincer, `hoi4_army_plan execute:false`; under 35% pull part of it out),
+   `hoi4_encirclement_candidates` (did the pocket close? `already_cut_off:true`).
 6. Closed: pincers get a front facing outward (the rest of the enemy); the anvil gets an
    offensive into the pocket states to destroy it.
 7. Next pocket.
@@ -64,7 +64,9 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
    (`hoi4_army_move` into it, or an offensive line).
 4. Losing a sector: pull back to the next defensible line instead of leaving divisions to be
    encircled; protect the capital and high-victory-point states first (capitulation comes at
-   about 80% of victory points lost).
+   about 80% of victory points lost). Fall back when half the land around an army is hostile
+   (`hoi4_armies` threat) or the neck behind it is 2 own provinces or fewer; the
+   `encirclement_risk` flag (70%) and the runner's pocket fall-back come too late. The HQ goes first.
 5. Use what the enemy gives you: an enemy salient (an enemy-held state sticking into your
    line) is a pocket for you; check `hoi4_encirclement_candidates` every week even in defence.
 
@@ -74,7 +76,8 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 1. Answer events at once (`hoi4_events`, `hoi4_event_choose`): an open event blocks every action.
 2. `hoi4_wars` : new occupied or threatened own states, uncovered borders -> fix first.
 3. `hoi4_armies` : armies without plans, unassigned divisions (fold them, `hoi4_army_assign`).
-4. `hoi4_supply` : sectors below 70% -> stop attacks there.
+4. `hoi4_supply` : under 50% -> no new attacks there; under 35% stop and pull 25-50% of the
+   divisions out; resume at 70%.
 5. `hoi4_encirclement_candidates` : new pockets -> start section 2.
 6. Stalled offensive (no progress for 10+ days) -> stop it, re-plan on another axis.
 7. Production: replacement equipment for the losses (infantry equipment, artillery, support).
@@ -94,50 +97,52 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
   disband the army); men and equipment return to the pool. See army-organisation.md.
 - `hoi4_map_mode {mode}`: supply before an offensive, resistance/compliance for occupied land, air
   for superiority; back to `political` before army orders.
-- `hoi4_occupation_law {law}`: default occupation law (verified); `hoi4_occupation` reads it.
+- `hoi4_occupation_law {law}`: default occupation law; `hoi4_occupation` reads it.
 - At the end of a war, `hoi4_war_stats`: own losses must be far below the enemy's.
 - `hoi4_army_move` replaces the army's battle plan with a manual order (planning is lost).
-- `hoi4_naval_invasion` needs convoys and naval superiority; its receipt says
-  `landing_verified:false`, so check the map/army after it starts.
+- `hoi4_naval_invasion` needs convoys and naval superiority; its receipt does not confirm the
+  landing, so check the map/army after it starts.
 - Peace: `hoi4_peace_options`, `hoi4_peace_take {"states":[ids]}`, `hoi4_peace_submit`,
   `hoi4_peace_exit`.
 
 ## 5b. Let the plan runner carry routine fighting
 
 At speed 3 a game month passes in under two wall minutes; a player making a few tool calls a
-minute cannot re-issue every stalled attack (Ethiopia runs 9-11). The plan's `war` object makes
-the runner do it, and the player decides strategy:
+minute cannot re-issue every stalled attack. The plan's `war` object makes the runner do it, and
+the player decides strategy:
 
 - `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
   every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
   axis whose next enemy-held state is nearest: front line, offensive line, execute.
 - `"stall_days": 8`: an ordered army without progress gets a direct `hoi4_army_move` into its
-  target (battle plans in roadless mountains may never advance; direct moves did).
-- `"rest_below": 12, "resume_above": 30` (absolute organisation; a rested infantry division reads
-  about 45): an exhausted army stops its plan and attacks again when it recovers.
+  target. The direct move burns planning (3% a day) and has no flank cover: prefer a replanned
+  offensive on another axis, and a direct move only into an empty adjacent province.
+- `"rest_below": 18, "resume_above": 48` (absolute organisation: about 30% and 80% of a 60-org
+  infantry division's max; scale to the template): an exhausted army stops its plan and attacks
+  again when it recovers. The defaults (12 / 30) are too low.
+- `"supply_floor": 50`: an army under 50% supply rests (attrition starts at 35%); the default 25
+  is too low.
 - `"motorization": 2`: every driven army's supply hubs use trucks.
 - `"reserve": ["Army 2"]`: armies only the player commands. Executing plans are never touched.
 - `"guard_states": [559, 844]` (or `"guards": {"Army 3": 844}`): the army standing in that own
   state holds a front there and never attacks. Keep one on every own border state the offensive
-  leaves behind (w15: Ethiopia walked into Somaliland and Jubaland once every army had left).
+  leaves behind: an empty border state is walked into.
 - An own state an enemy takes draws the nearest fighting army off its axis at once.
 - The war step runs right after events (`"first": false` puts it back after construction): a
   game day passes in about 2.5 s at speed 3.
 - `"armies": {"states": [550, 559], "generals": [...], "consolidate": false}`: armies are made
   from unassigned divisions only in those states; generals come from the `hoi4_army_commander`
   list (names outside it are refused).
-- Construction (supply hubs, railways) works in occupied states you control: build a supply
-  hub in each taken state on the axis and a railway to it from the nearest port or hub.
+- Construction works in occupied states you control: railway levels on the axis from the
+  nearest port or hub first (top of the queue); a supply hub only when it finishes in time.
 - `"disband": {"templates": [...], "max": N}`: divisions of weak templates standing in own states
   outside the theatre are disbanded so their equipment refills the front.
 
-## 6. Principles learned in live play (apply to any war)
-
-These came from failed training wars; they are general, not tied to one country.
+## 6. Principles (any war)
 
 - **Supply caps a front.** Every front has a supply ceiling. More divisions than it carries starve all of them
-  (seen: 18 divisions at 14-27% supply, organisation ~12, no progress). Read `hoi4_supply` every war tick; when an
-  army is below 50% supply, thin it (split and move part elsewhere) rather than adding more.
+  (18 divisions on one front sat at 14-27% supply and organisation about 12). Read `hoi4_supply` every war tick;
+  when an army is below 50% supply, thin it (split and move part elsewhere) rather than adding more.
 - **Quality at the front, quantity in the rear.** When supply is the limit, every division at the front eats the
   same supply and manpower whether it fights well or not. Attack with the best divisions only (highest attack,
   full equipment, good organisation); pull weak units (irregulars, cavalry, under-strength or low-equipment
@@ -145,8 +150,8 @@ These came from failed training wars; they are general, not tied to one country.
   borders and captured states. Fewer, better divisions at full supply beat many starving ones.
 - **Concentrate on victory points.** Strike armies go for the enemy's victory-point cities in order of value, not
   along the whole border; the line armies only hold.
-- **Organisation decides attacks.** Attack with organisation above ~50%; below that, stop the plan, recover, then
-  attack again all at once on the same axis. Continuous weak attacks lose.
+- **Organisation decides attacks.** Attack with organisation above about 50% of the template's max; rest at about
+  30%, resume at about 80%, then attack again all at once on the same axis. Continuous weak attacks lose.
 - **Exploit what the enemy lacks.** No air force: every fighter and CAS wing over the attack. No anti-tank: armour
   and fast divisions lead breakthroughs and pincers. Weak defence in open terrain: encircle there.
 - **Aim at victory points.** Capitulation comes from lost victory points; the capital and big cities end wars, so
@@ -155,8 +160,8 @@ These came from failed training wars; they are general, not tied to one country.
   first days of a war, not when the front stalls.
 - **Motorize supply far from railways.** An army fighting beyond the railheads (colonies, deserts,
   mountains, deep advances) gets far more supply when its hubs use trucks:
-  `hoi4_army_motorization {army, level:2}` (seen live: 29% -> 41% supply and rising organisation in nine
-  game days). It spends trucks (about 40 per hub per level), so keep a truck production line running.
+  `hoi4_army_motorization {army, level:2}` (one army rose from 29% to 41% supply in nine game days).
+  A fully motorised hub uses 60 trucks, so keep a truck production line running.
   Set it on day one of such a war, not after the attack stalls.
 - **Read the scenario's own rules.** Missions, timers and war-ending conditions of the country's focus
   tree and decisions decide what "winning" means (a mission timer can end a war as a loss even while
@@ -168,3 +173,17 @@ These came from failed training wars; they are general, not tied to one country.
 - **Adapt.** When the situation changes (new enemy, counter-offensive, an ally collapsing, a pocket against you),
   stop, re-read `hoi4_wars`, `hoi4_front_plan` and `hoi4_encirclement_candidates`, and re-plan from section 1. No
   scenario plan survives contact; these principles do.
+
+## 7. Tactics: continuous play at speed 3
+
+| ID | Tactic | How it works | When | Mode |
+|---|---|---|---|---|
+| CP01 | War-readiness gate | Before a declaration: fronts on every border, plans drawn 15 days earlier, fighters up 7-14 days earlier, laws at their gates, stockpile cover 30+ days, generals and HQs placed, motorisation set; the declaration waits for them | Every planned war | FAIR |
+| CP02 | Switch production when the tech lands | The tech completion is the trigger for the line rule (tier guard or parallel ramp), not a later review | Tier techs | FAIR |
+| CP03 | Pockets from candidates | Close pockets with `hoi4_encirclement_candidates` and an offensive into the neck, planned ahead, not hour-by-hour micro | Every war | FAIR |
+| CP04 | Cancel losing attacks | The casualty-ratio rest rule and careful execution stop attacks that lose badly | Every war | FAIR |
+| CP05 | Events by option name | Answer events with `event_rules` by option name, never by index | Always | FAIR |
+| CP06 | Peace conference | The game pauses itself; bid by the peace order | Each capitulation | FAIR |
+| CP07 | Rebalance after a capitulation | A phase that enters on the capitulation frees the guards, re-axes the armies, switches occupation laws and moves factories land to air or navy | Each capitulation | FAIR |
+| CP08 | Air missions at war start | Air plan entries with a `when` on the war predicate start every wing at once | War start | FAIR |
+| CP09 | Posture per phase with a cull | Each phase sets the production posture and removes the lines it no longer needs | Phase changes | FAIR |

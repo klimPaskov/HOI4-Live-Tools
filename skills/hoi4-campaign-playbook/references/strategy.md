@@ -23,8 +23,7 @@ Research industry/electronics and the equipment actually entering production.
 Keep combat equipment, support and logistics coherent with war dates. Do not
 research every aircraft/tank class, chase a bonus for an irrelevant technology,
 or buy future superiority at the price of having no equipment at war start.
-Choose the current doctrine/subdoctrine system by force and terrain; do not
-assume the pre-2025 doctrine-tree interface still exists.
+Choose the grand doctrine and subdoctrines by force and terrain.
 
 Spend political power on high-return laws/advisors and required political
 decisions while reserving enough for a known approaching crisis. Verify current
@@ -79,8 +78,9 @@ fuel and supply to sustain fighting. In FAIR keep line armor separate from foot
 infantry/cavalry according to the house rule. In META evaluate hybrid armor by
 actual partial-piercing and loss results, not a promise of invulnerability.
 
-No universal 7/2, 14/4, 20-, 21- or 40-width recipe. Match the installed terrain
-width, reinforcement behavior, intended front and equipment. Compare affordable
+Line divisions 14-18 wide for mountains and hills, 20 elsewhere; avoid 34-36 and
+40+ outside plains. Match terrain width, reinforcement behavior, intended front
+and equipment. Compare affordable
 formations at equivalent industrial cost; a higher stat card on one enormous
 division does not prove a better army. Specialized marines/mountaineers are for
 the terrain that needs them, within displayed caps in FAIR.
@@ -142,7 +142,7 @@ Keep `prepare -> planned -> staged -> launchable -> crossing -> landfall ->
 supplied bridgehead -> reinforcement -> exploitation -> complete`, plus
 `blocked/recovering`. An order drawn is not an invasion launched.
 
-| Gate | Required observed evidence | Response if unmet |
+| Gate | Must hold (observed) | Response if unmet |
 |---|---|---|
 | Plan | Tech, current plan/division capacity, assigned unit IDs, legal origin/target, planning progress | Reduce/split according to actual UI rules or research missing capability |
 | Stage | Units at origin, organization/equipment, convoys, fuel and route range | Wait in server, repair shortages, protect staging port |
@@ -151,11 +151,18 @@ supplied bridgehead -> reinforcement -> exploitation -> complete`, plus
 | Reinforce | Usable port throughput, convoy path, reserve troops, local air | Repair port and escorts, feed only sustainable forces |
 | Expand | Secure perimeter, connected supply, defended port, inland objective | Advance in bounds; landfall alone is not theater victory |
 
-Do not assume the old global 10-division invasion cap: the official NCNS release
-changed invasion capacity structure. Read current plan limits and the launch
-tooltip. Air/sea threshold values, temporary harbors and transport behavior are
-also build/DLC dependent. A transit route may include more regions than the
-visually obvious strait.
+Invasion capacity by tech:
+
+| Tech | Divisions | Plans | Prep days |
+|---|---|---|---|
+| Base | 4 | 1 | 60 |
+| Transport | 6 | 2 | 50 |
+| Landing craft | 10 | 5 | 40 |
+| Tank landing craft | 15 | 9 | 30 |
+
+Prep does not depend on size, so fill the cap. Launch needs 50%+ supremacy in every
+crossed region and 40% naval intel at launch only. A transit route may include
+more regions than the visually obvious strait.
 
 ## Occupation, peace and endgame
 

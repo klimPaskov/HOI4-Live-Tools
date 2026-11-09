@@ -1,155 +1,150 @@
-# Research, doctrines, special projects, MIOs, variants (HOI4 1.19.3, FAIR)
+# Research, doctrines, special projects, MIOs, variants
 
-Scope: Normal difficulty, historical AI, no exploits. Every rule names the proving file.
-`G` = `.../Steam/steamapps/common/Hearts of Iron IV`. Tags: [V] verified in game files,
-[W] wiki/common knowledge, not re-verified here, [?] uncertain or version dependent.
-Where this file and the on-screen tooltip disagree, the tooltip wins; log the difference.
+Scope: FAIR, Normal difficulty, historical AI, no exploits, 1936 start (the 1939 bookmark differs in doctrines,
+slots and techs). Where this file and the in-game tooltip disagree, the tooltip wins.
 
 ## 1. Core mechanics (read first)
 
-| Fact | Value | Proof |
-|---|---|---|
-| Base slots (no history override) | 2 | G/common/defines/00_defines.lua `BASE_RESEARCH_SLOTS = 2` [V] |
-| 1936 start slots | GER 4, ENG 4, ITA 4, POL 3, FRA 3, SOV 3, JAP 3, CHI none set so 2 [?] | G/history/countries/*.txt `set_research_slots` [V]; CHI has no line, so base 2, confirm with `hoi4_research slots` |
-| GER 1939 bookmark | 5 slots pre-granted (comment: Heraeus focus done) | G/history/countries/GER - Germany.txt ~l.454 [V] |
-| Tech cost | `research_cost` in tech file x `BASE_TECH_COST` 110 x ahead-of-time factor | defines `NTechnology` [V]; exact days-per-point [?]. Trust the cost in `hoi4_research list`. |
-| Ahead-of-time | `BASE_YEAR_AHEAD_PENALTY_FACTOR = 2`; penalty grows with each year the tech start_year is ahead of the date | defines [V]; exact curve [W] |
-| Focus tech bonus | `add_tech_bonus {bonus=X uses=N category=...}`: next N researches in the category get +X research bonus AND a reduction of the ahead-of-time penalty | G/localisation/english (EFFECT_ADD_TECH_BONUS) [V] |
-| Idle slot carry | `BASE_RESEARCH_POINTS_SAVED = 30` per slot (progress that survives short idle) | defines [V]; mechanics [?] |
-| Min research speed | 0.1 | defines [V] |
-| Tech sharing cap | `MAX_TECH_SHARING_BONUS = 0.5` (instant). A sharing group member that already has a tech speeds it for others | defines + technology_sharing_l_english.yml [V] |
-| Licence production | `LICENSE_PRODUCTION_TECH_BONUS = 0.2` (research bonus when you license-produce), licence MIC speed -25% base, -5%/yr behind, -10% outside faction, upgrading licensed gear costs 2x XP | defines l.658-666, l.712 [V] |
+| Fact | Value |
+|---|---|
+| Base slots | 2 |
+| 1936 start slots | GER 4, ENG 4, ITA 4, USA 4, POL 3, FRA 3, SOV 3, JAP 3, CHI 2 |
+| GER 1939 bookmark | 5 slots (Heraeus focus done) |
+| Tech cost | research cost x 110, then the ahead-of-time factor; `facts.py tech <id>` gives a tech's cost and year |
+| Ahead-of-time | research speed = 1 / (2 x years ahead + 1): half a year ahead takes twice as long, one year three times. Ordinary bonuses do not reduce it; only ahead-of-time bonuses do |
+| Focus tech bonus | `add_tech_bonus {bonus=X uses=N category=...}`: the next N techs of the category get +X research speed; only a bonus with an ahead-of-time reduction cuts the ahead penalty. `hoi4_research_extras` lists active bonuses and uses left |
+| Idle slot carry | each slot keeps up to 30 days of progress while idle |
+| Min research speed | 0.1 |
+| Tech sharing | bonus up to 50%; a sharing-group member that already has a tech speeds it for the others |
+| Licence production | +20% research on the matching tech; licensed output -25% (-35% outside the faction), -5% per year the design is ahead (up to 4); MIO traits do not apply; upgrading licensed gear costs 2x XP |
 
-Doctrines are NOT technologies in 1.19. They cost XP, not research slots
-(G/common/doctrines/grand_doctrines `xp_cost`/`xp_type`) [V]. The tool `hoi4_research list`
-deliberately excludes doctrine folders (hoi4_live/tools/economy_tools.py l.77) [V].
+Doctrines are not technologies: they cost XP, not research slots. Read them with `hoi4_doctrines`, adopt with
+`hoi4_doctrine_adopt`.
 
 ### 1.1 How to get more research slots (ordered by reliability)
 
-1. National focus `add_research_slot = 1`. Per tag [V, G/common/national_focus]:
-   - GER: `GER_develop_heraeus_facilities` (needs `GER_kdf_wagen_factories` first) in germany.txt; a second slot only in the Austrian-monarchy branch (`GER_reverse_the_brain_drain`), ignore.
-   - POL: `POL_additional_research_slot1` (after `POL_the_four_year_plan`) and `POL_additional_research_slot2` (needs more than 50 owned factories) in poland.txt.
-   - CHI (nationalist tree, china_nationalist.txt): `CHI_rural_schooling`, `CHI_expand_the_academica_sinica`, `CHI_chemical_research_institute` each give a slot. Other DLC variants of the tree (china_nationalist_sea.txt, Waking the Tiger) use different ids: `CHI_unify_the_admissions_process`, `CHI_expand_academica_sinica`, `CHI_expand_national_sun_yat_sen_university` [V]. Check which tree the save has via the focus tool.
-   - Generic tree: `extra_tech_slot` after `infrastructure_effort_2` (generic.txt) [V].
-2. Technology-sharing focuses and a few events; 231 focus files use `add_research_slot` [V count], so always read the focus list for "research" icons.
-3. Scientists/special-project facilities do not add tech slots; they add a separate program track (section 5).
-4. No cheap non-focus slot source was found in common/ideas for the three target tags [?].
+1. National focus `add_research_slot = 1`:
+   - GER: `GER_develop_heraeus_facilities` (needs `GER_kdf_wagen_factories` first); a second slot only in the Austrian-monarchy branch (`GER_reverse_the_brain_drain`), ignore.
+   - POL: `POL_additional_research_slot1` (after `POL_the_four_year_plan`) and `POL_additional_research_slot2` (needs more than 50 owned factories).
+   - CHI (nationalist tree): `CHI_rural_schooling`, `CHI_expand_the_academica_sinica`, `CHI_chemical_research_institute` each give a slot. Other variants of the tree use `CHI_unify_the_admissions_process`, `CHI_expand_academica_sinica`, `CHI_expand_national_sun_yat_sen_university`. Check which tree the save has with `hoi4_focus_list`.
+   - Generic tree: `extra_tech_slot` after `infrastructure_effort_2`.
+2. Many other trees have slot focuses: read the tree (`facts.py focus-tree`) for `add_research_slot`.
+3. Scientists and special-project facilities do not add tech slots; they run a separate programme track (section 5).
 
 Rule: for GER and POL the slot focus is high priority (earliest affordable). A 4th/5th/6th slot beats most
-single-tech focuses. For CHI prioritise the cheapest slot chain, but not before survival-critical focuses.
+single-tech focuses. For CHI take the cheapest slot chain, but not before survival-critical focuses.
 
 ### 1.2 Research speed and bonus sources
 
-- Scientists do not speed normal techs. Only facility "basic research" gives a tech bonus: `BASIC_RESEARCH_TECHNOLOGY_BONUS_FACTOR = 0.02` per scientist skill level, with diminishing returns (0.5) for a scientist shared across facilities [V, defines NProject].
-- MIO design team assigned to a matching research slot: `DESIGN_TEAM_RESEARCH_BONUS = 0.05` (some orgs set `research_bonus`), costs 0.1 PP/day per assignment [V, defines NIndustrialOrganisation]. Completing a tech with a design team also adds MIO funds (500 x research_cost).
-- Focus/idea bonuses: GER `GER_industrial_research_speed_factor` 5% in the industry branch (germany.txt l.548) [V].
-- Subdoctrine rewards can grant tech bonuses (e.g. `mobile_infantry` immediate: +50% bonus, 1 use, motorized_equipment; `irregulars` last reward: +50% x2 support_tech) [V, subdoctrines/land/*.txt].
+- Scientists do not speed normal techs. Only facility basic research gives a tech bonus: +2% per scientist skill level, halved for a scientist shared across facilities.
+- MIO design team on a matching research slot: +5% (some organisations more), 0.1 PP a day per assignment. A tech completed with a design team adds MIO funds (500 x research cost).
+- Focus and idea bonuses: GER `GER_industrial_research_speed_factor` 5% in the industry branch.
+- Subdoctrine rewards can grant tech bonuses (e.g. `mobile_infantry` immediate: +50%, 1 use, motorized_equipment; `irregulars` last reward: +50% x2 support_tech).
 
-Rule: never start an ahead-of-time tech while a normal on-date tech that gates equipment is available. Exception: a focus bonus
-currently covers it (bonus listed in section 3 tables) or the tech is cheap (cost <= 1.5) and gates a capability.
+Rule: pull a tech ahead of time only when nothing in-year remains in any folder, or an ahead-of-time bonus covers it;
+the plan says so.
 
-## 2. Doctrines in 1.19 (exact)
+## 2. Doctrines
 
-Structure [V, G/common/doctrines/_documentation.md and grand_doctrines/_documentation.md]:
+Structure:
 
-- Folder: land, naval, air, special_forces (special_forces needs NCNS or Arms Against Tyranny DLC) [V, folders/doctrine_folders.txt].
-- Grand doctrine: one per folder, paid with XP (all `xp_cost = 100`, type army/navy/air) [V]. Gives immediate bonuses and unlocks 4 tracks (land: infantry, combat_support, armor, operations; air: fighter, strike, medium, heavy aircraft; naval: capital_ships, carriers, screens, submarines).
-- Track: a slot. Put one subdoctrine in each (xp 100 each; the cheap special ones cost 50: irregulars, peoples_war, great_war_infantry, patrol_boats) [V].
-- Mastery: the track fills automatically. Each reward needs 100 mastery by default (`DEFAULT_REWARD_MASTERY`; subdoctrines can override, e.g. peoples_war 50) [V]. Finishing all rewards in a track triggers the grand doctrine's milestone for that track [V].
-- Mastery source: manpower of units in the track's categories (combat, missions, one tenth from training: `TRAINING_MASTERY_GAIN_FACTOR = 0.1`). Diminishing returns beyond 100,000 contributing manpower; hard cap `MAX_MONTHLY_MASTERY_GAIN = 40`; surplus when a track is full is banked at 25%, bank max 200 [V, defines NDoctrines]. Track multipliers: infantry x1, combat_support x8, armor x10 [V, tracks/land_doctrine_tracks.txt], so armor and support tracks need far fewer men.
-- Doctrine cost modifiers `<folder>_doctrine_cost_factor`, mastery gain `<folder>_track_mastery_gain_factor` exist [V].
-- Faction doctrine sharing: unlock costs 1 faction initiative per folder, base +10 mastery/month plus 2 per theater commander [V, defines l.4570-4572].
-- Cannot hold subdoctrines marked `xor` in different tracks simultaneously; replacing within the same track is allowed (costs XP again) [V, subdoctrines/_documentation.md].
+- Folders: land, naval, air, special_forces (special_forces needs No Compromise, No Surrender or Arms Against Tyranny).
+- Grand doctrine: one per folder, paid with XP (100, army/navy/air). Gives immediate bonuses and unlocks 4 tracks (land: infantry, combat_support, armor, operations; air: fighter, strike, medium, heavy aircraft; naval: capital_ships, carriers, screens, submarines).
+- Track: one subdoctrine per track (100 XP each; the cheap special ones cost 50: irregulars, peoples_war, great_war_infantry, patrol_boats).
+- Mastery: the track fills automatically. Each reward needs 100 mastery by default (some subdoctrines less, e.g. peoples_war 50). Finishing all rewards in a track triggers the grand doctrine's milestone for that track.
+- Mastery source: manpower of units in the track's categories (combat, missions; training gives one tenth). Diminishing returns beyond 100,000 contributing manpower; cap 40 mastery a month per track; surplus on a full track is banked at 25%, up to 200. Track multipliers: infantry x1, combat_support x8, armor x10, so armour and support tracks need far fewer men.
+- Cost and mastery modifiers exist per folder (`<folder>_doctrine_cost_factor`, `<folder>_track_mastery_gain_factor`).
+- Faction doctrine sharing: 1 faction initiative per folder, +10 mastery a month plus 2 per theatre commander.
+- Subdoctrines marked `xor` cannot be held in different tracks at once; replacing within the same track is allowed (costs XP again, mastery restarts).
 
 ### 2.1 What each country starts with (1936 start)
 
-| Tag | Grand doctrines set at 1936 | Proof |
-|---|---|---|
-| GER | new_mobile_warfare (land), new_convoy_raiding (naval), new_battlefield_support (air) | history/countries/GER - Germany.txt l.34-36 [V] |
-| CHI | mass_assault (land), new_fleet_in_being (naval); air grand doctrine only at 1939 | CHI - China.txt l.217-218, 859-862 [V]. Also sets large_unit_tactics + 200 mastery at 1939. |
-| POL | grand_battleplan (land), new_fleet_in_being (naval); air only at 1939 (new_strategic_destruction) | POL - Poland.txt l.50, 245-247 [V] |
-| FRA | grand_battleplan, new_fleet_in_being (+air at 1939) | FRA l.130-131 [V] |
-| SOV | mass_assault, new_fleet_in_being | SOV l.798 [V] |
-| ITA, JAP | grand_battleplan; ITA fleet_in_being, JAP base_strike | ITA l.369, JAP l.463 [V] |
+| Tag | Grand doctrines set at 1936 |
+|---|---|
+| GER | new_mobile_warfare (land), new_convoy_raiding (naval), new_battlefield_support (air) |
+| CHI | mass_assault (land), new_fleet_in_being (naval); air grand doctrine only at 1939, which also sets large_unit_tactics + 200 mastery |
+| POL | grand_battleplan (land), new_fleet_in_being (naval); air only at 1939 (new_strategic_destruction) |
+| FRA | grand_battleplan, new_fleet_in_being (+air at 1939) |
+| SOV | mass_assault, new_fleet_in_being |
+| ITA, JAP | grand_battleplan; ITA fleet_in_being, JAP base_strike |
 
-Consequence: at 1936 nobody spends XP on land grand doctrines. The first army XP goes into track subdoctrines. CHI and POL
-may also want an air grand doctrine (100 air XP) once any air XP exists.
+Consequence: at 1936 nobody spends XP on land grand doctrines. The first army XP goes into track subdoctrines. CHI
+and POL may also want an air grand doctrine (100 air XP) once any air XP exists.
 
-Land grand doctrine one-liners [V, grand_doctrines/land_grand_doctrines.txt]:
-mobile_warfare = +20% planning, +10% army speed, Unexpected Thrust tactic; superior_firepower = +10% line artillery SA, +5% support
-artillery SA; grand_battleplan = +10% max planning, +25% command power gain, Planned Attack tactic; mass_assault =
-48h no-supply grace, -10% out-of-supply penalty, Relentless Assault tactic. Re-picking a grand doctrine costs 100 XP again;
+Land grand doctrines: mobile_warfare = +20% planning speed, +10% army speed, Unexpected Thrust tactic;
+superior_firepower = +10% line artillery soft attack, +5% support artillery soft attack; grand_battleplan = +10% max
+planning, +25% command power gain, Planned Attack tactic; mass_assault = 48 hours of no-supply grace, -10%
+out-of-supply penalty, Relentless Assault tactic. Re-picking a grand doctrine costs 100 XP again and resets mastery:
 do not.
 
-### 2.2 Subdoctrine choice (army XP 100 each; read the tooltip first, DLC gates [V])
-
-AI weights show which fit which nation (ai_will_do in subdoctrine files) [V]. For the agent:
+### 2.2 Subdoctrine choice (army XP 100 each; DLC gates apply)
 
 | Track | Germany (mobile warfare) | China (mass assault) | Poland (grand battleplan) | Generic major / minor |
 |---|---|---|---|---|
 | Infantry | mobile_infantry (+10% breakthrough, free +50% motorized tech bonus) | large_unit_tactics; peoples_war only if communist | defensive_postures (dig-in, width) | defensive_postures (defender), assault_infantry (attacker); minors: irregulars (50 XP, NCNS) |
 | Combat support | mobile_recon_and_assault (La Resistance) else fire_concentration | fire_concentration | fire_concentration or anti_tank_frontline vs Germany | fire_concentration default |
-| Armor | armored_spearhead (La Resistance; `_no_lar` otherwise) | streamlined_deployment (only if armor exists, else delay) | armored_infantry_support / mobile_defense, low priority | by tag weights |
-| Operations | mission_type_tactics early; deep_battle later | last_stand is AI weight 0; prefer infiltration_tactics/mission_type_tactics | mission_type_tactics | mission_type_tactics |
+| Armor | armored_spearhead (La Resistance; `_no_lar` otherwise) | streamlined_deployment (only if armor exists, else delay) | armored_infantry_support / mobile_defense, low priority | by tag |
+| Operations | mission_type_tactics early; deep_battle later | infiltration_tactics or mission_type_tactics (not last_stand) | mission_type_tactics | mission_type_tactics |
 
-Notes: `deep_battle` and `armored_spearhead` have `_no_lar` twins for owners without La Resistance; only one variant is visible
-[V, operations/armor files]. Poland and China rarely field enough armor for the armor track, so leave it last.
-Air (needs air XP): fighter track = air_subdoctrine_fighter_homeland_defense (defender) / escort_fighter (offence);
-strike_aircraft = flying_artillery for CAS-heavy GER; medium = tactical_battlefield_support; heavy = skip unless bombers exist [V ids, air/*.txt; value judgement W].
-Naval: GER stays convoy_raiding; subdoctrines wolfpacks (submarines), convoy_escort (screens) [V ids]. Navy choices matter only if a navy is built.
+Notes: `deep_battle` and `armored_spearhead` have `_no_lar` twins for owners without La Resistance; only one variant
+is visible. Poland and China rarely field enough armour for the armor track, so leave it last.
+Air (air XP): fighter track = air_subdoctrine_fighter_homeland_defense (defender) / escort_fighter (offence);
+strike_aircraft = flying_artillery for CAS-heavy GER; medium = tactical_battlefield_support; heavy = skip unless
+bombers exist.
+Naval: Germany keeps Trade Interdiction (`convoy_raiding`) with `wolfpacks` for submarines; screens get
+`patrol_boats` (50 XP) or `torpedo_primacy`; `convoy_escort` only for route protection (Italy, UK). Navy choices
+matter only if a navy is built.
 
-Spend order for army XP (XP also pays variants, section 6): (1) infantry subdoctrine, (2) operations, (3) combat support,
-(4) armor. Keep >= 35 XP reserve for variant creation (mirrors AI cutoff `DEFAULT_*_VARIANT_CREATION_XP_CUTOFF_LAND = 35`, defines l.2465) [V].
+Spend order for army XP (XP also pays variants, section 6): (1) infantry subdoctrine, (2) operations, (3) combat
+support, (4) armor. Keep 35 XP in reserve for variant creation when a design is planned.
 
-When NOT to apply: do not swap subdoctrines mid-war unless the current track's rewards are idle (mastery restarts for the new subdoctrine); do not buy a
-subdoctrine whose `available` is false (greyed in UI).
+When NOT to apply: do not swap subdoctrines mid-war unless the current track's rewards are done (mastery restarts);
+do not buy a subdoctrine the game greys out.
 
 ### 2.3 Experience budget (every spend of army, air and navy XP)
 
-- Pools: army, navy and air experience each cap at **500** (`MAX_ARMY_EXPERIENCE`, `MAX_NAVY_EXPERIENCE`,
-  `MAX_AIR_EXPERIENCE`, defines:891-893) [V]. XP gained above the cap is lost, so plan spends before a
-  pool fills.
-- Sources: combat (the main one); training divisions give at most 0.08 army XP per day
-  (`NMilitary.TRAINING_MAX_DAILY_COUNTRY_EXP`, defines:1015) and training ships at most 1 navy XP per day
-  (`NNavy.TRAINING_MAX_DAILY_COUNTRY_EXP`, defines:1971) [V]; army exercises in peace (the exercise
-  button of the army view; no tool yet); focus and decision rewards (`army_experience = N`, read with
-  `facts.py focus <id>`); chiefs and high command with experience-gain traits (§ 4 of
-  `politics-diplomacy-espionage.md`).
-- Start-date XP: no `history/countries` file sets `army_experience` (`facts.py grep army_experience
-  --folder history/countries`: no match, 1.19.4.1); read the real value live with `hoi4_doctrines` at
-  reconcile [?].
-- Costs: grand doctrine 100, subdoctrines 100 (most), 60 or 50 (§2); template edits 5 per battalion and
-  10 per support company, plus 25 for an extra regiment column on this build (the template tools read
-  the cost from the window; the wiki Division designer and Division pages say 20 or 25) [?]; designer
-  modules add 5, replace 6, convert 3, remove 1, legacy upgrades 10 plus a ramp (§6.2) [V];
-  officer-corps spirits 20, 35 and 50 XP for the first, second and third (wiki Officer corps) [W].
-- Order: write every spend per branch with its month; no month spends more than the forecast; keep the
-  35 XP variant reserve (§2.2) only when a design is planned.
+- Pools: army, navy and air XP each cap at **500**; XP above the cap is lost, so plan spends before a pool fills.
+- Sources: combat (the main one); training divisions give at most 0.08 army XP a day and training ships at most 1
+  navy XP a day; army exercises in peace (no tool yet); focus and decision rewards (`army_experience = N`, read with
+  `facts.py focus <id>`); chiefs and high command with experience-gain traits (`politics-diplomacy-espionage.md` §4).
+  Read the start pools with `hoi4_doctrines` at the first reconcile.
+- Costs: grand doctrine 100; subdoctrines 100 (most), 60 or 50 (§2); template edits 5 per battalion, 10 per support
+  company and 25 for an extra regiment column (the template tools return the cost); designer modules add 5,
+  replace 6, convert 3, remove 1; legacy upgrades 10 plus a ramp (§6.2); officer-corps spirits 20, 35 and 50 XP for
+  the first, second and third.
+- Order: write every spend per branch with its month (plan `xp_budget`); no month spends more than the forecast;
+  keep the 35 XP variant reserve (§2.2) only when a design is planned.
 
 ## 3. Research priority tables
 
-Costs below are `research_cost` from G/common/technologies (multiply by 110 for points [?]). Years are `start_year`; researching earlier than the year is ahead of time.
+Costs are research costs (x 110, §1). Years are start years; researching earlier is ahead of time.
 
-### 3.1 Industry and infrastructure (always first) [V industry.txt]
+### 3.1 Industry and infrastructure (always first)
 
 | Tech | Year | Cost | Why |
 |---|---|---|---|
 | basic_machine_tools | 1936 | 1.5 | factory output; never skip |
-| construction1 | 1936 | 2 | construction speed (also gates facility/infrastructure line) |
+| construction1 | 1936 | 2 | construction speed (also gates the facility/infrastructure line) |
 | improved_machine_tools / construction2 | 1937 | 1.5 / 2 | |
 | excavation1-2 | None/1937 | 2 | resource extraction (only if mine-rich) |
-| concentrated_industry (or dispersed) | None/1937 | 2 | pick one branch by country; XOR with the other |
-| improved_equipment_conversion | 1937 | 2 | cheaper convert of old stock |
+| concentrated_industry (or dispersed) | None/1937 | 2 | pick one branch by country; each level also +20% building slots |
+| improved_equipment_conversion | 1937 | 2 | cheaper conversion of old stock |
 | advanced_machine_tools / construction3 | 1939 | 2 | |
 | fuel_silos, fuel_refining | 1936 | 1 / 3 | fuel for GER |
-| rubber/oil processing (synth) | 1937+ | 1.5 | only for GER/JAP/ITA style resource-starved nations |
+| rubber/oil processing (synth) | 1937+ | 1.5 | only for resource-starved GER/JAP/ITA |
 
-### 3.2 Electronics, computing, radar, encryption [V electronic_mechanical_engineering.txt]
+### 3.2 Electronics, computing, radar, encryption
 
-electronic_mechanical_engineering (1936, cost 1) is the root; it also gates `sp_air_radar` special project (`FROM = { has_tech = electronic_mechanical_engineering }` in radar_projects.txt) [V]. Then: radio (cost 2, root of signals), improved_radio 1938 (gates sp_naval_proximity_fuze), radio_detection (cost 1.75, radar line), computing_machine 1938 (cost 2.5), basic_encryption/decryption 1938, cavity_magnatron 1938, centimetric_radar 1940. Research radar line with the Germany knickebein bonus only if airfields matter; for CHI/POL computing is low priority.
-DLC gates [V, checked 1.19.4.1]: with La Resistance active `basic_encryption`/`basic_decryption` are hidden (`allow_branch = { NOT = { has_dlc = "La Resistance" } }`; cryptology is in the intelligence agency). `radio_detection` and `cavity_magnatron` carry `allow = { is_special_project_completed = sp:sp_air_radar }`: put `sp_air_radar` in the special projects, not the techs in a research list.
+electronic_mechanical_engineering (1936, cost 1) is the root; it also gates the `sp_air_radar` special project. Then:
+radio (cost 2, root of signals), improved_radio 1938 (gates sp_naval_proximity_fuze), radio_detection (cost 1.75,
+radar line), computing_machine 1938 (cost 2.5), basic_encryption/decryption 1938, cavity_magnatron 1938,
+centimetric_radar 1940. Research the radar line with the Germany knickebein bonus only if airfields matter; for
+CHI/POL computing is low priority.
+DLC gates: with La Resistance `basic_encryption`/`basic_decryption` are hidden (cryptology is in the intelligence
+agency). `radio_detection` and `cavity_magnatron` need the completed `sp_air_radar` project: put `sp_air_radar` in
+the special projects, not those techs in a research list.
 
-### 3.3 Land equipment lines [V infantry/support/artillery/armor.txt]
+### 3.3 Land equipment lines
 
 | Group | Sequence | Notes |
 |---|---|---|
@@ -157,15 +152,21 @@ DLC gates [V, checked 1.19.4.1]: with La Resistance active `basic_encryption`/`b
 | Support weapons | support_weapons (1918 base, 1.5), support_weapons2 (1938), support_weapons3 (1940) | |
 | Support companies | tech_engineers 1936 (1.25), tech_recon, tech_military_police, tech_maintenance_company, tech_field_hospital, tech_logistics_company, tech_signal_company (all 1936, ~1.25), second tiers 1939 (1.5) | engineers and logistics first (section 7) |
 | Artillery | interwar_artillery 1936 (1.5), artillery1 1939, artillery2 1940, artillery3 1941 | GER 1936 has gw_artillery only |
-| Anti-air / anti-tank | interwar_antiair 1936, antiair1 1939; interwar_antitank 1936, antitank1 1939, antitank2 1940 | AT before 1939 for POL/CHI vs armor |
+| Anti-air / anti-tank | interwar_antiair 1936, antiair1 1939; interwar_antitank 1936, antitank1 1939, antitank2 1940 | AT before 1939 for POL/CHI vs armour |
 | Motorised | tech_trucks, motorised_infantry (1936), mechanised_infantry 1940 | trucks gate logistics (section 7) |
-| Armor | Which folder shows depends on No Step Back (`common/technology_tags/00_technology.txt`: `armour_folder` without NSB, `nsb_armour_folder` with it) [V]. With NSB (current macOS set): gwtank_chassis, basic_light_tank_chassis, improved_light_tank_chassis 1936, basic_medium_tank_chassis (1938, cost 2, needs only gwtank_chassis), improved_medium_tank_chassis 1940; armor_tech_1/2/3 (1936/38/41, cost 1) and engine_tech_1/2/3 (1934/38/41) modules; equipment are chassis designs (`light_tank_chassis_2`, `medium_tank_chassis_1`). Without NSB: gwtank/basic_light_tank/improved_light_tank, basic_medium_tank 1939, improved_medium_tank 1941 (`medium_tank_equipment_1`). | modules are cheap, high value; a research list must use the keys of the folder that is shown |
+| Armor | The folder depends on No Step Back (`armour_folder` without it, `nsb_armour_folder` with it). With NSB: gwtank_chassis, basic_light_tank_chassis, improved_light_tank_chassis 1936, basic_medium_tank_chassis (1938, cost 2, needs only gwtank_chassis), improved_medium_tank_chassis 1940; armor_tech_1/2/3 (1936/38/41, cost 1) and engine_tech_1/2/3 (1934/38/41) modules; equipment are chassis designs (`light_tank_chassis_2`, `medium_tank_chassis_1`). Without NSB: gwtank/basic_light_tank/improved_light_tank, basic_medium_tank 1939, improved_medium_tank 1941 (`medium_tank_equipment_1`). | modules are cheap, high value; a research list must use the keys of the folder that is shown |
 | Railway | basic_train 1910, wartime_train 1939 | rail throughput |
 
-### 3.4 Air and naval [V air_techs.txt, bba_air_techs.txt, naval.txt]
+### 3.4 Air and naval
 
-Air: the two sets are exclusive (`air_techs_folder` without By Blood Alone, `bba_air_techs_folder` with it) [V]. With BBA (current macOS set): airframes iw_/basic_ (1936)/improved_ (1940)/advanced_ (1944) small, medium and large; engines_1 1922, engines_2 1936, engines_3 1940; modules aa_lmg 1922, aa_hmg 1939, range_improvements 1936, armor_piercing_bombs 1936, heavy_bombs 1940; equipment are airframe designs (`small_plane_airframe_1` fighter, `small_plane_cas_airframe_1` CAS, `medium_plane_airframe_1` bomber). Without BBA: fighter1 1936, fighter2 1940; CAS1 1936, CAS2 1940; tactical_bomber1 1936, 2 1940; heavy_fighter1/2, naval_bomber1, strategic_bomber1 (`fighter_equipment_1`, `CAS_equipment_1`).
-Naval (only if navy matters): basic_destroyer/ light_cruiser/ submarine 1936, improved 1940; transport 1922 for any invasion; landing_craft 1940 (cost 2).
+Air: the two sets are exclusive (`air_techs_folder` without By Blood Alone, `bba_air_techs_folder` with it). With
+BBA: airframes iw_/basic_ (1936)/improved_ (1940)/advanced_ (1944) small, medium and large; engines_1 1922,
+engines_2 1936, engines_3 1940; modules aa_lmg 1922, aa_hmg 1939, range_improvements 1936, armor_piercing_bombs 1936,
+heavy_bombs 1940; equipment are airframe designs (`small_plane_airframe_1` fighter, `small_plane_cas_airframe_1` CAS,
+`medium_plane_airframe_1` bomber). Without BBA: fighter1 1936, fighter2 1940; CAS1 1936, CAS2 1940; tactical_bomber1
+1936, 2 1940; heavy_fighter1/2, naval_bomber1, strategic_bomber1 (`fighter_equipment_1`, `CAS_equipment_1`).
+Naval (only if the navy matters): basic_destroyer / light_cruiser / submarine 1936, improved 1940; transport 1922 for
+any invasion; landing_craft 1940 (cost 2).
 
 ### 3.5 Role-based ordering
 
@@ -174,25 +175,27 @@ Naval (only if navy matters): basic_destroyer/ light_cruiser/ submarine 1936, im
 | Industrial major (GER) | industry > construction > infantry weapons > artillery > electronics > support > armor > air > naval |
 | Poor/large (CHI) | construction > infantry weapons > support (engineers, logistics) > artillery > cheap AT/AA > industry; skip naval entirely |
 | Defensive small (POL) | industry+construction > infantry weapons > AT > artillery > fighter1/CAS1 > motorised; no naval beyond basics |
-| Generic minor | infantry weapons, support, artillery, construction; license to avoid wasted slots |
+| Generic minor | infantry weapons, support, artillery, construction; licence to avoid wasted slots |
 
 ## 4. Dated research checklist 1936-1941
 
-Slot counts: GER 4 (5 with Heraeus focus), POL 3 (+2 via focus), CHI 2 (+3 via focus chain), generic 3. Always keep every slot busy; start the next queued entry the day a slot idles (`hoi4_research` waits per section 8).
+Slot counts: GER 4 (5 with Heraeus focus), POL 3 (+2 via focus), CHI 2 (+3 via focus chain), generic 3. Keep every
+slot busy; the standing plan fills an idle slot from its lists (`hoi4_plan_run`, section 8).
 
 ### 4.1 Germany (FAIR)
 
-| When | Queue (one per slot) | Source of order |
+| When | Queue (one per slot) | Note |
 |---|---|---|
-| 1936 Jan | basic_machine_tools, infantry_weapons1, construction1, electronic_mechanical_engineering | GER lacks all four at start (GER - Germany.txt l.86-101) [V]; no tech bonus needed |
+| 1936 Jan | basic_machine_tools, infantry_weapons1, construction1, electronic_mechanical_engineering | GER lacks all four at start; no tech bonus needed |
 | 1936 mid | interwar_artillery, interwar_antitank, tech_logistics_company (fighter1 only without BBA; with BBA basic_small_airframe and engines_2 are start techs) | |
 | 1937 | improved_machine_tools, construction2, concentrated_industry (then 2), tech_maintenance_company, armor_tech_1 (NSB; engine_tech_1 is a start tech with NSB), range_improvements / armor_piercing_bombs (BBA) or CAS1 (without BBA) | focus bonuses: industry 1x1 (`GER_industrial_expansion`), etc. |
-| 1938 | infantry_weapons2, support_weapons2, improved_radio, engine_tech_2, armor_tech_2, basic_medium_tank_chassis, tech_engineers2 if engineers used | `GER_advanced_panzer_research` gives +100% bonus once for cat_medium_armor [V] |
+| 1938 | infantry_weapons2, support_weapons2, improved_radio, engine_tech_2, armor_tech_2, basic_medium_tank_chassis, tech_engineers2 if engineers used | `GER_advanced_panzer_research` gives +100% once for cat_medium_armor |
 | 1939 | improved_infantry_weapons, artillery1, antiair1, advanced_machine_tools, construction3, wartime_train, aa_hmg (basic_medium_tank only without NSB) | `GER_artillery_bombardment` 0.5 x2 artillery |
 | 1940 | improved_infantry_weapons_2, artillery2, antitank2, mechanised_infantry, engines_3, improved_small_airframe + improved_medium_airframe (BBA) or fighter2 + tactical_bomber2 (without BBA) | |
 | 1941 | improved_medium_tank_chassis (NSB, 1940) or improved_medium_tank, artillery3, support_weapons3, assembly_line_production, centimetric radar after sp_air_radar if air war, super_heavy only if resourced | |
 
-The standing plan `plans/germany-fair-1936-1938.plan.json` implements this table for the active macOS DLC set (NSB + BBA + La Resistance + AAT + Gotterdammerung).
+The standing plan `plans/germany-fair-1936-1938.plan.json` implements this table for NSB + BBA + La Resistance + AAT +
+Götterdämmerung.
 
 ### 4.2 Nationalist China (FAIR)
 
@@ -202,9 +205,10 @@ The standing plan `plans/germany-fair-1936-1938.plan.json` implements this table
 | 1937 (war with Japan) | tech_engineers, interwar_antitank, tech_support line, support_weapons |
 | 1938 | infantry_weapons2, interwar_artillery, tech_logistics_company, construction2 |
 | 1939 | improved_infantry_weapons, tech_trucks only if truck production exists, antiair1 |
-| 1940-41 | artillery1-2, antitank1-2, infantry_weapons upgrades; ignore tanks and air unless license-produced |
+| 1940-41 | artillery1-2, antitank1-2, infantry_weapons upgrades; ignore tanks and air unless licence-produced |
 
-Reason: CHI starts with weak tech (history CHI file only gives infantry_weapons, gw_artillery, interwar_antiair, basic_train; l.205-216 [V]). It is slot-starved, so avoid ahead-of-time techs entirely.
+Reason: CHI starts with only infantry_weapons, gw_artillery, interwar_antiair and basic_train. It is slot-starved, so
+it avoids ahead-of-time techs entirely.
 
 ### 4.3 Poland (FAIR)
 
@@ -215,29 +219,33 @@ Reason: CHI starts with weak tech (history CHI file only gives infantry_weapons,
 | 1938 | infantry_weapons2, support_weapons2, antitank1 (focus `POL_anti_blitz_tactics` 1x2 cat_anti_tank), antiair1, tech_engineers |
 | 1939 (before September) | improved_infantry_weapons, artillery1, fortification line (basic_fortification_tech, land_fort_tech_1 1938) |
 
-Poland's own focuses give tech bonuses: infantry_weapons 1.0 x1 twice, armor 1.0 x1, motorized 2.0 x1, artillery 1.0 x1, cat_anti_tank 1.0 x1 (poland.txt) [V]. Time those focuses before queuing the matching techs.
+Poland's own focuses give tech bonuses: infantry_weapons 1.0 x1 twice, armor 1.0 x1, motorized 2.0 x1, artillery
+1.0 x1, cat_anti_tank 1.0 x1. Time those focuses before queuing the matching techs.
 
 ### 4.4 Generic nation (any other tag)
 
-1936: basic_machine_tools, infantry_weapons1, construction1. 1937: interwar_artillery/antitank, engineers, concentrated_industry. 1938: infantry_weapons2, support_weapons2, radio. 1939: improved_infantry_weapons, artillery1. 1940: next tiers. Always check the actual `hoi4_research list` first because the 1936 start grants different techs per tag.
+1936: basic_machine_tools, infantry_weapons1, construction1. 1937: interwar_artillery/antitank, engineers,
+concentrated_industry. 1938: infantry_weapons2, support_weapons2, radio. 1939: improved_infantry_weapons, artillery1.
+1940: next tiers. The 1936 start grants different techs per tag: read the completed techs first (`hoi4_research`,
+`hoi4_technology_list` with `available:true`, `facts.py research-calendar <TAG>`).
 
 ## 5. Special projects, scientists, facilities
 
-Mechanism [V: special_projects_documentation.md, common/defines NProject, buildings 00_buildings.txt]:
+Mechanism:
 
-1. Build a specialization facility in a state with a construction slot: `land_facility`, `air_facility`, `naval_facility`, `nuclear_facility` (base cost 10000 + 6000 per owned facility, one per state, needs supply, can be captured) [V].
-2. Recruit scientists: PP cost 25/50/75/100 depending on how many are idle `RECRUIT_SCIENTIST_COST` [V]. Scientist level thresholds 100/100/300/700/1500 XP; speed modifier -100%, -5%, +5%, +10%, +15%, +25% by skill level [V]. Traits add effects only on the project they work on (00_traits.txt: genius `special_project_speed_factor = 0.1`, aircraft/armored/artillery/submarine/nuclear specialists, etc.) [V].
-3. Basic research (idle scientist in a matching facility): gains breakthrough progress (12% x ... per defines: `BREAKTHROUGH_DAILY_TECHNOLOGY_GAIN`, 5/10000 per skill level) and a research bonus for that specialization; 0.28 XP per day for the scientist [V].
-4. Breakthrough points per specialization (air/land/naval/nuclear) are spent when starting a project (`breakthrough_cost`, e.g. radar 1 air, jet engine 3 air) [V]. Cancelled early projects refund the points [V].
-5. Project runs prototype phase (progress to 100, iterations). Time presets: short 45, medium 60, long 100, very_long 200 days; complexity small 15-25, medium 15-20, large 10-15, insane 5-10 iterations ranges [V, script_constants/special_project_constants.txt] and more than one resource must be supplied (steel/aluminium/chromium/tungsten per `resource_cost`); resource shortage slows to min 20%, supply shortage min 20% [V].
-6. Rewards: each iteration rolls generic or unique prototype rewards (threshold/weight/options); finishing grants `project_output` (equipment, modules, subunits, design bonuses, state effects) [V].
-7. Supportive scientist: a faction partner's scientist works at 25% efficiency, gives the owner 10% of an iteration's progress and +5% research sharing in the faction [V].
+1. Build a specialization facility in a state with a free slot: `land_facility`, `air_facility`, `naval_facility`, `nuclear_facility` (cost 10000 + 6000 per owned facility, one per state, needs supply, can be captured).
+2. Recruit scientists: 25/50/75/100 PP by how many are idle. Level thresholds 100/100/300/700/1500 XP; speed -100%, -5%, +5%, +10%, +15%, +25% by skill level. Traits act only on the project they work on (genius +10% project speed; aircraft, armour, artillery, submarine and nuclear specialists).
+3. Basic research (scientist in a matching facility without a project): earns breakthrough progress (growing with skill) and a research bonus for that specialization; the scientist gains 0.28 XP a day.
+4. Breakthrough points per specialization (air/land/naval/nuclear) are spent when starting a project (e.g. radar 1 air, jet engine 3 air). A project cancelled before an iteration completes refunds the points.
+5. A project runs a prototype phase (progress to 100, iterations). Time presets: short 45, medium 60, long 100, very_long 200 days; iterations: small 15-25, medium 15-20, large 10-15, insane 5-10. It needs resources (steel/aluminium/chromium/tungsten); a resource or supply shortage slows it to at least 20%.
+6. Rewards: each iteration rolls generic or unique prototype rewards (treat them as random); finishing grants the project output (equipment, modules, subunits, design bonuses, state effects).
+7. Supportive scientist: a faction partner's scientist works at 25% efficiency, gives the owner 10% of an iteration's progress and +5% research sharing in the faction.
 
-Projects relevant to our roles (early availability from files) [V, projects/*.txt]:
+Projects relevant to our roles:
 
 | Project | Spec | Tech gate | Breakthrough | Time/complexity | Use |
 |---|---|---|---|---|---|
-| sp_air_radar | air | electronic_mechanical_engineering | air 1 | medium/medium | best early project; AI weight x3 for majors, x2 after 1940 |
+| sp_air_radar | air | electronic_mechanical_engineering | air 1 | medium/medium | best early project for majors |
 | sp_land_flamethrower_tank | land | tech_engineers | land 1 | short/small | cheap, GER/ITA fortress breaking |
 | sp_land_military_engineering_vehicles | land | tech_engineers | land 1 | short/small | engineers breakthrough support |
 | sp_land_large_caliber_kinetic_energy_sabot | land | interwar_antitank | land 1 | short/small | AT boost for POL/CHI |
@@ -247,97 +255,117 @@ Projects relevant to our roles (early availability from files) [V, projects/*.tx
 | sp_air_jet_engine | air | engines_2 + fighter2 etc. | air 3 | long/large | 1942+ only |
 | sp_rockets_*, sp_nuclear_* | air/nuclear | 1942+ techs | | | out of 1936-41 scope |
 
-Facilities exist as a country gate: no matching facility means the project cannot start (UI text FACILITY_WITH_SPECIALIZATION_MISSING) [V]. Scientists and facilities for the three roles: GER builds an air facility first (radar), then land; POL builds one land or air facility only if factory surplus; CHI builds none before 1940 (spend construction on factories and infrastructure).
+No matching facility means the project cannot start. GER builds an air facility first (radar), then land; POL builds
+one land or air facility only with a factory surplus; CHI builds none before 1940 (spend construction on factories
+and infrastructure).
 
-Rule: if a facility sits idle, put its scientist on basic research (free bonus). If all projects require resources the nation does not have (e.g. tungsten, chromium for China), do not start (speed floor 20%).
+Rule: an idle facility's scientist does basic research (free bonus). Do not start a project whose resources the
+nation lacks (e.g. tungsten, chromium for China): it crawls at the 20% floor.
 
 ## 6. MIOs and equipment variants
 
-### 6.1 MIO selection [V: G/common/military_industrial_organization/organizations]
+### 6.1 MIO selection
 
-- Country-specific organisations replace generic ones: GER has Mauser/Walther (infantry weapons), Rheinmetall (artillery), Opel/Daimler (vehicles), Porsche/Henschel/MAN/Alkett (tanks), Messerschmitt/Junkers/Focke-Wulf/Heinkel/Dornier (air) in GER_organization.txt; CHI has Hanyan arsenal (infantry equipment), Taiyuan arsenal (artillery), Liaoning (motorized), Shanghai arsenal and Sino-German technical mission (armored cars/light tank) in CHI_organization.txt; POL has PZInz (infantry tank), PZL (air), PWS, Gdynia shipyard in POL_organization.txt [V]. The generic infantry-equipment MIO is blocked for GER and for POL/CHI when their DLC trees exist [V, 00_generic_organization.txt].
-- Pick order of MIO to unlock: infantry equipment, artillery, support equipment, then motorised, then tank, then air. Matches the 1936-41 priority list.
-- Size up costs funds: `FUNDS_FOR_SIZE_UP = 700` multiplied by level^1.8 style growth; each size-up gives 1 trait point [V]. Funds come from production lines with the MIO as manufacturer (0.1 per IC/day, capped 100/day) and from research completions with the design team [V].
-- Trait choice, generic infantry MIO [V]: take production efficiency cap/gain traits first (`mass_rifle_production`, `bolt_action` for cheap production vs `semi_auto` for quality, exclusive), then reliability, then AP rounds (hard attack) if opponents field armor. In general: efficiency before attack, reliability before build cost.
-- Assignments cost PP (0.1/day per design team). Only assign MIOs that match active techs/variants.
+- Country organisations replace generic ones: GER has Mauser/Walther (infantry weapons), Rheinmetall (artillery), Opel/Daimler (vehicles), Porsche/Henschel/MAN/Alkett (tanks), Messerschmitt/Junkers/Focke-Wulf/Heinkel/Dornier (air); CHI has Hanyan arsenal (infantry equipment), Taiyuan arsenal (artillery), Liaoning (motorized), Shanghai arsenal and Sino-German technical mission (armoured cars/light tank); POL has PZInz (infantry tank), PZL (air), PWS, Gdynia shipyard. The generic infantry-equipment MIO is blocked for GER, and for POL/CHI when their DLC trees exist. `facts.py mio <TAG>` and `hoi4_mios` list the keys.
+- Unlock order: infantry equipment, artillery, support equipment, motorised, tank, air.
+- A size-up costs 700 + 100 x (size + 1)^1.8 funds and gives 1 trait point. Funds: lines with the MIO as manufacturer (0.1 per IC a day, cap 100 a day) and tech completions with its design team.
+- Traits: production first (efficiency cap, then cost or output, growth last), then the role stat (soft attack in single-player; hard attack and piercing against tanks). Generic infantry MIO: `mass_rifle_production`/`bolt_action` for cheap production or `semi_auto` for quality (exclusive).
+- Assign only MIOs that match active techs and variants.
 
 ### 6.2 Variants and upgrades
 
-- Land equipment uses the module designer (tank/vehicle modules) and the legacy upgrade system for infantry gear and guns. Costs: legacy upgrade base `LAND_EQUIPMENT_BASE_COST = 10` army XP rising per total level; module add 5, replace 6, convert 3, remove 1 XP [V, defines l.668-671, 1121].
-- Upgrade (legacy) vs new variant: upgrade infantry equipment/artillery lines in place (existing production keeps going; stock upgrades gradually). Create a new variant only when a new chassis/tech arrives (e.g. basic_medium_tank) or the module set changes; switching a production line to a new variant resets efficiency unless it is a version of the same variant (rule [W]).
-- AI keeps 35 XP before trying and reserves 50 XP when short [V, defines l.2465-2471]; we mirror the 35 XP minimum.
-- Licensed equipment: -25% MIC speed, upgrades cost 2x XP, only worth it for CHI/POL when a faction partner has much better gear [V defines].
-- Do not research a new chassis and keep producing the old one on a long-running line without a plan: finish production to current stock before switching [W].
+- Land equipment uses the module designer (tank/vehicle modules) and the legacy upgrade system for infantry gear and guns. Costs: legacy upgrade 10 army XP rising per total level; module add 5, replace 6, convert 3, remove 1 XP.
+- Upgrade (legacy) infantry equipment and artillery in place (production continues; stock upgrades gradually). Create a new variant only when a new chassis or tech arrives (e.g. basic_medium_tank) or the module set changes. A line switched to a variant of the same model keeps 90% efficiency, same family 70%, a parent/child tier 30% (`templates-equipment-production.md` §5).
+- Licensed equipment (§1): only worth it for CHI/POL when a faction partner has much better gear.
+- A new chassis or tier: start it on new or idle factories and switch the old line whole when old stock covers about 30 days of field demand (`templates-equipment-production.md` §5).
 
-## 7. Tech that gates capabilities [V from tech files, unless noted]
+## 7. Tech that gates capabilities
 
-| Capability | Tech / project | File |
-|---|---|---|
-| Combat engineers (fortification, river crossing), land projects | tech_engineers (1936, 1.25), tech_engineers2 (1939) | support.txt |
-| Trucks and motorised divisions | tech_trucks, motorised_infantry (1936), mechanised_infantry (1940) | infantry.txt |
-| Supply throughput: logistics company, trains | tech_logistics_company (1936), basic_train, wartime_train (1939) | support.txt |
-| Maintenance and recovery | tech_maintenance_company(+2) | support.txt |
-| Signals/command | tech_signal_company | support.txt |
-| Radar (air detection, sp_air_radar) | electronic_mechanical_engineering, radio_detection | electronic_mechanical_engineering.txt |
-| Decrypt/encrypt | computing_machine 1938, basic_encryption/decryption 1938 | same |
-| Fortifications | basic_fortification_tech 1936, land_fort_tech_1 1938, _2 1940 | same |
-| Naval invasions | transport (1922), landing_craft (1940) | naval.txt |
-| Paratroopers/marines | paratroopers, marines (1936) | infantry.txt |
+| Capability | Tech / project |
+|---|---|
+| Combat engineers (fortification, river crossing), land projects | tech_engineers (1936, 1.25), tech_engineers2 (1939) |
+| Trucks and motorised divisions | tech_trucks, motorised_infantry (1936), mechanised_infantry (1940) |
+| Supply throughput: logistics company, trains | tech_logistics_company (1936), basic_train, wartime_train (1939) |
+| Maintenance and recovery | tech_maintenance_company (+2) |
+| Signals/command | tech_signal_company |
+| Radar (air detection) | electronic_mechanical_engineering, sp_air_radar, radio_detection |
+| Decrypt/encrypt | computing_machine 1938, basic_encryption/decryption 1938 (without La Resistance) |
+| Fortifications | basic_fortification_tech 1936, land_fort_tech_1 1938, _2 1940 |
+| Naval invasions | transport (1922), landing_craft (1940) |
+| Paratroopers/marines | paratroopers, marines (1936) |
 
 ## 8. Automation split
 
 ### (a) Automatable standing rules
 
-1. Keep all research slots busy: when `hoi4_research slots` shows idle, start the next queue entry (plan lists in section 4). Idempotent: skip if already researched (verified completed history) or already in a slot.
-2. Prefer on-date techs; skip ahead-of-time unless the entry is flagged in the queue (cost <= 1.5 and capability gating).
-3. When a focus gives `add_tech_bonus`, hold the matching tech until the bonus is active (if not already started). Keep the tag-specific table in section 4.
-4. Spend army XP: (a) subdoctrine per section 2.2 when XP >= 100 and a track is empty, (b) otherwise keep >= 35 XP for variants.
-5. Per-day check of new focus options containing `add_research_slot`: pick it when no survival-critical focus is pending.
-6. Daily: if facility exists and idle scientist, assign basic research.
-7. After each tech finishes, re-run `hoi4_research list` (fresh) and pick the next from the queue.
-8. Fail loudly (journal) if the research list cannot be verified (unknown completed techs, per tool design).
+1. Keep every research slot busy: the plan's `research_path` / `research_priority` fill idle slots (`hoi4_plan_run`); by hand `hoi4_research_start`. Skip techs already researched or already in a slot.
+2. Prefer in-year techs; ahead of time only when nothing in-year remains or an ahead-of-time bonus covers it (§1).
+3. A focus with `add_tech_bonus`: hold the matching tech until the bonus is active (plan `research_bonuses`; `hoi4_research_extras` shows uses left).
+4. Army XP: a subdoctrine per §2.2 when XP >= 100 and a track is empty (plan `doctrines`, `hoi4_doctrine_adopt`); otherwise keep 35 XP for variants.
+5. A new focus option with `add_research_slot`: pick it when no survival-critical focus is pending.
+6. A facility with an idle scientist: basic research (`hoi4_special_project_assign`).
+7. After each tech finishes, re-read completed techs (`hoi4_research`) and pick the next.
+8. Report in the journal when completed techs cannot be read.
 
 ### (b) Needs live decisions
 
-- Choosing between Concentrated vs Dispersed industry (XOR) and between mutually exclusive MIO traits (bolt_action vs semi_auto).
+- Concentrated vs Dispersed industry (exclusive) and mutually exclusive MIO traits (bolt_action vs semi_auto).
 - Subdoctrine choice when the country is mid-war with a changed front (tank-heavy vs infantry-heavy).
 - Whether to build a facility (competes with factories/infrastructure) and which special project to start.
 - Variant design choices (modules per chassis, role of the tank).
-- Whether to license equipment from a partner.
-- Switching nation to a different research focus after losing major territory (CHI) or after Poland falls.
+- Whether to licence equipment from a partner.
+- Switching the research focus after losing major territory (CHI) or after Poland falls.
 
 ### (c) Tools
 
-Existing tools (hoi4_live/tools/registry.py and economy_tools.py) [V]:
+| Need | Tool |
+|---|---|
+| Completed techs, raw research counters | `hoi4_research` |
+| Tech catalogue, what is researchable now | `hoi4_technology_list` (`available:true`), `hoi4_research_nodes`, `hoi4_research_node_detail` |
+| Research slots on screen | `hoi4_research_ui` |
+| Start a tech (or replace one in a busy slot) | `hoi4_research_start` |
+| Research bonuses, cost reductions, tech sharing | `hoi4_research_extras` |
+| Doctrines, mastery, XP pools, adoptable doctrines; adopt | `hoi4_doctrines` (`include_catalog`), `hoi4_doctrine_adopt` |
+| Special projects: read, recruit, assign, stop | `hoi4_special_projects` (`rules`), `hoi4_special_projects_panel`, `hoi4_special_project_recruit`, `hoi4_special_project_assign`, `hoi4_special_project_unassign`, `hoi4_special_project_stop`; facilities with `hoi4_construction_add` |
+| MIOs | `hoi4_mios`, `hoi4_mio_trait`, `hoi4_mio_policy`, `hoi4_mio_design_team` |
+| Designs and variants | `hoi4_designs`, `hoi4_design_options`, `hoi4_design_create`, `hoi4_design_set_production`, `hoi4_design_obsolete` |
+| Slot focuses | `hoi4_focus_list`, `hoi4_focus_start` |
+| Standing plan | `hoi4_plan`, `hoi4_plan_run` |
+| Offline facts | `facts.py tech`, `facts.py research-calendar`, `facts.py focus`, `facts.py projects`, `facts.py mio` |
 
-| Need | Tool | Status |
-|---|---|---|
-| Read research slots | `hoi4_research action=slots` | exists |
-| List techs, year, cost, ahead flag, folder filter | `hoi4_research action=list` (folder, filter, ahead, limit) | exists |
-| Start tech in slot (exact ID, same-slot verification, optional replace) | `hoi4_research action=start` | exists |
-| Daily standing plan that starts techs | `hoi4_standing` (default plan uses `hoi4_research start`) | exists, only pre-written entries |
-| Event wait / observation | `hoi4_wait_for`, `hoi4_telemetry`, `hoi4_briefing` | exists |
-| Focus choice (slot focuses) | `hoi4_focus` | exists |
-| Production line to apply new equipment | `hoi4_production` | exists |
+No tool yet:
+- research start without spending a bonus
+- research progress, days left and ahead-of-time penalty reads
+- army exercises and officer-corps spirits
+- MIO line assignment and per-MIO funds, size and trait reads
+- faction initiatives (doctrine and tech sharing)
+- licence dialogs; equipment conversion
 
-Note: the Rust native server (`--mac-input`, 68 tools) DOES expose `hoi4_technology_list`, `hoi4_research_nodes`, `hoi4_research_node_detail`, `hoi4_research`, `hoi4_research_start` (verified via tools/list on 25 Oct 2026); the Python registry uses a single `hoi4_research` with list/start actions. Use whichever the connected server lists.
+## 9. Version and DLC notes
 
-NO tool exists for (tool-gap list):
+- DLC changes which subdoctrines, organisations, tank and air folders and focus ids exist: read the live catalogue
+  (`hoi4_doctrines include_catalog`, `hoi4_mios`, `hoi4_technology_list`) before writing ids into a plan.
+- Subdoctrine rewards vary: read the tooltip before buying.
 
-1. Doctrine purchase: grand doctrine, subdoctrine selection, mastery inspection, XP balance read (army/navy/air XP).
-2. Special projects: facility construction by type (construction tool may cover buildings; verify facility types), scientist recruit/assign, project start, breakthrough points, basic research.
-3. MIO: org list, design-team assignment to tech/variant, manufacturer assignment, trait picking, funds read.
-4. Variant design: tank/ship/plane module designer, equipment upgrade (legacy upgrades), XP cost check.
-5. Faction doctrine/tech sharing initiatives.
-6. Reading the tech bonus availability (`add_tech_bonus` remaining uses) and scientist roster.
-7. Scripted read of the actual research speed/bonus per slot (only `slots` shows days left).
+## 10. Tactics: research, doctrines and MIOs
 
-## 9. Uncertain or version-dependent claims (verify live)
-
-- Exact cost formula and ahead-of-time curve (factor 2 is defined; the shape is from wiki memory).
-- Whether the nationalist China tree in this save is china_nationalist.txt or the Waking the Tiger variant (different focus ids).
-- DLC gates change which subdoctrines and organisations are visible (La Resistance, NCNS, Gotterdammerung, Thunder at Our Gates tags appear in the files).
-- 1936 start vs 1939 bookmark differ materially (doctrines, slots, techs); this file assumes the 1936 start.
-- Reward weights of special projects were not read; treat prototype rewards as random.
-- Subdoctrine reward effects were sampled, not exhaustively read; read the in-game tooltip before purchase.
-- Wiki cross-check for tech mechanics was truncated (hoi4.paradoxwikis.com/Technology returned partial text); no conflicting data was seen.
+| ID | Tactic | How it works | When | Mode |
+|---|---|---|---|---|
+| RE01 | Ahead-of-time costs a lot | Research speed = 1 / (2 x years ahead + 1): half a year ahead takes twice as long, one year three times; normal bonuses do not reduce it, only ahead-of-time bonuses do. Fill slots with in-year techs of other folders; pull a tier forward only when nothing in-year remains, and say so in the plan | Every research plan | FAIR |
+| RE02 | Big bonuses on big techs | Spend a limited 100% industry bonus on Tools 4, Construction 4 or Concentrated 2-3, not on a cheap tech; a +10% bonus on a 100-day tech saves about 9 days, 50% to 100% only about 17 | Focus bonuses | FAIR |
+| RE03 | Research without spending a bonus | 1.19.4: start a tech without consuming the matching bonus (shift-right-click) to keep it for the right tech | 1.19.4 | FAIR |
+| RE04 | Never idle | An idle slot keeps up to 30 days of points; leave one idle at most 30 days and only before a big tech | Always | FAIR |
+| RE05 | Industry order | Construction 1-3 on time, construction 4 is weak by 1941; tools and industry at or slightly ahead of their year; electronics adds +3-8% speed per computing tech | All | FAIR |
+| RE06 | Keep the grand doctrine | A new grand doctrine resets mastery in every track; mastery is capped at 40 a month per track; a full track banks 25% up to 200 | Doctrine planning | FAIR |
+| RE07 | Mastery multipliers | Track multipliers: infantry x1, combat support x8, armour x10; training gives 10% mastery | Doctrine planning | FAIR |
+| RE08 | 1.19.4 land doctrine choice | Mass Assault is the defensive pick (-0.2 infantry width milestone, -15% supply use); Grand Battle Plan the offensive one (+10% max planning, +25% command power gain); Mobile Warfare +20% planning speed; Superior Firepower +10% line artillery soft attack; Large Unit Tactics -0.2 infantry width | Land doctrine | FAIR |
+| RE09 | Naval and air doctrine follow the build | Trade Interdiction + wolfpacks for a submarine war; Base Strike for carriers; Fleet in Being for capitals; patrol_boats (50 XP) or torpedo_primacy for destroyer navies; convoy_escort only to protect routes; naval_gunfire_support (+25% bombardment, +20% invasion planning) before landings; Battlefield Support for CAS-led majors, Operational Integrity for minors; Dispersed Operations for countries without an air force | Doctrine planning | FAIR |
+| RE10 | Attachés | 100 PP + 50 command power; 15% of the attaché's XP and 10% of the host's mastery; +10% war support; the AI accepts at opinion 20+ | Neutrals and democracies while others fight | FAIR |
+| RE11 | Theorist and chiefs | Theorist before an expensive doctrine (-10% cost); chief of army gives 0.2/0.3/0.4 army XP a day by tier | Early game | FAIR |
+| RE12 | Tech sharing and licences | Tech-sharing bonus up to 50%; producing under licence gives +20% research on the matching tech | Faction members | FAIR |
+| RE13 | MIO on every line | A line's MIO costs nothing and earns 0.1 funds per IC a day (cap 100); a design team on research costs 0.1 PP a day, gives +5% speed and earns about five times the funds of production | AAT | FAIR |
+| RE14 | MIO trait order | Production first (cap, then cost or output, growth last), then the role stat (soft attack in single-player, hard attack and piercing against tanks); about 6 traits by the war; skip cost-penalty traits | AAT | FAIR |
+| RE15 | Design MIO and production MIO | Combat-stat MIO on the design, production MIO on the line; two MIOs level more slowly | SOV, GER, USA tank and plane lines | FAIR |
+| RE16 | MIO policies | Queue traits so the size-6 policy prompt appears; policies cost 25 PP and lock 180 days; Assembly Line Optimisers by default, Cutting Corners for tanks | AAT | FAIR |
+| RE17 | MIO traits are not retroactive | Re-apply the MIO to the variant, switch the line, convert the stock | AAT | FAIR |
+| RE18 | Naval techs when building ships | The research fallback skips naval techs: a plan that builds ships lists the sub hull, snorkel, torpedo, transport and landing-craft and radar techs itself | Navies | FAIR |
