@@ -1,0 +1,34 @@
+#!/bin/sh
+# HOI4 Live Tools MCP server (stdio) for macOS. MCP clients run this file; extra arguments pass through
+# (list, call TOOL JSON, docs, selftest).
+#
+# Python is chosen in this order: HOI4_LIVE_PYTHON, the installer's virtual environment (../venv next to an
+# installed app folder, or .venv in a checkout), then python3 on PATH.
+# An installed copy keeps its settings and output outside the app folder: config.json and artifacts/ in the
+# folder above (HOI4_LIVE_CONFIG and HOI4_LIVE_ARTIFACTS override).
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
+PARENT=$(dirname -- "$HERE")
+if [ -n "${HOI4_LIVE_PYTHON:-}" ]; then
+  PY=$HOI4_LIVE_PYTHON
+elif [ -x "$PARENT/venv/bin/python" ]; then
+  PY=$PARENT/venv/bin/python
+elif [ -x "$HERE/.venv/bin/python" ]; then
+  PY=$HERE/.venv/bin/python
+else
+  PY=python3
+fi
+if [ -f "$PARENT/install.json" ]; then
+  if [ -z "${HOI4_LIVE_CONFIG:-}" ] && [ -f "$PARENT/config.json" ]; then
+    HOI4_LIVE_CONFIG=$PARENT/config.json
+    export HOI4_LIVE_CONFIG
+  fi
+  if [ -z "${HOI4_LIVE_ARTIFACTS:-}" ]; then
+    HOI4_LIVE_ARTIFACTS=$PARENT/artifacts
+    export HOI4_LIVE_ARTIFACTS
+  fi
+fi
+PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}"
+PYTHONIOENCODING=utf-8
+PYTHONUNBUFFERED=1
+export PYTHONPATH PYTHONIOENCODING PYTHONUNBUFFERED
+exec "$PY" -m hoi4_live "$@"

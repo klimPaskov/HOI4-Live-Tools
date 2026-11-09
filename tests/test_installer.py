@@ -130,14 +130,50 @@ class RegistrationTests(unittest.TestCase):
     def test_is_ours(self):
         self.assertTrue(install.is_ours(CMD))
         self.assertTrue(install.is_ours([CMD]))
+        self.assertTrue(install.is_ours("/Users/a/Library/Application Support/hoi4-live-tools/app/hoi4-live-tools"))
         self.assertFalse(install.is_ours("node"))
         self.assertFalse(install.is_ours(None))
+
+
+class PlatformLayoutTests(unittest.TestCase):
+    def test_macos_layout(self):
+        with mock.patch.object(install.sys, "platform", "darwin"), \
+                mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(install.os.path, "expanduser", return_value="/Users/a"):
+            self.assertEqual(install.default_prefix(),
+                             os.path.join("/Users/a", "Library", "Application Support", "hoi4-live-tools"))
+            self.assertEqual(install.venv_python("/p"), os.path.join("/p", "venv", "bin", "python"))
+            install.check_platform()
+
+    def test_windows_layout(self):
+        with mock.patch.object(install.sys, "platform", "win32"), \
+                mock.patch.dict(os.environ, {"LOCALAPPDATA": "C:/L"}, clear=True):
+            self.assertEqual(install.default_prefix(), os.path.join("C:/L", "hoi4-live-tools"))
+            self.assertEqual(install.venv_python("P"), os.path.join("P", "venv", "Scripts", "python.exe"))
+            install.check_platform()
+
+    def test_linux_is_refused(self):
+        with mock.patch.object(install.sys, "platform", "linux"):
+            with self.assertRaises(install.InstallError) as caught:
+                install.check_platform()
+        self.assertEqual(caught.exception.code, install.EXIT_USAGE)
+
+    def test_prefix_override_wins(self):
+        with mock.patch.dict(os.environ, {"HOI4_LIVE_PREFIX": "/x/y"}):
+            self.assertEqual(install.default_prefix(), os.path.abspath("/x/y"))
+
+    def test_posix_launcher_is_executable_in_the_checkout(self):
+        path = os.path.join(helpers.ROOT, install.POSIX_LAUNCHER)
+        with open(path, "rb") as f:
+            self.assertTrue(f.read().startswith(b"#!/bin/sh\n"))
+        if os.name != "nt":
+            self.assertTrue(os.access(path, os.X_OK))
 
 
 class PayloadAndReleaseTests(unittest.TestCase):
     def test_payload_contents(self):
         names = [n for n, _ in install.payload_files(helpers.ROOT)]
-        for expected in ("install.py", "hoi4-live-tools.cmd", "requirements.txt", "LICENSE", "hoi4_live/__init__.py",
+        for expected in ("install.py", "hoi4-live-tools.cmd", "hoi4-live-tools", "requirements.txt", "LICENSE", "hoi4_live/__init__.py",
                          "hoi4_live/ocr/ocr_host.ps1", "skills/hoi4-live-campaign/SKILL.md"):
             self.assertIn(expected, names)
         self.assertFalse([n for n in names if "__pycache__" in n or n.endswith(".pyc") or n.startswith("tests/")
@@ -174,6 +210,10 @@ class PayloadAndReleaseTests(unittest.TestCase):
             self.assertIn(f"{top}/install.py", names)
             self.assertNotIn(b"\r\n", z.read(f"{top}/install.py"))
             self.assertIn(b"\r\n", z.read(f"{top}/hoi4-live-tools.cmd"))
+            launcher = z.getinfo(f"{top}/hoi4-live-tools")
+            self.assertEqual(launcher.external_attr >> 16, 0o755)
+            self.assertNotIn(b"\r\n", z.read(launcher))
+            self.assertTrue(z.read(launcher).startswith(b"#!/bin/sh\n"))
             self.assertTrue(all(i.date_time == build_release.FIXED_TIME for i in z.infolist()))
 
 

@@ -60,13 +60,13 @@ def build(out_dir, allow_dirty=False):
         for name, path in files:
             with open(path, "rb") as f:
                 data = f.read()
-            if name.endswith((".cmd", ".ps1", ".py", ".md", ".json", ".toml", ".txt")) or name in ("LICENSE", "NOTICE"):
+            if name.endswith((".cmd", ".ps1", ".py", ".md", ".json", ".toml", ".txt")) or name in ("LICENSE", "NOTICE", install.POSIX_LAUNCHER):
                 data = data.replace(b"\r\n", b"\n")
                 if name.endswith(".cmd"):
                     data = data.replace(b"\n", b"\r\n")
             info = zipfile.ZipInfo(f"{top}/{name}", FIXED_TIME)
             info.compress_type = zipfile.ZIP_STORED
-            info.external_attr = 0o644 << 16
+            info.external_attr = (0o755 if name == install.POSIX_LAUNCHER else 0o644) << 16
             z.writestr(info, data)
     with open(archive, "rb") as f:
         digest = hashlib.sha256(f.read()).hexdigest()

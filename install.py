@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install, check, register and remove HOI4 Live Tools for the current Windows user.
+"""Install, check, register and remove HOI4 Live Tools for the current Windows or macOS user.
 
     python install.py                       install (or upgrade) and register for the clients found
     python install.py install --register claude,codex
@@ -10,9 +10,10 @@
     python install.py uninstall [--purge]
 
 It runs from an unpacked release or from a checkout and needs only Python 3.9+ and, for the first install, network
-access to PyPI (numpy, Pillow, OpenCV). Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools):
+access to PyPI (numpy, Pillow, OpenCV, and PyObjC on macOS). Layout of an install (default prefix
+%LOCALAPPDATA%\\hoi4-live-tools on Windows, ~/Library/Application Support/hoi4-live-tools on macOS):
 
-    app\\            the program (hoi4-live-tools.cmd lives here: this is what clients start)
+    app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools on macOS: what clients start)
     venv\\           the private Python environment with the dependencies
     config.json    optional user settings (the launcher passes it as HOI4_LIVE_CONFIG when it exists)
     artifacts\\     screenshots, scenario reports, the server log, journals, state caches
@@ -46,7 +47,11 @@ import queue
 
 SERVER_ID = "hoi4-live"
 APP_DIR_NAME = "hoi4-live-tools"
-LAUNCHER = "hoi4-live-tools.cmd"
+WINDOWS_LAUNCHER = "hoi4-live-tools.cmd"
+POSIX_LAUNCHER = "hoi4-live-tools"
+LAUNCHER = POSIX_LAUNCHER if sys.platform == "darwin" else WINDOWS_LAUNCHER
+LAUNCHERS = (WINDOWS_LAUNCHER, POSIX_LAUNCHER)
+SUPPORTED_PLATFORMS = ("win32", "darwin")
 MARK_BEGIN = "# >>> hoi4-live-tools (managed) >>>"
 MARK_END = "# <<< hoi4-live-tools (managed) <<<"
 CLIENTS = ("claude", "codex", "cursor", "opencode")
@@ -56,7 +61,7 @@ TOOL_TIMEOUT_SEC = 1800
 PAYLOAD_DIRS = ("hoi4_live", "skills")
 PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md")
 PAYLOAD_FILES = ("README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "config.json", "requirements.txt",
-                 "pyproject.toml", "hoi4-live-tools.cmd", "install.py")
+                 "pyproject.toml", "hoi4-live-tools.cmd", "hoi4-live-tools", "install.py")
 SKIP_NAMES = {"__pycache__", ".pytest_cache"}
 SKIP_SUFFIXES = (".pyc", ".pyo")
 
@@ -89,6 +94,8 @@ def default_prefix():
     override = os.environ.get("HOI4_LIVE_PREFIX")
     if override:
         return os.path.abspath(override)
+    if sys.platform == "darwin":
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", APP_DIR_NAME)
     base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
     return os.path.join(base, APP_DIR_NAME)
 
@@ -130,8 +137,9 @@ def payload_files(src):
 
 
 def check_platform():
-    if sys.platform != "win32":
-        raise InstallError("HOI4 Live Tools drives the Windows game window and installs on Windows only", EXIT_USAGE)
+    if sys.platform not in SUPPORTED_PLATFORMS:
+        raise InstallError("this installer supports Windows and macOS; on Linux run the native runtime instead",
+                           EXIT_USAGE)
     if sys.version_info < (3, 9):
         raise InstallError(f"Python 3.9 or newer is required (this is {sys.version.split()[0]})", EXIT_USAGE)
 
@@ -169,6 +177,8 @@ def stage_app(src, prefix, out):
         target = os.path.join(staging, *name.split("/"))
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copyfile(path, target)
+    if sys.platform != "win32":
+        os.chmod(os.path.join(staging, POSIX_LAUNCHER), 0o755)
     try:
         if os.path.isdir(app):
             os.replace(app, old)
@@ -183,7 +193,9 @@ def stage_app(src, prefix, out):
 
 
 def venv_python(prefix):
-    return os.path.join(prefix, "venv", "Scripts", "python.exe")
+    if sys.platform == "win32":
+        return os.path.join(prefix, "venv", "Scripts", "python.exe")
+    return os.path.join(prefix, "venv", "bin", "python")
 
 
 def ensure_venv(prefix, out, system_site_packages=False):
@@ -205,7 +217,8 @@ def ensure_venv(prefix, out, system_site_packages=False):
 
 
 def install_requirements(python, app, out):
-    out.info("installing numpy, Pillow and OpenCV (first install downloads about 100 MB)")
+    out.info("installing numpy, Pillow and OpenCV" + (" and PyObjC" if sys.platform == "darwin" else "")
+             + " (first install downloads about 100 MB)")
     run_process([python, "-m", "pip", "install", "--disable-pip-version-check", "--no-input",
                  "--only-binary=:all:", "-r", os.path.join(app, "requirements.txt")],
                 out, "installing the dependencies")
@@ -305,7 +318,7 @@ def launcher_path(prefix):
 
 def is_ours(command):
     command = command[0] if isinstance(command, list) and command else command
-    return isinstance(command, str) and os.path.basename(command.replace("\\", "/")).lower() == LAUNCHER
+    return isinstance(command, str) and os.path.basename(command.replace("\\", "/")).lower() in LAUNCHERS
 
 
 def atomic_write(path, text):
@@ -588,7 +601,7 @@ def cmd_install(args, out):
         out.warn("installed and verified, but not every client is registered")
         return EXIT_REGISTRATION
     out.info("Restart your coding client, then check that the hoi4-live server lists its tools "
-             "(Claude Code: /mcp). Use `hoi4-live-tools.cmd selftest` for the game and OCR checks.")
+             f"(Claude Code: /mcp). Use `{LAUNCHER} selftest` for the game and OCR checks.")
     return EXIT_OK
 
 
@@ -671,7 +684,8 @@ def build_parser():
     parser = argparse.ArgumentParser(prog="install.py", description=__doc__.split("\n\n")[0])
     parser.add_argument("command", nargs="?", default="install",
                         choices=("install", "status", "register", "unregister", "uninstall"))
-    parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools)")
+    parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools on Windows, "
+                                         "~/Library/Application Support/hoi4-live-tools on macOS)")
     parser.add_argument("--register", default=None,
                         help="clients to register: auto (those found, default), all, none, or a list of "
                              + ", ".join(CLIENTS))
