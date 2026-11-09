@@ -35,6 +35,14 @@ pub trait Commands: Send + Sync {
     fn wait_events(&self) -> Option<std::sync::Arc<worker_events::Events>> {
         None
     }
+    /// The game content the FAIR guards judge templates, submarines and mines by
+    /// (`crate::fair_guard::Facts`); None skips those guards.
+    fn fair_facts(
+        &self,
+        _process: &dyn Process,
+    ) -> Option<std::sync::Arc<crate::fair_guard::Facts>> {
+        None
+    }
 }
 
 /// The server's own tools as the plan runner's tool set.
@@ -1384,7 +1392,16 @@ impl Server {
                 let process = self.process.as_ref().ok_or_else(|| {
                     Error::new("capability_unavailable", "Owned process required for input")
                 })?;
-                commands.unwrap().call(process.as_ref(), name, args)
+                let commands = commands.unwrap();
+                // FAIR guards (fair_guard.rs): the plan runner and direct calls alike.
+                if crate::fair_guard::GUARDED_TOOLS.contains(&name) {
+                    let run = crate::fair_guard::run_of(commands.plan_path().as_deref());
+                    if run.fair {
+                        let facts = commands.fair_facts(process.as_ref());
+                        crate::fair_guard::check(name, args, &run, facts.as_deref())?;
+                    }
+                }
+                commands.call(process.as_ref(), name, args)
             }
             _ => Err(Error::new(
                 "capability_unavailable",

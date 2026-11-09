@@ -550,7 +550,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "description": "archetype -> equipment the stockpile must hold (a proxy today: training waits while a fielded division lacks that archetype)"
+          "description": "archetype (or variant key) -> equipment the stockpile must hold: training waits while hoi4_stockpile holds less (without that read, while a fielded division lacks that archetype)"
         },
         "why": {
           "type": "string",
@@ -2060,9 +2060,8 @@
         "type": "number",
         "minimum": 0
       },
-      "description": "equipment (archetype or variant key) -> days of cover to keep; manage.stockpile_days acts below them",
-      "x-owner": "player",
-      "x-executor-planned": "W1-10"
+      "description": "equipment (archetype or variant key) -> days of cover to keep (hoi4_stockpile days_of_cover); below it the executor raises that equipment's production line by manage.rebalance_step idle military factories, or starts one (plan_manage.rs, rule stockpile; default without targets: infantry_equipment at manage.stockpile_days_warning)",
+      "x-owner": "executor"
     },
     "manage": {
       "type": "object",
@@ -2138,21 +2137,21 @@
         "stockpile_days_critical": {
           "type": "integer",
           "default": 7,
-          "description": "days of cover (reported unknown: no stockpile read)",
+          "description": "days of cover below which a low stockpile with no idle military factory to raise its line wakes the player",
           "x-rule": "stockpile",
           "minimum": 0
         },
         "stockpile_days_warning": {
           "type": "integer",
           "default": 30,
-          "description": "days of cover (reported unknown)",
+          "description": "days of cover wanted for infantry_equipment (when stockpile_targets names nothing) and for trucks; below it the line is raised",
           "x-rule": "stockpile",
           "minimum": 0
         },
         "trucks_ratio": {
           "type": "number",
           "default": 1.5,
-          "description": "trucks in stock / wanted (reported unknown)",
+          "description": "trucks (motorized_equipment) in stock / what the divisions need; below it the truck line is raised or started",
           "x-rule": "trucks",
           "minimum": 0
         },
@@ -2240,7 +2239,7 @@
           "type": "integer",
           "minimum": 1,
           "default": 3,
-          "description": "idle military factories given per action to the priority line the divisions lack most, re-chosen each action (acts without manage)",
+          "description": "idle military factories given per action to the priority line the divisions lack most (hoi4_stockpile fielded_short, else hoi4_supply; with no shortage the line with the fewest days of stockpile cover, else in turn), re-chosen each action (acts without manage); also the step of the stockpile rule",
           "x-owner": "executor"
         },
         "day0_production": {
@@ -2265,7 +2264,15 @@
           "type": "integer",
           "minimum": 0,
           "default": 30,
-          "description": "a production line not added by the executor within this many game days is mature: a tier change starts a new line instead of switching it (no line efficiency read)",
+          "description": "without a line efficiency read, a production line not added by the executor within this many game days is mature: a tier change starts a new line instead of switching it",
+          "x-owner": "executor"
+        },
+        "mature_line_efficiency": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 30,
+          "description": "a production line whose read efficiency (hoi4_production_lines output.efficiency, percent) is at least this is mature: a tier change starts a new line instead of switching it",
           "x-owner": "executor"
         },
         "invasion_base_days": {
@@ -3373,16 +3380,16 @@
           "arg": null,
           "min": 0,
           "unit": "convoys not in use",
-          "read": "hoi4_convoys (in use not mapped)",
-          "readable": false
+          "read": "hoi4_convoys convoys.free (stock minus in use, the top-bar figure), else hoi4_country_status convoys.free",
+          "readable": true
         },
         "stockpile_days": {
           "kind": "number",
           "arg": "equipment",
           "min": 0,
           "unit": "days of cover",
-          "read": "no stockpile read (W1-10)",
-          "readable": false
+          "read": "hoi4_stockpile days_of_cover of the archetype (or variant key) row; a stock that is not falling counts as 9999 days; unknown until the server has measured a trend",
+          "readable": true
         },
         "var": {
           "kind": "number",
@@ -3397,8 +3404,8 @@
           "min": -1,
           "max": 1,
           "unit": "balance of power value",
-          "read": "no read (W1-17)",
-          "readable": false
+          "read": "hoi4_country_status balances_of_power[].value of the balance with that id; an inactive balance is unknown",
+          "readable": true
         },
         "mission_days": {
           "kind": "number",
@@ -3648,7 +3655,7 @@
           "type": "boolean",
           "default": true,
           "x-owner": "executor",
-          "description": "after an offensive line is drawn, the execute order waits for the planning bonus (estimated from game days; no tool reads it); false executes the next tick"
+          "description": "after an offensive line is drawn, the execute order waits for the planning bonus: read from hoi4_armies planning.mean (executes at planning_share of planning_cap, or once the bonus stops rising for a game day), else estimated from game days; false executes the next tick"
         },
         "planning_cap": {
           "type": "number",
@@ -4125,7 +4132,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "description": "archetype -> equipment the stockpile must hold (a proxy today: training waits while a fielded division lacks that archetype)"
+          "description": "archetype (or variant key) -> equipment the stockpile must hold: training waits while hoi4_stockpile holds less (without that read, while a fielded division lacks that archetype)"
         },
         "why": {
           "type": "string",

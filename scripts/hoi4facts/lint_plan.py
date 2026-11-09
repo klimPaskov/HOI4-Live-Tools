@@ -97,7 +97,7 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            production.in_progress)
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
-                           false: convoys_free, stockpile_days, var, bop, mission_days)
+                           false: var, mission_days)
 
 Tactics rules (the strong-player habits the plan can state; numbers from the defines and files):
   production.mature_switch an entry that moves a mature line (a start line, or one 30+ days old) to another

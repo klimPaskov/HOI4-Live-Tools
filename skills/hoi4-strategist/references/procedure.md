@@ -26,10 +26,10 @@ Items 1, 2 and 29 are never "not applicable". Write every resolution into the co
 §25 (all 29 rows: resolution, where it lives, the facts command used, the check).
 
 **Key or atom not in the schema yet.** Some items name keys whose executor step a later build item adds
-(schema `x-executor-planned`: `xp_budget`, `stockpile_targets`, `sea_transfer`, `garrison_template`,
+(schema `x-executor-planned`: `xp_budget`, `sea_transfer`, `garrison_template`,
 `production[].remove` / `replace`, `manage.convoys_free`, `manage.fuel_floor`), keys that do not exist
 yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
-`convoys_free`, `stockpile_days:<equipment>`, `var:<name>`, `bop:<id>`, `mission_days:<id>`). Check the
+`var:<name>`, `mission_days:<id>`). Check the
 capability list (SKILL.md Inputs). When the key or atom is absent, never write it into `plan.json` (lint
 `schema.keys`); write the decision in its plan.md section and put it in the brief as a player line: the
 trigger in words, the read that checks it (for example `hoi4_country_status {}`), and the exact call.
@@ -224,7 +224,7 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
 10. **Stockpile cover targets** per item: critical under 7 days, warning under 30, 30+ days before a
     declaration (PR28, CP01); spare trucks 1.5x, trains 1.2x, convoys 0.25 per sea supply (PR29).
 Resolution: executor `production`, `production_priority`, `production_min_idle`, `training`; player
-`training_rules`; `stockpile_targets` (key pending); plan.md §5. Check: lint `production.factories`,
+`training_rules`; `stockpile_targets`; plan.md §5. Check: lint `production.factories`,
 `production.equipment`, `production.trucks`, `production.day0`, `production.cull`, `production.mature_switch`;
 rubric row 6.
 
@@ -328,7 +328,7 @@ Read: the country section of `economy-build-orders.md` §10 when it exists; doss
    with the focus path. Not applicable: `F bop <TAG>` (until available `F grep <TAG> --folder common/bop`)
    finds no balance for the tag and no planned focus sets one.
 Resolution: executor `focus_path`, `focus_fallback`; player `decision_rules` (BoP decisions with `when`;
-atom `bop:<id>` pending); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.order`,
+atom `bop:<id>`); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.order`,
 `focus.gates`; rubric row 3.
 
 ## E. Politics
@@ -493,7 +493,7 @@ cost in points, its estimated finish date (`C build-order`) and the source:
 7. Railway level 5 on the main axis before a large offensive; a fully motorised hub uses 60 trucks; consumption
    cuts (logistics companies, a Logistics Wizard marshal) in poor-supply theatres (LO04, LO06, LO09).
 Resolution: executor `construction_plan`, `war.motorization`, `war.supply_floor`, `war.supply_first`;
-`stockpile_targets` (key pending); plan.md §4 and §17. Check: lint `construction.hub`,
+`stockpile_targets`; plan.md §4 and §17. Check: lint `construction.hub`,
 `construction.hub_cost`, `construction.railway`, `construction.trigger_route`, `production.trucks`;
 rubric rows 7 and 14.
 

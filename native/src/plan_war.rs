@@ -19,11 +19,15 @@
 //!                      until the army's planning bonus reaches "planning_share" (0.9) of
 //!                      "planning_cap" (0.30, the game's base; techs, doctrines and traits raise it)
 //!                      at "planning_gain" (0.02 a game day), at most "planning_max_days" (15).
-//!                      No tool reads the planning bonus (hoi4_armies has none), so it is estimated
-//!                      from the game days since the line was drawn and the digest says so; the 1.19
-//!                      x0.8 without a deployed HQ scales cap and speed alike, so the wait is the
-//!                      same. No wait when the goal deadline is less than "planning_skip_days" (20)
-//!                      away. A rest resumes at once (planning rebuilt while resting)
+//!                      The army's planning bonus is read (hoi4_armies planning.mean, the mean of
+//!                      its divisions): it executes once the bonus reaches that share of the cap,
+//!                      or once it has stopped rising for a game day (it stands at the army's own
+//!                      cap, which techs, doctrines, traits and the HQ distance set and no tool
+//!                      reads). Without the read the bonus is estimated from the game days since
+//!                      the line was drawn and the digest says so; the 1.19 x0.8 without a deployed
+//!                      HQ scales cap and speed alike, so the wait is the same. No wait when the
+//!                      goal deadline is less than "planning_skip_days" (20) away. A rest resumes at
+//!                      once (planning rebuilt while resting)
 //!   supply_floor       50: an executing army below this supply percent rests (plan stopped), and no
 //!                      army below it gets a new attack order (execute, front, offensive, direct
 //!                      or stall move), except a move to retake an own state
@@ -80,6 +84,8 @@ pub(super) struct Memory {
     second: HashMap<String, i32>,
     /// army -> the move to another side of the target (stall response)
     via: HashMap<String, Via>,
+    /// army -> (highest planning bonus read, game hour it was first read at that level)
+    planning: HashMap<String, (f64, GameHour)>,
 }
 
 #[derive(Clone)]
@@ -231,6 +237,8 @@ pub(super) fn drawn(state: &mut State, army: &str, target: i32, now: GameHour) {
 }
 
 /// Why the army's execute order waits (None: execute now): the bound pause, then planning.
+/// `planning` is the army's planning bonus read now (hoi4_armies planning.mean), if any.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn execute_gate(
     state: &mut State,
     plan: &Value,
@@ -238,12 +246,13 @@ pub(super) fn execute_gate(
     target: i32,
     supply: Option<&Value>,
     supply_mean: Option<f64>,
+    planning: Option<f64>,
     now: GameHour,
 ) -> Option<String> {
     if let Some(why) = bound_wait(state, plan, army, supply, supply_mean, now) {
         return Some(why);
     }
-    planning_wait(state, plan, army, target, now)
+    planning_wait(state, plan, army, target, planning, now)
 }
 
 fn planning_wait(
@@ -251,6 +260,7 @@ fn planning_wait(
     plan: &Value,
     army: &str,
     target: i32,
+    read: Option<f64>,
     now: GameHour,
 ) -> Option<String> {
     let cfg = &plan["war"];
@@ -282,6 +292,19 @@ fn planning_wait(
         }
     };
     let elapsed = (now - since) as f64 / DAY as f64;
+    if let Some(bonus) = read {
+        return planning_read(
+            state,
+            &key,
+            army,
+            target,
+            bonus,
+            cap * wanted,
+            elapsed,
+            max_days,
+            now,
+        );
+    }
     if elapsed >= need {
         note(
             state,
@@ -297,6 +320,67 @@ fn planning_wait(
         gain * 100.0
     );
     note(state, &key, why.clone());
+    Some(why)
+}
+
+/// The planning wait on the bonus read from the army: execute at `wanted`, once the bonus has
+/// not risen for a game day (it stands at the army's own cap) or after `max_days`.
+#[allow(clippy::too_many_arguments)]
+fn planning_read(
+    state: &mut State,
+    key: &str,
+    army: &str,
+    target: i32,
+    bonus: f64,
+    wanted: f64,
+    elapsed: f64,
+    max_days: f64,
+    now: GameHour,
+) -> Option<String> {
+    let seen = state
+        .war_rules
+        .planning
+        .entry(army.to_string())
+        .or_insert((bonus, now));
+    if bonus > seen.0 + 0.001 {
+        *seen = (bonus, now);
+    }
+    let flat_days = (now - seen.1) as f64 / DAY as f64;
+    let pct = |v: f64| v * 100.0;
+    let go = if bonus + 1e-9 >= wanted {
+        Some(format!(
+            "planning {:.0}% reached {:.0}%",
+            pct(bonus),
+            pct(wanted)
+        ))
+    } else if bonus > 0.0 && flat_days >= 1.0 {
+        Some(format!(
+            "planning stopped rising at {:.0}% for {flat_days:.1} game days (the army's cap)",
+            pct(bonus)
+        ))
+    } else if elapsed >= max_days {
+        Some(format!(
+            "planning {:.0}% after the {max_days} game days at most",
+            pct(bonus)
+        ))
+    } else {
+        None
+    };
+    if let Some(go) = go {
+        state.war_rules.planning.remove(army);
+        note(
+            state,
+            key,
+            format!("{army} executes on state {target}: {go} (read)"),
+        );
+        return None;
+    }
+    let why = format!(
+        "{army} plans its offensive on state {target}: planning {:.0}% of {:.0}% wanted after {elapsed:.1} game days (read from hoi4_armies)",
+        pct(bonus),
+        pct(wanted)
+    );
+    note(state, key, why.clone());
     Some(why)
 }
 
@@ -783,6 +867,8 @@ mod tests {
         taken: Cell<bool>,
         flow: Cell<f64>,
         flank: Cell<bool>,
+        /// Army 1's planning bonus as hoi4_armies reads it (None: not read)
+        planning: Cell<Option<f64>>,
         calls: RefCell<Vec<(String, Value)>>,
     }
     impl W {
@@ -796,6 +882,7 @@ mod tests {
                 taken: Cell::new(false),
                 flow: Cell::new(0.0),
                 flank: Cell::new(false),
+                planning: Cell::new(None),
                 calls: RefCell::new(vec![]),
             }
         }
@@ -851,7 +938,8 @@ mod tests {
                     let mut armies = vec![json!({"army": "Army 1", "division_count": 10,
                         "main_state": self.here.get(), "battle_plan_orders": 2,
                         "plan_executing": self.executing.get(), "commander": "X",
-                        "threat": {"share": self.share.get(), "encirclement_risk": self.share.get() >= 0.7}})];
+                        "threat": {"share": self.share.get(), "encirclement_risk": self.share.get() >= 0.7},
+                        "planning": self.planning.get().map(|p| json!({"mean": p, "min": p, "max": p}))})];
                     if self.flank.get() {
                         armies.push(
                             json!({"army": "Army 2", "division_count": 8, "main_state": 43,
@@ -917,6 +1005,49 @@ mod tests {
             acted(tick(&mut state, &w, &off, "l", START + 6).unwrap()).starts_with("war execute")
         );
     }
+    #[test]
+    fn the_planning_read_decides_the_execute_order() {
+        let w = W::new();
+        let plan = plan(json!({}));
+        let mut state = State::default();
+        w.planning.set(Some(0.0));
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        tick(&mut state, &w, &plan, "l", START + 3).unwrap();
+        // rising below 0.9 x 30%: waits, and says it was read
+        for (day, bonus) in [(1, 0.05), (2, 0.1), (3, 0.15)] {
+            w.planning.set(Some(bonus));
+            assert_eq!(
+                tick(&mut state, &w, &plan, "l", START + 3 + day * DAY).unwrap(),
+                Tick::Nothing
+            );
+        }
+        let line = &state.war_rules.notes["planning:Army 1"];
+        assert!(line.contains("read from hoi4_armies"), "{line}");
+        // reached 27%: executes on day 4, long before the 13.5-day estimate
+        w.planning.set(Some(0.27));
+        let step = acted(tick(&mut state, &w, &plan, "l", START + 3 + 4 * DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        assert!(state.war_rules.notes["planning:Army 1"].contains("reached"));
+    }
+
+    #[test]
+    fn a_planning_bonus_that_stops_rising_is_at_the_armys_cap() {
+        let w = W::new();
+        let plan = plan(json!({}));
+        let mut state = State::default();
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        tick(&mut state, &w, &plan, "l", START + 3).unwrap();
+        w.planning.set(Some(0.2));
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", START + 3 + DAY).unwrap(),
+            Tick::Nothing
+        );
+        // the same 20% a game day later: the cap (a low-planning army), execute
+        let step = acted(tick(&mut state, &w, &plan, "l", START + 3 + 2 * DAY + 1).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        assert!(state.war_rules.notes["planning:Army 1"].contains("stopped rising"));
+    }
+
     fn plan_with(extra: Value) -> Value {
         plan(extra)
     }

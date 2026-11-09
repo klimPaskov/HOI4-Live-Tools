@@ -35,8 +35,10 @@
 //!                hoi4_production_lines, design id from hoi4_designs; `accept_progress_loss` default true).
 //!                Mature-line guard: when the design's type (hoi4_designs hull_or_chassis) differs from the
 //!                line's equipment (a tier or chassis change keeps 30% or less of the line's efficiency),
-//!                a line the executor did not add in the last `manage.mature_line_days` (30) game days is
-//!                mature (no tool reads line efficiency) and is never switched: the design starts as a
+//!                a line whose efficiency (hoi4_production_lines output.efficiency, percent) is at least
+//!                `manage.mature_line_efficiency` (30) is mature; without that read, a line the executor
+//!                did not add in the last `manage.mature_line_days` (30) game days is. A mature line
+//!                is never switched: the design starts as a
 //!                separate line (hoi4_production_add with `design`, 10% of the old line's factories,
 //!                1-5) on free factories and the old line keeps building; "switch_mature": true on the
 //!                entry (or on the `designs` item) switches the whole line anyway. A same-type variant
@@ -545,8 +547,10 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
         // 30% or less of the line's efficiency, a same-type variant 90%) never takes the
         // factories of a mature line; the new design starts as a separate line on free factories
         // and the old line keeps building. Only `switch_mature: true` switches the whole line.
-        // No tool reads line efficiency: a line counts as young only when the executor added it
-        // less than `manage.mature_line_days` (30) game days ago.
+        // The line's efficiency is read (hoi4_production_lines output.efficiency, percent): at
+        // or above `manage.mature_line_efficiency` (30) the line is mature. Without the read a
+        // line counts as young only when the executor added it less than
+        // `manage.mature_line_days` (30) game days ago.
         let line_type = text(&line["equipment_id"]).to_string();
         let design_type = text(&found["hull_or_chassis"]).to_string();
         if !mature && !line_type.is_empty() && !design_type.is_empty() && line_type != design_type {
@@ -554,8 +558,17 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 .as_i64()
                 .filter(|d| *d >= 0)
                 .unwrap_or(30);
+            let mature_efficiency = plan["manage"]["mature_line_efficiency"]
+                .as_f64()
+                .filter(|e| *e >= 0.0)
+                .unwrap_or(30.0);
+            let efficiency = line["output"]["efficiency"].as_f64();
             let added = state.done.get(&format!("prodadd:{equipment}")).copied();
-            if !added.is_some_and(|h| now - h < mature_days * DAY) {
+            let is_mature = match efficiency {
+                Some(e) => e >= mature_efficiency,
+                None => !added.is_some_and(|h| now - h < mature_days * DAY),
+            };
+            if is_mature {
                 let factories = line["factory_counters"]["requested_factories_raw_signed"]
                     .as_i64()
                     .unwrap_or(0);
@@ -572,10 +585,15 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 } else {
                     state.skip(now, "pdes", &key, 3 * DAY);
                 }
-                let age = added.map_or_else(
-                    || "not added by the executor; no line efficiency read".to_string(),
-                    |h| format!("added {} game days ago", (now - h) / DAY),
-                );
+                let age = match efficiency {
+                    Some(e) => {
+                        format!("efficiency {e:.0}% read, mature from {mature_efficiency:.0}%")
+                    }
+                    None => added.map_or_else(
+                        || "not added by the executor; no line efficiency read".to_string(),
+                        |h| format!("added {} game days ago", (now - h) / DAY),
+                    ),
+                };
                 note(
                     state,
                     "production_tier_guard",
@@ -2145,6 +2163,50 @@ mod tests {
             actions(&tools).last().unwrap().0,
             "hoi4_design_set_production"
         );
+    }
+
+    #[test]
+    fn the_line_efficiency_read_decides_whether_a_line_is_mature() {
+        let tools_at = |efficiency: f64| {
+            fake(vec![
+                (
+                    "hoi4_production_lines",
+                    json!({"lines": [
+                    {"entry_index": 2, "line_kind": "military", "equipment_id": "medium_tank_chassis_1",
+                        "line_handle": "0x10", "factory_counters": {"requested_factories_raw_signed": 20},
+                        "output": {"efficiency": efficiency, "efficiency_cap": 50.0}}]}),
+                ),
+                (
+                    "hoi4_designs",
+                    json!({"designs": [{"design_id": 6001, "name": "Panzer IV",
+                        "hull_or_chassis": "medium_tank_chassis_2", "production_lines": []}]}),
+                ),
+            ])
+        };
+        let plan =
+            json!({"production": [{"equipment": "medium_tank_chassis_1", "design": "Panzer IV"}]});
+        // a starting line at 12% efficiency is young by the read: it switches
+        let tools = tools_at(12.0);
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(actions(&tools)[0].0, "hoi4_design_set_production");
+        // a line the executor added 5 days ago but already at 45%: mature, kept
+        let tools = tools_at(45.0);
+        let mut state = State::default();
+        state
+            .done
+            .insert("prodadd:medium_tank_chassis_1".into(), START - 5 * DAY);
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(actions(&tools)[0].0, "hoi4_production_add");
+        let note = &state.affairs.notes["production_tier_guard"];
+        assert!(note.contains("efficiency 45% read"), "{note}");
+        // the threshold is the plan's
+        let tools = tools_at(45.0);
+        let mut state = State::default();
+        let high = json!({"manage": {"mature_line_efficiency": 60},
+            "production": [{"equipment": "medium_tank_chassis_1", "design": "Panzer IV"}]});
+        step(&mut state, &tools, &high, "l", START).unwrap();
+        assert_eq!(actions(&tools)[0].0, "hoi4_design_set_production");
     }
 
     fn declare_rows(enabled: bool) -> Value {
