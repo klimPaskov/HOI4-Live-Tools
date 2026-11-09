@@ -67,6 +67,19 @@
 //!                          "admirals"?,"repair_below"?,"repair_until"?} regions, missions, admirals, repair (plan_military.rs)
 //!   invasions              [{"id","from_state","target_state","target_province"?,"armies":[..],"fleet"?,"when"?,..}]
 //!                          one naval invasion at a time through hoi4_naval_invasion (plan_military.rs)
+//!   designs                [{"id","kind","base","name"?,"modules"?|"upgrades"?,"when"?,"xp"?,"production"?}]
+//!                          equipment designs made once, XP-guarded (plan_affairs.rs); `production[].design`
+//!                          switches that line to a design once (plan_affairs.rs)
+//!   diplomacy              [{"id","action","target","when"?,"world_tension_max"?,..}] justify, declare (only when
+//!                          the justification is complete and the war does not widen), guarantee, NAP,
+//!                          access, ... once each (plan_affairs.rs)
+//!   faction                {"join"?,"create"?:{"name","template"?,"invite"?},"when"?} (plan_affairs.rs)
+//!   intelligence           {"agency","upgrades":[ordered],"operatives"?} agency, next upgrade when none runs
+//!                          (plan_affairs.rs)
+//!   mio                    [{"organisation","traits":[trait_index..],"when"?,"design_team"?,"policy"?}] (plan_affairs.rs)
+//!   trade                  [{"resource","amount","from"?,"when"?}] manual purchases once each (plan_affairs.rs)
+//!   research_bonuses       {"<bonus category or name>":[techs]} or true: an active research bonus puts its
+//!                          techs first in the research step (plan_affairs.rs)
 //!   production_priority    equipment prefixes that receive military factories on no line
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
 //!   production             [{"equipment","factories"}] lines added once
@@ -183,6 +196,11 @@ mod plan_manage;
 #[path = "plan_military.rs"]
 mod plan_military;
 
+/// State, economy and diplomacy affairs (designs, diplomacy, faction, trade, MIOs, intelligence,
+/// research bonuses).
+#[path = "plan_affairs.rs"]
+mod plan_affairs;
+
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
 /// span of game hours, so the plan behaves the same at speed 1, 5 or paused.
@@ -268,6 +286,8 @@ pub struct State {
     manage: plan_manage::Memory,
     /// Military domains (plan_military.rs): wake alarms, digest lines, loss samples.
     military: plan_military::Memory,
+    /// State, economy and diplomacy affairs (plan_affairs.rs): wake alarms, digest lines, reads.
+    affairs: plan_affairs::Memory,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
@@ -378,6 +398,7 @@ impl Default for State {
             layout: HashMap::new(),
             manage: Default::default(),
             military: Default::default(),
+            affairs: Default::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -728,6 +749,8 @@ pub fn tick(
             }
         }
         priority.extend(strings(plan, "research_priority"));
+        // an active research bonus puts the techs it speeds first (plan_affairs.rs)
+        plan_affairs::bonus_first(state, tools, plan, now, available.as_ref(), &mut priority);
         let open: Vec<&String> = priority
             .iter()
             .filter(|t| !done.contains(*t) && !busy.contains(*t))
@@ -1175,6 +1198,11 @@ pub fn tick(
     // 8a''. military domains (plan_military.rs): naval invasions, casualty ratio, air
     // superiority, army groups, navy
     if let Some(step) = plan_military::step(state, tools, plan, lease, now)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a'''. state, economy and diplomacy affairs (plan_affairs.rs): diplomacy, faction, trade,
+    // designs and line switches, MIOs, intelligence
+    if let Some(step) = plan_affairs::step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
     // 9. armies (here unless the war runs first, which runs them right after itself)
@@ -4273,6 +4301,7 @@ pub fn run(
     let mut alarms = observe_alarms(tools, &plan);
     alarms.extend(plan_manage::take_alarms(state));
     alarms.extend(plan_military::take_alarms(state));
+    alarms.extend(plan_affairs::take_alarms(state));
     if let Some(alarm) = construction_alarm(state, tools, &plan, construction.as_deref()) {
         alarms.push(alarm);
     }
@@ -4347,6 +4376,9 @@ pub fn run(
     }
     if let Some(military) = plan_military::digest(state) {
         result["military"] = military;
+    }
+    if let Some(affairs) = plan_affairs::digest(state) {
+        result["affairs"] = affairs;
     }
     if !state.strategy.summary.is_null() {
         result["strategy"] = state.strategy.summary.clone();
