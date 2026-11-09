@@ -210,6 +210,51 @@ fn membership(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, u64>> {
     }
     Ok(out)
 }
+/// Planning bonus of a division (CArmy +0x468, i64 1/100000; 0.3 = 30%). The game's
+/// `min_planning` trigger (0x1018286e0) divides it by the division's cap (computed by 0x100091800
+/// from PLANNING_MAX, generals, technology and the HQ distance; not stored). Read live on
+/// 9 November 2026: 0 on all 35 Italian divisions, none of whose armies held a front or plan.
+const DIVISION_PLANNING: u64 = 0x468;
+/// division id -> planning bonus (0..1).
+fn planning(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, f64>> {
+    let u = ui(r)?;
+    let at = fld(r.string_abi(), &DIVISION, DIVISION_PLANNING)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = BTreeMap::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division)? != image + u.division_vtable {
+            continue;
+        }
+        let handle = r.read(division + u.division_handle, 8)?;
+        let id = format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        );
+        let raw = i64::from_le_bytes(r.read(division + at, 8)?.try_into().unwrap());
+        if (0..=10_000_000).contains(&raw) {
+            out.insert(id, raw as f64 / 100_000.0);
+        }
+    }
+    Ok(out)
+}
+/// Planning of an army's divisions: {mean, min, max} (fractions, 0.3 = 30%).
+fn planning_of(planning: &BTreeMap<String, f64>, ids: &[String]) -> Value {
+    let values: Vec<f64> = ids
+        .iter()
+        .filter_map(|id| planning.get(id).copied())
+        .collect();
+    if values.is_empty() {
+        return Value::Null;
+    }
+    let r3 = |v: f64| (v * 1000.0).round() / 1000.0;
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    json!({"mean": r3(mean), "min": r3(min), "max": r3(max)})
+}
 /// division id -> state id where it stands (None while moving or unknown).
 pub(super) fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
     let u = ui(r)?;
@@ -506,6 +551,7 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
             }
         }
         let places = division_states(r, image)?;
+        let planning = planning(r, image).unwrap_or_default();
         let armies = groups
             .into_iter()
             .map(|(group, ids)| {
@@ -537,7 +583,8 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 };
                 Ok(
                     json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
-                    "plan_executing":executing,"division_count":ids.len(),"divisions":ids,
+                    "plan_executing":executing,"planning":planning_of(&planning, &ids),
+                    "division_count":ids.len(),"divisions":ids,
                     "states":standing,"main_state":main_state,
                     "motorization":(r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff}),
                 )

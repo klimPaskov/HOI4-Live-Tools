@@ -5,6 +5,28 @@
 pub mod control_snapshot;
 pub(crate) mod controls;
 mod equipment;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod output;
+/// Line output needs the macOS/Linux layout tables; other platforms report it as unavailable.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub(crate) mod output {
+    use crate::{error::Result, memory::Reader};
+    use serde_json::{json, Value};
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub(crate) struct Efficiency;
+
+    pub(crate) fn efficiency_inputs(_: &Reader<'_>, _: u64, _: u64) -> Result<Efficiency> {
+        Err(crate::error::Error::new(
+            "unsupported_platform",
+            "line output reads need the macOS or Linux layout tables",
+        ))
+    }
+
+    pub(crate) fn observe(_: &Reader<'_>, _: u64, _: bool, _: Option<&Efficiency>) -> Value {
+        json!({"unavailable_reason":"unsupported_platform"})
+    }
+}
 use crate::{
     economy,
     error::{Error, Result},
@@ -272,6 +294,11 @@ fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collect
     let mut handles = BTreeSet::new();
     let mut anomalous = 0;
     let mut equipment_catalog = None;
+    // Country-wide efficiency inputs (cap and start); the owner join is the one own_production checks.
+    let efficiency = reader
+        .u64(production + game::layout(reader).production(0x290))
+        .and_then(|country| output::efficiency_inputs(reader, base, country))
+        .ok();
     let mut equipment_unavailable = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = reader.u64(line)?;
@@ -331,6 +358,7 @@ fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collect
             "factory_counters":{"active_factories_raw_signed":active,"damaged_factories_raw_signed":damaged,
                 "requested_factories_raw_signed":requested,"available_under_reviewed_policy":within_policy,
                 "unavailable_reason":if within_policy {Value::Null} else {json!("anomalous_counter_policy")}},
+            "output":output::observe(reader, line, kind == "naval", efficiency.as_ref()),
             "input_authorized":false}));
     }
     Ok(Collection {

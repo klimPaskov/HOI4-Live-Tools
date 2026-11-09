@@ -11,6 +11,7 @@ mod airui;
 mod alerts;
 mod armies;
 mod army_roles;
+mod bop;
 mod commanders;
 mod construction;
 mod construction_find;
@@ -90,6 +91,7 @@ mod special_project_rules;
 mod special_projects;
 mod states;
 mod stateslots;
+mod stockpile;
 mod supply;
 mod supplymem;
 mod template_edit;
@@ -645,6 +647,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_fleet_create","description":"Found a new fleet from one own task force with the game's ordinary controls: Strategic Navy map mode, the task force's fleet card, its Select button, then the bottom bar's '+' (new fleet) card; the new fleet holds exactly that task force and gets the game's default name (see hoi4_fleets). Typed refusals before input: task_force_unknown, task_force_ambiguous, nothing_to_change (already alone in its fleet), reserve_fleet. Verified from the fleet list in memory (one more fleet, holding only that task force). Use hoi4_fleet_mission / hoi4_fleet_region / hoi4_fleet_admiral on the new fleet afterwards.","inputSchema":{"type":"object","properties":{"task_force":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["task_force","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_navy_ui","description":"DEBUG ONLY (never listed to a player): dump the naval UI tree or send one ordinary input.","inputSchema":{"type":"object","properties":{"op":{"type":"string"},"root":{"type":"string"},"path":{"type":"string"},"depth":{"type":"integer"},"index":{"type":"integer"},"items":{"type":"boolean"},"x":{"type":"number"},"y":{"type":"number"},"code":{"type":"integer"},"letter":{"type":"string"},"pixels":{"type":"integer"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false}}),
         naval::convoys_schema(),
+        stockpile::tool(),
         airread::schema(),
         designs::schema(),
         doctrines::tool(),
@@ -686,7 +689,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
         json!({"name":"hoi4_train","description":"Queue `count` divisions of an own template in ONE training queue with ordinary input: the template's Train button creates the queue, its + sets each line to train one division (the game's default is infinite: a line that trains forever), then Add Unit adds the other lines in parallel; the queue gets the own state deploy_state_id as location (a queue without a location never deploys). Each step is verified on the queue in memory (amount, line count).","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
+        json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
         json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
@@ -779,6 +782,7 @@ impl Commands for MacClock {
                     | "hoi4_fleet_admiral"
                     | "hoi4_fleets"
                     | "hoi4_convoys"
+                    | "hoi4_stockpile"
                     | "hoi4_air"
                     | "hoi4_designs"
                     | "hoi4_input_lease"
@@ -1318,6 +1322,10 @@ impl MacClock {
         if name == "hoi4_convoys" {
             allowed(args, &[])?;
             return naval::convoys_tool(process, args);
+        }
+        if name == "hoi4_stockpile" {
+            allowed(args, &["equipment"])?;
+            return stockpile::stockpile(process, args);
         }
         if name == "hoi4_air" {
             allowed(args, &["wing"])?;
