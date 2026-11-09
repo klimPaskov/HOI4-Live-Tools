@@ -9,6 +9,8 @@ $ref are ignored. Annotations (title, description, default, examples, $comment, 
     errors = validate(instance, schema)        # [(path, message)], [] when valid
     problems = check_schema(schema)            # [message], [] when the schema uses only this subset
     owners(schema)                             # {top-level key: x-owner}
+    planned(schema)                            # {key path: x-executor-planned build item}
+    instances_of(plan, schema, "#/definitions/predicate")   # [(path, value)] validated by that ref
 
 CLI: python3 scripts/hoi4facts/schema_check.py SCHEMA.json PLAN.json [...]  (exit 1 on errors)
 """
@@ -233,6 +235,74 @@ def check_schema(schema, root=None, path="#"):
 def owners(schema):
     """{top-level key: x-owner} of a plan schema."""
     return {k: v.get("x-owner") for k, v in schema.get("properties", {}).items()}
+
+
+def planned(schema):
+    """{key path: x-executor-planned build item} of a plan schema (top-level keys and item fields:
+    "templates", "politics[].when", "production[].remove", "manage.alerts", ...)."""
+    out = {}
+
+    def walk(node, path, depth):
+        if not isinstance(node, dict) or depth > 3:
+            return
+        node = _resolve(node["$ref"], schema) if "$ref" in node else node
+        if path and node.get("x-executor-planned"):
+            out[path] = node["x-executor-planned"]
+        for key, sub in (node.get("properties") or {}).items():
+            if isinstance(sub, dict) and sub.get("x-executor-planned"):
+                out["%s.%s" % (path, key) if path else key] = sub["x-executor-planned"]
+            walk(sub, "%s.%s" % (path, key) if path else key, depth + 1)
+        items = node.get("items")
+        if isinstance(items, dict):
+            walk(items, path + "[]", depth + 1)
+
+    walk(schema, "", 0)
+    return out
+
+
+def instances_of(instance, schema, ref, root=None):
+    """[(path, value)] of the parts of `instance` that `schema` validates through `ref` (a local
+    "#/definitions/..." reference), e.g. every predicate of a plan. A matched part is not searched
+    further (a predicate's own all/any/not items stay inside it); anyOf/oneOf/allOf branches are
+    all followed and a path is listed once."""
+    root = schema if root is None else root
+    out, seen = [], set()
+
+    def walk(inst, node, path, depth):
+        if not isinstance(node, dict) or depth > 64:
+            return
+        if "$ref" in node:
+            if node["$ref"] == ref:
+                if path not in seen:
+                    seen.add(path)
+                    out.append((path or "$", inst))
+                return
+            walk(inst, _resolve(node["$ref"], root), path, depth + 1)
+            return
+        if isinstance(inst, dict):
+            props = node.get("properties", {})
+            patterns = node.get("patternProperties", {})
+            extra = node.get("additionalProperties", True)
+            for key, value in inst.items():
+                matched = False
+                if key in props:
+                    matched = True
+                    walk(value, props[key], _join(path, key), depth + 1)
+                for pat, sub in patterns.items():
+                    if re.search(pat, key):
+                        matched = True
+                        walk(value, sub, _join(path, key), depth + 1)
+                if not matched and isinstance(extra, dict):
+                    walk(value, extra, _join(path, key), depth + 1)
+        if isinstance(inst, list) and isinstance(node.get("items"), dict):
+            for i, item in enumerate(inst):
+                walk(item, node["items"], _join(path, i), depth + 1)
+        for word in ("anyOf", "oneOf", "allOf"):
+            for sub in node.get(word, []):
+                walk(inst, sub, path, depth + 1)
+
+    walk(instance, schema, "", 0)
+    return out
 
 
 def by_top_key(errors):

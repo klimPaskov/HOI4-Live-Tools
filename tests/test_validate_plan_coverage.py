@@ -55,6 +55,44 @@ units = {
                       "option = { name = aaa.1.b } }\n",
     "map/definition.csv": "0;0;0;0;land;false;unknown;0\n"
     + "".join(f"{p};{r};{g};{b};land;false;plains;1\n" for p, (r, g, b) in COLOURS.items()),
+    "common/units/land.txt": """sub_units = {
+    infantry = { group = infantry combat_width = 2 need = { gun = 100 } }
+    cavalry = { group = mobile combat_width = 2 active = yes need = { gun = 120 } }
+    artillery_brigade = { group = combat_support combat_width = 3 active = yes }
+    engineer = { group = support combat_width = 0 }
+    fire_support = { group = support combat_width = 0 categories = { category_regimental_support_battalions } }
+}
+""",
+    "common/units/equipment/gun.txt": "equipments = { gun = { is_archetype = yes } gun_1 = { archetype = gun } }\n",
+    "common/occupation_laws/laws.txt": "no_garrison = { }\nmilitary_governor_occupation = { }\n",
+}
+
+NEW_KEYS = {
+    "_meta": {"version": 1, "source": "strategist"},
+    "phases": [{"id": "P1", "enter": "1936.02.01", "exit": {"all": ["state_fully_controlled:3", "stability >= 0.5"]}}],
+    "goal": {"predicates": [{"any": ["capitulated:BBB", "owner:3 == AAA"]}], "deadline": "1937.12.01"},
+    "contingencies": [{"id": "lost", "when": ["province_controller:10=BBB", "war_support < 25%"],
+                       "then": {"phase": "P1"}}],
+    "event_rules": [{"event": "aaa.1", "option_name": "aaa.1.b", "when": "at_war_with:BBB",
+                     "else_option_name": "aaa.1.a", "fallback_index": 1}],
+    "checkpoints": [{"id": "cp", "by": "1936.06.01", "must": ["controls_state:3"], "else": "P1"}],
+    "politics": [],
+    "templates": [
+        {"id": "line", "name": "Line", "regiments": [["infantry"] * 3, ["artillery_brigade"]], "support": ["engineer"],
+         "regimental_support": ["fire_support"], "role": "line", "xp": 30, "when": "phase:P1"},
+        {"id": "flat", "name": "Flat", "regiments": ["cavalry", "cavalry"], "role": "garrison"},
+    ],
+    "training": [{"template": "Line", "deploy_state": 1, "queue": 2, "when": "date >= 1936.03.01"},
+                 {"template": "Guard", "deploy_state": 2}],
+    "xp_budget": {"army": [{"id": "x1", "cost": 30, "purpose": "template", "ref": "template:line"}]},
+    "stockpile_targets": {"gun": 30, "gun_1": 10},
+    "force_posture": {"reason": "land war", "phases": [{"phase": "base", "land": 100, "air": 0, "navy": 0},
+                                                       {"phase": "P1", "land": 80, "air": 20, "navy": 0}]},
+    "occupation": {"default_law": "military_governor_occupation", "ladder": ["no_garrison", "military_governor_occupation"],
+                   "harshest": "military_governor_occupation", "per_state": {"3": "no_garrison"}},
+    "peace": {"take": [3], "puppet": [], "max_rounds": 3},
+    "manage": {"stability_floor": 0.4},
+    "sea_transfer": {"convoys": 4, "ports": [2], "routes": [{"id": "r1", "from_state": 1, "to_state": 2}]},
 }
 
 GOOD = {
@@ -252,6 +290,93 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("option_name aaa.1.z is not an option of the event (has aaa.1.a, aaa.1.b)", text)
         self.assertIn("aaa.9: no event with this id", text)
         self.assertIn("fallback_option_name aaa.1.q", text)
+
+    # ------------------------------------------------------------------ coverage-build keys (W1-2)
+    def new(self, **changes):
+        plan = copy.deepcopy(NEW_KEYS)
+        plan.update(changes)
+        return self.run_plan(**plan)
+
+    def test_new_keys_clean(self):
+        rep = self.new()
+        self.assertEqual(rep.errors, [])
+        self.assertEqual(rep.warnings, [])
+
+    def test_predicates_parse_and_name_known_things(self):
+        rep = self.new(phases=[{"id": "P1", "enter": "stability >= 150",
+                                "exit": {"all": ["state_fully_controlled:9", "phase:P9", "at_war:QQQ"]}}],
+                       contingencies=[{"id": "c", "trigger": "province_controlled:99", "phase": "P1"}],
+                       goal={"predicates": ["owner:3=ZZZ", "tech_researched:t_none", "stockpile_days:nothing < 3",
+                                            "mission_days:no_mission < 5", "xp:sea > 3", "focus_done:no_focus"]})
+        text = "\n".join(rep.errors)
+        self.assertIn("predicate phases[0].enter: 'stability >= 150': stability as a percent runs from 0 to 100", text)
+        self.assertIn("phases[0].exit.all[0]: 'state_fully_controlled:9': 9 is not a state id", text)
+        self.assertIn("no phases[] entry with id P9", text)
+        self.assertIn("QQQ is not a country tag", text)
+        self.assertIn("contingencies[0].trigger: 'province_controlled:99': province 99 is in no state", text)
+        self.assertIn("ZZZ is not a country tag", text)
+        self.assertIn("no technology t_none", text)
+        self.assertIn("no equipment nothing", text)
+        self.assertIn("no decision or mission no_mission", text)
+        self.assertIn("'xp:sea > 3': 'sea' is not a branch", text)
+
+    def test_templates(self):
+        bad = [
+            {"id": "a", "name": "A", "regiments": [["infantry", "cavalry"], ["engineer"]], "support": ["infantry", "nope"],
+             "regimental_support": ["engineer", "fire_support"], "role": "line"},
+            {"id": "a", "name": "Wide", "regiments": [["infantry"] * 5] * 5, "support": [], "role": "line"},
+            {"id": "c", "name": "Mixed", "regiments": [["infantry"], "cavalry"], "role": "line"},
+        ]
+        text = "\n".join(self.new(templates=bad, xp_budget={}, training=[]).errors)
+        self.assertIn("regiments[0] mixes groups infantry, mobile", text)
+        self.assertIn("regiments[1] engineer is a support company", text)
+        self.assertIn("support infantry is a battalion", text)
+        self.assertIn("support nope is not a sub-unit", text)
+        self.assertIn("regimental_support[0] engineer is not a regimental support battalion", text)
+        self.assertIn("regimental_support[0] needs 3 battalions in regiments[0]", text)
+        self.assertIn("regimental_support[1] needs 3 battalions in regiments[1]", text)
+        self.assertIn("templates[1] a: duplicate id a", text)
+        self.assertIn("combat width 50 is above 40", text)
+        self.assertIn("not a mix", text)
+
+    def test_production_remove_replace_and_training_list(self):
+        text = self.errors(production=[{"equipment": "gun_1", "factories": 3},
+                                       {"equipment": "gun_1", "remove": True, "from": "1936.6.1"},
+                                       {"equipment": "gun_1", "replace": "gun_9"},
+                                       {"equipment": "gun", "remove": True, "replace": "gun_1"}],
+                           training=[{"template": "Line"}, {"template": "Guard", "deploy_state": 99}])
+        self.assertNotIn("duplicate key gun_1", text)
+        self.assertNotIn("factories must be", text)
+        self.assertIn("replace gun_9 is not an equipment key", text)
+        self.assertIn("give remove or replace, not both", text)
+        self.assertIn("training[0].deploy_state is required", text)
+        self.assertIn("training[1].deploy_state: unknown state id 99", text)
+
+    def test_new_key_references(self):
+        rep = self.new(stockpile_targets={"rifles": 30},
+                       xp_budget={"army": [{"id": "x", "cost": 5, "purpose": "template", "ref": "template:nope"},
+                                           {"id": "y", "cost": 5, "purpose": "doctrine", "ref": "doctrine:inf"}]},
+                       force_posture={"reason": "r", "phases": [{"phase": "P7", "land": 50, "air": 20, "navy": 0}]},
+                       occupation={"default_law": "gentle", "ladder": ["no_garrison"], "mildest": "military_governor_occupation"},
+                       peace={"take": [3, 77, "BBB"], "puppet": ["BBB"]},
+                       sea_transfer={"ports": [88], "routes": [{"id": "r", "from_state": 1, "to_state": 66}]},
+                       garrison_template={"template": "Nobody"},
+                       event_rules=[{"event": "aaa.1", "option_name": "aaa.1.b", "fallback_index": 5}])
+        text = "\n".join(rep.errors)
+        self.assertIn("fallback_index 5 but the event has 2 options", text)
+        self.assertIn("stockpile_targets.rifles: no equipment rifles", text)
+        self.assertIn("ref template:nope names no templates[] id", text)
+        self.assertNotIn("doctrine:inf", text)  # GOOD has a doctrines entry with id inf
+        self.assertIn("phase P7 is neither base nor a phases[] id", text)
+        self.assertIn("land + air + navy is 70, not 100", text)
+        self.assertIn("occupation.default_law: no occupation law gentle", text)
+        self.assertIn("occupation.mildest: military_governor_occupation is not on occupation.ladder", text)
+        self.assertIn("peace.take[1]: 77 is not a state id", text)
+        self.assertIn("peace.take[2]: BBB is a tag; the executor takes state ids", text)
+        self.assertIn("sea_transfer.routes[0].to_state: 66", text)
+        self.assertIn("sea_transfer.ports: 88", text)
+        self.assertTrue(any("peace.puppet[0]: tag BBB is only noted" in w for w in rep.warnings))
+        self.assertTrue(any("garrison_template.template 'Nobody'" in w for w in rep.warnings))
 
     def test_when_parser(self):
         self.assertEqual(vp.parse_when(""), ("now",))

@@ -1,5 +1,40 @@
 {
   "_comment": "Ethiopia FAIR, 1936-01-01 start, HOI4 1.19.4.1 macOS, active DLC set in _validator.dlcs (By Blood Alone). Goal: survive Italy's 1936 offensive, then take Eritrea 550, Italian Somaliland 559 and Jubaland 844 and end the war with the decision ETH_defeat_italy (Italy's AI always accepts). Explained in ethiopia-plan.md; mechanics with file:line proof in italo-ethiopian-war.md. Keys starting with _ are ignored by the runner; keys marked NEW in ethiopia-plan.md section 0 are not read by the current executor yet. Event BBA_italo_ethiopian_war_events.100: arrives at the host country, not at Ethiopia (no rule needed).",
+  "_meta": {
+    "version": 1,
+    "source": "hand"
+  },
+  "_coverage": {
+    "c1": "key:win_condition",
+    "c2": "md:italo-ethiopian-war.md (scenario reference; ethiopia-italy-1936.md has no situation section)",
+    "c3": "na: missing in hand plan",
+    "c4": "key:doctrines",
+    "c5": "na: missing in hand plan",
+    "c6": "na: missing in hand plan (training uses the start template Chitet Sefari)",
+    "c7": "na: no tanks, planes or ships to design (2 military factories, no air force or navy)",
+    "c8": "key:production,production_priority",
+    "c9": "na: missing in hand plan",
+    "c10": "key:construction,construction_plan",
+    "c11": "key:research_path,research_priority",
+    "c12": "na: missing in hand plan (focus_path and focus_fallback cover the focus part; no balance-of-power path for ETH_centralization_balance)",
+    "c13": "key:politics",
+    "c14": "na: missing in hand plan",
+    "c15": "na: missing in hand plan (politics holds only partial_economic_mobilisation)",
+    "c16": "key:armies,army_layout,army_group",
+    "c17": "na: missing in hand plan (training and training_rules only, no conscription plan)",
+    "c18": "key:war,war_by_phase,vp_targets,hold_targets,phases",
+    "c19": "key:construction_plan",
+    "c20": "key:air",
+    "c21": "na: landlocked at the start, no navy",
+    "c22": "na: missing in hand plan",
+    "c23": "na: missing in hand plan",
+    "c24": "na: minor nation without civilian factories for an agency (audit row O1: majors)",
+    "c25": "na: missing in hand plan (the war ends with the decision ETH_defeat_italy in win_condition)",
+    "c26": "key:event_rules,event_options,decisions",
+    "c27": "key:phases,contingencies,retake_rules",
+    "c28": "key:alarms",
+    "c29": "md:ethiopia-italy-1936.md (FAIR tags in the text)"
+  },
   "_validator": {
     "tag": "ETH",
     "start_date": "1936.1.1",
@@ -138,17 +173,8 @@
       "building": "infrastructure",
       "state": 271,
       "when": "1936.01.01",
-      "why": "the only state with a hub and railway; infrastructure is the only building Ethiopia can afford (2 civilian factories, no free slots)"
-    },
-    {
-      "id": "cp03_supply_node_842",
-      "order": 3,
-      "building": "supply_node",
-      "state": 842,
-      "province": 13238,
-      "when": "state_fully_controlled:550",
-      "priority": "low",
-      "note": "when: never before Eritrea is taken; only if 5+ civilian factories are free (the executor checks only that Eritrea 550 is fully controlled)"
+      "why": "the only state with a hub and railway; infrastructure is the only building Ethiopia can afford (2 civilian factories, no free slots)",
+      "note": "cp03_supply_node_842 (Adwa hub after Eritrea) removed: 20000 points take about 2000 days with 2 free civilian factories at Tigray's infrastructure 0 (lint construction.hub_cost); the Asmara hub 13250 is captured with Eritrea"
     }
   ],
   "production_priority": [
@@ -784,17 +810,7 @@
             "building": "arms_factory",
             "state": 271,
             "when": "",
-            "note": "when: focus ETH_develop_the_capital_region completed or a free slot shows in 271"
-          },
-          {
-            "id": "cp03_supply_node_842",
-            "order": 3,
-            "building": "supply_node",
-            "state": 842,
-            "province": 13238,
-            "when": "state_fully_controlled:550",
-            "priority": "low",
-            "note": "when: never before Eritrea is taken; only if 5+ civilian factories are free (the executor checks only that Eritrea 550 is fully controlled)"
+            "note": "when: focus ETH_develop_the_capital_region completed or a free slot shows in 271; cp03_supply_node_842 (Adwa hub) removed: about 2000 days with 2 free civilian factories (lint construction.hub_cost)"
           }
         ]
       },

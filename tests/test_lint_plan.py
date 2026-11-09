@@ -67,7 +67,7 @@ class Lessons(unittest.TestCase):
         self.assertIn("construction.front", rules)
         with open(LESSONS, encoding="utf-8") as fh:
             rows = [json.loads(line) for line in fh if line.strip()]
-        self.assertEqual(len(rows), 11)  # design table 4.4
+        self.assertEqual(len(rows), 12)  # design table 4.4 plus L12_early_hub_cost
         ids = set()
         for r in rows:
             self.assertEqual(set(r), {"id", "failure", "runs", "prevention", "lint_rule"})
@@ -106,7 +106,8 @@ class EvalWithoutGame(unittest.TestCase):
                     ("production", "mix"), ("events", "options"), ("army", "guard_states")]:
             self.assertLess(rows[key], 1.0, key)
         self.assertEqual(rows[("construction", "rail_first")], 1.0)  # untouched
-        self.assertEqual(rows[("executor", "coverage")], 1.0)
+        # event_rules is executor-owned since the strategy layer landed: cutting rules lowers the share
+        self.assertLess(rows[("executor", "coverage")], 1.0)
 
     def test_statistics(self):
         self.assertEqual(eval_plan.kendall_tau(["a", "b", "c"], ["a", "b", "c"]), 1.0)
@@ -131,16 +132,30 @@ class HandPlans(unittest.TestCase):
         out, errors = self.findings(load(ITA), "error")
         self.assertEqual(errors, [
             ("conquest.adjacency", "vp_targets[16] 13244"),  # Gambella is two steps past Yabello
-            ("construction.railway", "construction_plan[7] cp08_rail_way_843"),  # 7944 not on Dessie's route
-            ("construction.railway", "construction_plan[8] cp09_rail_way_835"),  # whole line queued at Wal Wal
-            ("schema.player_call", "air_plan"),
+            ("construction.railway", "construction_plan[5] cp08_rail_way_843"),  # 7944 not on Dessie's route
+            ("construction.railway", "construction_plan[6] cp09_rail_way_835"),  # whole line queued at Wal Wal
             ("schema.player_call", "army_group"),
             ("schema.player_call", "retake_rules"),
             ("win.goal", "goal"),  # only the deprecated surrender_goal
         ])
         _, warnings = self.findings(load(ITA), "warning")
-        self.assertEqual(warnings, [("research.throughput", "research_path[0]"),
-                                    ("research.throughput", "research_path[1]")])
+        # the coverage-build rules report as warnings on a hand plan (_meta.source "hand")
+        gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 7, 9, 14, 15, 17, 21, 22, 23, 24, 25, 27)]
+        self.assertEqual(warnings, sorted(gaps + [
+            ("manage.thresholds", "manage"),
+            ("navy.overseas", "navy"),  # East Africa is supplied by sea, no convoy or port plan
+            ("navy.required", "navy"),
+            ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland resist from day one
+            ("peace.enemies", "peace"),
+            ("politics.law_gates", "politics[0] war_economy"),  # war support > 0.5 gate, no `when`
+            ("predicates.unreadable", "phases[5].exit"),  # capitulated:ETH has no read yet
+            ("research.throughput", "research_path[0]"),
+            ("research.throughput", "research_path[1]"),
+            ("supply.port_convoys", "production"),
+        ]))
+        self.assertEqual(out["facts"]["overseas_states"], [550, 559, 844])
+        self.assertEqual(out["facts"]["occupation"]["resisting"], [163, 550, 559, 844])
+        self.assertNotIn("hub_cost", out["facts"])  # the two hubs that failed construction.hub_cost are gone
         facts = out["facts"]
         self.assertEqual(facts["surrender"]["ETH"]["total_vp"], 32)
         self.assertEqual(facts["surrender"]["ETH"]["vp_needed"], 26)
@@ -160,8 +175,16 @@ class HandPlans(unittest.TestCase):
             ("win.goal", "goal"),  # only the deprecated win_condition
         ])
         _, warnings = self.findings(load(ETH), "warning")
-        self.assertEqual(warnings, [("research.throughput", "research_path[0]"),
-                                    ("research.throughput", "research_path[1]")])
+        gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
+        self.assertEqual(warnings, sorted(gaps + [
+            ("manage.thresholds", "manage"),
+            ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
+            ("peace.enemies", "peace"),
+            ("politics.law_gates", "politics[0] partial_economic_mobilisation"),
+            ("research.throughput", "research_path[0]"),
+            ("research.throughput", "research_path[1]"),
+        ]))
+        self.assertEqual(out["facts"]["overseas_states"], [])  # landlocked: no navy rules
         # the decision ETH_defeat_italy gives the states the goal must hold
         self.assertEqual(out["facts"]["goal_states"], {"550": "full", "559": "full", "844": "full"})
         self.assertEqual(out["facts"]["border_states"], [835, 836, 837, 841, 842])
@@ -261,6 +284,255 @@ class SeededBadPlans(unittest.TestCase):
         for key in [("construction", "front"), ("construction", "rail_first"), ("construction", "factory_infra"),
                     ("research", "past_start"), ("army", "guard_cover")]:
             self.assertLess(scores[key], 1.0, key)
+
+
+def strategist(plan):
+    """A seeded copy as a strategist plan: the coverage-build rules report errors."""
+    plan = copy.deepcopy(plan)
+    plan["_meta"] = {"version": 1, "source": "strategist"}
+    return plan
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class CoverageBuildRules(unittest.TestCase):
+    """The W1-2 lint rules on seeded copies of the hand plans."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+        cls.ita = strategist(load(ITA))
+        cls.eth = strategist(load(ETH))
+
+    def run_lint(self, plan, **kw):
+        return lint_plan.lint(plan, self.game, **kw)
+
+    def hits(self, plan, rule, severity=None, text=""):
+        out = self.run_lint(plan)
+        return [f for f in out["findings"] if f["rule"] == rule and (severity is None or f["severity"] == severity)
+                and text in f["where"] + " " + f["message"]]
+
+    def assertHit(self, plan, rule, severity, text=""):
+        found = self.hits(plan, rule, severity, text)
+        self.assertTrue(found, f"no {severity} {rule} containing {text!r}: "
+                               f"{[f for f in self.run_lint(plan)['findings'] if f['rule'] == rule]}")
+        return found[0]
+
+    def assertNoHit(self, plan, rule, severity=None):
+        self.assertEqual(self.hits(plan, rule, severity), [])
+
+    # -------------------------------------------------------------- severity policy
+    def test_hand_source_and_flag_downgrade_only_new_rules(self):
+        hand = load(ITA)
+        self.assertTrue(self.hits(hand, "peace.enemies", "warning"))
+        self.assertTrue(self.hits(self.ita, "peace.enemies", "error"))
+        out = self.run_lint(self.ita, hand=True)
+        self.assertFalse([f for f in out["findings"] if f["rule"] in lint_plan.NEW_RULES and f["severity"] == "error"])
+        self.assertTrue([f for f in out["findings"] if f["rule"] == "win.goal" and f["severity"] == "error"])
+        rules = set(re.findall(r"^  ([a-z]+\.[a-z_]+)\s", lint_plan.__doc__, re.M))
+        self.assertLessEqual(lint_plan.NEW_RULES, rules)
+
+    # -------------------------------------------------------------- coverage.checklist
+    def test_coverage_checklist(self):
+        plan = copy.deepcopy(self.ita)
+        del plan["_coverage"]
+        self.assertHit(plan, "coverage.checklist", "error", "no _coverage")
+        plan = copy.deepcopy(self.ita)
+        del plan["_coverage"]["c4"]
+        plan["_coverage"]["c11"] = "key:research_path,templates"
+        plan["_coverage"]["c26"] = "call:event_rules"
+        self.assertHit(plan, "coverage.checklist", "error", "c4 (doctrine path)")
+        self.assertHit(plan, "coverage.checklist", "error", "key templates is not in the plan")
+        self.assertHit(plan, "coverage.checklist", "error", "plan.event_rules has no item with a call")
+        self.assertHit(self.ita, "coverage.checklist", "error", "c3 (force posture")  # na: missing is a gap
+        plan["_coverage"] = {c: "na: not applicable here" for c in plan["_coverage"]}
+        plan["_coverage"]["c4"] = "md:plan.md section 4"
+        self.assertNoHit(plan, "coverage.checklist")
+
+    # -------------------------------------------------------------- posture.shares
+    def test_posture_shares(self):
+        plan = copy.deepcopy(self.ita)
+        plan["force_posture"] = {"reason": "land war; CAS against an enemy without air",
+                                 "phases": [{"phase": "base", "land": 60, "air": 40, "navy": 0},
+                                            {"phase": "P2_tigray", "land": 50, "air": 30, "navy": 30}]}
+        f = self.assertHit(plan, "posture.shares", "warning", "phases[0]")
+        self.assertIn("air 0% vs 40%", f["message"])  # every Italian line is land equipment
+        self.assertHit(plan, "posture.shares", "error", "land + air + navy is 110")
+        plan["force_posture"]["phases"] = [{"phase": "base", "land": 100, "air": 0, "navy": 0}]
+        self.assertNoHit(plan, "posture.shares")
+
+    # -------------------------------------------------------------- navy, ports, convoys
+    def test_navy_required_and_overseas(self):
+        self.assertHit(self.ita, "navy.required", "error", "coastal state")
+        f = self.assertHit(self.ita, "navy.overseas", "error", "550, 559, 844")
+        self.assertIn("a convoy plan", f["message"])
+        plan = copy.deepcopy(self.ita)
+        plan["navy"] = {"posture": "coastal", "reason": "no naval enemy; escort the Red Sea convoys"}
+        plan["sea_transfer"] = {"convoys": 40, "ports": [550, 559]}
+        self.assertNoHit(plan, "navy.required")
+        self.assertNoHit(plan, "navy.overseas")
+        self.assertNoHit(self.eth, "navy.required")  # landlocked at the start
+        self.assertNoHit(self.eth, "navy.overseas")
+
+    def test_port_convoys(self):
+        f = self.assertHit(self.ita, "supply.port_convoys", "error", "by sea")
+        self.assertIn("0.25 convoys per supply", f["message"])
+        plan = copy.deepcopy(self.ita)
+        plan["construction_plan"].append({"id": "cp98_naval_base_158", "building": "naval_base", "state": 158,
+                                          "province": 11786, "when": "1936.01.01"})
+        self.assertHit(plan, "supply.port_convoys", "error", "builds a port in state(s) 158")
+        plan["manage"] = {"convoys_free": 0.2}
+        self.assertNoHit(plan, "supply.port_convoys")
+        plan = copy.deepcopy(self.ita)
+        plan["production"].append({"equipment": "convoy_1", "factories": 2})
+        self.assertNoHit(plan, "supply.port_convoys")
+
+    # -------------------------------------------------------------- construction.hub_cost
+    def test_day_one_hub_in_an_infrastructure_0_state_is_an_error(self):
+        plan = copy.deepcopy(self.eth)
+        plan["construction_plan"].append({"id": "cp99_supply_node_835", "building": "supply_node", "state": 835,
+                                          "when": "1936.01.01"})
+        f = self.assertHit(plan, "construction.hub_cost", "error", "cp99")
+        self.assertIn("about 2000 days", f["message"])  # 20000 / (2 civs x 5 x 1.0)
+        self.assertIn("infrastructure 0", f["message"])
+        self.assertIn("plan horizon 1938.01.01", f["message"])
+
+    def test_hub_names_the_railway_and_port_alternatives(self):
+        plan = copy.deepcopy(self.ita)
+        plan["construction_plan"].insert(0, {"id": "cp01_supply_node_559", "building": "supply_node", "state": 559,
+                                             "province": 2020, "when": "1936.01.01"})
+        f = self.assertHit(plan, "construction.hub_cost", "warning", "cp01")
+        self.assertIn("about 286 days", f["message"])  # 10 free civs, infrastructure 2
+        self.assertIn("port alternative: naval_base", f["message"])
+        self.assertIn("3.3 vs 2.8", f["message"])
+        plan = copy.deepcopy(self.ita)
+        plan["construction_plan"].append({"id": "cp05_supply_node_842", "building": "supply_node", "state": 842,
+                                          "province": 2072, "when": "state_fully_controlled:842"})
+        f = self.assertHit(plan, "construction.hub_cost", "error", "cp05")
+        self.assertIn("about 400 days", f["message"])
+        self.assertIn("plan horizon 1937.01.01", f["message"])
+
+    # -------------------------------------------------------------- air.base_capacity
+    def test_air_base_capacity(self):
+        self.assertNoHit(self.ita, "air.base_capacity")  # 120 planes, Eritrea level 3 = 600
+        plan = copy.deepcopy(self.ita)
+        plan["air_plan"][0]["count"] = 600
+        self.assertHit(plan, "air.base_capacity", "warning", "state 550")
+
+    # -------------------------------------------------------------- templates
+    def test_templates(self):
+        plan = copy.deepcopy(self.ita)
+        plan["templates"] = [
+            {"id": "tiny", "name": "Tiny", "regiments": [["infantry", "infantry"]], "support": [], "role": "line"},
+            {"id": "tanks", "name": "Tanks", "regiments": [["modern_armor"] * 5, ["modern_armor"] * 5],
+             "support": [], "role": "armour", "xp": 60},
+            {"id": "garr", "name": "Garrison", "regiments": ["cavalry", "cavalry"], "support": ["military_police"],
+             "role": "garrison"},
+        ]
+        f = self.assertHit(plan, "templates.width", "warning", "templates[0] tiny")
+        self.assertIn("mountain", f["message"])  # the highland terrain mix of the theatre
+        self.assertFalse([f for f in self.hits(plan, "templates.width") if "garr" in f["where"]])
+        what = "modern_armor equipment modern_tank_chassis"  # armour battalions come with their chassis
+        self.assertHit(plan, "templates.equipment", "error", what)
+        self.assertHit(plan, "templates.xp", "error", "no xp_budget")
+        plan["xp_budget"] = {"army": [{"id": "x1", "cost": 50, "purpose": "template", "ref": "template:tanks"}]}
+        self.assertHit(plan, "templates.xp", "warning", "budgets 50 XP")
+        arche = derive.equipment_archetypes(self.game)
+        tech = sorted(t for t, m in derive.tech_meta(self.game).items()
+                      if any(arche.get(e, e) == "modern_tank_chassis" for e in m["enables"]))[0]
+        plan["research_path"][2]["techs"].append(tech)  # planned for 1938, after the template's 1936
+        self.assertFalse(self.hits(plan, "templates.equipment", "error", what))
+        self.assertHit(plan, "templates.equipment", "warning", f"{what} needs {tech}")
+
+    # -------------------------------------------------------------- politics.law_gates
+    def test_law_gates(self):
+        f = self.assertHit(self.ita, "politics.law_gates", "error", "war_economy")
+        self.assertIn("war_support > 0.5", f["message"])
+        plan = copy.deepcopy(self.ita)
+        plan["politics"][0]["when"] = "war_support > 0.5"
+        self.assertNoHit(plan, "politics.law_gates")
+        plan["politics"][0]["when"] = {"all": ["1936.03.01", "stability >= 0.5"]}
+        self.assertHit(plan, "politics.law_gates", "warning", "does not test war_support > 0.5")
+
+    # -------------------------------------------------------------- occupation and peace
+    def test_occupation_and_peace(self):
+        f = self.assertHit(self.ita, "occupation.required", "error", "163, 550, 559, 844 resist")
+        self.assertIn("conquers 271", f["message"])
+        self.assertHit(self.eth, "occupation.required", "error", "conquers 550, 559, 844")
+        self.assertHit(self.ita, "peace.enemies", "error", "ETH")
+        plan = copy.deepcopy(self.ita)
+        plan["occupation"] = {"default_law": "military_governor_occupation", "harsher_at_resistance": 50}
+        plan["peace"] = {"take": [271, 842, 843]}
+        self.assertNoHit(plan, "occupation.required")
+        self.assertNoHit(plan, "peace.enemies")
+
+    # -------------------------------------------------------------- manage.thresholds
+    def test_manage_thresholds(self):
+        self.assertHit(self.ita, "manage.thresholds", "error", "no manage key")
+        plan = copy.deepcopy(self.ita)
+        plan["manage"] = {}
+        self.assertNoHit(plan, "manage.thresholds")
+        out = self.run_lint(plan)
+        self.assertEqual(out["facts"]["manage"]["stability_floor"], 0.5)
+        plan["manage"] = {"off": ["stability"], "stability_floor": 0.4, "fuel_floor": 0.2}
+        self.assertHit(plan, "manage.thresholds", "warning", "rule stability is in manage.off")
+        self.assertHit(plan, "manage.thresholds", "warning", "not run by the executor yet (W3-10)")
+
+    # -------------------------------------------------------------- predicates.unreadable
+    def test_goal_on_an_always_unknown_atom_warns(self):
+        plan = copy.deepcopy(self.ita)
+        plan["goal"] = {"predicates": ["capitulated:ETH", {"any": ["vp_share:ETH < 0.2", "capitulated:ETH"]}],
+                        "deadline": "1936.12.22"}
+        plan["checkpoints"] = [{"id": "esc", "by": "1936.06.01", "must": ["var:ITA_escalation < 4"]}]
+        f = self.assertHit(plan, "predicates.unreadable", "warning", "goal.predicates[0]")
+        self.assertIn("capitulated:ETH", f["message"])
+        self.assertHit(plan, "predicates.unreadable", "warning", "checkpoints[0].must[0]")
+        self.assertFalse(self.hits(plan, "predicates.unreadable", None, "goal.predicates[1]"))  # any[] with a readable atom
+
+    # -------------------------------------------------------------- production remove / replace
+    def test_production_remove(self):
+        plan = copy.deepcopy(self.ita)
+        plan["production"].append({"equipment": "infantry_equipment_1", "remove": True, "from": "1936.06.01"})
+        plan["production"].append({"equipment": "support_equipment_1", "replace": "infantry_equipment_1",
+                                   "from": "1936.06.01"})
+        self.assertHit(plan, "production.remove", "warning", "production[4]")
+        self.assertHit(plan, "production.remove", "warning", "production[5]")
+        lt = lint_plan.Lint(plan, self.game)
+        lines = lt.active_lines(derive.day("1936.07.01"))
+        self.assertEqual(lines, {"artillery_equipment_1": 4, "infantry_equipment_1": 2, "motorized_equipment_1": 5})
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class DeriveReaders(unittest.TestCase):
+    """The small readers derive.py gained for the coverage-build rules, against the install."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+
+    def test_terrain_widths_match_the_audit(self):
+        w = derive.terrain_widths(self.game)
+        self.assertEqual({k: (v["width"], v["support"]) for k, v in w.items()},
+                         {"plains": (70, 35), "forest": (60, 30), "hills": (70, 35), "mountain": (50, 25),
+                          "urban": (80, 40), "jungle": (60, 30), "marsh": (50, 25), "desert": (70, 35)})
+
+    def test_units_and_widths(self):
+        u = derive.unit_types(self.game)
+        self.assertEqual(u["infantry"]["width"], 2)
+        self.assertTrue(u["engineer"]["support"])
+        self.assertTrue(u["fire_support"]["regimental"])
+        self.assertIn("tech_engineers", derive.subunit_unlocks(self.game)["engineer"])
+        self.assertEqual(derive.template_width(self.game, [["infantry"] * 3, ["artillery_brigade"]]), 9)
+        self.assertEqual(derive.equipment_domain(self.game, "small_plane_cas_airframe_1"), "air")
+        self.assertEqual(derive.equipment_domain(self.game, "convoy_1"), "navy")
+
+    def test_construction_estimate(self):
+        from hoi4facts.script import Ctx
+        ita = Ctx("ITA", load(ITA)["_validator"]["dlcs"] + self.game.integrated_dlcs())
+        civ = derive.free_civilian_factories(self.game, ita, "ITA")
+        self.assertEqual((civ["civs"], civ["mils"], civ["free"]), (21, 20, 10))
+        self.assertEqual(derive.construction_days(self.game, "supply_node", 10, 2), 286)
+        self.assertEqual(derive.construction_days(self.game, "supply_node", 30, 0), 267)  # cap of 15 civs
+        self.assertEqual(derive.construction_constants(self.game)["project_cap"], 15)
 
 
 if __name__ == "__main__":
