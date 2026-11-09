@@ -6,9 +6,9 @@ Usage:
     tool_schemas.py show TOOL                          # required and allowed arguments, description
     tool_schemas.py check-call TOOL '{"arg": ...}'     # validates one call against the catalogue
 
-The native server lists its tools only inside a live session, but every tool is defined as a JSON
-literal (`json!({"name":"hoi4_...","description":...,"inputSchema":{...}})`) in native/src. This reads
-those literals with a brace matcher, so plans and briefs can be checked offline: the tool exists, its
+`build` asks the native binary (`hoi4-live-native --list-tools`, no game or session needed), which is
+authoritative; without a built binary it falls back to scanning the json! literals in native/src (which
+misses tools built by helper functions). Plans and briefs can then be checked offline: the tool exists, its
 required arguments are present and no unknown argument is passed. `request_id` and `lease_token` are
 filled by the broker and are never required of a plan. Stdlib only, Python 3.9+.
 """
@@ -139,10 +139,13 @@ def check_call(catalogue, tool, args):
     for key, value in args.items():
         spec = props.get(key) or {}
         kind = spec.get("type")
-        ok = {"string": isinstance(value, str), "integer": isinstance(value, int) and not isinstance(value, bool),
-              "number": isinstance(value, (int, float)) and not isinstance(value, bool),
-              "boolean": isinstance(value, bool), "array": isinstance(value, list),
-              "object": isinstance(value, dict)}.get(kind, True)
+        kinds = kind if isinstance(kind, list) else [kind]
+        checks = {"string": isinstance(value, str),
+                  "integer": isinstance(value, int) and not isinstance(value, bool),
+                  "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+                  "boolean": isinstance(value, bool), "array": isinstance(value, list),
+                  "object": isinstance(value, dict), "null": value is None}
+        ok = kind is None or any(checks.get(k, True) for k in kinds)
         if not ok:
             problems.append("%s: argument %s should be %s" % (tool, key, kind))
         if isinstance(spec.get("enum"), list) and value not in spec["enum"]:
@@ -168,6 +171,20 @@ def calls_in_text(text):
     return out
 
 
+DEFAULT_BINARY = os.path.join(ROOT, "native", "target", "release", "hoi4-live-native")
+
+
+def from_binary(binary=DEFAULT_BINARY):
+    """The authoritative catalogue: `hoi4-live-native --list-tools` (no game or session needed)."""
+    import subprocess
+    out = subprocess.run([binary, "--list-tools"], capture_output=True, text=True, timeout=60, check=True).stdout
+    tools = {}
+    for t in json.loads(out)["tools"]:
+        tools.setdefault(t["name"], {"description": t.get("description", ""),
+                                     "inputSchema": t.get("inputSchema") or {}, "source": "--list-tools"})
+    return dict(sorted(tools.items()))
+
+
 def load(path=DEFAULT_OUT):
     with open(path, encoding="utf-8") as f:
         return json.load(f)["tools"]
@@ -178,6 +195,8 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
     b.add_argument("--src", default=DEFAULT_SRC)
+    b.add_argument("--binary", default=DEFAULT_BINARY,
+                   help="native binary to ask (--list-tools); the source scan is used when it is missing")
     b.add_argument("--out", default=DEFAULT_OUT)
     sh = sub.add_parser("show")
     sh.add_argument("tool")
@@ -188,7 +207,7 @@ def main(argv=None):
     c.add_argument("--catalogue", default=DEFAULT_OUT)
     a = ap.parse_args(argv)
     if a.cmd == "build":
-        tools = extract(a.src)
+        tools = from_binary(a.binary) if os.path.exists(a.binary) else extract(a.src)
         with open(a.out, "w", encoding="utf-8") as f:
             json.dump({"_generated_by": "scripts/hoi4facts/tool_schemas.py build", "tools": tools}, f,
                       indent=1, ensure_ascii=False, sort_keys=True)

@@ -53,6 +53,17 @@ impl crate::plan_run::Tools for Internal<'_> {
         self.server.call(name, args, Some(self.commands))
     }
 }
+/// The full tool catalogue without a game or session: the common tools plus the platform's
+/// command tools (macOS/Linux builds). Printed by `hoi4-live-native --list-tools`.
+pub fn list_tools_offline() -> Value {
+    #[allow(unused_mut)]
+    let mut value = tools(None);
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    if let Some(list) = value["tools"].as_array_mut() {
+        list.extend(crate::launch::macos::mac_tool_list());
+    }
+    value
+}
 static PLAN_STATE: std::sync::Mutex<Option<crate::plan_run::State>> = std::sync::Mutex::new(None);
 fn tools(commands: Option<&dyn Commands>) -> Value {
     let mut value = json!({"tools":[

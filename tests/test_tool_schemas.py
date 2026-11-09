@@ -20,10 +20,16 @@ class ToolSchemaTests(unittest.TestCase):
                      "hoi4_air_mission", "hoi4_template_create", "hoi4_resources"):
             self.assertIn(name, self.tools)
 
-    def test_committed_catalogue_is_current(self):
-        committed = ts.load()
-        self.assertEqual(sorted(committed), sorted(self.tools),
+    @unittest.skipUnless(os.path.exists(ts.DEFAULT_BINARY), "native binary not built")
+    def test_committed_catalogue_matches_the_binary(self):
+        self.assertEqual(sorted(ts.load()), sorted(ts.from_binary()),
                          "run: python3 scripts/hoi4facts/tool_schemas.py build")
+
+    def test_union_types(self):
+        cat = {"t": {"inputSchema": {"properties": {"base": {"type": ["integer", "string"]}}}}}
+        self.assertEqual(ts.check_call(cat, "t", {"base": 3}), [])
+        self.assertEqual(ts.check_call(cat, "t", {"base": "x"}), [])
+        self.assertTrue(ts.check_call(cat, "t", {"base": [1]}))
 
     def test_call_checks(self):
         self.assertIn("hoi4_production_set: missing required argument line",
