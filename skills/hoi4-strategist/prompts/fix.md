@@ -13,3 +13,5 @@ until they report 0 errors, and list remaining warnings with a reason in plan.md
 run the critic. If an error cannot be fixed, write `RUN/strategist-blocked.md` with the reason and stop.
 
 Finish with one line: errors fixed, warnings left.
+
+Operator notes: if `RUN/operator-notes.md` exists, read it first. It holds corrections from the user or the operator (and earlier review findings); treat each as a finding to fix or to rebut with a source, and record how in plan.md §11.

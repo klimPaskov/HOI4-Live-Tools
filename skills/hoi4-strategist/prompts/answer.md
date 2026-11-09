@@ -11,3 +11,5 @@ for a player item, in the brief. Then re-run procedure step 7 (validate, lint an
 every finding and its answer in plan.md §11. Do not run the critic; the orchestrator runs round 2.
 
 Finish with one line: findings fixed, rebutted, open.
+
+Operator notes: if `RUN/operator-notes.md` exists, read it first. It holds corrections from the user or the operator (and earlier review findings); treat each as a finding to fix or to rebut with a source, and record how in plan.md §11.

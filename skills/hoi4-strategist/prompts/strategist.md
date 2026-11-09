@@ -34,3 +34,5 @@ game; never ask for input. If a gate cannot pass, write `RUN/strategist-blocked.
 
 Finish with a short summary: goal reading, phases, coverage (executor / player / not applicable
 counts), lint totals, open warnings.
+
+Operator notes: if `RUN/operator-notes.md` exists, read it first. It holds corrections from the user or the operator (and earlier review findings); treat each as a finding to fix or to rebut with a source, and record how in plan.md §11.
