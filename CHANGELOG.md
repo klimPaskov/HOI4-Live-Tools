@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 - 2026-11-09
+
+Mod-test checks, DLC without the Steam client, four launch fixes on 1.19.4.1, and war tools for the native
+macOS and Linux builds. The Windows Python server gains the new test-mode tools; it still has 52 tools.
+
+### War tools (native macOS and Linux)
+
+- New army tools: `hoi4_army_motorization` (set an army's supply motorization), `hoi4_army_detach` (move chosen
+  divisions out of an army) and `hoi4_division_disband` (disband divisions of one army).
+- New read and map tools: `hoi4_alerts`, `hoi4_occupation`, `hoi4_war_stats` (read-only) and `hoi4_map_mode`.
+- `hoi4_research_start` can replace the research in a busy slot (`replace: true`).
+- Orders that the game answers with a receipt now settle as errors when the receipt is a refusal, the camera
+  is reset more reliably, error messages say what was missing, and the campaign playbook gained notes on army
+  organisation and the war operating loop. Details are in [the macOS tool list](docs/TOOLS_MACOS.md).
 
 ### Launch check
 
@@ -9,8 +22,10 @@
 
 ### Launch failures
 
-Four launch failures seen on 1.19.4.1 on 2 November are handled. Offline tests and fakes cover the logic; the
-in-game confirmation of each is still to be done (see the pull request).
+Four launch failures seen on 1.19.4.1 on 2 November are handled. Offline tests and fakes cover the logic. A live
+run on HOI4 1.19.4.2 on 9 November confirmed the MAP_ERROR stop (below) and `hoi4_new_game` with no START
+retry needed in two runs; the START retry itself, the custom Select Country screen and the console changes were
+not exercised live (see "Live acceptance" below).
 
 - `hoi4_launch` with `-debug` fails at once when the game reports a MAP_ERROR (it waits on an OK dialog),
   with the error lines from `error.log`, the dialog text if OCR reads it, and a screenshot, instead of waiting
@@ -51,6 +66,37 @@ in-game confirmation of each is still to be done (see the pull request).
   One report (Markdown and JSON under `artifacts/`) lists per event and decision what appeared, what was
   answered, the unmet condition of a decision that could not be taken and the error lines. State, unit leader
   and character events, targeted decisions and missions are skipped with the reason. `dry_run` lists the plan.
+
+### Live acceptance (Windows, HOI4 1.19.4.2)
+
+Run on 9 November 2026 with the installed 1.4.0 candidate, a scratch user folder, no mods unless stated, and no
+console, save edit or memory write.
+
+- Install and `selftest` pass; the server answers 52 tools. A normal debug launch reaches the main menu in 88 to
+  129 s; `hoi4_status` and `hoi4_screen` report the running game and `main_menu`.
+- `hoi4_prepare` / `prepare_dlc`: both DLC files are copied, `error.log` has no "Could not find DLC", the main menu
+  shows the DLC icons, and the restore removes both files and leaves the real user folder byte-identical.
+- `-debug` launch of a scratch mod with province 221 removed from its strategic region fails with
+  `map_error_on_launch` about a minute after the start. The log line reads
+  `MAP_ERROR: The province 221 -  has no strategic region assigned.`
+- `hoi4_new_game` starts a game (1936.1.1.12) for two countries in 9 to 27 s with `start_retries` 0.
+- Not confirmed: the START retry (never needed), the custom Select Country screen (Old World Blues and The New
+  Order: Rises Again both failed to load their map on 1.19.4.2 with their own script errors, so no total
+  conversion could be reached), and every console-based tool (`hoi4_console`, `hoi4_check_trigger`,
+  `hoi4_check_focus`, `hoi4_smoke_namespace`, `hoi4_sweep_loc`), which the run did not use.
+- Found, not fixed in this release: at a 2560x1440 game window the capture and OCR frame is 1920x1080 and
+  clicks go to unscaled coordinates, so menu clicks miss (use a 1920x1080 window); after a resign 1.19.4.2 shows a
+  "Playthrough Overview" window whose Exit to Menu button `hoi4_new_game exit_to_menu` does not click;
+  `hoi4_shutdown` can return before the process has exited and then leaves the DLC files for
+  `hoi4_prepare action=restore`; `hoi4_launch` waits for its timeout when the game crashes on a map error
+  instead of reporting the crash.
+
+### Known limits
+
+Windows only; windowed or borderless at 1920x1080 and interface scale 1; the screen language of the game must
+match the OCR language; the campaign tools were verified on the vanilla interface with one large mod; the phase 4
+exit check was not repeated end to end on the final code and the two-year campaign runs of the plan were not made
+(see `docs/STATUS.md`).
 
 ## 1.3.0 - 2026-11-05
 

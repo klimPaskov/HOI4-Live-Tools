@@ -12,5 +12,5 @@ Package layout (one module per layer, see docs/PLAN.md):
     actions/     verified UI actions (phase 3+ campaign actions build on actions.verify)
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 SERVER_NAME = "hoi4-live-tools"

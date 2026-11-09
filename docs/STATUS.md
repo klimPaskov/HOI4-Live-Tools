@@ -5,6 +5,11 @@ capture/OCR, popup handling, telemetry generation, state and briefings, economy,
 diplomacy, army orders, navy/air missions, standing orders, a background clock,
 campaign journal and tool-call logging. See [tools.md](tools.md).
 
+Release 1.4.0 (9 November 2026) passed its live acceptance on Windows with HOI4 1.19.4.2: install and selftest,
+launch to the main menu, DLC copy and restore in a scratch user folder, the `-debug` MAP_ERROR stop and
+`hoi4_new_game`. The console-based mod checks and the custom Select Country screen were not exercised; the
+results and the four problems found are in the 1.4.0 entry of [the changelog](../CHANGELOG.md).
+
 Paths and process discovery have a platform interface with Windows and macOS
 implementations. macOS desktop, OCR, launch, memory and recorder integration are
 unfinished; the complete server cannot yet run on a Mac. This is a development
