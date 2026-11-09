@@ -281,6 +281,14 @@ def check_focus(game, plan, meta, rep):
     tree = trees.get(best, {})
     done = set(meta.get("completed_focuses", []))
     listed = set(path)
+    # focuses no player can start (available = { always = no }) that an effect completes
+    # (complete_national_focus in scripted effects, events, decisions): a prerequisite block that names
+    # one is satisfied by the script, not by the plan
+    scripted, unlocked = {}, set()
+    if any(i.get("script_only") for i in tree.values()):
+        sc = game.script_completed_focuses()
+        unlocked = set(game.script_unlocked_focuses())
+        scripted = {f: sc[f] for f, i in tree.items() if i.get("script_only") and f in sc}
     for i, k in enumerate(path):
         info = tree.get(k)
         if info is None:
@@ -289,10 +297,20 @@ def check_focus(game, plan, meta, rep):
             continue
         for block in info["prereq"]:
             if not (block & (done | set(path[:i]))):
+                by_script = sorted(block & set(scripted))
+                if by_script:
+                    rep.warn(
+                        f"focus_path[{i}] {k}: prerequisite {' or '.join(by_script)} is completed only by script "
+                        f"({scripted[by_script[0]][0]}); the path waits until it fires"
+                    )
+                    continue
                 rep.error(
                     f"focus_path[{i}] {k}: prerequisite {' or '.join(sorted(block))} "
                     f"not earlier in path"
                 )
+        if info.get("script_only") and k not in unlocked:
+            rep.warn(f"focus_path[{i}] {k}: available = {{ always = no }} and no effect unlocks it; "
+                     f"the path cannot start it")
         bad = info["exclusive"] & listed
         for other in sorted(bad):
             rep.error(f"focus_path: {k} is mutually exclusive with {other}, both listed")
@@ -306,12 +324,16 @@ def check_focus(game, plan, meta, rep):
             continue
         if k in listed:
             rep.error(f"focus_fallback[{i}]: {k} is already in focus_path")
+        if info.get("script_only") and k not in unlocked:
+            rep.warn(f"focus_fallback[{i}] {k}: available = {{ always = no }} and no effect unlocks it; "
+                     f"no need to list it")
         for other in sorted(info["exclusive"] & listed):
             rep.error(f"focus_fallback[{i}] {k}: mutually exclusive with {other} in focus_path")
         for other in sorted(info["exclusive"] & set(fallback)):
             rep.error(f"focus_fallback[{i}] {k}: mutually exclusive with fallback {other}")
         if info["prereq"] and not all(
-            b & (set(meta.get("completed_focuses", [])) | listed | set(fallback)) for b in info["prereq"]
+            b & (set(meta.get("completed_focuses", [])) | listed | set(fallback) | set(scripted))
+            for b in info["prereq"]
         ):
             rep.warn(f"focus_fallback[{i}] {k}: a prerequisite is neither in focus_path nor fallback")
 
@@ -674,6 +696,7 @@ def check_vp_targets(game, plan, meta, rep, good):
     states = game.states()
     pstate = game.province_state()
     facts = game.state_facts(ctx_of(meta, game), start_of(meta))
+    enemies = surrender_targets(plan)
     for i, e in entries:
         p, s = e["province"], e["state"]
         label = f"vp_targets[{i}] {p}"
@@ -688,9 +711,40 @@ def check_vp_targets(game, plan, meta, rep, good):
             continue
         if "vp" in e:
             have = facts.get(s, {}).get("vps", {}).get(p, 0)
-            if float(e["vp"]) != float(have):
-                rep.error(f"{label}: vp {e['vp']} but the state history gives {have:g} at the start")
+            owner = facts.get(s, {}).get("owner")
+            # A province of a country the goal does not capitulate (another tag's state on the way) counts
+            # nothing towards the enemy's surrender: vp 0 is honest there, and lint conquest.threshold
+            # counts only the enemy's own states the same way.
+            other = bool(enemies) and owner not in enemies
+            if float(e["vp"]) != float(have) and not (other and float(e["vp"]) == 0):
+                rep.error(f"{label}: vp {e['vp']} but the state history gives {have:g} at the start"
+                          + (f" (state {s} is {owner}'s, not the enemy's: give vp 0 or {have:g})" if other else ""))
     return len(entries)
+
+
+def surrender_targets(plan):
+    """Tags whose surrender the plan counts: goal predicates capitulated:<TAG>, else war.enemies."""
+    out = set()
+    goal = plan.get("goal") if isinstance(plan.get("goal"), dict) else {}
+
+    def atoms(p):
+        if isinstance(p, str):
+            yield p
+        elif isinstance(p, list):
+            for x in p:
+                yield from atoms(x)
+        elif isinstance(p, dict):
+            for k in ("all", "any"):
+                yield from atoms(p.get(k) or [])
+
+    for a in atoms(goal.get("predicates") or []):
+        m = re.match(r"^capitulated:([A-Z][A-Z0-9]{2})$", a)
+        if m:
+            out.add(m.group(1))
+    if not out:
+        war = plan.get("war") if isinstance(plan.get("war"), dict) else {}
+        out.update(t for t in war.get("enemies") or [] if isinstance(t, str))
+    return out
 
 
 def check_army_layout(game, plan, meta, rep, good):

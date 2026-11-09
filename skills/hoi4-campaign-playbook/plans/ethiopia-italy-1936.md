@@ -14,7 +14,8 @@ Ethiopian state controlled) [V MECH §2].
 
 **Honest expectation [H].** Ethiopia starts with 21 weak divisions, 2 military and 2 civilian factories,
 2 slow research slots, no artillery, no support companies, no air force and a closed arms market
-[V MECH §6, §9.1]. Italy's AI has 25 divisions in East Africa, 120 aircraft and reinforcements. The plan
+[V MECH §6, §9.1]. Italy has 46 divisions (FAIR aggregate), an air force and reinforcements; how many face
+Ethiopia is read from the map. The plan
 therefore survives first (defend mountains and hills, let Italy's missions fail and the war escalate), and
 attacks Eritrea only inside the 90-day Northern Thrust window, when Italy's African army should already
 carry escalation penalties.
@@ -71,7 +72,7 @@ NEW keys, for an executor extension (the player applies them until then):
 **Batch 3 — army.** The executor makes one army per state. Generals only from the `hoi4_army_commander`
 list. Set the layout below and give every army `hoi4_army_front` toward ITA on its border.
 
-| Army | Divisions at start [V MECH §9.1] | General | Holds |
+| Army | Divisions at start (own OOB, `facts.py oob ETH`) | General | Holds |
 |---|---|---|---|
 | Army of Tigray | 2 Mountain Division (Aksum 13237), 3 Mehal Sefari (Adwa 13238 x2, Macalle 2072), 2 Chitet (2072, 13238) | Seyoum Mengesha (defence 3) | Aksum 13237 and Adwa 13238 (hills) with 3 each, Macalle 2072 with 1+; never fewer than 2 in Macalle after Italy enters Tigray |
 | Army of Begemder | Mehal Sefari + Chitet at Gondar 1984 | Ayalew Birru (mountaineer) | Gondar 1984 only: every Italian approach crosses a river [V MECH §7.1] |
@@ -142,8 +143,8 @@ If `ETH_mercenaries` is not yet available (escalation <= 3), run `ETH_rally_arou
 
 **P1 Hold (1 January -> end of the Hold missions, about 15 May).** Axes empty; guard states 842, 841, 843,
 835, 836, 837. Hold the hills and mountains: Aksum/Adwa (hills), Macalle, Gondar, Dessie (mountains), Wal
-Wal (desert, irregulars +10% defence there), Bale 4995. Italy's AI rushes Begemder 841 and Sidamo 837 while
-its missions run [V MECH §9.3]: Gondar and 8062 get the first reinforcements.
+Wal (desert, irregulars +10% defence there), Bale 4995. Italy's missions ask for Gondar, Macalle, Dessie
+(north) and Wal Wal, Gaba, Moyale (south) [V MECH §4.1]: those provinces get the first reinforcements.
 * Christmas opportunity rule (1-14 January, Ethiopia +10% attack and breakthrough vs Italy [V IETH:72-90]):
   attack an Eritrean province only if it shows at most 1 Italian division and 3+ Ethiopian divisions are
   adjacent; the targets that matter are Asmara 13250 (hub) and Massaua 12766 (port).

@@ -18,6 +18,22 @@ EVENT_TYPES = ("country_event", "news_event", "state_event", "unit_leader_event"
                "operative_leader_event", "character_event")
 
 
+def never_true(items):
+    """True when a trigger block can never hold: `always = no` at its AND level, also inside
+    custom_trigger_tooltip / AND / hidden_trigger, or every branch of an OR."""
+    for k, v in items:
+        kl = (k or "").lower()
+        if kl == "always" and v == "no":
+            return True
+        if kl in ("and", "custom_trigger_tooltip", "hidden_trigger") and isinstance(v, list) and never_true(v):
+            return True
+        if kl == "or" and isinstance(v, list):
+            kids = [(a, b) for a, b in v if (a or "").lower() != "tooltip"]
+            if kids and all(never_true([kid]) for kid in kids):
+                return True
+    return False
+
+
 class Game:
     def __init__(self, root, mods=(), content=None, cache_dir=None):
         self.root = root
@@ -236,16 +252,50 @@ class Game:
                         exclusive = set()
                         if isinstance(excl, list):
                             exclusive = {x for a, x in excl if a == "focus"}
-                        focuses[fid] = {"prereq": prereq, "exclusive": exclusive, "cost": get1(fv, "cost", "1")}
+                        avail = get1(fv, "available")
+                        script_only = isinstance(avail, list) and never_true(avail)
+                        focuses[fid] = {"prereq": prereq, "exclusive": exclusive, "cost": get1(fv, "cost", "1"),
+                                        "script_only": script_only}
                     trees[tid] = focuses
             return trees
 
         return self.cached("focus", load)
 
+    def script_completed_focuses(self):
+        """{focus id: [content-relative file:line]} of every `complete_national_focus = <id>` in the
+        effects the game runs (scripted effects, events, decisions, focuses, on_actions, history)."""
+        return self._script_focus_refs()["complete_national_focus"]
+
+    def script_unlocked_focuses(self):
+        """{focus id: [file:line]} of every `unlock_national_focus = <id>` (lifts the focus's available check)."""
+        return self._script_focus_refs()["unlock_national_focus"]
+
+    def _script_focus_refs(self):
+        def load():
+            out = {"complete_national_focus": defaultdict(list), "unlock_national_focus": defaultdict(list)}
+            pat = re.compile(r"(complete_national_focus|unlock_national_focus)\s*=\s*\{?\s*(?:focus\s*=\s*)?"
+                             r"([A-Za-z0-9_.]+)")
+            for folder, rec in (("common/scripted_effects", False), ("events", True), ("common/decisions", True),
+                                ("common/national_focus", False), ("common/on_actions", False),
+                                ("history/countries", False)):
+                for f in self.files(folder, recursive=rec):
+                    text = read(f)
+                    if "_national_focus" not in text:
+                        continue
+                    rel = self.content.relpath(f)
+                    for n, line in enumerate(text.split("\n"), 1):
+                        for m in pat.finditer(line.split("#", 1)[0]):
+                            out[m.group(1)][m.group(2)].append(f"{rel}:{n}")
+            return {k: dict(v) for k, v in out.items()}
+
+        return self.cached("script_focus_refs", load)
+
     # ------------------------------------------------------------------ economy
     def equipment(self):
         def load():
             keys = set()
+            archetype_of = {}
+            duplicates = []
             for f in self.files("common/units/equipment"):
                 text = read(f)
                 for k, v in parse(text):
@@ -253,17 +303,29 @@ class Game:
                         for name, body in v:
                             if name and isinstance(body, list):
                                 keys.add(name)
+                                arch = get1(body, "archetype")
+                                if isinstance(arch, str):
+                                    archetype_of[name] = arch
                     elif k == "duplicate_archetypes" and isinstance(v, list):
-                        # generated families, e.g. small_plane_cas_airframe_1..N
+                        # generated families, e.g. small_plane_cas_airframe_0..N
                         for name, body in v:
                             if not name or not isinstance(body, list):
                                 continue
                             keys.add(name)
+                            arch = get1(body, "archetype")
+                            if isinstance(arch, str):
+                                duplicates.append((name, arch))
                             names = get1(body, "variant_name")
                             if isinstance(names, list):
                                 keys.update(a for a, _ in names if a)
                 # variant names produced by the game (derived_variant_name)
                 keys.update(re.findall(r"derived_variant_name\s*=\s*(\w+)", text))
+            # A duplicated archetype copies every equipment of the source archetype: the copy of
+            # small_plane_airframe_0 under small_plane_cas_airframe is small_plane_cas_airframe_0.
+            for dup, arch in duplicates:
+                for eq, a in archetype_of.items():
+                    if a == arch and eq != arch and eq.startswith(arch):
+                        keys.add(dup + eq[len(arch):])
             return keys
 
         return self.cached("equipment", load)

@@ -58,7 +58,9 @@ Checks (errors unless marked warning):
 
 Stdlib only, Python 3.9+. Exit status 0 when there are no errors.
 
-Optional plan key "_validator" (ignored by the runner):
+Plan key "_validator" (ignored by the runner). Missing fields come from the run folder: run_spec.json
+beside the plan (tag, start_date, mode, dlcs unless "auto"), then dossier/manifest.json (tag, date, mode,
+resolved dlcs). With no tag anywhere the check reads GER and warns (an error under --strict):
   {"tag": "GER", "start_date": "1936.1.1", "stop_date": "1938.1.1",
    "completed_techs": [...], "completed_focuses": [...],
    "history_file": "history/countries/GER - Germany.txt",   (default: found by tag)
@@ -108,6 +110,46 @@ def load_game(game_dir, userdir=None, mod_args=()):
     return Game(game_dir, mods)
 
 
+def derive_validator(plan, plan_path):
+    """Fill a missing _validator tag/start_date/mode/dlcs from the run folder: the plan's folder holds
+    run_spec.json (tag, start_date, mode, dlcs unless "auto") and dossier/manifest.json (tag, date, mode,
+    the resolved dlcs). Returns (source note or None, warning or None); without a tag anywhere the
+    validator falls back to GER and the warning says so."""
+    meta = plan.get("_validator")
+    meta = dict(meta) if isinstance(meta, dict) else {}
+    folder = os.path.dirname(os.path.abspath(plan_path))
+    found = []
+    sources = (
+        ("run_spec.json", (("tag", "tag"), ("start_date", "start_date"), ("mode", "mode"), ("dlcs", "dlcs"))),
+        (os.path.join("dossier", "manifest.json"),
+         (("tag", "tag"), ("start_date", "date"), ("mode", "mode"), ("dlcs", "dlcs"))),
+    )
+    for rel, keys in sources:
+        try:
+            with open(os.path.join(folder, rel), encoding="utf-8") as fh:
+                src = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(src, dict):
+            continue
+        took = []
+        for key, skey in keys:
+            v = src.get(skey)
+            if key in meta or v in (None, "", "auto"):
+                continue
+            if key == "dlcs" and not isinstance(v, list):
+                continue
+            meta[key] = v
+            took.append(key)
+        if took:
+            found.append(f"{rel} ({', '.join(took)})")
+    if not meta.get("tag"):
+        return None, ("_validator.tag missing and no run_spec.json or dossier/manifest.json beside the plan: "
+                      "checking as GER; add _validator {tag, start_date, dlcs}")
+    plan["_validator"] = meta
+    return ("_validator from " + "; ".join(found)) if found else None, None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("plan")
@@ -126,10 +168,15 @@ def main(argv=None):
     if not os.path.isdir(args.game_dir):
         print(f"game directory not found: {args.game_dir}", file=sys.stderr)
         return 2
+    note, missing = derive_validator(plan, args.plan)
+    if note:
+        print("note:", note)
     game = load_game(args.game_dir, args.userdir, args.mod)
     for m in game.content.mods:
         print(f"mod: {m.name} ({m.path})")
     rep, counts = validate(plan, game)
+    if missing:
+        rep.warnings.insert(0, missing)
     for w in rep.warnings:
         print("warning:", w)
     for e in rep.errors:
