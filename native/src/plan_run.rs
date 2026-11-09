@@ -43,7 +43,11 @@
 //!                          and the alarms `research_slot_idle_plan_exhausted` / `no_active_focus_plan_exhausted`
 //!                          when nothing from the plan could be started. `active` missing means active; only
 //!                          `"active": false` pauses the runner (result reason `plan inactive (active:false)`)
-//!   politics               [{"category","slot","idea"}] one-shot picks
+//!   _meta                  {"campaign":"<id>",..}: optional; `campaign` names the campaign this plan
+//!                          belongs to, and plan_state.json of another campaign is ignored (below)
+//!   politics               [{"id"?,"category","slot","idea","cost"?}] one-shot picks in list order;
+//!                          "cost": political power needed first. Done-memory is keyed by `id`
+//!                          (stable across a reorder or a revision), else by list position and idea
 //!   decisions              decision keys taken whenever enabled
 //!   training               {"template","queue","batch","deploy_state"} keep a training queue
 //!   production_priority    equipment prefixes that receive military factories on no line
@@ -59,6 +63,22 @@
 //!   construction_fallback_any_own_state  true: when every listed state is full, build in other own states
 //!                          (hoi4_states with the player tag); every tick's result names why
 //!                          nothing was queued in `construction`
+//!   construction_plan      [{"id"?,"order","building","state"?,"province"?,"path"?:[province ids],
+//!                          "from_state"?,"to_state"?,"when"?,"priority"?}] a triggered build order,
+//!                          each item queued once (hoi4_construction_add, or hoi4_railway_build for
+//!                          "rail_way"/"railway" from `path`'s first to last province) when `when` holds:
+//!                          "YYYY.MM.DD", "province_controlled:<id>", "state_fully_controlled:<id>",
+//!                          "owner:<state>=<TAG>" or empty (at once). Runs in peace and at war (when the
+//!                          war runs first, right after the war step; else just before `construction`).
+//!                          Done-memory is keyed by `id` (stable), else by `order`
+//!   doctrines              [{"id","folder","grand_doctrine"?,"track"?,"subdoctrine"?,"xp"}] adopted in
+//!                          list order through hoi4_doctrine_adopt once the folder's experience (folder
+//!                          "land"/"special_forces" army XP, "naval"/"navy" navy XP, "air" air XP;
+//!                          default "land") reaches "xp" (default 100): "grand_doctrine" is sent as
+//!                          {doctrine}, "subdoctrine" as {doctrine, track} (an entry with both adopts
+//!                          the grand doctrine first). The old entry shape {"doctrine","track"} is still
+//!                          read for one release. An entry that waits blocks the ones after it.
+//!                          Done-memory is keyed by `id` (stable), else by list position
 //!   war                    {"enemies":["FRA"],"min_army":6,"per_target":2,"reserve":["Army 9"],"cooldown_hours":12}
 //!                          send armies at the nearest enemy-held states (own states held by an enemy first):
 //!                          step into the state, draw front and offensive lines, execute the plan.
@@ -78,6 +98,15 @@
 //!                          listed general to an army of at least `min_for_general` divisions;
 //!                          armies below that size are merged into others (hoi4_army_merge) unless
 //!                          "consolidate": false
+//!
+//! Memory across a server restart: `plan_state.json` next to plan.json (written by the runner
+//! through a temp file and a rename whenever it changes; never edited by hand) keeps what is done
+//! (politics, doctrines, production lines; construction_plan items queued, each with its game
+//! hour), the running skip timers (a decision taken waits 30 days), the failure ledger and the
+//! army_layout roles. It is read once per server life when the game date is known, and ignored
+//! when it names another campaign (player tag, the game's playthrough id, or `_meta.campaign`).
+//! Work dated after the current game date is dropped (an earlier save was loaded). A note on
+//! an ignored or unwritable file is in the run result as `plan_state`.
 use crate::error::{Error, Result};
 use serde_json::{json, Map, Value};
 use std::{
@@ -143,7 +172,8 @@ pub struct State {
     boot: u64,
     bad: HashMap<String, GameHour>,
     last_hour: GameHour,
-    done: HashSet<String>,
+    /// One-shot work done (`pol:..`, `prod:..`, `doc:..`): key -> game hour it was done.
+    done: HashMap<String, GameHour>,
     seen: HashMap<String, GameHour>,
     seq: u64,
     sent: HashMap<String, (String, Value)>,
@@ -162,22 +192,37 @@ pub struct State {
     war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
     /// The enemy-held province of an own state last ordered for an army, and when.
     war_province: HashMap<String, (i32, GameHour)>,
-    /// `construction_plan` items already queued (by `order`).
-    plan_built: HashSet<i64>,
+    /// `construction_plan` items already queued (by `id`, else `order`) -> game hour queued.
+    plan_built: HashMap<String, GameHour>,
     /// `army_layout`: name_hint -> the army that plays that role.
     layout: HashMap<String, String>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
-    /// Refusals per politics pick (index): each refusal doubles the wait.
-    pol_fails: HashMap<usize, u32>,
+    /// Refusals per politics pick (its done key): each refusal doubles the wait.
+    pol_fails: HashMap<String, u32>,
     /// Political power when a pick was last refused: it is not tried again until the
     /// country has gained some (a refusal is usually a missing few points).
-    pol_pp_at_fail: HashMap<usize, f64>,
+    pol_pp_at_fail: HashMap<String, f64>,
     centers: HashMap<i32, (f64, f64)>,
     con: ConState,
     /// stop_on_date: (target hour, outcome of the single pause attempt)
     date_stop: Option<(i64, String)>,
     stages: Stages,
+    /// `plan_state.json`: the memory that survives a server restart.
+    persist: Persist,
+}
+
+/// What `run` knows about the persisted memory next to plan.json.
+#[derive(Default)]
+struct Persist {
+    /// The file was looked at (restored or ignored) once the game date was known.
+    restored: bool,
+    /// The campaign this memory belongs to: {"player","playthrough","campaign"}.
+    identity: Option<Value>,
+    /// The memory last written (nothing is written while it is unchanged).
+    saved: Option<Value>,
+    /// Why the file was ignored or could not be written (reported as `plan_state`).
+    note: Option<String>,
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -240,7 +285,7 @@ impl Default for State {
                 .map_or(0, |d| d.as_secs()),
             bad: HashMap::new(),
             last_hour: 0,
-            done: HashSet::new(),
+            done: HashMap::new(),
             seen: HashMap::new(),
             seq: 0,
             sent: HashMap::new(),
@@ -253,7 +298,7 @@ impl Default for State {
             war_guard: HashMap::new(),
             war_repeat: HashMap::new(),
             war_province: HashMap::new(),
-            plan_built: HashSet::new(),
+            plan_built: HashMap::new(),
             layout: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
@@ -262,6 +307,7 @@ impl Default for State {
             con: ConState::default(),
             date_stop: None,
             stages: Stages::default(),
+            persist: Persist::default(),
         }
     }
 }
@@ -377,6 +423,15 @@ impl State {
 
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
+}
+/// The stable `id` of a plan list item (a non-empty string or a number), used for its
+/// done-memory instead of its position so a revised or reordered list keeps what was done.
+fn item_id(item: &Value) -> Option<String> {
+    match &item["id"] {
+        Value::String(id) if !id.trim().is_empty() => Some(id.trim().to_string()),
+        Value::Number(id) => Some(id.to_string()),
+        _ => None,
+    }
 }
 /// Loose own divisions standing in `state_id` (hoi4_armies unassigned_by_state).
 fn unassigned_in(roster: &Value, state_id: i64) -> u64 {
@@ -836,8 +891,11 @@ pub fn tick(
     // 4. politics (one-shot picks)
     let mut political_power: Option<f64> = None;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
-        let key = format!("pol:{index}:{}", text(&pick["idea"]));
-        if state.done.contains(&key) || state.skipped(now, "pol", &index.to_string()) {
+        let key = item_id(pick).map_or_else(
+            || format!("pol:{index}:{}", text(&pick["idea"])),
+            |id| format!("pol:id:{id}"),
+        );
+        if state.done.contains_key(&key) || state.skipped(now, "pol", &key) {
             continue;
         }
         if political_power.is_none() {
@@ -853,7 +911,7 @@ pub fn tick(
             let need = pick["cost"].as_f64().unwrap_or(0.0);
             let since = state
                 .pol_pp_at_fail
-                .get(&index)
+                .get(&key)
                 .map_or(f64::MIN, |p| p + 15.0);
             if pp < need || pp < since {
                 continue;
@@ -867,19 +925,19 @@ pub fn tick(
             "po",
         )?;
         if ok || why.contains("already holds") {
-            state.done.insert(key);
-            state.pol_fails.remove(&index);
-            state.pol_pp_at_fail.remove(&index);
+            state.pol_fails.remove(&key);
+            state.pol_pp_at_fail.remove(&key);
+            state.done.insert(key, now);
         } else {
             if let Some(pp) = political_power {
-                state.pol_pp_at_fail.insert(index, pp);
+                state.pol_pp_at_fail.insert(key.clone(), pp);
             }
             // Usually short of political power. Each attempt opens the politics screen, so
             // back off (3, 6, 12 ... 30 days) instead of retrying every game day.
-            let fails = state.pol_fails.entry(index).or_insert(0);
+            let fails = state.pol_fails.entry(key.clone()).or_insert(0);
             *fails += 1;
             let days = (3u64 << (*fails - 1).min(4)).min(30);
-            state.skip(now, "pol", &index.to_string(), days as GameHour * DAY);
+            state.skip(now, "pol", &key, days as GameHour * DAY);
         }
         return Ok(Tick::Acted(format!(
             "politics {} : {ok} {why}",
@@ -990,13 +1048,13 @@ pub fn tick(
             }
         }
     }
-    // 7. production lines added once. The runner's memory does not survive a server
-    // restart, so a line that already exists in the game counts as done (a restart on
-    // 1 Nov 2026 re-added five lines).
+    // 7. production lines added once. The done-memory is kept in plan_state.json, and a line
+    // that already exists in the game counts as done too (a restart on 1 Nov 2026, before the
+    // memory was persisted, re-added five lines).
     let mut existing: Option<HashSet<String>> = None;
     for line in list(plan, "production") {
         let equipment = text(&line["equipment"]).to_string();
-        if state.done.contains(&format!("prod:{equipment}"))
+        if state.done.contains_key(&format!("prod:{equipment}"))
             || state.skipped(now, "prod", &equipment)
             || !reached(line, now)
         {
@@ -1014,7 +1072,7 @@ pub fn tick(
             );
         }
         if existing.as_ref().is_some_and(|e| e.contains(&equipment)) {
-            state.done.insert(format!("prod:{equipment}"));
+            state.done.insert(format!("prod:{equipment}"), now);
             continue;
         }
         let (ok, why) = state.act(
@@ -1025,11 +1083,19 @@ pub fn tick(
             "pr",
         )?;
         if ok {
-            state.done.insert(format!("prod:{equipment}"));
+            state.done.insert(format!("prod:{equipment}"), now);
         } else {
             state.skip(now, "prod", &equipment, 14 * DAY);
         }
         return Ok(Tick::Acted(format!("production {equipment}: {ok} {why}")));
+    }
+    // 7b. the triggered build order, in peace (and at war when the war does not run first;
+    // a war-first tick ran it right after the war step). Its items go before the open
+    // `construction` jobs so those cannot take the factories an ordered item waits for.
+    if !(war_on && plan["war"]["first"] != json!(false)) {
+        if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
     }
     // 8. construction with idle civilian factories. It comes before the armies
     // (which always find something to retry) so they cannot starve it.
@@ -1477,10 +1543,11 @@ fn layout_step(
     Ok(None)
 }
 
-/// `construction_plan`: ordered items `{order, building, state, province?, path?, from_state?,
+/// `construction_plan`: ordered items `{id?, order, building, state, province?, path?, from_state?,
 /// to_state?, when, priority?}` queued once each when `when` holds: a date ("1936.01.01"),
 /// `province_controlled:<id>`, `state_fully_controlled:<id>` or `owner:<state>=<TAG>`. Supply
-/// lines are then raised by the supply-first rule. One item per step.
+/// lines are then raised by the supply-first rule. One item per step, in peace and at war. An
+/// item is remembered as queued by its `id` (else its `order`), also across a restart.
 fn construction_plan_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -1491,6 +1558,20 @@ fn construction_plan_step(
     let Some(items) = plan["construction_plan"].as_array() else {
         return Ok(None);
     };
+    let key_of = |item: &Value| {
+        item_id(item).map_or_else(
+            || format!("order:{}", item["order"].as_i64().unwrap_or(-1)),
+            |id| format!("id:{id}"),
+        )
+    };
+    let pending = |state: &State, item: &Value| {
+        let key = key_of(item);
+        !state.plan_built.contains_key(&key) && !state.skipped(now, "cplan", &key)
+    };
+    // Nothing left to queue: no reads at all (in peace this step runs every tick).
+    if !items.iter().any(|item| pending(state, item)) {
+        return Ok(None);
+    }
     let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
     let mut provinces_of: HashMap<i64, Value> = HashMap::new();
     let mut detail = |state_id: i64| -> Value {
@@ -1505,11 +1586,12 @@ fn construction_plan_step(
             .clone()
     };
     for item in items {
-        let order = item["order"].as_i64().unwrap_or(-1);
-        let key = order.to_string();
-        if state.plan_built.contains(&order) || state.skipped(now, "cplan", &key) {
+        if !pending(state, item) {
             continue;
         }
+        let order = item["order"].as_i64().unwrap_or(-1);
+        let key = key_of(item);
+        let label = item_id(item).unwrap_or_else(|| format!("#{order}"));
         let home = item["state"]
             .as_i64()
             .or_else(|| item["to_state"].as_i64())
@@ -1558,12 +1640,12 @@ fn construction_plan_step(
         };
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
         if ok {
-            state.plan_built.insert(order);
+            state.plan_built.insert(key, now);
         } else {
             state.skip(now, "cplan", &key, 2 * DAY);
         }
         return Ok(Some(format!(
-            "construction plan #{order} {building} in {home}: {ok} {why}"
+            "construction plan {label} {building} in {home}: {ok} {why}"
         )));
     }
     Ok(None)
@@ -2119,8 +2201,9 @@ fn reached(entry: &Value, now: GameHour) -> bool {
 /// Routine domains the player tends to forget, one action per tick:
 ///   special_projects {"priority":["sp_key",..]}  an empty facility gets an idle scientist of its
 ///                    specialisation and the first priority (else visible) project of it;
-///   doctrines [{"doctrine":id,"track":t,"xp":100,"folder":"land"},..]  the next entry is adopted
-///                    once that folder's experience reaches "xp";
+///   doctrines [{"id","folder":"land","grand_doctrine"?,"track"?,"subdoctrine"?,"xp":100},..]  the
+///                    next entry is adopted once that folder's experience reaches "xp" (old shape
+///                    {"doctrine","track"} still read); see the module docs;
 ///   air {"war_missions":true}  in war, standing-by fighters fly air superiority and CAS wings
 ///                    close air support over our first border state with an enemy.
 fn extras_step(
@@ -2190,11 +2273,28 @@ fn extras_step(
         state.skip(now, "doccheck", "x", 7 * DAY);
         let read = tools.call("hoi4_doctrines", &json!({}))?;
         for (index, entry) in doctrines.iter().enumerate() {
-            let key = format!("doc:{index}");
-            if state.done.contains(&key) {
+            let key =
+                item_id(entry).map_or_else(|| format!("doc:{index}"), |id| format!("doc:id:{id}"));
+            if state.done.contains_key(&key) {
                 continue;
             }
-            if state.skipped(now, "doc", &key) {
+            // What to adopt: the grand doctrine, the subdoctrine on its track, or (old shape,
+            // kept for one release) `doctrine` with an optional `track`. An entry naming both
+            // a grand doctrine and a subdoctrine adopts the grand doctrine first.
+            let grand = entry["grand_doctrine"].as_str().filter(|g| !g.is_empty());
+            let sub = entry["subdoctrine"]
+                .as_str()
+                .or_else(|| entry["doctrine"].as_str())
+                .filter(|d| !d.is_empty());
+            let grand_key = format!("{key}:grand");
+            let (part_key, doctrine, track) = match (grand, sub) {
+                (Some(g), Some(_)) if !state.done.contains_key(&grand_key) => (grand_key, g, None),
+                (_, Some(d)) => (key.clone(), d, entry["track"].as_str()),
+                (Some(g), None) => (key.clone(), g, None),
+                // nothing to adopt: the entry is not this step's to fix
+                (None, None) => continue,
+            };
+            if state.skipped(now, "doc", &part_key) {
                 break;
             }
             let folder = entry["folder"].as_str().unwrap_or("land");
@@ -2207,20 +2307,17 @@ fn extras_step(
             if xp < entry["xp"].as_f64().unwrap_or(100.0) {
                 break;
             }
-            let mut args = json!({"doctrine": entry["doctrine"]});
-            if let Some(track) = entry["track"].as_str() {
+            let mut args = json!({"doctrine": doctrine});
+            if let Some(track) = track.filter(|t| !t.is_empty()) {
                 args["track"] = json!(track);
             }
             let (ok, why) = state.act(tools, lease, "hoi4_doctrine_adopt", args, "dc")?;
             if ok || why.contains("already") {
-                state.done.insert(key);
+                state.done.insert(part_key, now);
             } else {
-                state.skip(now, "doc", &key, 15 * DAY);
+                state.skip(now, "doc", &part_key, 15 * DAY);
             }
-            return Ok(Some(format!(
-                "doctrine {}: {ok} {why}",
-                text(&entry["doctrine"])
-            )));
+            return Ok(Some(format!("doctrine {doctrine}: {ok} {why}")));
         }
     }
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
@@ -3118,6 +3215,163 @@ pub fn merge_plan(path: &Path, changes: &Map<String, Value>) -> Result<Value> {
     Ok(plan)
 }
 
+/// `plan_state.json` next to `plan.json` (`<stem>_state.json` for another plan file name).
+pub fn state_path(plan_path: &Path) -> std::path::PathBuf {
+    let stem = plan_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("plan");
+    plan_path.with_file_name(format!("{stem}_state.json"))
+}
+
+/// The campaign the memory belongs to: the player tag (hoi4_overview), the game's playthrough
+/// id (the `handle_scope` of hoi4_construction_queue, which distinguishes campaigns) and the
+/// plan's `_meta.campaign` when the plan names one. None while the overview cannot be read.
+fn campaign_identity(tools: &dyn Tools, plan: &Value) -> Option<Value> {
+    let overview = tools.call("hoi4_overview", &json!({})).ok()?;
+    let playthrough = tools
+        .call("hoi4_construction_queue", &json!({"limit": 1}))
+        .ok()
+        .and_then(|q| {
+            q["handle_scope"]["playthrough_id"]
+                .as_str()
+                .map(String::from)
+        });
+    Some(json!({
+        "player": overview["player"].as_str(),
+        "playthrough": playthrough,
+        "campaign": plan["_meta"]["campaign"].as_str(),
+    }))
+}
+
+/// Same campaign unless a field both sides know differs (an unknown field never rejects).
+fn same_campaign(saved: &Value, now: &Value) -> bool {
+    ["player", "playthrough", "campaign"].iter().all(|field| {
+        match (saved[field].as_str(), now[field].as_str()) {
+            (Some(a), Some(b)) if !a.is_empty() && !b.is_empty() => a == b,
+            _ => true,
+        }
+    })
+}
+
+impl State {
+    /// The part of the memory that must survive a server restart: one-shot work done
+    /// (politics, doctrines, production lines), construction_plan items queued, running skip
+    /// timers (decisions taken wait 30 days), the failure ledger and the army_layout roles.
+    fn memory(&self, now: GameHour) -> Value {
+        let skips: HashMap<&String, &GameHour> =
+            self.bad.iter().filter(|(_, until)| **until > now).collect();
+        let failures: HashMap<&String, &Vec<GameHour>> = self
+            .failures
+            .iter()
+            .filter(|(_, times)| times.iter().any(|t| now - *t < 10 * DAY))
+            .collect();
+        let layout: HashMap<&String, &String> =
+            self.layout.iter().filter(|(_, a)| !a.is_empty()).collect();
+        json!({"done": self.done, "plan_built": self.plan_built, "skips": skips,
+            "failures": failures, "layout": layout})
+    }
+    /// Take back a saved memory. Work dated after `now` is dropped (an earlier save was
+    /// loaded: in that game it has not happened); after such a reload the timers and the
+    /// failure ledger are dropped too.
+    fn restore(&mut self, saved: &Value, now: GameHour) {
+        let hours = |key: &str| -> Vec<(String, GameHour)> {
+            saved[key]
+                .as_object()
+                .map(|m| {
+                    m.iter()
+                        .filter_map(|(k, v)| Some((k.clone(), v.as_i64()?)))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        for (key, at) in hours("done") {
+            if at <= now {
+                self.done.entry(key).or_insert(at);
+            }
+        }
+        for (key, at) in hours("plan_built") {
+            if at <= now {
+                self.plan_built.entry(key).or_insert(at);
+            }
+        }
+        let rewound = saved["game_hour"].as_i64().is_some_and(|h| now < h);
+        if !rewound {
+            for (key, until) in hours("skips") {
+                if until > now {
+                    self.bad.entry(key).or_insert(until);
+                }
+            }
+            if let Some(failures) = saved["failures"].as_object() {
+                for (signature, times) in failures {
+                    let times: Vec<GameHour> = times
+                        .as_array()
+                        .map(|t| t.iter().filter_map(Value::as_i64).collect())
+                        .unwrap_or_default();
+                    self.failures.entry(signature.clone()).or_insert(times);
+                }
+            }
+        }
+        if let Some(layout) = saved["layout"].as_object() {
+            for (hint, army) in layout {
+                if let Some(army) = army.as_str().filter(|a| !a.is_empty()) {
+                    self.layout
+                        .entry(hint.clone())
+                        .or_insert_with(|| army.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Once per server life, when the game date is known: read `plan_state.json` back unless it
+/// belongs to another campaign (then it is ignored and later overwritten).
+fn restore_memory(state: &mut State, tools: &dyn Tools, plan: &Value, path: &Path, now: GameHour) {
+    let Some(identity) = campaign_identity(tools, plan) else {
+        return;
+    };
+    state.persist.restored = true;
+    state.persist.saved = None;
+    let file = state_path(path);
+    match std::fs::read(&file) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => state.persist.note = Some(format!("plan_state.json unreadable: {e}")),
+        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+            Err(e) => state.persist.note = Some(format!("plan_state.json is not JSON: {e}")),
+            Ok(saved) if !same_campaign(&saved["identity"], &identity) => {
+                state.persist.note = Some(format!(
+                    "plan_state.json belongs to another campaign ({}), ignored",
+                    saved["identity"]
+                ));
+            }
+            Ok(saved) => state.restore(&saved, now),
+        },
+    }
+    state.persist.identity = Some(identity);
+}
+
+/// Write the memory when it changed (temp file and rename, like merge_plan).
+fn save_memory(state: &mut State, path: &Path, now: GameHour) {
+    let memory = state.memory(now);
+    if state.persist.saved.as_ref() == Some(&memory) {
+        return;
+    }
+    let mut body = memory.clone();
+    body["version"] = json!(1);
+    body["identity"] = state.persist.identity.clone().unwrap_or(Value::Null);
+    body["game_hour"] = json!(now);
+    let file = state_path(path);
+    let temporary = file.with_extension("json.tmp");
+    let written = serde_json::to_vec_pretty(&body)
+        .map_err(|e| Error::new("invalid_plan", e.to_string()))
+        .and_then(|bytes| Ok(std::fs::write(&temporary, bytes)?))
+        .and_then(|()| Ok(std::fs::rename(&temporary, &file)?));
+    match written {
+        Ok(()) => state.persist.saved = Some(memory),
+        Err(e) => state.persist.note = Some(format!("plan_state.json not written: {}", e.message)),
+    }
+}
+
 /// Run the plan for up to `seconds`, returning early when an event needs the
 /// model's choice or the runner must stop (peace conference). The plan file is
 /// read before every tick, so changes apply at once.
@@ -3144,7 +3398,13 @@ pub fn run(
     let reason = loop {
         let plan = read_plan(plan_path)?;
         let now = game_hour(state, tools);
+        if !state.persist.restored && now > 0 {
+            restore_memory(state, tools, &plan, plan_path, now);
+        }
         let step = tick(state, tools, &plan, lease, now);
+        if state.persist.restored {
+            save_memory(state, plan_path, now);
+        }
         // the digest survives a failing tick: it says what the stage saw
         match state.con.digest.take() {
             Some(digest) => construction = Some(digest),
@@ -3261,6 +3521,9 @@ pub fn run(
     let blocked = focus_blocked(state, &plan, state.last_hour);
     if !blocked.is_empty() {
         result["focus_blocked"] = json!(blocked);
+    }
+    if let Some(note) = state.persist.note.take() {
+        result["plan_state"] = json!(note);
     }
     if stopped_on_date {
         result["stopped_on_date"] = json!(true);
@@ -5967,5 +6230,401 @@ mod tests {
         let result = run(&mut State::default(), &fake(vec![]), &path, "l", 1).unwrap();
         assert_eq!(result["reason"], json!("plan inactive (active:false)"));
         let _ = std::fs::remove_file(path);
+    }
+
+    /// The actions sent (name, args) by a fake.
+    fn actions(f: &Fake) -> Vec<(String, Value)> {
+        f.calls
+            .borrow()
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn construction_plan_runs_in_peace_before_open_construction() {
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ITA"}))]);
+        let plan = json!({
+            "construction": [{"building": "arms_factory", "states": [7]}],
+            "construction_plan": [
+                {"id": "hub-5", "order": 1, "building": "supply_node", "state": 5,
+                 "province": 900, "when": "1936.01.01"}]});
+        let mut state = State::default();
+        let now = date_hour("1936.03.01").unwrap();
+        let step = tick(&mut state, &tools, &plan, "l", now).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("construction plan hub-5 supply_node in 5: true")),
+            "{step:?}"
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 1, "{sent:?}");
+        assert_eq!(sent[0].0, "hoi4_construction_add");
+        assert_eq!(sent[0].1["state_id"], 5);
+        assert_eq!(sent[0].1["province_id"], 900);
+        assert!(state.plan_built.contains_key("id:hub-5"));
+        // queued once: the next peace tick does not send it again
+        tick(&mut state, &tools, &plan, "l", now + DAY).unwrap();
+        assert_eq!(
+            actions(&tools)
+                .iter()
+                .filter(|(_, a)| a["building"] == "supply_node")
+                .count(),
+            1
+        );
+        // a plan whose items are all done reads nothing for them
+        let before = tools.calls.borrow().len();
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap(),
+            None
+        );
+        assert_eq!(tools.calls.borrow().len(), before);
+    }
+
+    #[test]
+    fn construction_plan_waits_for_its_date_in_peace() {
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ITA"}))]);
+        let plan = json!({"construction_plan": [
+            {"order": 2, "building": "infrastructure", "state": 5, "when": "1937.01.01"}]});
+        let mut state = State::default();
+        tick(
+            &mut state,
+            &tools,
+            &plan,
+            "l",
+            date_hour("1936.06.01").unwrap(),
+        )
+        .unwrap();
+        assert!(actions(&tools).is_empty());
+        let step = tick(
+            &mut state,
+            &tools,
+            &plan,
+            "l",
+            date_hour("1937.01.02").unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("construction plan #2")));
+        assert!(state.plan_built.contains_key("order:2"));
+    }
+
+    fn doctrine_tools() -> Fake {
+        fake(vec![(
+            "hoi4_doctrines",
+            json!({"experience": {"army": {"value": 150.0}, "navy": {"value": 10.0},
+                "air": {"value": 0.0}}}),
+        )])
+    }
+    /// One doctrine pass a week apart (the check runs every 7 game days).
+    fn doctrine_pass(state: &mut State, tools: &Fake, plan: &Value, week: i64) -> Option<String> {
+        extras_step(state, tools, plan, "l", START + week * 8 * DAY).unwrap()
+    }
+    fn adopted(tools: &Fake) -> Vec<Value> {
+        actions(tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_doctrine_adopt")
+            .map(|(_, mut a)| {
+                let o = a.as_object_mut().unwrap();
+                o.remove("request_id");
+                o.remove("lease_token");
+                a
+            })
+            .collect()
+    }
+
+    #[test]
+    fn doctrines_new_shape_send_the_grand_doctrine_then_the_subdoctrine_on_its_track() {
+        let plan = json!({"doctrines": [
+            {"id": "land-grand", "folder": "land", "grand_doctrine": "new_mobile_warfare", "xp": 50},
+            {"id": "land-inf", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry", "xp": 100},
+            {"id": "navy-grand", "folder": "naval", "grand_doctrine": "fleet_in_being", "xp": 50},
+            {"id": "never", "folder": "land", "grand_doctrine": "x", "xp": 1}]});
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        let first = doctrine_pass(&mut state, &tools, &plan, 0).unwrap();
+        assert!(
+            first.starts_with("doctrine new_mobile_warfare: true"),
+            "{first}"
+        );
+        doctrine_pass(&mut state, &tools, &plan, 1).unwrap();
+        // the naval entry waits for navy XP (10 < 50) and blocks the entry after it
+        assert_eq!(doctrine_pass(&mut state, &tools, &plan, 2), None);
+        assert_eq!(
+            adopted(&tools),
+            vec![
+                json!({"doctrine": "new_mobile_warfare"}),
+                json!({"doctrine": "mobile_infantry", "track": "infantry"}),
+            ]
+        );
+        assert!(state.done.contains_key("doc:id:land-grand"));
+        assert!(state.done.contains_key("doc:id:land-inf"));
+    }
+
+    #[test]
+    fn doctrines_old_shape_and_combined_entries_still_work() {
+        let plan = json!({"doctrines": [
+            {"doctrine": "superior_firepower", "track": "operations", "xp": 100, "folder": "land"},
+            {"folder": "air", "xp": 0, "grand_doctrine": "strategic_destruction",
+             "subdoctrine": "air_superiority_sub", "track": "fighters"}]});
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        for week in 0..4 {
+            doctrine_pass(&mut state, &tools, &plan, week);
+        }
+        assert_eq!(
+            adopted(&tools),
+            vec![
+                json!({"doctrine": "superior_firepower", "track": "operations"}),
+                json!({"doctrine": "strategic_destruction"}),
+                json!({"doctrine": "air_superiority_sub", "track": "fighters"}),
+            ]
+        );
+        assert!(state.done.contains_key("doc:0"));
+        assert!(state.done.contains_key("doc:1:grand"));
+        assert!(state.done.contains_key("doc:1"));
+    }
+
+    #[test]
+    fn id_keyed_done_memory_survives_a_list_reorder() {
+        // doctrines
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        let a = json!({"id": "a", "folder": "land", "grand_doctrine": "ga", "xp": 10});
+        let b = json!({"id": "b", "folder": "land", "subdoctrine": "sb", "track": "t", "xp": 10});
+        doctrine_pass(
+            &mut state,
+            &tools,
+            &json!({"doctrines": [a.clone(), b.clone()]}),
+            0,
+        );
+        let reordered = json!({"doctrines": [b, a]});
+        doctrine_pass(&mut state, &tools, &reordered, 1);
+        assert_eq!(doctrine_pass(&mut state, &tools, &reordered, 2), None);
+        assert_eq!(
+            adopted(&tools),
+            vec![
+                json!({"doctrine": "ga"}),
+                json!({"doctrine": "sb", "track": "t"})
+            ]
+        );
+        // construction_plan: the revision renumbers and reorders the items
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ITA"}))]);
+        let x = json!({"id": "x", "order": 1, "building": "infrastructure", "state": 5});
+        let y = json!({"id": "y", "order": 2, "building": "supply_node", "state": 6});
+        let mut state = State::default();
+        let first = json!({"construction_plan": [x.clone(), y.clone()]});
+        construction_plan_step(&mut state, &tools, &first, "l", START).unwrap();
+        let mut y2 = y;
+        y2["order"] = json!(1);
+        let mut x2 = x;
+        x2["order"] = json!(2);
+        let revised = json!({"construction_plan": [y2, x2]});
+        construction_plan_step(&mut state, &tools, &revised, "l", START).unwrap();
+        assert_eq!(
+            construction_plan_step(&mut state, &tools, &revised, "l", START).unwrap(),
+            None
+        );
+        let states: Vec<Value> = actions(&tools)
+            .iter()
+            .map(|(_, a)| a["state_id"].clone())
+            .collect();
+        assert_eq!(states, vec![json!(5), json!(6)]);
+        // politics
+        let tools = fake(vec![]);
+        let mut state = State::default();
+        let p = json!({"id": "law-1", "category": "law", "slot": 0, "idea": "partial_economic_mobilisation"});
+        let q = json!({"id": "adv-1", "category": "advisor", "slot": 1, "idea": "some_advisor"});
+        tick(
+            &mut state,
+            &tools,
+            &json!({"politics": [p.clone()]}),
+            "l",
+            START,
+        )
+        .unwrap();
+        tick(
+            &mut state,
+            &tools,
+            &json!({"politics": [q.clone(), p.clone()]}),
+            "l",
+            START,
+        )
+        .unwrap();
+        tick(
+            &mut state,
+            &tools,
+            &json!({"politics": [q, p]}),
+            "l",
+            START + DAY,
+        )
+        .unwrap();
+        let ideas: Vec<Value> = actions(&tools)
+            .iter()
+            .filter(|(n, _)| n == "hoi4_politics_choose")
+            .map(|(_, a)| a["idea"].clone())
+            .collect();
+        assert_eq!(
+            ideas,
+            vec![
+                json!("partial_economic_mobilisation"),
+                json!("some_advisor")
+            ]
+        );
+    }
+
+    /// A plan file in its own fresh directory (so its plan_state.json is its own).
+    fn plan_dir(plan: &Value) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "plan-state-test-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("plan.json");
+        std::fs::write(&path, serde_json::to_vec(plan).unwrap()).unwrap();
+        path
+    }
+    fn campaign(playthrough: &str, hour: GameHour) -> Fake {
+        fake(vec![
+            (
+                "hoi4_overview",
+                json!({"player": "ITA", "date": {"raw": hour}}),
+            ),
+            (
+                "hoi4_construction_queue",
+                json!({"handle_scope": {"playthrough_id": playthrough}}),
+            ),
+        ])
+    }
+
+    #[test]
+    fn state_round_trips_through_plan_state_json() {
+        let path = plan_dir(&json!({}));
+        assert_eq!(state_path(&path), path.with_file_name("plan_state.json"));
+        let tools = campaign("p-1", START);
+        let mut state = State::default();
+        restore_memory(&mut state, &tools, &json!({}), &path, START);
+        assert!(state.persist.restored);
+        state.done.insert("pol:id:law-1".into(), START - DAY);
+        state
+            .done
+            .insert("prod:infantry_equipment".into(), START - 2);
+        state.plan_built.insert("id:hub-5".into(), START - 3);
+        state.skip(START, "dec", "some_decision", 30 * DAY);
+        state.skip(START - 40 * DAY, "dec", "old", DAY);
+        state.layout.insert("strike".into(), "Army 2".into());
+        state.layout.insert("empty".into(), String::new());
+        save_memory(&mut state, &path, START);
+        let saved: Value =
+            serde_json::from_slice(&std::fs::read(state_path(&path)).unwrap()).unwrap();
+        assert_eq!(saved["identity"]["playthrough"], "p-1");
+        assert_eq!(saved["identity"]["player"], "ITA");
+        assert!(
+            saved["skips"].get("dec:old").is_none(),
+            "expired timers are not kept"
+        );
+        assert!(!path.with_file_name("plan_state.json.tmp").exists());
+
+        // a restarted server (a fresh State) takes it back
+        let mut again = State::default();
+        restore_memory(&mut again, &tools, &json!({}), &path, START + DAY);
+        assert_eq!(again.done, state.done);
+        assert_eq!(again.plan_built, state.plan_built);
+        assert!(again.skipped(START + DAY, "dec", "some_decision"));
+        assert_eq!(
+            again.layout.get("strike").map(String::as_str),
+            Some("Army 2")
+        );
+        assert!(!again.layout.contains_key("empty"));
+        assert_eq!(again.persist.note, None);
+
+        // an earlier save loaded: work done after the game date is dropped, timers too
+        let mut rewound = State::default();
+        restore_memory(&mut rewound, &tools, &json!({}), &path, START - DAY);
+        assert!(rewound.done.contains_key("pol:id:law-1"));
+        assert!(!rewound.done.contains_key("prod:infantry_equipment"));
+        assert!(rewound.plan_built.is_empty());
+        assert!(rewound.bad.is_empty());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn plan_state_of_another_campaign_is_ignored_and_replaced() {
+        let path = plan_dir(&json!({}));
+        let mut state = State::default();
+        restore_memory(
+            &mut state,
+            &campaign("p-1", START),
+            &json!({}),
+            &path,
+            START,
+        );
+        state.done.insert("doc:id:a".into(), START);
+        save_memory(&mut state, &path, START);
+        // another playthrough in the same folder
+        let mut other = State::default();
+        restore_memory(
+            &mut other,
+            &campaign("p-2", START),
+            &json!({}),
+            &path,
+            START,
+        );
+        assert!(other.done.is_empty());
+        assert!(other
+            .persist
+            .note
+            .as_deref()
+            .unwrap()
+            .contains("another campaign"));
+        save_memory(&mut other, &path, START);
+        let saved: Value =
+            serde_json::from_slice(&std::fs::read(state_path(&path)).unwrap()).unwrap();
+        assert_eq!(saved["identity"]["playthrough"], "p-2");
+        assert_eq!(saved["done"], json!({}));
+        // the plan's _meta.campaign tells campaigns apart too
+        let plan_a = json!({"_meta": {"campaign": "ita-1936-a"}});
+        let mut a = State::default();
+        restore_memory(&mut a, &campaign("p-3", START), &plan_a, &path, START);
+        a.done.insert("doc:id:a".into(), START);
+        save_memory(&mut a, &path, START);
+        let mut b = State::default();
+        let plan_b = json!({"_meta": {"campaign": "ita-1936-b"}});
+        restore_memory(&mut b, &campaign("p-3", START), &plan_b, &path, START);
+        assert!(b.done.is_empty());
+        let mut same = State::default();
+        restore_memory(&mut same, &campaign("p-3", START), &plan_a, &path, START);
+        assert!(same.done.contains_key("doc:id:a"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_restarted_server_does_not_queue_a_construction_plan_item_again() {
+        let plan = json!({"construction_plan": [
+            {"id": "rail-1", "order": 1, "building": "infrastructure", "state": 5}]});
+        let path = plan_dir(&plan);
+        let tools = campaign("p-1", START);
+        let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
+        assert!(
+            result["actions"][0]
+                .as_str()
+                .unwrap()
+                .starts_with("construction plan rail-1"),
+            "{result}"
+        );
+        // the server restarts: a fresh State reads plan_state.json back
+        let tools = campaign("p-1", START + DAY);
+        let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
+        assert!(
+            !actions(&tools)
+                .iter()
+                .any(|(n, _)| n == "hoi4_construction_add"),
+            "{result}"
+        );
+        assert!(result.get("plan_state").is_none(), "{result}");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }
