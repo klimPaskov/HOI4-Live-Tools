@@ -249,7 +249,10 @@ balance/delete` shape fleets; `hoi4_fleet_admiral` assigns admirals.
 Fleet composition:
 
 - Surface task force: full screening needs 3 screens per capital or carrier and
-  1 capital per carrier. In 1939-41 land-based naval bombers and carriers decide
+  1 capital per carrier (a heavy cruiser is the cheapest capital). Order of the
+  fight: light cruisers kill the enemy screens, then torpedo destroyers reach the
+  capitals and carriers; cheap one-gun destroyers soak light attack (NA48, NA49).
+  Carriers about 4 per fleet; no battleships; air superiority over the battle. In 1939-41 land-based naval bombers and carriers decide
   fleet fights more than another battleship.
 - Submarines: task forces of 8-12, one per raid region; shallow seas give +33%
   submarine visibility, deep ocean -15%.
@@ -723,9 +726,9 @@ Never improvise raw input for a gap.
 | AI05 | Move fighters freely, bombers rarely | A region change cuts efficiency to 90%, regained per day: fighters and CAS 0.888, tactical and naval bombers 0.192, strategic bombers 0.072; move bombers at most once a month; a newly assigned wing starts weak | Every air war | FAIR |
 | AI06 | Interception only against bombers | Fly air superiority; switch a home wing to interception only while enemy bombers operate there; never give one wing two missions | Every air war | FAIR |
 | AI07 | Central bases, never full | Overcrowding costs 2% per 1% over capacity (200 planes per base level); keep bases at 70% or less; a central base raises efficiency | Every air war | FAIR |
-| AI08 | Fighter choice | Light short-range fighters for Europe and defence, heavy fighters for range and islands; never two engines on a small airframe (cost 21 to 35); fighter 3 only with engine 4; 1940 fighter: small airframe 2, engine 3, two or three heavy MG, self-sealing tanks, armour | Plane designs | FAIR |
-| AI09 | CAS design | Small airframe, three bomb locks or heavy bomb locks, engine 3, armour plate and self-sealing tanks | Plane designs | FAIR |
-| AI10 | Naval bomber design | Small airframe with a torpedo mounting, engine 3, drop or extra fuel tanks; no armour or self-sealing (only agility protects against ship AA); only one naval armament category counts; medium airframe only for ocean range | Plane designs | FAIR |
+| AI08 | Fighter choice | Light short-range fighters for Europe and defence, heavy fighters for range and islands; range from fuel tanks or a range-focused MIO, and one fuel tank traded for an armour plate when the enemy fields many fighters; never two engines on a small airframe (cost 21 to 35); fighter 3 only with engine 4; 1940 fighter: small airframe 2, engine 3, two or three heavy MG, self-sealing tanks, armour | Plane designs | FAIR |
+| AI09 | CAS design by air colour | CAS airframe, engine 3. Uncontested (our) air: three bomb locks and nothing defensive (air defence ~8, ~24 IC), the most damage per IC; contested or enemy air: two bomb locks plus armour plate and defensive guns (air defence ~17, ~29 IC) to lose fewer planes; heavy bomb locks are cheaper. The CAS MIO's ground-attack traits add up to about +58% | Plane designs | FAIR |
+| AI10 | Naval bomber design | Naval bomber airframe with the best air torpedo (the air-torpedo tech is most of the damage), floats for detection, engine 3, drop or extra fuel tanks, radar once researched; no armour or self-sealing (only agility protects against ship AA); only one naval armament category counts; medium airframe only for ocean range | Plane designs | FAIR |
 | AI11 | Logistics strike when idle | With no own attack in a region for 3 days, CAS and tactical bombers strike trucks, trains and hubs (500 CAS killed 48 trains and 200 trucks in a month); back to CAS when the attack starts | Air-superior attacker | FAIR |
 | AI12 | Bomb contested air bases | Tactical bombers on enemy air bases: repairs sit low in the queue, capacity falls and overcrowding spirals | Contested regions | FAIR |
 | AI13 | Static AA is not anti-CAS | Static AA hits strategic bombers, port strikes, logistics strikes and air supply, not CAS; -12% bombing damage per level; build it only on factory and air-base states under bombing; use division AA against CAS | Defenders | FAIR |
@@ -743,6 +746,9 @@ Never improvise raw input for a gap.
 | AI25 | Fighters past 3:1 are wasted | Detection needed = our fighters / (3 x enemy fighters): about 33% at equal numbers, 100% at 3:1; past that, extra fighters cannot engage | Move the surplus or add radar instead of stacking | FAIR |
 | AI26 | Agility and speed trade | About +10% agility over the enemy is worth +4.5% defence and +10% speed about +6.5% attack; rank fighter designs by attack times defence per IC | Fighter designs | FAIR |
 | AI27 | Drop tanks by distance | Fighters over own regions need no drop tank; escorts or patrols over distant regions need them, or mission efficiency falls with range | Fighter designs | FAIR |
+| AI28 | Scout planes | A basic scout airframe, buildable on day 1, on recon over the enemy front gives the intel advantage in combat and reveals enemy plans; it is rarely targeted, so it needs no defence | Any land war | FAIR |
+| AI29 | Aluminium-free strategic bomber | Basic large airframe (3 aluminium) with the non-strategic-materials module (-3 aluminium) costs no aluminium; three bomb bays and engine II, buildable at the start; keep the airframe and refit engine III later (it frees a fourth bomb slot); electronics techs raise bombing damage. Targets: air bases, forts, ports, factories, never refineries | Allies in the Mediterranean and Pacific, long wars (AI14) | FAIR |
+| AI30 | Naval heavy fighters | Basic heavy-fighter airframe with torpedoes or depth charges (range ~1,960 km) on naval patrol hunts submarines and ships far out; with machine guns instead of sealed tanks it is buildable on day 1 | Navies facing submarines or distant fleets | FAIR |
 
 ## 17. Tactics: navy and invasions
 
@@ -754,12 +760,12 @@ Never improvise raw input for a gap.
 | NA04 | Adjacent fleet regions | With adjacent regions the whole fleet joins one battle; a gap means part of it fights alone | All navies | FAIR |
 | NA05 | Screens | Full screening needs 3 screens per capital or carrier and 1 capital per carrier, plus 3-6 spares; partial screening gives only part of the bonus | Surface fleets | FAIR |
 | NA06 | No doom stacks | Positioning -25% per +100% ship-count ratio (max -75%); fight with 1-2x the enemy's ships per task force | Surface battles | FAIR |
-| NA07 | Torpedo destroyers | Default screen: basic or improved hull, best engine, cheapest battery, torpedoes in every slot (about 650-950 IC); pair 1 light or heavy cruiser per 4 destroyers since capitals now hit small ships more | GER, ITA, minors | FAIR |
-| NA08 | ASW destroyers and hunter patrols | Depth charges 15+ and sonar make a sub hunter; 1 per 12 convoys on raided routes; hunt submarines on patrol (they are revealed), not on escort (they start hidden): 3-5 ASW destroyers with a spotter cruiser and naval bombers | Navies facing submarines | FAIR |
+| NA07 | Torpedo destroyers | Default screen: improved (1940) hull, engine III, cheapest battery, two torpedo IV (about 1,460 IC; basic hull 650-950 IC early); never the 1944 hull (it adds chromium); spam them to hit capitals once the enemy screens are thin; pair 1 light or heavy cruiser per 4 destroyers since capitals now hit small ships more | GER, ITA, minors | FAIR |
+| NA08 | ASW destroyers and hunter patrols | Depth charges 15+ and sonar on a 1936 hull (~1,000 IC, buildable early) make a sub hunter; naval heavy fighters (AI30) add air cover; 1 per 12 convoys on raided routes; hunt submarines on patrol (they are revealed), not on escort (they start hidden): 3-5 ASW destroyers with a spotter cruiser and naval bombers | Navies facing submarines | FAIR |
 | NA09 | Where submarines raid | Only against a convoy-dependent enemy (UK, Japan, overseas armies); deep ocean (-15% visibility), never shallow seas (+33%), the Channel or the North Sea (land-based air) | Raiders | FAIR |
 | NA10 | Submarines work on 1.19.4 | The 1.17.5 detection nerf was reversed in 1.18; measure losses against kills by IC over 30 days and move regions or pause the line when losses exceed kills | Germany, Italy, Japan | FAIR |
 | NA11 | Submarine task forces of 8-12 | One task force per raid region (a raider covers 1.5 regions at full efficiency); never mix old and new hulls; never put submarines in a surface task force | Raiders | FAIR |
-| NA12 | Raider design | Improved hull (1939) with three torpedo tubes for over 60 torpedo attack, which sinks a 60-HP convoy in one hit; snorkel or anechoic tiles; never build the early hull; old type II subs train, then go | Germany | FAIR |
+| NA12 | Raider design | FAIR: basic (1936) hull (Submarine II) with the best torpedoes and the best engine, no AIP or coating; never build the early hull. META only: the improved hull with three tubes (over 60 torpedo attack sinks a 60-HP convoy in one hit), the cruiser submarine, any later hull, anechoic tiles | Germany | FAIR |
 | NA13 | Raid where the convoys are | The sea-region info shows the estimated enemy convoys even at 0 intel; move each raider group every 7 days to the in-range region with most convoys and no warships | Raiders | FAIR |
 | NA14 | Raider settings | Medium risk; always engage only to kill a named enemy fleet | Raiders | FAIR |
 | NA15 | Convoy efficiency | Losses cut efficiency by 1.25x the loss; recovery starts after 7 quiet days at 4% a day; raiding an overseas front starves it | Enemies with overseas fronts | FAIR |
@@ -775,7 +781,7 @@ Never improvise raw input for a gap.
 | NA25 | Shore bombardment | Capitals on invasion support give the defender up to -33% | Landings | FAIR |
 | NA26 | Escort the landing's convoys | The 1.19.4 AI raids the convoys that feed a landing | After landfall | FAIR |
 | NA27 | Route regions | An invasion needs control in every region crossed; the click order changes the path | Sea Lion, Pacific | FAIR |
-| NA28 | Carriers only with a fleet | The AI attacks carriers with its whole fleet: 2-4 carriers per strike force with screens and capitals; hangars, AA and radar, no armour; the stance applies only in the first 24 hours | UK, USA, Japan | FAIR |
+| NA28 | Carriers only with a fleet | The AI attacks carriers with its whole fleet: 2-4 carriers per strike force with screens and a capital per carrier; past 80 planes in one naval battle each extra plane cuts sorties 0.5%, so about 4 carriers per fleet; most hangars the hull takes, AA and radar, no armour; carriers are the best sea control per IC, battleships are not worth building; the stance applies only in the first 24 hours | UK, USA, Japan | FAIR |
 | NA29 | Re-role old ships | Old destroyers become ASW escorts, cruisers spotters, old battleships hold safe waters; delete slow hulls the plan cannot use | Start fleets | FAIR |
 | NA30 | Admirals | One admiral per fleet with at most 10 task forces; the submarine fleet gets its own | All navies | FAIR |
 | NA31 | Mines | Near useless against the AI | All | FAIR |
@@ -795,6 +801,8 @@ Never improvise raw input for a gap.
 | NA45 | Crew from the keel | Since 1.19.4 a ship holds its manpower from keel-laying: queue only hulls the manpower pool can crew | Naval production | FAIR |
 | NA46 | Peace patrols for XP | In peace a patrolling fleet earns navy experience; patrol only while the fuel stock allows | Navies at peace | FAIR |
 | NA47 | Strike after the big battle | Keep obsolete capital ships out of losing fights; after a big battle the AI fleet goes to repair, which is the moment to strike or land | Fleet war | FAIR |
+| NA48 | Light cruisers kill screens | Screens shield capitals and carriers; light cruisers with four light batteries (light attack ~29, ~4,900 IC) strip the enemy screens first. Light battery III costs 150 IC per mount against 120 for II for 2 against 1.5 light attack and no extra resource (ship modules carry none in 1.19.4) | Surface fleets | FAIR |
+| NA49 | Sponge destroyers | Cheap early-hull destroyers with one light battery and a depth charge (~550 IC) absorb enemy light attack so the cruisers and torpedo destroyers survive | Surface fleets | FAIR |
 
 ## 18. Tactics: peace conference
 

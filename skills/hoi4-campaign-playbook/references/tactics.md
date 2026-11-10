@@ -53,6 +53,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PR45 Newest variant to elite templates
 - PR46 MIO-only conversion never ends
 - PR47 Convert big old stocks
+- PR48 Cheap support tanks
 
 ## Division design, training and experience: [templates-equipment-production.md §11](templates-equipment-production.md#11-tactics-division-design-training-and-experience)
 
@@ -84,6 +85,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AR26 Role battalion penalties
 - AR27 Upgrade when stock covers it
 - AR28 Flat or percentage support
+- AR29 TD division as an armour holder
 
 ## Construction, energy, trade and fuel: [economy-build-orders.md §15](economy-build-orders.md#15-tactics-construction-energy-trade-and-fuel)
 
@@ -142,6 +144,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - RE22 MIO policy timing
 - RE23 Bank XP and manpower on starter subdoctrines
 - RE24 Human Wave Tactics
+- RE25 Planning wins prepared attacks
+- RE26 Mastery from training
 
 ## Supply and logistics: [supply-logistics-deployment.md §11](supply-logistics-deployment.md#11-tactics-supply-and-logistics)
 
@@ -243,7 +247,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AI06 Interception only against bombers
 - AI07 Central bases, never full
 - AI08 Fighter choice
-- AI09 CAS design
+- AI09 CAS design by air colour
 - AI10 Naval bomber design
 - AI11 Logistics strike when idle
 - AI12 Bomb contested air bases
@@ -262,6 +266,9 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - AI25 Fighters past 3:1 are wasted
 - AI26 Agility and speed trade
 - AI27 Drop tanks by distance
+- AI28 Scout planes
+- AI29 Aluminium-free strategic bomber
+- AI30 Naval heavy fighters
 
 ## Navy and invasions: [war-air-naval-peace.md §17](war-air-naval-peace.md#17-tactics-navy-and-invasions)
 
@@ -312,6 +319,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - NA45 Crew from the keel
 - NA46 Peace patrols for XP
 - NA47 Strike after the big battle
+- NA48 Light cruisers kill screens
+- NA49 Sponge destroyers
 
 ## Peace conference: [war-air-naval-peace.md §18](war-air-naval-peace.md#18-tactics-peace-conference)
 
