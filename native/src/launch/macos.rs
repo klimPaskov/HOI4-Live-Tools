@@ -1193,6 +1193,23 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
         ),
     ))
 }
+#[cfg(test)]
+mod receipt_tools {
+    /// Every tool the executor may send (plan_run::RECEIPT_TOOLS) is served here, so the list
+    /// cannot name a tool this controller does not answer.
+    #[test]
+    fn every_executor_action_is_a_served_tool() {
+        let served: Vec<String> = super::mac_tool_list()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_string))
+            .collect();
+        let missing: Vec<&&str> = crate::plan_run::RECEIPT_TOOLS
+            .iter()
+            .filter(|n| !served.iter().any(|s| s == **n))
+            .collect();
+        assert!(missing.is_empty(), "not served: {missing:?}");
+    }
+}
 /// Tools that move the map camera; the camera is zoomed back out after them (army tools
 /// excepted: their camera stays at unit level until the next other action).
 const MAP_TOOLS: &[&str] = &[
@@ -4538,7 +4555,13 @@ impl MacClock {
                 .or(first_state);
             if !actions.receipt_exists(id) {
                 if current.as_deref() == Some(law) {
-                    return Ok(json!({"already":true,"law":law}));
+                    // A terminal receipt like every other action: a reply without one is taken
+                    // by the executor as uncertain and sent again.
+                    let action = json!({"kind":"occupation_law","law":law,"via_state":via});
+                    return Ok(json!({"receipt": {"status": "Verified", "action": action,
+                        "detail": {"law": law, "wanted": law,
+                            "note": "already in force: nothing was sent"}},
+                        "already": true, "law": law}));
                 }
                 if via.is_none() {
                     return Err(Error::new(
