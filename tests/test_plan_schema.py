@@ -40,8 +40,8 @@ HAND_PLANS = [
 # Per-item fields: list key -> (functions that read its entries, the first one walks the list;
 # loop variable names there).
 ENTRY_VARS = {
-    "politics": (["tick"], ["pick"]),
-    "production": (["tick", "wanted_switches"], ["line"]),
+    "politics": (["politics_step", "politics_auto_step"], ["pick"]),
+    "production": (["production_step", "wanted_switches"], ["line"]),
     "research_path": (["tick"], ["step"]),
     "construction": (["construction_step"], ["job"]),
     "construction_plan": (["construction_plan_step"], ["item"]),
@@ -72,6 +72,8 @@ NESTED_VARS = {
     "upgrade_ref": {"entry": "intelligence.upgrades[]"},
     "casualty_rule": {"m": "manage"},
     "air_superiority_rule": {"m": "manage"},
+    "politics_auto_step": {"entry": "politics_auto.order[]"},
+    "politics_auto_choice": {"entry": "politics_auto.order[]"},
 }
 # Executor-owned keys whose step is being built in parallel to an agreed shape: tagged executor before the
 # code reads them (the unread check skips them; their fields are checked once the code lands).

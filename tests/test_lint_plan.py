@@ -66,7 +66,7 @@ class CalendarAndHelpers(unittest.TestCase):
 PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
-                  "factory_rebalance_steps"}
+                  "factory_rebalance_steps", "domain_turns", "politics_auto"}
 
 
 class Lessons(unittest.TestCase):
@@ -75,7 +75,9 @@ class Lessons(unittest.TestCase):
         self.assertIn("construction.front", rules)
         with open(LESSONS, encoding="utf-8") as fh:
             rows = [json.loads(line) for line in fh if line.strip()]
-        self.assertEqual(len(rows), 24)  # design table 4.4, L12_early_hub_cost, L13-L23 tactics research, L24 shakedown
+        # design table 4.4, L12_early_hub_cost, L13-L23 tactics research, L24-L26 shakedowns (at least: other
+        # branches append their own rows)
+        self.assertGreaterEqual(len(rows), 25)
         ids = set()
         for r in rows:
             self.assertLessEqual({"id", "failure", "runs", "prevention", "lint_rule"}, set(r))
@@ -169,6 +171,7 @@ class HandPlans(unittest.TestCase):
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland resist from day one
             ("peace.enemies", "peace"),
             ("politics.law_gates", "politics[0] war_economy"),  # war support > 0.5 gate, no `when`
+            ("politics.pp_budget", "politics"),  # PP above 100 with no planned buy from late August
             # the L3/35 line: no army_layout template has light tanks and Divisione Celere is disbanded
             ("production.cull", "start line light_tank_chassis_1"),
             # 10 free factories, 9 go to start lines on day 0, the new artillery line draws from the same pool
@@ -206,6 +209,7 @@ class HandPlans(unittest.TestCase):
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
             ("peace.enemies", "peace"),
             ("politics.law_gates", "politics[0] partial_economic_mobilisation"),
+            ("politics.pp_budget", "politics"),  # PP idle after the one planned law
             ("research.throughput", "research_path[0]"),
             ("research.throughput", "research_path[1]"),
             ("war.planning_wait", "war.direct_moves"),
@@ -778,7 +782,17 @@ class TacticsRules(unittest.TestCase):
         self.assertNoHit(self.ita, "politics.unneeded_conscription")
 
     def test_pp_budget(self):
-        self.assertNoHit(self.ita, "politics.pp_budget")  # 150 PP by late May at 1.04 a day
+        self.assertNoHit(self.ita, "politics.pp_budget", "error")  # 150 PP by late May at 1.04 a day
+        # after its one law the plan leaves the power idle for months: no domain without a default use
+        f = self.assertHit(self.ita, "politics.pp_budget", "warning", "politics")
+        self.assertIn("no planned buy for", f["message"])
+        self.assertIn("politics_auto.order", f["message"])
+        plan = self.plan()
+        plan["politics_auto"] = {"order": [{"category": "government", "slot": 3, "ideas": ["ITA_a"]}]}
+        self.assertNoHit(plan, "politics.pp_budget", "warning", "no planned buy")
+        self.assertHit(plan, "politics.pp_budget", "info", "standing policy")
+        plan["politics_auto"]["enabled"] = False
+        self.assertHit(plan, "politics.pp_budget", "warning", "politics_auto is off")
         plan = self.plan()
         plan["politics"][0]["when"] = "1936.02.01"
         for k, idea in enumerate(["free_trade", "service_by_requirement", "tot_economic_mobilisation"]):

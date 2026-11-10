@@ -508,6 +508,118 @@
       "x-owner": "executor",
       "description": "one-shot picks in order; done-memory keyed by id"
     },
+    "politics_auto": {
+      "type": [
+        "object",
+        "boolean"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "threshold": {
+          "type": "number",
+          "default": 100,
+          "minimum": 0,
+          "description": "political power beyond the pending politics picks' costs from which the order buys"
+        },
+        "cap": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 0,
+          "description": "the country's political power cap"
+        },
+        "cap_margin": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "within this of the cap the order buys from all the power and the player is woken (political_power_at_cap)"
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "enum": [
+                  "government",
+                  "research_production",
+                  "military_staff"
+                ]
+              },
+              "slot": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              },
+              "ideas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "ranked best first: only an idea above the slot's current one is taken, and a current idea the list does not rank is left alone; absent: the first enabled idea, only while the slot is vacant"
+              },
+              "cost": {
+                "type": "number",
+                "minimum": 0,
+                "description": "political power the entry needs (default 50 for military_staff, else 150)"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate",
+                "description": "the entry waits until this holds"
+              },
+              "why": {
+                "type": "string",
+                "description": "the reason logged with each pick in the digest"
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "category",
+              "slot"
+            ],
+            "additionalProperties": false
+          },
+          "description": "the standing buy order (default: chief of army, military_staff 0; economy law war_economy > partial > low, government 2; trade law export_focus > limited_exports, government 1). Political advisors only when named here; government slot 0 (conscription) only within manage.conscription_laws"
+        },
+        "never": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "idea keys the order never takes"
+        },
+        "recheck_days": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1,
+          "description": "game days before an entry that found nothing to buy reads its slot again"
+        },
+        "idle_wake_days": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 0,
+          "description": "power above the threshold that nothing in the order can use for this long wakes the player (political_power_idle)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "description": "the standing political-power policy (plan_manage.rs rule 4): power the plan's politics picks leave unspent buys the first affordable entry of the order; false switches it off",
+      "x-owner": "executor"
+    },
     "decisions": {
       "type": "array",
       "items": {
@@ -684,6 +796,28 @@
     },
     "war": {
       "$ref": "#/definitions/war",
+      "x-owner": "executor"
+    },
+    "scheduler": {
+      "type": "object",
+      "properties": {
+        "max_wait_days": {
+          "type": "number",
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "description": "a domain (politics, decisions, training, production, construction, extras, manage, military, affairs) not offered a turn for this many game days goes ahead of the war-first block for one tick"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "additionalProperties": false,
+      "description": "the tick scheduler's turn guarantee (plan_run.rs DOMAINS): no domain starves behind the war-first block",
       "x-owner": "executor"
     },
     "disband": {

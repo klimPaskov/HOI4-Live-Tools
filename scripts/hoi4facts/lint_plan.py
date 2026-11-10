@@ -134,7 +134,9 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            50%; (info) the executor's 70% when no key exists
   politics.pp_budget       politics, decisions and decision_rules costs that the net PP income cannot pay by the
                            horizon (calc.pp_rates: (base + gain) x (1 + factor + stability) minus the running
-                           focus's cost); (warning) a dated buy affordable more than 30 days late
+                           focus's cost); (warning) a dated buy affordable more than 30 days late; (warning)
+                           projected PP above 100 with no planned buy left for more than 60 days in a row
+                           (info when politics_auto.order sets a standing buy order)
   politics.unneeded_conscription  a politics conscription law above the lowest law whose recruitable
                            manpower covers the plan's divisions plus manage.manpower_months of losses (15% a
                            month assumed); (warning) manage.conscription_laws unset or listing laws with an
@@ -208,6 +210,8 @@ POCKET_SHARE = 0.5        # war.pocket_threshold: fall back at this hostile shar
 EXECUTOR_POCKET_SHARE = 0.5  # the encirclement_risk read of hoi4_armies the executor falls back on
 AHEAD_YEARS = 0.5         # research.ahead: warning from half a year ahead, error from one year
 PP_LATE_DAYS = 30         # politics.pp_budget: a purchase this late against its date warns
+PP_IDLE = 100             # politics.pp_budget: political power above this with no planned buy is idle
+PP_IDLE_DAYS = 60         # ... and idle this many days in a row warns
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
 WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
@@ -2243,8 +2247,6 @@ class Lint:
                 ds = predicate_dates(r["when"], self.table) if r.get("when") is not None else []
                 for _ in range(max(1, r["max"]) if isinstance(r.get("max"), int) else 1):
                     buys.append((f"decision_rules[{i}] {r.get('decision')}", float(c), derive.day(max(ds)) if ds else None))
-        if not buys:
-            return
         gain, factor = calcmod.pp_modifiers(w, self.tag)
         rates = calcmod.pp_rates(w, gain, factor, calcmod.start_stability(w, self.tag), None,
                                  calcmod.pp_costs(w, self.tag))
@@ -2258,13 +2260,24 @@ class Lint:
         pending = list(buys)
         bought = {}
         day = start
-        while day <= end and pending:
+        idle_run, idle_from, idle_worst = 0, start, (0, start)
+        while day <= end:
             for b in list(pending):
                 label, c, due = b
                 if (due is None or due <= day) and balance >= c:
                     balance -= c
                     bought[label] = (day, due)
                     pending.remove(b)
+            # power above PP_IDLE that no planned buy is waiting for (one not yet due or not yet
+            # affordable keeps it banked on purpose)
+            if balance > PP_IDLE and not pending:
+                if not idle_run:
+                    idle_from = day
+                idle_run += 1
+                if idle_run > idle_worst[0]:
+                    idle_worst = (idle_run, idle_from)
+            else:
+                idle_run = 0
             day += 1
             balance += rates["per_day_focus"] if day <= focus_end else rates["per_day_idle"]
         how = (f"{rates['per_day_focus']:g} PP a day with a focus running ((base {rates['base']['v']:g} + gain "
@@ -2273,6 +2286,18 @@ class Lint:
         self.facts["pp_budget"] = {"per_day_focus": rates["per_day_focus"], "per_day_idle": rates["per_day_idle"],
                                    "bought": {k: derive.fmt(derive.date_of(v[0])) for k, v in bought.items()},
                                    "not_bought": [b[0] for b in pending]}
+        if idle_worst[0] > PP_IDLE_DAYS:
+            auto = self.plan.get("politics_auto")
+            policy = isinstance(auto, dict) and isinstance(auto.get("order"), list)
+            off = auto is False or (isinstance(auto, dict) and auto.get("enabled") is False)
+            self.add("info" if policy and not off else "warning", "politics.pp_budget", "politics",
+                     f"political power stays above {PP_IDLE:g} with no planned buy for {idle_worst[0]} days from "
+                     f"{derive.fmt(derive.date_of(idle_worst[1]))} ({how}): every spendable resource needs an "
+                     "owner and a default use; budget laws, advisors and decisions over the whole horizon"
+                     + (" (politics_auto.order is the standing policy that spends it)" if policy and not off
+                        else "; politics_auto is off, so it piles up to the cap" if off
+                        else ", or set politics_auto.order (the executor's default order only buys the chief of "
+                             "army and the economy and trade laws)"))
         for label, c, due in pending:
             self.add("error", "politics.pp_budget", label.split(" ")[0],
                      f"{label} ({c:g} PP) is not affordable by {derive.fmt(derive.date_of(end))}: {how}; "
