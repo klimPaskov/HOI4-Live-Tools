@@ -43,6 +43,12 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            marshal with no land role, an admiral with no navy_leader role; one person in two
                            posts (info: a marshal who is a general is promoted by hoi4_army_commander)
   army.strike_size         strike entry above 24 divisions
+  army.formations          (warning) command not concentrated: an army_layout entry below MIN_FORMATION divisions
+                           without a general that is not a task (task_of), or more than MAX_FORMATIONS formations
+                           in one theatre (the whole layout, or each army group when there are several); the
+                           executor folds them into tasks of the nearest formation either way
+  army.marshal             (warning) two or more formations and no army_group over them (one field marshal per
+                           theatre); (info) a group with no marshal: the executor picks the best free field marshal
   conquest.threshold       vp_targets below the enemy's surrender threshold (base limit plus its
                            starting surrender_limit modifiers), when the goal is a capitulation
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
@@ -203,6 +209,8 @@ HUB_DAYS = 120             # construction.hub_cost: warning above this many days
 HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal province that could serve instead
 MATURE_DAYS = 30          # production.mature_switch: a line this old (or a start line) is mature
 SWITCH_MATCH_DAYS = 14    # production.mature_switch: a remove and an add this close are one switch
+MAX_FORMATIONS = 3        # army.formations: formations per theatre (one field marshal)
+MIN_FORMATION = 3         # army.formations: smallest formation without a named general
 WIDTH_WARN = 0.05         # army.width_terrain: theatre fill this far below the best width warns
 WIDTH_ERROR = 0.10        # ... and this far is an error
 ATTACK_SUPPLY = 0.5       # war.supply_floor: no new offensive below this supply (the game's low-supply alert)
@@ -768,9 +776,10 @@ class Lint:
         if isinstance(g, dict):
             guarded.update(v for v in g.values() if isinstance(v, int))
         for e in layout:
-            if e.get("role") == "guard":
+            guarded.update(_ints(e.get("covers")))
+            if e.get("role") == "guard" or e.get("task_of"):
                 guarded.update(_ints(e.get("guard_states_in_order")))
-                if isinstance(e.get("state"), int) and not e.get("guard_states_in_order"):
+                if isinstance(e.get("state"), int) and (e.get("task_of") or not e.get("guard_states_in_order")):
                     guarded.add(e["state"])
         for sid in sorted(borders - guarded):
             self.add("error", "army.guards", "army_layout",
@@ -834,7 +843,52 @@ class Lint:
         armies = self.plan.get("armies") if isinstance(self.plan.get("armies"), dict) else {}
         if isinstance(armies.get("max"), int) and armies["max"] > MAX_STRIKE:
             self.add("error", "army.strike_size", "armies.max", f"armies.max {armies['max']} is above {MAX_STRIKE}")
+        self.formations(layout, armies)
         self.generals(layout, armies)
+
+    def formations(self, layout, armies):
+        """army.formations and army.marshal: command concentrated in a few formations per theatre, each under
+        a general, all under one field marshal; small roles are tasks inside a formation."""
+        if armies.get("concentrate") is False:
+            return
+        cap = armies.get("max_per_group", MAX_FORMATIONS)
+        least = armies.get("min_divisions", MIN_FORMATION)
+        groups = self.list_of("army_group")
+        def theatre(hint):
+            if len(groups) < 2:
+                return "the theatre"
+            for g in groups:
+                if hint in (g.get("armies") or []):
+                    return f"army group {g.get('id')}"
+            return None
+        per = defaultdict(list)
+        for i, e in enumerate(layout):
+            if e.get("task_of") or not isinstance(e.get("name_hint"), str):
+                continue
+            where = f"army_layout[{i}] {e['name_hint']!r}"
+            count = e.get("count", 1) if isinstance(e.get("count"), int) else 1
+            if count < least and not e.get("general"):
+                self.add("warning", "army.formations", where,
+                         f"{count} division(s) without a general is a task, not an army: give it task_of (the formation "
+                         f"whose front covers its state) so its divisions fight under a general who gains experience")
+                continue
+            t = theatre(e["name_hint"])
+            if t is not None:
+                per[t].append(e["name_hint"])
+        for t, hints in per.items():
+            if isinstance(cap, int) and cap > 0 and len(hints) > cap:
+                self.add("warning", "army.formations", "army_layout",
+                         f"{len(hints)} formations in {t} ({', '.join(hints)}); concentrate command in at most {cap} "
+                         f"(armies.max_per_group) so each general leads enough divisions to learn and none sits idle")
+        formations = [h for hints in per.values() for h in hints]
+        if len(formations) >= 2 and not groups:
+            self.add("warning", "army.marshal", "army_group",
+                     f"{len(formations)} formations ({', '.join(formations)}) and no army group: one field marshal "
+                     f"over the theatre gains experience from all of them and lends them his traits")
+        for i, g in enumerate(groups):
+            if not g.get("marshal"):
+                self.add("info", "army.marshal", f"army_group[{i}]",
+                         "no marshal named: the executor takes the best free field marshal")
 
     def commander_uses(self, layout, armies):
         """[(where, name, post, kind)]: post general | marshal | admiral; kind command (one post per person),

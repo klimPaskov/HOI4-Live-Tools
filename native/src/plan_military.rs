@@ -1540,7 +1540,7 @@ fn marshals(entry: &Value) -> Vec<String> {
     }
 }
 
-fn army_group_step(
+pub(super) fn army_group_step(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -1558,7 +1558,7 @@ fn army_group_step(
         .collect();
     let open = |state: &State, id: &str, e: &Value| {
         !state.done.contains_key(&format!("agrp:{id}"))
-            || (!marshals(e).is_empty() && !state.done.contains_key(&format!("agfm:{id}")))
+            || (e["marshal"] != json!(false) && !state.done.contains_key(&format!("agfm:{id}")))
     };
     // nothing left to do: no reads at all
     if !keyed.iter().any(|(id, e)| open(state, id, e)) {
@@ -1647,7 +1647,7 @@ fn army_group_step(
         // the field marshal, once
         let candidates = marshals(entry);
         let led = format!("agfm:{id}");
-        if candidates.is_empty() || state.done.contains_key(&led) {
+        if entry["marshal"] == json!(false) || state.done.contains_key(&led) {
             continue;
         }
         let group = match groups.iter().next() {
@@ -1669,11 +1669,20 @@ fn army_group_step(
             ));
             continue;
         }
-        let Some(general) = candidates
+        // The plan's names first; when none of them is free, the best free field marshal of the
+        // country (a theatre group made by plan_formations.rs names none).
+        let listed = candidates
             .iter()
             .find(|c| !state.skipped(now, "agfmc", &format!("{id}|{c}")))
-            .cloned()
-        else {
+            .cloned();
+        let fallback = || {
+            let skip = |n: &str| {
+                candidates.iter().any(|c| c == n)
+                    || state.skipped(now, "agfmc", &format!("{id}|{n}"))
+            };
+            super::plan_formations::best_marshal(state, tools, plan, &skip)
+        };
+        let Some(general) = listed.or_else(fallback) else {
             lines.push(format!("{label}: no listed field marshal is free"));
             wake(
                 state,
@@ -2127,6 +2136,19 @@ struct Hold<'a> {
 /// pocket fall-back).
 pub(super) fn holding(state: &State, army: &str) -> bool {
     state.military.held.contains_key(army)
+}
+
+/// Whether `army` is one of the running naval invasion's armies.
+pub(super) fn invading(state: &State, plan: &Value, army: &str) -> bool {
+    invasion_claims(state, plan).0.contains(army)
+}
+
+/// The army is gone (merged into its formation): drop its hold and rest memory.
+pub(super) fn forget_army(state: &mut State, army: &str) {
+    if let Some((id, _)) = state.military.held.remove(army) {
+        state.military.hold_orders.remove(&id);
+    }
+    state.military.cooled.remove(army);
 }
 
 /// A read through the tick's read cache (shared with the plan predicates): each tool and

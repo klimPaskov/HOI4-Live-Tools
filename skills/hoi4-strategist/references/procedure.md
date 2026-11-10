@@ -398,14 +398,29 @@ Resolution: executor `politics`; the remaining hires in buy order in `politics_a
 Read: `army-organisation.md` §1-§5; `war-operating-loop.md` §1, §3, §5b; `supply-logistics-deployment.md`
 §4, §8. Facts: `F oob <TAG>`, `F characters <TAG> --role general`, `F characters <TAG> --role marshal`,
 dossier §9.
+0. **Concentrate command.** Generals gain experience and traits from the battles of the divisions they
+   lead, a field marshal from the armies of his group, and an army without a general gets no leader
+   bonus at all. So plan a few standing formations per theatre (by default at most 3 under one field
+   marshal, each of at least 3 divisions), each with a sector, a purpose and a general who keeps it all
+   war. Guard posts, corridor holds and border watches are tasks of a formation (`task_of`: the
+   formation's name_hint; its front line covers those states), not armies of their own. Plans written
+   as one army per task get concentrated by the executor anyway (`armies.max_per_group`,
+   `armies.min_divisions`, `armies.concentrate: false` to keep a layout as written).
 1. `army_layout` uses only start template names, `count` ≤ divisions of those templates in that state,
-   `role` strike or guard. Every own state bordering an enemy has a guard.
+   `role` strike or guard. Every own state bordering an enemy is covered: by a formation's own state,
+   `axis`, `covers` or `guard_states_in_order`, or by a task (`task_of`) whose state is there.
 2. Strike armies ≤ 24 divisions, also sized to the supply on the axis.
-3. One general per army, chosen once by traits for its role (no reassignment later). Field marshals and
-   army groups for a front with more than one army: executor `army_group` (`id`, `name`, `armies`: 2 to
-   12 army_layout name_hints, `marshal`: a name or names tried in order, `when`), grouped once and led
-   once, never churned. A marshal who is only a general is promoted by the tool for command power; one
-   who also commands a layout army is skipped (`F characters <TAG> --role marshal`).
+3. One general per formation, chosen once by traits for its role (no reassignment later); the executor
+   gives every other army the best free general, so commanders do not sit idle. One army group per
+   theatre over all its formations: executor `army_group` (`id`, `name`, `armies`: 2 to 12 army_layout
+   name_hints, `marshal`: a name or names tried in order, `when`), grouped once and led once, never
+   churned; when no listed marshal is free the executor takes the best free field marshal. A marshal who
+   is only a general is promoted by the tool for command power; one who also commands a layout army is
+   skipped (`F characters <TAG> --role marshal`).
+3a. Offensives are battle plans: front, offensive line, planning, execute. `vp_targets` name the state the
+   offensive goes for; direct province moves only with `war.direct_moves` or as the stall response. An
+   army keeps a move for `war.move_commit_days` (3) and gets at most `war.move_budget` (3) moves in
+   `war.move_window_days` (10); every move costs organisation.
 4. Planned trait assignments and command-power use (15 CP per trait, 20 per preferred tactic): no tool
    yet: plan.md only, `commanders` key pending.
 5. `disband`: far divisions whose equipment the front needs; keep a home guard; never divisions overseas
@@ -416,7 +431,7 @@ dossier §9.
 7. Guards also on ports and hubs in reach of an enemy navy (OP42).
 Resolution: executor `armies`, `army_layout`, `army_group`, `disband`, `war.guards`, `war.guard_states`;
 plan.md §2 army table. Check: lint `army.templates`, `army.counts`, `army.guards`, `army.strike_size`,
-`army.generals` (marshals too); validate_plan (group armies are layout name_hints, one group per army);
+`army.generals` (marshals too), `army.formations`, `army.marshal`; validate_plan (group armies are layout name_hints, one group per army);
 rubric rows 6 and 8.
 
 ### 17. Manpower
@@ -462,6 +477,7 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    `hold_targets` {`id`, `army` (army_layout name_hint), `provinces` along the corridor, rear first, each
    touching the one before, `when`, `until`}: the army stands in the most forward listed province the
    player controls and follows as the corridor grows; it replaces the layout guard post of that army.
+   Only a formation holds a corridor; a hold named for a task is covered by its formation's front.
 4a. **Pocket step:** for each pocket from `hoi4_encirclement_candidates`, the pincers at the neck from two
    directions, the anvil pinning, then the reduction: an explicit offensive into every pocket province (the
    battle plan clears only empty pockets of 2 provinces or fewer), pocket ports first (OP13). Own fall-back
@@ -663,6 +679,9 @@ the army survives".
 2. One `contingency` per likely failure: own core or border province lost, an axis stalls past its
    date, a scripted escalation, a new war or ally call, supply below the floor on the axis, manpower or
    equipment short. Each has a `trigger` predicate and a `phase`, `overrides` or `revise` response.
+   A phase with neither `enter` nor `exit` lasts only while a contingency that names it is active; then
+   the phases are judged again from the first. Give a holding phase an `exit` only when it must outlast
+   its trigger, never leave the offensive waiting on a phase nothing ends.
 3. Every lesson that applies is covered by a lint rule, a contingency or a do-not item; name which in
    plan.md §9 or §10.
 4. One phase per expected capitulation with overrides for war (free the guards, new axes), production (the
@@ -681,7 +700,7 @@ the rule is a brief line (read, threshold, call) when the player must act.
 |---|---|---|
 | Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`) | `alarms` |
 | Game alert row (`hoi4_alerts {}`) | any named alert → its fix; officer corps, MIO, admiral alerts wake the player | `manage` |
-| Armies and generals | ≤ 24 divisions, general on armies ≥ 8 | `armies` |
+| Armies and generals | few formations (≤ 3 per marshal, ≥ 3 divisions, ≤ 24), small roles are tasks inside them, a general on every army | `armies`, `army_layout` |
 | Rest and resume | rest below 30% of the army's highest organisation seen, resume at 80% and 70% supply; at most 20 days (not while supply is under 35%). These are the executor defaults; absolute `rest_below` / `resume_above` replace the shares | `war.rest_below_pct`, `war.resume_above_pct`, `war.supply_resume`, `war.rest_max_days` |
 | Supply floor | no new offensive below 50% supply; below 35% nothing attacks (attrition). Executor defaults | `war.supply_floor`, `war.supply_hold` |
 | Planning wait | the execute order waits until the planning bonus reaches 90% of its 30% cap (about 14 game days), at most 15 days; skipped near the goal deadline | `war.planning_wait`, `war.planning_cap`, `war.planning_share`, `war.planning_gain`, `war.planning_max_days`, `war.planning_skip_days` |
