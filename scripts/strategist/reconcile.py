@@ -79,7 +79,9 @@ def live_names(call):
     for b in air.get("air_bases") or []:
         for name in b.get("wings") or []:
             base_state[name] = b.get("state_id")
-    names["wing_by_selector"] = [(r.get("wing"), r.get("variant"), base_state.get(r.get("wing")))
+    # (wing, variant, state, airframe type): a selector may name the variant or the airframe id
+    names["wing_by_selector"] = [(r.get("wing"), r.get("variant"), base_state.get(r.get("wing")),
+                                  r.get("aircraft_type"))
                                  for r in air.get("wings") or [] if r.get("wing")]
     lines = call("hoi4_production_lines", {})
     names["equipment"] = sorted({r.get("equipment_id") for r in lines.get("lines") or [] if r.get("equipment_id")})
@@ -150,7 +152,7 @@ SELECTOR = re.compile(r"^\s*(.+?)\s+at\s+(\d+)\s*$")
 
 
 def expand_wing_selectors(plan, names, patched, unresolved):
-    """Replace air_plan entries whose wing is "<variant> at <state>" by one entry per live wing."""
+    """Replace air_plan entries whose wing is "<variant or airframe> at <state>" by one entry per live wing."""
     entries = plan.get("air_plan")
     if not isinstance(entries, list):
         return
@@ -161,10 +163,12 @@ def expand_wing_selectors(plan, names, patched, unresolved):
             out.append(e)
             continue
         variant, state = norm(m.group(1)), int(m.group(2))
-        hits = [w for w, v, st in names.get("wing_by_selector") or [] if v and norm(v) == variant and st == state]
+        sel = [tuple(r) + (None,) * (4 - len(r)) for r in names.get("wing_by_selector") or []]
+        hits = [w for w, v, st, t in sel
+                if st == state and ((v and norm(v) == variant) or (t and norm(t) == variant))]
         if not hits:
             unresolved.append({"kind": "wing", "path": "air_plan[%d].wing" % i, "name": e["wing"],
-                               "candidates": ["%s at %s" % (v, st) for _, v, st in names.get("wing_by_selector") or []][:8]})
+                               "candidates": ["%s at %s" % (v, st) for _, v, st, _ in sel][:8]})
             out.append(e)
             continue
         for w in hits:

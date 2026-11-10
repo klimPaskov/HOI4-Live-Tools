@@ -297,6 +297,9 @@ pub struct State {
     war_cool: HashMap<String, GameHour>,
     /// per army: (target, main state, game hour) of the last progress seen
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
+    /// The game day on which an idle research slot or focus was offered the tick ahead of the
+    /// war-first block and started nothing (that day the war runs first again).
+    cheap_first_spent: Option<GameHour>,
     /// armies on direct move orders (their battle plan did not advance)
     war_move: HashSet<String>,
     /// armies resting (plan stopped for organisation or supply) since a game hour
@@ -420,6 +423,7 @@ impl Default for State {
             war_stage: HashMap::new(),
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
+            cheap_first_spent: None,
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
@@ -757,28 +761,20 @@ pub fn tick(
     // step can take 100 s (w15, 6 Nov 2026: 111-day stalls while the tick built factories), so
     // the war executive acts before everything else unless the plan says "war": {"first": false}.
     let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
-    if war_on && plan["war"]["first"] != json!(false) {
-        if let Some(step) = layout_step(state, tools, plan, lease, now)? {
+    // Research and the focus are one click each, but war preparation can queue dozens of army
+    // moves, and the war-first block acts once per tick: a slot or focus left idle starves
+    // (shakedown 10 Nov 2026: four slots and the focus still idle on 10 January). So while a
+    // slot is idle or no focus runs, the tick offers them first; when they start nothing, the war
+    // runs first again for the rest of that game day.
+    let day = now / DAY;
+    let cheap_first = war_on
+        && plan["war"]["first"] != json!(false)
+        && state.cheap_first_spent != Some(day)
+        && cheap_work_idle(tools);
+    let war_first = war_on && plan["war"]["first"] != json!(false) && !cheap_first;
+    if war_first {
+        if let Some(step) = war_first_steps(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
-        }
-        if let Some(step) = layout_names_step(state, tools, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        if let Some(step) = war_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        if let Some(step) = armies_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        // Home divisions disbanded early refill the fighting armies' equipment (w16: the
-        // African infantry fought at 13-33% for most of the year).
-        if plan["disband"].is_object() {
-            if let Some(step) = disband_step(state, tools, plan, lease, now)? {
-                return Ok(Tick::Acted(step));
-            }
         }
     }
     // 2. research
@@ -1092,6 +1088,13 @@ pub fn tick(
             state.stages.focus = Some((line, left == 0));
         }
     }
+    if cheap_first {
+        // neither research nor the focus acted: the war-first block gets the rest of the day
+        state.cheap_first_spent = Some(day);
+        if let Some(step) = war_first_steps(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
     // 4. politics (one-shot picks)
     let mut political_power: Option<f64> = None;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
@@ -1273,7 +1276,7 @@ pub fn tick(
     // 7b. the triggered build order, in peace (and at war when the war does not run first;
     // a war-first tick ran it right after the war step). Its items go before the open
     // `construction` jobs so those cannot take the factories an ordered item waits for.
-    if !(war_on && plan["war"]["first"] != json!(false)) {
+    if !war_first && !cheap_first {
         if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -1303,7 +1306,7 @@ pub fn tick(
         return Ok(Tick::Acted(step));
     }
     // 9. armies (here unless the war runs first, which runs them right after itself)
-    if !(war_on && plan["war"]["first"] != json!(false)) {
+    if !war_first && !cheap_first {
         if let Some(step) = armies_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -1314,12 +1317,62 @@ pub fn tick(
             return Ok(Tick::Acted(step));
         }
     }
-    if plan["disband"].is_object() && !(war_on && plan["war"]["first"] != json!(false)) {
+    if plan["disband"].is_object() && !war_first && !cheap_first {
         if let Some(step) = disband_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// The war-first block: layout, war executive, triggered build order, armies, early disbands.
+fn war_first_steps(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if let Some(step) = layout_step(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
+    }
+    if let Some(step) = layout_names_step(state, tools, lease, now)? {
+        return Ok(Some(step));
+    }
+    if let Some(step) = war_step(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
+    }
+    if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
+    }
+    if let Some(step) = armies_step(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
+    }
+    // Home divisions disbanded early refill the fighting armies' equipment (w16: the
+    // African infantry fought at 13-33% for most of the year).
+    if plan["disband"].is_object() {
+        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
+            return Ok(Some(step));
+        }
+    }
+    Ok(None)
+}
+
+/// An idle research slot or no active focus (reads only; an unreadable answer counts as busy).
+fn cheap_work_idle(tools: &dyn Tools) -> bool {
+    let slot_idle = tools
+        .call("hoi4_research", &json!({"limit": 1}))
+        .map(|r| {
+            list(&r, "slots")
+                .iter()
+                .any(|s| s["researching"].as_str().is_none())
+        })
+        .unwrap_or(false);
+    slot_idle
+        || tools
+            .call("hoi4_focus_completed", &json!({"limit": 1}))
+            .map(|f| f["active_key"].is_null())
+            .unwrap_or(false)
 }
 
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
@@ -6120,6 +6173,69 @@ mod tests {
         assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_front"));
     }
 
+    /// The war fake with every research slot idle.
+    struct IdleLab(War);
+    impl Tools for IdleLab {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            match name {
+                "hoi4_research" => {
+                    self.0
+                        .calls
+                        .borrow_mut()
+                        .push((name.to_string(), args.clone()));
+                    Ok(json!({"slots": [{"researching": null}]}))
+                }
+                "hoi4_technology_list" if args["available"] == json!(true) => Ok(json!({
+                    "available_only": true, "technologies": ["tech_a"],
+                    "start_years": {"tech_a": 1936}})),
+                _ => self.0.call(name, args),
+            }
+        }
+    }
+
+    #[test]
+    fn an_idle_research_slot_goes_ahead_of_the_war_first_block() {
+        let lab = IdleLab(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        let mut state = State::default();
+        let mut plan = war_plan();
+        plan["research_priority"] = json!(["tech_a"]);
+        tick(&mut state, &lab, &plan, "l", START).unwrap();
+        let calls = lab.0.calls.borrow();
+        assert!(
+            calls.iter().any(|(n, _)| n == "hoi4_research_start"),
+            "{calls:?}"
+        );
+        assert!(
+            !calls.iter().any(|(n, _)| n.starts_with("hoi4_army_")),
+            "{calls:?}"
+        );
+        assert_eq!(state.cheap_first_spent, None);
+    }
+
+    #[test]
+    fn an_idle_slot_with_nothing_to_start_hands_the_day_back_to_the_war() {
+        let lab = IdleLab(War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        });
+        let mut state = State::default();
+        let mut plan = war_plan();
+        plan["research_fallback"] = json!(false);
+        tick(&mut state, &lab, &plan, "l", START).unwrap();
+        assert!(lab
+            .0
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n.starts_with("hoi4_army_")));
+        assert_eq!(state.cheap_first_spent, Some(START / DAY));
+    }
+
     /// An army standing in an own state an enemy holds part of.
     struct Inside(RefCell<Vec<(String, Value)>>);
     impl Tools for Inside {
@@ -6744,8 +6860,10 @@ mod tests {
             calls: RefCell::new(vec![]),
         };
         let mut state = State::default();
-        tick(&mut state, &w, &war_plan(), "l", START).unwrap();
-        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_research"));
+        let step = tick(&mut state, &w, &war_plan(), "l", START).unwrap();
+        // busy slots and a running focus are only read; the war acts in the same tick
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("war ")), "{step:?}");
+        assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_research_start"));
     }
 
     #[test]
