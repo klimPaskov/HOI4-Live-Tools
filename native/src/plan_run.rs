@@ -261,6 +261,70 @@ pub const DAY: GameHour = 24;
 /// order last worked within this window.
 const LEDGER_KEEP: GameHour = 120 * DAY;
 
+/// Every game action the executor may send through `State::act`. Each one answers every
+/// success and every refusal after possible input with a terminal receipt
+/// (`receipt.status` Verified / NotApplied / Diverged), and a repeated request_id only settles.
+/// `dispatch` takes a reply without a receipt as uncertain and sends the order again, so a tool
+/// without receipts repeats each success until the game refuses it (railway and construction
+/// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
+/// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
+pub const RECEIPT_TOOLS: &[&str] = &[
+    "hoi4_agency_create",
+    "hoi4_agency_upgrade",
+    "hoi4_air_mission",
+    "hoi4_air_rebase",
+    "hoi4_army_assign",
+    "hoi4_army_commander",
+    "hoi4_army_create",
+    "hoi4_army_detach",
+    "hoi4_army_front",
+    "hoi4_army_group_create",
+    "hoi4_army_merge",
+    "hoi4_army_motorization",
+    "hoi4_army_move",
+    "hoi4_army_offensive",
+    "hoi4_army_plan",
+    "hoi4_army_rename",
+    "hoi4_army_split",
+    "hoi4_auto_import",
+    "hoi4_construction_add",
+    "hoi4_construction_order",
+    "hoi4_decision_take",
+    "hoi4_design_create",
+    "hoi4_design_set_production",
+    "hoi4_diplomacy_act",
+    "hoi4_division_disband",
+    "hoi4_doctrine_adopt",
+    "hoi4_event_choose",
+    "hoi4_faction_create",
+    "hoi4_faction_invite_accept",
+    "hoi4_fleet_admiral",
+    "hoi4_fleet_mission",
+    "hoi4_fleet_region",
+    "hoi4_focus_start",
+    "hoi4_mio_design_team",
+    "hoi4_mio_policy",
+    "hoi4_mio_trait",
+    "hoi4_naval_invasion",
+    "hoi4_occupation_law",
+    "hoi4_operative_assign",
+    "hoi4_operative_recruit",
+    "hoi4_peace_exit",
+    "hoi4_peace_submit",
+    "hoi4_peace_take",
+    "hoi4_politics_choose",
+    "hoi4_production_add",
+    "hoi4_production_set",
+    "hoi4_railway_build",
+    "hoi4_research_start",
+    "hoi4_special_project_assign",
+    "hoi4_template_create",
+    "hoi4_template_edit",
+    "hoi4_time",
+    "hoi4_trade_set",
+    "hoi4_train",
+];
+
 /// One tool call by name (a read, or an action with its own request id).
 pub trait Tools {
     fn call(&self, name: &str, args: &Value) -> Result<Value>;
@@ -717,6 +781,15 @@ impl State {
         args: Value,
         tag: &str,
     ) -> Result<(bool, String)> {
+        if !RECEIPT_TOOLS.contains(&name) {
+            return Err(Error::new(
+                "tool_without_receipt",
+                format!(
+                    "{name} is not in plan_run::RECEIPT_TOOLS: the executor sends only tools that \
+                     answer with a terminal receipt (a reply without one is resent)"
+                ),
+            ));
+        }
         let signature = format!("{name} {args}");
         let army_move = (name == "hoi4_army_move")
             .then(|| text(&args["army"]).to_string())
@@ -5710,6 +5783,94 @@ mod tests {
             assert_eq!(error.code, "action_uncertain");
             assert_eq!(tools.actions.borrow().len(), 1);
         }
+    }
+
+    /// The tool names given as a string literal at every `.act(` call of the executor sources.
+    /// (A call whose tool is a variable is covered by `act`'s own refusal.)
+    fn act_call_literals() -> Vec<String> {
+        let sources = [
+            include_str!("plan_run.rs"),
+            include_str!("plan_manage.rs"),
+            include_str!("plan_military.rs"),
+            include_str!("plan_affairs.rs"),
+            include_str!("plan_formations.rs"),
+            include_str!("plan_war.rs"),
+            include_str!("plan_predicate.rs"),
+        ];
+        let mut out = Vec::new();
+        for src in sources {
+            for (at, _) in src.match_indices(".act(") {
+                let rest = &src[at + 5..];
+                let (mut depth, mut commas, mut arg) = (0i32, 0, String::new());
+                for c in rest.chars() {
+                    match c {
+                        '(' | '[' | '{' => depth += 1,
+                        ')' | ']' | '}' if depth == 0 => break,
+                        ')' | ']' | '}' => depth -= 1,
+                        ',' if depth == 0 => {
+                            commas += 1;
+                            if commas == 3 {
+                                break;
+                            }
+                            continue;
+                        }
+                        _ => {}
+                    }
+                    if commas == 2 {
+                        arg.push(c);
+                    }
+                }
+                let arg = arg.trim();
+                if let Some(name) = arg.strip_prefix('"').and_then(|a| a.strip_suffix('"')) {
+                    out.push(name.to_string());
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn every_tool_the_executor_acts_with_has_receipt_support() {
+        let names = act_call_literals();
+        assert!(
+            names.len() > 80,
+            "the source scan found only {}",
+            names.len()
+        );
+        let missing: Vec<&str> = names
+            .iter()
+            .map(String::as_str)
+            .filter(|n| !RECEIPT_TOOLS.contains(n))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "act() is called with tools outside RECEIPT_TOOLS: {missing:?}"
+        );
+        let mut sorted = RECEIPT_TOOLS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), RECEIPT_TOOLS.len(), "duplicate entries");
+    }
+
+    #[test]
+    fn act_refuses_a_tool_without_receipt_support_before_any_call() {
+        let reads = fake(vec![]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt":{"status":"Verified"}}))].into()),
+        };
+        let error = State::default()
+            .act(
+                &tools,
+                "l",
+                &format!("hoi4_{}", "unreceipted"),
+                json!({}),
+                "x",
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "tool_without_receipt");
+        assert!(tools.actions.borrow().is_empty());
     }
 
     #[test]
