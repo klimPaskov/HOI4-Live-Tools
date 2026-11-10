@@ -33,6 +33,8 @@
 //! | `checkpoint_missed`        | true    | a checkpoint's date came with a `must` false (once) |
 //! | `phase_changed`            | true    | the active phase changed in this run (once)         |
 //! | `contingency_triggered`    | true    | a contingency's trigger held in this run (once)     |
+//! | `construction_item_blocked`| true    | a `construction_plan` item was given up (once)      |
+//! | `army_out_of_supply`       | true    | a driven army stayed under the supply floor after the executor's own levers (once per spell) |
 //!
 //! A boolean key set to `false`, or a numeric key set to `false`/`null`
 //! disables that alarm. Every alarm is `{code, message, fix:{tool, args_hint}}`;
@@ -406,6 +408,36 @@ pub fn strategy(plan: &Value, summary: &Value, news: &[Value]) -> Vec<Value> {
                 ),
                 "hoi4_plan",
                 json!({"op": "get"}),
+            )),
+            "construction_item_blocked" if enabled(config, "construction_item_blocked") => {
+                out.push(alarm(
+                    "construction_item_blocked",
+                    format!(
+                        "construction_plan item {} ({}) given up after {} tries: {}; {}",
+                        said("item"),
+                        said("building"),
+                        said("tries"),
+                        said("why"),
+                        said("next")
+                    ),
+                    "hoi4_plan",
+                    json!({"op": "set", "plan": {"construction_plan": "<revised item>"}}),
+                ))
+            }
+            "army_out_of_supply" if enabled(config, "army_out_of_supply") => out.push(alarm(
+                "army_out_of_supply",
+                format!(
+                    "{} has stood below the supply floor for {} days in state {} (supply {}%); \
+                     tried: {}; {}",
+                    said("army"),
+                    said("days"),
+                    said("state"),
+                    said("supply"),
+                    said("levers"),
+                    said("next")
+                ),
+                "hoi4_plan",
+                json!({"op": "set", "plan": {"war": "<axes or pacing>", "construction_plan": "<supply items>"}}),
             )),
             _ => {}
         }

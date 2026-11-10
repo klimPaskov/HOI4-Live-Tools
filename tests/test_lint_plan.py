@@ -67,7 +67,7 @@ PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
-                  "move_commitment"}
+                  "move_commitment", "action_receipts", "construction_give_up", "supply_relief"}
 
 
 class Lessons(unittest.TestCase):
@@ -171,6 +171,11 @@ class HandPlans(unittest.TestCase):
             ("army.formations", "army_layout[6] 'Afar guard'"),
             # 6-8 wide colonial and irregular divisions fill the highland battles at 0.86-0.92, width 14 at 0.99
             ("army.width_terrain", "army_layout"),
+            # the four railways start at plain provinces, not at a hub, port or the capital (sk2 shakedown)
+            ("construction.railway_node", "construction_plan[2] cp04_rail_way_842"),
+            ("construction.railway_node", "construction_plan[4] cp07_rail_way_271"),
+            ("construction.railway_node", "construction_plan[5] cp08_rail_way_843"),
+            ("construction.railway_node", "construction_plan[6] cp09_rail_way_835"),
             ("manage.thresholds", "manage"),
             ("navy.overseas", "navy"),  # East Africa is supplied by sea, no convoy or port plan
             ("navy.required", "navy"),
@@ -185,9 +190,18 @@ class HandPlans(unittest.TestCase):
             ("research.throughput", "research_path[0]"),
             ("research.throughput", "research_path[1]"),
             ("supply.port_convoys", "production"),
+            # the highland states lie past what the Eritrean hub and the Somali ports reach
+            ("supply.axis_reach", "war_by_phase.P2_tigray.axes[0] state 271"),
+            ("supply.axis_reach", "war_by_phase.P2_tigray.axes[1] state 835"),
+            ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[0] state 840"),
+            ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 836"),
+            ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 837"),
             ("war.planning_wait", "war.direct_moves"),  # direct moves build no planning
             ("war.supply_floor", "war.supply_floor"),  # 30 is under the 35% attrition line
         ]))
+        reach = {r["where"]: r for r in out["facts"]["supply_reach"]}
+        self.assertEqual(reach["war_by_phase.P2_tigray.axes[0] state 842"]["from"], 13250)  # Asmara hub
+        self.assertGreaterEqual(reach["war_by_phase.P2_tigray.axes[0] state 842"]["reach"], 1.0)
         self.assertEqual(out["facts"]["overseas_states"], [550, 559, 844])
         self.assertEqual(out["facts"]["occupation"]["resisting"], [163, 550, 559, 844])
         self.assertNotIn("hub_cost", out["facts"])  # the two hubs that failed construction.hub_cost are gone
@@ -200,6 +214,21 @@ class HandPlans(unittest.TestCase):
         timers = {t["mission"]: (t["earliest"], t["latest"]) for t in facts["timers"]}
         self.assertEqual(timers["ITA_missiolini_conquer_ethiopia"], ("1936.12.22", "1936.12.27"))
         self.assertIn("271", facts["goal_states"])
+
+    def test_supply_reach_falls_with_distance_and_rises_with_trucks(self):
+        from hoi4facts import mapgraph
+        graph = self.game.map_graph()
+        path = mapgraph.route(graph, 13250, 5010)["path"]  # Asmara hub to Addis Ababa
+        near = derive.supply_reach(self.game, path[:3], "hub")
+        far = derive.supply_reach(self.game, path, "hub")
+        self.assertGreater(near, far)
+        self.assertGreater(derive.supply_reach(self.game, path, "hub", 2), far)
+        self.assertEqual(derive.supply_reach(self.game, path, "port", 2), derive.supply_reach(self.game, path, "port"))
+        self.assertEqual(derive.supply_reach(self.game, path[:1], "capital"), 5.0)
+        nodes = derive.railway_nodes(self.game, "ITA", None)
+        self.assertEqual(nodes[13250], "hub")
+        self.assertEqual(nodes[12991], "port")  # Mogadishu: a naval base, no hub on 1.19.4
+        self.assertNotIn(13238, nodes)
 
     def test_ethiopia(self):
         out, errors = self.findings(load(ETH), "error")
@@ -218,6 +247,10 @@ class HandPlans(unittest.TestCase):
             ("politics.pp_budget", "politics"),  # PP idle after the one planned law
             ("research.throughput", "research_path[0]"),
             ("research.throughput", "research_path[1]"),
+            # the Italian coast is far from Addis Ababa over the highlands
+            ("supply.axis_reach", "war_by_phase.P3_eritrea.axes[0] state 550"),
+            ("supply.axis_reach", "war_by_phase.P4_south.axes[0] state 559"),
+            ("supply.axis_reach", "war_by_phase.P4_south.axes[0] state 844"),
             ("war.planning_wait", "war.direct_moves"),
             ("war.supply_floor", "war.supply_floor"),  # 20 is under the 35% attrition line
         ]))

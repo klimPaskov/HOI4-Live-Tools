@@ -19,6 +19,8 @@ starts `scripts/strategist/run.py --role strategist --revision <mode> --run RUN 
 | `own_core_lost` | `own_state_occupied` alarm on a core state | quick (contingency first) |
 | `phase_exit` | a phase `exit` holds and the next phase has `revise_on_enter` | full |
 | `plan_exhausted` | `research_slot_idle_plan_exhausted` / `no_active_focus_plan_exhausted` alarms | quick (extend lists) |
+| `construction_item_blocked` | the executor gave up a `construction_plan` item after its tries (feed change and alarm, with the last refusal) | quick: replace the item with another way to the same purpose (another start or a shorter line, a port, trucks, a hub) |
+| `army_out_of_supply` | a driven army stayed below `war.supply_floor` for `war.relief_report_days` after the executor's own railway and truck levers (feed change and alarm) | full: pace the axis to its supply reach, bring supply forward, or pull divisions back |
 | `periodic` | every 6 game months in peace, every 2 in war | full |
 | `player_request` | the player sends `hoi4_plan {op:"request_revision", reason}` | quick |
 

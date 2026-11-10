@@ -123,8 +123,12 @@
 //!                          "YYYY.MM.DD", "province_controlled:<id>", "state_fully_controlled:<id>",
 //!                          "owner:<state>=<TAG>" or empty (at once). Runs in peace and at war (when the
 //!                          war runs first, right after the war step; else just before `construction`).
-//!                          Done-memory is keyed by `id` (stable), else by `order`
-//!   doctrines              [{"id","folder","grand_doctrine"?,"track"?,"subdoctrine"?,"xp"}] adopted in
+//!                          Done-memory is keyed by `id` (stable), else by `order`. A railway item
+//!                          starts at the nearest own railway node when its first province is none.
+//!                          An item that fails 3 times (or with a refusal no retry changes) is given
+//!                          up, kept in plan_state and reported (alarm construction_item_blocked);
+//!                          revising the item sends it again
+//!   doctrines             [{"id","folder","grand_doctrine"?,"track"?,"subdoctrine"?,"xp"}] adopted in
 //!                          list order through hoi4_doctrine_adopt once the folder's experience (folder
 //!                          "land"/"special_forces" army XP, "naval"/"navy" navy XP, "air" air XP;
 //!                          default "land") reaches "xp" (default 100): "grand_doctrine" is sent as
@@ -147,7 +151,11 @@
 //!                          no new attack, "supply_hold":35 nothing attacks, "supply_resume":70;
 //!                          "rest_max_days":20 resumes anyway above the hold; "pocket_share":0.5;
 //!                          the bound pause after a captured hub (plan_war.rs has every key);
-//!                          "motorization":2 sets every driven army's supply trucks once
+//!                          "motorization":2 sets every driven army's supply trucks once;
+//!                          supply relief: an army below supply_floor for "relief_after_days":2 gets
+//!                          a railway to the own node nearest where it starves, then one more
+//!                          motorization level; after "relief_report_days":10 the alarm
+//!                          army_out_of_supply asks for a decision ("supply_relief":false: report only)
 //!   disband                {"templates":["Camicie Nere"],"keep_states":[ids],"max":N} disband divisions of these
 //!                          templates outside keep_states and war.theatre, one army per tick; never
 //!                          overseas (the capital must reach the division over own-controlled land) nor
@@ -337,6 +345,11 @@ pub struct State {
     war_province: HashMap<String, (i32, GameHour)>,
     /// `construction_plan` items already queued (by `id`, else `order`) -> game hour queued.
     plan_built: HashMap<String, GameHour>,
+    /// `construction_plan` items given up: key -> {at, why, item}. An item stays given up
+    /// until the plan's item changes (a revision), so a failing order is never sent forever.
+    plan_blocked: HashMap<String, Value>,
+    /// Failed attempts per `construction_plan` item since it last worked or was revised.
+    plan_tries: HashMap<String, (u32, String)>,
     /// `army_layout`: name_hint -> the army that plays that role.
     layout: HashMap<String, String>,
     /// Failures per layout item ("create:<state>", "detach:<hint>") since it last worked.
@@ -475,6 +488,8 @@ impl Default for State {
             war_repeat: HashMap::new(),
             war_province: HashMap::new(),
             plan_built: HashMap::new(),
+            plan_blocked: HashMap::new(),
+            plan_tries: HashMap::new(),
             layout: HashMap::new(),
             layout_fails: HashMap::new(),
             manage: Default::default(),
@@ -2289,9 +2304,23 @@ fn construction_plan_step(
             |id| format!("id:{id}"),
         )
     };
+    // A given-up item comes back only when the plan revised it.
+    for item in items {
+        let key = key_of(item);
+        if state
+            .plan_blocked
+            .get(&key)
+            .is_some_and(|row| row["item"] != *item)
+        {
+            state.plan_blocked.remove(&key);
+            state.plan_tries.remove(&key);
+        }
+    }
     let pending = |state: &State, item: &Value| {
         let key = key_of(item);
-        !state.plan_built.contains_key(&key) && !state.skipped(now, "cplan", &key)
+        !state.plan_built.contains_key(&key)
+            && !state.plan_blocked.contains_key(&key)
+            && !state.skipped(now, "cplan", &key)
     };
     // Nothing left to queue: no reads at all (in peace this step runs every tick).
     if !items.iter().any(|item| pending(state, item)) {
@@ -2348,9 +2377,13 @@ fn construction_plan_step(
                 .iter()
                 .filter_map(Value::as_i64)
                 .collect();
+            // The item's purpose is railway supply to its target: a start that is no own
+            // railway node (no hub, port or capital) is replaced by the nearest own node over
+            // own land, since the game re-uses existing track on the way.
             let mut a = json!({
                 "from_state": item["from_state"].as_i64().unwrap_or(home),
-                "to_state": item["to_state"].as_i64().unwrap_or(home)});
+                "to_state": item["to_state"].as_i64().unwrap_or(home),
+                "from_nearest_node": true});
             if let (Some(f), Some(t)) = (path.first(), path.last()) {
                 a["from_province"] = json!(f);
                 a["to_province"] = json!(t);
@@ -2365,15 +2398,63 @@ fn construction_plan_step(
         };
         let (ok, why) = state.act(tools, lease, tool, args, "cp")?;
         if ok {
-            state.plan_built.insert(key, now);
+            state.plan_built.insert(key.clone(), now);
+            state.plan_tries.remove(&key);
         } else {
             state.skip(now, "cplan", &key, 2 * DAY);
+            item_failed(state, item, &key, &label, &why, now);
         }
         return Ok(Some(format!(
             "construction plan {label} {building} in {home}: {ok} {why}"
         )));
     }
     Ok(None)
+}
+
+/// Failed attempts after which a `construction_plan` item is given up and reported.
+const PLAN_ITEM_TRIES: u32 = 3;
+
+/// A `construction_plan` order failed. A wait the game will lift by itself (the order held by
+/// the failure ledger, an end not controlled yet) costs nothing; a refusal that no retry can
+/// change gives the item up at once; any other failure counts, and the third gives it up. A
+/// given-up item is reported (urgent feed change and alarm `construction_item_blocked`) so the
+/// player or a plan revision picks another way to the same purpose, and is never sent again
+/// until the plan's item changes.
+fn item_failed(state: &mut State, item: &Value, key: &str, label: &str, why: &str, now: GameHour) {
+    let code = why.split(':').next().unwrap_or("").trim();
+    if why.starts_with("skipped:") || code == "end_not_controlled" {
+        return;
+    }
+    let hopeless = matches!(
+        code,
+        "unknown_state" | "province_not_in_state" | "invalid_arguments" | "use_railway_tool"
+    );
+    let tries = {
+        let entry = state
+            .plan_tries
+            .entry(key.to_string())
+            .or_insert((0, String::new()));
+        entry.0 += 1;
+        entry.1 = why.to_string();
+        entry.0
+    };
+    if !hopeless && tries < PLAN_ITEM_TRIES {
+        return;
+    }
+    state.plan_tries.remove(key);
+    let detail = json!({"item": label, "building": item["building"], "tries": tries,
+        "why": why, "game_hour": now,
+        "next": "pick another way to the same purpose: another start or a shorter line, a port, \
+                 trucks (war.motorization), or a hub; revise the item to try it again"});
+    state.plan_blocked.insert(
+        key.to_string(),
+        json!({"at": now, "why": why, "tries": tries, "item": item}),
+    );
+    crate::watch::feed().note(crate::watch::CONSTRUCTION_BLOCKED, true, detail.clone());
+    state
+        .strategy
+        .news
+        .push(json!({"kind": crate::watch::CONSTRUCTION_BLOCKED, "detail": detail}));
 }
 
 /// The first supply line (supply hub or railway) that stands behind a line of another kind, by
@@ -3672,6 +3753,24 @@ fn war_step(
             }
         }
         let own_target = targets.iter().any(|t| t.0 == target && t.1);
+        // Low supply is acted on, not only waited out: a railway to the nearest node and more
+        // trucks first, then a report for a decision (plan_war.rs supply_relief).
+        if let Some((_, supply)) = org {
+            if let Some(line) = plan_war::supply_relief(
+                state,
+                tools,
+                lease,
+                plan,
+                army,
+                supply_read.as_ref(),
+                supply,
+                &limits,
+                now,
+            )? {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(line));
+            }
+        }
         // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
         // recovers, or after `rest_max_days` when the supply is above the hard hold (supply where
         // the army stands may never recover). A direct-move army has no plan to stop: it rests by
@@ -5035,7 +5134,8 @@ impl State {
             .iter()
             .filter(|(army, _)| !army.starts_with("guard:"))
             .collect();
-        json!({"done": self.done, "plan_built": self.plan_built, "skips": skips,
+        json!({"done": self.done, "plan_built": self.plan_built,
+            "plan_blocked": self.plan_blocked, "skips": skips,
             "failures": failures, "layout": layout, "strategy": self.strategy.memory(),
             "war": {"stage": stage, "assign": self.war_assign}})
     }
@@ -5064,6 +5164,15 @@ impl State {
             }
         }
         let rewound = saved["game_hour"].as_i64().is_some_and(|h| now < h);
+        if let Some(blocked) = saved["plan_blocked"].as_object() {
+            for (key, row) in blocked {
+                if row["at"].as_i64().is_some_and(|at| at <= now) {
+                    self.plan_blocked
+                        .entry(key.clone())
+                        .or_insert_with(|| row.clone());
+                }
+            }
+        }
         if !rewound {
             for (key, until) in hours("skips") {
                 if until > now {
@@ -7587,6 +7696,66 @@ mod tests {
             None
         );
         assert_eq!(built(&tools), 1);
+        assert_eq!(rail.1["from_nearest_node"], true);
+    }
+
+    #[test]
+    fn a_failing_construction_plan_item_is_given_up_reported_and_back_after_a_revision() {
+        struct Fail(RefCell<u32>);
+        impl Tools for Fail {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "ITA"}),
+                    "hoi4_railway_build" => {
+                        *self.0.borrow_mut() += 1;
+                        return Err(Error::new("railway_not_queued", "queued nothing"));
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let item = json!({"id": "r1", "building": "rail_way", "from_state": 559,
+            "to_state": 559, "path": [12991, 2020], "when": ""});
+        let plan = json!({"construction_plan": [item.clone()]});
+        let tools = Fail(RefCell::new(0));
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..PLAN_ITEM_TRIES {
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
+            now += 3 * DAY;
+            state.failures.clear(); // the ledger's own back-off is not under test here
+        }
+        assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        assert!(state.plan_blocked.contains_key("id:r1"));
+        let news = news_of(&state, crate::watch::CONSTRUCTION_BLOCKED);
+        assert_eq!(news.len(), 1);
+        assert!(news[0]["detail"]["why"]
+            .as_str()
+            .unwrap()
+            .starts_with("railway_not_queued"));
+        let alarms = crate::alarms::strategy(&plan, &Value::Null, &state.strategy.news);
+        assert!(alarm_codes(&alarms).contains(&"construction_item_blocked".to_string()));
+        // given up: never sent again, also not after a restart
+        for _ in 0..5 {
+            now += 30 * DAY;
+            assert_eq!(
+                construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap(),
+                None
+            );
+        }
+        assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES);
+        let mut again = State::default();
+        again.restore(&state.memory(now), now);
+        assert!(again.plan_blocked.contains_key("id:r1"));
+        // a revised item (another start) is tried again
+        let mut revised = item.clone();
+        revised["path"] = json!([13250, 2020]);
+        let plan = json!({"construction_plan": [revised]});
+        construction_plan_step(&mut again, &tools, &plan, "l", now).unwrap();
+        assert_eq!(*tools.0.borrow(), PLAN_ITEM_TRIES + 1);
     }
 
     #[test]
