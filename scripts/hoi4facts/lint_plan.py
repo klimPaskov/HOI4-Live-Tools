@@ -82,7 +82,7 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   supply.port_convoys      the plan builds a port or relies on one (sea_transfer.ports, an overseas army)
                            but has no convoy item (convoy production line or manage.convoys_free);
                            sea supply needs SUPPLY_CONVOY_FACTOR convoys per supply
-  supply.axis_reach        an axis state (war and war_by_phase) whose main province gets an estimated supply
+  supply.axis_reach        an axis state (war, war_by_phase, phase overrides) whose main province gets an estimated supply
                            flow below 1.0 from the best node held by then (start nodes, planned hubs and
                            ports, nodes of earlier axis states), from the NSupply defines, terrain, state
                            infrastructure, rivers and war.motorization (warning: an estimate; error when no
@@ -1279,6 +1279,11 @@ class Lint:
         start_ctl = set(self.start_control())
         wars = [("war", self.war)] + [(f"war_by_phase.{k}", p) for k, p in
                                       sorted((self.plan.get("war_by_phase") or {}).items()) if isinstance(p, dict)]
+        # a phase can carry its own axes in overrides.war; those advances need supply as much as the base ones
+        for i, phase in enumerate(self.plan.get("phases") or []):
+            war = ((phase or {}).get("overrides") or {}).get("war") if isinstance(phase, dict) else None
+            if isinstance(war, dict) and war.get("axes"):
+                wars.append((f"phases[{i}].overrides.war", war))
         rows, seen = [], set()
         for label, war in wars:
             mot = war.get("motorization", self.war.get("motorization", 0))

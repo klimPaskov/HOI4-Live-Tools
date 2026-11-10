@@ -29,8 +29,10 @@ an enemy with no peace item, or a land war with no templates).
 
 Output: `RUN/review/critic-<n>.json` in the rubric's format, with `max` 32 (n = 1 + the number of
 existing `critic-*.json` files). Every finding has a severity (blocker, major, minor), the evidence, and a fix.
-In round 2 re-check only the open findings and what the answers changed, and keep the finding ids.
+In round 2 re-check only the open findings and what the answers changed, keep the finding ids, and give
+each finding a `status`: `fixed` when the plan now answers it (or the rebuttal holds), `open` otherwise.
+An open blocker or major finding fails the gate whatever the total.
 
-Finish with one line: round, total of 32, pass or fail, open blockers.
+Finish with one line: round, total of 32, pass or fail, open blockers and majors.
 
 Files: change nothing outside RUN (the tools, skills, schema and plans in the repository are what the plan is checked with). If a tool or fact reader is wrong or missing, write the gap with evidence to `RUN/tool-gaps.md` and continue with the best sourced workaround.

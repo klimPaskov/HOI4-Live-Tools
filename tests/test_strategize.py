@@ -144,6 +144,14 @@ class StrategizeTests(unittest.TestCase):
         self.assertTrue(strategize.review_passes(
             {"total": 28, "scores": {}, "findings": [{"id": "F", "severity": "blocker", "status": "fixed"}]})[0])
         self.assertFalse(strategize.review_passes(None)[0])
+        # an open major finding sends the plan back while rounds remain; the last round ships it reported
+        major = {"total": 28, "scores": {}, "findings": [{"id": "F1", "severity": "major"}]}
+        ok, detail = strategize.review_passes(major)
+        self.assertFalse(ok)
+        self.assertIn("open majors ['F1']", detail)
+        self.assertTrue(strategize.review_passes(major, allow_majors=True)[0])
+        self.assertTrue(strategize.review_passes(
+            {"total": 28, "scores": {}, "findings": [{"id": "F1", "severity": "major", "status": "fixed"}]})[0])
 
     def test_max_from_the_critic_file(self):
         rows11 = {str(i): 1 for i in range(1, 12)}
