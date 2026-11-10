@@ -66,7 +66,8 @@ class CalendarAndHelpers(unittest.TestCase):
 PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
-                  "factory_rebalance_steps", "domain_turns", "politics_auto"}
+                  "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
+                  "move_commitment"}
 
 
 class Lessons(unittest.TestCase):
@@ -163,6 +164,11 @@ class HandPlans(unittest.TestCase):
         # the coverage-build rules report as warnings on a hand plan (_meta.source "hand")
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 7, 9, 14, 15, 17, 21, 22, 23, 24, 25, 27)]
         self.assertEqual(warnings, sorted(gaps + [
+            # one army per guard task: three tiny guard armies and four formations in one theatre
+            ("army.formations", "army_layout"),
+            ("army.formations", "army_layout[4] 'South guard'"),
+            ("army.formations", "army_layout[5] 'Jubaland guard'"),
+            ("army.formations", "army_layout[6] 'Afar guard'"),
             # 6-8 wide colonial and irregular divisions fill the highland battles at 0.86-0.92, width 14 at 0.99
             ("army.width_terrain", "army_layout"),
             ("manage.thresholds", "manage"),

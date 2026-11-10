@@ -152,12 +152,16 @@
 //!                          templates outside keep_states and war.theatre, one army per tick; never
 //!                          overseas (the capital must reach the division over own-controlled land) nor
 //!                          in an army at encirclement risk (plan_war.rs)
-//!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
-//!                          army of at most `max`: create armies where divisions stand unassigned (folding in
-//!                          standing armies when the game refuses and "absorb" is true), split oversized ones, and give the next
-//!                          listed general to an army of at least `min_for_general` divisions;
-//!                          armies below that size are merged into others (hoi4_army_merge) unless
-//!                          "consolidate": false
+//!                          "vp_targets" name the state of an army's battle plan (direct province moves
+//!                          only with "direct_moves": true); every move passes the commitment rule
+//!                          ("move_commit_days":3, "move_budget":3, "move_window_days":10, see `MoveRules`)
+//!   armies                 {"max":24,"min_for_general":1,"generals":["Name",..],"max_per_group":3,
+//!                          "min_divisions":3,"concentrate":true} keep every division in an army of at most
+//!                          `max`: create armies where divisions stand unassigned (folding in standing armies
+//!                          when the game refuses and "absorb" is true), split oversized ones; armies below
+//!                          `min_divisions` are merged into others (hoi4_army_merge) unless "consolidate":
+//!                          false. Command is concentrated in a few formations and every army gets a general
+//!                          (plan_formations.rs)
 //!
 //! The strategy layer (step 0, before events and war; reads only, never input). Predicates are
 //! `crate::plan_predicate` strings or {all|any|not}; an atom that cannot be read is unknown, never
@@ -219,6 +223,9 @@ use std::{
     time::Duration,
 };
 
+/// Concentrated command: formations and their tasks, a general for every army, the army group.
+#[path = "plan_formations.rs"]
+mod plan_formations;
 /// Continuous management (alerts, templates, occupation, peace, resources, air plan, `manage`).
 #[path = "plan_manage.rs"]
 mod plan_manage;
@@ -342,6 +349,8 @@ pub struct State {
     affairs: plan_affairs::Memory,
     /// War-step rules (plan_war.rs): planning, peaks, bounds, the stall response.
     war_rules: plan_war::Memory,
+    /// Army moves: the commitment rule, the budget and each move's reason.
+    moves: Moves,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
@@ -472,6 +481,7 @@ impl Default for State {
             military: Default::default(),
             affairs: Default::default(),
             war_rules: Default::default(),
+            moves: Moves::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -483,6 +493,149 @@ impl Default for State {
             strategy: Strategy::default(),
             pcache: None,
         }
+    }
+}
+
+/// The commitment rule for army moves (`war.move_commit_days`, `war.move_budget`,
+/// `war.move_window_days`). Every move costs the army organisation, and before this rule several
+/// steps (hold posts, the pocket fall-back, victory-point advances, guard posts, retakes) each
+/// re-decided an army's destination from the reads of the moment, so one army was sent back and
+/// forth. Now an army that was given a move keeps it for `move_commit_days` (default 3 game
+/// days) against every other step, gets at most `move_budget` moves (default 3) in `move_window_days` (default 10), and
+/// none while its organisation is below the war step's rest line. A pocket fall-back and a naval
+/// invasion move are exempt. A held move is answered "move_held: ..." without input and without
+/// a failure in the ledger; every verified move is kept with its reason for the digest
+/// (`moves`).
+#[derive(Clone, Copy)]
+struct MoveRules {
+    commit: GameHour,
+    budget: usize,
+    window: GameHour,
+}
+
+impl Default for MoveRules {
+    fn default() -> Self {
+        Self {
+            commit: 3 * DAY,
+            budget: 3,
+            window: 10 * DAY,
+        }
+    }
+}
+
+impl MoveRules {
+    fn of(plan: &Value) -> Self {
+        let d = Self::default();
+        let cfg = &plan["war"];
+        Self {
+            commit: cfg["move_commit_days"]
+                .as_f64()
+                .map_or(d.commit, |v| (v * DAY as f64) as GameHour),
+            budget: cfg["move_budget"].as_u64().map_or(d.budget, |v| v as usize),
+            window: cfg["move_window_days"]
+                .as_f64()
+                .map_or(d.window, |v| (v * DAY as f64) as GameHour),
+        }
+    }
+}
+
+#[derive(Default)]
+struct Moves {
+    rules: MoveRules,
+    /// army -> (game hour, reason, destination) of each verified move, newest last
+    log: HashMap<String, Vec<(GameHour, &'static str, String)>>,
+    /// armies below the war step's rest line at its last read
+    tired: HashSet<String>,
+    /// army -> the last held move (reason, why), for the digest
+    held: HashMap<String, String>,
+}
+
+/// Why a move was sent, from the request tag of the step that sent it.
+fn move_reason(tag: &str) -> &'static str {
+    match tag {
+        "wp" => "pocket fall-back",
+        "hd" => "hold post",
+        "wv" => "victory-point advance",
+        "wr" => "war order (retake or resume)",
+        "wm" => "stalled attack: direct move",
+        "wg" => "guard post",
+        "im" => "naval invasion staging",
+        "wd" | "w2" => "second direction",
+        _ => "other",
+    }
+}
+
+impl Moves {
+    /// Some(why) when the move of `army` (sent by the step `tag`) is held.
+    fn gate(&self, army: &str, tag: &str, now: GameHour) -> Option<String> {
+        if matches!(tag, "wp" | "im") {
+            return None;
+        }
+        if self.tired.contains(army) {
+            return Some(format!(
+                "move_held: {army} is below its organisation rest line; it moves only out of a pocket"
+            ));
+        }
+        let log = self.log.get(army)?;
+        // another step may not override a fresh order; the step that gave it may update it
+        // (a hold post that moves forward with the corridor) within the budget
+        if let Some((at, reason, to)) = log.last() {
+            if now - at < self.rules.commit && *reason != move_reason(tag) {
+                return Some(format!(
+                    "move_held: {army} is committed to its {reason} move to {to} for {} more game hours",
+                    self.rules.commit - (now - at)
+                ));
+            }
+        }
+        let recent = log
+            .iter()
+            .filter(|(at, _, _)| now - at < self.rules.window)
+            .count();
+        (recent >= self.rules.budget).then(|| {
+            format!(
+                "move_held: {army} moved {recent} times in {} game days (budget {})",
+                self.rules.window / DAY,
+                self.rules.budget
+            )
+        })
+    }
+    fn record(&mut self, army: &str, tag: &str, args: &Value, now: GameHour) {
+        let to = match args["province_id"].as_i64() {
+            Some(p) => format!("state {} province {p}", args["state_id"]),
+            None => format!("state {}", args["state_id"]),
+        };
+        let keep = self.rules.window.max(30 * DAY);
+        let log = self.log.entry(army.to_string()).or_default();
+        log.retain(|(at, _, _)| now - at < keep);
+        log.push((now, move_reason(tag), to));
+        self.held.remove(army);
+    }
+    /// The digest's `moves`: per army, the moves in the window with their reasons, and what is
+    /// held now.
+    fn digest(&self, now: GameHour) -> Option<Value> {
+        let mut out = serde_json::Map::new();
+        let mut armies: Vec<&String> = self.log.keys().chain(self.held.keys()).collect();
+        armies.sort();
+        armies.dedup();
+        for army in armies {
+            let recent: Vec<String> = self
+                .log
+                .get(army)
+                .into_iter()
+                .flatten()
+                .filter(|(at, _, _)| now - at < self.rules.window)
+                .map(|(at, reason, to)| format!("{}h ago: {reason} -> {to}", now - at))
+                .collect();
+            let held = self.held.get(army);
+            if recent.is_empty() && held.is_none() {
+                continue;
+            }
+            out.insert(
+                army.clone(),
+                json!({"moves_in_window": recent.len(), "recent": recent, "held": held}),
+            );
+        }
+        (!out.is_empty()).then_some(Value::Object(out))
     }
 }
 
@@ -550,6 +703,18 @@ impl State {
         tag: &str,
     ) -> Result<(bool, String)> {
         let signature = format!("{name} {args}");
+        let army_move = (name == "hoi4_army_move")
+            .then(|| text(&args["army"]).to_string())
+            .filter(|a| !a.is_empty());
+        if let Some(army) = &army_move {
+            if let Some(why) = self.moves.gate(army, tag, self.clock) {
+                self.moves
+                    .held
+                    .insert(army.clone(), format!("{}: {why}", move_reason(tag)));
+                self.last_ok = Some(false);
+                return Ok((false, why));
+            }
+        }
         if let Some(why) = self.backing_off(&signature) {
             self.last_ok = Some(false);
             return Ok((false, why));
@@ -580,6 +745,9 @@ impl State {
             Ok((true, _)) => {
                 self.failures.remove(&signature);
                 self.failed_wall.remove(&signature);
+                if let Some(army) = &army_move {
+                    self.moves.record(army, tag, &args, clock);
+                }
             }
             Err(_) => {}
         }
@@ -767,6 +935,11 @@ pub fn tick(
     state.pcache = None;
     let merged = strategy_step(state, tools, plan, now);
     let plan = merged.as_ref().unwrap_or(plan);
+    // command concentrated in a few formations; small roles are tasks inside them
+    // (plan_formations.rs)
+    let concentrated = plan_formations::concentrate(plan);
+    let plan = concentrated.as_ref().unwrap_or(plan);
+    state.moves.rules = MoveRules::of(plan);
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
     if events["peace_conference_open"] == json!(true) {
@@ -1193,6 +1366,9 @@ pub fn tick(
     }
     // 9. armies (here unless the war runs first, which runs them right after itself)
     if !war_first && !cheap_first {
+        if let Some(step) = plan_formations::command_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
         if let Some(step) = armies_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -1495,9 +1671,12 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let steps: [Step; 6] = [
+    let steps: [Step; 7] = [
         layout_step,
         |state, tools, _, lease, now| layout_names_step(state, tools, lease, now),
+        // Command before the war step: the war step acts in nearly every tick, so anything
+        // behind it never ran (no army group or general was ever given in sk2, 1936).
+        plan_formations::command_step,
         war_step,
         construction_plan_step,
         armies_step,
@@ -1558,7 +1737,9 @@ fn armies_step(
     if plan["armies"].is_object() {
         let cfg = &plan["armies"];
         let max = cfg["max"].as_u64().unwrap_or(24);
-        let min_general = cfg["min_for_general"].as_u64().unwrap_or(8);
+        // armies below a formation's size are folded into others (plan_formations.rs gives
+        // every army its general; `min_for_general` no longer leaves small ones without)
+        let min_general = cfg["min_divisions"].as_u64().unwrap_or(3);
         let roster = tools.call("hoi4_armies", &json!({}))?;
         // "states": [ids] limits army creation to those states, in that order (the theatre
         // first), so home garrisons do not cost the war its ticks.
@@ -1728,35 +1909,7 @@ fn armies_step(
                 }
             }
         }
-        let generals = strings(cfg, "generals");
-        let used: HashSet<String> = list(&roster, "armies")
-            .iter()
-            .filter_map(|a| a["commander"].as_str().map(String::from))
-            .collect();
-        let mut spare = generals.iter().filter(|g| !used.contains(*g));
-        for army in list(&roster, "armies") {
-            let name = text(&army["army"]);
-            if army["commander"].is_null()
-                && army["division_count"].as_u64().unwrap_or(0) >= min_general
-                && !state.skipped(now, "armygeneral", name)
-            {
-                let Some(general) = spare.next() else { break };
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_army_commander",
-                    json!({"army": name, "general": general}),
-                    "gn",
-                )?;
-                state.skip(
-                    now,
-                    "armygeneral",
-                    name,
-                    if ok { 14 * DAY } else { 2 * DAY },
-                );
-                return Ok(Some(format!("general {general} -> {name}: {ok} {why}")));
-            }
-        }
+        // Generals are given by plan_formations.rs (command_step), for every army.
     }
     Ok(None)
 }
@@ -2026,7 +2179,8 @@ fn layout_entry<'p>(state: &State, plan: &'p Value, army: &str) -> Option<&'p Va
 }
 
 /// Whether the war step may send `army` into state `id`: an army without a layout role goes
-/// anywhere; a role goes only to its own state, its `axis` and its `guard_states_in_order`.
+/// anywhere; a role goes only to its own state, its `axis`, its `guard_states_in_order` and the
+/// states its tasks cover (`covers`).
 fn layout_allows(state: &State, plan: &Value, army: &str, id: i32) -> bool {
     let Some(e) = layout_entry(state, plan, army) else {
         return true;
@@ -2035,6 +2189,7 @@ fn layout_allows(state: &State, plan: &Value, army: &str, id: i32) -> bool {
         || list(e, "axis")
             .iter()
             .chain(list(e, "guard_states_in_order"))
+            .chain(list(e, "covers"))
             .any(|v| v.as_i64() == Some(i64::from(id)))
 }
 
@@ -3144,6 +3299,11 @@ fn war_step(
         })
         .unwrap_or_default();
     plan_war::observe(state, &condition);
+    state.moves.tired = condition
+        .iter()
+        .filter(|(army, (org, _))| limits.tired(state, army, *org))
+        .map(|(army, _)| army.clone())
+        .collect();
     // Guards: {"Army 4": 844} holds that own state: the army goes there and draws a front on
     // the nearest border, and never attacks (w15: Ethiopia walked into Eritrea and Somalia
     // after every army had left for the offensive).
@@ -3364,11 +3524,20 @@ fn war_step(
             })
         };
         let own = |id: i32| targets.iter().any(|x| x.0 == id && x.1);
-        let mut target = state
-            .war_assign
-            .get(&name)
-            .copied()
-            .filter(|t| open(*t) && !behind(*t) && (!hold_only || own(*t)));
+        // Without direct moves a victory-point target is the state of the army's next VP
+        // province: the battle plan (front, offensive, execute) goes there and stays committed
+        // until the province is held. Direct province moves had replaced every offensive of the
+        // strike armies (Italy 1936: only fronts and moves were ever sent, no offensive).
+        let direct_mode = cfg["direct_moves"] == json!(true);
+        let vp_state: Option<i32> = if direct_mode || hold_only {
+            None
+        } else {
+            vp_choice(state, tools, plan, &roster, &name, &me, &mut vp_rows)
+                .map(|(st, _)| st as i32)
+        };
+        let mut target = state.war_assign.get(&name).copied().filter(|t| {
+            (open(*t) || vp_state == Some(*t)) && !behind(*t) && (!hold_only || own(*t))
+        });
         if target.is_none() {
             if let Some(old) = state.war_assign.remove(&name) {
                 if let Some(n) = load.get_mut(&old) {
@@ -3438,6 +3607,28 @@ fn war_step(
             }
         }
         let Some(target) = target else { continue };
+        let raw_orders = army["battle_plan_orders"].as_u64().unwrap_or(0);
+        // The victory-point state replaces an attack target (never a retake of own land).
+        let target = match vp_state {
+            Some(st) if st != target && !targets.iter().any(|t| t.0 == target && t.1) => {
+                if let Some(old) = state.war_assign.insert(name.clone(), st) {
+                    if let Some(n) = load.get_mut(&old) {
+                        *n = n.saturating_sub(1);
+                    }
+                }
+                *load.entry(st).or_default() += 1;
+                // an army that holds a front draws only the new offensive line
+                if raw_orders > 0 {
+                    state.war_stage.insert(name.clone(), 1);
+                } else {
+                    state.war_stage.remove(&name);
+                }
+                state.war_move.remove(&name);
+                state.war_since.remove(&name);
+                st
+            }
+            _ => target,
+        };
         // `direct_moves`: attack with direct moves, state then province by province, instead of
         // battle plans (w11 and w23: the plans stalled for weeks in the Ethiopian mountains and a
         // direct move broke each stall).
@@ -3573,68 +3764,32 @@ fn war_step(
         }
         // `vp_targets`: the plan's victory-point provinces in order, each for a named army or any
         // army. The army goes for the first one not yet held (own land to retake comes first).
-        if !own_target {
-            if let Some(vp) = plan["vp_targets"].as_array() {
-                let names: Vec<String> = list(&roster, "armies")
-                    .iter()
-                    .map(|a| text(&a["army"]).to_string())
-                    .collect();
-                let by_layout = |t: &Value| state.layout.get(text(&t["army"])).cloned();
-                let mine_now = |t: &Value| {
-                    by_layout(t).is_some_and(|a| a == name)
-                        || (by_layout(t).is_none() && text(&t["army"]).contains(name.as_str()))
-                };
-                let unowned = |t: &Value| {
-                    by_layout(t).is_none_or(|a| a.is_empty())
-                        && !names.iter().any(|n| text(&t["army"]).contains(n.as_str()))
-                };
-                let mut chosen: Option<(i64, i64)> = None;
-                for t in vp {
-                    if !(mine_now(t) || unowned(t)) {
-                        continue;
-                    }
-                    let (Some(p), Some(st)) = (t["province"].as_i64(), t["state"].as_i64()) else {
-                        continue;
-                    };
-                    let row = vp_rows
-                        .entry(st)
-                        .or_insert_with(|| {
-                            tools
-                                .call("hoi4_states", &json!({"query": st.to_string()}))
-                                .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
-                                .unwrap_or_default()
-                        })
-                        .clone();
-                    let held = list(&row, "provinces")
-                        .iter()
-                        .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
-                    if !held {
-                        chosen = Some((st, p));
-                        break;
-                    }
-                }
-                if let Some((st, p)) = chosen {
-                    let on_way = state
-                        .war_province
-                        .get(&name)
-                        .is_some_and(|(q, at)| i64::from(*q) == p && now - at < 3 * DAY);
-                    if on_way {
-                        state.war_cool.insert(name.clone(), now + cooldown);
-                        continue;
-                    }
-                    state.war_province.insert(name.clone(), (p as i32, now));
-                    let (ok, why) = state.act(
-                        tools,
-                        lease,
-                        "hoi4_army_move",
-                        json!({"army": name, "state_id": st, "province_id": p}),
-                        "wv",
-                    )?;
+        // `vp_targets` with `direct_moves`: the army goes for its next victory-point province with
+        // a direct move. Without direct moves the province's state is the battle plan's target
+        // (chosen above), and the offensive takes the province.
+        if !own_target && direct {
+            if let Some((st, p)) = vp_choice(state, tools, plan, &roster, &name, &me, &mut vp_rows)
+            {
+                let on_way = state
+                    .war_province
+                    .get(&name)
+                    .is_some_and(|(q, at)| i64::from(*q) == p && now - at < 3 * DAY);
+                if on_way {
                     state.war_cool.insert(name.clone(), now + cooldown);
-                    return Ok(Some(format!(
-                        "war vp target {name} -> province {p} (state {st}): {ok} {why}"
-                    )));
+                    continue;
                 }
+                state.war_province.insert(name.clone(), (p as i32, now));
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_move",
+                    json!({"army": name, "state_id": st, "province_id": p}),
+                    "wv",
+                )?;
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(format!(
+                    "war vp target {name} -> province {p} (state {st}): {ok} {why}"
+                )));
             }
         }
         // Stalled: no progress for `stall_days` while ordered. Direct moves into the target
@@ -3823,11 +3978,12 @@ fn war_step(
         }
         // The army has a front already (the game refuses a second one the same way): go on to
         // the offensive instead of stepping into the state.
-        if label == "front" && orders > 0 {
+        if label == "front" && (orders > 0 || raw_orders > 0) {
             state.war_stage.insert(name.clone(), 1);
             state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
             return Ok(Some(format!(
-                "war front {name} -> state {target}: false {why} (it has {orders} battle plan order(s): the offensive follows)"
+                "war front {name} -> state {target}: false {why} (it has {} battle plan order(s): the offensive follows)",
+                orders.max(raw_orders)
             )));
         }
         // No foothold for a front line yet: step into the state first.
@@ -3854,6 +4010,57 @@ fn war_step(
         )));
     }
     Ok(None)
+}
+
+/// The army's next `vp_targets` province not yet held (state, province): the first entry in plan
+/// order that names this army (its army_layout role or its name), or no army.
+fn vp_choice(
+    state: &State,
+    tools: &dyn Tools,
+    plan: &Value,
+    roster: &Value,
+    name: &str,
+    me: &str,
+    vp_rows: &mut HashMap<i64, Value>,
+) -> Option<(i64, i64)> {
+    let vp = plan["vp_targets"].as_array()?;
+    let names: Vec<String> = list(roster, "armies")
+        .iter()
+        .map(|a| text(&a["army"]).to_string())
+        .collect();
+    let by_layout = |t: &Value| state.layout.get(text(&t["army"])).cloned();
+    let mine_now = |t: &Value| {
+        by_layout(t).is_some_and(|a| a == name)
+            || (by_layout(t).is_none() && text(&t["army"]).contains(name))
+    };
+    let unowned = |t: &Value| {
+        by_layout(t).is_none_or(|a| a.is_empty())
+            && !names.iter().any(|n| text(&t["army"]).contains(n.as_str()))
+    };
+    for t in vp {
+        if !(mine_now(t) || unowned(t)) {
+            continue;
+        }
+        let (Some(p), Some(st)) = (t["province"].as_i64(), t["state"].as_i64()) else {
+            continue;
+        };
+        let row = vp_rows
+            .entry(st)
+            .or_insert_with(|| {
+                tools
+                    .call("hoi4_states", &json!({"query": st.to_string()}))
+                    .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
+                    .unwrap_or_default()
+            })
+            .clone();
+        let held = list(&row, "provinces")
+            .iter()
+            .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
+        if !held {
+            return Some((st, p));
+        }
+    }
+    None
 }
 
 /// A pocket forming: much of the land around the army is held by others. Fall back to the nearest
@@ -4147,6 +4354,31 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
         .strategy
         .contingencies
         .retain(|id, _| known.contains(id));
+    // a0. a phase with neither `enter` nor `exit` is entered only through a contingency, and lasts
+    // while a contingency that names it is active; then the phase order is judged again from the
+    // start (sk2, 1936: PX_retake was entered for a border province lost in April and the strike
+    // armies held for good, though the province was retaken within days)
+    let only_by_contingency = state.strategy.phase.as_ref().and_then(|(p, _)| {
+        phases
+            .iter()
+            .find(|(id, _)| id == p)
+            .filter(|(_, v)| v["enter"].is_null() && v["exit"].is_null())
+            .map(|(id, _)| id.clone())
+    });
+    if let Some(p) = only_by_contingency {
+        let named = state.strategy.contingencies.keys().any(|id| {
+            contingency(plan, id).is_some_and(|c| then_field(c, "phase").as_str() == Some(&p))
+        });
+        if !named {
+            state.strategy.phase = None;
+            let detail =
+                json!({"phase": p, "reason": "no active contingency names it", "game_hour": now});
+            state
+                .strategy
+                .news
+                .push(json!({"kind": "phase_left", "detail": detail}));
+        }
+    }
     // a. phases: with none active the first whose `enter` holds; on through `exit`
     for _ in 0..=phases.len() {
         let current = state
@@ -5099,6 +5331,9 @@ pub fn run(
     }
     if let Some(war) = plan_war::digest(state) {
         result["war"] = war;
+    }
+    if let Some(moves) = state.moves.digest(state.last_hour) {
+        result["moves"] = moves;
     }
     if !state.strategy.summary.is_null() {
         result["strategy"] = state.strategy.summary.clone();
@@ -6218,7 +6453,7 @@ mod tests {
     }
 
     #[test]
-    fn only_real_armies_get_a_general() {
+    fn every_army_gets_a_general_from_the_plan_list_first() {
         struct Roster;
         impl Tools for Roster {
             fn call(&self, name: &str, args: &Value) -> Result<Value> {
@@ -6231,7 +6466,7 @@ mod tests {
                         {"army": "Army 2", "division_count": 3, "commander": null},
                         {"army": "Army 3", "division_count": 12, "commander": null}]})),
                     "hoi4_army_commander" => {
-                        assert_eq!(args["army"], json!("Army 3"));
+                        assert_eq!(args["army"], json!("Army 2"));
                         assert_eq!(args["general"], json!("B"));
                         Ok(json!({"receipt": {"status": "Verified"}}))
                     }
@@ -6242,7 +6477,100 @@ mod tests {
         let plan = json!({"armies": {"generals": ["B", "C"], "consolidate": false}});
         let mut state = State::default();
         let step = tick(&mut state, &Roster, &plan, "l", START).unwrap();
-        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("general B -> Army 3: true")));
+        // a small army is led too (no leader bonus without a general): min_for_general is 1
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("command: general B -> Army 2: true")),
+            "{step:?}"
+        );
+    }
+
+    #[test]
+    fn a_move_is_kept_against_other_steps_budgeted_and_never_made_tired() {
+        let tools = fake(vec![]);
+        let mut state = State::default();
+        let send = |state: &mut State, at: GameHour, army: &str, to: i64, tag: &str| {
+            state.clock = at;
+            state
+                .act(
+                    &tools,
+                    "l",
+                    "hoi4_army_move",
+                    json!({"army": army, "state_id": to}),
+                    tag,
+                )
+                .unwrap()
+        };
+        assert!(send(&mut state, START, "A", 1, "hd").0);
+        // another step may not override the fresh order...
+        let (ok, why) = send(&mut state, START + DAY, "A", 2, "wv");
+        assert!(
+            !ok && why.starts_with("move_held: A is committed to its hold post move"),
+            "{why}"
+        );
+        assert!(state.failures.is_empty(), "a held move is no failure");
+        // ...but a pocket fall-back always goes, and then the hold waits for it
+        assert!(send(&mut state, START + DAY, "A", 3, "wp").0);
+        assert!(!send(&mut state, START + 2 * DAY, "A", 1, "hd").0);
+        // the same step may update its order, within the budget (3 in 10 days)
+        assert!(send(&mut state, START + 5 * DAY, "A", 1, "hd").0);
+        let (ok, why) = send(&mut state, START + 6 * DAY, "A", 4, "hd");
+        assert!(
+            !ok && why.contains("moved 3 times in 10 game days"),
+            "{why}"
+        );
+        // an army below its rest line moves only out of a pocket
+        state.moves.tired.insert("B".into());
+        assert!(!send(&mut state, START, "B", 1, "wr").0);
+        assert!(send(&mut state, START, "B", 1, "wp").0);
+        // the digest names each move's reason and what is held
+        let d = state.moves.digest(START + 6 * DAY).unwrap();
+        assert_eq!(d["A"]["moves_in_window"], 3);
+        assert!(d["A"]["recent"][1]
+            .as_str()
+            .unwrap()
+            .contains("pocket fall-back -> state 3"));
+        assert!(d["A"]["held"]
+            .as_str()
+            .unwrap()
+            .starts_with("hold post: move_held"));
+    }
+
+    #[test]
+    fn a_victory_point_target_is_attacked_with_a_battle_plan_not_a_direct_move() {
+        let states = json!({"states": [
+            {"state_id": 1, "owner": "ITA", "controller": "ITA", "x": 0.0, "z": 0.0},
+            {"state_id": 2, "owner": "ETH", "controller": "ETH", "x": 10.0, "z": 0.0,
+             "provinces": [{"province": 50, "controller": "ETH"}]},
+            {"state_id": 3, "owner": "ETH", "controller": "ETH", "x": 5.0, "z": 0.0}]});
+        let tools = fake(vec![
+            ("hoi4_states", states),
+            (
+                "hoi4_armies",
+                json!({"armies": [{"army": "A", "division_count": 6, "main_state": 1,
+                "battle_plan_orders": 0, "planning": {"mean": 0.0}}]}),
+            ),
+        ]);
+        let plan = json!({"war": {"me": "ITA", "enemies": ["ETH"], "supply_first": false, "rest": false},
+            "vp_targets": [{"province": 50, "state": 2, "army": "A"}]});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        let out = war_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("war front A -> state 2"), "{out}");
+        let calls = tools.calls.borrow();
+        assert!(!calls.iter().any(|(n, _)| n == "hoi4_army_move"));
+        drop(calls);
+        // with direct moves the province itself is the order
+        let mut plan = plan;
+        plan["war"]["direct_moves"] = json!(true);
+        let mut state = State::default();
+        let out = war_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("war vp target A -> province 50"), "{out}");
     }
 
     struct Extras(std::cell::RefCell<Vec<(String, Value)>>);
@@ -6385,7 +6713,7 @@ mod tests {
                 }
             }
         }
-        let plan = json!({"armies": {"generals": ["C"]}});
+        let plan = json!({"armies": {"generals": ["C"], "min_for_general": 50}});
         let mut state = State::default();
         let step = tick(&mut state, &Roster, &plan, "l", START).unwrap();
         assert!(
@@ -6417,7 +6745,7 @@ mod tests {
                 }
             }
         }
-        let plan = json!({"armies": {"generals": ["C"]}});
+        let plan = json!({"armies": {"generals": ["C"], "min_for_general": 50}});
         let mut state = State::default();
         state.layout.insert("North guard".into(), "Guard 1".into());
         state.war_guard.insert("Held 1".into(), 550);
@@ -9226,6 +9554,30 @@ mod tests {
             changes.last().unwrap()["detail"]["reason"],
             "contingency core_lost"
         );
+    }
+
+    #[test]
+    fn a_phase_only_a_contingency_enters_ends_with_that_contingency() {
+        let plan = json!({"phases": [{"id": "attack"}, {"id": "retake"}],
+            "contingencies": [{"id": "lost", "when": "at_war_with:FRA", "then": {"phase": "retake"}}]});
+        let game = |enemies: Value| {
+            fake(vec![
+                ("hoi4_states", json!({"states": []})),
+                ("hoi4_wars", json!({"wars": {"enemies": enemies}})),
+            ])
+        };
+        let mut state = State::default();
+        let t0 = hour("1936.03.01");
+        tick(&mut state, &game(json!(["FRA"])), &plan, "l", t0).unwrap();
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("retake"));
+        // still lost: the phase stays
+        tick(&mut state, &game(json!(["FRA"])), &plan, "l", t0 + DAY).unwrap();
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("retake"));
+        // the trigger no longer holds: the contingency ends, and with it the phase
+        tick(&mut state, &game(json!([])), &plan, "l", t0 + 2 * DAY).unwrap();
+        tick(&mut state, &game(json!([])), &plan, "l", t0 + 3 * DAY).unwrap();
+        assert_eq!(state.strategy.phase_id().as_deref(), Some("attack"));
+        assert_eq!(news_of(&state, "phase_left").len(), 1);
     }
 
     #[test]

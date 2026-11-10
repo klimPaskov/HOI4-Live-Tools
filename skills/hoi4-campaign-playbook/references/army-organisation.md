@@ -32,12 +32,23 @@ from a country script.
 - Train them (`hoi4_train`) while manpower allows; the game alert `no_divisions_in_training`
   means the queue is empty. Size training to equipment production, not to division count.
 
-## 4. Armies by role, with generals that fit
+## 4. Few formations, tasks inside them, generals that stay
 
-- One army per task, at most 24 divisions: a strike army (best divisions, all tanks and
-  motorized), holding armies for each front, and a rear or garrison army.
+- Commanders learn from fighting: a general gains experience and traits from the battles of
+  his divisions, a field marshal from the armies of his group. An army without a general gets
+  no leader bonus, and an army of one or two divisions teaches its general almost nothing.
+  So concentrate command: a few standing formations per theatre (by default at most 3 under one
+  field marshal, each of 3 or more divisions, at most 24), each with a sector and a purpose
+  (main effort, second axis, the other front), and each led by one general all war.
+- Guarding a border, holding a corridor or watching a port is a task of the formation whose
+  sector it is: its front line covers the state (`covers`, or an `army_layout` entry with
+  `task_of`), not a separate army. Separate tiny armies leave generals idle, get moved more
+  often (each move costs organisation) and read as pockets at every enemy step.
+- Give orders once and keep them: a front line, then an offensive line, planning, execute.
+  Direct moves are for mopping up and stalls; an army keeps a move for a few days and has a
+  small move budget.
 - Read generals with `hoi4_commanders` (skill, attack, defence, planning, logistics and
-  traits) and match them to the task, then assign with `hoi4_army_commander`:
+  traits) and match them to the formation, then assign with `hoi4_army_commander`:
   - tanks and motorized: panzer_leader or armor_officer, else the best attack and skill;
   - infantry assaults: infantry_officer or offensive traits, high attack;
   - mountains (Ethiopia, Alps, Balkans): trait_mountaineer;
@@ -46,14 +57,16 @@ from a country script.
   - cavalry and irregulars: cavalry_leader or irregulars_officer;
   - holding lines: defensive traits (defensive_doctrine, trait_cautious, organizer);
   - the best skill always leads the main effort.
-- Every army needs a general; the sitrep flags armies without one.
+- Every army has a general. The executor gives any army without one the best free general
+  for its role (the plan's names first) and never moves a general who leads another army.
 
 ## 5. Army groups and field marshals
 
-- Each front with two or more armies is one army group (`hoi4_army_group_create`) with a
-  field marshal (`hoi4_army_commander` with the army group's name). The marshal's bonuses
-  apply to every army in the group. Only field marshals can lead a group: when the tool
-  refuses a leader, pick another from the group's commander list.
+- One army group per theatre over all its formations (`hoi4_army_group_create`), led by a
+  field marshal (`hoi4_army_commander` with the army group's name). His traits reach every
+  army of the group and he gains experience from all of them. Only field marshals can lead a
+  group; the tool promotes a general for command power. When no listed marshal is free, the
+  executor takes the best free one (field-marshal traits, then skill).
 - Pick the marshal by traits (Logistics Wizard, Offensive or Defensive Doctrine, Thorough
   Planner), then planning and skill.
 - The sitrep flags armies without an army group and groups without a marshal.

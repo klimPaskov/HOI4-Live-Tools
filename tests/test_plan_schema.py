@@ -47,7 +47,7 @@ ENTRY_VARS = {
     "construction_plan": (["construction_plan_step"], ["item"]),
     "army_layout": (["layout_step"], ["e", "x"]),
     "doctrines": (["extras_step"], ["entry"]),
-    "vp_targets": (["war_step"], ["t"]),
+    "vp_targets": (["vp_choice", "war_step"], ["t"]),
     "training": (["training_step"], ["tr"]),
     "templates": (["templates_step"], ["entry"]),
     "air_plan": (["air_plan_step", "wing_matches", "rebase_target"], ["entry"]),

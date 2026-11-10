@@ -861,8 +861,9 @@
         },
         "min_for_general": {
           "type": "integer",
-          "default": 8,
-          "minimum": 0
+          "default": 1,
+          "minimum": 0,
+          "description": "armies with at least this many divisions get a general (the plan's names first, then the best free general for the role); default 1: every army"
         },
         "states": {
           "$ref": "#/definitions/state_ids"
@@ -896,6 +897,23 @@
         "note": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
+        },
+        "concentrate": {
+          "type": "boolean",
+          "default": true,
+          "description": "concentrate command: entries below min_divisions without a general, and formations beyond max_per_group per theatre, become tasks of a formation and their armies are merged into it; false keeps the layout as written"
+        },
+        "max_per_group": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 0,
+          "description": "formations per theatre under one field marshal (0: no cap)"
+        },
+        "min_divisions": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "description": "smallest formation: a smaller army_layout entry without a general is a task of the formation of its state"
         }
       },
       "additionalProperties": false,
@@ -962,6 +980,16 @@
           "note": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
+          },
+          "task_of": {
+            "type": "string",
+            "x-owner": "executor",
+            "description": "the name_hint of the formation this entry is a task of: no army is made for it, its divisions stay in that formation and its states join the formation's covers (guard posts, corridor holds and border watches are tasks, not armies)"
+          },
+          "covers": {
+            "$ref": "#/definitions/state_ids",
+            "x-owner": "executor",
+            "description": "states the formation's front line covers besides its own state and axis (its tasks' states are added by the executor); the war step may send it there"
           }
         },
         "additionalProperties": false,
@@ -3790,7 +3818,7 @@
           "type": "boolean",
           "default": false,
           "x-owner": "executor",
-          "description": "true: direct hoi4_army_move orders instead of battle plans"
+          "description": "true: direct hoi4_army_move orders instead of battle plans (a victory-point target is then a province move); false: a victory-point target names the state of the battle plan's offensive"
         },
         "supply_first": {
           "type": "boolean",
@@ -3919,6 +3947,23 @@
           "default": 12,
           "x-owner": "executor",
           "description": "longest bound pause in game days"
+        },
+        "move_commit_days": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "description": "an army keeps a move this many game days against every other step (a pocket fall-back is exempt)"
+        },
+        "move_budget": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "description": "at most this many moves per army in move_window_days (each move costs organisation)"
+        },
+        "move_window_days": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1
         }
       },
       "additionalProperties": false
