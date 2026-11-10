@@ -85,7 +85,9 @@ Full FAIR plan with checkpoints: [germany-fair.md](germany-fair.md).
 - **Navy and air:** 10-20 dockyards on torpedo destroyers from 1936 (30-40 by mid-1939), 1-2 convoy lines; from 1939
   improved-hull U-boats (60-100) on 8-12-boat groups in deep ocean; 300-600 naval bombers by mid-1940 for the Channel;
   Kriegsmarine chain `GER_strengthen_the_kriegsmarine`, `GER_trade_interdiction`, `GER_wolfpack_tactics` (needs war),
-  `GER_u_boat_efforts`. Fighters from about 5 factories early to 15-25 by 1939; a large CAS force from 1940.
+  `GER_u_boat_efforts`. Fighters from about 5 factories early to 15-25 by 1939; a large CAS force from 1940. Fighter:
+  three heavy MG, engine III, Focke-Wulf (range-focused MIO); one armour plate keeps about 1,200 km for Africa, two
+  plates elsewhere.
 - **War timing:** Danzig or War no earlier than July 1939 in FAIR; Poland without calling allies; then justify on France
   so Belgium joins with it, leaving only the Netherlands and Luxembourg to justify (skips Around Maginot); Norway and
   Denmark by justification rather than the focus; seize gold after each capitulation. Barbarossa supply from February
@@ -127,7 +129,8 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   divisions); join the war by 1 January 1941 at the latest with the surface fleet docked in core ports at entry (FAIR
   rules); Romanian oil through the Balkans ends fuel trouble.
 - **Production:** pre-Danzig about 18 infantry equipment, 3 AT, 3 AA, 3 support, 2 trucks, 2 trains, 1 artillery, the
-  rest fighters (improved small airframe, three 4-HMG packs, self-sealing tank, two armour plates); switch fighter lines
+  rest fighters (improved small airframe, three 4-HMG packs, self-sealing tank, two armour plates; that leaves about
+  750 km, so Africa needs fuel tanks in place of a plate); switch fighter lines
   to CAS when Germany needs Barbarossa air.
 - **Doctrine and army:** Mass Assault into Mass Mobilisation, or Grand Battleplan; colonial police occupation law;
   port garrisons of 18 infantry with artillery, engineer and AA support for Africa and the islands.
@@ -188,7 +191,8 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   first, then Superior Firepower or Grand Battleplan with Grand Assault before the war.
 - **Navy and air:** carrier navy (better): carriers only, carrier focuses, improved carriers; Base Strike (Patrol
   Boats, Massed Carrier Fleet); air doctrine with Medium-Range Escort and Precision Naval Bombing, switched to escort
-  before a fleet battle (NA40); torpedo-3 naval bombers sink fleets; never fight in storms, without air cover or on low
+  before a fleet battle (NA40); carrier fighter: improved carrier airframe, three heavy MG, engine III, from Mitsubishi
+  (Arms Against Tyranny; cost, output and efficiency traits make it the cheapest carrier fighter); torpedo-3 naval bombers sink fleets; never fight in storms, without air cover or on low
   supply (NA39). Alternative: torpedo destroyers plus super-heavy battleships with max AA.
 - **War (1941 under FAIR):** air over Siam on the first day; kill the Raj fast (a slow Raj war is a lost war); many
   Asian landings at once so the Allies run out of command power (NA41); Dutch East Indies: max infrastructure and
@@ -284,7 +288,8 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   infrastructure in the big home states. Prepare for the Inevitable and General Rearmament make Partial Mobilisation
   work like War Economy for military factories (the UK cannot leave Partial before war, so never convert civilian
   factories).
-- **Production:** fighters on lines of 10 that can later switch to CAS; the cheapest CAS on 100+ factories by the
+- **Production:** fighters on lines of 10 that can later switch to CAS (Supermarine: three heavy MG, engine III, fuel tanks
+  for range; one tank traded for an armour plate when the Axis air force is large); the cheapest CAS on 100+ factories by the
   landing year (the Allied CAS factory); heavy tanks for a French or Allied armour force (own research, 20-50
   factories); marines and mountaineers for landings (T18). MIOs: air designer Assembly Line Optimisers at level 6,
   Modular Assemblies after the CAS switch.
@@ -324,7 +329,8 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
 - **Construction:** infrastructure and facilities first (isolation slows only factories and dockyards); civilian
   factories toward 150 owned (the Industrial Expansion faction goal), then military factories from about January 1938
   for a strategic-bomber line and fighters; facility in a state with one more infrastructure level.
-- **Production:** strategic bombers 20 early; every other early military factory on fighters; trucks and trains 2;
+- **Production:** strategic bombers 20 early (aluminium-free, AI29); every other early military factory on fighters
+  (heavy fighters: advanced airframe rushed with the bonuses, four or more heavy MG, the jet engine as soon as possible); trucks and trains 2;
   about 25 mechanised for the marines; support tanks (light recon 15-20% above the medium flame line); never 300
   factories on rifles with a 200k stockpile: build tanks, bombers or amphibious gear.
 - **1939-41:** join the Allies only on a FAIR trigger (Japanese attack, 1942, an invasion of the UK or the Americas,

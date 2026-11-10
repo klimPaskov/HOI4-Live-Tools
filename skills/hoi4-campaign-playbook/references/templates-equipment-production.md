@@ -216,7 +216,8 @@ engineer, AA, flame tank. W36, org ~88, defence ~1,040, soft ~610 with late gear
 **T18 MARINE-36 (landing assault)**: 10-12 marines + 4-5 mechanised + 1-2 line AT; support artillery, super-heavy
 howitzer, light-tank recon, flame tank, engineer. W36, MP ~21,700, soft ~510, hard ~130-170, breakthrough ~455.
 Pacific variant: 5 marines + 12-15 mountaineers + 1 line AA (no terrain penalty on landings, rivers and mountains).
-Only as many marines as the landing needs (AR12); the follow-up waves use T19.
+Only as many marines as the landing needs (AR12); the follow-up waves use T19. W30 variant: 13 marines + 2 artillery (AT
+instead of artillery against armour, or all marines), five support companies.
 
 **T19 RANGER-36 (inland after a landing, forests and hills)**: 16 rangers + 3 line AT (W35, MP ~10,000, soft ~470,
 hard ~170, breakthrough ~480) or 15 mountaineers + 4 mechanised + 1 line AT; same support as T18. Hard attack rises
@@ -226,22 +227,50 @@ with each AT battalion; cut AT when AT equipment runs short, use towed instead o
 IC: a cheap holder for ports, islands and colonial coasts; reserve priority so it draws the oldest rifles (PR17); add
 support AT where the enemy lands armour. Remove a company rather than disable its equipment (MX15).
 
+**T21 TD-18 (anti-armour holder)**: 9 tank destroyer battalions (TD division design above), 4 km/h; support tank recon,
+engineer, and with the Tank Destroyer Force subdoctrine the assault engineer and armoured signal companies (it
+multiplies TD hard attack through them). Holds a sector against armour; each TD battalion carries -75% breakthrough,
+so it never attacks (AR29).
+
+**T22 AMPHIBIOUS-ARMOUR-18**: 9 amphibious tank battalions (cheap amphibious design above), tank support companies. For
+landings and river lines where amphibious tanks are allowed; never with marines in one division (space marines).
+
+**T23 TRAIN-50 (doctrine mastery in peace)**: 25 infantry + 5 support companies (W50) grinds the infantry, combat
+support and operations tracks at once; an armour trainer is 25 training light tanks (design above) + support companies.
+Only fully equipped with equipment on, never deployed at war (RE26).
+
 ### Designs used with these templates (1.19.4 designer)
 
 | Role | Design | Notes |
 |---|---|---|
 | Medium tank | Improved medium chassis, medium gun II, radio III, diesel, armour 17 clicks, engine 0 | Soft ~50, piercing ~104, armour ~89, ~15.7 IC; 4 km/h, matches the slowest tank in the division |
-| Heavy tank | Basic or improved heavy, high-velocity gun III, radio III, petrol, armour 17, engine 1-5 | Piercing 205-240, armour 110-116, ~23 IC; coastal defence and breakthrough |
+| Heavy tank | Basic or improved heavy, high-velocity gun III, radio III, petrol, armour 17, engine 1-5 | Piercing 205-240, armour 110-116, ~23 IC; coastal defence and breakthrough. Early or cheap version: medium turret and gun on the heavy chassis, armour 4 clicks, no engine clicks; saves IC and the anti-tank research |
 | Tank destroyer | Basic medium TD, gun III, no engine or armour clicks | Piercing ~275 for ~13.8 IC: the cheapest piercing |
-| Light recon | Improved light chassis, engine 1, armour 17 | Armour ~84, ~16.5 IC; recon support company |
-| Flame tank | Basic medium flame chassis, flamethrower, radio, armour 17, engine to 4 km/h | ~19 IC; support company |
+| Tank destroyer (TD division) | Basic medium TD without an MIO, armour 4 clicks, no engine | 4 km/h; armour clicks add breakthrough, engine clicks only for speed; T21 |
+| Light recon | Improved light chassis, engine 1, armour 17 | Armour ~84, ~16.5 IC; recon support company where it meets enemy armour |
+| Light recon (cheap) | Improved light chassis, engine clicks for speed, no armour | ~6 IC, reliability ~85%; the default recon support company for infantry (PR48) |
+| Flame tank | Basic medium flame chassis, flamethrower, radio, armour 17, engine to 4 km/h | ~19 IC; support company on armour and assault templates |
+| Flame tank (cheap) | Basic medium flame chassis, flamethrower, engine to 4 km/h, no armour | ~4.4 IC; support company on infantry, which sets the speed anyway (PR48) |
 | SPAA | Basic light SPAA, AA gun II, no clicks | Air attack ~43 for ~4 IC; regimental row |
-| Amphibious tank | Three-man turret, high-velocity gun II, radio III, amphibious drive, auto-loader, easy maintenance, diesel, torsion bars, armour 14-17, engine to 4 km/h | Landing support where amphibious tanks are allowed |
-| CAS | Improved CAS airframe, bombs in every weapon slot, best engine, cheapest extras | Ground attack ~36, ~24 IC; the cheapest CAS in quantity for landings |
-| Fighter | Improved small airframe, three heavy-MG packs, best engine, self-sealing tank, armour plates | Air attack ~54, agility ~45, ~27 IC; start as a base design and add modules (PR40) |
-| Naval bomber | Improved naval bomber, torpedo III, best engine, fuel tanks, armour | Range ~1,365 km, ~29 IC |
-| Destroyer | Basic or improved hull, torpedoes in every slot, cheapest light battery, best engine | Torpedo attack ~86, ~1,200 IC (NA07) |
-| Mechanised (cost variant) | Every click on production cost, nothing else | The first variant of an own mechanised design, before the MIO (PR38) |
+| Amphibious tank | Three-man turret, high-velocity gun II, radio III, amphibious drive, auto-loader, easy maintenance, diesel, torsion bars, armour 14-17, engine to 4 km/h | Landing support where amphibious tanks are allowed; cheap version for T22: amphibious chassis, armour 4 clicks, no engine |
+| Training light tank | Basic light chassis, nothing added | ~3.4 IC, reliability ~120%: trains without equipment losses (T23, RE26) |
+| CAS (uncontested air) | Improved CAS airframe, bombs in every weapon slot, best engine, nothing defensive | Ground attack ~36, air defence ~8, ~24 IC; the most damage per IC and the CAS for landings (AI09) |
+| CAS (contested air) | Improved CAS airframe, two bomb locks, best engine, armour plate and defensive guns | Air defence ~17, ~29 IC; loses fewer planes under contested or enemy air (AI09) |
+| Fighter | Improved small airframe, three heavy-MG packs, best engine, self-sealing tank, armour plates | Air attack ~54, agility ~45, ~27 IC; start as a base design and add modules (PR40). Range comes from fuel tanks or a range-focused MIO; trade a fuel tank for an armour plate when the enemy fields many fighters (AI08) |
+| Heavy fighter | Advanced heavy-fighter airframe, four or more heavy MG, best engine | Air attack ~100, range ~1,750 km, ~57 IC; escort and island range; the jet engine as soon as researched |
+| Carrier fighter | Improved carrier airframe, three heavy MG, best engine, range from the MIO | Cheap carrier air; loses to heavy fighters one for one but costs far less |
+| Naval bomber | Improved naval bomber, best air torpedo, floats, best engine, fuel tanks; radar once researched | Range ~1,365 km, ~29 IC; floats give the detection, the air-torpedo tech most of the damage; no armour (AI10) |
+| Naval heavy fighter | Basic heavy-fighter airframe, two torpedoes or depth charges, best engine | Range ~1,960 km, ~48 IC; submarine and ship hunter on naval patrol; buildable on day 1 with machine guns in place of the sealed tanks (AI30) |
+| Strategic bomber | Basic large airframe, three bomb bays, six engine II, non-strategic-materials module | ~117 IC, no aluminium; buildable at the start after the basic bomber tech; later engine III frees a fourth bomb slot (AI29) |
+| Scout plane | Basic scout airframe, nothing else | Day-1 build; recon over enemy land for the combat intel advantage; needs no defence (AI28) |
+| Destroyer (torpedo) | Improved (1940) hull, two torpedo IV, engine III, cheapest light battery | ~1,460 IC; the capital killer once the enemy screens are thin; never the 1944 hull (adds chromium) (NA07) |
+| Destroyer (screen sponge) | Early hull, one light battery, one depth charge | ~550 IC; soaks enemy light attack so the damage dealers live (NA49) |
+| Destroyer (anti-submarine) | Basic (1936) hull, depth charges, sonar | ~1,000 IC; convoy escort, buildable early (NA08) |
+| Light cruiser | Light cruiser hull, four light battery II or III, best engine | Light attack ~29, ~4,900 IC; kills enemy screens (NA48) |
+| Recon cruiser | Light cruiser hull, float plane, radar | Surface detection ~63, ~3,100 IC; spotter for the strike force |
+| Carrier | Historical or improved carrier hull, most hangars the hull takes, no armour | ~8,900 IC with two hangars; the most sea control per IC; about 4 per fleet (NA28) |
+| Submarine | Basic (1936) hull (Submarine II), best torpedo, best engine | The FAIR raider (NA12); the cruiser submarine and every later hull are META-only |
+| Mechanised (cost variant) | Every click on production cost, nothing else | About half the IC (~4), reliability falls to ~60%; the first variant of an own mechanised design, before the MIO (PR38) |
 
 ### Evolution path (by era; changes are template edits, see §8 and AR13)
 
@@ -480,7 +509,7 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR35 | 1.19.4 tank rules | Chassis module-attack multiplier: interwar -5%, basic 0, improved +5%, advanced +10%, modern +15%; tank HP scales with reliability, so keep reliability at 80%+. Defaults: riveted armour, best 3-man turret, radio, engine only to the division's speed; skip stabiliser, skirts, smoke and fuel drums. Against the AI a cheap howitzer medium gives most of the soft attack for about 40% of the cost | Tank designs | FAIR |
 | PR36 | Swaps are instant and final | A line swap applies at once even while paused and swapping back does not restore efficiency; switch only from a plan entry, never as a probe | All | FAIR |
 | PR37 | Absorb a surplus with battalions | A large surplus (e.g. artillery) goes into elite templates, not into moving factories | Over-production | FAIR |
-| PR38 | Swap to an own design without the MIO first | Switching a licensed or old line straight to a new design with an MIO attached loses the whole efficiency. Create a cost-only variant (or a chain of interim designs that change one thing each), switch the line to it with no MIO, then attach the MIO in the designer. After a cost-cutting MIO policy, upgrade the existing equipment once and never again | Own gun, mechanised or tank replaces a licensed or older line | FAIR |
+| PR38 | Swap to an own design without the MIO first | Switching a licensed or old line straight to a new design with an MIO attached loses the whole efficiency. Create a cost-only variant (every click on production cost: about half the IC, reliability about 60%) (or a chain of interim designs that change one thing each), switch the line to it with no MIO, then attach the MIO in the designer. After a cost-cutting MIO policy, upgrade the existing equipment once and never again | Own gun, mechanised or tank replaces a licensed or older line | FAIR |
 | PR39 | New line for the next gun tier | Keep the mature infantry-equipment line running and open a separate line for the next tier; switching the old line starves the stockpile while it regrows. Merge only when the stockpile is safe | Gun 2 to gun 3, artillery tiers | FAIR |
 | PR40 | Base airframe, then convert | Put many factories on a base design of the final airframe with the modules researched so far; add each new module as a variant (90%); when the final design is done, convert every base plane in stock to it | Fighters, CAS 1937-41 | FAIR |
 | PR41 | Lines of ten for later swaps | Run big plane lines as several lines of about 10 factories so part can switch role (fighter to CAS) without touching the rest | Allied CAS build-up, Axis Barbarossa CAS | FAIR |
@@ -490,6 +519,7 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR45 | Newest variant to elite templates | When two variants of one archetype are in stock, set the elite and attack templates to the newest and the reserves and garrisons to the oldest, per template | Variant changeover | FAIR |
 | PR46 | MIO-only conversion never ends | A conversion to a design that differs only by the organisation producing it shows no cost and never finishes; change one module so the cost differs | Designer conversions | FAIR |
 | PR47 | Convert big old stocks | A large starting stock of obsolete armour is worth converting into a cheap useful variant (a light tank chassis with a fixed superstructure and a howitzer) before it is scrapped or left idle | Germany, majors with old armour | FAIR |
+| PR48 | Cheap support tanks | Recon and flame support companies on infantry need no armour: a zero-armour light recon (~6 IC) and a zero-armour medium flame tank at 4 km/h (~4.4 IC) cost a third or less of the armoured versions; keep the armoured ones for armour and assault templates | Infantry templates with tank support companies | FAIR |
 
 ## 11. Tactics: division design, training and experience
 
@@ -503,7 +533,7 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | AR06 | Breakthrough over enemy attacks | Hits land at 10% while defence or breakthrough remains, 40% after; assault templates need breakthrough above the defender's attacks per hour | Forts, mountains, dug-in lines | FAIR |
 | AR07 | Organisation floor | Division org is the average of line battalions (infantry 60, mountaineers 70, tanks 10, artillery 0); pushers need 30+, holders 50+ | Armour and artillery-heavy templates | FAIR |
 | AR08 | Line artillery is back | Since 1.19.3 line artillery has breakthrough 10/13/16 and more HP: 7 infantry + 2 artillery (20) or 6 + 3 (21, not for mountains). SP artillery can be cheaper per gun but doubles supply and fuel | Infantry offence 1939+ | FAIR |
-| AR09 | TD, SPA and SPAA are support | Line TD and SPA battalions carry -75% to -90% breakthrough; since 1.19.3 TDs belong in the regimental row only. No TD screen division | Armour design | FAIR |
+| AR09 | TD, SPA and SPAA are support | Line TD and SPA battalions carry -75% to -90% breakthrough; since 1.19.3 TDs belong in the regimental row of attacking templates; no TD screen division; the one line-TD division is the armour holder (AR29) | Armour design | FAIR |
 | AR10 | Garrison by hardness | Resistance damage falls 1% per 1% hardness (to -90%). Garrison template: 1 cavalry battalion where manpower is plentiful (suppression 2, cheapest), else 2-4 obsolete light tanks or armoured cars (hardness about 80%). Never infantry plus military police: MP raises losses | Every occupation | FAIR |
 | AR11 | Mountaineers for the mountain axis | +35% attack and +10% defence in mountains, +20% attack in hills; width 25 or less so two fit a one-direction mountain fight; special forces cap max(24, 5% of other battalions) | Ethiopia, Alps, Balkans, Caucasus | FAIR |
 | AR12 | Marines to the cap only | About +50% amphibious attack cancels the landing penalty; more is wasted; fill the rest with normal assault battalions | Landings | FAIR |
@@ -523,3 +553,4 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | AR26 | Role battalion penalties | TD battalions -75% breakthrough and -10% soft attack; SP artillery -75% breakthrough and -10% hard attack; SPAA -90% breakthrough | Never count them toward a template's breakthrough | FAIR |
 | AR27 | Upgrade when stock covers it | Change a template to new equipment only when the stockpile plus about 60 days of line output covers the whole change; otherwise divisions sit under-equipped | Template upgrades | FAIR |
 | AR28 | Flat or percentage support | Support companies with flat stats (artillery, anti-air, anti-tank, engineers) lift weak divisions the most; percentage companies pay only on strong ones | Support company choice | FAIR |
+| AR29 | TD division as an armour holder | 9 cheap basic medium TDs (armour clicks, no engine) give the most hard attack per IC; Tank Destroyer Force (No Compromise, No Surrender) multiplies TDs through the assault engineer and armoured signal companies; -75% breakthrough per TD battalion, so it holds and never attacks (T21) | Defending a sector against enemy armour | FAIR |
