@@ -174,6 +174,44 @@ pub(super) fn plan(stacks: &[Stack], area: Area) -> Plan {
     }
 }
 
+/// Arrow-key taps the selection may spend bringing wanted stacks into the area.
+const PAN_TAPS: usize = 6;
+
+/// The arrow key that pans the camera towards the wanted stacks outside the area (None when
+/// every wanted stack is inside it, or none projects). A stack behind the camera lies below
+/// the screen. The key follows the larger offset of the wanted stacks' centre from the area's
+/// centre, measured in area half-sizes.
+pub(super) fn pan_key(stacks: &[Stack], area: Area) -> Option<u16> {
+    use crate::platform::game_input::vk;
+    let wanted: Vec<&Stack> = stacks.iter().filter(|s| !s.wanted.is_empty()).collect();
+    if wanted.iter().all(|s| s.at.is_some_and(|p| inner(area, p))) {
+        return None;
+    }
+    if wanted.iter().any(|s| s.at.is_none()) {
+        return Some(vk::DOWN);
+    }
+    let n = wanted.len() as f64;
+    let cx = wanted.iter().filter_map(|s| s.at).map(|p| p.0).sum::<f64>() / n;
+    let cy = wanted.iter().filter_map(|s| s.at).map(|p| p.1).sum::<f64>() / n;
+    let (mx, my) = ((area.x0 + area.x1) / 2.0, (area.y0 + area.y1) / 2.0);
+    let (hx, hy) = ((area.x1 - area.x0) / 2.0, (area.y1 - area.y0) / 2.0);
+    let (dx, dy) = ((cx - mx) / hx, (cy - my) / hy);
+    if dx.abs() < 1e-6 && dy.abs() < 1e-6 {
+        return None;
+    }
+    Some(if dx.abs() >= dy.abs() {
+        if dx < 0.0 {
+            vk::LEFT
+        } else {
+            vk::RIGHT
+        }
+    } else if dy < 0.0 {
+        vk::UP
+    } else {
+        vk::DOWN
+    })
+}
+
 /// How far the camera must zoom out (around the screen centre) for every wanted position to lie
 /// inside the area with its box margins: the factor by which their offsets from the centre must
 /// shrink; 1.0 when all fit already.
@@ -444,6 +482,18 @@ pub(super) fn select(
             (stacks, height) = project(process, &positions, &want, &ok)?;
         }
     }
+    // A state larger than the screen at the highest framing leaves wanted stacks outside the
+    // area (shakedown 10 Nov 2026: Somaliland's southern stack sat 40 px below it and the
+    // selection was refused 40 times): pan towards them with the arrow keys, a few taps at most.
+    for _ in 0..PAN_TAPS {
+        let Some(key) = pan_key(&stacks, AREA) else {
+            break;
+        };
+        keys.press_code(key)?;
+        std::thread::sleep(std::time::Duration::from_millis(220));
+        super::super::screenmap::wait_camera_still(process, 900);
+        (stacks, height) = project(process, &positions, &want, &ok)?;
+    }
     let plan = plan(&stacks, AREA);
     super::super::ui::trace_text(&format!(
         "army select state {state}: height {height:.0}, found {found}, zoom {zoom_events}, plan {:?}, stacks {:?}",
@@ -563,6 +613,30 @@ pub(super) fn select(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_wanted_stack_below_the_area_pans_the_camera_down_and_none_when_all_are_inside() {
+        use crate::platform::game_input::vk;
+        // Somaliland, shakedown 10 Nov 2026: the wanted stack at (544, 827) below the area
+        let stacks = vec![
+            stack(1964, (986.0, 442.0), &[], 0),
+            stack(2063, (544.0, 827.0), &["a", "b"], 0),
+        ];
+        assert_eq!(pan_key(&stacks, AREA), Some(vk::DOWN));
+        let left = vec![stack(1, (300.0, 500.0), &["a"], 0)];
+        assert_eq!(pan_key(&left, AREA), Some(vk::LEFT));
+        let behind = vec![Stack {
+            province: 1,
+            at: None,
+            wanted: vec!["a".into()],
+            others: 0,
+        }];
+        assert_eq!(pan_key(&behind, AREA), Some(vk::DOWN));
+        let inside = vec![
+            stack(1, (900.0, 500.0), &["a"], 0),
+            stack(2, (300.0, 500.0), &[], 3),
+        ];
+        assert_eq!(pan_key(&inside, AREA), None);
+    }
     fn stack(province: i32, at: Point, wanted: &[&str], others: usize) -> Stack {
         Stack {
             province,

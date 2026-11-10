@@ -818,7 +818,8 @@
           },
           "axis": {
             "$ref": "#/definitions/state_ids",
-            "x-owner": "player"
+            "x-owner": "executor",
+            "description": "the role's target states in order: the war step sends the army along it, and never retakes or falls back into a state outside its own state, axis and guard_states_in_order"
           },
           "why": {
             "type": "string",
@@ -3589,7 +3590,7 @@
             "$ref": "#/definitions/state_ids"
           },
           "x-owner": "executor",
-          "description": "ordered target state lists; an army follows the axis whose next enemy-held state is nearest"
+          "description": "ordered target state lists; an army follows the axis whose next enemy-held state is nearest (an army_layout role with an axis follows its own axis first); an explicit empty list is a hold phase: no attack on enemy land, own states are still retaken"
         },
         "theatre": {
           "$ref": "#/definitions/state_ids",
@@ -3744,6 +3745,13 @@
           "default": 0.5,
           "x-owner": "executor",
           "description": "share of the land provinces around an army held by others at which it falls back from a forming pocket (outside fully held own states)"
+        },
+        "pocket_reach": {
+          "type": "number",
+          "minimum": 0,
+          "default": 150,
+          "x-owner": "executor",
+          "description": "farthest distance (map units between state centres) a pocket fall-back goes; an army_layout role falls back only into its own state, axis or guard states"
         },
         "second_direction": {
           "type": "boolean",
