@@ -1371,6 +1371,23 @@ def supply_hubs(game):
     return {p: r["supply_hub"] for p, r in graph["provinces"].items() if r.get("supply_hub")}
 
 
+def railway_nodes(game, tag, ctx, date=DEFAULT_START, history_file=None):
+    """{province: kind} of the places a railway can start from at date, whoever holds them: supply hubs
+    (hub), naval bases (port) and the capital's victory point province (capital, for `tag`)."""
+    graph = game.map_graph()
+    if graph is None:
+        return {}
+    out = {p: "hub" for p in supply_hubs(game)}
+    for st in graph.get("states", {}).values():
+        for p in st.get("naval_bases") or {}:
+            out.setdefault(p, "port")
+    cap = capital_state(game, tag, ctx, date, history_file)
+    vps = graph.get("states", {}).get(cap, {}).get("victory_points") or {}
+    if vps:
+        out[max(vps, key=lambda p: (vps[p], -p))] = "capital"
+    return out
+
+
 def coastal_provinces(game):
     """Coastal land provinces (map/definition.csv), or an empty set without a map."""
     graph = game.map_graph()
@@ -1389,6 +1406,59 @@ def _top_keys(game, folder, wrapper=None):
             elif k == wrapper and isinstance(v, list):
                 out.update(n for n, b in v if n and isinstance(b, list))
     return out
+
+
+def terrain_supply_factors(game):
+    """{terrain: supply_flow_penalty_factor} of common/terrain categories (0 when absent)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/terrain"):
+            for k, v in parse_file(f):
+                if k != "categories" or not isinstance(v, list):
+                    continue
+                for name, b in v:
+                    if name and isinstance(b, list):
+                        out[name] = _num(get1(b, "supply_flow_penalty_factor"), 0.0)
+        return out
+
+    return game.cached("derive:terrainsupply", load)
+
+
+def supply_reach(game, path, kind="hub", motorization=0):
+    """Estimated supply flow left at the end of `path` (provinces, source first) from a supply source of
+    `kind` (hub, port or capital), from the NSupply defines: the source's initial flow (a hub gains
+    SUPPLY_HUB_FULL_MOTORIZATION_BONUS x motorization/2) minus, for the i-th province entered, the starting
+    penalty plus the added penalty scaled by the distance logistics curve at i, times one plus the terrain's
+    supply_flow_penalty_factor, less the infrastructure drop reduction, plus the river crossing penalty. 1.0 is
+    the reach the game treats as fully supplying a province. An estimate: weather, damage, node throughput
+    and the exact terrain formula are left out."""
+    df = lambda n, d: define(game, n, d)  # noqa: E731
+    prefix = {"hub": "NODE", "port": "NAVAL_BASE", "capital": "CAPITAL"}[kind]
+    flow = df(f"{prefix}_INITIAL_SUPPLY_FLOW", 2.8)
+    if kind != "port" and motorization:
+        flow += df("SUPPLY_HUB_FULL_MOTORIZATION_BONUS", 2.2) * min(1.0, motorization / 2.0)
+    start = df(f"{prefix}_STARTING_PENALTY_PER_PROVINCE", 0.5)
+    added = df(f"{prefix}_ADDED_PENALTY_PER_PROVINCE", 0.7)
+    k = df("SUPPLY_FLOW_DIST_LOGISTICS_FALLOFF_K", 1.3)
+    mid = df("SUPPLY_FLOW_DIST_LOGISTICS_FALLOFF_MIDPOINT", 2.3)
+    scalar = df("SUPPLY_FLOW_DIST_LOGISTICS_FALLOFF_SCALAR", 0.9)
+    floor = df("SUPPLY_FLOW_DIST_LOGISTICS_FALLOFF_MIN_PENALTY_SCALE", 0.25)
+    infra_cut = df("SUPPLY_FLOW_DROP_REDUCTION_AT_MAX_INFRA", 0.3)
+    river = df("SUPPLY_FLOW_PENALTY_CROSSING_RIVERS", 0.2)
+    graph = game.map_graph() or {"provinces": {}, "adj": {}}
+    provs, adj, states = graph["provinces"], graph.get("adj", {}), graph.get("states", {})
+    terrain = terrain_supply_factors(game)
+    for i, (a, b) in enumerate(zip(path, path[1:]), start=1):
+        curve = max(floor, scalar / (1 + math.exp(-k * (i - mid))))
+        row = provs.get(b, {})
+        infra = min(5, states.get(row.get("state"), {}).get("infrastructure") or 0)
+        pen = (start + added * curve) * max(0.0, 1 + terrain.get(row.get("terrain"), 0.0))
+        pen *= 1 - infra_cut * infra / 5
+        if adj.get(a, {}).get(b, {}).get("river_crossing"):
+            pen += river
+        flow -= pen
+    return round(flow, 2)
 
 
 def occupation_laws(game):

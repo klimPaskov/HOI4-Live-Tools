@@ -28,6 +28,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            queued before it there
   construction.railway     railway path provinces not touching, or not controlled when the
                            trigger fires (start control plus the vp_targets taken by then)
+  construction.railway_node  a railway whose start province is no supply hub, naval base or capital and
+                           no hub or port the plan builds there (the game runs a railway from a node; the
+                           executor would move the start to the nearest node)
   construction.trigger_route  a province_controlled: trigger off every vp target route
   construction.hub         supply hub in a province or state an enemy still holds when it fires
   production.factories     production lines need more military factories than the plan has
@@ -79,6 +82,11 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   supply.port_convoys      the plan builds a port or relies on one (sea_transfer.ports, an overseas army)
                            but has no convoy item (convoy production line or manage.convoys_free);
                            sea supply needs SUPPLY_CONVOY_FACTOR convoys per supply
+  supply.axis_reach        an axis state (war and war_by_phase) whose main province gets an estimated supply
+                           flow below 1.0 from the best node held by then (start nodes, planned hubs and
+                           ports, nodes of earlier axis states), from the NSupply defines, terrain, state
+                           infrastructure, rivers and war.motorization (warning: an estimate; error when no
+                           node is held or planned within 14 steps); each state once, at its first axis
   construction.hub_cost    a supply hub (or any building of base_cost >= 15000) finishes after the goal
                            deadline or the plan horizon: base_cost / (min(15, free civs) x points per civ
                            x infrastructure speed); warning above 120 days, or when an existing or
@@ -207,6 +215,10 @@ POSTURE_POINTS = 15        # posture.shares: percentage points a production shar
 HUB_COST = 15000           # construction.hub_cost: base_cost from which a building counts as a hub-sized job
 HUB_DAYS = 120             # construction.hub_cost: warning above this many days
 HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal province that could serve instead
+NODE_STEPS = 6             # construction.railway_node: steps searched for the nearest node to name
+REACH_STEPS = 14           # supply.axis_reach: steps searched for supply nodes around an axis state
+REACH_SOURCES = 4          # supply.axis_reach: nearest nodes routed per axis state
+REACH_OK = 1.0             # supply.axis_reach: estimated flow below which the axis state is short of supply
 MATURE_DAYS = 30          # production.mature_switch: a line this old (or a start line) is mature
 SWITCH_MATCH_DAYS = 14    # production.mature_switch: a remove and an add this close are one switch
 MAX_FORMATIONS = 3        # army.formations: formations per theatre (one field marshal)
@@ -231,7 +243,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
              "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
-             "peace.order"}
+             "peace.order", "construction.railway_node", "supply.axis_reach"}
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -583,6 +595,16 @@ class Lint:
                              f"trigger province {w[1]} is on no vp target route")
                 if b in kinds["railway"] and isinstance(e.get("path"), list):
                     path = _ints(e["path"])
+                    nodes = self.rail_nodes()
+                    if path and nodes and path[0] not in nodes:
+                        near = derive.distances(game, [path[0]], NODE_STEPS)
+                        alt = sorted((d, q) for q, d in near.items() if q in nodes and q != path[0])
+                        self.add("error", "construction.railway_node", where,
+                                 f"railway start {path[0]} (state {pstate.get(path[0])}) is no supply hub, port or "
+                                 f"capital, nor a hub or port the plan builds: a railway runs from a node, so the "
+                                 f"executor would start it elsewhere"
+                                 + (f"; the nearest node is {alt[0][1]} (state {pstate.get(alt[0][1])}, "
+                                    f"{alt[0][0]} step(s))" if alt else f"; no node within {NODE_STEPS} steps"))
                     adj = self.adjacency(straits=False)
                     for a, c in zip(path, path[1:]):
                         if adj and c not in adj.get(a, ()):
@@ -1228,6 +1250,83 @@ class Lint:
             if hit:
                 return max(start, max(hit))
         return start
+
+    def rail_nodes(self):
+        """{province: kind} a railway can start from: the map's hubs and naval bases, the capital, and the
+        hubs and ports the construction plans build at a province."""
+        if getattr(self, "_rail_nodes", None) is not None:
+            return self._rail_nodes
+        kinds = derive.building_kinds(self.game)
+        costs = derive.building_costs(self.game)
+        out = dict(derive.railway_nodes(self.game, self.tag, self.ctx, self.start, self.meta.get("history_file")))
+        for _, items in self.construction_lists():
+            for e in items:
+                b, prov = e.get("building"), e.get("province")
+                if isinstance(prov, int) and (b in kinds["supply"] or (costs.get(b) or {}).get("port")):
+                    out.setdefault(prov, "planned")
+        self._rail_nodes = out
+        return out
+
+    def supply_axis_reach(self):
+        """supply.axis_reach: estimated supply at each axis state's main province from the best node held by
+        then (start nodes under start control, planned hubs and ports, nodes of earlier axis states)."""
+        game = self.game
+        graph = game.map_graph()
+        nodes = self.rail_nodes()
+        if graph is None or not nodes:
+            return
+        gstates = graph.get("states", {})
+        start_ctl = set(self.start_control())
+        wars = [("war", self.war)] + [(f"war_by_phase.{k}", p) for k, p in
+                                      sorted((self.plan.get("war_by_phase") or {}).items()) if isinstance(p, dict)]
+        rows, seen = [], set()
+        for label, war in wars:
+            mot = war.get("motorization", self.war.get("motorization", 0))
+            mot = mot if isinstance(mot, int) else 0
+            for j, axis in enumerate(war.get("axes") or []):
+                held = {p: k for p, k in nodes.items() if p in start_ctl or k == "planned"}
+                for sid in _ints(axis):
+                    st = gstates.get(sid) or {}
+                    vps = st.get("victory_points") or {}
+                    provs = st.get("provinces") or []
+                    target = max(vps, key=lambda p: (vps[p], -p)) if vps else (provs[0] if provs else None)
+                    if target is None or sid in seen:
+                        continue
+                    seen.add(sid)
+                    best = None
+                    if target in held:
+                        best = (9.9, target, held[target], 0)
+                    else:
+                        near = derive.distances(game, [target], REACH_STEPS)
+                        for d, q in sorted((d, q) for q, d in near.items() if q in held)[:REACH_SOURCES]:
+                            r = mapgraph.route(graph, q, target)
+                            if not r:
+                                continue
+                            kind = "hub" if held[q] == "planned" else held[q]
+                            v = derive.supply_reach(game, r["path"], kind, mot)
+                            if best is None or v > best[0]:
+                                best = (v, q, held[q], r["steps"])
+                    where = f"{label}.axes[{j}] state {sid}"
+                    if best is None:
+                        self.add("error", "supply.axis_reach", where,
+                                 f"no supply node held or planned within {REACH_STEPS} steps of province {target}: "
+                                 f"armies there starve; build a port, a railway to a node or a hub first, or "
+                                 f"stop the axis short")
+                        rows.append({"where": where, "province": target, "reach": None})
+                    else:
+                        v, q, kind, steps = best
+                        rows.append({"where": where, "province": target, "reach": v, "from": q, "node": kind,
+                                     "steps": steps, "motorization": mot})
+                        if v < REACH_OK:
+                            self.add("warning", "supply.axis_reach", where,
+                                     f"estimated supply flow {v:g} at province {target} from the {kind} at {q} "
+                                     f"({steps} step(s), motorization {mot}); below {REACH_OK:g} the armies there "
+                                     f"run short: pace the axis to the supply, add a port or railway to a node "
+                                     f"nearer, or raise motorization")
+                    for p in list(st.get("naval_bases") or {}) + [q for q in provs if nodes.get(q) == "hub"]:
+                        held.setdefault(p, nodes.get(p, "port"))
+        if rows:
+            self.facts["supply_reach"] = rows
 
     def axis_states(self):
         out = set()
@@ -2725,7 +2824,7 @@ class Lint:
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
-                 self.hub_cost, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus
                  # timeline)

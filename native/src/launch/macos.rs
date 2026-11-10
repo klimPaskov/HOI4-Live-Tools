@@ -3169,12 +3169,43 @@ impl MacClock {
                 .and_then(Value::as_u64)
                 .filter(|v| *v < 128)
                 .ok_or_else(|| Error::new("invalid_arguments", "line must be 0..127"))?;
-            return construction::reorder(
-                process,
-                &self.keys,
-                line as usize,
-                string(args, "action")?,
-            );
+            let order = string(args, "action")?;
+            let id = string(args, "request_id")?;
+            // A journaled receipt like every other action: the executor settles an order by its
+            // receipt, and an order without one was taken as uncertain and sent again
+            // (shakedown sk2, 10 Nov 2026).
+            let action = json!({"kind":"construction_order","line":line,"action":order});
+            let done: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            let refused = std::cell::Cell::new(false);
+            let mut settle = || {
+                Ok(match (done.borrow().clone(), refused.get()) {
+                    (Some(body), _) => journal::Outcome::Reached(body),
+                    (None, true) => {
+                        journal::Outcome::Unchanged(json!({"note": "refused before any click"}))
+                    }
+                    (None, false) => journal::Outcome::Unknown,
+                })
+            };
+            let keys = &self.keys;
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                match construction::reorder(process, keys, line as usize, order) {
+                    Ok(body) => {
+                        *done.borrow_mut() = Some(body);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        // These are raised before the row button is clicked.
+                        refused.set(matches!(
+                            e.code,
+                            "invalid_arguments" | "invalid_target" | "gui_target_unavailable"
+                        ));
+                        Err(e)
+                    }
+                }
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_railway_build" {
             allowed(
@@ -3184,26 +3215,102 @@ impl MacClock {
                     "from_state",
                     "to_province",
                     "to_state",
+                    "from_nearest_node",
+                    "to_nearest_node",
                     "request_id",
                     "lease_token",
                 ],
             )?;
             let token = string(args, "lease_token")?;
+            let id = string(args, "request_id")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            self.keys.preflight()?;
             let int = |k: &str| {
                 args.get(k)
                     .and_then(Value::as_i64)
                     .and_then(|v| i32::try_from(v).ok())
                     .filter(|v| *v > 0)
             };
-            return railway::build(
-                process,
-                &self.keys,
-                (int("from_province"), int("from_state")),
-                (int("to_province"), int("to_state")),
-            );
+            let flag = |k: &str| args.get(k).and_then(Value::as_bool).unwrap_or(false);
+            let (nearest, to_node) = (flag("from_nearest_node"), flag("to_nearest_node"));
+            // The action is the request as asked (a retry of the same id matches it without new
+            // reads); the resolved ends go into the receipt detail.
+            let action = json!({"kind":"railway_build",
+                "from_province":int("from_province"),"from_state":int("from_state"),
+                "to_province":int("to_province"),"to_state":int("to_state"),
+                "from_nearest_node":nearest,"to_nearest_node":to_node});
+            // A retry of a journaled id only settles; it never resolves or clicks again (a
+            // railway order without a receipt was re-sent until its path stood at the highest
+            // level and every later order "queued nothing", shakedown sk2, 10 Nov 2026).
+            let route = if actions.receipt_exists(id) {
+                None
+            } else {
+                let route = railway::resolve(
+                    process,
+                    (int("from_province"), int("from_state")),
+                    (int("to_province"), int("to_state")),
+                    nearest,
+                    to_node,
+                )?;
+                self.keys.preflight()?;
+                Some(route)
+            };
+            let before = match &route {
+                Some(_) => railway::queue_work_now(process)?,
+                None => i64::MAX,
+            };
+            let done: std::cell::RefCell<Option<Value>> = std::cell::RefCell::new(None);
+            let refused = std::cell::Cell::new(false);
+            let mut settle = |baseline: &Value| {
+                if let Some(body) = done.borrow().clone() {
+                    return Ok(journal::Outcome::Reached(body));
+                }
+                let base = baseline["queue_work"].as_i64().unwrap_or(i64::MAX);
+                let now = railway::queue_work_now(process)?;
+                let body = json!({"queue_work_before": base, "queue_work_after": now,
+                    "route": route.as_ref().map(railway::Route::json)});
+                Ok(if now > base {
+                    journal::Outcome::Reached(body)
+                } else if refused.get() {
+                    journal::Outcome::Unchanged(body)
+                } else {
+                    journal::Outcome::Unknown
+                })
+            };
+            let keys = &self.keys;
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let Some(route) = &route else {
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A journaled railway order is only settled, never sent again",
+                    ));
+                };
+                let clicked = std::cell::Cell::new(false);
+                match railway::dispatch(process, keys, route, before, &clicked) {
+                    Ok(body) => {
+                        *done.borrow_mut() = Some(body);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        // Settled as not applied: a failure before the first map click, or
+                        // railway_not_queued (the queue was read for 5 s after the clicks and
+                        // never grew: the game refused the path). A failure between the clicks
+                        // and the readback may have left a railway behind and stays uncertain.
+                        refused.set(!clicked.get() || e.code == "railway_not_queued");
+                        Err(e)
+                    }
+                }
+            };
+            let receipt = actions.execute_baselined(
+                id,
+                &epoch,
+                action,
+                json!({"queue_work": before}),
+                &mut settle,
+                &mut dispatch,
+            )?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_save" {
             allowed(args, &["request_id", "lease_token"])?;

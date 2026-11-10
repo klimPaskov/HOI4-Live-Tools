@@ -3948,6 +3948,26 @@
           "x-owner": "executor",
           "description": "longest bound pause in game days"
         },
+        "supply_relief": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "an army below supply_floor gets a railway to the own railway node nearest where it starves, then one more motorization level; false: report only"
+        },
+        "relief_after_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "x-owner": "executor",
+          "description": "game days below supply_floor before the supply relief acts"
+        },
+        "relief_report_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 10,
+          "x-owner": "executor",
+          "description": "game days below supply_floor before the spell is reported (alarm army_out_of_supply)"
+        },
         "move_commit_days": {
           "type": "number",
           "default": 3,
@@ -4105,6 +4125,12 @@
           "type": "boolean"
         },
         "contingency_triggered": {
+          "type": "boolean"
+        },
+        "construction_item_blocked": {
+          "type": "boolean"
+        },
+        "army_out_of_supply": {
           "type": "boolean"
         },
         "goal_risk_days": {

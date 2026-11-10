@@ -25,13 +25,21 @@ pub const CHECKPOINT_MISSED: &str = "checkpoint_missed";
 pub const PHASE_CHANGED: &str = "phase_changed";
 /// A contingency's trigger held (detail: contingency, reason, phase, overrides, revise).
 pub const CONTINGENCY_TRIGGERED: &str = "contingency_triggered";
+/// A `construction_plan` item was given up after failing (detail: item, building, tries, why,
+/// next).
+pub const CONSTRUCTION_BLOCKED: &str = "construction_item_blocked";
+/// A driven army stayed below the war supply floor and the executor's own supply levers did not
+/// lift it (detail: army, state, supply, days, levers, next).
+pub const ARMY_OUT_OF_SUPPLY: &str = "army_out_of_supply";
 /// The change kinds the standing plan's strategy layer notes.
-pub const PLAN_KINDS: [&str; 5] = [
+pub const PLAN_KINDS: [&str; 7] = [
     GOAL_REACHED,
     GOAL_AT_RISK,
     CHECKPOINT_MISSED,
     PHASE_CHANGED,
     CONTINGENCY_TRIGGERED,
+    CONSTRUCTION_BLOCKED,
+    ARMY_OUT_OF_SUPPLY,
 ];
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Condvar, Mutex, OnceLock};
@@ -746,7 +754,10 @@ mod tests {
         assert_eq!(v["changes"][0]["urgent"], true);
         assert_eq!(v["changes"][0]["date"], "1936.3.1");
         let urgent = feed.observe(0, &[], true, 50);
-        assert_eq!(urgent["changes"].as_array().unwrap().len(), 4);
+        assert_eq!(
+            urgent["changes"].as_array().unwrap().len(),
+            PLAN_KINDS.len() - 1
+        );
         assert_eq!(
             PLAN_KINDS.iter().collect::<BTreeSet<_>>().len(),
             PLAN_KINDS.len()

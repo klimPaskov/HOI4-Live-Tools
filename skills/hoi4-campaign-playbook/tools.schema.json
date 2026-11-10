@@ -3531,10 +3531,13 @@
    "source": "--list-tools"
   },
   "hoi4_railway_build": {
-   "description": "Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends must be own or controlled land the game lets railways cross. Verified by the own construction queue holding one more line or one more railway level (a path already queued gets another level on its line). Typed refusals before input: no_node_in_state (lists what to build), province_not_in_state, unknown_state. Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.",
+   "description": "Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends are checked live before any input: the start must be an own railway node now (a supply hub or naval base read from the game, or the capital) and both ends own-controlled. `from_nearest_node:true` replaces a missing start, or one that is no own node, with the own railway node the network already feeds (capital, port, hub with a railway) nearest to the target over own-controlled land (the game re-uses existing railways, so the line is the same); the result says start_replaced. `to_nearest_node:true` makes the target the own railway node nearest to the given province (a railway feeds a hub, the hub feeds the provinces around it; a railway to a plain province only helps as part of the way to a hub); the result says target_node_for_province. The receipt is journaled under request_id (Verified when the own construction queue holds one more line or one more railway level; a retry of the same id settles, it never clicks again). Typed refusals before input: not_a_railway_node and end_not_controlled (both name the nearest own node), no_node_reachable (no own node reaches the target over own land: use a port, trucks or a hub), no_node_in_state, province_not_in_state, unknown_state. railway_not_queued after the clicks means the game refused the path (often: it already stands or is queued at its highest level). Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "from_nearest_node": {
+      "type": "boolean"
+     },
      "from_province": {
       "maximum": 99999,
       "minimum": 1,
@@ -3550,6 +3553,9 @@
      },
      "request_id": {
       "type": "string"
+     },
+     "to_nearest_node": {
+      "type": "boolean"
      },
      "to_province": {
       "maximum": 99999,

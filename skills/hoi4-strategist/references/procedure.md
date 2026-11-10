@@ -521,9 +521,31 @@ cost in points, its estimated finish date (`C build-order`) and the source:
 6. Fuel: refinery or import plan when the plan runs motorised, air or naval forces on little oil.
 7. Railway level 5 on the main axis before a large offensive; a fully motorised hub uses 60 trucks; consumption
    cuts (logistics companies, a Logistics Wizard marshal) in poor-supply theatres (LO04, LO06, LO09).
-Resolution: executor `construction_plan`, `war.motorization`, `war.supply_floor`, `war.supply_first`;
-`stockpile_targets`; plan.md §4 and §17. Check: lint `construction.hub`,
-`construction.hub_cost`, `construction.railway`, `construction.trigger_route`, `production.trucks`;
+8. **Pace the advance to supply reach.** Supply flow starts at a node (capital 5.0, port 3.3, hub 2.8
+   plus up to 2.2 when motorised) and loses a share at every province it enters, more in rough terrain,
+   less at high infrastructure, more across rivers; about 1.0 fully supplies a province. Only hubs,
+   ports and the capital are nodes: a railway carries supply between nodes and adds throughput, it does
+   not feed the provinces between them. So for each axis state ask which node will feed it when the
+   armies arrive (held at the start, built by then, or captured earlier on the axis) and how far it is.
+   Lint `supply.axis_reach` prints the estimate per axis state in `facts.supply_reach`; where it is
+   below 1.0, stop the axis at the last supplied state until a port, a railway to a nearer node or
+   trucks are in place, or write why the shortfall is accepted (a short push to a capital that
+   surrenders).
+9. **A railway starts at a node.** The first `path` province of a railway item is a supply hub, a naval
+   base, the capital, or a hub or port the plan builds there first; the last is the province to reach
+   (`F province <id>` shows hub and port). The executor moves a start that is no node to the nearest fed
+   node and says so, so the line built is not the one planned.
+10. **What the executor does on its own.** An army below `war.supply_floor` for
+   `war.relief_after_days` (2) gets a railway level from the nearest fed node to its province, then one
+   more motorisation level; after `war.relief_report_days` (10) it raises `army_out_of_supply`
+   (`war.supply_relief: false` keeps only the report). A `construction_plan` item refused three times is
+   given up and raises `construction_item_blocked`; a revision that changes the item (another start,
+   a port, trucks) brings it back. Plan for these levers instead of counting on them: they react after
+   the army has started to starve.
+Resolution: executor `construction_plan`, `war.motorization`, `war.supply_floor`, `war.supply_first`,
+`war.supply_relief`, `war.relief_after_days`, `war.relief_report_days`; `stockpile_targets`; plan.md §4
+and §17. Check: lint `construction.hub`, `construction.hub_cost`, `construction.railway`,
+`construction.railway_node`, `construction.trigger_route`, `supply.axis_reach`, `production.trucks`;
 rubric rows 7 and 14.
 
 ### 20. Air plan

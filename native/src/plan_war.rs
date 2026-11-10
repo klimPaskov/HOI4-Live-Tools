@@ -60,6 +60,12 @@
 //!                      own state) have passed, and its supply is at the floor; at most
 //!                      "bound_max_days" (12). Fronts and offensive lines are drawn meanwhile, so
 //!                      the bound builds planning
+//!   supply_relief      true: an army below supply_floor for "relief_after_days" (2) gets the
+//!                      executor's own supply levers: a railway to the own railway node nearest the
+//!                      province where it starves, from the nearest node the network feeds (once per
+//!                      province in 30 days), then one more motorization level. After
+//!                      "relief_report_days" (10) below the floor the urgent change and alarm
+//!                      army_out_of_supply report the spell and what was tried. false: report only
 //!
 //! The disband guard has no key: `disband` takes a division only where the capital reaches it
 //! over own-controlled land (hoi4_wars capital_land; overseas 75% of the equipment is lost) and
@@ -86,6 +92,20 @@ pub(super) struct Memory {
     via: HashMap<String, Via>,
     /// army -> (highest planning bonus read, game hour it was first read at that level)
     planning: HashMap<String, (f64, GameHour)>,
+    /// army -> its current spell below the supply floor (supply relief)
+    starved: HashMap<String, Starved>,
+    /// target province -> game hour a relief railway was last asked for it
+    relief_rail: HashMap<i32, GameHour>,
+}
+
+/// One spell of an army below the supply floor: what the executor tried for it.
+#[derive(Clone, Default)]
+struct Starved {
+    since: GameHour,
+    lowest: f64,
+    levers: Vec<String>,
+    motorized: bool,
+    reported: bool,
 }
 
 #[derive(Clone)]
@@ -119,6 +139,7 @@ pub(super) fn army_renamed(memory: &mut Memory, old: &str, new: &str) {
     rekey(&mut memory.bound, old, new);
     rekey(&mut memory.second, old, new);
     rekey(&mut memory.via, old, new);
+    rekey(&mut memory.starved, old, new);
 }
 
 /// The last status of each rule (the run result's `war`), or None when nothing was said.
@@ -223,6 +244,150 @@ pub(super) fn observe(state: &mut State, condition: &HashMap<String, (f64, f64)>
 /// Say why an army gets no attack order now.
 pub(super) fn held_note(state: &mut State, army: &str, why: String) {
     note(state, &format!("hold:{army}"), why);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Supply relief: low supply feeds back into construction and the army's trucks.
+
+/// The province where the army's divisions stand worst supplied (most divisions there, then the
+/// lowest supply), with its state, from hoi4_supply divisions.
+fn starving_province(supply: Option<&Value>, army: &str) -> Option<(i64, i64)> {
+    let mut at: BTreeMap<(i64, i64), (usize, f64)> = BTreeMap::new();
+    for d in list(supply?, "divisions") {
+        if text(&d["army"]) != army {
+            continue;
+        }
+        let (Some(p), Some(s)) = (d["province_id"].as_i64(), d["state_id"].as_i64()) else {
+            continue;
+        };
+        let pct = d["supply_percent"].as_f64().unwrap_or(100.0);
+        let e = at.entry((p, s)).or_insert((0, 100.0));
+        e.0 += 1;
+        e.1 = e.1.min(pct);
+    }
+    at.into_iter()
+        .filter(|(_, (_, pct))| *pct < 100.0)
+        .max_by(|a, b| a.1 .0.cmp(&b.1 .0).then(b.1 .1.total_cmp(&a.1 .1)))
+        .map(|(k, _)| k)
+}
+
+/// An army below the supply floor does not just wait: the executor pulls its own supply levers
+/// first, then asks for a decision. Below the floor for `relief_after_days` (2): a railway to the
+/// own railway node nearest to where the army starves, from the nearest node the network
+/// already feeds (it joins a captured or cut-off hub, or raises the level of the line that feeds
+/// it; at most once per province in 30 days); then one more level of supply motorization
+/// (trucks carry supply farther from the hubs). After `relief_report_days` (10) below the floor
+/// the spell is reported once as the urgent change `army_out_of_supply` with what was tried, so
+/// the player or a plan revision changes the pace, the axis or the supply plan (a port, a hub, a
+/// shorter line). `war.supply_relief: false` keeps the levers off (the report stays). The spell
+/// ends when the supply is back at the floor.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn supply_relief(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    plan: &Value,
+    army: &Value,
+    supply_read: Option<&Value>,
+    supply: f64,
+    limits: &Limits,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let name = text(&army["army"]).to_string();
+    if !limits.starving(supply) {
+        state.war_rules.starved.remove(&name);
+        return Ok(None);
+    }
+    let cfg = &plan["war"];
+    let spell = state
+        .war_rules
+        .starved
+        .entry(name.clone())
+        .or_insert_with(|| Starved {
+            since: now,
+            lowest: supply,
+            ..Default::default()
+        });
+    spell.lowest = spell.lowest.min(supply);
+    let elapsed = (now - spell.since) as f64 / DAY as f64;
+    let motorized = spell.motorized;
+    let levers_on = cfg["supply_relief"] != json!(false);
+    if levers_on && elapsed >= days(&cfg["relief_after_days"], 2.0) {
+        let place = starving_province(supply_read, &name);
+        let rail_due = place.is_some_and(|(p, _)| {
+            state
+                .war_rules
+                .relief_rail
+                .get(&(p as i32))
+                .is_none_or(|at| now - at >= 30 * DAY)
+        });
+        if let (Some((p, s)), true) = (place, rail_due) {
+            state.war_rules.relief_rail.insert(p as i32, now);
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_railway_build",
+                json!({"to_province": p, "to_state": s, "to_nearest_node": true,
+                    "from_nearest_node": true}),
+                "ws",
+            )?;
+            let line = format!("railway to the node nearest province {p}: {ok} {why}");
+            if let Some(spell) = state.war_rules.starved.get_mut(&name) {
+                spell.levers.push(line.clone());
+            }
+            return Ok(Some(format!(
+                "supply relief {name} (supply {supply:.0}%, state {s}): {line}"
+            )));
+        }
+        let level = army["motorization"].as_u64();
+        if let (Some(level), false) = (level, motorized) {
+            if level < 2 {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_motorization",
+                    json!({"army": name, "level": level + 1}),
+                    "ws",
+                )?;
+                let line = format!("motorization {level} -> {}: {ok} {why}", level + 1);
+                if let Some(spell) = state.war_rules.starved.get_mut(&name) {
+                    spell.motorized = true;
+                    spell.levers.push(line.clone());
+                }
+                return Ok(Some(format!(
+                    "supply relief {name} (supply {supply:.0}%): {line}"
+                )));
+            }
+        }
+    }
+    let Some(spell) = state.war_rules.starved.get_mut(&name) else {
+        return Ok(None);
+    };
+    if elapsed >= days(&cfg["relief_report_days"], 10.0) && !spell.reported {
+        spell.reported = true;
+        let levers = if spell.levers.is_empty() {
+            "nothing (no starving province read, or supply_relief off)".to_string()
+        } else {
+            spell.levers.join("; ")
+        };
+        let detail = json!({"army": name, "state": army["main_state"],
+            "supply": (supply * 10.0).round() / 10.0, "lowest": (spell.lowest * 10.0).round() / 10.0,
+            "days": elapsed.round(), "levers": levers,
+            "next": "the axis outruns its supply: pace the offensive to the supply reach, bring \
+                     supply forward (a port, a hub, railway levels on the feeding line, trucks) or \
+                     pull part of the army back to supplied provinces"});
+        note(
+            state,
+            &format!("supply:{name}"),
+            format!("{name} below the supply floor for {elapsed:.0} days: {levers}"),
+        );
+        crate::watch::feed().note(crate::watch::ARMY_OUT_OF_SUPPLY, true, detail.clone());
+        state
+            .strategy
+            .news
+            .push(json!({"kind": crate::watch::ARMY_OUT_OF_SUPPLY, "detail": detail}));
+    }
+    Ok(None)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -975,6 +1140,73 @@ mod tests {
             Tick::Acted(s) => s,
             other => panic!("expected an action, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn an_army_below_the_supply_floor_gets_a_railway_then_trucks_then_a_report() {
+        struct R(RefCell<Vec<(String, Value)>>);
+        impl Tools for R {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                Ok(json!({"receipt": {"status": "Verified"}}))
+            }
+        }
+        let read = json!({"divisions": [
+            {"army": "S", "province_id": 2020, "state_id": 559, "supply_percent": 12.0},
+            {"army": "S", "province_id": 2020, "state_id": 559, "supply_percent": 15.0},
+            {"army": "S", "province_id": 12991, "state_id": 559, "supply_percent": 100.0},
+            {"army": "N", "province_id": 13238, "state_id": 842, "supply_percent": 5.0}]});
+        let army = json!({"army": "S", "main_state": 559, "motorization": 1});
+        let plan = plan(json!({}));
+        let limits = Limits::of(&plan);
+        let tools = R(RefCell::new(vec![]));
+        let mut state = State::default();
+        let relief = |state: &mut State, supply: f64, at: GameHour| {
+            supply_relief(
+                state,
+                &tools,
+                "l",
+                &plan,
+                &army,
+                Some(&read),
+                supply,
+                &limits,
+                at,
+            )
+            .unwrap()
+        };
+        // just fell below the floor: nothing yet
+        assert_eq!(relief(&mut state, 14.0, START), None);
+        let line = relief(&mut state, 14.0, START + 2 * DAY).unwrap();
+        assert!(line.contains("railway"), "{line}");
+        let line = relief(&mut state, 14.0, START + 2 * DAY + 1).unwrap();
+        assert!(line.contains("motorization 1 -> 2"), "{line}");
+        // the railway to the same province waits 30 days, the trucks were raised once
+        assert_eq!(relief(&mut state, 14.0, START + 5 * DAY), None);
+        let sent = tools.0.borrow().clone();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0].0, "hoi4_railway_build");
+        assert_eq!(sent[0].1["to_province"], 2020);
+        assert_eq!(sent[0].1["to_nearest_node"], true);
+        assert_eq!(sent[0].1["from_nearest_node"], true);
+        assert_eq!(sent[1].1["level"], 2);
+        // ten days below the floor: reported once, with what was tried
+        assert_eq!(relief(&mut state, 14.0, START + 10 * DAY), None);
+        assert_eq!(relief(&mut state, 14.0, START + 11 * DAY), None);
+        let news: Vec<&Value> = state
+            .strategy
+            .news
+            .iter()
+            .filter(|n| n["kind"] == crate::watch::ARMY_OUT_OF_SUPPLY)
+            .collect();
+        assert_eq!(news.len(), 1);
+        assert!(news[0]["detail"]["levers"]
+            .as_str()
+            .unwrap()
+            .contains("railway"));
+        // back at the floor: the spell ends; a new spell starts its own count
+        assert_eq!(relief(&mut state, 60.0, START + 12 * DAY), None);
+        assert!(!state.war_rules.starved.contains_key("S"));
     }
 
     #[test]
