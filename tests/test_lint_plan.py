@@ -75,7 +75,7 @@ class Lessons(unittest.TestCase):
         self.assertIn("construction.front", rules)
         with open(LESSONS, encoding="utf-8") as fh:
             rows = [json.loads(line) for line in fh if line.strip()]
-        self.assertEqual(len(rows), 23)  # design table 4.4, L12_early_hub_cost, L13-L23 from the tactics research
+        self.assertEqual(len(rows), 24)  # design table 4.4, L12_early_hub_cost, L13-L23 tactics research, L24 shakedown
         ids = set()
         for r in rows:
             self.assertLessEqual({"id", "failure", "runs", "prevention", "lint_rule"}, set(r))
