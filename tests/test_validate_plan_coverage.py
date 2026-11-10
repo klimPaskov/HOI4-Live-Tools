@@ -67,6 +67,10 @@ BBB_works_organization = { allowed = { original_tag = BBB } equipment_type = { a
     "history/states/3-Three.txt": 'state = { id = 3 name = "STATE_3" history = { owner = BBB } provinces = { 30 } }\n',
     "history/units/AAA_1936.txt": """division_template = { name = "Line" }
 division_template = { name = "Guard" }
+division_template = { name = "Colonial" obsolete = yes }
+division_template = { name = "Irregular" is_locked = yes }
+division_template = { name = "Unlocked" #is_locked = yes
+}
 units = {
     division = { location = 10 division_template = "Line" }
     division = { location = 10 division_template = "Line" }
@@ -393,6 +397,15 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("templates[1] a: duplicate id a", text)
         self.assertIn("combat width 50 is above 40", text)
         self.assertIn("not a mix", text)
+
+    def test_obsolete_or_locked_bases_cannot_be_edited(self):
+        plans = [{"id": f"t{i}", "name": f"New {b}", "base": b, "regiments": [["infantry"]], "role": "line"}
+                 for i, b in enumerate(["Colonial", "Irregular", "Unlocked", "Line"])]
+        text = "\n".join(self.new(templates=plans, xp_budget={}, training=[]).errors)
+        self.assertIn("base 'Colonial' is obsolete", text)
+        self.assertIn("base 'Irregular' is locked", text)
+        self.assertNotIn("'Unlocked'", text)  # a commented-out lock does not count
+        self.assertNotIn("base 'Line'", text)
 
     def test_production_remove_replace_and_training_list(self):
         text = self.errors(production=[{"equipment": "gun_1", "factories": 3},

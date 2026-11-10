@@ -626,6 +626,31 @@ class Game:
 
         return self.cached("templatenames", load)
 
+    def locked_templates(self):
+        """History templates the player cannot edit: {name: "obsolete" | "locked"}. An obsolete
+        (decommissioned) or locked template has no Edit button in the game."""
+
+        def load():
+            out = {}
+            for p in self.files("history/units"):
+                text = re.sub(r"#[^\n]*", "", read(p))
+                for m in re.finditer(r'division_template\s*=\s*\{', text):
+                    depth, j = 1, m.end()
+                    while j < len(text) and depth:
+                        depth += {"{": 1, "}": -1}.get(text[j], 0)
+                        j += 1
+                    body = text[m.end():j]
+                    name = re.search(r'name\s*=\s*"([^"]+)"', body)
+                    if not name:
+                        continue
+                    if re.search(r"\bis_locked\s*=\s*yes", body):
+                        out[name.group(1)] = "locked"
+                    elif re.search(r"\bobsolete\s*=\s*yes", body):
+                        out.setdefault(name.group(1), "obsolete")
+            return out
+
+        return self.cached("lockedtemplates", load)
+
     # ------------------------------------------------------------------ events
     def event_files(self):
         return self.files("events")

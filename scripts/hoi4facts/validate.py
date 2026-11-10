@@ -1221,8 +1221,13 @@ def check_templates(game, plan, rep):
     units = derive.unit_types(game)
     need = int(derive.define(game, "REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS", 3) or 3)
     ids, names = set(), set()
+    locked = game.locked_templates() if hasattr(game, "locked_templates") else {}
     for i, t in entries:
         label = f"templates[{i}] {t.get('id')}"
+        base = t.get("base")
+        if isinstance(base, str) and base in locked:
+            rep.error(f"{label}: base {base!r} is {locked[base]} in the start OOB, so the game offers no Edit "
+                      f"for it; create a new template under another name instead")
         for key, seen in (("id", ids), ("name", names)):
             v = str(t.get(key))
             if v in seen:

@@ -83,6 +83,8 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   templates.equipment     a template unit or its equipment unlocked by no tech at the start or in the
                            research plan (warning when the tech comes after the template's date)
   templates.xp             a template with xp and no xp_budget.army spend ref template:<id>
+  templates.locked         a template whose base is obsolete (decommissioned) or is_locked in the history
+                           OOB: the game offers no Edit for it
   politics.law_gates       an economy or conscription law with an `available` gate bought without a
                            `when` predicate (other gated laws: warning; warning when `when` skips the
                            gate's war support / stability)
@@ -209,7 +211,7 @@ PP_LATE_DAYS = 30         # politics.pp_budget: a purchase this late against its
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
 WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
-             "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp",
+             "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
              "predicates.unreadable",
              # tactics research rules
@@ -1499,8 +1501,13 @@ class Lint:
         xb = self.plan.get("xp_budget") if isinstance(self.plan.get("xp_budget"), dict) else None
         spends = {s.get("ref"): s for s in (xb or {}).get("army") or [] if isinstance(s, dict)}
         start_year = derive.as_tuple(self.start)[0]
+        locked = game.locked_templates() if hasattr(game, "locked_templates") else {}
         for i, t in enumerate(temps):
             where = f"templates[{i}] {t.get('id', t.get('name'))}"
+            base = t.get("base")
+            if isinstance(base, str) and base in locked:
+                self.add("error", "templates.locked", where,
+                         f"base {base!r} is {locked[base]}: the game offers no Edit for it; create a new template")
             cols = template_columns(t.get("regiments")) or []
             dates = predicate_dates(t["when"], self.table) if t.get("when") is not None else []
             year = max(dates)[0] if dates else start_year
