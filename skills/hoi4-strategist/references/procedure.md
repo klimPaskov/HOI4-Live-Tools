@@ -335,6 +335,14 @@ atom `bop:<id>`); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.or
 
 ## E. Politics
 
+**Political power is budgeted over the whole horizon** (L26): laws, advisors and decisions together, so that
+the projected balance never sits above about 100 PP with no planned buy for more than 60 days (lint
+`politics.pp_budget`). The plan's `politics` picks are the dated buys; `politics_auto` is the standing order for
+what they leave unspent (default: chief of army, economy law, trade law). Name the political advisors that fit
+the plan (PP, stability, war support or production traits from `F characters <TAG> --role advisor`) in
+`politics_auto.order`, since the executor cannot read an advisor's trait from its token; list in
+`politics_auto.never` the ideas the plan must not take.
+
 ### 13. Gated laws
 Read: `economy-build-orders.md` §5; `politics-diplomacy-espionage.md` "Economy, trade and conscription
 laws". Facts: `F laws <TAG>` (current law and the `needs` gate of each), `F idea <id>`, `C pp`.
@@ -354,7 +362,8 @@ laws". Facts: `F laws <TAG>` (current law and the `needs` gate of each), `F idea
 7. **No conscription law the plan does not need:** Service by Requirement -10%, All Adults Serve -30%, Scraping
    the Barrel -40% output; set `manage.conscription_laws` to the laws the manpower plan allows (PO14, L22).
 Resolution: executor `politics` (`id`, `category`, `slot`, `idea`, `cost`) with player-owned `when`;
-`manage.conscription_laws`. Check: lint `politics.unneeded_conscription`; rubric rows 3 and 10.
+`politics_auto`; `manage.conscription_laws`. Check: lint `politics.unneeded_conscription`,
+`politics.pp_budget`; rubric rows 3 and 10.
 
 ### 14. Stability and war support
 Read: `politics-diplomacy-espionage.md` §2. Facts: dossier §1 (stability, war support, spirits with
@@ -380,7 +389,8 @@ Read: `politics-diplomacy-espionage.md` §4. Facts: `F characters <TAG> --role a
 2. The chief of army among the first three hires of a land power; each advisor passes the payback test
    (cost / daily gain under half the horizon); officer-corps spirits bought before the hires they discount
    (PO07, PO08, PO10).
-Resolution: executor `politics`. Check: rubric row 10.
+Resolution: executor `politics`; the remaining hires in buy order in `politics_auto.order`. Check: lint
+`politics.pp_budget`; rubric row 10.
 
 ## F. Army organisation and manpower
 

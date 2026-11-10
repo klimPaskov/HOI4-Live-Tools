@@ -48,6 +48,12 @@
 //!   politics               [{"id"?,"category","slot","idea","cost"?}] one-shot picks in list order;
 //!                          "cost": political power needed first. Done-memory is keyed by `id`
 //!                          (stable across a reorder or a revision), else by list position and idea
+//!   politics_auto          the standing political-power policy for what the picks leave unspent
+//!                          (plan_manage.rs rule 4; default on, false switches it off)
+//!   scheduler              {"max_wait_days":1}: every domain of `DOMAINS` (politics, decisions,
+//!                          training, production, construction, extras, manage, military, affairs)
+//!                          gets a turn at least this often; one kept waiting longer goes ahead of
+//!                          the war-first block for one tick, and the war takes the tick after
 //!   decisions              decision keys taken whenever enabled
 //!   training               {"template","queue","batch","deploy_state","when"?} keep a training queue, or a
 //!                          list of them (plan_manage.rs, with `training_rules`)
@@ -310,6 +316,8 @@ pub struct State {
     /// The game day on which an idle research slot or focus was offered the tick ahead of the
     /// war-first block and started nothing (that day the war runs first again).
     cheap_first_spent: Option<GameHour>,
+    /// The domain scheduler's turns (no domain starves behind the war-first block).
+    sched: Sched,
     /// armies on direct move orders (their battle plan did not advance)
     war_move: HashSet<String>,
     /// armies resting (plan stopped for organisation or supply) since a game hour
@@ -365,6 +373,18 @@ struct Persist {
     saved: Option<Value>,
     /// Why the file was ignored or could not be written (reported as `plan_state`).
     note: Option<String>,
+}
+
+/// The domain scheduler (see [`DOMAINS`]).
+#[derive(Default)]
+struct Sched {
+    /// Domain -> the game hour it was last offered a turn (acted or found nothing to do).
+    turns: HashMap<&'static str, GameHour>,
+    /// An overdue domain acted in the last tick: this tick belongs to the war-first block.
+    yielded: bool,
+    /// The war-first block (or the idle research/focus pass) already ran in this tick, so the
+    /// construction domain leaves the triggered build order to it.
+    war_ran: bool,
 }
 
 /// What the research and focus stages saw this tick (the digest lines).
@@ -439,6 +459,7 @@ impl Default for State {
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             cheap_first_spent: None,
+            sched: Sched::default(),
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
@@ -832,7 +853,12 @@ pub fn tick(
         && state.cheap_first_spent != Some(day)
         && cheap_work_idle(tools);
     let war_first = war_on && plan["war"]["first"] != json!(false) && !cheap_first;
+    state.sched.war_ran = war_first || cheap_first;
     if war_first {
+        // a domain the war-first block kept waiting a whole day gets this tick (DOMAINS)
+        if let Some(step) = overdue_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
         if let Some(step) = war_first_steps(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
         }
@@ -1158,7 +1184,136 @@ pub fn tick(
             return Ok(Tick::Acted(step));
         }
     }
-    // 4. politics (one-shot picks)
+    // 4.-8a'''. the domains, in the scheduler's order (each one offered a turn, see DOMAINS)
+    for (name, step) in DOMAINS {
+        state.sched.turns.insert(name, now);
+        if let Some(line) = step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(line));
+        }
+    }
+    // 9. armies (here unless the war runs first, which runs them right after itself)
+    if !war_first && !cheap_first {
+        if let Some(step) = armies_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
+    // 8b. war executive (when it does not run first)
+    if war_on && plan["war"]["first"] == json!(false) {
+        if let Some(step) = war_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
+    if plan["disband"].is_object() && !war_first && !cheap_first {
+        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
+    Ok(Tick::Nothing)
+}
+
+/// One domain's turn: at most one action (the line for the digest), None when it has nothing
+/// to do.
+type Step = fn(&mut State, &dyn Tools, &Value, &str, GameHour) -> Result<Option<String>>;
+
+/// The domains below the war-first block, in tick order. Each owns a spendable resource and has
+/// a default use for it, and none may starve another: the war-first block acts once per tick
+/// and returns, so without a turn guarantee everything behind it (political power, decisions,
+/// production, construction, management) waits as long as the war finds an order to give.
+/// [`overdue_step`] offers a domain not reached for `scheduler.max_wait_days` game days a turn
+/// ahead of the war-first block.
+const DOMAINS: [(&str, Step); 9] = [
+    ("politics", politics_step),
+    // `decision_rules` (guarded, targeted, counted, never-take) before the plain `decisions` list
+    ("decisions", decisions_step),
+    ("training", |state, tools, plan, lease, now| {
+        // one template or a list, with training_rules (plan_manage.rs)
+        if plan["training"].is_null() {
+            return Ok(None);
+        }
+        plan_manage::training_step(state, tools, plan, lease, now)
+    }),
+    ("production", |state, tools, plan, lease, now| {
+        // military factories on no line go to the priority line the divisions lack most, a few
+        // at a time (plan_manage.rs), then the plan's lines
+        let economy = tools.call("hoi4_economy", &json!({}))?;
+        if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
+            return Ok(Some(step));
+        }
+        production_step(state, tools, plan, lease, now)
+    }),
+    ("construction", |state, tools, plan, lease, now| {
+        // The triggered build order, in peace (and at war when the war does not run first; a
+        // war-first tick ran it right after the war step). Its items go before the open
+        // `construction` jobs so those cannot take the factories an ordered item waits for.
+        if !state.sched.war_ran {
+            if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
+                return Ok(Some(step));
+            }
+        }
+        // construction with idle civilian factories, before the armies (which always find
+        // something to retry) so they cannot starve it
+        let economy = tools.call("hoi4_economy", &json!({}))?;
+        construction_step(state, tools, plan, lease, now, &economy)
+    }),
+    // special projects, doctrines, air missions in war (one action at most)
+    ("extras", extras_step),
+    // continuous management (plan_manage.rs): alerts, templates, occupation, resources,
+    // air_plan, manage
+    ("manage", plan_manage::step),
+    // military domains (plan_military.rs): naval invasions, casualty ratio, air superiority,
+    // army groups, navy
+    ("military", plan_military::step),
+    // state, economy and diplomacy affairs (plan_affairs.rs): diplomacy, faction, trade, designs
+    // and line switches, MIOs, intelligence
+    ("affairs", plan_affairs::step),
+];
+
+/// The scheduler's turn guarantee: the domains not offered a turn for `scheduler.max_wait_days`
+/// (default 1) game days, longest-waiting first, until one acts. A domain seen for the first
+/// time starts its clock now. Never twice in a row: after an overdue domain acted, the next
+/// tick belongs to the war-first block, so the war keeps at least every other tick.
+fn overdue_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if std::mem::take(&mut state.sched.yielded) {
+        return Ok(None);
+    }
+    let wait = plan["scheduler"]["max_wait_days"]
+        .as_f64()
+        .filter(|d| *d > 0.0)
+        .map_or(DAY, |d| (d * DAY as f64).round() as GameHour);
+    let mut due: Vec<(GameHour, usize)> = Vec::new();
+    for (i, (name, _)) in DOMAINS.iter().enumerate() {
+        let last = *state.sched.turns.entry(name).or_insert(now);
+        if now.saturating_sub(last) >= wait {
+            due.push((last, i));
+        }
+    }
+    due.sort_unstable();
+    for (_, i) in due {
+        let (name, step) = DOMAINS[i];
+        state.sched.turns.insert(name, now);
+        if let Some(line) = step(state, tools, plan, lease, now)? {
+            state.sched.yielded = true;
+            return Ok(Some(format!("{line} (overdue {name} turn)")));
+        }
+    }
+    Ok(None)
+}
+
+/// Politics (tick step 4): the plan's one-shot picks, then the standing political-power policy
+/// (`politics_auto`, plan_manage.rs) for the power the picks leave unspent.
+fn politics_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     let mut political_power: Option<f64> = None;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
         let key = item_id(pick).map_or_else(
@@ -1213,31 +1368,24 @@ pub fn tick(
             let days = (3u64 << (*fails - 1).min(4)).min(30);
             state.skip(now, "pol", &key, days as GameHour * DAY);
         }
-        return Ok(Tick::Acted(format!(
+        return Ok(Some(format!(
             "politics {} : {ok} {why}",
             text(&pick["idea"])
         )));
     }
-    // 5. decisions: `decision_rules` (guarded, targeted, counted, never-take) before the plain
-    // `decisions` list
-    if let Some(step) = decisions_step(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 6. training: one template or a list, with training_rules (plan_manage.rs)
-    if !plan["training"].is_null() {
-        if let Some(step) = plan_manage::training_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    // 6b. military factories on no line go to the priority line the divisions lack most, a few
-    // at a time (plan_manage.rs)
-    let economy = tools.call("hoi4_economy", &json!({}))?;
-    if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 7. production lines added once. The done-memory is kept in plan_state.json, and a line
-    // that already exists in the game counts as done too (a restart on 1 Nov 2026, before the
-    // memory was persisted, re-added five lines).
+    plan_manage::politics_auto_step(state, tools, plan, lease, now)
+}
+
+/// Production lines (tick step 7) added once. The done-memory is kept in plan_state.json, and a line
+/// that already exists in the game counts as done too (a restart on 1 Nov 2026, before the
+/// memory was persisted, re-added five lines).
+fn production_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     let mut existing: Option<HashSet<String>> = None;
     // 7-. `remove: true` entries: the executor removes every own line of that equipment
     // (hoi4_production_set factories 0 presses the line's close button), addressed by the live
@@ -1287,7 +1435,7 @@ pub fn tick(
             if !ok {
                 state.skip(now, "prodrm", equipment, 3 * DAY);
             }
-            return Ok(Tick::Acted(format!(
+            return Ok(Some(format!(
                 "production remove {equipment} (line {}): {ok} {why}",
                 live["entry_index"]
             )));
@@ -1334,58 +1482,9 @@ pub fn tick(
         } else {
             state.skip(now, "prod", &equipment, 14 * DAY);
         }
-        return Ok(Tick::Acted(format!("production {equipment}: {ok} {why}")));
+        return Ok(Some(format!("production {equipment}: {ok} {why}")));
     }
-    // 7b. the triggered build order, in peace (and at war when the war does not run first;
-    // a war-first tick ran it right after the war step). Its items go before the open
-    // `construction` jobs so those cannot take the factories an ordered item waits for.
-    if !war_first && !cheap_first {
-        if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    // 8. construction with idle civilian factories. It comes before the armies
-    // (which always find something to retry) so they cannot starve it.
-    if let Some(step) = construction_step(state, tools, plan, lease, now, &economy)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 8a. special projects, doctrines, air missions in war (one action at most)
-    if let Some(step) = extras_step(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 8a'. continuous management (plan_manage.rs): alerts, templates, occupation, resources,
-    // air_plan, manage
-    if let Some(step) = plan_manage::step(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 8a''. military domains (plan_military.rs): naval invasions, casualty ratio, air
-    // superiority, army groups, navy
-    if let Some(step) = plan_military::step(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 8a'''. state, economy and diplomacy affairs (plan_affairs.rs): diplomacy, faction, trade,
-    // designs and line switches, MIOs, intelligence
-    if let Some(step) = plan_affairs::step(state, tools, plan, lease, now)? {
-        return Ok(Tick::Acted(step));
-    }
-    // 9. armies (here unless the war runs first, which runs them right after itself)
-    if !war_first && !cheap_first {
-        if let Some(step) = armies_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    // 8b. war executive (when it does not run first)
-    if war_on && plan["war"]["first"] == json!(false) {
-        if let Some(step) = war_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    if plan["disband"].is_object() && !war_first && !cheap_first {
-        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    Ok(Tick::Nothing)
+    Ok(None)
 }
 
 /// The war-first block: layout, war executive, triggered build order, armies, early disbands.
@@ -1396,7 +1495,6 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    type Step = fn(&mut State, &dyn Tools, &Value, &str, GameHour) -> Result<Option<String>>;
     let steps: [Step; 6] = [
         layout_step,
         |state, tools, _, lease, now| layout_names_step(state, tools, lease, now),
@@ -6422,6 +6520,59 @@ mod tests {
         assert_eq!(name, "hoi4_army_move", "{:?}", w.calls.borrow());
         assert!(args["state_id"] == 28 || args["state_id"] == 18, "{args}");
         assert!(!w.calls.borrow().iter().any(|(n, _)| n == "hoi4_army_front"));
+    }
+
+    #[test]
+    fn a_domain_the_war_kept_waiting_a_day_gets_the_next_tick_then_the_war_again() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let mut plan = war_plan();
+        plan["politics"] = json!([{"id": "chief", "category": "military_staff", "slot": 0,
+            "idea": "ITA_chief", "cost": 50}]);
+        let politics = |w: &War| {
+            w.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_politics_choose")
+                .count()
+        };
+        // the war-first block acts on the first tick; the domains' clocks start
+        assert!(matches!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Acted(_)
+        ));
+        assert_eq!(politics(&w), 0);
+        // a game day later the politics domain, never reached, goes ahead of the war
+        let out = tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
+        assert!(
+            matches!(&out, Tick::Acted(line) if line.contains("overdue politics turn")),
+            "{out:?}"
+        );
+        assert_eq!(politics(&w), 1);
+        // and the next tick belongs to the war-first block again
+        let armies = |w: &War| {
+            w.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n.starts_with("hoi4_army_"))
+                .count()
+        };
+        let before = armies(&w);
+        tick(&mut state, &w, &plan, "l", START + DAY + 1).unwrap();
+        assert!(armies(&w) > before);
+        assert_eq!(politics(&w), 1);
+        // scheduler.max_wait_days stretches the guarantee
+        let mut state = State::default();
+        plan["scheduler"] = json!({"max_wait_days": 3});
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
+        assert_eq!(politics(&w), 1);
+        tick(&mut state, &w, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(politics(&w), 2);
     }
 
     /// The war fake with every research slot idle.

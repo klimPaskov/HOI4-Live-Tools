@@ -52,6 +52,7 @@ How to use it:
 | `L21_width_against_terrain` | 6 templates |
 | `L22_unneeded_conscription` | 13 gated laws, 17 manpower |
 | `L23_invasion_prep_default` | 21 naval plan |
+| `L26_every_resource_has_an_owner` | 13-15 politics; every domain's standing policy |
 
 ## Why each lesson matters
 
@@ -75,3 +76,4 @@ These are the failures the lessons record (design section 4.4). The ids are in t
 | Mature lines switched at once; unused start lines kept; day-0 factories on new lines; every idle factory dumped on one line | Efficiency is per factory: a tier switch keeps 30%, a moved or new factory starts at 10%; dead lines waste 4.5 IC a day per factory. |
 | Widths that ignore terrain; conscription the plan does not need; invasions on a 14-day prep | Width decides how much of an army fights; each conscription step costs factory output; landings fail when caps and prep come from guesses. |
 | Day-1 or wartime supply hubs (20000 points) that cannot finish in a short war | A hub takes about 190-270 days with 15 civilian factories and blocks the factory build-up meanwhile. Railways first, then ports, then trucks; a hub only when `calc build-order` shows it finishes before it is needed, with its cost and finish date in plan.md §4. |
+| A resource with no owner and no default use (political power spent only on a few named picks; domains behind a busy one never reached) | Idle power, slots or factories compound against the plan. Every spendable resource has an owning domain with a default use, the plan sets priorities and standing orders rather than only one-off items, and the executor gives every domain a turn each game day. |

@@ -69,6 +69,16 @@
 //!                    region or over capacity) and then flies `mission` over `region` (hoi4_air_mission);
 //!                    once `switch_when` holds, over `then_region` with `then_mission`. Wings the air plan
 //!                    names are left out of `air.war_missions`
+//!   politics_auto    {"enabled":true,"threshold":100,"cap":2000,"cap_margin":30,"order"?,"never"?,
+//!                    "recheck_days":30,"idle_wake_days":30} or false (rule 4, run by the politics
+//!                    domain after the plan's `politics` picks): political power at or above
+//!                    `threshold` beyond the pending picks' costs, or within `cap_margin` of `cap`,
+//!                    buys the first affordable entry of `order` [{"category","slot","ideas"?,"cost"?,
+//!                    "when"?,"why"?}] the game enables (`ideas` ranked best first, only above the
+//!                    current idea; without `ideas` a vacant slot takes the first enabled idea).
+//!                    Default order: chief of army, economy law, trade law (`politics_auto_default`);
+//!                    conscription only within manage.conscription_laws; `never` ideas are skipped.
+//!                    Wakes: `political_power_at_cap`, `political_power_idle`
 //!   manage           thresholds of the standing rules (all optional; the rules of this object run
 //!                    only when the plan has it, the resource rule also with `auto_import`, the alerts
 //!                    and the ledger always):
@@ -141,6 +151,8 @@ pub(super) struct Memory {
     alert_since: HashMap<String, GameHour>,
     /// The next priority line in turn for idle factories when no shortage is known.
     feed_turn: usize,
+    /// Since when political power above the threshold found nothing to buy (`politics_auto`).
+    pp_idle_since: Option<GameHour>,
 }
 
 /// What the runner did in the open peace conference.
@@ -1728,6 +1740,259 @@ fn country_rules(
 }
 
 // ---------------------------------------------------------------------------------------------
+// Rule 4: political power has an owner. The plan's `politics` picks spend it first (tick step
+// 4); what they leave above the threshold goes to the standing order below, so a thin plan
+// never leaves the power to pile up at the cap.
+
+/// The default standing order, from the playbook's buy priority: the chief of army (army
+/// experience every day, 50 PP), then the economy and trade laws (150 PP each). Political
+/// advisors are not in it: an advisor token says nothing about its trait, so the plan names them
+/// (`politics_auto.order`). Conscription laws never are (manage.conscription_laws).
+fn politics_auto_default() -> Value {
+    json!([
+        {"category": "military_staff", "slot": 0, "cost": 50,
+         "why": "chief of army: army experience every day"},
+        {"category": "government", "slot": 2, "cost": 150,
+         "ideas": ["war_economy", "partial_economic_mobilisation", "low_economic_mobilisation"],
+         "why": "economy law: fewer consumer goods, faster military factories"},
+        {"category": "government", "slot": 1, "cost": 150,
+         "ideas": ["export_focus", "limited_exports"],
+         "why": "trade law: factory, construction and research bonuses"}
+    ])
+}
+
+/// Political power now (hoi4_economy, else hoi4_country_status).
+fn political_power(tools: &dyn Tools) -> Option<f64> {
+    tools
+        .call("hoi4_economy", &json!({}))
+        .ok()
+        .and_then(|e| e["political_power"]["raw_signed"].as_f64())
+        .map(|raw| raw / 100_000.0)
+}
+
+/// The idea an entry takes from a slot's options, or why none.
+fn politics_auto_choice(
+    entry: &Value,
+    current: &str,
+    enabled: &[String],
+    never: &[String],
+    conscription: &[String],
+) -> std::result::Result<String, String> {
+    let government_0 = text(&entry["category"]) == "government" && entry["slot"] == json!(0);
+    let usable = |idea: &String| {
+        enabled.contains(idea)
+            && !never.contains(idea)
+            && (!government_0 || conscription.contains(idea))
+    };
+    let ideas = strings(entry, "ideas");
+    if ideas.is_empty() {
+        // a vacant slot: the first idea the game offers
+        if !current.is_empty() {
+            return Err(format!("holds {current}"));
+        }
+        return enabled
+            .iter()
+            .find(|i| usable(i))
+            .cloned()
+            .ok_or_else(|| "nothing enabled".to_string());
+    }
+    // `ideas` best first: only an idea ranked above the current one; an unlisted current idea
+    // (a law the plan or a focus chose) is left alone
+    let better = match ideas.iter().position(|i| i == current) {
+        Some(at) => &ideas[..at],
+        None if current.is_empty() => &ideas[..],
+        None => return Err(format!("holds {current}, which the order does not rank")),
+    };
+    better
+        .iter()
+        .find(|i| usable(i))
+        .cloned()
+        .ok_or_else(|| format!("holds {current}; nothing better enabled"))
+}
+
+/// `politics_auto` (default on): political power at or above `threshold` (100) beyond what the
+/// plan's own pending `politics` picks need (their `cost`), or within `cap_margin` (30) of
+/// `cap` (2000), buys the first affordable entry of `order` (default
+/// [`politics_auto_default`]) the game offers. One `hoi4_politics_options` read per entry at
+/// most every `recheck_days` (30); the reads stop for a game day after a scan buys nothing.
+/// Power at the cap wakes the player (`political_power_at_cap`), and so does power above the
+/// threshold that nothing in the order can use for `idle_wake_days` (30)
+/// (`political_power_idle`). Each pick and its reason go in the digest
+/// (`manage.politics_auto`).
+pub(super) fn politics_auto_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &plan["politics_auto"];
+    if *cfg == json!(false) || cfg["enabled"] == json!(false) || state.skipped(now, "pauto", "x") {
+        return Ok(None);
+    }
+    let Some(pp) = political_power(tools) else {
+        note(state, "politics_auto", "unknown: no political power read");
+        state.skip(now, "pauto", "x", DAY);
+        return Ok(None);
+    };
+    let threshold = cfg["threshold"].as_f64().unwrap_or(100.0);
+    let cap = cfg["cap"].as_f64().unwrap_or(2000.0);
+    let at_cap = pp >= cap - cfg["cap_margin"].as_f64().unwrap_or(30.0);
+    let pp_text = pp.round();
+    if at_cap {
+        wake(
+            state,
+            plan,
+            now,
+            4,
+            "political_power_at_cap",
+            format!("political power {pp_text} sits at the cap {cap}: every day adds nothing"),
+            json!({"political_power": pp_text, "cap": cap}),
+        );
+    }
+    // the plan's own picks not yet taken keep their cost
+    let reserve: f64 = list(plan, "politics")
+        .iter()
+        .enumerate()
+        .filter(|(index, pick)| {
+            let key = item_id(pick).map_or_else(
+                || format!("pol:{index}:{}", text(&pick["idea"])),
+                |id| format!("pol:id:{id}"),
+            );
+            !state.done.contains_key(&key)
+        })
+        .filter_map(|(_, pick)| pick["cost"].as_f64())
+        .sum();
+    let budget = if at_cap { pp } else { pp - reserve };
+    if pp < threshold && !at_cap {
+        state.manage.pp_idle_since = None;
+        note(
+            state,
+            "politics_auto",
+            format!("PP {pp_text} below {threshold}: banked"),
+        );
+        return Ok(None);
+    }
+    let default_order = politics_auto_default();
+    let order = if cfg["order"].is_array() {
+        &cfg["order"]
+    } else {
+        &default_order
+    };
+    let never = strings(cfg, "never");
+    let conscription = strings(&plan["manage"], "conscription_laws");
+    let recheck = cfg["recheck_days"]
+        .as_i64()
+        .filter(|d| *d > 0)
+        .unwrap_or(30)
+        * DAY;
+    let mut seen: Vec<String> = Vec::new();
+    for entry in order.as_array().map_or(&[][..], Vec::as_slice) {
+        let (category, slot) = (text(&entry["category"]).to_string(), &entry["slot"]);
+        let slot_key = format!("{category}:{slot}");
+        let cost = entry["cost"]
+            .as_f64()
+            .unwrap_or(if category == "military_staff" {
+                50.0
+            } else {
+                150.0
+            });
+        if budget < cost
+            || state.skipped(now, "pauto", &slot_key)
+            || !when_holds(state, tools, &entry["when"], now).is_true()
+        {
+            continue;
+        }
+        let options = tools.call(
+            "hoi4_politics_options",
+            &json!({"category": category, "slot": slot, "lease_token": lease}),
+        );
+        let Ok(options) = options else {
+            state.skip(now, "pauto", &slot_key, recheck);
+            seen.push(format!("{slot_key} unreadable"));
+            continue;
+        };
+        let current = options["current"]
+            .as_str()
+            .or(options["current"]["idea"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let enabled: Vec<String> = list(&options, "options")
+            .iter()
+            .filter(|i| i["enabled"] == json!(true))
+            .map(|i| text(&i["idea"]).to_string())
+            .collect();
+        let idea = match politics_auto_choice(entry, &current, &enabled, &never, &conscription) {
+            Ok(idea) => idea,
+            Err(why) => {
+                state.skip(now, "pauto", &slot_key, recheck);
+                seen.push(format!("{slot_key} {why}"));
+                continue;
+            }
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_politics_choose",
+            json!({"category": category, "slot": slot, "idea": idea}),
+            "pa",
+        )?;
+        if !ok {
+            state.skip(now, "pauto", &slot_key, 7 * DAY);
+        }
+        let reason = entry["why"].as_str().unwrap_or("politics_auto order");
+        let from = if current.is_empty() {
+            "vacant"
+        } else {
+            current.as_str()
+        };
+        let line = format!(
+            "PP {pp_text} (plan reserve {reserve}): {slot_key} {from} -> {idea} ({reason}): {ok}"
+        );
+        let picks = state
+            .manage
+            .notes
+            .get("politics_auto_picks")
+            .map_or_else(String::new, |p| format!("{p}; "));
+        let at = crate::calendar::decode(i32::try_from(now).unwrap_or(0))
+            .map_or_else(|_| format!("hour {now}"), |d| d.text);
+        note(
+            state,
+            "politics_auto_picks",
+            format!("{picks}{at} {idea}: {ok}"),
+        );
+        note(state, "politics_auto", line.clone());
+        state.manage.pp_idle_since = None;
+        return Ok(Some(format!("politics_auto {line} {why}")));
+    }
+    // nothing bought: no reads again for a game day; power above the threshold with nothing to
+    // buy for long wakes the player
+    state.skip(now, "pauto", "x", DAY);
+    let since = *state.manage.pp_idle_since.get_or_insert(now);
+    let idle_days = cfg["idle_wake_days"].as_i64().unwrap_or(30);
+    if now.saturating_sub(since) >= idle_days * DAY {
+        wake(
+            state,
+            plan,
+            now,
+            4,
+            "political_power_idle",
+            format!("political power {pp_text} has had nothing to buy for {idle_days} game days; name advisors, laws or decisions in politics_auto.order or the plan's politics"),
+            json!({"political_power": pp_text, "reserve": reserve, "order": seen}),
+        );
+    }
+    note(
+        state,
+        "politics_auto",
+        format!(
+            "PP {pp_text} (plan reserve {reserve}): nothing to buy [{}]",
+            seen.join(", ")
+        ),
+    );
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------------------------
 // Rule 10: front equipment fill (hoi4_supply), every 3 game days.
 
 fn equipment_rule(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
@@ -3117,6 +3382,129 @@ mod tests {
         json!({"player": {"tag": "ITA"}, "wars": [{"includes_player": true, "sides": [
             {"countries": [{"tag": "ITA", "casualties_total": total}]},
             {"countries": [{"tag": "ETH", "casualties_total": 1.0}]}]}]})
+    }
+
+    fn pp(points: f64) -> Value {
+        json!({"political_power": {"raw_signed": points * 100_000.0}})
+    }
+
+    #[test]
+    fn unspent_political_power_buys_the_standing_order_above_the_plan_reserve() {
+        let tools = fake(vec![
+            ("hoi4_economy", pp(150.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": null, "options": [
+                    {"idea": "ITA_off", "enabled": false}, {"idea": "ITA_chief", "enabled": true}]}),
+            ),
+        ]);
+        // a pending plan pick of 100 leaves 50: enough for the chief of army (50), not a law
+        let plan = json!({"politics": [{"id": "p", "category": "government", "slot": 3,
+            "idea": "x", "cost": 100}]});
+        let mut state = State::default();
+        let out = politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            out.as_deref()
+                .unwrap_or("")
+                .contains("military_staff:0 vacant -> ITA_chief"),
+            "{out:?}"
+        );
+        let acts = actions(&tools);
+        assert_eq!(acts.len(), 1);
+        assert_eq!(acts[0].0, "hoi4_politics_choose");
+        assert_eq!(acts[0].1["idea"], "ITA_chief");
+        assert!(state.manage.notes["politics_auto"].contains("chief of army"));
+        assert!(state.manage.notes["politics_auto_picks"].contains("ITA_chief: true"));
+        // below the threshold the power is banked and no window opens
+        let low = fake(vec![("hoi4_economy", pp(90.0))]);
+        let mut state = State::default();
+        assert_eq!(
+            politics_auto_step(&mut state, &low, &json!({}), "l", START).unwrap(),
+            None
+        );
+        assert_eq!(reads(&low, "hoi4_politics_options"), 0);
+        assert!(state.manage.notes["politics_auto"].contains("banked"));
+        // switched off
+        let mut state = State::default();
+        let off = json!({"politics_auto": false});
+        assert_eq!(
+            politics_auto_step(&mut state, &tools, &off, "l", START).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn politics_auto_moves_only_up_its_ranking_and_never_into_conscription() {
+        let enabled: Vec<String> = ["war_economy", "partial_economic_mobilisation", "x_law"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let economy = json!({"category": "government", "slot": 2,
+            "ideas": ["war_economy", "partial_economic_mobilisation"]});
+        let none: Vec<String> = Vec::new();
+        assert_eq!(
+            politics_auto_choice(&economy, "civilian_economy", &enabled, &none, &none),
+            Err("holds civilian_economy, which the order does not rank".into())
+        );
+        assert_eq!(
+            politics_auto_choice(
+                &economy,
+                "partial_economic_mobilisation",
+                &enabled,
+                &none,
+                &none
+            ),
+            Ok("war_economy".into())
+        );
+        assert!(politics_auto_choice(&economy, "war_economy", &enabled, &none, &none).is_err());
+        let never = vec!["war_economy".to_string()];
+        assert!(politics_auto_choice(&economy, "", &enabled, &never, &none)
+            .is_ok_and(|i| i == "partial_economic_mobilisation"));
+        // government slot 0 (conscription) only within manage.conscription_laws
+        let draft = json!({"category": "government", "slot": 0});
+        assert!(politics_auto_choice(&draft, "", &enabled, &none, &none).is_err());
+        let allowed = vec!["x_law".to_string()];
+        assert_eq!(
+            politics_auto_choice(&draft, "", &enabled, &none, &allowed),
+            Ok("x_law".into())
+        );
+        // a slot without a ranking is filled only while vacant
+        let chief = json!({"category": "military_staff", "slot": 0});
+        assert!(politics_auto_choice(&chief, "ITA_a", &enabled, &none, &none).is_err());
+    }
+
+    #[test]
+    fn power_at_the_cap_or_with_nothing_to_buy_wakes_the_player() {
+        let tools = fake(vec![
+            ("hoi4_economy", pp(1990.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": "war_economy", "options": [{"idea": "a", "enabled": true}]}),
+            ),
+        ]);
+        let plan = json!({"politics_auto": {"idle_wake_days": 0}});
+        let mut state = State::default();
+        assert_eq!(
+            politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        let reasons: Vec<Value> = wakes(&mut state)
+            .iter()
+            .map(|w| w["reason"].clone())
+            .collect();
+        assert_eq!(
+            reasons,
+            [
+                json!("political_power_at_cap"),
+                json!("political_power_idle")
+            ]
+        );
+        assert!(state.manage.notes["politics_auto"].contains("nothing to buy"));
+        // the scan waits a game day before reading the windows again
+        let opened = reads(&tools, "hoi4_politics_options");
+        politics_auto_step(&mut state, &tools, &plan, "l", START + 2).unwrap();
+        assert_eq!(reads(&tools, "hoi4_politics_options"), opened);
     }
 
     #[test]
