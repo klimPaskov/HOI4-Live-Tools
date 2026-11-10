@@ -2174,6 +2174,24 @@ fn ledger_stopped(why: &str) -> bool {
     why.starts_with("skipped:")
 }
 
+/// Game hours before a hold move that is under way (or already there) is checked again.
+const HOLD_RECHECK: GameHour = 10 * DAY;
+
+/// A verified hoi4_army_move receipt detail says the army is heading for or standing in the
+/// target: the pre-check sent nothing, every division heads there, or the divisions wait in
+/// their port for a sea transfer (which shows no heading until it sails).
+fn move_under_way(detail: &Value) -> bool {
+    let note = text(&detail["note"]);
+    let divisions = detail["divisions"].as_u64().unwrap_or(0);
+    let heading = detail["divisions_heading"].as_u64().unwrap_or(0);
+    note.contains("nothing was sent")
+        || note.contains("own port")
+        || detail["under_way_by_other_route"] == json!(true)
+        || detail["sea_transfer_unverified"] == json!(true)
+        // some divisions head there: the others already stand there or follow
+        || (divisions > 0 && heading > 0)
+}
+
 /// The guard post army_layout gives the army playing a guard role (guard_states_in_order[0]).
 fn layout_guard_post(state: &State, plan: &Value, army: &str) -> Option<i32> {
     list(plan, "army_layout")
@@ -2644,7 +2662,10 @@ fn hold_one(
         .get(id)
         .filter(|o| o.army == army && o.post == post)
     {
-        if o.under_way || now - o.at < DAY {
+        // A move on its way (or one the game took: a sea transfer waiting in port shows no
+        // heading) is not sent again for HOLD_RECHECK; the shakedown of 10 Nov 2026 re-sent the
+        // same verified move every game day, 20 times.
+        if now - o.at < if o.under_way { HOLD_RECHECK } else { DAY } {
             let how = if o.under_way {
                 "heading there or standing there"
             } else {
@@ -2756,8 +2777,7 @@ fn hold_one(
         .last
         .borrow()
         .as_ref()
-        .and_then(|r| r["receipt"]["detail"]["note"].as_str().map(str::to_string))
-        .is_some_and(|n| n.contains("nothing was sent"));
+        .is_some_and(|r| move_under_way(&r["receipt"]["detail"]));
     state.military.hold_orders.insert(
         id.to_string(),
         HoldOrder {
@@ -2767,7 +2787,13 @@ fn hold_one(
             under_way,
         },
     );
-    if under_way {
+    let presettled = receipts
+        .last
+        .borrow()
+        .as_ref()
+        .and_then(|r| r["receipt"]["detail"]["note"].as_str().map(str::to_string))
+        .is_some_and(|n| n.contains("nothing was sent"));
+    if presettled {
         // the pre-check settled it without input: not an action, the next hold is looked at
         note(
             state,
@@ -3020,8 +3046,8 @@ mod tests {
             sent = actions(&tools).len();
         }
         assert_eq!(
-            sent, 4,
-            "the order failed 3 times in 10 days: not sent again"
+            sent, 3,
+            "the order failed 3 times since it last worked (the command power refusal counts): not sent again"
         );
     }
 
@@ -3896,6 +3922,50 @@ mod tests {
         assert_eq!(tools.moves().len(), 3);
         let alarms = take_alarms(&mut state);
         assert_eq!(alarms[0]["reason"], "hold_lost:north");
+    }
+
+    #[test]
+    fn a_verified_move_waiting_in_port_is_not_sent_again_every_day() {
+        // shakedown 10 Nov 2026: G_afar_a's move to 8043 went out 20 times while its division
+        // waited in Massaua for the sea transfer (the receipt shows no heading until it sails)
+        struct Port(Corridor);
+        impl Tools for Port {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_army_move" && args.get("request_id").is_some() {
+                    self.0
+                        .calls
+                        .borrow_mut()
+                        .push((name.to_string(), args.clone()));
+                    return Ok(json!({"receipt": {"status": "Verified", "detail": {
+                        "divisions": 1, "divisions_heading": 0, "sea_transfer_unverified": true,
+                        "under_way_by_other_route": false,
+                        "note": "every division waits in an own port: a sea transfer shows no heading until it lands"}}}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let tools = Port(Corridor::new());
+        let plan = corridor_plan();
+        let mut state = State::default();
+        assert!(hold_at(&mut state, &tools, &plan, START).is_some());
+        assert_eq!(tools.0.moves().len(), 1);
+        for day in 1..10 {
+            assert_eq!(hold_at(&mut state, &tools, &plan, START + day * DAY), None);
+        }
+        assert_eq!(
+            tools.0.moves().len(),
+            1,
+            "no re-order while it waits in port"
+        );
+        // after HOLD_RECHECK the order is checked again (the tool's pre-check settles it)
+        hold_at(&mut state, &tools, &plan, START + 10 * DAY + 1);
+        assert_eq!(tools.0.moves().len(), 2);
+        assert!(move_under_way(
+            &json!({"divisions": 6, "divisions_heading": 2, "note": ""})
+        ));
+        assert!(!move_under_way(
+            &json!({"divisions": 6, "divisions_heading": 0, "note": ""})
+        ));
     }
 
     #[test]

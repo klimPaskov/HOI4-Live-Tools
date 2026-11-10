@@ -412,11 +412,47 @@ pub(super) struct Def {
     pub group: i32,
     pub width: f64,
 }
+/// CTechnologyStatus offsets of the full sub-unit catalog on macOS, newest build first:
+/// 1.19.4.1 (f584) +0x180, Mach-O 089EA519 +0x320.
+const MACOS_CATALOGS: [u64; 2] = [0x180, 0x320];
+
+/// The first candidate array that is non-empty, at most 400 long and holds only sub-unit
+/// definitions (`is_def`); an unreadable candidate is None.
+pub(super) fn pick_catalog(
+    candidates: Vec<Option<Vec<u64>>>,
+    is_def: impl Fn(u64) -> bool,
+) -> Result<Vec<u64>> {
+    candidates
+        .into_iter()
+        .flatten()
+        .find(|list| !list.is_empty() && list.len() <= 400 && list.iter().all(|p| is_def(*p)))
+        .ok_or_else(|| {
+            Error::new(
+                "invalid_array",
+                "No sub-unit catalog found in the technology status (unmapped build)",
+            )
+        })
+}
 pub(super) fn catalog(r: &Reader<'_>, image: u64) -> Result<Vec<Def>> {
     let l = layout(r)?;
     let country = own_country(r, image)?;
     let status = r.u64(country + game::layout(r).country_technology_status)?;
-    let list = r.pointer_array(status + l.subunit_catalog)?;
+    // 1.19.4.1 (f584) moved the full catalog from CTechnologyStatus +0x320 to +0x180 (98
+    // definitions with these DLCs; +0xeb0 and +0x1be0 hold subsets without militia and
+    // irregular_infantry). +0x320 now holds no array at all (shakedown 10 Nov 2026: every
+    // hoi4_template_edit and hoi4_template_options failed with invalid_array). The macOS
+    // reader takes the first candidate whose every entry is a sub-unit definition.
+    let candidates: Vec<u64> = match r.string_abi() {
+        StringAbi::LibCxx => MACOS_CATALOGS.to_vec(),
+        StringAbi::LibStdCxx => vec![l.subunit_catalog],
+    };
+    let list = pick_catalog(
+        candidates
+            .iter()
+            .map(|off| r.pointer_array(status + off).ok())
+            .collect(),
+        |p| is_ptr(p) && r.u64(p).ok() == Some(image + l.subunit_vtable),
+    )?;
     if list.len() > 400 {
         return Err(Error::new("invalid_array", "Too many sub-unit definitions"));
     }
@@ -971,6 +1007,23 @@ pub(super) fn snapshot<T>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_catalog_is_the_first_candidate_holding_only_sub_unit_definitions() {
+        let def = |p: u64| p >= 0x1000;
+        // 1.19.4.1: +0x180 holds the catalog, +0x320 no array
+        let got = pick_catalog(vec![Some(vec![0x1000, 0x2000]), None], def).unwrap();
+        assert_eq!(got, vec![0x1000, 0x2000]);
+        // the older build: +0x180 is something else, +0x320 the catalog
+        let got = pick_catalog(vec![Some(vec![0x10, 0x2000]), Some(vec![0x3000])], def).unwrap();
+        assert_eq!(got, vec![0x3000]);
+        assert_eq!(
+            pick_catalog(vec![None, Some(vec![])], def)
+                .unwrap_err()
+                .code,
+            "invalid_array"
+        );
+    }
+
     use super::*;
 
     fn unit(

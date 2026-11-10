@@ -206,7 +206,9 @@ impl<'a> Reader<'a> {
         {
             return Err(Error::new(
                 "invalid_array",
-                "Invalid array count/capacity/data",
+                format!(
+                    "Invalid array count/capacity/data (array at {a:#x}: data {ptr:#x}, capacity {cap}, count {size})"
+                ),
             ));
         }
         Ok((header, ptr, size as usize))

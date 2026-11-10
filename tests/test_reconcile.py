@@ -23,7 +23,8 @@ FAKE = textwrap.dedent('''
         "hoi4_air_wings": {"wings": [{"wing": "12° Stormo"}, {"wing": "14° Stormo"}]},
         "hoi4_air": {"air_bases": [{"state_id": 550, "wings": ["12\u00b0 Stormo", "14\u00b0 Stormo"]}],
                      "wings": [{"wing": "12\u00b0 Stormo", "variant": "CR.32"},
-                               {"wing": "14\u00b0 Stormo", "variant": "Ca.111"}]},
+                               {"wing": "14\u00b0 Stormo", "variant": "Ca.111",
+                                "aircraft_type": "small_plane_cas_airframe_0"}]},
         "hoi4_production_lines": {"lines": [{"equipment_id": "infantry_equipment_1",
                                              "factory_counters": {"active_factories_raw_signed": 4}}]},
         "hoi4_technology_list": {"technologies": ["basic_machine_tools", "construction1"]},
@@ -78,6 +79,12 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(patched["air_plan"][0]["wing"], "12\u00b0 Stormo")
         self.assertEqual(patched["air_plan"][0]["selector"], "CR.32 at 550")
         self.assertEqual([u["name"] for u in report["unresolved"]], ["SM.79 at 550"])
+
+    def test_wing_selector_takes_the_airframe_id(self):
+        plan = {"air_plan": [{"wing": "small_plane_cas_airframe_0 at 550", "mission": "cas"}]}
+        code, report, patched, _ = self.run_it(plan)
+        self.assertEqual(patched["air_plan"][0]["wing"], "14\u00b0 Stormo")
+        self.assertEqual(report["unresolved"], [])
 
     def test_marshals_are_checked(self):
         plan = {"army_group": [{"id": "g", "armies": ["A"], "marshal": ["rodolfo graziani", "Pietro Badoglio"]}]}
