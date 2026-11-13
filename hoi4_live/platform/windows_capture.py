@@ -66,7 +66,15 @@ class Capturer:
         self.last_method = None
 
     def grab(self, method=None):
-        """RGB uint8 array of the client area, shape (h, w, 3)."""
+        """RGB uint8 array of the client area, shape (h, w, 3). The window learns the frame size, so clicks on
+        points read from this picture land correctly when it is not the client's pixel size (issue #27)."""
+        img = self._grab(method)
+        note = getattr(self.window, "note_frame", None)
+        if note is not None and img is not None:
+            note(img.shape[1], img.shape[0])
+        return img
+
+    def _grab(self, method=None):
         method = method or self.method
         hwnd = self.window.require()
         retry = time.monotonic() >= self.printwindow_retry_at

@@ -74,7 +74,10 @@ Things every modder should know:
   [launch order](#launch-order-for-a-mod-test). Career Profile and Awards need the Steam client.
 - **Windows setup.** Windowed or borderless game, UI scale 1, English Windows OCR,
   console key on the `` ` `` key of a US layout. A 1920×1080 borderless window is
-  what the live runs used.
+  what the live runs used. A larger window, for example a 2560×1440 borderless game, works too: the tools
+  read the screen as a picture (the frame) and scale click points from the frame to the window, so a capture
+  that is smaller than the window still clicks the right spot. `hoi4_status` shows `window.client`, `window.frame`
+  and the scale when they differ. Coordinates in tool results are frame pixels.
 - **Mods and `-debug`.** The Python package launches the game with whatever your
   playset enables. The native Linux launcher starts it with no mods.
 - **Not working yet.** The Windows native adapter, ARM64 Linux, and a clean
