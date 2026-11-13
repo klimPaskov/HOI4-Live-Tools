@@ -1,8 +1,11 @@
 """The Hearts of Iron IV window: discovery by process image, client geometry, focus and pinning.
 
 Matching by owning process (hoi4.exe) avoids false hits such as an Explorer window opened on the game folder,
-whose title is also "Hearts of Iron IV". All public coordinates are client pixels; to_screen() converts and refuses
-anything outside the client area, which is how "act only inside the HOI4 window" is enforced.
+whose title is also "Hearts of Iron IV". All public coordinates are frame pixels: the pixels of the picture that
+capture and OCR return. That equals the client area (the usual case) or, when the capture comes back smaller than the
+client (a 2560x1440 window captured as 1920x1080, issue #27), the same picture at a smaller size. to_screen() scales
+frame points up to the client and refuses anything outside the frame, which is how "act only inside the HOI4 window"
+is enforced.
 """
 
 import os
@@ -24,6 +27,7 @@ class GameWindow:
         self.pin = pin
         self.hwnd = window_id
         self.pid = expected_identity.pid if expected_identity else None
+        self.frame = None                      # (w, h) of the last captured picture
 
     def bind_identity(self, identity):
         if self._identity is not None and self._identity != identity:
@@ -90,23 +94,45 @@ class GameWindow:
         """(x, y, w, h) of the client area in screen pixels."""
         return win32.client_rect(self.require())
 
+    def note_frame(self, w, h):
+        """Record the size of the picture the capturer returned. Coordinates read from it are in this space."""
+        self.frame = (int(w), int(h))
+
+    def frame_scale(self):
+        """(sx, sy): client pixels per frame pixel. (1, 1) unless the capture has the client's shape at another size."""
+        if not self.frame or not self.frame[0] or not self.frame[1]:
+            return 1.0, 1.0
+        _, _, cw, ch = self.client()
+        fw, fh = self.frame
+        if (cw, ch) == (fw, fh) or not cw or not ch:
+            return 1.0, 1.0
+        if abs((cw / ch) - (fw / fh)) > 0.03 * (cw / ch):
+            return 1.0, 1.0                     # not the same picture (a crop): never stretch it
+        return cw / fw, ch / fh
+
     def size(self):
+        """(w, h) of the coordinate space every tool works in: the frame when one was captured, else the client."""
         _, _, w, h = self.client()
+        if self.frame and self.frame_scale() != (1.0, 1.0):
+            return self.frame
         return w, h
 
     def to_screen(self, x, y, clamp=False):
-        cx, cy, w, h = self.client()
+        cx, cy, _, _ = self.client()
+        w, h = self.size()
         if not (0 <= x < w and 0 <= y < h):
             if clamp:
                 x, y = min(max(0, x), w - 1), min(max(0, y), h - 1)
             else:
                 raise ToolError(f"point ({x}, {y}) is outside the game client area {w}x{h}",
                                 {"client_size": [w, h]})
-        return int(cx + x), int(cy + y)
+        sx, sy = self.frame_scale()
+        return int(cx + round(x * sx)), int(cy + round(y * sy))
 
     def from_screen(self, sx, sy):
         cx, cy, _, _ = self.client()
-        return sx - cx, sy - cy
+        fx, fy = self.frame_scale()
+        return (sx - cx) / fx, (sy - cy) / fy
 
     def title(self):
         return win32.window_text(self.require())

@@ -6,6 +6,7 @@ takes the game down with it. The playset (dlc_load.json) and settings are never 
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -157,6 +158,99 @@ def wait_exit(pid, timeout=60):
             return True
         time.sleep(1)
     return False
+
+
+def owned_process_present(pid, creation_time=None, name=None, plat=None):
+    """True while the process this server launched is still there: its pid is alive or still listed under the image
+    name, and (when `creation_time` is known) it is the same process, not a recycled pid.
+
+    The exit-code check alone can say "exited" while the image is still being torn down and the process list shows
+    hoi4.exe for a few more seconds (issue #29), so both views must agree before the game counts as gone."""
+    plat = plat or platform.current()
+    listed = False
+    if name:
+        listed = pid in (running_pids(name) if plat is platform.current() else plat.find_processes(name))
+    alive = listed or plat.pid_alive(pid)
+    child = _LAUNCHES.get(pid)
+    if child is not None and child.poll() is not None and not listed:
+        return False                                   # our own child exited and the list no longer shows it
+    if not alive:
+        return False
+    if creation_time is not None:
+        try:
+            now = plat.capture_process_identity(pid).creation_time
+        except Exception:
+            return True                                # cannot read it: assume it is still the same process
+        if now != creation_time:
+            return False                               # the pid was reused by a different process
+    return True
+
+
+def wait_gone(pid, creation_time=None, name=None, timeout=60, plat=None, clock=time.monotonic, sleep=time.sleep):
+    """Wait until the launched game process is gone (see owned_process_present). True when it is, False at the timeout."""
+    deadline = clock() + timeout
+    while True:
+        if not owned_process_present(pid, creation_time, name, plat):
+            return True
+        if clock() >= deadline:
+            return False
+        sleep(0.5)
+
+
+def wait_no_game(name, timeout=15, clock=time.monotonic, sleep=time.sleep):
+    """Wait until no process with this image name is listed. True when none is, False at the timeout."""
+    deadline = clock() + timeout
+    while running_pids(name):
+        if clock() >= deadline:
+            return False
+        sleep(0.5)
+    return True
+
+
+def command_line(pid, timeout=20):
+    """The command line of a running process, or None when it cannot be read (used on failure paths only)."""
+    try:
+        if sys.platform == "win32":
+            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                   f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"]
+        else:
+            cmd = ["ps", "-p", str(int(pid)), "-o", "args="]
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    text = out.stdout.strip()
+    return text or None
+
+
+_ERROR_ARG_RX = re.compile(r'-(error_\w+)\s+(?:"([^"]*)"|(\S+))', re.I)
+
+
+def parse_error_dialog(cmdline):
+    """The title and message of the helper process the game starts to show a fatal error ("-error_title ..."), or
+    None when the command line is not one. Every `-error_*` argument is kept under its own name."""
+    if not cmdline or "-error_title" not in cmdline.lower():
+        return None
+    args = {}
+    for m in _ERROR_ARG_RX.finditer(cmdline):
+        args[m.group(1).lower()] = m.group(2) if m.group(2) is not None else m.group(3)
+    title = args.pop("error_title", None)
+    message = next((args[k] for k in ("error_message", "error_text", "error_msg", "error_body") if k in args), None)
+    if message is None and args:
+        message = next(iter(args.values()))
+    return {"title": title, "message": message, "arguments": args}
+
+
+def error_dialogs(owned_pid, name, reader=None):
+    """Error-dialog helper processes of the game: other `name` processes started with -error_title."""
+    out = []
+    for pid in running_pids(name):
+        if pid == owned_pid:
+            continue
+        parsed = parse_error_dialog((reader or command_line)(pid))
+        if parsed:
+            parsed["pid"] = pid
+            out.append(parsed)
+    return out
 
 
 def kill(pid):

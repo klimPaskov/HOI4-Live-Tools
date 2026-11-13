@@ -60,6 +60,7 @@ class Session:
         self.last_popups = []
         self.launched_pid = None
         self.launched_identity = None
+        self.dlc_restore_grace_s = 15
         self.config_session = None
         self.config_owner_id = None
         self.dlc_prepared = False           # hoi4_prepare copied the DLC files into the run's user folder
@@ -134,7 +135,8 @@ class Session:
         if not self.dlc_prepared:
             return None
         from .game import dlc_prepare, process
-        if process.running_pids(self.cfg["window"]["process_name"]):
+        # the process list can still show the game for a few seconds after it exited: give it a short grace first
+        if not process.wait_no_game(self.cfg["window"]["process_name"], self.dlc_restore_grace_s):
             return {"restored": [], "removed": [], "conflicts": {},
                     "error": "a game is still running; the DLC files stay in place until it exits"}
         try:

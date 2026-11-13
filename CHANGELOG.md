@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Four launch and menu fixes found on 1.19.4.2 (9 November 2026).
+
+- `hoi4_launch` stops at once when the owned game process exits or the game opens its fatal-error dialog (the helper
+  `hoi4.exe -error_title ...`, for example "Failed to load the map"). The error carries the exit code, the dialog title and
+  message and the `error.log` lines, instead of waiting out the timeout (#30).
+- `hoi4_shutdown` waits until the owned process is really gone (pid dead and no longer in the process list, creation time
+  checked) before it restores the config and DLC files, and the DLC restore allows a short grace for a process list that
+  clears late (#29).
+- `hoi4_new_game` with `exit_to_menu` clicks Exit to Menu on the Playthrough Overview window of 1.19.4.2 (#28).
+- Clicks are scaled from the captured frame to the game window, so a 2560x1440 window captured as 1920x1080 clicks the
+  right spot (#27). `hoi4_status` shows the frame size and scale.
+
 ## 1.4.1 - 2026-11-09
 
 The Python server installs on macOS from the release archive.

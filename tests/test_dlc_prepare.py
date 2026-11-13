@@ -388,6 +388,7 @@ class ToolLevel(Folders):
         with p1, p2:
             self.call(session)
         with mock.patch.object(session_tools.process, "running_pids", return_value=[5]):
+            session.dlc_restore_grace_s = 0
             self.assertIn("still running", session.restore_dlc_after_exit()["error"])
         self.assertTrue(session.dlc_prepared)
         self.put(self.target, "launcher-v2.sqlite", b"rewritten")

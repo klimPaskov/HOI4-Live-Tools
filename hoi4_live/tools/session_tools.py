@@ -59,6 +59,14 @@ def hoi4_status(session, args):
         x, y, w, h = session.window.client()
         data["window"] = {"title": session.window.title(), "client": [x, y, w, h],
                           "foreground": session.window.is_foreground()}
+        frame = getattr(session.window, "frame", None)
+        if frame:
+            data["window"]["frame"] = list(frame)
+            scale = session.window.frame_scale()
+            if scale != (1.0, 1.0):
+                data["window"]["frame_scale"] = [round(scale[0], 4), round(scale[1], 4)]
+                data["window"]["note"] = ("the capture is smaller than the client area; coordinates in tool results "
+                                          "are frame pixels and clicks are scaled to the client")
         if args["look"]:
             img = session.grab(focus=False)
             data["capture_method"] = session.capturer.last_method
@@ -187,6 +195,30 @@ def hoi4_prepare(session, args):
                   f"{len(rep['removed'])} copies removed)", **rep)
 
 
+def _check_launch_alive(session, pid, crashes_before):
+    """Fail a launch at once when the owned process is gone or the game opened its fatal-error dialog (issue #30)."""
+    identity = getattr(session, "launched_identity", None)
+    created = identity.creation_time if identity is not None and getattr(identity, "pid", pid) == pid else None
+    try:
+        launch_errors.check_process(session, pid, created)
+    except ToolError as exc:
+        if session.dlc_prepared and not exc.details.get("dialog_pid"):
+            session.restore_dlc_after_exit()
+        new = process.crash_dirs(session.cfg.user_dir) - crashes_before
+        if new:
+            exc.details["crash"] = sorted(new)
+        raise
+
+
+def _wait_game_gone(session, pid, timeout):
+    """True once the game process is really gone: the pid is dead and no longer listed, and it was not just a reused
+    pid (creation time of the owned launch). An exit code seen a few seconds before the process list clears used to
+    make hoi4_shutdown restore the DLC files too early (issue #29)."""
+    identity = getattr(session, "launched_identity", None)
+    created = identity.creation_time if identity is not None and getattr(identity, "pid", pid) == pid else None
+    return process.wait_gone(pid, created, session.cfg["window"]["process_name"], timeout)
+
+
 @tool("hoi4_launch",
       "Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game "
       "already runs it is left alone (restart=true quits it through its own menu first). The playset and settings "
@@ -217,7 +249,7 @@ def hoi4_launch(session, args):
         session.require_owned_game()
         menu.quit_to_desktop(session)
         pid = session.window.pid
-        if not process.wait_exit(pid, 90):
+        if not _wait_game_gone(session, pid, 90):
             raise ToolError("the running game did not exit through its menu; not relaunching")
         if getattr(session, "config_session", None) is not None:
             restored = session.restore_configs_after_exit()
@@ -238,6 +270,7 @@ def hoi4_launch(session, args):
         backup.mark_game_starting(session.config_owner_id)
     from ..game import gamemode
     gamemode.begin_run(session, t0)
+    session.logs.mark("launch_start", ("error", "game", "system", "setup"))
     try:
         pid = process.launch(cfg.game_dir, launch_args)
     except (OSError, ToolError):
@@ -271,6 +304,7 @@ def hoi4_launch(session, args):
         if process.crash_dirs(cfg.user_dir) - crashes_before:
             session.restore_dlc_after_exit()
             raise ToolError("the game crashed during startup", {"crash": sorted(process.crash_dirs(cfg.user_dir) - crashes_before)})
+        _check_launch_alive(session, pid, crashes_before)
     if not session.window.find():
         raise ToolError("no game window appeared", data)
     session.logs.mark("launch", ("error", "game", "system", "setup"))
@@ -284,9 +318,7 @@ def hoi4_launch(session, args):
             if new:
                 session.restore_dlc_after_exit()
                 raise ToolError("the game crashed during startup", {"crash": sorted(new)})
-            if not process.running_pids():
-                session.restore_dlc_after_exit()
-                raise ToolError("the game exited during startup")
+            _check_launch_alive(session, pid, crashes_before)
             session.window.close_notepad_logs()
             launch_errors.check(session, args["debug"])          # a MAP_ERROR dialog: fail now, not at the timeout
             idle = session.logs.idle_seconds("setup") or 0
@@ -435,12 +467,12 @@ def hoi4_shutdown(session, args):
         if pid != session.launched_pid:
             raise ToolError("force only terminates a game this server launched; quit it through the menu instead")
         process.kill(pid)
-        exited = process.wait_exit(pid, 30)
+        exited = _wait_game_gone(session, pid, 30)
         restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
         return result(f"termination requested for pid {pid}", pid=pid, exited=exited, config_restore=restored,
                       dlc_restore=session.restore_dlc_after_exit() if exited else None)
     menu.quit_to_desktop(session)
-    exited = process.wait_exit(pid, 120)
+    exited = _wait_game_gone(session, pid, 120)
     restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
     return result("game exited" if exited else "quit requested; the game is still closing", pid=pid, exited=exited,
                   config_restore=restored, dlc_restore=session.restore_dlc_after_exit() if exited else None)

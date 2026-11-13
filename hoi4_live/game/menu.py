@@ -333,19 +333,42 @@ def _confirm_if_asked(session, before_texts):
     return None
 
 
+OVERVIEW_TAB_RX = re.compile(r"playthrough\s*overview", re.I)
+OVERVIEW_EXIT_CLICKS = 3
+
+
+def _click_overview_exit(session):
+    """Click Exit to Menu on the Playthrough Overview window (1.19.4.2 shows it after a resignation: tabs Playthrough
+    Overview, Awards and Statistics). Only when that window is up, so the pause menu's own button is never mistaken
+    for it. Returns the clicked line's text or None."""
+    img, lines, res = ui.find_text(session, r"exit\s*to\s*menu", exact=True, scale=1.5)
+    if not lines or not any(OVERVIEW_TAB_RX.search(l.text) for l in res.lines):
+        return None
+    x, y = sorted(lines, key=lambda l: -l.box[1])[0].center
+    session.input.click(x, y)
+    return lines[0].text
+
+
 def quit_to_main_menu(session, timeout=240):
-    """Pause menu -> Exit to Menu -> OK (Resign Game) -> the statistics screen's Quit -> main menu.
-    Never touches the pause menu's Wiki button (it opens a browser)."""
+    """Pause menu -> Exit to Menu -> OK (Resign Game) -> the end screen (the statistics screen's Quit, or on 1.19.4.2
+    the Playthrough Overview window's Exit to Menu) -> main menu. Never touches the pause menu's Wiki button (it
+    opens a browser)."""
     hits = open_esc_menu(session)
     ui.click_text(session, r"exit\s*to\s*menu")
     confirmed = _confirm_if_asked(session, hits)
     t0 = time.time()
     clicked_quit = False
+    overview_clicks = 0
     while time.time() - t0 < timeout:
         session.check_cancel()
         ok, texts = main_menu_visible(session)
         if ok:
-            return {"confirmed": confirmed, "statistics_quit": clicked_quit, "seconds": round(time.time() - t0)}
+            return {"confirmed": confirmed, "statistics_quit": clicked_quit, "overview_exit": overview_clicks > 0,
+                    "seconds": round(time.time() - t0)}
+        if overview_clicks < OVERVIEW_EXIT_CLICKS and _click_overview_exit(session):
+            overview_clicks += 1
+            session.sleep(3)
+            continue
         if not clicked_quit:
             img, lines, res = ui.find_text(session, r"quit", exact=True, scale=1.5)
             if lines:
