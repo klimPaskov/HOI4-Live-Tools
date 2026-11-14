@@ -666,6 +666,25 @@ class World:
 
         return self.cached("wars", load)
 
+    def start_global_flags(self):
+        """Global flags the country histories set at the start date (any country's history can set one)."""
+
+        def load():
+            out = set()
+            for p in self.game.files("history/countries"):
+                try:
+                    with open(p, encoding="utf-8-sig", errors="replace") as fh:
+                        if "set_global_flag" not in fh.read():
+                            continue
+                except OSError:
+                    continue
+                m = re.match(r"^([A-Z][A-Z0-9]{2})", os.path.basename(p))
+                if m:
+                    out.update(f["v"] for f in self.country(m.group(1))["global_flags"] if f.get("v"))
+            return out
+
+        return self.cached("start_global_flags", load)
+
     def at_war_with(self, tag=None):
         tag = tag or self.tag
         enemies = set()

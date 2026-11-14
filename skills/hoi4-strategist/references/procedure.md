@@ -331,13 +331,21 @@ Read: the country section of `economy-build-orders.md` §10 when it exists; doss
 1. `focus_path` in order: no exclusive pair; each focus after its prerequisites; every runtime
    `available` gate true in the phase that reaches it. Copy dates into plan.md §6 as
    `[D focus-timeline]`. `focus_fallback` for a blocked focus.
+   **The focus slot never idles:** the two lists together keep it busy from the start to the horizon
+   under the plan's own conditions. A focus that waits for something (peace, a flag, land not yet held)
+   has focuses that can start meanwhile listed after it, and the fallback list holds focuses whose
+   prerequisites are done by then and whose `available` gate holds in the state the plan is in when the
+   path runs out (at war when the war is still on). A focus the game only completes by script
+   (`available` `always = no`) is listed nowhere. Read each gate with `F focus <id>`; lint
+   `focus.available`, `focus.idle` and `focus.unconfirmed` walk the slot day by day and name every
+   blocked focus with the line that blocks it.
 2. Balance of power, when the tag has one at the start date or a planned focus creates one: the side
    the plan wants, the range edges that matter, and the focuses and decisions that move it; consistent
    with the focus path. Not applicable: `F bop <TAG>` (until available `F grep <TAG> --folder common/bop`)
    finds no balance for the tag and no planned focus sets one.
 Resolution: executor `focus_path`, `focus_fallback`; player `decision_rules` (BoP decisions with `when`;
 atom `bop:<id>`); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.order`,
-`focus.gates`; rubric row 3.
+`focus.gates`, `focus.available`, `focus.idle`, `focus.unconfirmed`; rubric row 3.
 
 ## E. Politics
 
