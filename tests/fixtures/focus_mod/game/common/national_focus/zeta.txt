@@ -1,0 +1,8 @@
+focus_tree = {
+	id = zeta_focus
+	country = { factor = 0 modifier = { add = 10 tag = ZZA } }
+	focus = { id = ZZA_root cost = 5 }
+	# No war condition here: the mod's file adds one.
+	focus = { id = ZZA_peace_works cost = 10 prerequisite = { focus = ZZA_root } }
+	focus = { id = ZZA_base_only cost = 10 }
+}

@@ -1,0 +1,5 @@
+zza_open_the_hidden_door = {
+	# The focus says it can never start; this effect opens it all the same.
+	unlock_national_focus = ZZA_unlocked
+	unlock_national_focus = { focus = ZZA_unlocked_too }
+}

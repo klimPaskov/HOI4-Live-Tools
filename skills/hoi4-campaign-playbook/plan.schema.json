@@ -450,6 +450,11 @@
         "focus_blocked": {
           "type": "integer",
           "minimum": 0
+        },
+        "focus_unavailable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "game hours before a focus that hoi4_focus_available knows to be unavailable is asked about again (default 24); it is never opened in the game meanwhile"
         }
       },
       "additionalProperties": false,

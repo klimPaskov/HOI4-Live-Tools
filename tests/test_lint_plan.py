@@ -67,7 +67,8 @@ PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
-                  "move_commitment", "action_receipts", "construction_give_up", "supply_relief"}
+                  "move_commitment", "action_receipts", "construction_give_up", "supply_relief",
+                  "focus_availability"}
 
 
 class Lessons(unittest.TestCase):

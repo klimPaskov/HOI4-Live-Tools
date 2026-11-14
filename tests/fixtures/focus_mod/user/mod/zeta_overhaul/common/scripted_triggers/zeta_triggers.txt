@@ -1,0 +1,9 @@
+zza_is_ready = {
+	has_war = no
+	has_tech = zza_radio
+}
+zza_deep_1 = { zza_deep_2 = yes }
+zza_deep_2 = { zza_deep_3 = yes }
+zza_deep_3 = { zza_deep_4 = yes }
+zza_deep_4 = { zza_deep_5 = yes }
+zza_deep_5 = { always = yes }

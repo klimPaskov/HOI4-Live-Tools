@@ -1,0 +1,1658 @@
+{
+ "focus_files": [
+  "focus_mod/user/mod/zeta_overhaul/common/national_focus/zeta.txt"
+ ],
+ "scripted_files": [
+  "focus_mod/user/mod/zeta_overhaul/common/scripted_triggers/zeta_triggers.txt"
+ ],
+ "effect_files": [
+  "focus_mod/user/mod/zeta_overhaul/common/scripted_effects/zeta_effects.txt"
+ ],
+ "cases": [
+  {
+   "name": "a root focus without conditions is available",
+   "focus": "ZZA_root",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a completed focus cannot be started again",
+   "focus": "ZZA_root",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "already completed"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus missing from the loaded tree is unavailable",
+   "focus": "ZZA_root",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [],
+    "wars": [],
+    "tree": [
+     "ZZA_left"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "not in the loaded focus tree"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus the files do not define is unknown",
+   "focus": "ZZA_nowhere",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "not defined in common/national_focus"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a missing prerequisite is certain",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs ZZA_root"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "unknown completed focuses leave the prerequisite unknown",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "prerequisite ZZA_root"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs peace: available at peace",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs peace: unavailable in a war",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs has_war = no"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs peace: unknown when the wars are not read",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "completed": [
+     "ZZA_root"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_war = no"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs peace: unknown while a war may or may not have begun",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "maybe_wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_war = no"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs peace: a certain war decides whatever else may be",
+   "focus": "ZZA_peace_works",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQC"
+    ],
+    "maybe_wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs has_war = no"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs a war with one country: unknown while that war may or may not have begun",
+   "focus": "ZZA_war_plan",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQC"
+    ],
+    "maybe_wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_war_with = QQB"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs a war with one country: unavailable at peace",
+   "focus": "ZZA_war_plan",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs has_war_with = QQB"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs a war with one country: available in that war",
+   "focus": "ZZA_war_plan",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs a war with one country: unavailable in another war",
+   "focus": "ZZA_war_plan",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQC"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs has_war_with = QQB"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an exclusive focus that is completed blocks",
+   "focus": "ZZA_left",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root",
+     "ZZA_right"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "mutually exclusive with ZZA_right (completed)"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an exclusive focus that is not completed does not block",
+   "focus": "ZZA_left",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "one member of each prerequisite group is enough",
+   "focus": "ZZA_either",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root",
+     "ZZA_right",
+     "ZZA_peace_works"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "every prerequisite group needs a member",
+   "focus": "ZZA_either",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root",
+     "ZZA_right"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs ZZA_peace_works"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a country flag cannot be read: unknown",
+   "focus": "ZZA_flagged",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_country_flag = zza_secret"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a flag the facts name as set",
+   "focus": "ZZA_flagged",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "flags": [
+     "zza_secret"
+    ]
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a flag the facts do not name may still be set",
+   "focus": "ZZA_flagged",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "flags": [
+     "another_flag"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_country_flag = zza_secret"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "needs a war with one country: unknown while any other country may be at war",
+   "focus": "ZZA_war_plan",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQC"
+    ],
+    "maybe_wars": [
+     "*"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_war_with = QQB"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an unknown trigger inside an OR that already holds does not matter",
+   "focus": "ZZA_flag_or_war",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an unknown trigger inside an OR that does not hold otherwise stays unknown",
+   "focus": "ZZA_flag_or_war",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_country_flag = zza_secret"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an unknown trigger beside a failing one: unavailable is certain",
+   "focus": "ZZA_flag_and_peace",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs has_war = no"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an unknown trigger beside a passing one: unknown",
+   "focus": "ZZA_flag_and_peace",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_country_flag = zza_secret"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a branch behind a DLC that is off is not loaded",
+   "focus": "ZZA_dlc_branch",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "its branch is not loaded (allow_branch)"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a branch behind a DLC that is on is loaded",
+   "focus": "ZZA_dlc_branch",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [
+     "Zeta Expansion"
+    ],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a branch behind a DLC when the DLCs are not known: unknown",
+   "focus": "ZZA_dlc_branch",
+   "state": {
+    "tag": "ZZA",
+    "completed": [],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "allow_branch (judged when the tree was laid out)",
+     "has_dlc = Zeta Expansion"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a branch condition that changes during the game and holds now",
+   "focus": "ZZA_dyn_branch",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a branch condition that changes during the game and fails now: unknown, not unavailable",
+   "focus": "ZZA_dyn_branch",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "allow_branch (judged when the tree was laid out)"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "bypass holds: it can be taken although available fails",
+   "focus": "ZZA_bypassed",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "exists": {
+     "QQB": false
+    }
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": true
+   }
+  },
+  {
+   "name": "available holds and bypass does not",
+   "focus": "ZZA_bypassed",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "exists": {
+     "QQB": true
+    }
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "available and bypass both unknown",
+   "focus": "ZZA_bypassed",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "exists = yes",
+     "exists = no"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a date gate before its date",
+   "focus": "ZZA_late",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs date > 1938.1.1"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a date gate after its date",
+   "focus": "ZZA_late",
+   "state": {
+    "tag": "ZZA",
+    "date": "1938.3.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a date gate without a date: unknown",
+   "focus": "ZZA_late",
+   "state": {
+    "tag": "ZZA",
+    "completed": [],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "date > 1938.1.1"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "state ownership and control in a state scope",
+   "focus": "ZZA_state",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "states": {
+     "9001": {
+      "owner": "ZZA",
+      "controller": "ZZA"
+     },
+     "9002": {
+      "owner": "QQB",
+      "controller": "ZZA"
+     }
+    }
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a state somebody else controls",
+   "focus": "ZZA_state",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "states": {
+     "9001": {
+      "owner": "ZZA",
+      "controller": "ZZA"
+     },
+     "9002": {
+      "owner": "QQB",
+      "controller": "QQB"
+     }
+    }
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs 9002 = { is_controlled_by = ROOT }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a state that was not read: unknown",
+   "focus": "ZZA_state",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "states": {
+     "9001": {
+      "owner": "ZZA",
+      "controller": "ZZA"
+     }
+    }
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "is_controlled_by = ROOT"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a scripted trigger is expanded",
+   "focus": "ZZA_scripted",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "techs": [
+     "zza_radio"
+    ]
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a scripted trigger whose body fails",
+   "focus": "ZZA_scripted",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ],
+    "techs": [
+     "zza_radio"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs zza_is_ready = yes"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a scripted trigger with an unread part",
+   "focus": "ZZA_scripted",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_tech = zza_radio"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "scripted triggers nested too deep are unknown",
+   "focus": "ZZA_too_deep",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "zza_deep_5 = yes"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: the limit holds, the body decides",
+   "focus": "ZZA_if",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: the limit holds and the body fails",
+   "focus": "ZZA_if",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQC"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs if = { limit = { has_war = yes } has_war_with = QQB }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: the limit fails, the else decides",
+   "focus": "ZZA_if",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: the limit fails and the else fails",
+   "focus": "ZZA_if",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs if = { limit = { has_war = yes } has_war_with = QQB }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: an unknown limit and an unknown branch",
+   "focus": "ZZA_if",
+   "state": {
+    "tag": "ZZA",
+    "completed": [
+     "ZZA_root"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_war = yes",
+     "has_war_with = QQB"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: an unknown limit decides when both branches agree",
+   "focus": "ZZA_if_agree",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "if: an unknown limit with branches that differ",
+   "focus": "ZZA_if_agree",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_country_flag = zza_secret"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "count_triggers: enough hold",
+   "focus": "ZZA_count",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "count_triggers: an unknown one could still make the count",
+   "focus": "ZZA_count",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_country_flag = zza_secret"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "count_triggers: too few can hold",
+   "focus": "ZZA_count",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs count_triggers = { amount = 2 has_war = no has_completed_focus = ZZA_root has_country_flag = zza_secret }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "tooltip wrappers are read through and the player is never the AI",
+   "focus": "ZZA_tooltip",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "overlord": null
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a subject fails the wrapped NOT",
+   "focus": "ZZA_tooltip",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "overlord": "QQB"
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs custom_trigger_tooltip = { tooltip = ZZA_TOOLTIP NOT = { is_subject = yes } }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "an unread overlord is unknown",
+   "focus": "ZZA_tooltip",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "is_subject = yes"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "numbers above their thresholds",
+   "focus": "ZZA_numbers",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "numbers": {
+     "stability": 0.62,
+     "political_power": 150
+    }
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a number below its threshold",
+   "focus": "ZZA_numbers",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "numbers": {
+     "stability": 0.41,
+     "political_power": 150
+    }
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs has_stability > 0.5"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a number that was not read",
+   "focus": "ZZA_numbers",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "numbers": {
+     "stability": 0.62
+    }
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_political_power > 100"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a scope over other countries is unknown",
+   "focus": "ZZA_neighbours",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "any_neighbor_country = { has_war = yes }"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "faction and subject lists",
+   "focus": "ZZA_faction",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "faction": [
+     "QQC"
+    ],
+    "subjects": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "not in a faction with the named country",
+   "focus": "ZZA_faction",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "faction": [],
+    "subjects": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs is_in_faction_with = QQC"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a subject the NOT forbids",
+   "focus": "ZZA_faction",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [],
+    "faction": [
+     "QQC"
+    ],
+    "subjects": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs NOT = { has_subject = QQB }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "another country's war with the player is known, its government is not",
+   "focus": "ZZA_their_war",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": [
+     "QQB"
+    ]
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "has_government = fascism"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "another country that is not at war with the player",
+   "focus": "ZZA_their_war",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs QQB = { has_war_with = ROOT NOT = { has_government = fascism } }"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "exclusive named by the other side only, and that side is completed: unknown",
+   "focus": "ZZA_one_sided",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_excluder"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "ZZA_excluder lists it as mutually exclusive"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "exclusive named by the other side only, and that side is not completed",
+   "focus": "ZZA_one_sided",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "two different definitions of one id: unknown",
+   "focus": "ZZA_twice",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "defined more than once with different rules"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a shared focus with tag triggers",
+   "focus": "ZZS_shared",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a shared focus for another tag",
+   "focus": "ZZS_shared",
+   "state": {
+    "tag": "QQC",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs tag = ZZA"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus that can never start and that no script unlocks",
+   "focus": "ZZA_never",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs always = no"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus that can never start but a script unlocks: unknown",
+   "focus": "ZZA_unlocked",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "a script can unlock it (unlock_national_focus)",
+     "needs always = no"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a missing prerequisite of a focus a script unlocks: unknown",
+   "focus": "ZZA_unlocked_too",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "a script can unlock it (unlock_national_focus)",
+     "needs ZZA_right"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus a script unlocks whose requirements hold anyway",
+   "focus": "ZZA_unlocked_too",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root",
+     "ZZA_right"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
+    "unknown": [],
+    "bypass": false
+   }
+  }
+ ]
+}

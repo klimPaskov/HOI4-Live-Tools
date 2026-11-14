@@ -14,7 +14,14 @@ use std::{
 };
 
 /// Folders the tools read from the game's content.
-const LAYERED: [&str; 5] = ["map", "history", "common", "localisation", "interface"];
+const LAYERED: [&str; 6] = [
+    "map",
+    "history",
+    "common",
+    "localisation",
+    "interface",
+    "events",
+];
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct ModDescriptor {
@@ -98,6 +105,24 @@ fn userdir(exe: &str) -> Option<PathBuf> {
     }
     let linux = home.join(".local/share/Paradox Interactive/Hearts of Iron IV");
     linux.is_dir().then_some(linux)
+}
+
+/// `disabled_dlcs` of a `dlc_load.json` (descriptor paths), or None when the text is not that file.
+pub(super) fn parse_disabled_dlcs(json: &str) -> Option<Vec<String>> {
+    let value = serde_json::from_str::<serde_json::Value>(json).ok()?;
+    Some(
+        value
+            .get("disabled_dlcs")?
+            .as_array()?
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect(),
+    )
+}
+
+/// The DLCs the running game's user folder switches off (None: no readable `dlc_load.json`).
+pub(super) fn disabled_dlcs(exe: &str) -> Option<Vec<String>> {
+    parse_disabled_dlcs(&std::fs::read_to_string(userdir(exe)?.join("dlc_load.json")).ok()?)
 }
 
 /// Relative file path -> source file, for the layered folders: the install, then each mod in
@@ -227,6 +252,21 @@ mod tests {
         assert!(parse_enabled_mods("{\"enabled_mods\":[],\"disabled_dlcs\":[]}").is_empty());
     }
     #[test]
+    fn disabled_dlcs_come_from_dlc_load() {
+        assert_eq!(
+            parse_disabled_dlcs(
+                "{\"enabled_mods\":[],\"disabled_dlcs\":[\"dlc/dlc028_la_resistance.dlc\"]}"
+            ),
+            Some(vec!["dlc/dlc028_la_resistance.dlc".to_string()])
+        );
+        assert_eq!(
+            parse_disabled_dlcs("{\"enabled_mods\":[],\"disabled_dlcs\":[]}"),
+            Some(vec![])
+        );
+        assert_eq!(parse_disabled_dlcs("{\"enabled_mods\":[]}"), None);
+        assert_eq!(parse_disabled_dlcs("not json"), None);
+    }
+    #[test]
     fn userdir_argument_keeps_spaces_in_the_path() {
         assert_eq!(
             userdir_argument("/x/hoi4 -userdir=/Users/a/My Runs/w12/userdata -debug"),
@@ -275,6 +315,52 @@ mod tests {
             std::fs::read_to_string(root.join("map/buildings.txt")).unwrap(),
             "modded"
         );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+    #[test]
+    fn the_focus_rules_follow_the_mod_that_replaces_the_install_tree() {
+        use crate::focus_rules::{Catalog, Snapshot, State};
+        // The install's tree has no war condition on this focus; the mod's file of the same
+        // name adds one, and drops a focus only the install had.
+        const INSTALL: &str = include_str!(
+            "../../../../tests/fixtures/focus_mod/game/common/national_focus/zeta.txt"
+        );
+        const MOD: &str = include_str!(
+            "../../../../tests/fixtures/focus_mod/user/mod/zeta_overhaul/common/national_focus/zeta.txt"
+        );
+        let base = std::env::temp_dir().join(format!("modlayer-focus-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        for (path, text) in [
+            ("install/common/national_focus/zeta.txt", INSTALL),
+            ("mod/common/national_focus/zeta.txt", MOD),
+        ] {
+            let file = base.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, text).unwrap();
+        }
+        let at_war = || {
+            Snapshot(serde_json::json!({"tag": "ZZA", "completed": ["ZZA_root"], "wars": ["QQB"]}))
+        };
+        let install = Catalog::load(&base.join("install"));
+        assert!(install.focus("ZZA_base_only").is_some());
+        assert_eq!(
+            install.verdict("ZZA_peace_works", &at_war()).state,
+            State::Available
+        );
+        let files = merge(
+            &base.join("install"),
+            &[ModDescriptor {
+                path: base.join("mod"),
+                replace_paths: Vec::new(),
+            }],
+        );
+        let merged = base.join("merged");
+        materialise(&files, &merged).unwrap();
+        let layered = Catalog::load(&merged);
+        assert!(layered.focus("ZZA_base_only").is_none());
+        let verdict = layered.verdict("ZZA_peace_works", &at_war());
+        assert_eq!(verdict.state, State::Unavailable);
+        assert_eq!(verdict.why, ["needs has_war = no"]);
         let _ = std::fs::remove_dir_all(&base);
     }
 }

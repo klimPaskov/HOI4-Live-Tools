@@ -567,6 +567,77 @@ impl<'a> Ctx<'a> {
     }
 }
 
+/// Typed reads for rules that are not written as predicates (focus availability): the same
+/// cached tool reads the atoms use.
+impl Ctx<'_> {
+    /// The player's tag.
+    pub(crate) fn player(&mut self) -> Option<String> {
+        self.me().ok()
+    }
+    /// The tags at war with the player.
+    pub(crate) fn war_enemies(&mut self) -> Option<Vec<String>> {
+        enemies(self).ok()
+    }
+    /// Every completed focus of the player.
+    pub(crate) fn completed_focuses(&mut self) -> Option<&HashSet<String>> {
+        self.paged("hoi4_focus_completed", "completed").ok()
+    }
+    /// Every technology the player researched.
+    pub(crate) fn researched(&mut self) -> Option<&HashSet<String>> {
+        self.paged("hoi4_research", "researched").ok()
+    }
+    /// Whether `tag` owns a state (None: not readable, or not a tag `hoi4_states` can list).
+    pub(crate) fn owns_a_state(&mut self, tag: &str) -> Option<bool> {
+        if tag.len() != 3 || !tag.bytes().all(|b| b.is_ascii_uppercase()) {
+            return None;
+        }
+        let read = self.read("hoi4_states", &json!({"query": tag}))?;
+        let rows = read["states"].as_array()?;
+        Some(rows.iter().any(|r| r["owner"].as_str() == Some(tag)))
+    }
+    /// A state's owner, its controller, and the one tag that holds every province of it
+    /// (`Some(None)`: several tags do; None: the provinces were not listed).
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn state_holders(
+        &mut self,
+        id: i64,
+    ) -> Option<(Option<String>, Option<String>, Option<Option<String>>)> {
+        let row = state_row(self, id).ok()?;
+        let text = |key: &str| {
+            row[key]
+                .as_str()
+                .filter(|t| !t.is_empty())
+                .map(str::to_string)
+        };
+        let holders: HashSet<&str> = row["provinces"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p["controller"].as_str())
+            .collect();
+        let full = match holders.len() {
+            0 => None,
+            1 => Some(holders.iter().next().map(|h| h.to_string())),
+            _ => Some(None),
+        };
+        Some((text("owner"), text("controller"), full))
+    }
+    /// The reading of a numeric atom without an argument (`stability`, `war_support`, `pp`,
+    /// `manpower`, `world_tension`).
+    pub(crate) fn number(&mut self, name: &str) -> Option<f64> {
+        let atom = Atom {
+            text: name.to_string(),
+            name: name.to_string(),
+            arg: None,
+            cmp: None,
+        };
+        match reading(&atom, self) {
+            Ok(Reading::Number(value)) => Some(value),
+            _ => None,
+        }
+    }
+}
+
 /// Parse and evaluate; a predicate that does not parse is Unknown (recorded with its error).
 pub fn check(value: &Value, ctx: &mut Ctx) -> Truth {
     match parse(value) {

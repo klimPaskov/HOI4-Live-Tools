@@ -1,7 +1,8 @@
 //! A small, tolerant reader for Clausewitz script files (`key = value`,
 //! `key = { ... }`, bare list items, `#` comments, quoted strings) used to
-//! name what the live memory reads only identify by number or loc key:
-//! doctrines, military-industrial organisations, agency upgrades.
+//! name what the live memory reads only identify by number or loc key
+//! (doctrines, military-industrial organisations, agency upgrades) and to
+//! read rules the game keeps in script (national focus availability).
 //!
 //! The reader never fails: malformed input yields whatever parsed up to the
 //! problem, so a game update can degrade a catalogue but never a live read.
@@ -12,13 +13,13 @@ use std::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum Val {
+pub(crate) enum Val {
     Scalar(String),
     Block(Vec<Entry>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Entry {
+pub(crate) struct Entry {
     /// Empty for anonymous blocks (`{ ... }` inside a list of blocks).
     pub key: String,
     /// `=` for assignments; `>`, `<`, `>=`, `<=`, `!=` for comparisons;
@@ -28,13 +29,13 @@ pub(super) struct Entry {
 }
 
 impl Val {
-    pub(super) fn block(&self) -> &[Entry] {
+    pub(crate) fn block(&self) -> &[Entry] {
         match self {
             Val::Block(entries) => entries,
             Val::Scalar(_) => &[],
         }
     }
-    pub(super) fn scalar(&self) -> Option<&str> {
+    pub(crate) fn scalar(&self) -> Option<&str> {
         match self {
             Val::Scalar(s) => Some(s),
             Val::Block(_) => None,
@@ -43,7 +44,7 @@ impl Val {
 }
 
 /// Lookups on a parsed block.
-pub(super) trait Block {
+pub(crate) trait Block {
     fn find_val(&self, key: &str) -> Option<&Val>;
     fn all<'a>(&'a self, key: &'a str) -> Box<dyn Iterator<Item = &'a Val> + 'a>;
     fn text(&self, key: &str) -> Option<&str>;
@@ -206,14 +207,14 @@ fn parse_block(tokens: &[Tok], pos: &mut usize, top: bool) -> Vec<Entry> {
     entries
 }
 
-pub(super) fn parse(text: &str) -> Vec<Entry> {
+pub(crate) fn parse(text: &str) -> Vec<Entry> {
     let tokens = lex(text);
     let mut pos = 0;
     parse_block(&tokens, &mut pos, true)
 }
 
 /// Every `.txt` file below `dir` (sorted, recursive), parsed and concatenated.
-pub(super) fn parse_dir(dir: &Path) -> Vec<Entry> {
+pub(crate) fn parse_dir(dir: &Path) -> Vec<Entry> {
     let mut files = Vec::new();
     collect(dir, &mut files, 0);
     files.sort();
@@ -244,7 +245,7 @@ fn collect(dir: &Path, files: &mut Vec<PathBuf>, depth: u32) {
 
 /// Parse a directory once per install and key; callers build their own
 /// catalogue type from the entries.
-pub(super) fn cached<T: Send + Sync + 'static>(
+pub(crate) fn cached<T: Send + Sync + 'static>(
     dir: &Path,
     key: &'static str,
     build: impl FnOnce(&Path) -> T,
