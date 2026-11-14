@@ -7,8 +7,9 @@ No action leaves a running game paused: one guard on the input binding covers ev
 - Cause of the pauses in the shakedown of 10 November (16 of 281 `hoi4_army_move` and 3 of 12 `hoi4_army_merge` calls):
   an army order closes open top-bar panels with Escape first. The loop pressed Escape, slept 250 ms and read the panels
   again; a panel left open by a focus or research action still read as open at that moment, so a second Escape went to
-  the free map and opened the game menu, which pauses the game and leaves it paused when closed. Every one of the 19
-  calls followed an action that leaves a panel open; army orders with no panel open never paused.
+  the free map and opened the game menu, which pauses the game and leaves it paused when closed. Each of the 19 calls
+  was the first army order after an action of another kind (16 after a focus or research action); the 218 army moves
+  that followed another army order never paused.
 - Escape is now pressed only for something that reads as open and never on a timer: the next Escape waits until what
   was open has changed or the game menu has come up, and stops at the menu (`pause_guard::escape_close`; used for the
   top-bar panels, the focus tree and every best-effort dismiss).
