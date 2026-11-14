@@ -630,6 +630,16 @@ pub(super) struct PlayerWars {
 const SURRENDER_NOT_MAPPED: &str =
     "not_mapped: the country's surrender progress is not located in memory yet";
 
+/// Naval intel is per target country (0..1), the figure on the navy tab (`navy_tab_frame`, text
+/// `intel`) of the intel ledger in the country's diplomacy view (interface/countryintelledger.gui).
+/// Under NDefines.NIntel.NAVAL_DOMINANCE_INTEL_LOW the player's naval dominance against that
+/// country is scaled down, to NAVAL_DOMINANCE_INTEL_LOW_DOMINANCE_MIN_PENALTY at or below
+/// NAVAL_DOMINANCE_INTEL_LOW_DOMINANCE_PENALTY_START. Not located in memory yet: the war row field
+/// stays null with this reason (gap register navy.dominance_intel_read); the plan predicate
+/// `naval_intel:<TAG>` reads `wars[].own_naval_intel` and stays unknown while it is null.
+const NAVAL_INTEL_NOT_MAPPED: &str =
+    "not_mapped: the player's naval intel against the country is not located in memory yet";
+
 fn goal_json(names: &mut Names<'_>, g: &Goal) -> Value {
     json!({"type":g.kind,"attacker":names.who(g.attacker),"target":names.who(g.target),
         "diplomacy_array_offset":format!("0x{:x}",g.array),
@@ -672,7 +682,8 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
             "war_goals_involving_enemy":related,
             "attacker":null,"defender":null,"sides_reason":"offset_not_validated",
             "war_score":null,"war_score_reason":"offset_not_validated",
-            "enemy_surrender_progress":null,"enemy_surrender_progress_reason":SURRENDER_NOT_MAPPED}),
+            "enemy_surrender_progress":null,"enemy_surrender_progress_reason":SURRENDER_NOT_MAPPED,
+            "own_naval_intel":null,"own_naval_intel_reason":NAVAL_INTEL_NOT_MAPPED}),
         );
     }
     let allies: Vec<Value> = picture.allies.iter().map(|t| names.who(*t)).collect();

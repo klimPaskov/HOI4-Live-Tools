@@ -14,7 +14,7 @@
 //!   "province_controller:<p>=<TAG>" (a single = is ==), "vp_share:<TAG><=0.5", "at_war:<TAG>",
 //!   "not_at_war:<TAG>", "not_exists:<TAG>", "focus_completed:<key>", "tech_researched:<key>".
 //!   Ratio atoms (stability, war_support, world_tension, fuel_ratio, vp_share, equipment_fill,
-//!   resistance, compliance, surrender_progress) are fractions 0..1; a value above 1 or written with % is a
+//!   resistance, compliance, surrender_progress, naval_dominance, naval_intel) are fractions 0..1; a value above 1 or written with % is a
 //!   percentage ("war_support >= 25" is 0.25). Truth: all is false when one part is false,
 //!   unknown when one part is unknown and none false; any is the mirror; not keeps unknown.
 //!
@@ -57,6 +57,16 @@
 //!   bop:<id>                    hoi4_country_status balances_of_power[].value of the balance
 //!                               whose id is <id> (-1..1); an inactive balance is unknown
 //!   mission_days:<id>           unknown: hoi4_decisions_list has no mission timers (W1-18)
+//!   naval_dominance:<region>    hoi4_fleets sea_regions[] row of strategic sea region <region id>,
+//!                               field own_dominance (0..1: the player's and friends' share of the
+//!                               region's naval dominance; the region is controlled at
+//!                               NDefines.NNavy.DOMINANCE_CONTROLLED_THRESHOLD_RATIO, 0.6)
+//!   naval_intel:<TAG>           hoi4_wars wars.wars[] row of the war with TAG, field own_naval_intel
+//!                               (0..1, the navy figure of TAG's intel ledger; under
+//!                               NIntel.NAVAL_DOMINANCE_INTEL_LOW, 0.4, dominance against TAG is
+//!                               scaled down). Both unknown today: the tools report the fields null
+//!                               with a reason until they are located in memory (gap register
+//!                               navy.dominance_intel_read)
 //!   capitulated:<TAG>           hoi4_wars + hoi4_events + hoi4_states: no longer at war with TAG and
 //!                               (a peace conference is open or TAG owns no state)
 //!   surrender_progress:<TAG>    hoi4_wars wars.wars[] row of the war with TAG, field
@@ -209,6 +219,8 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("var", Kind::Number, true),
     ("bop", Kind::Number, true),
     ("mission_days", Kind::Number, true),
+    ("naval_dominance", Kind::Ratio, true),
+    ("naval_intel", Kind::Ratio, true),
     ("surrender_progress", Kind::Ratio, true),
     ("at_peace_conference", Kind::Flag, false),
     ("at_war_with", Kind::Flag, true),
@@ -788,6 +800,18 @@ fn enemies(ctx: &mut Ctx) -> Read<Vec<String>> {
 /// (`enemy_surrender_progress`; a value above 1 is read as a percent). A null value is unknown with
 /// the tool's own reason: the read is a seam the tool fills once the value is located in memory.
 pub(crate) fn surrender_progress(ctx: &mut Ctx, tag: &str) -> Read<f64> {
+    war_ratio(
+        ctx,
+        tag,
+        "enemy_surrender_progress",
+        "surrender progress",
+        "peace.surrender_progress_read",
+    )
+}
+
+/// A 0..1 `field` of the row of the war with `tag` in hoi4_wars `wars.wars[]` (a value above 1 is
+/// a percent). Null is unknown with the tool's `<field>_reason` and the gap register `row`.
+fn war_ratio(ctx: &mut Ctx, tag: &str, field: &str, what: &str, row_id: &str) -> Read<f64> {
     let read = ctx
         .read("hoi4_wars", &json!({}))
         .ok_or("hoi4_wars unreadable")?;
@@ -797,14 +821,42 @@ pub(crate) fn surrender_progress(ctx: &mut Ctx, tag: &str) -> Read<f64> {
         .flatten()
         .find(|w| w["enemy"]["tag"].as_str().or_else(|| w["enemy"].as_str()) == Some(tag))
         .ok_or_else(|| format!("no own war with {tag} in hoi4_wars (no war overview row)"))?;
-    match row["enemy_surrender_progress"].as_f64() {
+    match row[field].as_f64() {
         Some(v) if v > 1.0 => Ok(v / 100.0),
         Some(v) => Ok(v.max(0.0)),
         None => Err(format!(
-            "hoi4_wars reads no surrender progress for {tag} ({}; gap register peace.surrender_progress_read)",
-            row["enemy_surrender_progress_reason"]
+            "hoi4_wars reads no {what} for {tag} ({}; gap register {row_id})",
+            row[format!("{field}_reason").as_str()]
                 .as_str()
                 .unwrap_or("field missing")
+        )),
+    }
+}
+
+/// The own naval dominance share of strategic sea region `region` from hoi4_fleets `sea_regions[]`
+/// (0..1, a percent above 1). A null list is unknown with the tool's reason: the read is a seam the
+/// tool fills once the sea region values are located in memory.
+fn sea_dominance(ctx: &mut Ctx, region: i64) -> Read<f64> {
+    let read = ctx
+        .read("hoi4_fleets", &json!({}))
+        .ok_or("hoi4_fleets unreadable")?;
+    let Some(rows) = read["sea_regions"].as_array() else {
+        return Err(format!(
+            "hoi4_fleets reads no sea region dominance ({}; gap register navy.dominance_intel_read)",
+            read["sea_regions_reason"]
+                .as_str()
+                .unwrap_or("field missing")
+        ));
+    };
+    let row = rows
+        .iter()
+        .find(|r| r["region_id"].as_i64() == Some(region))
+        .ok_or_else(|| format!("sea region {region} not listed by hoi4_fleets"))?;
+    match row["own_dominance"].as_f64() {
+        Some(v) if v > 1.0 => Ok(v / 100.0),
+        Some(v) => Ok(v.max(0.0)),
+        None => Err(format!(
+            "hoi4_fleets sea region {region} has no own_dominance"
         )),
     }
 }
@@ -1001,6 +1053,15 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             num(row["value"].as_f64(), "balance of power value missing")
         }
         "mission_days" => Err("hoi4_decisions_list reports no mission timers (audit W1-18)".into()),
+        "naval_dominance" => sea_dominance(ctx, id_arg(atom)?).map(Reading::Number),
+        "naval_intel" => war_ratio(
+            ctx,
+            &tag_arg(atom)?,
+            "own_naval_intel",
+            "naval intel",
+            "navy.dominance_intel_read",
+        )
+        .map(Reading::Number),
         "surrender_progress" => surrender_progress(ctx, &tag_arg(atom)?).map(Reading::Number),
         "capitulated" => {
             // What a player sees: the war with TAG is over and either the peace conference that
@@ -1268,6 +1329,45 @@ mod tests {
             eval(&f, json!("surrender_progress:Ethiopia > 0.7")),
             Truth::Unknown
         );
+    }
+    #[test]
+    fn naval_dominance_and_intel_wait_for_the_sea_region_read() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_fleets",
+            json!({"fleets": [], "sea_regions": null, "sea_regions_reason": "not_mapped: test"}),
+        );
+        let mut ctx = Ctx::new(&f, date_hour("1936.05.01").unwrap());
+        assert_eq!(
+            check(&json!("naval_dominance:42 >= 0.6"), &mut ctx),
+            Truth::Unknown
+        );
+        assert!(ctx.unknown()["naval_dominance:42 >= 0.6"].contains("not_mapped: test"));
+        f.replies.insert(
+            "hoi4_fleets",
+            json!({"sea_regions": [{"region_id": 42, "own_dominance": 70}]}),
+        );
+        assert_eq!(eval(&f, json!("naval_dominance:42 >= 0.6")), Truth::True);
+        assert_eq!(eval(&f, json!("naval_dominance:7 >= 0.6")), Truth::Unknown);
+        // naval intel is per country: the war row, null with a reason today
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["ENG"], "wars": [
+                {"enemy": {"tag": "ENG"}, "own_naval_intel": null,
+                 "own_naval_intel_reason": "not_mapped: intel"}]}}),
+        );
+        let mut ctx = Ctx::new(&f, date_hour("1936.05.01").unwrap());
+        assert_eq!(
+            check(&json!("naval_intel:ENG >= 0.4"), &mut ctx),
+            Truth::Unknown
+        );
+        assert!(ctx.unknown()["naval_intel:ENG >= 0.4"].contains("not_mapped: intel"));
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["ENG"], "wars": [
+                {"enemy": {"tag": "ENG"}, "own_naval_intel": 35}]}}),
+        );
+        assert_eq!(eval(&f, json!("naval_intel:ENG >= 0.4")), Truth::False);
     }
     fn eval(f: &Fake, p: Value) -> Truth {
         let mut ctx = Ctx::new(f, date_hour("1936.05.01").unwrap());

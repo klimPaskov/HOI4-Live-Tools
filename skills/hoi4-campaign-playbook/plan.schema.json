@@ -3864,6 +3864,26 @@
           "read": "hoi4_wars wars.wars[].enemy_surrender_progress of the war with TAG: not built yet, the tool reports null (gap register peace.surrender_progress_read)",
           "readable": false
         },
+        "naval_dominance": {
+          "kind": "number",
+          "arg": "region",
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1 (a value above 1, or with %, is a percent): the player's and friends' share of the naval dominance of strategic sea region <id> (controlled at 0.6)",
+          "read": "hoi4_fleets sea_regions[].own_dominance: not built yet, the tool reports null (gap register navy.dominance_intel_read)",
+          "readable": false
+        },
+        "naval_intel": {
+          "kind": "number",
+          "arg": "tag",
+          "min": 0,
+          "max": 1,
+          "ratio": true,
+          "unit": "fraction 0..1: the player's naval intel against TAG (the navy figure of TAG's intel ledger; under 0.4 the naval dominance against TAG is scaled down, to half at 0.1)",
+          "read": "hoi4_wars wars.wars[].own_naval_intel of the war with TAG: not built yet, the tool reports null (gap register navy.dominance_intel_read)",
+          "readable": false
+        },
         "capitulated": {
           "kind": "bool",
           "arg": "tag",
@@ -3912,7 +3932,7 @@
         "array",
         "boolean"
       ],
-      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|xp:(army|air|navy|land|naval)|vp_share:[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+|surrender_progress:[A-Z][A-Z0-9]{2})\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
+      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|xp:(army|air|navy|land|naval)|vp_share:[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+|surrender_progress:[A-Z][A-Z0-9]{2}|naval_dominance:\\d+|naval_intel:[A-Z][A-Z0-9]{2})\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
       "items": {
         "$ref": "#/definitions/predicate"
       },

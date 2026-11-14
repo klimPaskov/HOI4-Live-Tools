@@ -458,6 +458,15 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(rep.warnings, [])
         self.assertEqual(hv.start_fleets(self.game, {"tag": "AAA"}), {"Home Fleet"})
         self.assertEqual(hv.sea_region_names(self.game, {"tag": "AAA"}), {"Test Sea"})
+        self.assertEqual(hv.sea_region_ids(self.game, {"tag": "AAA"}), {1})
+
+    def test_invasion_waits_on_a_sea_region_by_id(self):
+        inv = {"id": "i", "from_state": 2, "target_state": 3, "target_province": 30, "armies": ["North"],
+               "fleet": "Home Fleet"}
+        rep = self.wave2(invasions=[dict(inv, when=["naval_dominance:1 >= 0.6", "naval_intel:BBB >= 0.4"])])
+        self.assertEqual(rep.errors, [])
+        rep = self.wave2(invasions=[dict(inv, when="naval_dominance:7 >= 0.6")])
+        self.assertIn("7 is not the id of a sea strategic region", "\n".join(rep.errors))
 
     def test_army_group_and_hold_targets(self):
         rep = self.wave2(army_group=[{"id": "g", "armies": ["North", "North guard"]},

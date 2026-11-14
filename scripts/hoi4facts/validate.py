@@ -1065,7 +1065,7 @@ _TAG_RE = r"[A-Z][A-Z0-9]{2}"
 PRED_ARGS = {
     "province": r"\d+", "state": r"\d+", "tag": _TAG_RE, "key": r"[A-Za-z0-9_.\-]+", "id": r"[A-Za-z0-9_]+",
     "branch": r"army|air|navy|land|naval", "army": r"[^<>=!\s](?:[^<>=!]*[^<>=!\s])?", "equipment": r"[A-Za-z0-9_]+",
-    "name": r"[A-Za-z0-9_.@^:]+",
+    "name": r"[A-Za-z0-9_.@^:]+", "region": r"\d+",
 }
 PRED_OPS = ("<=", ">=", "==", "!=", "<", ">")
 _PRED_CMP = re.compile(r"^(?P<name>[a-z_]+)(?::(?P<arg>.*?))?\s*(?P<op><=|>=|==|!=|=|<|>)\s*(?P<value>[^<>=!\s][^<>=!]*)$")
@@ -1238,7 +1238,7 @@ def predicate_can_hold(pred, table):
     return True, True
 
 
-def check_predicates(game, plan, rep, schema=None):
+def check_predicates(game, plan, rep, schema=None, meta=None):
     """Every predicate parses (x-grammar) and names known provinces, states, tags, focuses, techs,
     phases, equipment and missions."""
     schema = schema if schema is not None else load_schema()
@@ -1267,6 +1267,10 @@ def check_predicates(game, plan, rep, schema=None):
                 rep.error(f"{label}: {arg} is not a state id")
             elif want == "tag" and tags and arg not in tags:
                 rep.error(f"{label}: {arg} is not a country tag")
+            elif want == "region" and meta is not None:
+                seas = sea_region_ids(game, meta)
+                if seas and int(arg) not in seas:
+                    rep.error(f"{label}: {arg} is not the id of a sea strategic region in map/strategicregions")
             if a["kind"] == "tag" and tags and a["value"] not in tags:
                 rep.error(f"{label}: {a['value']} is not a country tag")
             if name in ("focus_completed", "focus_done"):
@@ -1515,6 +1519,16 @@ def start_fleets(game, meta):
     if not any(not f.get("missing") for f in ob["files"]):
         return None
     return {f["name"] for f in ob["fleets"] if isinstance(f.get("name"), str)}
+
+
+def sea_region_ids(game, meta):
+    """Ids of the strategic regions that hold a sea province (empty without a map)."""
+    graph = game.map_graph()
+    if graph is None:
+        return set()
+    sea = {p for p, r in graph["provinces"].items() if r.get("type") == "sea"}
+    regions = _world(game, meta).strategic_regions()
+    return {rid for rid, r in regions.items() if sea & set(r["provinces"])}
 
 
 def sea_region_names(game, meta):
@@ -1954,7 +1968,7 @@ def validate(plan, game, schema=None):
     check_war(game, plan, rep)
     counts["doctrines"] = check_doctrines(game, plan, meta, rep, good)
     counts["event_rules"] = check_event_rules(game, plan, rep, good)
-    counts["predicates"] = check_predicates(game, plan, rep, schema)
+    counts["predicates"] = check_predicates(game, plan, rep, schema, meta)
     counts["templates"] = check_templates(game, plan, rep)
     check_coverage_keys(game, plan, meta, rep)
     counts["military"] = check_military_keys(game, plan, meta, rep)
