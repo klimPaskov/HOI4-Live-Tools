@@ -227,7 +227,11 @@ fn defense_lines_step(
         }
         let mut args = json!({"army": army, "states": states});
         if kind == "area_defense" {
-            let settings = strings(entry, "settings");
+            // only the toggles the order's window has (an unknown one would be refused)
+            let settings: Vec<String> = strings(entry, "settings")
+                .into_iter()
+                .filter(|s| AREA_SETTINGS.contains(&s.as_str()))
+                .collect();
             if !settings.is_empty() {
                 args["settings"] = json!(settings);
             }
@@ -328,7 +332,7 @@ mod tests {
             {"id": "vistula", "army": "Armia Poznan", "kind": "fallback", "states": [10, 11],
              "when": "at_war_with:GER"},
             {"id": "coast", "army": "Armia Poznan", "kind": "area_defense", "states": [85],
-             "settings": ["ports", "victory_points"]}]});
+             "settings": ["ports", "victory_points", "moats"]}]});
         let mut state = State::default();
         assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
         assert!(actions(&f).is_empty());
