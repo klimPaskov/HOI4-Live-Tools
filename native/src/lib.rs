@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod alarms;
 pub mod autopilot;
+pub mod builds;
 pub mod calendar;
 pub mod doctor;
 pub mod error;
