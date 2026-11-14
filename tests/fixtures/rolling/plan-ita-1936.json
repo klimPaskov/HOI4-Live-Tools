@@ -1,0 +1,1564 @@
+{
+ "_meta": {
+  "version": 1,
+  "source": "strategist"
+ },
+ "active": true,
+ "auto_events": true,
+ "wait_events_days": 2,
+ "goal": {
+  "summary": "Ethiopia capitulates",
+  "predicates": [
+   "capitulated:ETH",
+   "state_controller:271=ITA"
+  ],
+  "deadline": "1936.12.22",
+  "fail_predicates": [
+   {
+    "all": [
+     "state_controller:550=ETH",
+     "state_controller:559=ETH",
+     "state_controller:844=ETH"
+    ]
+   },
+   {
+    "all": [
+     "not_at_war:ETH",
+     {
+      "not": "state_controller:271=ITA"
+     }
+    ]
+   }
+  ]
+ },
+ "war": {
+  "enemies": [
+   "ETH"
+  ],
+  "min_army": 3,
+  "per_target": 2,
+  "cooldown_hours": 12,
+  "reserve": [],
+  "axes": [],
+  "theatre": [
+   550,
+   559,
+   844,
+   908,
+   842,
+   843,
+   841,
+   840,
+   835,
+   836,
+   837,
+   838,
+   839,
+   271
+  ],
+  "guard_states": [
+   550,
+   559,
+   844
+  ],
+  "motorization": 2,
+  "direct_moves": false,
+  "supply_first": true,
+  "supply_relief": true,
+  "relief_after_days": 2,
+  "relief_report_days": 10,
+  "supply_floor": 50,
+  "supply_hold": 35,
+  "supply_resume": 70,
+  "rest": true,
+  "rest_below_pct": 0.3,
+  "resume_above_pct": 0.8,
+  "rest_max_days": 20,
+  "planning_wait": true,
+  "planning_cap": 0.3,
+  "planning_share": 0.9,
+  "planning_max_days": 15,
+  "planning_skip_days": 20,
+  "stall_days": 8,
+  "second_direction": true,
+  "bound": true,
+  "bound_rail_days": 10,
+  "bound_core_days": 5,
+  "bound_max_days": 12,
+  "avoid_pockets": true,
+  "pocket_share": 0.5,
+  "move_commit_days": 3,
+  "move_budget": 3,
+  "move_window_days": 10
+ },
+ "armies": {
+  "states": [
+   550,
+   559,
+   844,
+   908
+  ],
+  "max": 24,
+  "min_for_general": 3,
+  "absorb": "assign",
+  "concentrate": true,
+  "max_per_group": 4,
+  "min_divisions": 3,
+  "generals": [
+   "Giovanni Messe",
+   "Carlo Vecchiarelli",
+   "Ettore Baldassarre",
+   "Alessandro Pirzio Biroli",
+   "Ezio Rosi",
+   "Mario Berti"
+  ]
+ },
+ "army_layout": [
+  {
+   "id": "fm_north_strike",
+   "name_hint": "North Strike",
+   "state": 550,
+   "templates": [
+    "Divisione di Fanteria"
+   ],
+   "count": 4,
+   "role": "strike",
+   "general": "Giovanni Messe",
+   "axis": [
+    842,
+    843,
+    271,
+    835
+   ]
+  },
+  {
+   "id": "fm_gondar",
+   "name_hint": "Gondar Group",
+   "state": 550,
+   "templates": [
+    "Divisione di Fanteria",
+    "Divisione Alpina"
+   ],
+   "count": 3,
+   "role": "strike",
+   "general": "Carlo Vecchiarelli",
+   "axis": [
+    841,
+    840
+   ]
+  },
+  {
+   "id": "fm_north_guard",
+   "name_hint": "North Guard",
+   "state": 550,
+   "templates": [
+    "Camicie Nere"
+   ],
+   "count": 5,
+   "role": "guard",
+   "task_of": "North Strike",
+   "covers": [
+    550,
+    842,
+    908,
+    843
+   ],
+   "guard_states_in_order": [
+    550,
+    842,
+    908,
+    843
+   ]
+  },
+  {
+   "id": "fm_south",
+   "name_hint": "South Force",
+   "state": 559,
+   "templates": [
+    "Divisione Ascari Libica",
+    "Divisione Ascari Somala"
+   ],
+   "count": 2,
+   "role": "strike",
+   "general": "Ettore Baldassarre",
+   "covers": [
+    844
+   ]
+  },
+  {
+   "id": "fm_somali_guard",
+   "name_hint": "Somali Guard",
+   "state": 559,
+   "templates": [
+    "Camicie Nere",
+    "Banda Irregolare Somala"
+   ],
+   "count": 3,
+   "role": "guard",
+   "guard_states_in_order": [
+    559
+   ]
+  },
+  {
+   "id": "fm_jubaland_guard",
+   "name_hint": "Jubaland Guard",
+   "state": 844,
+   "templates": [
+    "Divisione di Fanteria"
+   ],
+   "count": 1,
+   "role": "guard",
+   "task_of": "Somali Guard",
+   "covers": [
+    844
+   ],
+   "guard_states_in_order": [
+    844
+   ]
+  }
+ ],
+ "army_group": [
+  {
+   "id": "ag_aoi",
+   "name": "Africa Orientale",
+   "armies": [
+    "North Strike",
+    "Gondar Group",
+    "South Force",
+    "Somali Guard"
+   ],
+   "marshal": [
+    "Rodolfo Graziani",
+    "Pietro Badoglio"
+   ]
+  }
+ ],
+ "vp_targets": [
+  {
+   "id": "vp01_13238",
+   "order": 1,
+   "province": 13238,
+   "name": "Adwa",
+   "state": 842,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.02.20"
+  },
+  {
+   "id": "vp02_13237",
+   "order": 2,
+   "province": 13237,
+   "name": "Aksum",
+   "state": 842,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.02.20"
+  },
+  {
+   "id": "vp03_12812",
+   "order": 3,
+   "province": 12812,
+   "name": "Wal Wal",
+   "state": 835,
+   "vp": 1,
+   "army": "South Force",
+   "by": "1936.03.01",
+   "mission": "south"
+  },
+  {
+   "id": "vp04_2072",
+   "order": 4,
+   "province": 2072,
+   "name": "Macalle",
+   "state": 842,
+   "vp": 2,
+   "army": "North Strike",
+   "by": "1936.03.15",
+   "mission": "north"
+  },
+  {
+   "id": "vp05_5097",
+   "order": 5,
+   "province": 5097,
+   "name": "Dessie",
+   "state": 843,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.04.30",
+   "mission": "north",
+   "path": [
+    8043,
+    5041,
+    5097
+   ]
+  },
+  {
+   "id": "vp06_1984",
+   "order": 6,
+   "province": 1984,
+   "name": "Gondar",
+   "state": 841,
+   "vp": 2,
+   "army": "Gondar Group",
+   "by": "1936.05.15",
+   "mission": "north"
+  },
+  {
+   "id": "vp07_5010",
+   "order": 7,
+   "province": 5010,
+   "name": "Addis Ababa",
+   "state": 271,
+   "vp": 5,
+   "army": "North Strike",
+   "by": "1936.06.10",
+   "path": [
+    8043,
+    5041,
+    13240,
+    13239,
+    5010
+   ]
+  },
+  {
+   "id": "vp08_8036",
+   "order": 8,
+   "province": 8036,
+   "name": "Asella",
+   "state": 271,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.06.25",
+   "path": [
+    5010,
+    10734,
+    8036
+   ]
+  },
+  {
+   "id": "vp09_7980",
+   "order": 9,
+   "province": 7980,
+   "name": "Dire Dawa",
+   "state": 835,
+   "vp": 2,
+   "army": "North Strike",
+   "by": "1936.07.20",
+   "path": [
+    13239,
+    7980
+   ]
+  },
+  {
+   "id": "vp10_13249",
+   "order": 10,
+   "province": 13249,
+   "name": "Harar",
+   "state": 835,
+   "vp": 3,
+   "army": "North Strike",
+   "by": "1936.08.05",
+   "path": [
+    13239,
+    13249
+   ]
+  },
+  {
+   "id": "vp11_10775",
+   "order": 11,
+   "province": 10775,
+   "name": "Gaba",
+   "state": 836,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.08.20",
+   "path": [
+    8036,
+    10775
+   ]
+  },
+  {
+   "id": "vp12_13246",
+   "order": 12,
+   "province": 13246,
+   "name": "Irgalem",
+   "state": 837,
+   "vp": 2,
+   "army": "North Strike",
+   "by": "1936.10.05",
+   "path": [
+    8036,
+    13246
+   ]
+  },
+  {
+   "id": "vp13_13242",
+   "order": 13,
+   "province": 13242,
+   "name": "Debre Markos",
+   "state": 840,
+   "vp": 2,
+   "army": "Gondar Group",
+   "by": "1936.10.15"
+  },
+  {
+   "id": "vp14_8019",
+   "order": 14,
+   "province": 8019,
+   "name": "Yabello",
+   "state": 837,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.10.25",
+   "path": [
+    13246,
+    8019
+   ]
+  },
+  {
+   "id": "vp15_13247",
+   "order": 15,
+   "province": 13247,
+   "name": "Moyale",
+   "state": 837,
+   "vp": 1,
+   "army": "North Strike",
+   "by": "1936.11.05",
+   "mission": "south",
+   "path": [
+    13246,
+    13247
+   ]
+  }
+ ],
+ "production": [
+  {
+   "equipment": "infantry_equipment_1",
+   "factories": 10,
+   "from": "1936.01.01"
+  },
+  {
+   "equipment": "support_equipment_1",
+   "factories": 3,
+   "from": "1936.01.01"
+  },
+  {
+   "equipment": "motorized_equipment_1",
+   "factories": 7,
+   "from": "1936.01.01"
+  },
+  {
+   "equipment": "light_tank_chassis_1",
+   "remove": true,
+   "from": "1936.01.01"
+  },
+  {
+   "equipment": "small_plane_cas_airframe_0",
+   "remove": true,
+   "from": "1936.01.01"
+  },
+  {
+   "equipment": "small_plane_cas_airframe_1",
+   "remove": true,
+   "from": "1936.01.01"
+  },
+  {
+   "equipment": "convoy_1",
+   "factories": 1,
+   "from": "1936.01.01"
+  }
+ ],
+ "production_priority": [
+  "infantry_equipment",
+  "motorized_equipment",
+  "support_equipment",
+  "artillery_equipment"
+ ],
+ "production_min_idle": 1,
+ "stockpile_targets": {
+  "infantry_equipment": 30,
+  "support_equipment": 30,
+  "motorized_equipment": 30,
+  "artillery_equipment": 30
+ },
+ "auto_import": {
+  "enabled": true,
+  "budget": 4
+ },
+ "research_priority": [],
+ "research_path": [
+  {
+   "year": 1936,
+   "not_before": "1936.01.01",
+   "techs": [
+    "basic_machine_tools",
+    "construction1",
+    "synth_oil_experiments",
+    "electronic_mechanical_engineering",
+    "concentrated_industry",
+    "interwar_artillery",
+    "armor_tech_1",
+    "tech_logistics_company",
+    "mechanical_computing",
+    "radio",
+    "support_weapons",
+    "tech_recon",
+    "excavation1",
+    "tech_field_hospital",
+    "tech_maintenance_company",
+    "engine_tech_1"
+   ]
+  }
+ ],
+ "research_fallback": false,
+ "focus_path": [
+  "ITA_ethiopian_war_logistics_bba",
+  "ITA_army_primacy_bba",
+  "ITA_a_bandits_war",
+  "ITA_italian_highways_bba",
+  "ITA_fiocchi_munizioni",
+  "ITA_brescia_small_arms_industry",
+  "ITA_increase_artillery_production"
+ ],
+ "focus_fallback": [
+  "ITA_ministry_of_italian_africa",
+  "ITA_railway_innovations",
+  "ITA_air_innovations_bba",
+  "ITA_steel_industry_in_terni"
+ ],
+ "construction_min_idle": 2,
+ "construction_queue_depth": 3,
+ "construction_plan": [
+  {
+   "id": "cp01_rail_559",
+   "order": 1,
+   "building": "rail_way",
+   "from_state": 559,
+   "to_state": 559,
+   "path": [
+    12991,
+    2020
+   ],
+   "when": "1936.01.01",
+   "priority": "top"
+  },
+  {
+   "id": "cp02_naval_base_8043",
+   "order": 2,
+   "building": "naval_base",
+   "state": 550,
+   "province": 8043,
+   "when": "1936.01.01",
+   "priority": "top"
+  },
+  {
+   "id": "cp03_rail_842_adwa",
+   "order": 3,
+   "building": "rail_way",
+   "from_state": 550,
+   "to_state": 842,
+   "path": [
+    13250,
+    13238
+   ],
+   "when": "province_controlled:13238",
+   "priority": "top"
+  },
+  {
+   "id": "cp04_rail_842_macalle",
+   "order": 4,
+   "building": "rail_way",
+   "from_state": 550,
+   "to_state": 842,
+   "path": [
+    13250,
+    13238,
+    2072
+   ],
+   "when": "province_controlled:2072",
+   "priority": "top"
+  },
+  {
+   "id": "cp05_rail_559_walwal",
+   "order": 5,
+   "building": "rail_way",
+   "from_state": 559,
+   "to_state": 835,
+   "path": [
+    12991,
+    2020,
+    12812
+   ],
+   "when": "province_controlled:12812",
+   "priority": "top"
+  },
+  {
+   "id": "cp06_rail_908_aussa",
+   "order": 6,
+   "building": "rail_way",
+   "from_state": 550,
+   "to_state": 908,
+   "path": [
+    12766,
+    8043,
+    5041,
+    13240
+   ],
+   "when": "owner:908=ITA",
+   "priority": "top"
+  },
+  {
+   "id": "cp07_rail_271_addis",
+   "order": 7,
+   "building": "rail_way",
+   "from_state": 550,
+   "to_state": 271,
+   "path": [
+    12766,
+    8043,
+    5041,
+    13240,
+    13239
+   ],
+   "when": "province_controlled:13239",
+   "priority": "top"
+  },
+  {
+   "id": "cp08_air_base_908",
+   "order": 8,
+   "building": "air_base",
+   "state": 908,
+   "when": "owner:908=ITA",
+   "priority": "top"
+  }
+ ],
+ "construction": [
+  {
+   "building": "arms_factory",
+   "count": 2,
+   "states": [
+    161,
+    157,
+    115,
+    162,
+    114
+   ]
+  }
+ ],
+ "politics": [
+  {
+   "id": "pol_cavallero",
+   "category": "military_staff",
+   "slot": 0,
+   "idea": "ITA_ugo_cavallero",
+   "cost": 50
+  },
+  {
+   "id": "pol_guzzoni",
+   "category": "military_staff",
+   "slot": 3,
+   "idea": "ITA_alfredo_guzzoni",
+   "cost": 100
+  },
+  {
+   "id": "pol_starace",
+   "category": "military_staff",
+   "slot": 4,
+   "idea": "ITA_achille_starace",
+   "cost": 50,
+   "when": "date >= 1936.07.10"
+  },
+  {
+   "id": "pol_war_economy",
+   "category": "government",
+   "slot": 2,
+   "idea": "war_economy",
+   "cost": 150,
+   "when": "war_support > 0.5"
+  }
+ ],
+ "politics_auto": {
+  "enabled": true,
+  "threshold": 0,
+  "cap": 400,
+  "cap_margin": 40,
+  "order": [
+   {
+    "category": "government",
+    "slot": 3,
+    "ideas": [
+     "ITA_alberto_beneduce"
+    ],
+    "cost": 150
+   },
+   {
+    "category": "government",
+    "slot": 4,
+    "ideas": [
+     "ITA_giacomo_acerbo"
+    ],
+    "cost": 150
+   },
+   {
+    "category": "military_staff",
+    "slot": 5,
+    "ideas": [
+     "ITA_mario_roatta",
+     "ITA_vittorio_ambrosio"
+    ],
+    "cost": 50
+   }
+  ],
+  "never": [
+   "scraping_the_barrel",
+   "all_adults_serve",
+   "service_by_requirement",
+   "closed_economy"
+  ]
+ },
+ "force_posture": {
+  "phases": [
+   {
+    "phase": "base",
+    "land": 97,
+    "air": 0,
+    "navy": 3
+   }
+  ]
+ },
+ "air": {
+  "war_missions": true
+ },
+ "air_plan": [
+  {
+   "id": "ap01a_cas_ca111",
+   "wing": "14° Stormo",
+   "base_state": 550,
+   "mission": "cas",
+   "region": "Danakil",
+   "then_region": "Ethiopian Highlands",
+   "switch_when": "province_controlled:5097",
+   "count": 48,
+   "when": {
+    "not": {
+     "all": [
+      "owner:908=ITA",
+      "date >= 1936.05.01"
+     ]
+    }
+   },
+   "selector": "Ca.111 at 550"
+  },
+  {
+   "id": "ap01b_cas_ca111_fwd",
+   "wing": "14° Stormo",
+   "base_state": 908,
+   "mission": "cas",
+   "region": "Danakil",
+   "then_region": "Ethiopian Highlands",
+   "switch_when": "province_controlled:5097",
+   "count": 48,
+   "when": {
+    "all": [
+     "owner:908=ITA",
+     "date >= 1936.05.01"
+    ]
+   },
+   "selector": "Ca.111 at 550"
+  },
+  {
+   "id": "ap02_cas_sm81",
+   "wing": "13° Stormo",
+   "base_state": 550,
+   "mission": "cas",
+   "region": "Danakil",
+   "then_region": "Ethiopian Highlands",
+   "switch_when": "province_controlled:5097",
+   "count": 32,
+   "selector": "SM.81 at 550"
+  },
+  {
+   "id": "ap03a_fighters_cr32",
+   "wing": "12° Stormo",
+   "base_state": 550,
+   "mission": "air_superiority",
+   "region": "Danakil",
+   "then_region": "Ethiopian Highlands",
+   "switch_when": "province_controlled:5097",
+   "count": 40,
+   "when": {
+    "not": {
+     "all": [
+      "owner:908=ITA",
+      "date >= 1936.05.01"
+     ]
+    }
+   },
+   "selector": "CR.32 at 550"
+  },
+  {
+   "id": "ap03b_fighters_cr32_fwd",
+   "wing": "12° Stormo",
+   "base_state": 908,
+   "mission": "air_superiority",
+   "region": "Danakil",
+   "then_region": "Ethiopian Highlands",
+   "switch_when": "province_controlled:5097",
+   "count": 40,
+   "when": {
+    "all": [
+     "owner:908=ITA",
+     "date >= 1936.05.01"
+    ]
+   },
+   "selector": "CR.32 at 550"
+  }
+ ],
+ "navy": {
+  "posture": "coastal",
+  "convoy_escort": {
+   "fleet": "Comando Navale Mar Rosso",
+   "regions": [
+    "Red Sea"
+   ],
+   "when": "1936.01.01"
+  },
+  "admirals": {
+   "Comando Navale Mar Rosso": "Alberto Da Zara"
+  },
+  "repair_below": 0.5,
+  "repair_until": 0.9
+ },
+ "manage": {
+  "manpower_months": 2,
+  "conscription_laws": [
+   "extensive_conscription"
+  ],
+  "stability_floor": 0.5,
+  "equipment_fill_floor": 0.8,
+  "stockpile_days_critical": 7,
+  "stockpile_days_warning": 30,
+  "trucks_ratio": 1.5,
+  "casualty_ratio_max": 2.0,
+  "casualty_window_days": 14,
+  "casualty_min_losses": 1000,
+  "casualty_rest_days": 7,
+  "rebalance_step": 2,
+  "day0_production": true,
+  "war_priority": true
+ },
+ "alarms": {
+  "idle_civilian_factories": 4,
+  "idle_military_factories": 2,
+  "political_power": 160,
+  "unassigned_divisions": 2
+ },
+ "disband": {
+  "templates": [
+   "Divisione di Fanteria",
+   "Divisione Alpina",
+   "Camicie Nere",
+   "Divisione Celere",
+   "Reggimento di Cavalleria"
+  ],
+  "keep_states": [
+   550,
+   559,
+   844,
+   158,
+   160
+  ],
+  "max": 8
+ },
+ "occupation": {
+  "default_law": "military_governor_occupation",
+  "when": "1936.01.01",
+  "ladder": [
+   "local_police_force_garrison",
+   "military_governor_occupation",
+   "martial_law_occupation",
+   "brutally_oppressive_occupation"
+  ],
+  "harsher_at_resistance": 0.25,
+  "milder_at_compliance": 0.8,
+  "milder_below_resistance": 0.1,
+  "mildest": "military_governor_occupation",
+  "harshest": "brutally_oppressive_occupation",
+  "change_days": 14
+ },
+ "peace": {
+  "take": [
+   271,
+   835,
+   842,
+   843,
+   841,
+   837,
+   840,
+   838,
+   839,
+   836
+  ],
+  "max_rounds": 6
+ },
+ "event_rules": [
+  {
+   "id": "er_italo_ethiopian_war_01",
+   "event": "BBA_italo_ethiopian_war_events.01",
+   "option_name": "BBA_italo_ethiopian_war_events.01.b"
+  },
+  {
+   "id": "er_italo_ethiopian_war_400",
+   "event": "BBA_italo_ethiopian_war_events.400",
+   "option_name": "BBA_italo_ethiopian_war_events.400.b"
+  },
+  {
+   "id": "er_italy_missiolinis_02_north",
+   "event": "BBA_italy_missiolinis.02_north",
+   "option_name": "BBA_italy_missiolinis.02_north.b",
+   "fallback_option_name": "BBA_italy_missiolinis.02_north.a"
+  },
+  {
+   "id": "er_italy_missiolinis_04_south",
+   "event": "BBA_italy_missiolinis.04_south",
+   "option_name": "BBA_italy_missiolinis.04_south.b",
+   "fallback_option_name": "BBA_italy_missiolinis.04_south.a"
+  },
+  {
+   "id": "er_ETH_1",
+   "event": "ETH_events.1",
+   "option_name": "ETH_events.1.b"
+  },
+  {
+   "id": "er_italo_ethiopian_war_120",
+   "event": "BBA_italo_ethiopian_war_events.120",
+   "option_name": "BBA_italo_ethiopian_war_events.120.b"
+  },
+  {
+   "id": "er_italo_ethiopian_war_110",
+   "event": "BBA_italo_ethiopian_war_events.110",
+   "option_name": "BBA_italo_ethiopian_war_events.110.b"
+  },
+  {
+   "id": "er_italo_ethiopian_war_500",
+   "event": "BBA_italo_ethiopian_war_events.500",
+   "option_name": "BBA_italo_ethiopian_war_events.500.c"
+  },
+  {
+   "id": "er_italo_ethiopian_war_501",
+   "event": "BBA_italo_ethiopian_war_events.501",
+   "option_name": "BBA_italo_ethiopian_war_events.501.b"
+  }
+ ],
+ "decisions": [],
+ "decision_rules": [
+  {
+   "id": "dr_never_ITA_withdraw_from_ethiopia",
+   "decision": "ITA_withdraw_from_ethiopia",
+   "never": true
+  },
+  {
+   "id": "dr_never_colonial_government_in_east_africa",
+   "decision": "colonial_government_in_east_africa",
+   "never": true
+  },
+  {
+   "id": "dr_never_give_somaliland_to_the_aoi",
+   "decision": "give_somaliland_to_the_aoi",
+   "never": true
+  },
+  {
+   "id": "dr_never_give_djibouti_to_the_aoi",
+   "decision": "give_djibouti_to_the_aoi",
+   "never": true
+  },
+  {
+   "id": "dr_never_give_garissa_to_the_aoi",
+   "decision": "give_garissa_to_the_aoi",
+   "never": true
+  },
+  {
+   "id": "dr_never_ITA_establish_the_regno_albania",
+   "decision": "ITA_establish_the_regno_albania",
+   "never": true
+  },
+  {
+   "id": "dr_never_ITA_establish_the_governato_del_montenegro",
+   "decision": "ITA_establish_the_governato_del_montenegro",
+   "never": true
+  },
+  {
+   "id": "dr_never_reestablish_the_bosporan_kingdom",
+   "decision": "reestablish_the_bosporan_kingdom",
+   "never": true
+  }
+ ],
+ "phases": [
+  {
+   "id": "P1_hold_christmas",
+   "enter": "1936.01.01",
+   "exit": "1936.01.16",
+   "goal": "every Eritrean, Somali and Jubaland border province stays Italian while the ETH Christmas offensive bonus runs (14 days from 1936.01.01)",
+   "overrides": {
+    "war": {
+     "axes": []
+    }
+   }
+  },
+  {
+   "id": "P2_tigray",
+   "enter": "1936.01.16",
+   "exit": "state_fully_controlled:842",
+   "goal": "plan 12-15 days, then take Adwa, Aksum and Macalle (state 842 Tigray, 4 VP); the South Force takes Wal Wal and holds it",
+   "overrides": {
+    "war": {
+     "axes": [
+      [
+       842
+      ],
+      [
+       835
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "P3_afar_opens",
+   "enter": "state_fully_controlled:842",
+   "exit": "owner:908=ITA",
+   "goal": "Tigray fully Italian fires event .400 (ultimatum to Aussa): the Gondar Group attacks Gondar meanwhile, the North Strike rests and redraws toward Dessie",
+   "overrides": {
+    "war": {
+     "axes": [
+      [
+       841
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "P4_dessie_addis",
+   "enter": {
+    "all": [
+     "owner:908=ITA",
+     "not_exists:AFA"
+    ]
+   },
+   "exit": "state_controller:271=ITA",
+   "goal": "through Afar 8043-5041: Dessie, then 13240-13239-5010 Addis Ababa and Asella (mandatory state 271); railway cp06 then cp07 behind the army",
+   "overrides": {
+    "war": {
+     "axes": [
+      [
+       843,
+       271
+      ],
+      [
+       841,
+       840
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "P5_rest_of_vp",
+   "enter": "state_controller:271=ITA",
+   "exit": "capitulated:ETH",
+   "goal": "Dire Dawa, Harar, Gaba, Irgalem, Debre Markos, Yabello, Moyale until ETH capitulates (26 VP worst case; fewer under low war support)",
+   "overrides": {
+    "war": {
+     "axes": [
+      [
+       835,
+       836,
+       837
+      ],
+      [
+       840
+      ],
+      [
+       835
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "P6_peace_occupation",
+   "enter": "capitulated:ETH",
+   "goal": "peace conference: take the Ethiopian states, then colonial police and garrisons"
+  },
+  {
+   "id": "PC_afa_holds",
+   "goal": "contingency only: AFA refuses the ultimatum, the army goes through Wello (3 river crossings)",
+   "overrides": {
+    "war": {
+     "axes": [
+      [
+       843,
+       271
+      ],
+      [
+       841,
+       840
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "id": "PC_recover_eritrea",
+   "goal": "contingency only: an Eritrean province is enemy-held, hold and retake first (L01)",
+   "overrides": {
+    "war": {
+     "axes": []
+    }
+   }
+  }
+ ],
+ "checkpoints": [
+  {
+   "id": "ck01_christmas_held",
+   "by": "1936.01.16",
+   "must": [
+    "state_controller:550=ITA",
+    "state_controller:559=ITA",
+    "state_controller:844=ITA"
+   ],
+   "else": "contingency:c01_recover_eritrea"
+  },
+  {
+   "id": "ck02_logistics_focus",
+   "by": "1936.02.06",
+   "must": [
+    "focus_done:ITA_ethiopian_war_logistics_bba"
+   ],
+   "else": "revise"
+  },
+  {
+   "id": "ck03_adwa_aksum_walwal",
+   "by": "1936.02.25",
+   "must": [
+    "province_controlled:13238",
+    "province_controlled:13237",
+    "province_controlled:12812"
+   ],
+   "else": "revise"
+  },
+  {
+   "id": "ck04_tigray",
+   "by": "1936.03.20",
+   "must": [
+    "state_fully_controlled:842"
+   ],
+   "else": "revise"
+  },
+  {
+   "id": "ck05_aussa",
+   "by": "1936.04.25",
+   "must": [
+    "owner:908=ITA"
+   ],
+   "else": "contingency:c02_afa_holds"
+  },
+  {
+   "id": "ck05b_south_held",
+   "by": "1936.05.20",
+   "must": [
+    "state_controller:559=ITA",
+    "state_controller:844=ITA"
+   ],
+   "else": "contingency:c08_recover_south"
+  },
+  {
+   "id": "ck07a_shewa_gate",
+   "by": "1936.06.01",
+   "must": [
+    "province_controlled:13239"
+   ],
+   "else": "contingency:c09_dire_dawa_first"
+  },
+  {
+   "id": "ck07b_addis_due",
+   "by": "1936.06.20",
+   "must": [
+    "state_controller:271=ITA"
+   ],
+   "else": "contingency:c09_dire_dawa_first"
+  },
+  {
+   "id": "ck06_missions",
+   "by": "1936.07.14",
+   "must": [
+    {
+     "any": [
+      {
+       "all": [
+        "province_controlled:2072",
+        "province_controlled:1984"
+       ]
+      },
+      {
+       "all": [
+        "province_controlled:2072",
+        "province_controlled:5097"
+       ]
+      },
+      {
+       "all": [
+        "province_controlled:1984",
+        "province_controlled:5097"
+       ]
+      }
+     ]
+    }
+   ],
+   "else": "revise"
+  },
+  {
+   "id": "ck07_addis",
+   "by": "1936.07.10",
+   "must": [
+    "state_controller:271=ITA"
+   ],
+   "else": "contingency:c03_addis_stalls"
+  },
+  {
+   "id": "ck08_vp_share",
+   "by": "1936.09.30",
+   "must": [
+    "vp_share:ETH <= 0.25"
+   ],
+   "else": "revise"
+  },
+  {
+   "id": "ck09_capitulated",
+   "by": "1936.12.01",
+   "must": [
+    "capitulated:ETH"
+   ],
+   "else": "revise"
+  }
+ ],
+ "contingencies": [
+  {
+   "id": "c01_recover_eritrea",
+   "when": {
+    "any": [
+     "province_controller:13250=ETH",
+     "province_controller:12766=ETH",
+     "province_controller:13251=ETH",
+     "province_controller:12723=ETH",
+     "province_controller:8043=ETH"
+    ]
+   },
+   "phase": "PC_recover_eritrea",
+   "revise": "quick"
+  },
+  {
+   "id": "c02_afa_holds",
+   "when": {
+    "all": [
+     "state_fully_controlled:842",
+     "exists:AFA",
+     {
+      "not": "owner:908=ITA"
+     }
+    ]
+   },
+   "phase": "PC_afa_holds",
+   "revise": "quick"
+  },
+  {
+   "id": "c03_addis_stalls",
+   "when": {
+    "all": [
+     "date >= 1936.06.25",
+     {
+      "not": "state_controller:271=ITA"
+     }
+    ]
+   },
+   "revise": "full"
+  },
+  {
+   "id": "c08_recover_south",
+   "when": {
+    "any": [
+     "province_controller:1964=ETH",
+     "province_controller:2020=ETH",
+     "province_controller:2063=ETH",
+     "province_controller:11014=ETH"
+    ]
+   },
+   "revise": "quick"
+  },
+  {
+   "id": "c09_dire_dawa_first",
+   "when": {
+    "any": [
+     {
+      "all": [
+       "date >= 1936.06.01",
+       {
+        "not": "province_controlled:13239"
+       }
+      ]
+     },
+     {
+      "all": [
+       "date >= 1936.06.20",
+       {
+        "not": "state_controller:271=ITA"
+       }
+      ]
+     }
+    ]
+   },
+   "overrides": {
+    "vp_targets": [
+     {
+      "id": "vp01_13238",
+      "order": 1,
+      "province": 13238,
+      "name": "Adwa",
+      "state": 842,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.02.20"
+     },
+     {
+      "id": "vp02_13237",
+      "order": 2,
+      "province": 13237,
+      "name": "Aksum",
+      "state": 842,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.02.20"
+     },
+     {
+      "id": "vp03_12812",
+      "order": 3,
+      "province": 12812,
+      "name": "Wal Wal",
+      "state": 835,
+      "vp": 1,
+      "army": "South Force",
+      "by": "1936.03.01",
+      "mission": "south"
+     },
+     {
+      "id": "vp04_2072",
+      "order": 4,
+      "province": 2072,
+      "name": "Macalle",
+      "state": 842,
+      "vp": 2,
+      "army": "North Strike",
+      "by": "1936.03.15",
+      "mission": "north"
+     },
+     {
+      "id": "vp05_5097",
+      "order": 5,
+      "province": 5097,
+      "name": "Dessie",
+      "state": 843,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.04.30",
+      "mission": "north",
+      "path": [
+       8043,
+       5041,
+       5097
+      ]
+     },
+     {
+      "id": "vp06_1984",
+      "order": 6,
+      "province": 1984,
+      "name": "Gondar",
+      "state": 841,
+      "vp": 2,
+      "army": "Gondar Group",
+      "by": "1936.05.15",
+      "mission": "north"
+     },
+     {
+      "id": "vp09_7980",
+      "order": 7,
+      "province": 7980,
+      "name": "Dire Dawa",
+      "state": 835,
+      "vp": 2,
+      "army": "North Strike",
+      "by": "1936.06.27",
+      "path": [
+       13240,
+       7980
+      ]
+     },
+     {
+      "id": "vp10_13249",
+      "order": 8,
+      "province": 13249,
+      "name": "Harar",
+      "state": 835,
+      "vp": 3,
+      "army": "North Strike",
+      "by": "1936.07.03",
+      "path": [
+       7980,
+       13249
+      ]
+     },
+     {
+      "id": "vp07_5010",
+      "order": 9,
+      "province": 5010,
+      "name": "Addis Ababa",
+      "state": 271,
+      "vp": 5,
+      "army": "North Strike",
+      "by": "1936.07.12",
+      "path": [
+       8043,
+       5041,
+       13240,
+       13239,
+       5010
+      ]
+     },
+     {
+      "id": "vp08_8036",
+      "order": 10,
+      "province": 8036,
+      "name": "Asella",
+      "state": 271,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.07.25",
+      "path": [
+       5010,
+       10734,
+       8036
+      ]
+     },
+     {
+      "id": "vp11_10775",
+      "order": 11,
+      "province": 10775,
+      "name": "Gaba",
+      "state": 836,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.08.20",
+      "path": [
+       8036,
+       10775
+      ]
+     },
+     {
+      "id": "vp12_13246",
+      "order": 12,
+      "province": 13246,
+      "name": "Irgalem",
+      "state": 837,
+      "vp": 2,
+      "army": "North Strike",
+      "by": "1936.10.05",
+      "path": [
+       8036,
+       13246
+      ]
+     },
+     {
+      "id": "vp13_13242",
+      "order": 13,
+      "province": 13242,
+      "name": "Debre Markos",
+      "state": 840,
+      "vp": 2,
+      "army": "Gondar Group",
+      "by": "1936.10.15"
+     },
+     {
+      "id": "vp14_8019",
+      "order": 14,
+      "province": 8019,
+      "name": "Yabello",
+      "state": 837,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.10.25",
+      "path": [
+       13246,
+       8019
+      ]
+     },
+     {
+      "id": "vp15_13247",
+      "order": 15,
+      "province": 13247,
+      "name": "Moyale",
+      "state": 837,
+      "vp": 1,
+      "army": "North Strike",
+      "by": "1936.11.05",
+      "mission": "south",
+      "path": [
+       13246,
+       13247
+      ]
+     }
+    ],
+    "war": {
+     "axes": [
+      [
+       835,
+       271
+      ],
+      [
+       841,
+       840
+      ]
+     ]
+    }
+   },
+   "revise": "quick"
+  },
+  {
+   "id": "c04_equipment_short",
+   "when": "equipment_fill:North Strike < 0.7",
+   "overrides": {
+    "production_priority": [
+     "infantry_equipment",
+     "support_equipment",
+     "motorized_equipment",
+     "artillery_equipment"
+    ]
+   },
+   "revise": "quick"
+  },
+  {
+   "id": "c05_war_support_low",
+   "when": "war_support < 0.4",
+   "revise": "quick"
+  },
+  {
+   "id": "c06_stability_low",
+   "when": "stability < 0.5",
+   "revise": "quick"
+  },
+  {
+   "id": "c07_manpower_low",
+   "when": "manpower < 80000",
+   "revise": "quick"
+  }
+ ]
+}

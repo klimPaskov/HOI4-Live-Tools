@@ -216,8 +216,13 @@ def construction(plan, snap, facts, ledger):
         building = "industrial_complex" if building == "arms_factory" else "infrastructure"
     item = {"building": building, "states": states, "count": 2,
             "why": "rolling update: %s civilian factories idle" % snap.get("civ_idle")}
-    ops = [{"op": "extend", "key": "construction", "items": [item]}] if states else []
-    ops.append({"op": "set", "key": "construction_fallback_any_own_state", "value": True})
+    same = any(e.get("building") == building and sorted(e.get("states") or [], key=str) == states for e in entries)
+    ops = [{"op": "extend", "key": "construction", "items": [item]}] if states and not same else []
+    if plan.get("construction_fallback_any_own_state") is not True:
+        ops.append({"op": "set", "key": "construction_fallback_any_own_state", "value": True})
+    if not ops:
+        return {"domain": "construction", "need": "work for idle civilian factories",
+                "options": [{"building": building, "states": states, "already_planned": True}], "default": None}
     return {"domain": "construction", "need": "work for idle civilian factories",
             "options": [{"building": building, "states": states}],
             "default": {"summary": "construction: %s, any own state as fallback" % building, "ops": ops}}

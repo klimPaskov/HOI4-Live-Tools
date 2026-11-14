@@ -79,9 +79,13 @@ EXTRA_TOOLS = [
     {"name": "hoi4_run",
      "description": "The campaign run. {\"op\":\"status\"}: run folder, game date, executor, idle pause. "
                     "{\"op\":\"stop\"}: end the run once when you are done: executor off, input released, "
-                    "report.md written in the run folder; the game keeps running.",
-     "inputSchema": {"type": "object", "properties": {"op": {"type": "string", "enum": ["status", "stop"]}},
-                     "required": ["op"], "additionalProperties": False}},
+                    "report.md written in the run folder; the game keeps running. {\"op\":\"planner\"}: the rolling "
+                    "planner's updates and model use. {\"op\":\"plan_patch\",\"update\":N,\"patch\":{...}}: answer a "
+                    "plan update the supervisor asked you for (the gates check it before it is applied).",
+     "inputSchema": {"type": "object", "properties": {
+         "op": {"type": "string", "enum": ["status", "stop", "planner", "plan_patch"]},
+         "update": {"type": "integer", "minimum": 1}, "patch": {"type": "object"}},
+         "required": ["op"], "additionalProperties": False}},
 ]
 
 
@@ -182,6 +186,8 @@ class Supervisor:
         self.stopped = threading.Event()
         self.finished = threading.Event()
         self.start_date = None
+        self.planner = None
+        self.plan_lock = threading.RLock()
         self._log = open(os.path.join(run, "calls.jsonl"), "a", encoding="utf-8")
         self._events = open(os.path.join(run, "supervisor.log"), "a", encoding="utf-8")
 
@@ -348,7 +354,11 @@ class Supervisor:
                     "You did exactly this %d s ago and it succeeded. A successful action is done: read the state "
                     "to see its effect instead of repeating it; if the game shows it undone, change the target or "
                     "the arguments." % int(now - prev[0]))}}
-        err, body = self.native_call(name, args)
+        if name == "hoi4_plan":
+            with self.plan_lock:                     # the planner swaps the plan file under the same lock
+                err, body = self.native_call(name, args)
+        else:
+            err, body = self.native_call(name, args)
         if err and error_code(body) == "input_target_not_frontmost" and self.front and self.is_action(name, args):
             pid = (self.session.get("game") or {}).get("pid")
             if pid and self.front(pid):
@@ -388,10 +398,19 @@ class Supervisor:
         op = args.get("op")
         if op == "status":
             return {"isError": False, "body": self.describe()}
+        if op == "planner":
+            if self.planner is None:
+                return error("planner_off", "the rolling planner is not running in this run")
+            return {"isError": False, "body": self.planner.summary()}
+        if op == "plan_patch":
+            if self.planner is None:
+                return error("planner_off", "the rolling planner is not running in this run")
+            ok, why = self.planner.submit(args.get("update") or 0, args.get("patch"))
+            return {"isError": not ok, "body": {"received": ok, "message": why}}
         if op == "stop":
             threading.Thread(target=self.stop, args=("stopped_by_player",), daemon=True).start()
             return {"isError": False, "body": {"stopping": True, "report": os.path.join(self.run, "report.md")}}
-        return error("invalid_arguments", "op is status or stop")
+        return error("invalid_arguments", "op is status, stop, planner or plan_patch")
 
     def describe(self):
         err, overview = self.native.call("hoi4_overview", {}) if self.native else (True, {})
@@ -530,6 +549,38 @@ class Supervisor:
             return
         self.renew(now)
         self.watchdog(now)
+        if self.planner is not None:
+            try:
+                self.planner.tick()
+            except Exception as exc:  # noqa: BLE001 - the plan in force stays; the next tick tries again
+                self.event("planner_failed", error=str(exc)[:300])
+
+    # ------------------------------------------------------------------------------------------ planner
+    def start_planner(self, load_facts=True):
+        """The rolling planner (docs/ROLLING_PLAN.md) beside the executor; HOI4_LIVE_PLANNER=off leaves it out."""
+        if os.environ.get("HOI4_LIVE_PLANNER") == "off" or not os.path.exists(os.path.join(self.run, "plan.json")):
+            return None
+        from ..planner import facts as pf, gates as pg, worker as pw
+        tools_dir = pf.tools_dir()
+
+        def ask_agent(folder):
+            self.note("a plan update is waiting (%s): read %s and answer within 2 minutes with hoi4_run "
+                      "{\"op\":\"plan_patch\",\"update\":%s,\"patch\":{...}}; without an answer the default "
+                      "pick is applied" % (os.path.basename(folder), os.path.join(folder, "prompt.md"),
+                                           os.path.basename(folder).split("-")[-1]))
+        self.planner = pw.PlannerWorker(self.run, lambda name, args: self.native.call(name, args),
+                                        lock=self.plan_lock, note=self.note,
+                                        proposer=pw.proposer_for(tools_dir=tools_dir, notify=ask_agent))
+
+        def bind():
+            facts = pf.load()
+            if facts is not None:
+                tools = pg.ToolGates(tools_dir, pf.game_dir()) if tools_dir else None
+                self.planner.attach(facts, tools)
+            self.event("planner_ready", facts=facts is not None, tools=bool(tools_dir))
+        if load_facts:
+            threading.Thread(target=bind, daemon=True).start()
+        return self.planner
 
     def loop(self):
         while not self.stopped.wait(TICK):
@@ -576,6 +627,8 @@ class Supervisor:
                                  "needed": needed})
             if rows:
                 final["capitulation"] = rows
+        if self.planner is not None:
+            self.planner.write_summary()
         self.release()
         self.event("stopped", reason=reason)
         self.state = "ended"
@@ -655,6 +708,7 @@ def main(argv=None):
     supervisor.status("starting", "starting the native runtime")
     if not supervisor.start():
         return 1
+    supervisor.start_planner()
     address, family = endpoint_address()
     authkey = secrets.token_bytes(32)
     listener = serve(supervisor, address, family, authkey)
