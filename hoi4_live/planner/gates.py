@@ -95,6 +95,10 @@ def anchored(candidate, snap, triggers, menus, costs):
     return errors
 
 
+# _meta keys the plan store and the rollback write (store.py); the tools check the plan without them.
+STORE_META = ("version", "parent", "updated", "update_summary", "proposer", "trigger", "gates", "rolled_back_from")
+
+
 class ToolGates:
     """validate_plan --strict and lint_plan through the planning tools, with the incumbent's counts cached."""
 
@@ -115,10 +119,19 @@ class ToolGates:
         return out
 
     @staticmethod
-    def content_key(plan):
-        """The plan's content without its version meta: an applied candidate is the next incumbent."""
-        body = {k: v for k, v in plan.items() if k != "_meta"} if isinstance(plan, dict) else plan
-        return hashlib.sha256(json.dumps(body, sort_keys=True).encode("utf-8")).hexdigest()
+    def checked(plan):
+        """The plan as the tools check it: without the version bookkeeping the store writes into _meta, so an
+        applied candidate and the next incumbent are the same plan to the tools."""
+        if not isinstance(plan, dict) or not isinstance(plan.get("_meta"), dict):
+            return plan
+        out = dict(plan)
+        out["_meta"] = {k: v for k, v in plan["_meta"].items() if k not in STORE_META}
+        out["_meta"]["version"] = 1
+        return out
+
+    @classmethod
+    def content_key(cls, plan):
+        return hashlib.sha256(json.dumps(cls.checked(plan), sort_keys=True).encode("utf-8")).hexdigest()
 
     def counts(self, plan, key=None):
         """{"validate": n, "lint": {rule: n}} for a plan, cached by its content; both tools run at once."""
@@ -128,7 +141,7 @@ class ToolGates:
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "plan.json")
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(plan, f)
+                json.dump(self.checked(plan), f)
             argvs = [[sys.executable, "-I", os.path.join(self.tools, "validate_plan.py"), path, "--strict"],
                      [sys.executable, "-I", os.path.join(self.tools, "hoi4facts", "lint_plan.py"), path, "--json"]]
             with concurrent.futures.ThreadPoolExecutor(2) as pool:

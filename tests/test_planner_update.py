@@ -149,6 +149,22 @@ class GateTests(unittest.TestCase):
         self.assertFalse(worse["ok"])
         self.assertEqual(worse["steps"][-1]["gate"], "lint")
 
+    def test_the_tools_check_a_plan_without_the_store_bookkeeping(self):
+        seen = []
+
+        def runner(argv):
+            with open(argv[3]) as f:
+                seen.append(json.load(f)["_meta"])
+            return 0, "0 error(s)" if "validate_plan.py" in argv[2] else json.dumps({"findings": []})
+        tools = gates.ToolGates("/nowhere", runner=runner)
+        stored = dict(PLAN, _meta={"version": 4, "parent": 3, "updated": 1.0, "proposer": "default",
+                                   "update_summary": "x", "trigger": "t", "gates": "full", "source": "strategist"})
+        tools.counts(stored)
+        self.assertEqual(seen[0], {"version": 1, "source": "strategist"})
+        n = len(seen)
+        tools.counts(dict(stored, _meta={"version": 5, "source": "strategist"}))   # the same plan: cached
+        self.assertEqual(len(seen), n)
+
 
 class FakeModel:
     name = "model"
