@@ -3464,6 +3464,120 @@
           },
           "description": "that many operatives recruited (hoi4_operative_recruit), or one entry per operative: entry i's mission is assigned to operative i"
         },
+        "networks": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "$ref": "#/definitions/tag",
+                "description": "country whose network is built"
+              },
+              "state_id": {
+                "$ref": "#/definitions/state_id",
+                "description": "state to build in (default: the tool's choice in the target)"
+              },
+              "operative": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 31,
+                "description": "recruited position to send (default: the first idle one not on an operation)"
+              },
+              "until": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "default": 100,
+                "description": "stop sending once the network's strength (strongest covered state) reaches this"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "target"
+            ]
+          },
+          "description": "keep an operative building a network in each target (hoi4_operative_assign build_intel_network) until its strength reaches `until`"
+        },
+        "operations": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_]+$",
+                "description": "operation key (common/operations), e.g. operation_collaboration_government"
+              },
+              "target": {
+                "$ref": "#/definitions/tag"
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "operatives": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 31
+                },
+                "description": "recruited positions to use (default: the first free ones)"
+              },
+              "auto_commence": {
+                "type": "boolean",
+                "default": true,
+                "description": "tick Commence when ready (the game starts it once resources are gathered)"
+              },
+              "runs": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "description": "how many times to run it (default 1, or 5 with repeat_until)"
+              },
+              "repeat_until": {
+                "type": "object",
+                "properties": {
+                  "collaboration": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "run again while the target's collaboration (0..1) is below this"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation",
+              "target"
+            ]
+          },
+          "description": "operations started in order with hoi4_operation_start once hoi4_operations judges them ready and they are not running already"
+        },
         "when": {
           "$ref": "#/definitions/predicate"
         },

@@ -289,6 +289,13 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            deadline or plan horizon
   navy.strike_without_patrol  (warning) a strike_force mission in a sea region no own patrol mission covers
                            (a strike force engages only what patrols spot)
+  intelligence.operations  an intelligence.operations entry the game would never let the plan prepare: an operation
+                           key not in common/operations; an operation whose `allowed` names a has_rule the plan
+                           country's starting ideology sets to no (e.g. collaboration government for a
+                           democracy); no agency (intelligence.agency false); (warning) more operatives than the
+                           agency can hold with the planned upgrades (1 slot, one more per
+                           AGENCY_UPGRADE_PER_OPERATIVE_SLOT upgrades, at most MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES more;
+                           advisors and spirits add others) or than intelligence.operatives recruits
   peace.order              (info) peace.take ranks states the plan does not hold at the conference (no vp target
                            or axis there, not owned) ahead of a state it holds
 
@@ -309,7 +316,7 @@ from collections import Counter, defaultdict, deque
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from hoi4facts import calc as calcmod  # noqa: E402
-    from hoi4facts import content, derive, mapgraph, plan_gates, plan_keys, schema_check  # noqa: E402
+    from hoi4facts import content, derive, mapgraph, plan_gates, plan_keys, schema_check, script  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
     from hoi4facts import research as researchmod  # noqa: E402
@@ -320,7 +327,7 @@ if __package__ in (None, ""):
     from hoi4facts.validate import _world as world_of  # noqa: E402
 else:
     from . import calc as calcmod
-    from . import content, derive, mapgraph, plan_gates, plan_keys, schema_check
+    from . import content, derive, mapgraph, plan_gates, plan_keys, schema_check, script
     from . import tech as techrule
     from .game import Game
     from . import research as researchmod
@@ -388,7 +395,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
-             "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "politics.available", "research.ahead",
+             "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "intelligence.operations", "politics.available", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
@@ -4252,6 +4259,51 @@ class Lint:
                          "settings belong to the area defence order's window; a fallback line ignores them")
 
     # ------------------------------------------------------------------
+    def intelligence_operations(self):
+        """intelligence.operations entries the game would never let the plan prepare."""
+        intel = self.plan.get("intelligence") if isinstance(self.plan.get("intelligence"), dict) else {}
+        ops = [o for o in intel.get("operations") or [] if isinstance(o, dict)]
+        if not ops:
+            return
+        defs = _operation_defs(self.game)
+        if intel.get("agency") is not True:
+            self.add("error", "intelligence.operations", "intelligence.agency",
+                     "intelligence.operations needs the agency: set intelligence.agency true")
+        party = None
+        if self.tag:
+            try:
+                party = self.world.ruling_party(self.tag)
+            except Exception:  # history without politics: the rule is left unjudged
+                party = None
+        rules = _ideology_rules(self.game).get(party, {}) if party else {}
+        per_slot = self.define("AGENCY_UPGRADE_PER_OPERATIVE_SLOT", 5) or 5
+        cap = self.define("MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES", 1)
+        upgrades = len(intel.get("upgrades") or [])
+        # the agency's own slot plus the slots upgrades add (MAX_... caps the added ones)
+        slots = 1 + int(min(upgrades // per_slot, cap))
+        planned = intel.get("operatives")
+        recruited = planned if isinstance(planned, int) else len(planned) if isinstance(planned, list) else 0
+        for n, o in enumerate(ops):
+            key, where = o.get("operation", ""), f"intelligence.operations[{n}]"
+            d = defs.get(key)
+            if d is None:
+                self.add("error", "intelligence.operations", where,
+                         f"{key}: no such operation in common/operations")
+                continue
+            barred = [r for r in d["rules"] if rules.get(r) == "no"]
+            if barred:
+                self.add("error", "intelligence.operations", where,
+                         f"{key}: its allowed block needs {', '.join(barred)}, which the starting ideology "
+                         f"{party} sets to no (change the government first or drop it)")
+            need = d["operatives"]
+            if need > slots:
+                self.add("warning", "intelligence.operations", where,
+                         f"{key} needs {need} operatives; {upgrades} planned agency upgrades give {slots} slot(s) "
+                         f"(one more per {int(per_slot)} upgrades) unless advisors or spirits add more")
+            if need > recruited:
+                self.add("warning", "intelligence.operations", where,
+                         f"{key} needs {need} operatives; intelligence.operatives recruits {recruited}")
+
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
@@ -4265,7 +4317,8 @@ class Lint:
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.politics_pp_budget,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
-                 self.navy_strike_without_patrol, self.peace_order, self.defense_lines]
+                 self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
+                 self.intelligence_operations]
         for step in steps:
             step()
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
@@ -4274,6 +4327,57 @@ class Lint:
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self
+
+
+def _operation_defs(game):
+    """{operation key: {"operatives": n, "rules": [has_rule names in allowed]}} from common/operations."""
+
+    def load():
+        out = {}
+        for f in game.files("common/operations"):
+            for k, v in script.parse_file(f):
+                if not (isinstance(k, str) and k.startswith("operation_") and isinstance(v, list)):
+                    continue
+                rules = []
+
+                def walk(items):
+                    for kk, vv in items:
+                        if kk == "has_rule" and isinstance(vv, str):
+                            rules.append(vv)
+                        elif isinstance(vv, list) and kk not in ("NOT",):
+                            walk(vv)
+
+                allowed = script.get1(v, "allowed")
+                if isinstance(allowed, list):
+                    walk(allowed)
+                try:
+                    ops = int(float(script.get1(v, "operatives", "1")))
+                except (TypeError, ValueError):
+                    ops = 1
+                out[k] = {"operatives": ops, "rules": rules}
+        return out
+
+    return game.cached("operation_defs", load)
+
+
+def _ideology_rules(game):
+    """{ideology group: {rule: "yes"|"no"}} from common/ideologies."""
+
+    def load():
+        out = {}
+        for f in game.files("common/ideologies"):
+            groups = []
+            for k, v in script.parse_file(f):
+                if k == "ideologies" and isinstance(v, list):
+                    groups.extend(v)
+            for k, v in groups:
+                if isinstance(k, str) and isinstance(v, list):
+                    rules = script.get1(v, "rules")
+                    out[k] = {rk: rv for rk, rv in rules if isinstance(rk, str) and isinstance(rv, str)} \
+                        if isinstance(rules, list) else {}
+        return out
+
+    return game.cached("ideology_rules", load)
 
 
 def _has_call(node, depth=0):

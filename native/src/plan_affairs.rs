@@ -118,9 +118,15 @@
 //!                agency's state is not readable (hoi4_intelligence state_read:false), so the refusals
 //!                are the only state. `operatives`: that many operatives recruited (hoi4_operative_recruit,
 //!                first candidate), and a list entry's `mission` assigned to operative i
-//!                (hoi4_operative_assign, country `target` or `state_id`). Tools: agency_upgrade live 1-2
-//!                Nov; agency_create live 6 Nov (descriptor UNVALIDATED); operatives fixed live round w13
-//!                (descriptors UNVALIDATED)
+//!                (hoi4_operative_assign, country `target` or `state_id`); an operative back from an
+//!                operation (idle, on none) gets its mission again. `networks` [{"target","state_id"?,
+//!                "operative"?,"until"?}]: an operative builds a network in each target until its
+//!                strength reaches `until` (default 100). `operations` [{"operation","target","when"?,
+//!                "operatives"?,"auto_commence"?,"runs"?,"repeat_until"?:{"collaboration"}}]: started
+//!                with hoi4_operation_start when hoi4_operations judges it ready and it does not run
+//!                already; `runs` times (default 1) or until the target's collaboration reaches the
+//!                goal (at most `runs`, default 5). Refusals and the agency state come from memory
+//!                (receipts verified by memory readback, live 14 Nov)
 //!   mio          [{"organisation" ("organization" too),"traits":[trait_index,..],"when"?,"slot"?,
 //!                "design_team"?:true|slot,"policy"?}] per organisation, in order: `design_team` puts it into
 //!                that design-team slot of the politics view once (hoi4_mio_design_team, slot `slot` or 0),
@@ -2148,7 +2154,8 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
         _ => Vec::new(),
     };
     let want_agency = cfg["agency"] == json!(true) && !state.done.contains_key("intel:agency");
-    if !want_agency && upgrades.is_empty() && operatives.is_empty() {
+    let has_ops = !list(cfg, "networks").is_empty() || !list(cfg, "operations").is_empty();
+    if !want_agency && upgrades.is_empty() && operatives.is_empty() && !has_ops {
         return Ok(None);
     }
     let mut waits: Vec<String> = Vec::new();
@@ -2265,6 +2272,18 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                 )));
             }
         }
+        // An operative back from an operation (idle, on none) gets its listed mission again.
+        if let Some(read) = intel_read(state, tools, now) {
+            for (i, live) in list(&read["operatives"], "list").iter().enumerate() {
+                let key = format!("intel:opm:{i}");
+                if live["idle"] == json!(true)
+                    && live["operation"].is_null()
+                    && state.done.get(&key).is_some_and(|at| now - *at > 3 * DAY)
+                {
+                    state.done.remove(&key);
+                }
+            }
+        }
         for (i, op) in operatives.iter().enumerate() {
             let mission = text(&op["mission"]).trim();
             let key = format!("intel:opm:{i}");
@@ -2305,11 +2324,201 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                 "intelligence operative {i} mission {mission}: {ok} {why}"
             )));
         }
+        // 4. networks, then operations
+        if let Some(done) = intel_networks(state, run, cfg, &mut waits)? {
+            return Ok(Some(done));
+        }
+        if let Some(done) = intel_operations(state, run, cfg, &mut waits)? {
+            return Ok(Some(done));
+        }
     }
     if !waits.is_empty() {
         note(state, "intelligence", waits.join("; "));
     }
     state.skip(now, "mintel", "x", DAY);
+    Ok(None)
+}
+
+/// `intelligence.networks`: [{"target", "state_id"?, "operative"?, "until"?}] keeps an operative
+/// building a network in each target until its strength (hoi4_intelligence intel_network, the
+/// strongest covered state) reaches `until` (default 100). Without an operative already on
+/// build_intel_network there, the named one (else the first idle one not on an operation) is sent.
+fn intel_networks(
+    state: &mut State,
+    run: &Run<'_>,
+    cfg: &Value,
+    waits: &mut Vec<String>,
+) -> Result<Option<String>> {
+    let (tools, now) = (run.tools, run.now);
+    let entries = list(cfg, "networks").to_vec();
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    let Some(read) = intel_read(state, tools, now) else {
+        return Ok(None);
+    };
+    for (k, net) in entries.iter().enumerate() {
+        let target = text(&net["target"]).trim().to_uppercase();
+        let key = format!("intel:net:{k}");
+        if target.is_empty() || state.skipped(now, "intel", &key) {
+            continue;
+        }
+        if gate(state, tools, &net["when"], now).is_some() {
+            continue;
+        }
+        let until = net["until"].as_f64().unwrap_or(100.0);
+        let strength = list(&read["intel_network"], "networks")
+            .iter()
+            .find(|n| text(&n["target"]) == target)
+            .and_then(|n| n["strength"].as_f64())
+            .unwrap_or(0.0);
+        if strength >= until {
+            continue;
+        }
+        let ops = list(&read["operatives"], "list");
+        let building = ops.iter().any(|o| {
+            text(&o["mission"]) == "build_intel_network" && text(&o["mission_target"]) == target
+        });
+        if building {
+            continue;
+        }
+        let pick = match net["operative"].as_u64() {
+            Some(i) => Some(i as usize),
+            None => ops
+                .iter()
+                .position(|o| o["idle"] == json!(true) && o["operation"].is_null()),
+        };
+        let Some(i) = pick else {
+            waits.push(format!("network {target}: no idle operative"));
+            continue;
+        };
+        let mut args = json!({"operative": i, "mission": "build_intel_network"});
+        match net["state_id"].as_u64() {
+            Some(id) => args["state_id"] = json!(id),
+            None => args["country"] = json!(target),
+        }
+        let (ok, why) = state.act(tools, run.lease, "hoi4_operative_assign", args, "in")?;
+        state.affairs.intel = None;
+        let days = if ok {
+            3
+        } else {
+            match code(&why) {
+                "already_on_mission" => 3,
+                "operative_busy" | "operative_unknown" => 7,
+                "invalid_arguments" | "target_required" | "unknown_country" => {
+                    note(state, "intelligence", format!("network {target}: {why}"));
+                    90
+                }
+                _ => 7,
+            }
+        };
+        state.skip(now, "intel", &key, days * DAY);
+        return Ok(Some(format!("intelligence network {target} operative {i}: {ok} {why}")));
+    }
+    Ok(None)
+}
+
+/// `intelligence.operations`: [{"operation","target","when"?,"operatives"?,"auto_commence"?,
+/// "runs"?,"repeat_until"?:{"collaboration"}}] in order. An entry waits while its operation runs
+/// against the target (hoi4_intelligence operations_running), is judged by hoi4_operations (a
+/// failing verdict waits with its reasons) and is started with hoi4_operation_start. It runs
+/// `runs` times (default 1), or while the target's collaboration stays below
+/// repeat_until.collaboration (at most `runs`, default 5 then).
+fn intel_operations(
+    state: &mut State,
+    run: &Run<'_>,
+    cfg: &Value,
+    waits: &mut Vec<String>,
+) -> Result<Option<String>> {
+    let (tools, now) = (run.tools, run.now);
+    let entries = list(cfg, "operations").to_vec();
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    let Some(read) = intel_read(state, tools, now) else {
+        return Ok(None);
+    };
+    for (k, entry) in entries.iter().enumerate() {
+        let operation = text(&entry["operation"]).trim().to_string();
+        let target = text(&entry["target"]).trim().to_uppercase();
+        let key = format!("intel:opn:{k}");
+        if operation.is_empty() || target.is_empty() || state.skipped(now, "intel", &key) {
+            continue;
+        }
+        if let Some(why) = gate(state, tools, &entry["when"], now) {
+            waits.push(format!("{operation} {target}: {why}"));
+            continue;
+        }
+        let running = list(&read["operations_running"], "list")
+            .iter()
+            .any(|o| text(&o["operation"]) == operation && text(&o["target"]) == target);
+        if running {
+            waits.push(format!("{operation} {target}: running"));
+            continue;
+        }
+        let collab_goal = entry["repeat_until"]["collaboration"].as_f64();
+        let runs = entry["runs"]
+            .as_u64()
+            .unwrap_or(if collab_goal.is_some() { 5 } else { 1 }) as usize;
+        let done = (0..runs)
+            .take_while(|n| state.done.contains_key(&format!("{key}:{n}")))
+            .count();
+        if done >= runs {
+            continue;
+        }
+        let judged = tools
+            .call("hoi4_operations", &json!({"target": target, "operations": [operation]}))
+            .ok();
+        let row = judged.as_ref().map(|j| &j["targets"][0]);
+        if let (Some(goal), Some(have)) = (collab_goal, row.and_then(|r| r["collaboration"].as_f64())) {
+            if have >= goal {
+                continue;
+            }
+        }
+        let verdict = row.map(|r| &r["operations"][0]["verdict"]);
+        if verdict.is_some_and(|v| v["ready"] == json!("false")) {
+            let v = verdict.unwrap();
+            let codes: Vec<&str> = list(v, "reasons").iter().map(|r| text(&r["code"])).collect();
+            let days = if codes.iter().any(|c| matches!(*c, "not_allowed" | "not_a_target")) {
+                note(state, "intelligence", format!("{operation} {target}: {codes:?} (game rules)"));
+                90
+            } else if codes.contains(&"unavailable") {
+                30
+            } else {
+                7
+            };
+            waits.push(format!("{operation} {target}: {}", codes.join(", ")));
+            state.skip(now, "intel", &key, days * DAY);
+            continue;
+        }
+        let mut args = json!({"target": target, "operation": operation});
+        if let Some(list) = entry["operatives"].as_array() {
+            args["operatives"] = json!(list);
+        }
+        if let Some(b) = entry["auto_commence"].as_bool() {
+            args["auto_commence"] = json!(b);
+        }
+        let (ok, why) = state.act(tools, run.lease, "hoi4_operation_start", args, "iq")?;
+        state.affairs.intel = None;
+        if ok {
+            state.done.insert(format!("{key}:{done}"), now);
+            state.skip(now, "intel", &key, 3 * DAY);
+        } else {
+            let days = match code(&why) {
+                "not_enough_operatives" | "operative_busy" | "operation_unavailable" => 7,
+                "unknown_operation" | "operation_not_listed" | "display_name_unknown" => {
+                    note(state, "intelligence", format!("{operation} {target}: {why}"));
+                    90
+                }
+                _ => 5,
+            };
+            state.skip(now, "intel", &key, days * DAY);
+        }
+        return Ok(Some(format!(
+            "intelligence operation {operation} {target} run {}: {ok} {why}",
+            done + 1
+        )));
+    }
     Ok(None)
 }
 

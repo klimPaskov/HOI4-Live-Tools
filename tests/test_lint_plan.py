@@ -1386,3 +1386,38 @@ class DeriveReaders(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class IntelligenceOperations(unittest.TestCase):
+    """intelligence.operations: requests the game would never let the plan prepare."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+
+    def findings(self, tag, intel):
+        plan = copy.deepcopy(load(ITA))
+        plan["_validator"] = {"tag": tag, "start_date": "1936.1.1"}
+        plan["_meta"] = {"version": 1}
+        plan["intelligence"] = intel
+        lt = lint_plan.Lint(plan, self.game)
+        lt.intelligence_operations()
+        return [(f["severity"], f["message"]) for f in lt.findings]
+
+    def test_a_democracy_cannot_run_collaboration_government(self):
+        op = {"operation": "operation_collaboration_government", "target": "GER"}
+        intel = {"agency": True, "upgrades": ["upgrade_a"] * 5, "operatives": 2, "operations": [op]}
+        out = self.findings("FRA", intel)
+        self.assertEqual([s for s, _ in out], ["error"])
+        self.assertIn("democratic", out[0][1])
+        self.assertEqual(self.findings("ITA", intel), [])
+
+    def test_unknown_operation_missing_agency_and_too_few_operatives(self):
+        intel = {"agency": False, "operatives": 1, "operations": [
+            {"operation": "operation_nope", "target": "ETH"},
+            {"operation": "operation_collaboration_government", "target": "ETH"}]}
+        out = self.findings("ITA", intel)
+        self.assertEqual(sorted(s for s, _ in out), ["error", "error", "warning", "warning"])
+        self.assertTrue(any("no such operation" in m for _, m in out))
+        self.assertTrue(any("1 slot" in m for _, m in out))
