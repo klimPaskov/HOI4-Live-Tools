@@ -105,7 +105,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            operation days from the defines) missing from goal.capitulation.levers; one that pays
                            within the run left unused with no why; a used one without start, cost or effect_vp; a
                            used operation without the agency, its operatives and a network on the enemy in the
-                           intelligence key; a used lever no tool carries without tool_gap (facts.capitulation_levers)
+                           intelligence key (intelligence.networks counts), or with no intelligence.operations entry
+                           that runs it on the enemy; a used lever no tool carries without tool_gap
+                           (facts.capitulation_levers)
   conquest.tool_gap        (warning) a used lever no tool carries yet (LEVER_TOOL_GAPS, from the gap register's
                            not-executable rows): report it in RUN/tool-gaps.md
   gap.blocked              (warning, lint_gaps.py) a plan key that relies on a lever the gap register lists as not
@@ -292,7 +294,9 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
   intelligence.operations  an intelligence.operations entry the game would never let the plan prepare: an operation
                            key not in common/operations; an operation whose `allowed` names a has_rule the plan
                            country's starting ideology sets to no (e.g. collaboration government for a
-                           democracy); no agency (intelligence.agency false); (warning) more operatives than the
+                           democracy); an operation that also picks a state or region (coup, sabotage, coordinated
+                           strike: the tool refuses it); no agency (intelligence.agency false); (warning) more
+                           operatives than the
                            agency can hold with the planned upgrades (1 slot, one more per
                            AGENCY_UPGRADE_PER_OPERATIVE_SLOT upgrades, at most MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES more;
                            advisors and spirits add others) or than intelligence.operatives recruits
@@ -1587,10 +1591,19 @@ class Lint:
                 nets = [o for o in (ops if isinstance(ops, list) else []) if isinstance(o, dict)
                         and o.get("mission") in ("build_intel_network", "quiet_intel_network")
                         and enemy in (o.get("target"), o.get("country"), st_owner.get(o.get("state_id")))]
+                nets += [n for n in intel.get("networks") or [] if isinstance(n, dict)
+                         and enemy in (n.get("target"), st_owner.get(n.get("state_id")))]
                 if not (intel.get("agency") or ag.get("agency_at_start")) or n_ops < (r["cost"]["operatives"] or 0) or not nets:
                     self.add("error", "conquest.levers", where,
                              f"needs intelligence.agency, {r['cost']['operatives']:g} operatives and a network on {enemy} "
-                             f"(build_intel_network on a state it holds) in the plan's intelligence key")
+                             f"(intelligence.networks, or build_intel_network on a state it holds) in the plan's "
+                             f"intelligence key")
+                runs = [o for o in intel.get("operations") or [] if isinstance(o, dict)
+                        and o.get("operation") in names and o.get("target") == enemy]
+                if not r.get("tool_gap") and not runs:
+                    self.add("error", "conquest.levers", where,
+                             f"no intelligence.operations entry runs {r['lever']} on {enemy}: the executor starts "
+                             f"operations only from that key")
         return rows
 
     def capitulation_plan(self):
@@ -4290,6 +4303,10 @@ class Lint:
                 self.add("error", "intelligence.operations", where,
                          f"{key}: no such operation in common/operations")
                 continue
+            if d.get("picks_location"):
+                self.add("error", "intelligence.operations", where,
+                         f"{key} also picks a state or region in its window, which hoi4_operation_start does not "
+                         f"choose yet (it refuses with operation_picks_location): a tool gap, see the gap register")
             barred = [r for r in d["rules"] if rules.get(r) == "no"]
             if barred:
                 self.add("error", "intelligence.operations", where,
@@ -4330,7 +4347,8 @@ class Lint:
 
 
 def _operation_defs(game):
-    """{operation key: {"operatives": n, "rules": [has_rule names in allowed]}} from common/operations."""
+    """{operation key: {"operatives": n, "rules": [has_rule names in allowed], "picks_location": bool}} from
+    common/operations (picks_location: the window also asks for a state or region)."""
 
     def load():
         out = {}
@@ -4354,7 +4372,9 @@ def _operation_defs(game):
                     ops = int(float(script.get1(v, "operatives", "1")))
                 except (TypeError, ValueError):
                     ops = 1
-                out[k] = {"operatives": ops, "rules": rules}
+                picks = any(script.get1(v, key) is not None
+                            for key in ("selection_target", "selection_target_state", "target_type"))
+                out[k] = {"operatives": ops, "rules": rules, "picks_location": picks}
         return out
 
     return game.cached("operation_defs", load)

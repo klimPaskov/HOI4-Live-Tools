@@ -147,7 +147,7 @@ class Strategist(unittest.TestCase):
             path = strategize.write_blocked_levers(d)
             with open(path, encoding="utf-8") as f:
                 text = f.read()
-        self.assertIn("espionage.collaboration_government", text)
+        self.assertIn("espionage.coup", text)
         self.assertIn("RUN/tool-gaps.md", text)
 
     def test_gap_findings_reach_tool_gaps(self):

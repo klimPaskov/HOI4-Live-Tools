@@ -243,10 +243,11 @@ Democracies justify only on threat countries, cannot puppet, cannot declare on a
 ## 8. Intelligence agency and operatives (La Resistance)
 
 - **Agency**: 30 days and 5 civilian factories (`hoi4_agency_create`). Germany gets one automatically only in the 1939 start.
-- **Upgrades**: 30 days each, one at a time, 5-10 civilian factories while in progress. Every 5 upgrades give one extra operative slot (once).
+- **Upgrades**: 30 days each, one at a time, 5-10 civilian factories while in progress. The agency starts with one operative slot; 5 upgrades give a second (`AGENCY_UPGRADE_PER_OPERATIVE_SLOT` 5, `MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES` 1: never more than two slots from the agency). More come only from advisors, spirits and the spymaster (PO29).
+- **Recruitment**: a newly opened slot offers candidates after 30 days (`AGENCY_OPERATIVE_RECRUITMENT_TIME`); the pick itself is instant. A candidate of the target's nationality builds its network about 30% faster.
 - Upgrade order:
-  1. `upgrade_training_centers` (+1 operative slot; 10 civilian factories).
-  2. Four cheap upgrades the plan uses, to reach 5 upgrades for the extra operative: `upgrade_army_department` (+25% army intel), `upgrade_passive_defense`, `upgrade_anti_partisan` (before an occupation), 5 civilian factories each, and `upgrade_form_department` (decryption +25, opens the crypto branch; 8 factories).
+  1. `upgrade_training_centers` (one more candidate offered per slot, 3 to 4, not a slot; 10 civilian factories).
+  2. Four cheap upgrades the plan uses, to reach 5 upgrades for the second operative: `upgrade_army_department` (+25% army intel), `upgrade_passive_defense`, `upgrade_anti_partisan` (before an occupation), 5 civilian factories each, and `upgrade_form_department` (decryption +25, opens the crypto branch; 8 factories).
   3. `upgrade_decryption_boost` when decryption is planned; `upgrade_blueprint_stealing` and `upgrade_invisible_ink` only when steal tech is planned.
   4. Skip `upgrade_suicide_pills`, `upgrade_diplo_training`, `upgrade_psycho_warfare` unless the plan uses those missions.
 - **Spymaster**: 3+ upgrades and 1 faction initiative (50 PP without the faction system), 180-day cooldown.
@@ -259,11 +260,18 @@ Democracies justify only on threat countries, cannot puppet, cannot declare on a
 | steal tech (civilian / army / navy / air) | 120 | 3 | 0.2 | 35 / 50 | needs the matching token; random tech bonus. Situational: only when 3+ techs behind in that branch |
 | capture cipher | 75 | 2 | 0.2 | 40 | speeds decryption |
 | fake intel | 60 | 2 | 0 | 40 | defensive, rarely worth it |
-| collaboration government | 90 | 2 | 0.1 | 50 | 200 support equipment, 1000 infantry equipment, 10 civilian factories for 60 days. A pre-war operation for non-democracies: start the year before the war (IN10) |
+| collaboration government | 90 | 2 | 0.1 | 50 | 200 support equipment, 1000 infantry equipment, 10 civilian factories for 60 days; adds 0.30 collaboration (0.45 on the extra outcome, 33% chance); each earlier run on the same target costs 25% more (`cost_multiplier` 0.25). A pre-war operation for non-democracies: start the year before the war (IN10). Live facts below |
 | coup government | 180 | 2 | 0.3 | 70 | 12000 infantry equipment; target stability under 70% and 20% party support (DI11) |
 | coordinated strike | 3 | 2 | 0.3 | 70 | needs a justified war goal; declares war on completion and the port-strike and strategic-bombing missions prepared in the target region strike at once; 15 civilian factories for 5 days |
 | sabotage industry / infrastructure / resources | 90 | 3 | 0.2 | 35 | in occupied land with resistance |
 | boost resistance / resistance contacts | 50 / 60 | 2 | 0.2 / 0.1 | 35 / 40 | only in enemy-occupied states |
+
+- **Running one**: `hoi4_operations` lists every operation for a target with its requirements and the reason each is or is not met (`waits_for` holds equipment the preparation takes as it arrives); `hoi4_operation_start` prepares it with named operatives and auto commence; `hoi4_intelligence` shows it under `operations_running`. Plan key `intelligence.operations` (start condition, operatives, runs or `repeat_until`); `intelligence.networks` builds the network first. Operations that also pick a state or region in their window (coup, coordinated strike, sabotage, boost resistance, resistance contacts) are refused (`operation_picks_location`): a gap in the register.
+- **Collaboration government, live (14 Nov 2026, Italy on Ethiopia, macOS 1.19.4.1)**:
+  - Available while at war with the target: the row is listed and Prepare works (Italy at war with Ethiopia since 1 January).
+  - Preparation starts while short of equipment; the game takes the equipment as it arrives (started with 49 of 200 support equipment).
+  - Observed timeline from nothing: agency started 1 January, done 1 February; first operative 2 March; five upgrades by 19 August; second slot's candidates about 17 September; second operative and the operation started 13 October (network on Ethiopia at 100 in 3 states by then).
+  - Not measured yet: the time to completion, the collaboration it adds, its effect on the surrender limit (`SURRENDER_LIMIT_REDUCTION_PER_COLLABORATION` 0.15: absolute or relative is open), stacking of runs, and whether the result needs a Collect click.
 
 Payoff ranking: (1) intel networks on the main enemy, in the states just behind its front before an offensive; (2) collaboration government on the main target from the year before the war (non-democracies); (3) counter-intelligence when your agency defence is low and you lead a faction; (4) steal tech only when 3+ techs behind; (5) boost ideology only on small targets in a real ideological contest. All are ordinary UI actions under FAIR; coups and collaboration are legitimate but not a free win.
 
@@ -324,20 +332,20 @@ Specific events:
 | Events | `hoi4_events` (full text and options), `hoi4_event_choose` | `event_rules`, `auto_events` |
 | Diplomacy | `hoi4_diplomacy` (offered actions, cost, AI refusal, justification preview), `hoi4_diplomacy_act`, `hoi4_diplomacy_countries`, `hoi4_diplomacy_state`, `hoi4_diplomacy_incoming`, `hoi4_war_risk` (who joins a war), `hoi4_wars` | `diplomacy`, `war` |
 | Factions | `hoi4_faction_create`, `hoi4_faction_invite_accept`, `hoi4_faction_leave`; invite, join and kick through `hoi4_diplomacy_act` | `faction` |
-| Intelligence | `hoi4_intelligence` (upgrade, mission and operation catalogue), `hoi4_agency_create`, `hoi4_agency_upgrade`, `hoi4_operative_recruit`, `hoi4_operative_assign` | `intelligence` |
+| Intelligence | `hoi4_intelligence` (catalogue plus live agency, upgrades, candidates, operatives, network strength per state, running operations), `hoi4_operations` (requirements per operation with reasons), `hoi4_agency_create`, `hoi4_agency_upgrade`, `hoi4_operative_recruit`, `hoi4_operative_assign`, `hoi4_operation_start` | `intelligence` (`intelligence.networks`, `intelligence.operations`) |
 | Occupation | `hoi4_occupation` (resistance and compliance per state), `hoi4_occupation_law` (default law) | `occupation` |
 | MIOs | `hoi4_mios`, `hoi4_mio_trait`, `hoi4_mio_policy`, `hoi4_mio_design_team` | `mio` |
 | Peace | `hoi4_peace_options`, `hoi4_peace_take`, `hoi4_peace_submit`, `hoi4_peace_exit`, `hoi4_war_goal_targets` | `peace` |
 | Trade | `hoi4_trade`, `hoi4_trade_set`, `hoi4_auto_import` | `trade`, `auto_import` |
 
 Gaps:
-- Operations (collaboration government, coup, steal tech, capture cipher, coordinated strike) and the `boost_ideology` mission: `hoi4_operative_assign` refuses them.
+- Operations that also pick a state or region (coup, coordinated strike, sabotage, boost resistance, resistance contacts): `hoi4_operation_start` refuses them (`operation_picks_location`). Only collaboration government has run live; steal tech and capture cipher go through the same tool but are not yet verified. The `boost_ideology` mission: `hoi4_operative_assign` refuses it.
 - Decryption target and cipher activation.
 - Licence, lend-lease and volunteer dialogs (`hoi4_diplomacy_act` returns `dialog_unsupported`).
 - Faction goals, rules, initiative and influence: no read or set.
 - Per-state occupation law (only the default law is set); the ideology laws (autonomous occupation, liberated workers, Italian colonial police) are not in `hoi4_occupation_law`'s list.
 - Garrison template assignment (the plan's `garrison_template` has no action yet).
-- Reads: balance of power, enemy industry ratio and surrender progress (law gates), agency upgrade levels, operatives and network strength, MIO size, funds and traits, foreign opinion and justification timers.
+- Reads: balance of power, enemy industry ratio and surrender progress (law gates), an operation's phase and progress and the collaboration value, MIO size, funds and traits, foreign opinion and justification timers.
 
 ## 11. Tactics: political power, laws, stability and war support
 
@@ -406,7 +414,7 @@ Gaps:
 | ID | Tactic | How it works | When | Mode |
 |---|---|---|---|---|
 | IN01 | Agency with a plan | 30 days and 5 civilian factories; founding at the start is enough for Germany to finish collaboration on France and part of Poland by 1939; economy-first minors wait | GER, JAP, SOV, ITA when operations are planned | FAIR |
-| IN02 | Five upgrades fast | Every 5 upgrades +1 operative (once); training centres first (+1 slot), then four cheap upgrades the plan uses (5 civilian factories each, form department 8): army department, passive defence, form department, anti-partisan; spymaster needs 3 upgrades and 1 faction initiative | Agency owners | FAIR |
+| IN02 | Five upgrades fast | 5 upgrades open the second operative slot (once; candidates 30 days later); training centres first (one more candidate to choose from, not a slot), then four cheap upgrades the plan uses (5 civilian factories each, form department 8): army department, passive defence, form department, anti-partisan; spymaster needs 3 upgrades and 1 faction initiative | Agency owners | FAIR |
 | IN03 | Networks behind the front | Several network states just behind the enemy front, 3-6 months before an offensive: enemy planning -100% there, -5 entrenchment, own planning up; extra operatives add 0.4/0.2/0.1/0 network a day | Offence and defence | FAIR |
 | IN04 | Counter-intelligence | At most 2 operatives (stacking 1/0.5/0.25) | Majors facing spies | FAIR |
 | IN05 | Propaganda | One operative per target (each more x0.5), up to -20% stability and war support | Before war with a major | FAIR |
@@ -414,7 +422,7 @@ Gaps:
 | IN07 | Steal tech only when far behind | Infiltrate 90 days, steal 120 days, 3 operatives; worth it only 3+ techs behind in a branch | Behind a major | FAIR |
 | IN08 | Root out resistance | An operative cuts a state's resistance target by 10 (5 on neighbours); try it before a harsher law | Garrisons draining equipment | FAIR |
 | IN09 | Spies survive | Since 1.18 operatives hide for 28 days instead of being captured as often; skip suicide pills and rescues | All | FAIR |
-| IN10 | Collaboration before the war | 90 days, 2 operatives, 50% network, 200 support and 1000 infantry equipment and 10 civilian factories for 60 days; each run +30%; collaboration lowers the surrender limit and becomes compliance at capitulation; stop near 75%; keep a third operative on a quiet network. Non-democracies only. Germany: France and Poland first, then Belgium; Japan: China before it capitulates | Year before the war | FAIR |
+| IN10 | Collaboration before the war | 90 days, 2 operatives, 50% network, 200 support and 1000 infantry equipment and 10 civilian factories for 60 days; each run +30% collaboration (45% on the extra outcome) and costs 25% more than the last; available while at war (live); about 9.5 months from no agency to the operation's start for Italy in 1936 (live, section 8); collaboration lowers the surrender limit and becomes compliance at capitulation; stop near 75%; keep a third operative on a quiet network. Non-democracies only. Germany: France and Poland first, then Belgium; Japan: China before it capitulates | Year before the war | FAIR |
 | IN11 | Agency against a strong opponent | Defence and decryption before operative slots: Form Department, Passive Defence to max, Radio Interception x2, then Invisible Ink and Suicide Pills, Army Department; advisors that add an agency slot go into counter-intelligence and cryptology; decrypt the main enemy and its air leader | Multiplayer-strength enemies, majors | FAIR |
 | IN12 | Collaboration and infiltration targets | Germany: France 3, Poland 3, Belgium, Netherlands, Denmark, Norway 2 each (never the USSR in FAIR); Japan: China 3 before it capitulates, then the Raj; USSR: Latvia, Estonia, then networks, army infiltration and decryption on Germany, Hungary, Romania; UK and USA: infiltrate the Axis armies (GER, ITA, BUL, HUN, ROM, FIN) and decrypt them before a landing | Year before each war | FAIR |
 

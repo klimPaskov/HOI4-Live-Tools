@@ -1938,8 +1938,9 @@
    ],
    "payoff": "medium",
    "why": "every espionage lever needs it",
-   "closing": "offline",
-   "owner": "intel-ops agent: the descriptor still says UNVALIDATED although creation ran live (6 Nov round w12, 14 Nov op1)"
+   "closing": "none",
+   "owner": "closed",
+   "verified": "live 14 Nov op1 (ITA 1936, macOS 1.19.4.1): agency created by the tool; agency_exists refused from memory"
   },
   {
    "id": "espionage.agency_upgrades",
@@ -1957,11 +1958,11 @@
     "hoi4_agency_upgrade",
     "hoi4_intelligence"
    ],
-   "verified": "LIVE_VERIFICATION_1_19_4.md: 1-2 Nov, 10 DLC (upgrade_army_department started)",
+   "verified": "live 14 Nov op1 (ITA 1936, macOS 1.19.4.1): upgrade_economy_civilian Verified by memory; upgrade_maxed refused from memory; levels read from memory",
    "payoff": "medium",
    "why": "operative slots and defence",
    "closing": "live",
-   "owner": "agency upgrade levels are state_read:false; executor order by plan not seen live"
+   "owner": "intel-ops agent: the executor's upgrade order by plan not seen live"
   },
   {
    "id": "espionage.recruit_operatives",
@@ -1978,8 +1979,9 @@
    ],
    "payoff": "medium",
    "why": "operatives carry every mission",
-   "closing": "offline",
-   "owner": "intel-ops agent: descriptor still UNVALIDATED (recruit Verified 14 Nov op1); needs a typed refusal for the locked slot"
+   "closing": "live",
+   "owner": "intel-ops agent: the pick by candidate name not re-run live",
+   "verified": "live 14 Nov op1 (ITA 1936, macOS 1.19.4.1): recruit Verified by memory; operative_slot_locked refused with the days left"
   },
   {
    "id": "espionage.intel_network",
@@ -1990,6 +1992,7 @@
     "procedure.md#24. Intelligence"
    ],
    "plan": [
+    "intelligence.networks",
     "intelligence.operatives[].mission",
     "intelligence.operatives[].state_id"
    ],
@@ -1998,8 +2001,9 @@
    ],
    "payoff": "high",
    "why": "-100% enemy planning, -5 entrenchment where you attack",
-   "closing": "offline",
-   "owner": "intel-ops agent: descriptor still UNVALIDATED (build_intel_network Verified 14 Nov op1)"
+   "closing": "live",
+   "owner": "intel-ops agent: the intelligence.networks executor step not seen live",
+   "verified": "live 14 Nov op1 (ITA 1936, macOS 1.19.4.1): build_intel_network state 842 Verified; ETH network at 100 in 3 states read from memory"
   },
   {
    "id": "espionage.counter_intelligence",
@@ -2094,21 +2098,20 @@
    "plan": [
     "goal.capitulation.levers[].lever",
     "goal.capitulation.collaboration",
-    "intelligence.operatives[].mission"
+    "intelligence.operations"
    ],
    "tools": [
-    "hoi4_operative_assign"
-   ],
-   "blocked": "operations refuse with operation_not_built; no plan key carries an operation (goal.capitulation.* is lint only)",
-   "blocked_terms": [
-    "collaboration"
+    "hoi4_operations",
+    "hoi4_operation_start",
+    "hoi4_intelligence"
    ],
    "lever_kind": "operation",
    "payoff": "high",
    "why": "lowers the enemy surrender limit up to 30 points",
-   "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it; then a plan key (intelligence.operations) and executor step",
-   "priority": 1
+   "closing": "live",
+   "owner": "intel-ops agent: finish one operation live, read collaboration and the surrender limit, a second run for stacking",
+   "priority": 1,
+   "note": "built; partly verified live 14 Nov op1 (ITA on ETH, at war): hoi4_operation_start Verified (both operatives by name, auto commence); available while at war; preparation starts while short of equipment. Unmeasured: completion, the collaboration value, the surrender-limit effect, stacking"
   },
   {
    "id": "espionage.coup",
@@ -2121,17 +2124,17 @@
     "diplomacy[].action"
    ],
    "tools": [
-    "hoi4_operative_assign",
-    "hoi4_diplomacy_act"
+    "hoi4_diplomacy_act",
+    "hoi4_operation_start"
    ],
-   "blocked": "operation_not_built in hoi4_operative_assign; diplomacy stage_coup (dialog=true) never live",
+   "blocked": "hoi4_operation_start refuses operations that also pick a state or region (operation_picks_location); diplomacy stage_coup (dialog=true) never live",
    "blocked_terms": [
     "coup"
    ],
    "payoff": "medium",
    "why": "turns a guaranteed minor without a war",
    "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it"
+   "owner": "intel-ops agent: pick the state or region in the operation window, then live-test"
   },
   {
    "id": "espionage.steal_blueprints",
@@ -2140,18 +2143,16 @@
    "playbook": [
     "politics-diplomacy-espionage.md#13 IN07"
    ],
-   "plan": [],
-   "tools": [
-    "hoi4_operative_assign"
+   "plan": [
+    "intelligence.operations"
    ],
-   "blocked": "operation_not_built; no plan key",
-   "blocked_terms": [
-    "steal"
+   "tools": [
+    "hoi4_operation_start"
    ],
    "payoff": "low",
    "why": "situational",
    "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it"
+   "owner": "intel-ops agent: hoi4_operation_start carries any country-target operation from the files; only collaboration ran live"
   },
   {
    "id": "espionage.decryption",
@@ -2176,19 +2177,16 @@
    "playbook": [
     "politics-diplomacy-espionage.md#8. Intelligence agency and operatives (La Resistance)"
    ],
-   "plan": [],
-   "tools": [
-    "hoi4_operative_assign"
+   "plan": [
+    "intelligence.operations"
    ],
-   "blocked": "operation_not_built",
-   "blocked_terms": [
-    "capture cipher",
-    "capture_cipher"
+   "tools": [
+    "hoi4_operation_start"
    ],
    "payoff": "low",
    "why": "only with a decryption plan",
    "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it"
+   "owner": "intel-ops agent: hoi4_operation_start carries any country-target operation from the files; only collaboration ran live"
   },
   {
    "id": "espionage.coordinated_strike",
@@ -2199,9 +2197,9 @@
    ],
    "plan": [],
    "tools": [
-    "hoi4_operative_assign"
+    "hoi4_operation_start"
    ],
-   "blocked": "operation_not_built",
+   "blocked": "hoi4_operation_start refuses operations that also pick a state or region (operation_picks_location)",
    "blocked_terms": [
     "coordinated strike",
     "coordinated_strike"
@@ -2209,7 +2207,7 @@
    "payoff": "low",
    "why": "niche naval opener",
    "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it"
+   "owner": "intel-ops agent: pick the state or region in the operation window, then live-test"
   },
   {
    "id": "espionage.sabotage_resistance_ops",
@@ -2220,16 +2218,16 @@
    ],
    "plan": [],
    "tools": [
-    "hoi4_operative_assign"
+    "hoi4_operation_start"
    ],
-   "blocked": "operation_not_built",
+   "blocked": "hoi4_operation_start refuses operations that also pick a state or region (operation_picks_location)",
    "blocked_terms": [
     "sabotage"
    ],
    "payoff": "low",
    "why": "defender-side niche",
    "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it"
+   "owner": "intel-ops agent: pick the state or region in the operation window, then live-test"
   },
   {
    "id": "espionage.spymaster",
@@ -2258,11 +2256,12 @@
    "tools": [
     "hoi4_intelligence"
    ],
-   "blocked": "agency created, upgrade levels, operative roster and network values are state_read:false",
    "payoff": "medium",
    "why": "operations need network thresholds (35-70%)",
-   "closing": "both",
-   "owner": "intel-ops agent (feat/intel-operations) is building it"
+   "closing": "none",
+   "owner": "closed",
+   "plan_na": "a read: the executor and the player call it",
+   "verified": "live 14 Nov op1 (ITA 1936, macOS 1.19.4.1): agency, upgrades, candidates, operatives with missions, network strength per state and the running operation read from memory"
   },
   {
    "id": "trade.auto_import_on_deficit",
