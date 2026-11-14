@@ -13,6 +13,8 @@ validate and lint need the planning tools and the game files (facts.tools_dir); 
 are skipped and the result says `partial`.
 """
 
+import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -93,6 +95,10 @@ def anchored(candidate, snap, triggers, menus, costs):
     return errors
 
 
+# _meta keys the plan store and the rollback write (store.py); the tools check the plan without them.
+STORE_META = ("version", "parent", "updated", "update_summary", "proposer", "trigger", "gates", "rolled_back_from")
+
+
 class ToolGates:
     """validate_plan --strict and lint_plan through the planning tools, with the incumbent's counts cached."""
 
@@ -112,18 +118,34 @@ class ToolGates:
             out += ["--mod", m]
         return out
 
+    @staticmethod
+    def checked(plan):
+        """The plan as the tools check it: without the version bookkeeping the store writes into _meta, so an
+        applied candidate and the next incumbent are the same plan to the tools."""
+        if not isinstance(plan, dict) or not isinstance(plan.get("_meta"), dict):
+            return plan
+        out = dict(plan)
+        out["_meta"] = {k: v for k, v in plan["_meta"].items() if k not in STORE_META}
+        out["_meta"]["version"] = 1
+        return out
+
+    @classmethod
+    def content_key(cls, plan):
+        return hashlib.sha256(json.dumps(cls.checked(plan), sort_keys=True).encode("utf-8")).hexdigest()
+
     def counts(self, plan, key=None):
-        """{"validate": n, "lint": {rule: n}} for a plan (cached by `key`)."""
-        if key and key in self._cache:
+        """{"validate": n, "lint": {rule: n}} for a plan, cached by its content; both tools run at once."""
+        key = self.content_key(plan)
+        if key in self._cache:
             return self._cache[key]
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "plan.json")
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(plan, f)
-            _, vout = self.runner([sys.executable, "-I", os.path.join(self.tools, "validate_plan.py"), path,
-                                   "--strict"] + self._args())
-            _, lout = self.runner([sys.executable, "-I", os.path.join(self.tools, "hoi4facts", "lint_plan.py"), path,
-                                   "--json"] + self._args())
+                json.dump(self.checked(plan), f)
+            argvs = [[sys.executable, "-I", os.path.join(self.tools, "validate_plan.py"), path, "--strict"],
+                     [sys.executable, "-I", os.path.join(self.tools, "hoi4facts", "lint_plan.py"), path, "--json"]]
+            with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                (_, vout), (_, lout) = pool.map(lambda a: self.runner(a + self._args()), argvs)
         found = re.findall(r"(\d+) error\(s\)", vout)
         rules = {}
         try:
@@ -134,9 +156,31 @@ class ToolGates:
         except ValueError:
             rules = {"_unreadable": 1}
         out = {"validate": int(found[-1]) if found else 0, "lint": rules}
-        if key:
-            self._cache[key] = out
+        if len(self._cache) > 32:
+            self._cache.clear()
+        self._cache[key] = out
         return out
+
+
+# Lint rules that simulate the factory pool from the scenario start. Mid-game the executor adds a new line once,
+# from the factories idle at that moment (never from other lines), so a line added from today cannot
+# over-allocate the live pool; the ratchet does not hold these rules against a patch whose production change is
+# only such additions.
+START_POOL_RULES = ("production.factories", "production.day0")
+
+
+def _adds_lines_from_now(patch, snap):
+    from .state import day_of
+    today = snap.get("day")
+    prod = [op for op in patch.get("ops") or [] if str(op.get("key", "")).split(".")[0] == "production"]
+    if not prod or today is None:
+        return False
+    for op in prod:
+        item = op.get("item") if isinstance(op.get("item"), dict) else None
+        start = day_of(item.get("from")) if item else None
+        if op.get("op") != "add" or start is None or start < today - 1:
+            return False
+    return True
 
 
 def run(incumbent, candidate, patch, snap, triggers, menus, costs, ledger=None, tools=None, incumbent_key=None):
@@ -160,9 +204,11 @@ def run(incumbent, candidate, patch, snap, triggers, menus, costs, ledger=None, 
             return [] if after["validate"] <= before["validate"] else [
                 "validate_plan --strict: %d errors, the plan in force has %d" % (after["validate"], before["validate"])]
 
+        exempt = START_POOL_RULES if _adds_lines_from_now(patch, snap) else ()
+
         def lint():
             return ["lint %s: %d errors, the plan in force has %d" % (r, n, before["lint"].get(r, 0))
-                    for r, n in sorted(after["lint"].items()) if n > before["lint"].get(r, 0)]
+                    for r, n in sorted(after["lint"].items()) if n > before["lint"].get(r, 0) and r not in exempt]
         ok = step("validate", validate) and step("lint", lint)
     if ok:
         ok = step("anchored", lambda: anchored(candidate, snap, triggers, menus, costs))

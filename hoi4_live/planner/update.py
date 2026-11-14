@@ -120,6 +120,40 @@ class Updater:
         with open(self.journal, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False, default=sorted) + "\n")
 
+    def _split_default(self, plan, menus, snap, triggers, sha, done):
+        """(patch, candidate, gates, dropped domains): the domain defaults added one at a time, each kept only
+        when the plan with it and the ones kept before it passes the gates."""
+        kept, dropped = [], []
+        best = (None, None, {"ok": False, "partial": self.tools is None, "steps": [
+            {"gate": "split", "ok": False, "detail": ["no domain's pick passes on its own"], "seconds": 0}]})
+        tried = set()
+        for domain, pick in _split(menus):
+            tried.add(domain)
+            # the anchored gate asks only the domains tried so far to be filled
+            scope = [t for t in triggers if t.get("domain") in tried or t["kind"] != "horizon_low"]
+            trial = pt.merge(kept + [pick])
+            try:
+                candidate = pt.apply(plan, trial, done=done)
+            except pt.PatchError as exc:
+                dropped.append(domain)
+                self.ledger.add(snap.get("day"), "update", "default:" + domain, "rejected", exc)
+                continue
+            result = gt.run(plan, candidate, trial, snap, scope, menus, self.costs or _flat(), self.ledger,
+                            self.tools, incumbent_key=sha)
+            if result["ok"]:
+                kept.append(pick)
+                best = (trial, candidate, result)
+            else:
+                dropped.append(domain)
+                failed = [s for s in result["steps"] if not s["ok"]][-1]
+                self.ledger.add(snap.get("day"), "update", "default:" + domain, "rejected",
+                                "%s: %s" % (failed["gate"], "; ".join(failed["detail"])))
+        trial, candidate, result = best
+        if trial is None:
+            return {"ops": []}, None, result, dropped
+        trial["summary"] = "default: " + "; ".join(p["summary"] for p in kept)
+        return trial, candidate, result, dropped
+
     def run(self, triggers, snap, h, plan_state=None):
         t0 = self.clock()
         self.count += 1
@@ -171,6 +205,12 @@ class Updater:
             result = gt.run(plan, candidate, proposal, snap, triggers, menus, self.costs or _flat(), self.ledger,
                             self.tools, incumbent_key=sha)
             record["gates"] = result
+            if not result["ok"] and name == "default":
+                # one domain's pick must not hold back the others: keep each domain's pick that passes with the
+                # ones kept before it, and withhold the failing ones for a while
+                proposal, candidate, result, dropped = self._split_default(plan, menus, snap, triggers, sha, done)
+                record.update(gates=result, dropped=dropped, summary=proposal.get("summary"),
+                              ops=len(proposal.get("ops") or []))
             if not result["ok"]:
                 failed = [s for s in result["steps"] if not s["ok"]][-1]
                 record["result"] = "gates: %s" % failed["gate"]
@@ -195,6 +235,10 @@ class Updater:
         entry["seconds"] = round(self.clock() - t0, 2)
         self._journal(entry)
         return entry
+
+
+def _split(menus):
+    return [(d, m["default"]) for d, m in menus.items() if m.get("default")]
 
 
 def _flat():

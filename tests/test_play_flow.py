@@ -255,6 +255,20 @@ class SupervisorTests(Folder):
         self.assertEqual(s.leased, {"hoi4_input_lease", "hoi4_plan_run", "hoi4_research_start", "hoi4_time",
                                     "hoi4_autopilot", "hoi4_daily_governor"})
 
+    def test_the_rolling_planner_runs_beside_the_executor(self):
+        s = self.ready()
+        if not os.path.exists(os.path.join(self.run_dir, "plan.json")):
+            supervisor.runs.write_json(os.path.join(self.run_dir, "plan.json"), {"research_path": []})
+        self.assertIsNotNone(s.start_planner(load_facts=False))
+        s.tick()
+        self.assertTrue(os.path.isdir(os.path.join(self.run_dir, "planner")))
+        out = s.run_tool({"op": "planner"})
+        self.assertFalse(out["isError"])
+        self.assertIn("budget", out["body"])
+        self.assertTrue(s.run_tool({"op": "plan_patch", "update": 99, "patch": {"ops": []}})["isError"])
+        leased = [n for n, a in self.fake.calls if "lease_token" in a and n.startswith(("hoi4_overview", "hoi4_states"))]
+        self.assertEqual(leased, [])
+
     def test_start_waits_while_the_user_is_in_the_menus_then_binds(self):
         attempts = []
 

@@ -10,7 +10,7 @@
 extend        append list items not already listed (strings by value, objects by id)
 replace_tail  keep the list's items the state shows done (or running), replace the rest
 set           set a key or a dotted sub-key to a value
-add           append one object; it gets an id when it has none
+add           append one object; in a list whose items carry ids (ID_KEYS) it gets one when it has none
 remove        drop one not-yet-done object by id
 
 Detail keys change freely. Strategy keys (the goal, phases, checkpoints, horizons, contingencies, the war's
@@ -36,6 +36,9 @@ STRATEGY_KEYS = {"goal", "phases", "checkpoints", "horizons", "contingencies", "
                  "army_group", "armies", "war_by_phase", "peace", "diplomacy", "faction", "invasions",
                  "war.enemies", "war.axes", "war.theatre", "war.guard_states"}
 OPS = ("extend", "replace_tail", "set", "add", "remove")
+# Lists whose items carry an `id` in the schema (the executor keys its memory on it); an added item gets one.
+ID_KEYS = {"construction_plan", "politics", "templates", "designs", "diplomacy", "army_group", "hold_targets",
+           "invasions", "doctrines", "trade", "contingencies", "checkpoints", "phases", "horizons"}
 
 
 class PatchError(ValueError):
@@ -148,8 +151,9 @@ def apply(plan, patch, done=(), new_id=None):
             node[last] = kept + [copy.deepcopy(x) for x in op["items"] if _ident(x) not in have]
         elif kind == "add":
             item = copy.deepcopy(op["item"])
-            item.setdefault("id", next_id(op["key"]))
-            if any(isinstance(x, dict) and x.get("id") == item["id"] for x in current):
+            if op["key"] in ID_KEYS:
+                item.setdefault("id", next_id(op["key"]))
+            if item.get("id") and any(isinstance(x, dict) and x.get("id") == item["id"] for x in current):
                 raise PatchError("ops[%d]: id %s is already in %s" % (i, item["id"], op["key"]))
             current.append(item)
         elif kind == "remove":

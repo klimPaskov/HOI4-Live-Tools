@@ -81,6 +81,7 @@ class StateBuilder:
         self.wars_known = False
         self.controllers = {}
         self.vp = {}
+        self.centers = {}
         self.armies = {}
         self.shortages = {}
         self.fill_low = {}
@@ -176,6 +177,8 @@ class StateBuilder:
                 self.vp[sid] = {"owner": row.get("owner"), "name": row.get("name"),
                                 "provinces": [{"province": v.get("province"), "vp": v.get("victory_points"),
                                                "controller": v.get("controller")} for v in vps if isinstance(v, dict)]}
+            if isinstance(sid, int) and isinstance(row.get("x"), (int, float)) and isinstance(row.get("z"), (int, float)):
+                self.centers[sid] = (float(row["x"]), float(row["z"]))
 
     def _armies(self, body, args):
         out = {}
@@ -278,7 +281,9 @@ class StateBuilder:
             "pp": self.pp, "pp_gain": self.pp_gain, "civ_idle": self.civ_idle,
             "wars": sorted(self.wars), "wars_known": self.wars_known,
             "controllers": {str(k): v for k, v in sorted(self.controllers.items())},
-            "vp": {str(k): v for k, v in sorted(self.vp.items())},
+            "vp": {str(k): dict(v, center=self.centers.get(k)) if k in self.centers else v
+                   for k, v in sorted(self.vp.items())},
+            "centers": {str(k): list(v) for k, v in sorted(self.centers.items())},
             "armies": self.armies, "shortages": self.shortages, "fill_low": self.fill_low,
             "signals": dict(self.signals), "phase": self.phase, "lines": dict(self.lines),
         }

@@ -76,13 +76,41 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn(("government", 3), [(e["category"], e["slot"]) for e in order[1:]])
         pr = menus.production(PLAN, snap(), None, None, h["production"])
         ops = pr["default"]["ops"]
+        # a new line, added from today (the executor fills it from idle factories once)
         self.assertEqual(ops[0]["item"]["equipment"], "artillery_equipment_1")
+        self.assertEqual(ops[0]["item"]["from"], "1936.11.01")
         self.assertEqual(ops[1]["value"][0], "artillery_equipment")
         c = menus.construction(PLAN, snap(), None, None)
-        self.assertEqual(c["default"]["ops"][0]["items"][0]["building"], "arms_factory")
+        self.assertEqual(c["default"]["ops"], [{"op": "set", "key": "construction_fallback_any_own_state",
+                                                "value": True}])        # the same item is already planned
+        peace = menus.construction(PLAN, snap(wars=[]), None, None)
+        self.assertEqual(peace["default"]["ops"][0]["items"][0]["building"], "industrial_complex")
         a = menus.army(PLAN, snap(), None, None)
         self.assertIn("held 4 of the 12 needed", a["progress"])
         self.assertEqual([i["state"] for i in a["default"]["ops"][0]["items"]], [835, 271])
+
+    def test_the_target_set_is_re_evaluated_from_the_live_table(self):
+        def prov(vp, ctl):
+            return [{"province": 1, "vp": vp, "controller": ctl}]
+        table = {"1": {"owner": "ETH", "name": "Near", "provinces": prov(5, "ETH"), "center": [10, 0]},
+                 "2": {"owner": "ETH", "name": "Far", "provinces": prov(6, "ETH"), "center": [400, 0]},
+                 "3": {"owner": "ETH", "name": "Listed", "provinces": prov(8, "ETH"), "center": [200, 0]},
+                 "4": {"owner": "ETH", "name": "Taken", "provinces": prov(4, "ITA"), "center": [5, 0]}}
+        live = snap(vp=table, centers={"1": [10, 0], "2": [400, 0], "3": [200, 0], "4": [5, 0], "9": [0, 0]},
+                    controllers={"9": "ITA", "4": "ITA"})
+        plan = dict(PLAN, vp_targets=[{"state": 3}, {"state": 4}],
+                    goal={"capitulation": {"enemy": "ETH", "vp_needed": 17}})
+        a = menus.army(plan, live, None, None)
+        self.assertIn("held 4 of the 17 needed (the plan's capitulation aim)", a["progress"])
+        # 4 held + 8 listed = 12; the near state (5) closes the gap before the more valuable far one
+        self.assertEqual([i["state"] for i in a["default"]["ops"][0]["items"]], [1])
+        # the aim drops (enemy war support fell): the listed target alone is enough, nothing is added
+        plan["goal"] = {"capitulation": {"enemy": "ETH", "vp_needed": 9}}
+        a = menus.army(plan, live, None, None)
+        self.assertIsNone(a["default"])
+        self.assertNotIn("not_needed_now", a)
+        plan["goal"] = {"capitulation": {"enemy": "ETH", "vp_needed": 4}}
+        self.assertEqual(menus.army(plan, live, None, None)["not_needed_now"], [3])
 
 
 class GateTests(unittest.TestCase):
@@ -120,6 +148,40 @@ class GateTests(unittest.TestCase):
         worse = gates.run(cand, PLAN, {"ops": []}, snap(), [], {}, hz.Costs(), tools=tools)
         self.assertFalse(worse["ok"])
         self.assertEqual(worse["steps"][-1]["gate"], "lint")
+
+    def test_start_pool_rules_do_not_hold_a_line_added_from_today(self):
+        def runner(argv):
+            with open(argv[3]) as f:
+                plan = json.load(f)
+            if "validate_plan.py" in argv[2]:
+                return 0, "0 error(s)"
+            over = len(plan["production"]) > 1
+            return 0, json.dumps({"findings": [{"severity": "error", "rule": "production.factories"}] if over else []})
+        tools = gates.ToolGates("/nowhere", runner=runner)
+        item = {"equipment": "artillery_equipment_1", "factories": 3, "from": "1936.11.01"}
+        cand = dict(PLAN, production=PLAN["production"] + [item])
+        patch = {"ops": [{"op": "add", "key": "production", "item": item}]}
+        self.assertTrue(gates.run(PLAN, cand, patch, snap(), [], {}, hz.Costs(), tools=tools)["ok"])
+        early = dict(item, **{"from": "1936.01.01"})
+        cand = dict(PLAN, production=PLAN["production"] + [early])
+        patch = {"ops": [{"op": "add", "key": "production", "item": early}]}
+        self.assertFalse(gates.run(PLAN, cand, patch, snap(), [], {}, hz.Costs(), tools=tools)["ok"])
+
+    def test_the_tools_check_a_plan_without_the_store_bookkeeping(self):
+        seen = []
+
+        def runner(argv):
+            with open(argv[3]) as f:
+                seen.append(json.load(f)["_meta"])
+            return 0, "0 error(s)" if "validate_plan.py" in argv[2] else json.dumps({"findings": []})
+        tools = gates.ToolGates("/nowhere", runner=runner)
+        stored = dict(PLAN, _meta={"version": 4, "parent": 3, "updated": 1.0, "proposer": "default",
+                                   "update_summary": "x", "trigger": "t", "gates": "full", "source": "strategist"})
+        tools.counts(stored)
+        self.assertEqual(seen[0], {"version": 1, "source": "strategist"})
+        n = len(seen)
+        tools.counts(dict(stored, _meta={"version": 5, "source": "strategist"}))   # the same plan: cached
+        self.assertEqual(len(seen), n)
 
 
 class FakeModel:
@@ -165,6 +227,29 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.run_dir, "plans", "plan.v1.json")))
         with open(os.path.join(self.run_dir, "planner", "journal.jsonl")) as f:
             self.assertEqual(json.loads(f.readline())["version"], 2)
+
+    def test_one_failing_domain_does_not_hold_back_the_others(self):
+        def runner(argv):
+            with open(argv[3]) as f:
+                plan = json.load(f)
+            if "validate_plan.py" in argv[2]:
+                return 0, "0 error(s)"
+            bad = any(p.get("ideas") is None for p in plan["politics_auto"]["order"])
+            return 0, json.dumps({"findings": [{"severity": "error", "rule": "politics.budget"}] if bad else []})
+        s = snap()
+        h = hz.estimate(PLAN, s)
+        u = self.updater()
+        u.tools = gates.ToolGates("/nowhere", runner=runner)
+        entry = u.run(low_triggers("research", "politics", "production"), s, h)
+        self.assertEqual(entry["applied"], "default", entry)
+        self.assertEqual(entry["proposals"][-1]["dropped"], ["politics"])
+        plan, _ = store.PlanStore(self.run_dir).read()
+        self.assertTrue(any(e.get("equipment") == "artillery_equipment_1" for e in plan["production"]))
+        self.assertEqual(len(plan["politics_auto"]["order"]), 1)
+        # the failing pick is withheld for a while; the menu still lists it for a model or the player's agent
+        m = menus.build(plan, s, hz.estimate(plan, s), low_triggers("politics"), None, u.ledger)
+        self.assertIsNone(m["politics"]["default"])
+        self.assertIn("failed the gates", m["politics"]["default_withheld"])
 
     def test_model_patch_wins_when_it_passes_and_default_when_it_does_not(self):
         s = snap()

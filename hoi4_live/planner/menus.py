@@ -187,18 +187,23 @@ def production(plan, snap, facts, ledger, h):
     entries = {e.get("equipment") for e in plan.get("production") or [] if isinstance(e, dict) and not e.get("remove")}
     priority = [p for p in plan.get("production_priority") or [] if isinstance(p, str)]
     step = int((plan.get("manage") or {}).get("rebalance_step") or 3)
-    options, ops = [], []
+    options, ops, added = [], [], []
     for fam in sorted(short):
         has_line = any(eq.startswith(fam) for eq in lines) or any((e or "").startswith(fam) for e in entries)
         variant = _variant(fam, snap, facts)
         options.append({"family": fam, "days_of_cover": short[fam].get("days_of_cover"), "line": has_line,
                         "variant": variant})
         if not has_line and not (ledger and ledger.failed(variant, snap.get("day"))):
-            ops.append({"op": "add", "key": "production", "item": {
-                "id": "u_%s_%s" % (fam, snap.get("day")), "equipment": variant, "factories": step,
-                "why": "rolling update: %s reported short and no line builds it" % fam}})
+            # added once by the executor from the factories idle now: `from` today, so the planning tools count
+            # it from now and not from the scenario start
+            item = {"equipment": variant, "factories": step,
+                    "why": "rolling update: %s reported short and no line builds it" % fam}
+            if snap.get("date"):
+                item["from"] = str(snap["date"])[:10]
+            added.append(item)
         if fam not in priority[:1]:
             priority = [fam] + [p for p in priority if p != fam]
+    ops += [{"op": "add", "key": "production", "item": item} for item in added]
     if priority != (plan.get("production_priority") or []):
         ops.append({"op": "set", "key": "production_priority", "value": priority})
     default = {"summary": "production: " + ", ".join(sorted(short)), "ops": ops} if ops else None
@@ -216,20 +221,54 @@ def construction(plan, snap, facts, ledger):
         building = "industrial_complex" if building == "arms_factory" else "infrastructure"
     item = {"building": building, "states": states, "count": 2,
             "why": "rolling update: %s civilian factories idle" % snap.get("civ_idle")}
-    ops = [{"op": "extend", "key": "construction", "items": [item]}] if states else []
-    ops.append({"op": "set", "key": "construction_fallback_any_own_state", "value": True})
+    same = any(e.get("building") == building and sorted(e.get("states") or [], key=str) == states for e in entries)
+    ops = [{"op": "extend", "key": "construction", "items": [item]}] if states and not same else []
+    if plan.get("construction_fallback_any_own_state") is not True:
+        ops.append({"op": "set", "key": "construction_fallback_any_own_state", "value": True})
+    if not ops:
+        return {"domain": "construction", "need": "work for idle civilian factories",
+                "options": [{"building": building, "states": states, "already_planned": True}], "default": None}
     return {"domain": "construction", "need": "work for idle civilian factories",
             "options": [{"building": building, "states": states}],
             "default": {"summary": "construction: %s, any own state as fallback" % building, "ops": ops}}
 
 
+def _capitulation_needed(plan, total):
+    """(VP needed, how it was set): the plan's capitulation aim when it has one, else a share of the enemy's VP."""
+    aim = ((plan.get("goal") or {}).get("capitulation") or {}) if isinstance(plan.get("goal"), dict) else {}
+    if isinstance(aim.get("vp_needed"), (int, float)) and aim["vp_needed"] > 0:
+        return int(aim["vp_needed"]), "the plan's capitulation aim"
+    share = (plan.get("war") or {}).get("capitulation_share")
+    if not total:
+        return None, ""
+    if share:
+        return math.ceil(total * float(share)), "share %.2f of %.0f enemy VP" % (float(share), total)
+    return math.ceil(total * 0.8), "assumed share 0.80 of %.0f enemy VP" % total
+
+
+def _difficulty(sid, snap, tag):
+    """Map distance from the nearest state the player controls (state centres); 0 when unknown."""
+    centers = snap.get("centers") or {}
+    here = centers.get(sid)
+    if not here:
+        return 0.0
+    mine = [c for s, c in centers.items() if (snap.get("controllers") or {}).get(int(s)) == tag
+            or (snap.get("controllers") or {}).get(s) == tag]
+    if not mine:
+        return 0.0
+    return min(math.hypot(here[0] - c[0], here[1] - c[1]) for c in mine)
+
+
 def army(plan, snap, facts, ledger):
-    """Victory-point progress from the live table, and enemy states the targets do not reach."""
+    """The victory-point target set re-evaluated from the live table: the cheapest set of enemy states still
+    reaching the capitulation, ordered by value against difficulty, with progress "held X of the Y needed".
+    Targets already taken drop out of the count, a moved threshold (the plan's aim revised) changes the set, and
+    listed targets the set no longer needs are named so a strategy update can drop them."""
     tag = snap.get("player")
     enemies = set(snap.get("wars") or (plan.get("war") or {}).get("enemies") or [])
     table = snap.get("vp") or {}
     total = held = 0.0
-    by_state = []
+    open_states = []
     for sid, row in table.items():
         if row.get("owner") not in enemies:
             continue
@@ -237,29 +276,43 @@ def army(plan, snap, facts, ledger):
         mine = sum(float(p.get("vp") or 0) for p in row.get("provinces") or [] if p.get("controller") == tag)
         total += vp_state
         held += mine
-        by_state.append((vp_state - mine, sid, row.get("name")))
-    share = float((plan.get("war") or {}).get("capitulation_share") or 0.8)
-    needed = math.ceil(total * share) if total else None
+        if vp_state - mine > 0:
+            open_states.append({"state": int(sid), "name": row.get("name"), "vp_open": vp_state - mine,
+                                "distance": round(_difficulty(sid, snap, tag))})
+    needed, basis = _capitulation_needed(plan, total)
     listed = {str(t.get("state")) for t in plan.get("vp_targets") or [] if isinstance(t, dict)}
-    left_listed = sum(v for v, sid, _ in by_state if sid in listed)
-    options = [{"state": int(sid), "name": name, "vp_open": v, "listed": sid in listed}
-               for v, sid, name in sorted(by_state, reverse=True) if v > 0]
-    gap = (needed - held - left_listed) if needed is not None else 0
+    scale = max([o["distance"] for o in open_states] + [1.0])
+    for o in open_states:
+        o["listed"] = str(o["state"]) in listed
+        o["value_per_difficulty"] = round(o["vp_open"] / (1.0 + o["distance"] / scale), 2)
+    open_states.sort(key=lambda o: (-o["value_per_difficulty"], -o["vp_open"], o["state"]))
+    chosen, got = [], held
+    if needed is not None:
+        # the listed targets first (the opening chose them), then the cheapest others
+        for o in [o for o in open_states if o["listed"]] + [o for o in open_states if not o["listed"]]:
+            if got >= needed:
+                break
+            chosen.append(o)
+            got += o["vp_open"]
+    extra = [o for o in chosen if not o["listed"]]
+    spare = [o["state"] for o in open_states if o["listed"] and o not in chosen]
     default = None
-    if needed is not None and gap > 0:
-        extra, got = [], 0.0
-        for o in options:
-            if not o["listed"] and got < gap:
-                extra.append({"state": o["state"], "why": "rolling update: the listed targets reach %.0f of %d VP"
-                              % (held + left_listed, needed)})
-                got += o["vp_open"]
-        if extra:
-            default = {"summary": "army: %d targets added to reach the capitulation share" % len(extra),
-                       "ops": [{"op": "extend", "key": "vp_targets", "items": extra}]}
-    progress = "held %.0f of the %s needed (%.0f%% of %.0f enemy VP, share %.2f%s)" % (
-        held, needed, 100.0 * held / total if total else 0, total, share,
-        "" if (plan.get("war") or {}).get("capitulation_share") else " assumed")
-    return {"domain": "army", "need": progress, "options": options[:12], "default": default, "progress": progress}
+    if extra:
+        default = {"summary": "army: %d targets added to reach the capitulation (%s)" % (len(extra), basis),
+                   "ops": [{"op": "extend", "key": "vp_targets", "items": [
+                       {"state": o["state"], "why": "rolling update: held %.0f of the %d needed; the listed targets "
+                        "fall short" % (held, needed)} for o in extra]}]}
+    progress = "held %.0f of the %s needed (%s)" % (held, needed, basis or "no enemy VP read yet")
+    menu = {"domain": "army", "need": progress, "options": open_states[:12], "default": default,
+            "progress": progress}
+    if spare:
+        menu["not_needed_now"] = spare
+    return menu
+
+
+# A domain's default pick that failed the gates waits this long before it is offered again (the model or the
+# player's agent may still pick from the menu).
+WITHHOLD_DAYS = 30
 
 
 def domains_for(triggers):
@@ -298,5 +351,10 @@ def build(plan, snap, h, triggers, facts=None, ledger=None, research_days=120, f
             if d in ("research", "focus") and (h.get(d) or {}).get("days", 0) and h[d]["days"] >= (
                     research_days if d == "research" else focus_days):
                 m["default"] = None
+        if m.get("default") and ledger is not None and ledger.failed("default:" + d, snap.get("day"),
+                                                                     cooldown=WITHHOLD_DAYS):
+            m["default_withheld"] = m.pop("default")["summary"] + " (failed the gates in the last %d days)" % (
+                WITHHOLD_DAYS)
+            m["default"] = None
         out[d] = m
     return out
