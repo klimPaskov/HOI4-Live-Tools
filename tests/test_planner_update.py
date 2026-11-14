@@ -76,9 +76,9 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn(("government", 3), [(e["category"], e["slot"]) for e in order[1:]])
         pr = menus.production(PLAN, snap(), None, None, h["production"])
         ops = pr["default"]["ops"]
-        # the new line takes its factories from the largest line of a family that is not short
-        self.assertEqual(ops[0]["value"], [{"equipment": "infantry_equipment_1", "factories": 7},
-                                           dict(ops[0]["value"][1], equipment="artillery_equipment_1", factories=3)])
+        # a new line, added from today (the executor fills it from idle factories once)
+        self.assertEqual(ops[0]["item"]["equipment"], "artillery_equipment_1")
+        self.assertEqual(ops[0]["item"]["from"], "1936.11.01")
         self.assertEqual(ops[1]["value"][0], "artillery_equipment")
         c = menus.construction(PLAN, snap(), None, None)
         self.assertEqual(c["default"]["ops"], [{"op": "set", "key": "construction_fallback_any_own_state",
@@ -148,6 +148,24 @@ class GateTests(unittest.TestCase):
         worse = gates.run(cand, PLAN, {"ops": []}, snap(), [], {}, hz.Costs(), tools=tools)
         self.assertFalse(worse["ok"])
         self.assertEqual(worse["steps"][-1]["gate"], "lint")
+
+    def test_start_pool_rules_do_not_hold_a_line_added_from_today(self):
+        def runner(argv):
+            with open(argv[3]) as f:
+                plan = json.load(f)
+            if "validate_plan.py" in argv[2]:
+                return 0, "0 error(s)"
+            over = len(plan["production"]) > 1
+            return 0, json.dumps({"findings": [{"severity": "error", "rule": "production.factories"}] if over else []})
+        tools = gates.ToolGates("/nowhere", runner=runner)
+        item = {"equipment": "artillery_equipment_1", "factories": 3, "from": "1936.11.01"}
+        cand = dict(PLAN, production=PLAN["production"] + [item])
+        patch = {"ops": [{"op": "add", "key": "production", "item": item}]}
+        self.assertTrue(gates.run(PLAN, cand, patch, snap(), [], {}, hz.Costs(), tools=tools)["ok"])
+        early = dict(item, **{"from": "1936.01.01"})
+        cand = dict(PLAN, production=PLAN["production"] + [early])
+        patch = {"ops": [{"op": "add", "key": "production", "item": early}]}
+        self.assertFalse(gates.run(PLAN, cand, patch, snap(), [], {}, hz.Costs(), tools=tools)["ok"])
 
     def test_the_tools_check_a_plan_without_the_store_bookkeeping(self):
         seen = []

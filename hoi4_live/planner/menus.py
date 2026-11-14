@@ -19,7 +19,6 @@ Ranking rules are general (no country or mod is named):
              the most valuable enemy states the plan does not list
 """
 
-import copy
 import math
 import re
 
@@ -179,29 +178,6 @@ def _variant(family, snap, facts):
     return sorted(lines)[-1] if lines else family + "_1"
 
 
-def _fund(plan, added, short):
-    """The production list with the new lines, their factories taken from the largest lines of families that are
-    not short (the plan's allocation stays within the factories it has; the executor fills the new line from
-    the factories that free up)."""
-    lines = copy.deepcopy([e for e in plan.get("production") or []])
-    for item in added:
-        need = item["factories"]
-        while need > 0:
-            donors = [e for e in lines if isinstance(e, dict) and not e.get("remove") and not e.get("until")
-                      and isinstance(e.get("factories"), (int, float)) and e["factories"] > 1
-                      and not any((e.get("equipment") or "").startswith(f) for f in short)]
-            if not donors:
-                break
-            donor = max(donors, key=lambda e: e["factories"])
-            take = min(need, donor["factories"] - 1)
-            donor["factories"] -= take
-            need -= take
-        item = dict(item, factories=item["factories"] - need)
-        if item["factories"] > 0:
-            lines.append(item)
-    return lines
-
-
 def production(plan, snap, facts, ledger, h):
     short = dict((h.get("short") or {}))
     for army in (h.get("fill_low") or {}).values():
@@ -218,12 +194,16 @@ def production(plan, snap, facts, ledger, h):
         options.append({"family": fam, "days_of_cover": short[fam].get("days_of_cover"), "line": has_line,
                         "variant": variant})
         if not has_line and not (ledger and ledger.failed(variant, snap.get("day"))):
-            added.append({"equipment": variant, "factories": step,
-                          "why": "rolling update: %s reported short and no line builds it" % fam})
+            # added once by the executor from the factories idle now: `from` today, so the planning tools count
+            # it from now and not from the scenario start
+            item = {"equipment": variant, "factories": step,
+                    "why": "rolling update: %s reported short and no line builds it" % fam}
+            if snap.get("date"):
+                item["from"] = str(snap["date"])[:10]
+            added.append(item)
         if fam not in priority[:1]:
             priority = [fam] + [p for p in priority if p != fam]
-    if added:
-        ops.append({"op": "set", "key": "production", "value": _fund(plan, added, short)})
+    ops += [{"op": "add", "key": "production", "item": item} for item in added]
     if priority != (plan.get("production_priority") or []):
         ops.append({"op": "set", "key": "production_priority", "value": priority})
     default = {"summary": "production: " + ", ".join(sorted(short)), "ops": ops} if ops else None

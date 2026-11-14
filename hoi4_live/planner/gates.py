@@ -162,6 +162,27 @@ class ToolGates:
         return out
 
 
+# Lint rules that simulate the factory pool from the scenario start. Mid-game the executor adds a new line once,
+# from the factories idle at that moment (never from other lines), so a line added from today cannot
+# over-allocate the live pool; the ratchet does not hold these rules against a patch whose production change is
+# only such additions.
+START_POOL_RULES = ("production.factories", "production.day0")
+
+
+def _adds_lines_from_now(patch, snap):
+    from .state import day_of
+    today = snap.get("day")
+    prod = [op for op in patch.get("ops") or [] if str(op.get("key", "")).split(".")[0] == "production"]
+    if not prod or today is None:
+        return False
+    for op in prod:
+        item = op.get("item") if isinstance(op.get("item"), dict) else None
+        start = day_of(item.get("from")) if item else None
+        if op.get("op") != "add" or start is None or start < today - 1:
+            return False
+    return True
+
+
 def run(incumbent, candidate, patch, snap, triggers, menus, costs, ledger=None, tools=None, incumbent_key=None):
     """{"ok", "partial", "steps": [{"gate", "ok", "detail", "seconds"}]}; stops at the first failing step."""
     steps = []
@@ -183,9 +204,11 @@ def run(incumbent, candidate, patch, snap, triggers, menus, costs, ledger=None, 
             return [] if after["validate"] <= before["validate"] else [
                 "validate_plan --strict: %d errors, the plan in force has %d" % (after["validate"], before["validate"])]
 
+        exempt = START_POOL_RULES if _adds_lines_from_now(patch, snap) else ()
+
         def lint():
             return ["lint %s: %d errors, the plan in force has %d" % (r, n, before["lint"].get(r, 0))
-                    for r, n in sorted(after["lint"].items()) if n > before["lint"].get(r, 0)]
+                    for r, n in sorted(after["lint"].items()) if n > before["lint"].get(r, 0) and r not in exempt]
         ok = step("validate", validate) and step("lint", lint)
     if ok:
         ok = step("anchored", lambda: anchored(candidate, snap, triggers, menus, costs))
