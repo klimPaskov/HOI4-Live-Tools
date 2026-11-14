@@ -147,7 +147,8 @@
     "politics_auto",
     "politics_auto.order",
     "politics_auto.threshold",
-    "politics_auto.never"
+    "politics_auto.never",
+    "politics_auto.recheck_pp"
    ],
    "tools": [
     "hoi4_politics_options",
@@ -157,7 +158,7 @@
    "payoff": "high",
    "why": "idle PP is lost advisors and laws (PP compounds)",
    "closing": "live",
-   "owner": "live: politics_auto spends PP before the cap (sk6 and sk9 held 144-192 idle PP); find why the standing order did not buy",
+   "owner": "live: confirm politics_auto spends PP (LIVE-QUEUE NP1). Offline root cause fixed: a pending politics pick the game could not take (a gated when, a refused advisor) held its cost in reserve for good, so every standing entry was short of power and passed over without a logged reason; a disabled wanted idea (the game greys out what the power cannot pay) waited recheck_days; the default order named vanilla law keys. Now only buyable picks hold power back, a disabled slot is read again once the power has grown (recheck_pp), every entry passed over says why, and the default order fills vacant military staff seats without a game key",
    "priority": 5
   },
   {
@@ -306,7 +307,7 @@
    "payoff": "medium",
    "why": "combat and planning bonuses for the main army",
    "closing": "both",
-   "owner": "offline: the plan lint refuses an idea in a slot of another kind (facts politics-slots); live: hire one high-command advisor"
+   "owner": "live: hire one high-command advisor (military_staff 3-5) through politics. Offline closed: validate_plan refuses an idea in a slot of another kind (facts politics-slots) in politics, politics_auto.order, manage.conscription_laws and every phase or contingency override of them"
   },
   {
    "id": "advisors.navy_air_chiefs",

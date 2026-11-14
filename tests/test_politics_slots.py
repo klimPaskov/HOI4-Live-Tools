@@ -60,6 +60,7 @@ ideas = {
         war_economy = { cost = 150 }
     }
     trade_laws = { law = yes free_trade = { cost = 150 } }
+    mobilization_laws = { law = yes volunteer_only = { cost = 150 } limited_conscription = { cost = 150 } }
     industrial_concern = { AAA_works = { cost = 150 } }
     country = { AAA_spirit = { } }
     academy_spirit = { AAA_academy = { } }
@@ -119,6 +120,11 @@ class Fixture(unittest.TestCase):
     def politics_errors(self, plan):
         rep, _ = vp.validate(plan, self.game)
         return [e for e in rep.errors if e.startswith(("politics[", "politics_auto"))]
+
+    def politics_errors_all(self, plan):
+        """The slot findings of the plan and of its overrides (schema findings of the fixture plan left out)."""
+        rep, _ = vp.validate(plan, self.game)
+        return [e for e in rep.errors if "politics" in e.split(":")[0] or "conscription_laws" in e.split(":")[0]]
 
 
 class Reader(Fixture):
@@ -262,6 +268,39 @@ class PlanCheck(Fixture):
         self.assertIn("politics_auto.order[0]: AAA_logistics fits military_staff slot 3-5 (high_command)", errs[0])
         self.assertIn("politics_auto.order[1]: slot 3 is outside research_production", errs[1])
         self.assertIn("politics_auto.order[2]: unknown idea/character no_such_law", errs[2])
+
+
+    def test_overrides_are_checked_like_the_plan(self):
+        # a phase or contingency override replaces the plan's politics while it is active: the executor would
+        # take its picks as they stand, so an idea in a slot of another kind there is refused the same way
+        plan = copy.deepcopy(PLAN)
+        plan["phases"] = [{"id": "war", "overrides": {
+            "politics": [{"id": "hc", "category": "military_staff", "slot": 0, "idea": "AAA_logistics"}]}}]
+        plan["contingencies"] = [{"id": "c", "then": {"overrides": {
+            "politics_auto": {"order": [{"category": "military_staff", "slot": 1, "ideas": ["AAA_chief"]}]}}}}]
+        errs = self.politics_errors_all(plan)
+        self.assertEqual(len(errs), 2, errs)
+        self.assertIn("phases[0].overrides.politics[0]: AAA_logistics fits military_staff slot 3-5 (high_command), "
+                      "not military_staff slot 0 (army_chief)", errs[0])
+        self.assertIn("contingencies[0].then.overrides.politics_auto.order[0]: AAA_chief fits military_staff slot 0 "
+                      "(army_chief), not military_staff slot 1 (navy_chief)", errs[1])
+        plan["phases"][0]["overrides"]["politics"][0]["slot"] = 5
+        plan["contingencies"][0]["then"]["overrides"]["politics_auto"]["order"][0]["slot"] = 0
+        self.assertEqual(self.politics_errors_all(plan), [])
+
+    def test_conscription_laws_are_ideas_of_the_slot_the_manpower_rule_uses(self):
+        plan = copy.deepcopy(PLAN)
+        plan["manage"] = {"conscription_laws": ["limited_conscription"]}
+        self.assertEqual(self.politics_errors_all(plan), [])
+        plan["manage"]["conscription_laws"].append("war_economy")
+        plan["phases"] = [{"id": "p", "overrides": {"manage": {"conscription_laws": ["free_trade", "nope"]}}}]
+        errs = self.politics_errors_all(plan)
+        self.assertEqual(len(errs), 3, errs)
+        self.assertIn("manage.conscription_laws[1]: the manpower rule takes it in government slot 0, but war_economy "
+                      "fits government slot 2 (economy), not government slot 0 (mobilization_laws)", errs[0])
+        self.assertIn("phases[0].overrides.manage.conscription_laws[0]: the manpower rule takes it in government "
+                      "slot 0, but free_trade fits government slot 1 (trade_laws)", errs[1])
+        self.assertIn("phases[0].overrides.manage.conscription_laws[1]: unknown idea nope", errs[2])
 
 
 @unittest.skipUnless(os.path.isfile(os.path.join(REAL, "common", "idea_tags", "00_idea.txt")),

@@ -494,6 +494,73 @@ def check_politics_auto(game, plan, meta, rep):
                 rep.error(f"{where}: {problem}")
 
 
+class _Prefixed:
+    """A Report view that names where an override layer's findings sit (phases[0].overrides.)."""
+
+    def __init__(self, rep, prefix):
+        self.rep, self.prefix = rep, prefix
+
+    def error(self, msg):
+        self.rep.error(self.prefix + msg)
+
+    def warn(self, msg):
+        self.rep.warn(self.prefix + msg)
+
+
+def override_layers(plan):
+    """(where, overrides) for every phase and contingency override object of the plan: the executor merges
+    them over the plan's top-level keys while the phase or contingency is active."""
+    out = []
+    for i, ph in enumerate(plan.get("phases") or []):
+        if isinstance(ph, dict) and isinstance(ph.get("overrides"), dict):
+            out.append((f"phases[{i}].overrides.", ph["overrides"]))
+    for i, c in enumerate(plan.get("contingencies") or []):
+        if not isinstance(c, dict):
+            continue
+        if isinstance(c.get("then"), dict) and isinstance(c["then"].get("overrides"), dict):
+            out.append((f"contingencies[{i}].then.overrides.", c["then"]["overrides"]))
+        if isinstance(c.get("overrides"), dict):
+            out.append((f"contingencies[{i}].overrides.", c["overrides"]))
+    return out
+
+
+def check_conscription_laws(game, plan, meta, rep):
+    """manage.conscription_laws: the manpower rule takes them in government slot 0, so each must be an idea of
+    the kind the game puts there (common/idea_tags)."""
+    manage = plan.get("manage")
+    laws = manage.get("conscription_laws") if isinstance(manage, dict) else None
+    if not isinstance(laws, list):
+        return
+    ctx = ctx_of(meta, game)
+    ideas, chars, tokens = game.ideas(ctx)
+    for i, law in enumerate(laws):
+        if not isinstance(law, str):
+            continue
+        if law not in ideas and law not in chars and law not in tokens:
+            rep.error(f"manage.conscription_laws[{i}]: unknown idea {law}")
+            continue
+        problem = derive.politics_slot_problem(game, ctx, "government", 0, law)
+        if problem:
+            rep.error(f"manage.conscription_laws[{i}]: the manpower rule takes it in government slot 0, but {problem}")
+
+
+def check_politics_slots(game, plan, meta, rep):
+    """Every pick of the plan and of its phase and contingency overrides in a slot of its own kind: politics,
+    politics_auto.order, manage.conscription_laws (an idea in a slot of another kind is refused by the game, so
+    the executor would try it again and again)."""
+    check_politics(game, plan, meta, rep)
+    check_politics_auto(game, plan, meta, rep)
+    check_conscription_laws(game, plan, meta, rep)
+    for where, layer in override_layers(plan):
+        view = _Prefixed(rep, where)
+        if "politics" in layer:
+            check_politics(game, layer, meta, view)
+        if "politics_auto" in layer:
+            check_politics_auto(game, layer, meta, view)
+        if "manage" in layer:
+            check_conscription_laws(game, layer, meta, view)
+
+
 def check_decisions(game, plan, rep):
     keys = strings(plan, "decisions")
     dup_check(rep, "decisions", keys)
@@ -1873,8 +1940,7 @@ def validate(plan, game, schema=None):
     check_focus(game, plan, meta, rep)
     check_production(game, plan, rep)
     check_construction(game, plan, rep, meta)
-    check_politics(game, plan, meta, rep)
-    check_politics_auto(game, plan, meta, rep)
+    check_politics_slots(game, plan, meta, rep)
     check_decisions(game, plan, rep)
     check_training(game, plan, rep, meta)
     check_misc(plan, rep)

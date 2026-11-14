@@ -1096,13 +1096,14 @@ class TacticsRules(unittest.TestCase):
         plan["politics_auto"] = {"order": [{"category": "government", "slot": 3, "ideas": ["ITA_a"], "cost": 150}]}
         f = self.assertHit(plan, "politics.available", "error", "politics[1]")
         self.assertIn("has_completed_focus = ITA_army_leaders", f["message"])
-        self.assertIn("keeps its 50 PP in reserve", f["message"])
+        self.assertIn("never buys it", f["message"])
         out = lint_plan.lint(plan, self.game)
-        # the executor's reserve: the closed pick's 50 PP stay reserved and the standing order never buys
-        self.assertEqual(out["facts"]["pp_budget"]["reserved_at_end"], 50)
+        # the executor's reserve: a pick the game cannot take holds nothing back, so the standing order buys
+        self.assertEqual(out["facts"]["pp_budget"]["reserved_at_end"], 0)
+        self.assertIn("politics_auto.order[0] ITA_a", out["facts"]["pp_budget"]["bought"])
         self.assertIn("politics[1] ITA_achille_starace", out["facts"]["pp_budget"]["not_bought"])
-        f = self.assertHit(plan, "politics.pp_budget", "error", "nothing bought for")
-        self.assertIn("never-available politics[1] ITA_achille_starace keeps 50 PP in reserve", f["message"])
+        # so the power no longer sits idle behind the closed pick
+        self.assertNoHit(plan, "politics.pp_budget", "error", "nothing bought for")
         # the corrected plan: the focus that opens the gate is on the path, so the pick can be taken
         plan["focus_path"] = ["ITA_army_leaders"] + [k for k in plan.get("focus_path") or [] if k != "ITA_army_leaders"]
         self.assertNoHit(plan, "politics.available")

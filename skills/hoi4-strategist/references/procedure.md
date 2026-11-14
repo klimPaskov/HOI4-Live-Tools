@@ -378,11 +378,13 @@ atom `bop:<id>`); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.or
 **Political power is budgeted over the whole horizon** (L26): laws, advisors and decisions together, so that
 the projected balance never sits above about 100 PP with no planned buy for more than 60 days (lint
 `politics.pp_budget`). The plan's `politics` picks are the dated buys; `politics_auto` is the standing order for
-what they leave unspent (default: chief of army, economy law, trade law). The executor keeps the cost of every
-`politics` pick not yet taken in reserve and lets `politics_auto` spend only above it, so a pick that can never
-be taken (an advisor whose `available` gate needs a focus the plan never completes, lint `politics.available`)
-freezes the standing order for the whole run: check each pick's gate (`F characters <TAG> --role advisor` prints
-`available`) against the focus path. The lint simulates the income to the horizon the executor's way
+what they leave unspent (default: every vacant military staff seat; laws and political advisors only when the
+order names them). The executor holds back the cost of each `politics` pick that could be bought now (its `when`
+holds and the game has not just refused it) and lets `politics_auto` spend only above that; a gated or refused
+pick holds nothing back and is paid for once it opens, from the power there is then. So bank for a gated law
+with `politics_auto.threshold`, not with the pick. A pick that can never be taken (an advisor whose `available`
+gate needs a focus the plan never completes, lint `politics.available`) is tried again and again and never
+bought: check each pick's gate (`F characters <TAG> --role advisor` prints `available`) against the focus path. The lint simulates the income to the horizon the executor's way
 (`facts.pp_budget`: income, spent, reserved at the end); give `politics_auto.order` enough entries (political
 advisors, the next laws, high-command seats) to absorb what the dated picks leave. Name the political advisors that fit
 the plan (PP, stability, war support or production traits from `F characters <TAG> --role advisor`) in

@@ -78,7 +78,7 @@ HAND_PLANS = [
 # Per-item fields: list key -> (functions that read its entries, the first one walks the list;
 # loop variable names there).
 ENTRY_VARS = {
-    "politics": (["politics_step", "politics_auto_step"], ["pick"]),
+    "politics": (["politics_step", "politics_auto_step", "politics_key", "politics_reserve"], ["pick"]),
     "production": (["production_step", "wanted_switches"], ["line"]),
     "research_path": (["tick"], ["step"]),
     "construction": (["construction_step"], ["job"]),

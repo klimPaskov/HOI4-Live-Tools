@@ -566,7 +566,7 @@
           "type": "number",
           "default": 100,
           "minimum": 0,
-          "description": "political power beyond the pending politics picks' costs from which the order buys"
+          "description": "political power beyond the reserve from which the order buys; the reserve is the cost of each pending politics pick that could be bought now (its when holds, it is not backing off after a refusal)"
         },
         "cap": {
           "type": "number",
@@ -631,7 +631,7 @@
             ],
             "additionalProperties": false
           },
-          "description": "the standing buy order (default: chief of army, military_staff 0; economy law war_economy > partial > low, government 2; trade law export_focus > limited_exports, government 1). Political advisors only when named here; government slot 0 (conscription) only within manage.conscription_laws"
+          "description": "the standing buy order (default, naming no game key: every vacant military_staff seat, chiefs and high command, takes the first advisor the game enables). Laws and political advisors only when named here; government slot 0 (conscription) only within manage.conscription_laws"
         },
         "never": {
           "type": "array",
@@ -646,6 +646,12 @@
           "default": 30,
           "minimum": 1,
           "description": "game days before an entry that found nothing to buy reads its slot again"
+        },
+        "recheck_pp": {
+          "type": "number",
+          "default": 25,
+          "exclusiveMinimum": 0,
+          "description": "an entry whose wanted idea the game disabled (power or conditions) reads its slot again once political power has grown by this much since that read, before recheck_days"
         },
         "idle_wake_days": {
           "type": "integer",
