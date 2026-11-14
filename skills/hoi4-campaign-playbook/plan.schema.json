@@ -1928,7 +1928,6 @@
                 "facility"
               ]
             },
-            "uniqueItems": true,
             "description": "area_defense only: the toggles of the order's settings window to switch on (none: the game's default)"
           },
           "when": {
@@ -1956,7 +1955,6 @@
         ]
       },
       "x-owner": "executor",
-      "x-executor-planned": "gap register orders.defensive_lines",
       "description": "defensive orders (plan_seams.rs): once `when` holds and the army exists, a fallback line or area defence order for it (battle-plan toolbar), deleted once `until` holds. The tools for those orders are not built yet: the executor sends nothing and the digest (`seams`) says what waits; list the army in war.reserve (lint orders.defense_reserve) so the war step does not drive it"
     },
     "retake_rules": {
