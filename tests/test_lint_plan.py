@@ -967,17 +967,23 @@ class TacticsRules(unittest.TestCase):
         self.assertNoHit(self.ita, "politics.unneeded_conscription")
 
     def test_pp_budget(self):
-        self.assertNoHit(self.ita, "politics.pp_budget", "error")  # 150 PP by late May at 1.04 a day
+        self.assertNoHit(self.ita, "politics.pp_budget", "error", "politics[0]")  # 150 PP by late May at 1.04 a day
         # after its one law the plan leaves the power idle for months: no domain without a default use
-        f = self.assertHit(self.ita, "politics.pp_budget", "warning", "politics")
-        self.assertIn("no planned buy for", f["message"])
-        self.assertIn("politics_auto.order", f["message"])
+        f = self.assertHit(self.ita, "politics.pp_budget", "error", "nothing bought for")
+        self.assertIn("set politics_auto.order", f["message"])
+        out = lint_plan.lint(self.ita, self.game)
+        self.assertEqual(out["facts"]["pp_budget"]["spent"], 150)
+        self.assertGreater(out["facts"]["pp_budget"]["income"], 350)
+        # one standing entry absorbs one buy, not a year of income
         plan = self.plan()
-        plan["politics_auto"] = {"order": [{"category": "government", "slot": 3, "ideas": ["ITA_a"]}]}
-        self.assertNoHit(plan, "politics.pp_budget", "warning", "no planned buy")
-        self.assertHit(plan, "politics.pp_budget", "info", "standing policy")
+        plan["politics_auto"] = {"order": [{"category": "government", "slot": 3, "ideas": ["ITA_a"], "cost": 50}]}
+        self.assertHit(plan, "politics.pp_budget", "error", "politics_auto.order runs out")
+        # enough standing entries spend the year's income
+        plan["politics_auto"]["order"] += [{"category": "government", "slot": k, "ideas": [f"ITA_{k}"], "cost": 50}
+                                           for k in range(4, 9)]
+        self.assertNoHit(plan, "politics.pp_budget", "error", "nothing bought for")
         plan["politics_auto"]["enabled"] = False
-        self.assertHit(plan, "politics.pp_budget", "warning", "politics_auto is off")
+        self.assertHit(plan, "politics.pp_budget", "error", "politics_auto is off")
         plan = self.plan()
         plan["politics"][0]["when"] = "1936.02.01"
         for k, idea in enumerate(["free_trade", "service_by_requirement", "tot_economic_mobilisation"]):
@@ -989,6 +995,29 @@ class TacticsRules(unittest.TestCase):
         self.assertNoHit(plan, "politics.pp_budget", "error", "politics[1]")  # 300 PP by the end of the year
         f = self.assertHit(plan, "politics.pp_budget", "warning", "politics[0]")
         self.assertIn("114 days after its date", f["message"])
+
+    def test_politics_available(self):
+        # the shakedown plan bought a high-command advisor whose gate needs a focus the path never takes
+        plan = self.plan()
+        plan["politics"].append({"id": "pol_starace", "category": "military_staff", "slot": 4,
+                                 "idea": "ITA_achille_starace", "cost": 50})
+        plan["politics_auto"] = {"order": [{"category": "government", "slot": 3, "ideas": ["ITA_a"], "cost": 150}]}
+        f = self.assertHit(plan, "politics.available", "error", "politics[1]")
+        self.assertIn("has_completed_focus = ITA_army_leaders", f["message"])
+        self.assertIn("keeps its 50 PP in reserve", f["message"])
+        out = lint_plan.lint(plan, self.game)
+        # the executor's reserve: the closed pick's 50 PP stay reserved and the standing order never buys
+        self.assertEqual(out["facts"]["pp_budget"]["reserved_at_end"], 50)
+        self.assertIn("politics[1] ITA_achille_starace", out["facts"]["pp_budget"]["not_bought"])
+        f = self.assertHit(plan, "politics.pp_budget", "error", "nothing bought for")
+        self.assertIn("never-available politics[1] ITA_achille_starace keeps 50 PP in reserve", f["message"])
+        # the corrected plan: the focus that opens the gate is on the path, so the pick can be taken
+        plan["focus_path"] = ["ITA_army_leaders"] + [k for k in plan.get("focus_path") or [] if k != "ITA_army_leaders"]
+        self.assertNoHit(plan, "politics.available")
+        # an order entry whose every idea is closed never buys
+        plan = self.plan()
+        plan["politics_auto"] = {"order": [{"category": "military_staff", "slot": 5, "ideas": ["ITA_achille_starace"]}]}
+        self.assertHit(plan, "politics.available", "error", "politics_auto.order[0]")
 
     # -------------------------------------------------------------- research
     def test_research_ahead(self):

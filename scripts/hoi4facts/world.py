@@ -1140,6 +1140,7 @@ class World:
                                 av = get1(rv, "available")
                                 if isinstance(av, list):
                                     r["available"] = self.text(av, 160, tag)
+                                    r["available_block"] = av
                             if rk == "country_leader":
                                 r["ideology"] = get1(rv, "ideology")
                             vis = get1(rv, "visible")

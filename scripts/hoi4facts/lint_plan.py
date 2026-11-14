@@ -204,11 +204,17 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            war.direct_moves; (info) no such key in the schema yet
   war.pocket_threshold     pocket fall-back switched off (avoid_pockets false) or a pocket-share key above
                            50%; (info) the executor's 70% when no key exists
-  politics.pp_budget       politics, decisions and decision_rules costs that the net PP income cannot pay by the
-                           horizon (calc.pp_rates: (base + gain) x (1 + factor + stability) minus the running
-                           focus's cost); (warning) a dated buy affordable more than 30 days late; (warning)
-                           projected PP above 100 with no planned buy left for more than 60 days in a row
-                           (info when politics_auto.order sets a standing buy order)
+  politics.pp_budget       the PP income over the whole run simulated the way the executor spends it (calc.pp_rates:
+                           (base + gain) x (1 + factor + stability) minus the running focus's cost): politics,
+                           decisions and decision_rules picks once due, affordable and open, every pick not yet
+                           taken keeping its cost in reserve, politics_auto.order buying only above that reserve
+                           and its threshold; a pick the income cannot pay by the horizon; projected PP above
+                           100 (or above the next pick that can still be bought) with nothing bought for more
+                           than 60 days in a row; (warning) a dated buy affordable more than 30 days late
+  politics.available       a politics pick or every idea of a politics_auto.order entry whose `available` gate
+                           (advisor or law, game files) stays closed to the horizon under the plan's facts: the
+                           focuses the focus slot walk completes, the date, the war (plan_gates); the executor
+                           would keep such a pick's cost in reserve for good
   politics.unneeded_conscription  a politics conscription law above the lowest law whose recruitable
                            manpower covers the plan's divisions plus manage.manpower_months of losses (15% a
                            month assumed); (warning) manage.conscription_laws unset or listing laws with an
@@ -311,7 +317,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
-             "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "research.ahead",
+             "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "politics.available", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
@@ -714,10 +720,12 @@ class Lint:
             return plan_gates.Facts(self.tag, dlcs, derive.fmt(derive.date_of(day)), war,
                                     enemies if war else (), done, held, own)
 
+        self._gate_facts = facts_at  # politics.available reads advisor and law gates the same way
         changes = [d for d in (war_start, war_end) if d is not None]
         sched = plan_gates.focus_schedule(path, fallback, tree, fmeta, days_per, start, horizon, facts_at,
                                           self.meta.get("completed_focuses", []), changes)
         day = lambda d: derive.fmt(derive.date_of(int(d)))  # noqa: E731
+        self._focus_done = [(int(r["end"]), r["focus"]) for r in sched["rows"]]
         self.facts["focus"]["schedule"] = [dict(r, start=day(r["start"]), end=day(r["end"])) for r in sched["rows"]]
         self.facts["focus"]["idle"] = [dict(g, **{"from": day(g["from"]), "to": day(g["to"])}) for g in sched["idle"]]
         for n in sched["never"]:
@@ -3091,86 +3099,186 @@ class Lint:
                     return float(r["cost"])
         return None
 
+    def idea_gate(self, idea):
+        """The `available` trigger block of an advisor (by character id or idea token) or a law idea, or None."""
+        if not isinstance(idea, str):
+            return None
+        for ch in self.world.characters(self.tag, "advisor"):
+            for r in ch["roles"]:
+                if r["role"] == "advisor" and idea in (ch["id"], r.get("idea_token")):
+                    return r.get("available_block")
+        info = derive.law_ideas(self.game).get(idea)
+        return info["available"] if info else None
+
+    def idea_open(self, idea, day):
+        """(True / False / None, blocking lines) of an idea's `available` gate on day under the plan's facts:
+        the date, the war, the focuses the focus slot walk has completed by then, the start flags."""
+        block = self.idea_gate(idea)
+        facts_at = getattr(self, "_gate_facts", None)
+        if not block or facts_at is None:
+            return True, []
+        done = set(self.meta.get("completed_focuses", []) or []) | \
+            {f for end, f in getattr(self, "_focus_done", []) if end <= day}
+        facts = facts_at(day, done)
+        return plan_gates.evaluate(block, facts), plan_gates.blocking(block, facts)
+
+    def idea_ever_open(self, idea, first, last):
+        """(False, blocking lines) when an idea's gate is closed on every day from first to last (weekly
+        samples and the last day: focuses, the war and the date change over the run); else (True or None, [])."""
+        why = []
+        for day in list(range(first, last, 7)) + [last]:
+            ok, why = self.idea_open(idea, day)
+            if ok is not False:
+                return ok, []
+        return False, why
+
     def politics_pp_budget(self):
-        """Planned PP spending (politics, decisions) against the net income: base x factors minus the
-        running focus's cost (calc.pp_rates); unaffordable by the horizon or bought late."""
+        """Planned PP spending against the net income over the whole run, the way the executor spends it:
+        dated picks (politics, decisions, decision_rules) in order once affordable and open, every pick not
+        yet taken keeping its cost in reserve, and politics_auto.order buying only from the power above that
+        reserve (and above its threshold). A pick whose `available` gate never opens under the plan
+        (politics.available) is never bought and keeps its reserve for good. Power above PP_IDLE (or above
+        the next pick that can still be bought) with nothing bought for PP_IDLE_DAYS is idle."""
         if not self.tag:
             return
+        start = derive.day(self.start)
+        end = derive.day(self.stop) if self.stop else (derive.day(self.goal["deadline"]) if self.goal.get("deadline")
+                                                       else start + 365)
         buys = []
         for i, p in enumerate(self.list_of("politics")):
             c = self.pp_cost(p)
             if c:
                 ds = predicate_dates(p["when"], self.table) if p.get("when") is not None else []
-                buys.append((f"politics[{i}] {p.get('idea')}", c, derive.day(max(ds)) if ds else None))
+                due = derive.day(max(ds)) if ds else None
+                label = f"politics[{i}] {p.get('idea')}"
+                ok, why = self.idea_ever_open(p.get("idea"), max(start, due or start), end)
+                if ok is False:
+                    self.add("error", "politics.available", f"politics[{i}]",
+                             f"{p.get('idea')} cannot be taken by {derive.fmt(derive.date_of(end))} under the plan: "
+                             f"its `available` gate stays closed ({'; '.join(why[:3])}); the executor keeps its "
+                             f"{c:g} PP in reserve for it all the same, which starves politics_auto: drop it, or "
+                             f"plan what opens the gate (a focus in focus_path) before its date")
+                buys.append({"label": label, "cost": c, "due": due, "idea": p.get("idea"), "never": ok is False})
         w = self.world
         for i, d in enumerate(self.plan.get("decisions") or []):
             row = w.find_decision(d) if isinstance(d, str) else None
             c = w.decision_row(row).get("cost") if row else None
             if isinstance(c, (int, float)) and c > 0:
-                buys.append((f"decisions[{i}] {d}", float(c), None))
+                buys.append({"label": f"decisions[{i}] {d}", "cost": float(c), "due": None, "idea": None,
+                             "never": False})
         for i, r in enumerate(self.list_of("decision_rules")):
             row = w.find_decision(r.get("decision")) if isinstance(r.get("decision"), str) and not r.get("never") else None
             c = w.decision_row(row).get("cost") if row else None
             if isinstance(c, (int, float)) and c > 0:
                 ds = predicate_dates(r["when"], self.table) if r.get("when") is not None else []
                 for _ in range(max(1, r["max"]) if isinstance(r.get("max"), int) else 1):
-                    buys.append((f"decision_rules[{i}] {r.get('decision')}", float(c), derive.day(max(ds)) if ds else None))
+                    buys.append({"label": f"decision_rules[{i}] {r.get('decision')}", "cost": float(c),
+                                 "due": derive.day(max(ds)) if ds else None, "idea": None, "never": False})
+        auto = self.plan.get("politics_auto")
+        off = auto is False or (isinstance(auto, dict) and auto.get("enabled") is False)
+        policy = isinstance(auto, dict) and isinstance(auto.get("order"), list)
+        threshold = float(auto.get("threshold", 100)) if isinstance(auto, dict) and \
+            isinstance(auto.get("threshold"), (int, float)) else 100.0
+        orders = []
+        for j, e in enumerate((auto.get("order") or []) if policy and not off else []):
+            if not isinstance(e, dict):
+                continue
+            ideas = [x for x in (e.get("ideas") or []) if isinstance(x, str)]
+            cost = e.get("cost") if isinstance(e.get("cost"), (int, float)) else \
+                (50.0 if e.get("category") == "military_staff" else 150.0)
+            gates = [(x, self.idea_ever_open(x, start, end)) for x in ideas]
+            if ideas and all(g[0] is False for _, g in gates):
+                self.add("error", "politics.available", f"politics_auto.order[{j}]",
+                         f"none of {', '.join(ideas)} can be taken by {derive.fmt(derive.date_of(end))} under the plan "
+                         f"({'; '.join(f'{x}: ' + '; '.join(g[1][:2]) for x, g in gates)}): the entry never buys")
+                continue
+            orders.append({"label": f"politics_auto.order[{j}] {'/'.join(ideas) or e.get('category')}",
+                           "cost": float(cost), "ideas": ideas})
         gain, factor = calcmod.pp_modifiers(w, self.tag)
         rates = calcmod.pp_rates(w, gain, factor, calcmod.start_stability(w, self.tag), None,
                                  calcmod.pp_costs(w, self.tag))
-        start = derive.day(self.start)
-        end = derive.day(self.stop) if self.stop else (derive.day(self.goal["deadline"]) if self.goal.get("deadline")
-                                                       else start + 365)
         timeline = (self.facts.get("focus") or {}).get("timeline") or []
         focus_end = end if self.plan.get("focus_fallback") else (derive.day(timeline[-1]["end"]) if timeline else start)
         f = w.country(self.tag).get("political_power")
         balance = float(f["v"]) if f and isinstance(f.get("v"), (int, float)) else 0.0
-        pending = list(buys)
+        pending, auto_left = list(buys), list(orders)
         bought = {}
+        income = 0.0
         day = start
-        idle_run, idle_from, idle_worst = 0, start, (0, start)
+        idle_run, idle_from, idle_worst = 0, start, (0, start, 0.0)
         while day <= end:
+            got = False
             for b in list(pending):
-                label, c, due = b
-                if (due is None or due <= day) and balance >= c:
-                    balance -= c
-                    bought[label] = (day, due)
-                    pending.remove(b)
-            # power above PP_IDLE that no planned buy is waiting for (one not yet due or not yet
-            # affordable keeps it banked on purpose)
-            if balance > PP_IDLE and not pending:
+                if b["never"] or (b["due"] is not None and b["due"] > day) or balance < b["cost"]:
+                    continue
+                if b["idea"] is not None and self.idea_open(b["idea"], day)[0] is False:
+                    continue
+                balance -= b["cost"]
+                bought[b["label"]] = (day, b["due"], b["cost"])
+                pending.remove(b)
+                got = True
+            reserve = sum(b["cost"] for b in pending)
+            if auto_left and balance >= threshold:
+                for e in list(auto_left):
+                    if balance - reserve < e["cost"]:
+                        continue
+                    if e["ideas"] and not any(self.idea_open(x, day)[0] is not False for x in e["ideas"]):
+                        continue
+                    balance -= e["cost"]
+                    bought[e["label"]] = (day, None, e["cost"])
+                    auto_left.remove(e)
+                    got = True
+                    break
+            # power above what the next buyable pick needs, with nothing bought: idle (a pick that can never
+            # be bought saves nothing)
+            nxt = [b["cost"] for b in pending if not b["never"]]
+            level = max(PP_IDLE, min(nxt) if nxt else 0.0)
+            if balance > level and not got:
                 if not idle_run:
                     idle_from = day
                 idle_run += 1
                 if idle_run > idle_worst[0]:
-                    idle_worst = (idle_run, idle_from)
+                    idle_worst = (idle_run, idle_from, balance)
             else:
                 idle_run = 0
             day += 1
-            balance += rates["per_day_focus"] if day <= focus_end else rates["per_day_idle"]
+            gain_today = rates["per_day_focus"] if day <= focus_end else rates["per_day_idle"]
+            balance += gain_today
+            income += gain_today
         how = (f"{rates['per_day_focus']:g} PP a day with a focus running ((base {rates['base']['v']:g} + gain "
                f"{gain:g}) x (1 + {factor + rates['stability_factor']:g}) - {rates['focus_cost']:g} for the focus"
                + (f" - {rates['cost']:g} daily costs" if rates["cost"] else "") + ")")
+        reserved = sum(b["cost"] for b in pending)
         self.facts["pp_budget"] = {"per_day_focus": rates["per_day_focus"], "per_day_idle": rates["per_day_idle"],
+                                   "income": round(income), "end_balance": round(balance),
                                    "bought": {k: derive.fmt(derive.date_of(v[0])) for k, v in bought.items()},
-                                   "not_bought": [b[0] for b in pending]}
+                                   "spent": round(sum(v[2] for v in bought.values())),
+                                   "not_bought": [b["label"] for b in pending] + [e["label"] for e in auto_left],
+                                   "reserved_at_end": round(reserved)}
         if idle_worst[0] > PP_IDLE_DAYS:
-            auto = self.plan.get("politics_auto")
-            policy = isinstance(auto, dict) and isinstance(auto.get("order"), list)
-            off = auto is False or (isinstance(auto, dict) and auto.get("enabled") is False)
-            self.add("info" if policy and not off else "warning", "politics.pp_budget", "politics",
-                     f"political power stays above {PP_IDLE:g} with no planned buy for {idle_worst[0]} days from "
-                     f"{derive.fmt(derive.date_of(idle_worst[1]))} ({how}): every spendable resource needs an "
-                     "owner and a default use; budget laws, advisors and decisions over the whole horizon"
-                     + (" (politics_auto.order is the standing policy that spends it)" if policy and not off
-                        else "; politics_auto is off, so it piles up to the cap" if off
-                        else ", or set politics_auto.order (the executor's default order only buys the chief of "
-                             "army and the economy and trade laws)"))
-        for label, c, due in pending:
-            self.add("error", "politics.pp_budget", label.split(" ")[0],
-                     f"{label} ({c:g} PP) is not affordable by {derive.fmt(derive.date_of(end))}: {how}; "
-                     f"{sum(x[1] for x in buys if x[0] in bought):g} PP go to earlier buys")
-        for label, (d, due) in bought.items():
+            blocked = [b["label"] for b in pending if b["never"]]
+            tail = (f"; the never-available {', '.join(blocked)} keep{'s' if len(blocked) == 1 else ''} "
+                    f"{sum(b['cost'] for b in pending if b['never']):g} PP in reserve, so politics_auto cannot "
+                    f"spend it" if blocked else
+                    "; politics_auto is off, so it piles up to the cap" if off else
+                    "; politics_auto.order runs out" if policy and not auto_left and orders else
+                    "; politics_auto.order cannot use it (empty, or nothing it names opens)" if policy else
+                    "; set politics_auto.order (the executor's default order only buys the chief of army and the "
+                    "economy and trade laws)")
+            self.add("error", "politics.pp_budget", "politics",
+                     f"political power stays at about {idle_worst[2]:.0f} with nothing bought for {idle_worst[0]} days "
+                     f"from {derive.fmt(derive.date_of(idle_worst[1]))} ({how}; {round(income)} PP come in to "
+                     f"{derive.fmt(derive.date_of(end))}, the plan spends {self.facts['pp_budget']['spent']}){tail}: "
+                     "every spendable resource needs an owner and a default use; budget advisors, laws and "
+                     "decisions over the whole run, and give politics_auto.order enough entries to absorb the rest")
+        for b in pending:
+            if b["never"]:
+                continue
+            self.add("error", "politics.pp_budget", b["label"].split(" ")[0],
+                     f"{b['label']} ({b['cost']:g} PP) is not affordable by {derive.fmt(derive.date_of(end))}: {how}; "
+                     f"{sum(v[2] for k, v in bought.items() if k.startswith(('politics[', 'decision'))):g} PP go to "
+                     f"earlier buys")
+        for label, (d, due, _) in bought.items():
             if due is not None and d - due > PP_LATE_DAYS:
                 self.add("warning", "politics.pp_budget", label.split(" ")[0],
                          f"{label} is affordable only on {derive.fmt(derive.date_of(d))}, {d - due} days after its "
