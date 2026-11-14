@@ -357,6 +357,7 @@ mod generated {
                 build_id,
                 sha256,
                 translated: None,
+                attached: false,
             }
         }
 

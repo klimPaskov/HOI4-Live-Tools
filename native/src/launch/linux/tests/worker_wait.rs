@@ -72,6 +72,7 @@ fn synthetic_owner(events: Arc<Events>) -> (Arc<Shared>, Receiver<()>, SyncSende
                 supervisor: identity,
                 build_id: "fixture".into(),
                 sha256: "fixture".into(),
+                attached: false,
                 translated: None,
             },
         },

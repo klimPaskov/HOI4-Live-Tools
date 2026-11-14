@@ -99,6 +99,7 @@ fn owned_fex_guest_reads_and_selfexec_execveat_invalidate_original_reader() {
         supervisor: capture_identity(std::process::id() as i32).unwrap(),
         build_id: build_id.clone(),
         sha256: sha256.clone(),
+        attached: false,
         translated: Some(TranslatedImage {
             executable: guest.to_str().unwrap().into(),
             translator_sha256: FEX_SHA256.into(),
