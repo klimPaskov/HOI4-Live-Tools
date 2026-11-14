@@ -1,0 +1,589 @@
+"""The supervisor of one native campaign: python -m hoi4_live.play.supervisor --prefix INSTALL --run RUN --native BIN
+
+`hoi4-live play` starts it in the background after attaching to the user's game. It owns the run until the game
+closes or the run is stopped:
+
+    start       start the native runtime on the run's session, retrying while the user is still in the menus;
+                take the input lease, check the country, switch the executor on
+    serve       answer the `hoi4-live-play` proxy on a private endpoint (authenticated, this user only)
+    each call   add the lease token and a request id where the tool takes them; refuse an identical action that
+                succeeded within DUPLICATE_WINDOW seconds with its earlier result (`already_done`); bring the
+                game to the front once when input found another window in front; log the call without tokens
+    watchdog    no player call for IDLE_PAUSE seconds: executor off and a running game paused (the only pause the
+                product makes); the next player call switches the executor back on
+    health      the game or the runtime gone: stop
+    stop        executor off, lease released, runtime closed, report.md written, the active-run pointer removed;
+                the game itself is never closed
+
+Every decision is in the Supervisor class, which takes its runtime, clock and helpers as arguments for tests.
+"""
+
+import argparse
+import copy
+import json
+import os
+import re
+import secrets
+import sys
+import tempfile
+import threading
+import time
+
+from . import game, report, runs
+from .native import Native
+
+IDLE_PAUSE = 300
+DUPLICATE_WINDOW = 45
+RENEW_EVERY = 300
+LEASE_SECONDS = 900
+CAMPAIGN_WAIT = 1800
+RETRY_EVERY = 5
+TICK = 5
+HEALTH_EVERY = 15
+HOLDER = "hoi4-live-play"
+# Actions whose repeat is meaningful (a clock change, a plan step) or that the supervisor owns.
+NOT_DEDUPED = {"hoi4_time", "hoi4_army_plan", "hoi4_plan_run", "hoi4_autopilot", "hoi4_input_lease"}
+# The supervisor's own tools: the player never holds the lease or runs the executor's step itself.
+HIDDEN = {"hoi4_input_lease", "hoi4_plan_run"}
+GONE = {"process_exited", "process_absent", "process_lost", "ownership_changed"}
+FATAL_START = {"unsupported_build", "task_access_denied", "input_permission_denied", "ownership_changed",
+               "process_absent", "platform_unavailable", "invalid_session", "permission_denied"}
+START_STEPS = {
+    "campaign_unavailable": "start or load the campaign in the game (it is still in the menus)",
+    "invalid_input_binding": "the loaded campaign is another country: load or start the plan's country",
+    "input_geometry_unverified": "set the game to Windowed, 1920x1080, UI scaling 1.0 (Options > Graphics)",
+    "input_geometry_changed": "leave the game window as it is (size and screen) while the run starts",
+    "input_target_not_frontmost": "click the game window so it is in front",
+    "task_access_denied": "memory access is not allowed yet: run hoi4-live doctor and do its step",
+    "unsupported_build": "this game build is not one the native runtime reads: run hoi4-live doctor",
+    "input_permission_denied": "allow Accessibility for the app you ran hoi4-live play in (System Settings > "
+                               "Privacy & Security > Accessibility), then run hoi4-live play again",
+    "process_absent": "the game closed",
+    "ownership_changed": "the game closed or was restarted: run hoi4-live play again",
+}
+EXTRA_TOOLS = [
+    {"name": "hoi4_batch",
+     "description": "Several tool calls in one turn, in order (at speed 3 every model turn costs game days). Each "
+                    "item is [tool, {arguments}]; every call runs and each result is returned (bodies cut to about "
+                    "1500 characters unless full is true). Lease tokens and request ids are added for you.",
+     "inputSchema": {"type": "object", "properties": {
+         "calls": {"type": "array", "minItems": 1, "maxItems": 20,
+                   "items": {"type": "array", "minItems": 1, "maxItems": 2}},
+         "full": {"type": "boolean"}}, "required": ["calls"], "additionalProperties": False}},
+    {"name": "hoi4_run",
+     "description": "The campaign run. {\"op\":\"status\"}: run folder, game date, executor, watchdog. "
+                    "{\"op\":\"stop\"}: end the run once when you are done: executor off, input released, "
+                    "report.md written in the run folder; the game keeps running.",
+     "inputSchema": {"type": "object", "properties": {"op": {"type": "string", "enum": ["status", "stop"]}},
+                     "required": ["op"], "additionalProperties": False}},
+]
+
+
+def error(code, message):
+    return {"isError": True, "body": {"error": {"code": code, "message": message}}}
+
+
+def error_code(body):
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        return str(body["error"].get("code") or "")
+    return ""
+
+
+def stderr_code(text):
+    """The error code a native runtime that failed to start wrote last ("code: message" or Error { code: ".." })."""
+    codes = re.findall(r'code: "([a-z_]+)"', text or "") or re.findall(r"^([a-z][a-z_]+): ", text or "", re.M)
+    return codes[-1] if codes else ""
+
+
+def player_tool(tool):
+    """The tool as the player sees it: no lease token, request id optional."""
+    shown = copy.deepcopy(tool)
+    schema = shown.get("inputSchema") or {}
+    props = schema.get("properties") or {}
+    props.pop("lease_token", None)
+    if "required" in schema:
+        schema["required"] = [k for k in schema["required"] if k not in ("lease_token", "request_id")]
+    return shown
+
+
+def player_tools(tools):
+    return [player_tool(t) for t in tools if t.get("name") not in HIDDEN] + copy.deepcopy(EXTRA_TOOLS)
+
+
+def shrink(value, budget):
+    """Valid JSON within about `budget` characters: long lists keep their first items, long strings are cut."""
+    if len(json.dumps(value)) <= budget:
+        return value
+    if isinstance(value, dict):
+        share = max(60, budget // max(1, len(value)))
+        return {k: shrink(v, share) for k, v in value.items()}
+    if isinstance(value, list):
+        out, used = [], 2
+        for i, item in enumerate(value):
+            part = shrink(item, max(60, budget // 4))
+            size = len(json.dumps(part)) + 1
+            if used + size > budget and out:
+                out.append({"_more": len(value) - i, "_hint": "full:true returns every item"})
+                break
+            out.append(part)
+            used += size
+        return out
+    if isinstance(value, str) and len(value) > budget:
+        return value[:max(20, budget - 3)] + "..."
+    return value
+
+
+class Supervisor:
+    def __init__(self, run, prefix, start_native, clock=time.time, sleep=time.sleep, front=None,
+                 idle_pause=IDLE_PAUSE, duplicate_window=DUPLICATE_WINDOW, campaign_wait=CAMPAIGN_WAIT,
+                 retry_every=RETRY_EVERY):
+        self.run, self.prefix = run, prefix
+        self.start_native, self.clock, self.sleep, self.front = start_native, clock, sleep, front
+        self.idle_pause, self.duplicate_window = idle_pause, duplicate_window
+        self.campaign_wait, self.retry_every = campaign_wait, retry_every
+        self.request = runs.read_json(os.path.join(run, "request.json")) or {}
+        self.session = runs.read_json(os.path.join(run, "session.json")) or {}
+        self.native = None
+        self.tools, self.leased, self.takes_request_id = [], set(), set()
+        self.token = None
+        self.lock = threading.RLock()
+        self.done = {}
+        self.notes = []
+        self.counter = 0
+        self.started = clock()
+        self.last_player = self.started
+        self.last_renew = self.started
+        self.last_health = self.started
+        self.watchdog_paused = False
+        self.counts = {"calls": 0, "already_done": 0, "watchdog_pauses": 0, "front": 0, "executor_stops": 0}
+        self.feed_seq = 0
+        self.state = "starting"
+        self.end_reason = None
+        self.stopped = threading.Event()
+        self.finished = threading.Event()
+        self.start_date = None
+        self._log = open(os.path.join(run, "calls.jsonl"), "a", encoding="utf-8")
+        self._events = open(os.path.join(run, "supervisor.log"), "a", encoding="utf-8")
+
+    # ------------------------------------------------------------------------------------------ records
+    def event(self, kind, **detail):
+        with self.lock:
+            self._events.write(json.dumps({"t": round(self.clock(), 3), "event": kind, **detail}) + "\n")
+            self._events.flush()
+
+    def status(self, state=None, message=None, **extra):
+        if state:
+            self.state = state
+        data = {"state": self.state, "message": message, "run": self.run, "pid": os.getpid(),
+                "updated": self.clock(), "tag": self.request.get("tag"), "executor": self.state == "ready"
+                and not self.watchdog_paused, "watchdog_paused": self.watchdog_paused,
+                "end_reason": self.end_reason, **extra}
+        runs.write_json(os.path.join(self.run, "status.json"), data)
+        return data
+
+    def note(self, text):
+        with self.lock:
+            self.notes.append(text)
+        self.event("note", text=text)
+
+    def _record_call(self, name, args, out, ms, source):
+        shown = {k: v for k, v in (args or {}).items() if k != "lease_token"}
+        with self.lock:
+            self._log.write(json.dumps({"t": round(self.clock(), 3), "source": source, "tool": name, "args": shown,
+                                        "ms": ms, "isError": out["isError"], "code": error_code(out["body"]),
+                                        "already_done": bool(isinstance(out["body"], dict)
+                                                             and out["body"].get("already_done"))}) + "\n")
+            self._log.flush()
+
+    # ------------------------------------------------------------------------------------------ start
+    def native_call(self, name, args):
+        args = dict(args)
+        if name in self.leased and self.token:
+            args["lease_token"] = self.token
+        if name in self.takes_request_id and "request_id" not in args:
+            with self.lock:
+                self.counter += 1
+                args["request_id"] = "s%d-%d" % (int(self.started) % 100000, self.counter)
+        return self.native.call(name, args)
+
+    def _stderr_tail(self):
+        try:
+            with open(os.path.join(self.run, "native.stderr"), encoding="utf-8", errors="replace") as f:
+                return f.read()[-4000:]
+        except OSError:
+            return ""
+
+    def start(self):
+        """True when the runtime is bound, the lease held and the executor on; False with status "failed"."""
+        deadline = self.clock() + self.campaign_wait
+        last = None
+        while True:
+            self.native = self.start_native()
+            try:
+                self.native.initialize()
+                listed = self.native.tools()
+            except Exception:  # noqa: BLE001 - a runtime that exited at start; its reason is in its stderr
+                listed = None
+            if listed is not None and self.native.alive():
+                break
+            code = stderr_code(self._stderr_tail()) or "native_start_failed"
+            self.native.close()
+            step = START_STEPS.get(code, "see native.stderr in the run folder")
+            if code != last:
+                self.event("waiting", code=code)
+                last = code
+            if code in FATAL_START or self.clock() >= deadline:
+                why = code if code in FATAL_START else "timeout"
+                self.end_reason = why
+                self.status("failed", "%s: %s" % (code, step), code=code)
+                return False
+            self.status("waiting", "%s: %s" % (code, step), code=code)
+            if code == "input_target_not_frontmost" and self.front:
+                # The user is looking at the terminal: bring the game forward for the next try.
+                self.front((self.session.get("game") or {}).get("pid"))
+            self.sleep(self.retry_every)
+        self.tools = listed
+        for tool in listed:
+            props = (tool.get("inputSchema") or {}).get("properties") or {}
+            if "lease_token" in props:
+                self.leased.add(tool["name"])
+            if "request_id" in props:
+                self.takes_request_id.add(tool["name"])
+        err, lease = self.native.call("hoi4_input_lease", {"op": "acquire", "holder": HOLDER, "seconds": LEASE_SECONDS})
+        if err or not lease.get("lease_token"):
+            self.end_reason = "lease_refused"
+            self.status("failed", "the input lease was refused: %s" % json.dumps(lease)[:300])
+            self.native.close()
+            return False
+        self.token = lease["lease_token"]
+        self.last_renew = self.clock()
+        err, overview = self.native.call("hoi4_overview", {})
+        tag = self.request.get("tag")
+        if not err and tag and overview.get("player") and overview["player"] != tag:
+            self.end_reason = "wrong_country"
+            self.status("failed", "the loaded campaign plays %s, the plan is for %s: load %s and run hoi4-live play "
+                                  "again" % (overview["player"], tag, tag))
+            self.release()
+            return False
+        err, body = self.native_call("hoi4_autopilot", {"enabled": True, "interval_ms": 1000})
+        if err:
+            self.note("the executor could not be switched on (%s); the plan's routine work is yours until it is"
+                      % error_code(body))
+        self.start_date = (overview.get("date") or {}).get("text") if isinstance(overview, dict) else None
+        self.event("ready", date=self.start_date, executor=not err)
+        self.last_player = self.clock()
+        # The status turns "ready" once the endpoint exists (main), so nobody is told to play before it can.
+        self.state = "ready"
+        return True
+
+    # ------------------------------------------------------------------------------------------ calls
+    def handle(self, name, args, source="player"):
+        if self.state != "ready":
+            return error("run_not_ready", "the run is %s: %s" % (self.state, self.end_reason or "starting"))
+        args = dict(args or {})
+        began = self.clock()
+        if source == "player":
+            self.last_player = began
+            if self.watchdog_paused:
+                self.resume_after_watchdog()
+        if name == "hoi4_batch":
+            out = self.batch(args)
+        elif name == "hoi4_run":
+            out = self.run_tool(args)
+        elif name in HIDDEN or name not in {t["name"] for t in self.tools}:
+            out = error("tool_not_available", "%s is not a tool of this run" % name)
+        else:
+            out = self.forward(name, args)
+        self.counts["calls"] += 1
+        self._record_call(name, args, out, round((self.clock() - began) * 1000), source)
+        with self.lock:
+            notes, self.notes = self.notes, []
+        if notes:
+            body = out["body"] if isinstance(out["body"], dict) else {"result": out["body"]}
+            out = {"isError": out["isError"], "body": {**body, "supervisor_notes": notes}}
+        return out
+
+    def signature(self, name, args):
+        if name not in self.leased or name in NOT_DEDUPED:
+            return None
+        return name + json.dumps({k: v for k, v in args.items() if k not in ("request_id", "lease_token")},
+                                 sort_keys=True)
+
+    def forward(self, name, args):
+        now = self.clock()
+        sig = self.signature(name, args)
+        if sig:
+            with self.lock:
+                prev = self.done.get(sig)
+            if prev and now - prev[0] < self.duplicate_window:
+                self.counts["already_done"] += 1
+                body = prev[1] if isinstance(prev[1], dict) else {"result": prev[1]}
+                return {"isError": False, "body": {**body, "already_done": (
+                    "You did exactly this %d s ago and it succeeded. A successful action is done: read the state "
+                    "to see its effect instead of repeating it; if the game shows it undone, change the target or "
+                    "the arguments." % int(now - prev[0]))}}
+        err, body = self.native_call(name, args)
+        if err and error_code(body) == "input_target_not_frontmost" and self.front and name in self.leased:
+            pid = (self.session.get("game") or {}).get("pid")
+            if pid and self.front(pid):
+                self.counts["front"] += 1
+                self.event("front", tool=name)
+                err, body = self.native_call(name, args)
+        if not err and sig:
+            with self.lock:
+                self.done[sig] = (now, body)
+        if err and error_code(body) in GONE:
+            threading.Thread(target=self.stop, args=("game_closed",), daemon=True).start()
+        return {"isError": err, "body": body}
+
+    def batch(self, args):
+        calls = args.get("calls")
+        if not isinstance(calls, list) or not 1 <= len(calls) <= 20:
+            return error("invalid_arguments", "calls must list 1 to 20 items, each [tool, {arguments}]")
+        results = []
+        for n, item in enumerate(calls):
+            if not isinstance(item, list) or not item or not isinstance(item[0], str) \
+                    or (len(item) > 1 and not isinstance(item[1], dict)):
+                results.append({"n": n, "isError": True, "body": {"error": {"code": "invalid_arguments",
+                                "message": "each item is [tool, {arguments}]"}}})
+                continue
+            name = item[0]
+            if name in ("hoi4_batch", "hoi4_run") or name in HIDDEN or name not in {t["name"] for t in self.tools}:
+                results.append({"n": n, "tool": name, "isError": True,
+                                "body": {"error": {"code": "tool_not_available",
+                                                   "message": "%s cannot be batched here" % name}}})
+                continue
+            out = self.forward(name, dict(item[1]) if len(item) > 1 else {})
+            body = out["body"] if args.get("full") else shrink(out["body"], 1500)
+            results.append({"n": n, "tool": name, "isError": out["isError"], "body": body})
+        return {"isError": all(r["isError"] for r in results), "body": {"results": results}}
+
+    def run_tool(self, args):
+        op = args.get("op")
+        if op == "status":
+            return {"isError": False, "body": self.describe()}
+        if op == "stop":
+            threading.Thread(target=self.stop, args=("stopped_by_player",), daemon=True).start()
+            return {"isError": False, "body": {"stopping": True, "report": os.path.join(self.run, "report.md")}}
+        return error("invalid_arguments", "op is status or stop")
+
+    def describe(self):
+        err, overview = self.native.call("hoi4_overview", {}) if self.native else (True, {})
+        return {"run": self.run, "state": self.state, "tag": self.request.get("tag"),
+                "goal": self.request.get("goal"), "date": None if err else (overview.get("date") or {}).get("text"),
+                "paused": None if err else overview.get("paused"), "executor_on": not self.watchdog_paused,
+                "watchdog_paused": self.watchdog_paused, "minutes": round((self.clock() - self.started) / 60, 1),
+                **self.counts}
+
+    # ------------------------------------------------------------------------------------------ background
+    def resume_after_watchdog(self):
+        err, body = self.native_call("hoi4_autopilot", {"enabled": True, "interval_ms": 1000})
+        self.watchdog_paused = False
+        self.event("watchdog_resume", executor=not err)
+        self.note("the executor is on again after the watchdog pause"
+                  + ("" if not err else " (it refused: %s)" % error_code(body))
+                  + "; unpause with hoi4_time {\"paused\":false,\"speed\":3} if the game is paused")
+        self.status()
+
+    def watchdog(self, now):
+        if self.watchdog_paused or now - self.last_player <= self.idle_pause:
+            return False
+        self.native_call("hoi4_autopilot", {"enabled": False})
+        err, overview = self.native.call("hoi4_overview", {})
+        paused = False
+        if not err and overview.get("paused") is False:
+            perr, _ = self.native_call("hoi4_time", {"paused": True})
+            paused = not perr
+        self.watchdog_paused = True
+        self.counts["watchdog_pauses"] += 1
+        self.event("watchdog_pause", idle=round(now - self.last_player), game_paused=paused)
+        self.note("no call from you for %d minutes: the supervisor turned the executor off%s"
+                  % ((now - self.last_player) // 60, " and paused the game" if paused else ""))
+        self.status()
+        return True
+
+    def renew(self, now):
+        if now - self.last_renew < RENEW_EVERY:
+            return
+        self.last_renew = now
+        err, body = self.native.call("hoi4_input_lease", {"op": "renew", "lease_token": self.token,
+                                                          "seconds": LEASE_SECONDS})
+        if err:
+            err, lease = self.native.call("hoi4_input_lease", {"op": "acquire", "holder": HOLDER,
+                                                               "seconds": LEASE_SECONDS})
+            if not err and lease.get("lease_token"):
+                self.token = lease["lease_token"]
+            self.event("lease_reacquired", ok=not err)
+
+    def health(self, now):
+        """True when the game and the runtime are still there."""
+        if not self.native.alive():
+            return False
+        if now - self.last_health < HEALTH_EVERY:
+            return True
+        self.last_health = now
+        err, body = self.native.call("hoi4_overview", {})
+        if err and error_code(body) in GONE:
+            return False
+        err, feed = self.native.call("hoi4_observe", {"since": self.feed_seq, "kinds": ["autopilot_stopped"]})
+        if not err and isinstance(feed, dict):
+            self.feed_seq = feed.get("seq", self.feed_seq)
+            for change in feed.get("changes") or []:
+                if change.get("kind") == "autopilot_stopped" and not self.watchdog_paused:
+                    self.counts["executor_stops"] += 1
+                    self.event("executor_stopped", detail=change.get("detail"))
+                    self.note("the executor stopped (%s); the plan's routine work waits until it is on again "
+                              "(hoi4_autopilot {\"enabled\":true})" % json.dumps(change.get("detail"))[:200])
+        return True
+
+    def tick(self):
+        now = self.clock()
+        if self.stopped.is_set() or self.state != "ready":
+            return
+        if not self.health(now):
+            self.stop("game_closed")
+            return
+        self.renew(now)
+        self.watchdog(now)
+
+    def loop(self):
+        while not self.stopped.wait(TICK):
+            try:
+                self.tick()
+            except Exception as exc:  # noqa: BLE001 - one failed tick is logged; the next one runs
+                self.event("tick_failed", error=str(exc)[:300])
+
+    # ------------------------------------------------------------------------------------------ stop
+    def close_records(self):
+        for record in (self._log, self._events):
+            if not record.closed:
+                record.close()
+
+    def release(self):
+        if self.native and self.native.alive() and self.token:
+            self.native_call("hoi4_autopilot", {"enabled": False})
+            self.native.call("hoi4_input_lease", {"op": "release", "lease_token": self.token})
+        if self.native:
+            self.native.close()
+
+    def stop(self, reason):
+        with self.lock:
+            if self.stopped.is_set():
+                return
+            self.stopped.set()
+        self.end_reason = reason
+        final = {}
+        if self.native and self.native.alive():
+            err, overview = self.native.call("hoi4_overview", {})
+            if not err:
+                final["date"] = (overview.get("date") or {}).get("text")
+            err, stats = self.native.call("hoi4_war_stats", {})
+            if not err:
+                final["war_stats"] = stats
+        self.release()
+        self.event("stopped", reason=reason)
+        self.state = "ended"
+        path = report.write(self.run, reason, self.counts, final, self.started, self.clock())
+        self.status("ended", "run ended: %s; report: %s" % (reason, path), report=path)
+        runs.clear_active(self.prefix, self.run)
+        runs.write_json(os.path.join(runs.runs_dir(self.prefix), "last.json"),
+                        {"run": self.run, "reason": reason, "report": path})
+        self.close_records()
+        self.finished.set()
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# endpoint
+
+
+def endpoint_address(system=None):
+    system = system or game.system_name()
+    if system == "windows":
+        return r"\\.\pipe\hoi4live-" + secrets.token_hex(8), "AF_PIPE"
+    folder = tempfile.mkdtemp(prefix="hoi4live-")
+    return os.path.join(folder, "play.sock"), "AF_UNIX"
+
+
+def serve(supervisor, address, family, authkey):
+    from multiprocessing.connection import Listener
+    listener = Listener(address, family=family, authkey=authkey)
+
+    def client(conn):
+        with conn:
+            try:
+                while True:
+                    message = conn.recv()
+                    op = message.get("op")
+                    if op == "tools":
+                        conn.send({"tools": player_tools(supervisor.tools), "state": supervisor.state})
+                    elif op == "call":
+                        conn.send(supervisor.handle(message.get("name"), message.get("args")))
+                    elif op == "stop":
+                        threading.Thread(target=supervisor.stop, args=("stopped_by_user",), daemon=True).start()
+                        conn.send({"stopping": True})
+                    else:
+                        conn.send(error("invalid_request", "op is tools, call or stop"))
+            except (EOFError, OSError):
+                return
+
+    def accept():
+        from multiprocessing import AuthenticationError
+        while not supervisor.stopped.is_set():
+            try:
+                conn = listener.accept()
+            except (AuthenticationError, EOFError):
+                continue                                  # a caller without the key, or one that hung up
+            except OSError:
+                return                                    # the listener was closed
+            threading.Thread(target=client, args=(conn,), daemon=True).start()
+
+    threading.Thread(target=accept, daemon=True).start()
+    return listener
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="hoi4-live-play supervisor", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--prefix", required=True)
+    parser.add_argument("--run", required=True)
+    parser.add_argument("--native", required=True)
+    parser.add_argument("--idle-pause", type=int, default=int(os.environ.get("HOI4_LIVE_IDLE_PAUSE", IDLE_PAUSE)))
+    args = parser.parse_args(argv)
+    run = os.path.abspath(args.run)
+    native_args = [args.native, "--session", os.path.join(run, "session.json"), "--mac-input", run]
+    supervisor = Supervisor(run, os.path.abspath(args.prefix),
+                            lambda: Native(native_args, os.path.join(run, "native.stderr")),
+                            front=game.bring_to_front if game.system_name() == "macos" else None,
+                            idle_pause=args.idle_pause)
+    supervisor.status("starting", "starting the native runtime")
+    if not supervisor.start():
+        return 1
+    address, family = endpoint_address()
+    authkey = secrets.token_bytes(32)
+    listener = serve(supervisor, address, family, authkey)
+    endpoint = {"address": address, "family": family, "authkey": authkey.hex()}
+    runs.write_json(os.path.join(run, "endpoint.json"), endpoint)
+    runs.set_active(supervisor.prefix, run, endpoint, os.getpid())
+    supervisor.status("ready", "playing", date=supervisor.start_date)
+    try:
+        import signal
+        signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=supervisor.stop, args=("stopped_by_user",),
+                                                                  daemon=True).start())
+    except (ValueError, OSError, AttributeError):
+        pass
+    try:
+        supervisor.loop()
+    finally:
+        supervisor.stop(supervisor.end_reason or "supervisor_exit")
+        supervisor.finished.wait(120)
+        listener.close()
+        if family == "AF_UNIX":
+            for path in (address, os.path.dirname(address)):
+                try:
+                    (os.rmdir if os.path.isdir(path) else os.remove)(path)
+                except OSError:
+                    pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
