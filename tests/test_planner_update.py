@@ -87,6 +87,29 @@ class MenuTests(unittest.TestCase):
         self.assertIn("held 4 of the 12 needed", a["progress"])
         self.assertEqual([i["state"] for i in a["default"]["ops"][0]["items"]], [835, 271])
 
+    def test_the_target_set_is_re_evaluated_from_the_live_table(self):
+        def prov(vp, ctl):
+            return [{"province": 1, "vp": vp, "controller": ctl}]
+        table = {"1": {"owner": "ETH", "name": "Near", "provinces": prov(5, "ETH"), "center": [10, 0]},
+                 "2": {"owner": "ETH", "name": "Far", "provinces": prov(6, "ETH"), "center": [400, 0]},
+                 "3": {"owner": "ETH", "name": "Listed", "provinces": prov(8, "ETH"), "center": [200, 0]},
+                 "4": {"owner": "ETH", "name": "Taken", "provinces": prov(4, "ITA"), "center": [5, 0]}}
+        live = snap(vp=table, centers={"1": [10, 0], "2": [400, 0], "3": [200, 0], "4": [5, 0], "9": [0, 0]},
+                    controllers={"9": "ITA", "4": "ITA"})
+        plan = dict(PLAN, vp_targets=[{"state": 3}, {"state": 4}],
+                    goal={"capitulation": {"enemy": "ETH", "vp_needed": 17}})
+        a = menus.army(plan, live, None, None)
+        self.assertIn("held 4 of the 17 needed (the plan's capitulation aim)", a["progress"])
+        # 4 held + 8 listed = 12; the near state (5) closes the gap before the more valuable far one
+        self.assertEqual([i["state"] for i in a["default"]["ops"][0]["items"]], [1])
+        # the aim drops (enemy war support fell): the listed target alone is enough, nothing is added
+        plan["goal"] = {"capitulation": {"enemy": "ETH", "vp_needed": 9}}
+        a = menus.army(plan, live, None, None)
+        self.assertIsNone(a["default"])
+        self.assertNotIn("not_needed_now", a)
+        plan["goal"] = {"capitulation": {"enemy": "ETH", "vp_needed": 4}}
+        self.assertEqual(menus.army(plan, live, None, None)["not_needed_now"], [3])
+
 
 class GateTests(unittest.TestCase):
     def test_invariants(self):
