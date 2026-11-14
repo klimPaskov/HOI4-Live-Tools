@@ -1157,6 +1157,122 @@
             "type": "string"
           },
           "x-owner": "text"
+        },
+        "capitulation": {
+          "type": "object",
+          "x-owner": "lint",
+          "description": "the capitulation the plan aims at (lint conquest.vp_selection and conquest.levers): the threshold the main vp targets reach, the enemy war support and collaboration it rests on, and every lever that lowers it",
+          "properties": {
+            "enemy": {
+              "$ref": "#/definitions/tag",
+              "description": "the country whose capitulation the aim counts (one of the goal's capitulated: predicates)"
+            },
+            "vp_needed": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "the enemy VP the main vp targets (reserve not set) must hold; the reserve targets carry the plan to the unlowered threshold"
+            },
+            "war_support": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "enemy war support the aim assumes; under the split (0.5) the threshold drops, and a used war_support lever must say what holds it there"
+            },
+            "collaboration": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "collaboration with the enemy the aim assumes, from a used collaboration operation"
+            },
+            "levers": {
+              "type": "array",
+              "description": "every way to lower the threshold facts.capitulation_levers lists, used or with why not",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "lever": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "war_support, or an operation id from common/operations (operation_collaboration_government; the operation_ prefix may be left out)"
+                  },
+                  "use": {
+                    "type": "boolean",
+                    "description": "true: the plan uses it (start, cost and effect_vp required); false: why says why not"
+                  },
+                  "start": {
+                    "$ref": "#/definitions/date",
+                    "description": "when the plan starts it"
+                  },
+                  "ready_by": {
+                    "$ref": "#/definitions/date",
+                    "description": "when it pays; the lint warns when that is before the agency timeline allows"
+                  },
+                  "cost": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "what it takes: operatives, network, equipment, factories, PP, air wings"
+                  },
+                  "effect_vp": {
+                    "type": "integer",
+                    "description": "VP the threshold drops by when it pays"
+                  },
+                  "means": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x-owner": "text"
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x-owner": "text",
+                    "description": "the tools that carry it"
+                  },
+                  "tool_gap": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "the missing or unverified tool it depends on (also in RUN/tool-gaps.md)"
+                  },
+                  "why": {
+                    "type": "string",
+                    "description": "Free text for people and the player; never read by the executor."
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "Free text for people and the player; never read by the executor."
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "lever",
+                  "use"
+                ]
+              }
+            },
+            "summary": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            },
+            "why": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            },
+            "note": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "enemy",
+            "vp_needed",
+            "levers"
+          ]
         }
       },
       "additionalProperties": false,
@@ -4254,6 +4370,17 @@
           "note": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
+          },
+          "running_vp": {
+            "type": "number",
+            "minimum": 0,
+            "x-owner": "lint",
+            "description": "enemy VP held after this target (start control, this target and the ones before it, paths included); the lint checks it"
+          },
+          "reserve": {
+            "type": "boolean",
+            "x-owner": "lint",
+            "description": "true: past the goal.capitulation aim, taken only if the threshold has not been lowered as planned; the executor takes it like any other target, so list reserves after the main set"
           }
         },
         "additionalProperties": false,

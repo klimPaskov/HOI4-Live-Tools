@@ -169,5 +169,21 @@ class StrategizeTests(unittest.TestCase):
         self.assertEqual([strategize.pass_mark(m) for m in (32, 22, 64)], [22, 16, 44])
 
 
+
+class LintToolGaps(unittest.TestCase):
+    def test_tool_gap_findings_reach_tool_gaps_md(self):
+        with tempfile.TemporaryDirectory() as d:
+            row = {"rule": "conquest.tool_gap", "severity": "warning",
+                   "where": "goal.capitulation.levers[1] operation_collaboration_government",
+                   "message": "the plan needs it but hoi4_operative_assign refuses operations"}
+            with open(os.path.join(d, "lint.json"), "w", encoding="utf-8") as f:
+                json.dump({"findings": [row, {"rule": "conquest.levers", "where": "x", "message": "y"}]}, f)
+            self.assertEqual(len(strategize.lint_tool_gaps(d)), 1)
+            self.assertEqual(strategize.lint_tool_gaps(d), [])  # once
+            with open(os.path.join(d, "tool-gaps.md"), encoding="utf-8") as f:
+                text = f.read()
+            self.assertIn("operation_collaboration_government", text)
+            self.assertNotIn("- x:", text)
+
 if __name__ == "__main__":
     unittest.main()

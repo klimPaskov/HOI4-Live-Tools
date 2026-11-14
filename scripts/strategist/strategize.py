@@ -304,8 +304,31 @@ def strategize(args, runner=None):
     return finish(run_dir, report, None, started)
 
 
+def lint_tool_gaps(run_dir):
+    """Append the last lint's conquest.tool_gap findings (a lever the plan needs that no tool carries) to
+    tool-gaps.md, once each, so the gap reaches the operator even when the strategist did not write it."""
+    try:
+        with open(os.path.join(run_dir, "lint.json"), encoding="utf-8") as f:
+            findings = json.load(f).get("findings") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+    path = os.path.join(run_dir, "tool-gaps.md")
+    old = ""
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            old = f.read()
+    new = ["- %s: %s" % (f.get("where"), f.get("message")) for f in findings
+           if f.get("rule") == "conquest.tool_gap" and "- %s:" % f.get("where") not in old]
+    if new:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(("\n" if old else "") + "## Levers the plan needs that no tool carries (lint conquest.tool_gap)\n\n"
+                    + "\n".join(new) + "\n")
+    return new
+
+
 def finish(run_dir, report, failure, started):
     report["seconds"] = round(time.time() - started)
+    lint_tool_gaps(run_dir)
     gaps = os.path.join(run_dir, "tool-gaps.md")
     if os.path.exists(gaps):
         # The models may not change the tools; they report gaps here for the operator to fix.

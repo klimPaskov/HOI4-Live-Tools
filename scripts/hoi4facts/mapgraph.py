@@ -687,6 +687,34 @@ def route(graph, src, dst, avoid_rivers=False, weights=None, land_only=True, all
             "rivers": len(crossings), "avoid_rivers": avoid_rivers}
 
 
+def costs_from(graph, sources, allowed=None, land_only=True, weights=None):
+    """Cheapest cost from the nearest of `sources` to every reachable province, with route's step cost:
+    ({province: cost}, {province: previous province}); a source costs 0 and has no previous."""
+    w = _weights(graph, weights)
+    provs, adj = graph["provinces"], graph["adj"]
+    dist = {s: 0.0 for s in sources if s in provs}
+    prev = {}
+    heap = [(0.0, s) for s in dist]
+    heapq.heapify(heap)
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist.get(u, float("inf")):
+            continue
+        for v, e in adj.get(u, {}).items():
+            if e.get("impassable") or v not in provs:
+                continue
+            if land_only and provs[v]["type"] != "land":
+                continue
+            if allowed is not None and not allowed(v):
+                continue
+            nd = d + step_cost(graph, u, v, e, w)
+            if nd < dist.get(v, float("inf")):
+                dist[v] = nd
+                prev[v] = u
+                heapq.heappush(heap, (nd, v))
+    return dist, prev
+
+
 def path_crossings(graph, path):
     """[[a, b], ...] river crossings along a given province path; KeyError if two steps are not adjacent."""
     return [[a, b] for a, b in zip(path, path[1:]) if graph["adj"][a][b].get("river_crossing")]

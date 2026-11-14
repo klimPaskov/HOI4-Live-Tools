@@ -84,6 +84,25 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            starting surrender_limit modifiers), when the goal is a capitulation; the
                            threshold is the one at war support 50% or more (low war support lowers it, and
                            facts.surrender.war_support gives the lower numbers for earlier checkpoints)
+  conquest.vp_selection    a capitulation goal with no goal.capitulation aim (enemy, vp_needed, the war support and
+                           collaboration it rests on, levers); an aim below what those leave the enemy asking; a
+                           war support under the split or a collaboration with no used lever behind it; running_vp
+                           on a vp target that is not the enemy VP held after it; main targets (reserve not set)
+                           short of the aim; a main target the others do not need to reach the aim; a main target
+                           while a skipped enemy VP province worth as much costs VP_DOMINANCE of it or less; and,
+                           for one army, a target taken before a later one worth as much at that share of the
+                           cost. Cost = route cost (terrain, infrastructure, rivers) from the land held by then +
+                           VP_GARRISON_COST per enemy start division in the state + VP_SUPPLY_COST per point of
+                           estimated supply under REACH_OK; facts.vp_selection gives each target's cost and value,
+                           and the reference set greedy by value for difficulty (targets that lie on a later
+                           target's leg or in a goal state are exempt from the need, skip and order checks)
+  conquest.levers          a way to lower the enemy's surrender threshold the game files give (war support under the
+                           split; an operation that adds collaboration, with its agency, recruitment, network and
+                           operation days from the defines) missing from goal.capitulation.levers; one that pays
+                           within the run left unused with no why; a used one without start, cost or effect_vp; a
+                           used operation without the agency, its operatives and a network on the enemy in the
+                           intelligence key; a used lever no tool carries without tool_gap (facts.capitulation_levers)
+  conquest.tool_gap        (warning) a used lever no tool carries yet (LEVER_TOOL_GAPS): report it in RUN/tool-gaps.md
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
                            fully-controlled state left out)
   conquest.adjacency       target (or the first province of its path) not next to own land or an
@@ -286,6 +305,13 @@ HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal pr
 NODE_STEPS = 6             # construction.railway_node: steps searched for the nearest node to name
 REACH_STEPS = 14           # supply.axis_reach: steps searched for supply nodes around an axis state
 REACH_SOURCES = 4          # supply.axis_reach: nearest nodes routed per axis state
+VP_GARRISON_COST = 2.0     # conquest.vp_selection: cost per enemy division in the target's state at the start
+VP_SUPPLY_COST = 4.0       # conquest.vp_selection: cost per point of estimated supply flow below REACH_OK there
+VP_DOMINANCE = 0.75        # conquest.vp_selection: an option worth as much at this share of the cost or less wins
+# A lever the plan needs but no tool carries: the lint names the gap (conquest.tool_gap) instead of the plan
+# dropping the lever. Remove a row when its tool is live-verified.
+LEVER_TOOL_GAPS = {"operation": "hoi4_operative_assign refuses operations (playbook politics-diplomacy-espionage "
+                                "section (c) Gaps); the operations tool is being built"}
 REACH_OK = 1.0             # supply.axis_reach: estimated flow below which the axis state is short of supply
 MATURE_DAYS = 30          # production.mature_switch: a line this old (or a start line) is mature
 SWITCH_MATCH_DAYS = 14    # production.mature_switch: a remove and an add this close are one switch
@@ -319,7 +345,8 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
              "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "politics.available", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
-             "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance"}
+             "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
+             "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
@@ -1348,6 +1375,281 @@ class Lint:
                     self.add("warning", "conquest.by_order", where,
                              f"by {e['by']} is before the previous target of {army or 'any army'} ({last_by[army][1]})")
                 last_by[army] = (d, e["by"])
+
+    # ------------------------------------------------------------------ capitulation aim, levers, vp selection
+    def vp_supply(self, prov):
+        """Estimated supply flow at a province from the best node held at the start or planned (as
+        supply.axis_reach; nodes taken in the war are left out)."""
+        cache = self.__dict__.setdefault("_vp_supply", {})
+        if prov in cache:
+            return cache[prov]
+        game, graph = self.game, self.game.map_graph()
+        start_ctl = set(self.start_control())
+        held = {p: k for p, k in self.rail_nodes().items() if p in start_ctl or k == "planned"}
+        mot = self.war.get("motorization", 0)
+        mot = mot if isinstance(mot, int) else 0
+        best = 9.9 if prov in held else None
+        if best is None and graph is not None:
+            near = derive.distances(game, [prov], REACH_STEPS)
+            for _, q in sorted((d, q) for q, d in near.items() if q in held)[:REACH_SOURCES]:
+                r = mapgraph.route(graph, q, prov, allowed=self.can_enter())
+                if r:
+                    v = derive.supply_reach(game, r["path"], "hub" if held[q] == "planned" else held[q], mot)
+                    best = v if best is None else max(best, v)
+        cache[prov] = best
+        return best
+
+    def can_enter(self):
+        open_tags, own = self.passable_tags(), self.world.owner_of_province
+        return (lambda p: own(p) is None or own(p) in open_tags) if open_tags is not None else None
+
+    def vp_options(self, ctl, enemy, vps, owners, pstate):
+        """{province: option} for each VP province `enemy` owns at the start and `ctl` does not hold: the
+        cheapest route from ctl (mapgraph step cost: terrain, infrastructure, rivers), the enemy VP taken on
+        it, and cost = route cost + VP_GARRISON_COST x the enemy's start divisions in the target state +
+        VP_SUPPLY_COST x the estimated supply short of REACH_OK there."""
+        graph = self.game.map_graph()
+        if graph is None:
+            return {}
+        adj = self.adjacency()
+        front = [p for p in ctl if any(n not in ctl for n in adj.get(p, ()))]
+        dist, prev = mapgraph.costs_from(graph, front, allowed=self.can_enter())
+        garrison = self.__dict__.get("_garrison", {}).get(enemy)
+        if garrison is None:
+            garrison = Counter(d.get("state") for d in self.world.oob(enemy).get("divisions") or [])
+            self.__dict__.setdefault("_garrison", {})[enemy] = garrison
+        out = {}
+        for prov, v in vps.items():
+            if v <= 0 or prov in ctl or owners.get(pstate.get(prov)) != enemy or prov not in dist:
+                continue
+            path = [prov]
+            while path[-1] in prev:
+                path.append(prev[path[-1]])
+            path.reverse()
+            taken = [p for p in path if p not in ctl]
+            got = sum(vps.get(p, 0) for p in taken if owners.get(pstate.get(p)) == enemy)
+            sup = self.vp_supply(prov)
+            g = garrison.get(pstate.get(prov), 0)
+            short = max(0.0, REACH_OK - sup) if sup is not None else REACH_OK
+            cost = dist[prov] + VP_GARRISON_COST * g + VP_SUPPLY_COST * short
+            out[prov] = {"province": prov, "state": pstate.get(prov), "vp": got, "own_vp": v,
+                         "route_cost": round(dist[prov], 2), "steps": len(taken),
+                         "rivers": len(mapgraph.path_crossings(graph, path)), "garrison": g,
+                         "supply": None if sup is None else round(sup, 2), "cost": round(cost, 2),
+                         "value": round(got / max(cost, 0.5), 3), "path": taken}
+        return out
+
+    def capitulation_levers(self, enemy, surr, cap, last_day):
+        """The catalogue of ways to lower `enemy`'s surrender threshold the game files give, with cost, the
+        earliest date each pays and its effect in VP; then each checked against goal.capitulation.levers."""
+        game = self.game
+        start_day = derive.day(self.start)
+        ws = surr["war_support"]
+        rows = []
+        if ws.get("full_malus"):
+            rows.append({"lever": "war_support", "kind": "war_support", "pays_off": ws["at_zero"]["vp_needed"] < surr["vp_needed"],
+                         "means": ["casualties", "strategic_bombing", "propaganda"],
+                         "effect": f"{surr['vp_needed']} VP at {ws['split'] * 100:g}% war support or more, "
+                                   f"{ws['at_start']['vp_needed']} at the start value {ws['start'] * 100:g}%, "
+                                   f"{ws['at_zero']['vp_needed']} at 0%",
+                         "effect_vp": surr["vp_needed"] - ws["at_zero"]["vp_needed"]})
+        ag = self.world.agency(self.tag) if self.tag else {}
+        dfn = {k: (v or {}).get("v") for k, v in (ag.get("defines") or {}).items()}
+        gain = dfn.get("OPERATIVE_BASE_INTEL_NETWORK_GAIN") or 0.4
+        for op in (ag.get("operations") or []) if ag.get("dlc_la_resistance", True) else []:
+            if not op.get("collaboration"):
+                continue
+            t = 0 if ag.get("agency_at_start") else (dfn.get("AGENCY_CREATION_DAYS") or 30)
+            t += dfn.get("AGENCY_OPERATIVE_RECRUITMENT_TIME") or 30
+            network = math.ceil((op.get("network_strength") or 0) / gain)
+            ready = start_day + t + network + (op.get("days") or 0)
+            runs = 0 if ready > last_day else 1 + int((last_day - ready) // max(1, op.get("days") or 1))
+            collab = min(1.0, runs * op["collaboration"])
+            wsv = (cap or {}).get("war_support")
+            def need(c):
+                r = derive.surrender(game, enemy, self.ctx, self.start, war_support=wsv, collaboration=c)
+                return r["war_support"]["at"]["vp_needed"] if wsv is not None else r["vp_needed"]
+            eff = need(0) - need(collab)
+            rows.append({"lever": op["id"], "kind": "operation", "pays_off": runs > 0 and eff >= 1,
+                         "earliest_ready": derive.fmt(derive.date_of(ready)),
+                         "runs_by_last_target": runs, "collaboration": round(collab, 3), "effect_vp": eff,
+                         "timeline_days": {"agency": 0 if ag.get("agency_at_start") else dfn.get("AGENCY_CREATION_DAYS") or 30,
+                                           "recruit": dfn.get("AGENCY_OPERATIVE_RECRUITMENT_TIME") or 30,
+                                           "network": network, "operation": op.get("days")},
+                         "cost": {"operatives": op.get("operatives"), "network_strength": op.get("network_strength"),
+                                  "equipment": op.get("equipment")},
+                         "tool_gap": LEVER_TOOL_GAPS.get("operation")})
+        if cap is None:
+            return rows
+        plan_levers = {}
+        for i, e in enumerate(cap.get("levers") or []):
+            if isinstance(e, dict) and isinstance(e.get("lever"), str):
+                plan_levers[e["lever"]] = (i, e)
+        for r in rows:
+            names = [r["lever"], r["lever"].replace("operation_", "", 1)]
+            hit = next((plan_levers[n] for n in names if n in plan_levers), None)
+            if hit is None:
+                self.add("error", "conquest.levers", "goal.capitulation.levers",
+                         f"{r['lever']} lowers {enemy}'s threshold by up to {r['effect_vp']} VP"
+                         + (f" (earliest {r['earliest_ready']}, {r['runs_by_last_target']} run(s) before the last "
+                            f"target)" if r["kind"] == "operation" else f" ({r['effect']})")
+                         + ": list it with use, start, cost and effect, or use false with why")
+                continue
+            i, e = hit
+            where = f"goal.capitulation.levers[{i}] {r['lever']}"
+            if not e.get("use"):
+                if r["pays_off"] and not e.get("why"):
+                    self.add("error", "conquest.levers", where,
+                             f"pays {r['effect_vp']} VP within the run but is not used and gives no why")
+                continue
+            missing = [k for k in ("start", "cost", "effect_vp") if e.get(k) in (None, "")]
+            if missing:
+                self.add("error", "conquest.levers", where, f"a used lever needs {', '.join(missing)}")
+            if r.get("tool_gap"):
+                if not e.get("tool_gap"):
+                    self.add("error", "conquest.levers", where,
+                             f"no tool carries it yet ({r['tool_gap']}): set tool_gap and report it in RUN/tool-gaps.md")
+                else:
+                    self.add("warning", "conquest.tool_gap", where, f"the plan needs it but {r['tool_gap']}")
+            if r["kind"] == "operation":
+                rd = derive.day(e.get("ready_by")) if e.get("ready_by") else None
+                if rd is not None and rd < derive.day(r["earliest_ready"]):
+                    self.add("warning", "conquest.levers", where,
+                             f"ready_by {e['ready_by']} is before the earliest the agency timeline allows "
+                             f"({r['earliest_ready']}: {r['timeline_days']})")
+                intel = self.plan.get("intelligence") if isinstance(self.plan.get("intelligence"), dict) else {}
+                ops = intel.get("operatives")
+                n_ops = ops if isinstance(ops, int) else len(ops or [])
+                st_owner = {sid: r["owner"] for sid, r in game.state_facts(self.ctx, self.start).items()}
+                nets = [o for o in (ops if isinstance(ops, list) else []) if isinstance(o, dict)
+                        and o.get("mission") in ("build_intel_network", "quiet_intel_network")
+                        and enemy in (o.get("target"), o.get("country"), st_owner.get(o.get("state_id")))]
+                if not (intel.get("agency") or ag.get("agency_at_start")) or n_ops < (r["cost"]["operatives"] or 0) or not nets:
+                    self.add("error", "conquest.levers", where,
+                             f"needs intelligence.agency, {r['cost']['operatives']:g} operatives and a network on {enemy} "
+                             f"(build_intel_network on a state it holds) in the plan's intelligence key")
+        return rows
+
+    def capitulation_plan(self):
+        """conquest.vp_selection: the aim (goal.capitulation), the running totals and the cheapest set."""
+        surr_all = self.facts.get("surrender") or {}
+        if not surr_all:
+            return
+        cap = self.goal.get("capitulation") if isinstance(self.goal.get("capitulation"), dict) else None
+        enemy = (cap or {}).get("enemy") if (cap or {}).get("enemy") in surr_all else sorted(surr_all)[0]
+        surr = surr_all[enemy]
+        game = self.game
+        facts = game.state_facts(self.ctx, self.start)
+        vps = {p: v for r in facts.values() for p, v in r["vps"].items()}
+        owners = {sid: r["owner"] for sid, r in facts.items()}
+        pstate = game.province_state()
+        start = set(self.start_control())
+        targets = self.targets()
+        main = [e for e in targets if not e.get("reserve")]
+        days = [derive.day(e["by"]) for e in main if e.get("by") and derive.day(e["by"]) is not None]
+        last_day = max(days) if days else max((d for d, _ in self.horizon()), default=derive.day(self.start) + 365)
+        levers = self.capitulation_levers(enemy, surr, cap, last_day)
+        ws = (cap or {}).get("war_support")
+        collab = (cap or {}).get("collaboration") or 0
+        est = derive.surrender(game, enemy, self.ctx, self.start, war_support=ws, collaboration=collab)
+        floor_need = est["war_support"]["at"]["vp_needed"] if ws is not None else est["vp_needed"]
+        aim = (cap or {}).get("vp_needed") if isinstance((cap or {}).get("vp_needed"), int) else surr["vp_needed"]
+        ev = lambda p: vps.get(p, 0) if owners.get(pstate.get(p)) == enemy else 0  # noqa: E731
+        if cap is None:
+            self.add("error", "conquest.vp_selection", "goal.capitulation",
+                     f"the goal capitulates {enemy} but the plan states no aim: set goal.capitulation {{enemy, vp_needed, "
+                     f"war_support, collaboration, levers}} (facts.capitulation_levers lists the levers, "
+                     f"facts.vp_selection.reference the cheapest set) and running_vp on each vp target")
+        else:
+            if aim < floor_need:
+                self.add("error", "conquest.vp_selection", "goal.capitulation.vp_needed",
+                         f"aims at {aim} VP but at war support {ws if ws is not None else 'unlowered'} and collaboration "
+                         f"{collab:g} {enemy} asks {floor_need} of {surr['total_vp']:g}")
+            used = {e.get("lever", "").replace("operation_", "", 1) for e in cap.get("levers") or []
+                    if isinstance(e, dict) and e.get("use")}
+            if ws is not None and ws < surr["war_support"]["split"] and "war_support" not in used:
+                self.add("error", "conquest.vp_selection", "goal.capitulation.war_support",
+                         f"assumes {enemy} war support {ws:g} (under {surr['war_support']['split']:g}, where the "
+                         f"threshold drops) with no used war_support lever saying what holds it there")
+            if collab and not any(u for u in used if "collaboration" in u):
+                self.add("error", "conquest.vp_selection", "goal.capitulation.collaboration",
+                         f"assumes collaboration {collab:g} with no used collaboration lever")
+        # running totals, main total, what each main target alone adds
+        counted, run, rows = set(start), 0, []
+        for i, e in enumerate(targets):
+            add = [p for p in dict.fromkeys(self.captures(e)) if p not in counted]
+            counted.update(add)
+            run += sum(ev(p) for p in add)
+            rows.append({"province": e["province"], "name": e.get("name"), "vp": sum(ev(p) for p in add),
+                         "running_vp": run, "reserve": bool(e.get("reserve"))})
+            if cap is not None and e.get("running_vp") != run:
+                self.add("error", "conquest.vp_selection", f"vp_targets[{i}] {e['province']}",
+                         f"running_vp {e.get('running_vp')} but {enemy} VP held after this target is {run} "
+                         f"(of the {aim} the plan aims at)")
+        main_caps = {}
+        for e in main:
+            for p in self.captures(e):
+                main_caps.setdefault(p, []).append(e["province"])
+        main_total = sum(ev(p) for p in main_caps if p not in start)
+        if cap is not None and main_total < aim:
+            self.add("error", "conquest.vp_selection", "vp_targets",
+                     f"the main targets (reserve false) hold {main_total} of the {aim} VP the plan aims at")
+        must = set(self.goal_states())
+        legs = {e["province"]: set(leg or []) | set(self.captures(e)) for _, e, leg, _ in self.legs()}
+        ctl = set(start)
+        for k, e in enumerate(main):
+            later = main[k + 1:]
+            anchor = (pstate.get(e["province"]) in must
+                      or any(e["province"] in legs.get(u["province"], ()) for u in later))
+            own = sum(ev(p) for p in dict.fromkeys(self.captures(e)) if p not in start
+                      and set(main_caps.get(p, ())) == {e["province"]})
+            where = f"vp_targets {e['province']}" + (f" ({e['name']})" if e.get("name") else "")
+            if cap is not None and not anchor and own and main_total - own >= aim:
+                self.add("error", "conquest.vp_selection", where,
+                         f"not needed: the other main targets hold {main_total - own} of the {aim} aimed at; drop it "
+                         f"or mark it reserve")
+            if e["province"] not in ctl:
+                opts = self.vp_options(ctl, enemy, vps, owners, pstate)
+                me = opts.get(e["province"])
+                if me and not anchor and cap is not None:
+                    skipped = [o for p, o in opts.items() if p not in main_caps and o["vp"] >= me["vp"]
+                               and o["cost"] <= VP_DOMINANCE * me["cost"]]
+                    if skipped:
+                        o = min(skipped, key=lambda o: o["cost"])
+                        self.add("error", "conquest.vp_selection", where,
+                                 f"{me['vp']} VP at cost {me['cost']:g}, while {o['province']} (state {o['state']}, "
+                                 f"{o['vp']} VP at cost {o['cost']:g}) is skipped: take the cheaper one")
+                    army = e.get("army", "")
+                    first = [opts[u["province"]] for u in later if u.get("army", "") == army
+                             and u["province"] in opts and e["province"] not in legs.get(u["province"], ())
+                             and opts[u["province"]]["vp"] >= me["vp"] and opts[u["province"]]["cost"] <= VP_DOMINANCE * me["cost"]]
+                    if first:
+                        o = min(first, key=lambda o: o["cost"])
+                        self.add("error", "conquest.vp_selection", where,
+                                 f"order: {o['province']} later in the list holds {o['vp']} VP at cost {o['cost']:g} "
+                                 f"from here, against {me['vp']} at {me['cost']:g} for this one: take it first")
+                if me:
+                    rows[targets.index(e)].update({"cost": me["cost"], "value": me["value"]})
+            ctl.update(self.captures(e))
+        # the reference: greedy by value for difficulty from the start until the aim is reached
+        ref, ctl, total = [], set(start), 0
+        while total < aim and len(ref) < 60:
+            opts = self.vp_options(ctl, enemy, vps, owners, pstate)
+            if not opts:
+                break
+            o = max(opts.values(), key=lambda o: (o["value"], -o["cost"], -o["province"]))
+            total += o["vp"]
+            ref.append({k: o[k] for k in ("province", "state", "vp", "cost", "value", "route_cost", "rivers", "garrison",
+                                          "supply", "path")} | {"running_vp": total})
+            ctl.update(o["path"])
+        self.facts["vp_selection"] = {
+            "enemy": enemy, "aim": aim, "vp_needed_base": surr["vp_needed"], "total_vp": surr["total_vp"],
+            "aim_rests_on": {"war_support": ws, "collaboration": collab, "vp_needed": floor_need},
+            "main_total": main_total, "plan": rows, "reference": ref, "reference_total": total,
+            "method": "cost = route cost (terrain, infrastructure, rivers) + %g x enemy start divisions in the "
+                      "state + %g x supply short of %g; value = VP on the route / cost; reference = greedy by value "
+                      "from the start control" % (VP_GARRISON_COST, VP_SUPPLY_COST, REACH_OK)}
+        self.facts["capitulation_levers"] = levers
 
     def conquest_skipped_near(self, targets, vps, owners, pstate):
         """(warning) an enemy VP province next to own land or to a planned target is never taken,
@@ -3646,7 +3948,7 @@ class Lint:
     # ------------------------------------------------------------------
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
-                 self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
+                 self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
                  self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
                  self.alarms_silenced,
                  self.production_changes, self.unreadable,

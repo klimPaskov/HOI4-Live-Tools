@@ -577,7 +577,7 @@ def low_war_support_malus(game, war_support):
     return full * gap
 
 
-def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None):
+def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None, collaboration=0.0):
     """Capitulation arithmetic of `tag` at date: {"total_vp", "base", "modifiers": [[idea, value]],
     "limit", "vp_needed", "vp_needed_base", "war_support": {...}}. Total VP = the victory points of the
     states it owns; limit = BASE_SURRENDER_LIMIT plus the surrender_limit of its starting ideas, floored at
@@ -587,7 +587,11 @@ def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None):
     ask for, so the number a plan must reach. Low war support lowers the limit (low_war_support_malus), and
     "war_support" gives the rows a planner compares: `start` (the history's war support), `at_start` and
     `at_zero` ({"war_support", "malus", "limit", "vp_needed"}), `at` for the war_support argument when given,
-    and `applies`: which row holds at that war support (the argument, else the start value)."""
+    and `applies`: which row holds at that war support (the argument, else the start value).
+
+    `collaboration` (0..1, what the enemy's collaboration with the planner reaches) lowers every row's limit by
+    SURRENDER_LIMIT_REDUCTION_PER_COLLABORATION x collaboration, read as limit points (an estimate: the define
+    says "each percent of collaboration lowers the surrender limit by this percentage")."""
     ectx = Ctx(tag, ctx.dlcs) if ctx else None
     facts = game.state_facts(ectx, date)
     total = sum(sum(r["vps"].values()) for r in facts.values() if r["owner"] == tag)
@@ -599,7 +603,8 @@ def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None):
         v = table.get(idea, {}).get("surrender_limit")
         if v:
             mods.append([idea, v])
-    ideas_limit = base + sum(v for _, v in mods)
+    per_collab = float(define(game, "SURRENDER_LIMIT_REDUCTION_PER_COLLABORATION", 0.15))
+    ideas_limit = base + sum(v for _, v in mods) - per_collab * max(0.0, min(1.0, float(collaboration or 0)))
     limit = max(floor, ideas_limit)
     need = lambda lim: int(math.ceil(total * lim - 1e-9))  # noqa: E731
 
@@ -617,7 +622,8 @@ def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None):
     now = ws.get("at") or ws["at_start"]
     ws["applies"] = "limit" if not now["malus"] else ("at" if "at" in ws else "at_start")
     return {"tag": tag, "total_vp": total, "base": base, "modifiers": mods, "limit": round(limit, 4),
-            "vp_needed": need(limit), "vp_needed_base": need(base), "war_support": ws}
+            "vp_needed": need(limit), "vp_needed_base": need(base), "war_support": ws,
+            "collaboration": round(float(collaboration or 0), 4)}
 
 
 # --------------------------------------------------------------------------- characters
