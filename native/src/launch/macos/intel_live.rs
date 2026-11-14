@@ -52,7 +52,6 @@ const UPGRADE_KEY: u64 = 0x10;
 const LEADER_TYPE: &str = "16COperativeLeader";
 const LEADER_NAME: u64 = 0x20;
 const LEADER_NATIONALITIES: u64 = 0xd88;
-const LEADER_OWNER: u64 = 0xe20;
 const LEADER_CODENAME: u64 = 0xe48;
 const LEADER_MISSION: u64 = 0xea0;
 const MISSION_TYPE: &str = "17COperativeMission";
@@ -146,6 +145,8 @@ pub(super) struct Operative {
     pub address: u64,
     /// The game's character id of the operative (operative locations name it).
     pub id: i32,
+    /// Key of the operation the operative works on.
+    pub operation: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -170,6 +171,7 @@ impl Network {
     pub fn strength(&self) -> f64 {
         self.subs.iter().map(|s| s.strongest).fold(0.0, f64::max)
     }
+    #[cfg(test)]
     pub fn state(&self, id: i32) -> Option<f64> {
         self.subs
             .iter()
@@ -238,6 +240,7 @@ fn operative(r: &Reader<'_>, image: u64, leader: u64) -> Result<Operative> {
         mission_state,
         address: leader,
         id: r.i32(leader + 8)?,
+        operation: None,
     })
 }
 
@@ -315,6 +318,28 @@ pub(super) fn networks(r: &Reader<'_>, image: u64, gs: u64, own_tag: i32) -> Res
     Ok(out)
 }
 
+const POLITICS: u64 = 0xd38;
+const POLITICS_TYPE: &str = "16CPoliticalStatus";
+const RULING_PARTY: u64 = 0xd0;
+const PARTY_TYPE: &str = "15CPoliticalParty";
+const PARTY_GROUP: u64 = 0x18;
+const GROUP_TYPE: &str = "14CIdeologyGroup";
+const GROUP_KEY: u64 = 0x18;
+
+/// Ruling ideology group of `country` (`fascism`, ...): `CPoliticalStatus` (country `+0xd38`),
+/// ruling `CPoliticalParty` `+0xd0`, its `CIdeologyGroup` `+0x18`, whose key is at `+0x18`
+/// (read live 14 November 2026: Italy 1936 `fascism`).
+pub(super) fn ruling_ideology(r: &Reader<'_>, country: u64) -> Result<String> {
+    let politics = object(r, r.u64(country + at(r, &COUNTRY, POLITICS)?)?, POLITICS_TYPE)?;
+    let party = object(r, r.u64(politics + RULING_PARTY)?, PARTY_TYPE)?;
+    let group = object(r, r.u64(party + PARTY_GROUP)?, GROUP_TYPE)?;
+    let key = text(r, group + GROUP_KEY)?;
+    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+        return Err(Error::new("invalid_string", "Unexpected ideology key"));
+    }
+    Ok(key)
+}
+
 pub(super) fn operative_json(index: usize, o: &Operative) -> Value {
     json!({
         "index": index,
@@ -324,7 +349,9 @@ pub(super) fn operative_json(index: usize, o: &Operative) -> Value {
         "mission": o.mission,
         "mission_target": o.mission_target,
         "mission_state": o.mission_state,
-        "free": o.mission.is_none() || o.mission.as_deref() == Some("no_mission"),
+        "idle": o.mission.is_none() || o.mission.as_deref() == Some("no_mission"),
+        "operation": o.operation,
+        "available_for_operation": o.operation.is_none(),
     })
 }
 
@@ -409,20 +436,20 @@ pub(super) mod tests {
     fn agency_read_joins_upgrades_operatives_and_candidates() {
         let m = Mem::default();
         m.alloc(0x40000, 0x5000);
-        let (country, agency, up, op, cand) = (0x100000u64, 0x110000u64, 0x120000u64, 0x130000u64, 0x140000u64);
-        for (a, n) in [(country, 0x1000), (agency, 0x200), (up, 0x100), (op, 0x1000), (cand, 0x1000), (0x150000, 0x100), (0x160000, 0x100)] {
+        let (country, ag, up, op, cand) = (0x100000u64, 0x110000u64, 0x120000u64, 0x130000u64, 0x140000u64);
+        for (a, n) in [(country, 0x1000), (ag, 0x200), (up, 0x100), (op, 0x1000), (cand, 0x1000), (0x150000, 0x100), (0x160000, 0x100)] {
             m.alloc(a, n);
         }
-        m.q(country + AGENCY, agency);
-        typed(&m, agency, AGENCY_TYPE, 0);
+        m.q(country + AGENCY, ag);
+        typed(&m, ag, AGENCY_TYPE, 0);
         typed(&m, up, UPGRADE_TYPE, 1);
         m.sso(up + UPGRADE_KEY, "upgrade_army_department");
         m.q(0x150000, up);
         m.i(0x150000 + 8, 1);
-        array(&m, agency + UPGRADES_DONE, 0x150000, 1);
-        m.q(agency + UPGRADING, 0);
-        m.patch(agency + CREATED, &[1, 0]);
-        m.l(agency + PROGRESS, 3_000_000);
+        array(&m, ag + UPGRADES_DONE, 0x150000, 1);
+        m.q(ag + UPGRADING, 0);
+        m.patch(ag + CREATED, &[1, 0]);
+        m.l(ag + PROGRESS, 3_000_000);
         typed(&m, op, LEADER_TYPE, 2);
         m.sso(op + LEADER_NAME, "Francesco");
         m.sso(op + LEADER_CODENAME, "Lupo");
@@ -430,12 +457,12 @@ pub(super) mod tests {
         typed(&m, op + LEADER_MISSION, MISSION_TYPE, 3);
         m.q(op + LEADER_MISSION + MISSION_OBJECT, 0);
         m.q(0x160040, op);
-        array(&m, agency + OPERATIVES, 0x160040, 1);
+        array(&m, ag + OPERATIVES, 0x160040, 1);
         typed(&m, cand, LEADER_TYPE, 2);
         m.sso(cand + LEADER_NAME, "Benito");
         m.q(0x160080, cand);
-        array(&m, agency + CANDIDATES, 0x160080, 1);
-        m.i(agency + SLOT_WAIT, 6);
+        array(&m, ag + CANDIDATES, 0x160080, 1);
+        m.i(ag + SLOT_WAIT, 6);
         let r = Reader::new(&m);
         let a = agency_read(&r, country);
         assert!(a.created && !a.creating);
@@ -446,7 +473,7 @@ pub(super) mod tests {
         assert_eq!(a.candidates, ["Benito"]);
         let v = agency_json(&a);
         assert_eq!(v["upgrade_count"], json!(1));
-        assert_eq!(operative_json(0, &a.operatives[0])["free"], json!(true));
+        assert_eq!(operative_json(0, &a.operatives[0])["idle"], json!(true));
         // A wrong object type fails closed.
         typed(&m, up, "11CTechnology", 4);
         assert_eq!(agency(&r, IMAGE, country).unwrap_err().code, "invalid_type");

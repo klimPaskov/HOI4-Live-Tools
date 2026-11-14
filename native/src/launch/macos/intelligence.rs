@@ -391,6 +391,7 @@ pub(super) fn intelligence(process: &dyn Process, include_operations: bool) -> R
 pub(super) struct LiveState {
     pub agency: std::result::Result<intel_live::Agency, Error>,
     pub networks: std::result::Result<Vec<intel_live::Network>, Error>,
+    pub ideology: Option<String>,
 }
 
 pub(super) fn live_state(r: &Reader<'_>, image: u64) -> Result<LiveState> {
@@ -405,7 +406,12 @@ pub(super) fn live_state(r: &Reader<'_>, image: u64) -> Result<LiveState> {
         Ok(n) => Ok(n),
         Err(e) => Err(keep(e)?),
     };
-    Ok(LiveState { agency, networks })
+    let ideology = intel_live::ruling_ideology(r, own.country).ok();
+    Ok(LiveState {
+        agency,
+        networks,
+        ideology,
+    })
 }
 
 fn unread(e: &Error) -> Value {
@@ -413,6 +419,7 @@ fn unread(e: &Error) -> Value {
 }
 
 pub(super) fn merge_live(body: &mut Value, state: &LiveState) {
+    body["ruling_ideology"] = json!(state.ideology);
     match &state.agency {
         Ok(a) => {
             let mut agency = intel_live::agency_json(a);
@@ -429,7 +436,7 @@ pub(super) fn merge_live(body: &mut Value, state: &LiveState) {
                 .collect();
             body["operatives"]["state_read"] = json!(true);
             body["operatives"]["recruited"] = json!(ops.len());
-            body["operatives"]["free"] = json!(a.operatives.iter().filter(|o| intel_live::operative_json(0, o)["free"] == json!(true)).count());
+            body["operatives"]["idle"] = json!(a.operatives.iter().filter(|o| intel_live::operative_json(0, o)["idle"] == json!(true)).count());
             body["operatives"]["list"] = json!(ops);
             body["operatives"].as_object_mut().map(|o| o.remove("reason"));
         }
