@@ -1434,8 +1434,10 @@ fn trait_index(v: &Value) -> Option<u64> {
         .or_else(|| v.as_str().and_then(|s| s.trim().parse().ok()))
 }
 
-/// The skip after a refused MIO order.
-fn mio_refused(state: &mut State, now: GameHour, org: &str, why: &str) {
+/// The skip after a refused MIO order. `kind` keeps the design-team, policy and trait orders of one
+/// organisation apart: a refused policy no longer holds its traits (sk2, 10 Nov: 33 refused policies
+/// and not one trait queued).
+fn mio_refused(state: &mut State, now: GameHour, kind: &str, org: &str, why: &str) {
     let days = match code(why) {
         "mio_system_absent" => {
             note(
@@ -1460,7 +1462,7 @@ fn mio_refused(state: &mut State, now: GameHour, org: &str, why: &str) {
         | "trait_not_visible" => 14,
         _ => 3,
     };
-    state.skip(now, "mio", org, days * DAY);
+    state.skip(now, kind, org, days * DAY);
 }
 
 fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
@@ -1486,10 +1488,12 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             Value::Number(n) => n.as_u64(),
             _ => None,
         }
-        .filter(|_| !state.done.contains_key(&team_key));
+        .filter(|_| !state.done.contains_key(&team_key) && !state.skipped(now, "miodt", &org));
         let policy = text(&entry["policy"]).trim().to_string();
         let policy_key = format!("miopol:{org}:{policy}");
-        let want_policy = !policy.is_empty() && !state.done.contains_key(&policy_key);
+        let want_policy = !policy.is_empty()
+            && !state.done.contains_key(&policy_key)
+            && !state.skipped(now, "miopol", &org);
         let mut next: Option<u64> = None;
         let mut bad: Option<String> = None;
         for t in list(entry, "traits") {
@@ -1510,11 +1514,14 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
                 "{org}: trait {b} is not a trait_index (hoi4_mio_trait list:true numbers them)"
             ));
         }
+        let next = next.filter(|_| !state.skipped(now, "mio", &org));
         if team.is_none() && !want_policy && next.is_none() {
-            continue;
-        }
-        if state.skipped(now, "mio", &org) {
-            waits.push(format!("{org}: waiting"));
+            if state.skipped(now, "mio", &org)
+                || state.skipped(now, "miopol", &org)
+                || state.skipped(now, "miodt", &org)
+            {
+                waits.push(format!("{org}: waiting"));
+            }
             continue;
         }
         if let Some(why) = gate(state, tools, &entry["when"], now) {
@@ -1531,7 +1538,7 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             if ok {
                 state.done.insert(team_key, now);
             } else {
-                mio_refused(state, now, &org, &why);
+                mio_refused(state, now, "miodt", &org, &why);
             }
             return Ok(Some(format!(
                 "mio {org} design team slot {slot}: {ok} {why}"
@@ -1543,7 +1550,7 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             if ok {
                 state.done.insert(policy_key, now);
             } else {
-                mio_refused(state, now, &org, &why);
+                mio_refused(state, now, "miopol", &org, &why);
             }
             return Ok(Some(format!("mio {org} policy {policy}: {ok} {why}")));
         }
@@ -1553,7 +1560,7 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             if ok || code(&why) == "trait_already_queued" {
                 state.done.insert(format!("mio:{org}:t{index}"), now);
             } else {
-                mio_refused(state, now, &org, &why);
+                mio_refused(state, now, "mio", &org, &why);
             }
             return Ok(Some(format!("mio {org} trait {index}: {ok} {why}")));
         }
@@ -2707,6 +2714,41 @@ mod tests {
         assert_eq!(sent.len(), 4);
         assert_eq!(sent[1].1["trait_index"], 3);
         assert_eq!(sent[1].1["slot"], 1);
+    }
+
+    #[test]
+    fn a_refused_policy_does_not_hold_the_traits() {
+        // sk2 (10 Nov): the policy was refused 33 times (organization_not_offered) and, because
+        // the policy always went first under one skip timer, not one trait was queued.
+        let tools = fake(vec![]);
+        tools.refuse("hoi4_mio_policy", "policy_not_offered");
+        let plan = json!({"mio": [{"organisation": "ITA_beretta_organization",
+            "policy": "mio_policy_assembly_line_optimizers", "traits": [2, 4]}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out
+            .unwrap()
+            .contains("policy mio_policy_assembly_line_optimizers: false"));
+        let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio ITA_beretta_organization trait 2: true Verified")
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 2).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio ITA_beretta_organization trait 4: true Verified")
+        );
+        // the policy is tried again after its own wait, not before
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 3).unwrap(),
+            None
+        );
+        tools.accept("hoi4_mio_policy");
+        let out = step(&mut state, &tools, &plan, "l", START + 15 * DAY).unwrap();
+        assert!(out
+            .unwrap()
+            .contains("policy mio_policy_assembly_line_optimizers: true"));
     }
 
     #[test]
