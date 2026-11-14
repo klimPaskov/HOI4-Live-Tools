@@ -81,7 +81,18 @@ the evidence images stay in the repository.
 
 ## Known limits to repeat in the release notes
 
-Windows only; windowed or borderless at interface scale 1; the screen language of the game must match the OCR
-language; the campaign tools were verified on the vanilla interface with one large mod; the phase 4 exit check was
-not repeated end to end on the final code and the two-year campaign runs of the plan were not made (see
-`docs/STATUS.md`).
+The Python server drives the game on Windows (and, untested live, on macOS); the native runtime reads HOI4
+1.19.4.1 only, on macOS (Apple silicon) and Linux x86_64, and has no Windows adapter; nothing in the install starts
+a native game yet (`hoi4-live play` hands the campaign to the coding client through the Python server on Windows and
+macOS and names the missing piece on Linux); windowed or borderless at interface scale 1; the screen language of
+the game must match the OCR language; no full campaign has been accepted on any runtime (see `docs/STATUS.md`).
+
+## What the first release with the installer needs
+
+1. Merge the installer, doctor and play changes, then set the new version in `hoi4_live/__init__.py`,
+   `pyproject.toml`, `native/Cargo.toml` (and `Cargo.lock`) and the top `CHANGELOG.md` entry.
+2. Push the tag `v<version>` (the owner does this). The workflow builds, checks the one-line installer against the
+   built files, attests and publishes `install.py`, `install.sh` and `install.ps1` beside the archives.
+3. On each system, run the README's one-line install from the published release into a fresh account, then
+   `hoi4-live doctor` and `hoi4-live play`, and record what each printed. Until this is done the one-line install is
+   tested only against release folders in CI.
