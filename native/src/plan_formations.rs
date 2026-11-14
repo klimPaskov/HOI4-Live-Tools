@@ -300,6 +300,24 @@ fn free_own(c: &Value, tag: &str) -> bool {
         && c["stale"] != json!(true)
 }
 
+/// The free commanders of the country that can be picked. The country's leader list also holds
+/// characters who are not generals now (advisers, leaders a later focus recruits); the game's
+/// commander list never offers those. Once the roster has seen that list (a row says
+/// `listed_in_panel_or_assigned`), only the rows it showed are candidates; a roster that has not
+/// seen it yet offers every free row.
+fn pickable<'a>(rows: &'a [Value], tag: &str) -> Vec<&'a Value> {
+    let free: Vec<&Value> = rows.iter().filter(|c| free_own(c, tag)).collect();
+    let seen = rows
+        .iter()
+        .any(|c| c["listed_in_panel_or_assigned"] == json!(true) && c["assigned_to"].is_null());
+    if !seen {
+        return free;
+    }
+    free.into_iter()
+        .filter(|c| c["listed_in_panel_or_assigned"] != json!(false))
+        .collect()
+}
+
 fn num(c: &Value, key: &str) -> i64 {
     c[key].as_i64().unwrap_or(0)
 }
@@ -348,9 +366,8 @@ pub(super) fn best_marshal(
 ) -> Option<String> {
     let tag = own_tag(state, tools, plan);
     let read = tools.call("hoi4_commanders", &json!({})).ok()?;
-    list(&read, "commanders")
-        .iter()
-        .filter(|c| free_own(c, &tag))
+    pickable(list(&read, "commanders"), &tag)
+        .into_iter()
         .filter(|c| !skip(text(&c["name"])))
         .max_by_key(|c| {
             (
@@ -619,9 +636,8 @@ fn merge_and_lead(
             .into_iter()
             .chain(strings(cfg, "generals"))
             .collect();
-        let mut pool: Vec<&Value> = rows
-            .iter()
-            .filter(|c| free_own(c, &tag))
+        let mut pool: Vec<&Value> = pickable(rows, &tag)
+            .into_iter()
             .filter(|c| !marshals.contains(text(&c["name"])))
             .collect();
         pool.sort_by_key(|c| std::cmp::Reverse(general_score(c, strike)));
@@ -641,7 +657,14 @@ fn merge_and_lead(
             state.skip(now, "cgen", &army, 365 * DAY);
         } else {
             state.skip(now, "cgen", &army, DAY);
-            state.skip(now, "cgenx", &general, 30 * DAY);
+            // A name the commander list does not offer is not a general of this country now:
+            // asking again next month only repeats the refusal.
+            let wait = if plan_military::code(&why) == "unknown_commander" {
+                365
+            } else {
+                30
+            };
+            state.skip(now, "cgenx", &general, wait * DAY);
         }
         return Ok(Some(format!(
             "command: general {general} -> {army}: {ok} {why}"
@@ -886,6 +909,48 @@ mod tests {
         );
         // given once: the army is not looked at again for a year
         assert!(state.skipped(1000 + 300 * DAY, "cgen", "Army 9"));
+    }
+
+    #[test]
+    fn generals_come_from_the_rows_the_commander_list_showed() {
+        // The leader list also names characters who are not generals now; they outrank the
+        // real ones on paper and the game's list never offers them.
+        let plan = json!({"war": {"me": "ITA"}, "armies": {}});
+        let roster = |listed: bool| {
+            game(vec![
+                (
+                    "hoi4_armies",
+                    json!({"armies": [
+                    {"army": "Guard", "division_count": 3, "commander": null, "main_state": 1}]}),
+                ),
+                (
+                    "hoi4_commanders",
+                    json!({"commanders": [
+                    {"name": "Messe", "id": "ITA_messe", "skill": 4,
+                        "assigned_to": {"kind": "army", "name": "Strike"},
+                        "listed_in_panel_or_assigned": true},
+                    {"name": "Later Hero", "id": "ITA_hero", "assigned_to": null, "skill": 5,
+                        "attack": 5, "available": null, "listed_in_panel_or_assigned": false},
+                    {"name": "Bastico", "id": "ITA_bastico", "assigned_to": null, "skill": 1,
+                        "attack": 1, "available": null, "listed_in_panel_or_assigned": listed}]}),
+                ),
+            ])
+        };
+        let out = command_step(&mut State::default(), &roster(true), &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: general Bastico -> Guard: true"),
+            "{out}"
+        );
+        // the list was never seen (only assigned rows are known): every free row may be tried
+        let out = command_step(&mut State::default(), &roster(false), &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: general Later Hero -> Guard: true"),
+            "{out}"
+        );
     }
 
     #[test]

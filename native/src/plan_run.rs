@@ -217,9 +217,9 @@
 //!                          `decisions` list included (`decision_forbidden`)
 //!   event_rules            [{"event","option_name","when" (or "condition")?,"else_option_name"?,
 //!                          "fallback_option_name"?,"fallback_index"?}]: the first rule of the open event
-//!                          whose condition holds picks the option whose text (hoi4_events options) is
-//!                          option_name, ignoring case, markup and punctuation (else the one option that
-//!                          contains it); a false condition takes else_option_name or leaves the event to
+//!                          whose condition holds picks the option whose text or script name
+//!                          (hoi4_events options, option_keys) is option_name, ignoring case, markup
+//!                          and punctuation (else the one option that contains it); a false condition takes else_option_name or leaves the event to
 //!                          the next rule; a name not offered falls back to fallback_option_name, then
 //!                          fallback_index, then event_options; an unknown condition waits
 //!
@@ -274,6 +274,10 @@ pub const DAY: GameHour = 24;
 /// How long a failure stays in the ledger (game hours): the backoff counts failures since the
 /// order last worked within this window.
 const LEDGER_KEEP: GameHour = 120 * DAY;
+/// A failed try that held the input this many seconds or longer waits in proportion.
+const COSTLY_FAILURE: u64 = 5;
+/// The wall-clock wait after a costly failed try, in multiples of the time it took.
+const COST_FACTOR: u64 = 10;
 
 /// Every game action the executor may send through `State::act`. Each one answers every
 /// success and every refusal after possible input with a terminal receipt
@@ -388,8 +392,12 @@ pub struct State {
     failures: HashMap<String, Vec<GameHour>>,
     /// Wall-clock second of each order's last failure (not persisted: a restart starts afresh).
     failed_wall: HashMap<String, u64>,
+    /// Seconds the last failed try of each order held the input (not persisted).
+    failed_cost: HashMap<String, u64>,
     /// Wall clock override for tests (seconds); None reads the system clock.
     wall: Option<u64>,
+    /// Duration override for tests: seconds every `act` is taken to have lasted.
+    act_seconds: Option<u64>,
     /// Whether the last `act` worked (None: no act since the caller reset it).
     last_ok: Option<bool>,
 
@@ -562,7 +570,9 @@ impl Default for State {
             clock: 0,
             failures: HashMap::new(),
             failed_wall: HashMap::new(),
+            failed_cost: HashMap::new(),
             wall: None,
+            act_seconds: None,
             last_ok: None,
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -852,7 +862,11 @@ impl State {
             );
             object.insert("lease_token".into(), json!(lease));
         }
+        let began = std::time::Instant::now();
         let result = self.dispatch(tools, name, &args);
+        let lasted = self
+            .act_seconds
+            .unwrap_or_else(|| began.elapsed().as_secs());
         self.last_ok = Some(matches!(&result, Ok((true, _))));
         match &result {
             Ok((false, _)) => {
@@ -861,11 +875,13 @@ impl State {
                     .or_default()
                     .push(clock);
                 let wall = self.wall_now();
+                self.failed_cost.insert(signature.clone(), lasted);
                 self.failed_wall.insert(signature, wall);
             }
             Ok((true, _)) => {
                 self.failures.remove(&signature);
                 self.failed_wall.remove(&signature);
+                self.failed_cost.remove(&signature);
                 if let Some(army) = &army_move {
                     self.moves.record(army, tag, &args, clock);
                 }
@@ -887,22 +903,47 @@ impl State {
     /// (at most 60) after its last failure. Game time alone was not enough: at speed 3 ten game
     /// days pass in about 25 s, so a failing selection went out about 40 times in one shakedown
     /// (10 Nov 2026). Some(reason) while the order waits.
+    ///
+    /// From the first failure on, a try that held the input for COSTLY_FAILURE seconds or more
+    /// waits COST_FACTOR times that long (at most an hour) before the same order goes out
+    /// again: every player call and every other executor step queue behind the input, so a
+    /// search that ends in a refusal after 47 s must not come back with the next skip timer
+    /// (14 Nov 2026: four such tries took 69 game days of input in one year).
     fn backing_off(&mut self, signature: &str) -> Option<String> {
         let clock = self.clock;
+        let since_failure = self
+            .failed_wall
+            .get(signature)
+            .map(|at| self.wall_now().saturating_sub(*at));
+        let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
+        let cost_left = match since_failure {
+            Some(passed) if cost >= COSTLY_FAILURE => {
+                (COST_FACTOR * cost).min(3600).saturating_sub(passed)
+            }
+            _ => 0,
+        };
         let times = self.failures.get_mut(signature)?;
         times.retain(|t| clock - *t < LEDGER_KEEP);
         let n = times.len();
         if n < 3 {
-            return None;
+            return (cost_left > 0).then(|| {
+                format!(
+                    "skipped: the last try of this order failed after {cost} s on the input; it waits {cost_left} more wall seconds"
+                )
+            });
         }
         let last = times.iter().copied().max().unwrap_or(clock);
         let doubling = 1u64 << (n - 3).min(4);
         let game_wait = (10 * DAY * doubling as GameHour).min(80 * DAY);
         let wall_wait = (120 * doubling).min(3600);
         let game_left = game_wait - (clock - last).clamp(0, game_wait);
-        let wall_left = self.failed_wall.get(signature).map_or(0, |at| {
-            wall_wait.saturating_sub(self.wall_now().saturating_sub(*at))
-        });
+        let wall_left = self
+            .failed_wall
+            .get(signature)
+            .map_or(0, |at| {
+                wall_wait.saturating_sub(self.wall_now().saturating_sub(*at))
+            })
+            .max(cost_left);
         if game_left == 0 && wall_left == 0 {
             return None;
         }
@@ -5208,7 +5249,16 @@ fn event_rule_choice(
     top: &Value,
     now: GameHour,
 ) -> Option<Option<(u64, String)>> {
-    let options = list(top, "options");
+    // Each shown option answers to its text and to its script name (`option_keys`).
+    let named: Vec<Value> = list(top, "options")
+        .iter()
+        .enumerate()
+        .map(|(i, option)| match top["option_keys"][i].as_str() {
+            Some(key) => json!({"text": text_or(option), "key": key}),
+            None => option.clone(),
+        })
+        .collect();
+    let options = named.as_slice();
     for rule in list(plan, "event_rules") {
         if text(&rule["event"]) != key {
             continue;
@@ -7757,6 +7807,50 @@ mod tests {
             )
             .unwrap();
         assert_eq!(*tools.0.borrow(), 5);
+    }
+
+    #[test]
+    fn a_failed_try_that_held_the_input_long_waits_in_proportion_from_the_first_failure() {
+        struct Refuse(RefCell<usize>);
+        impl Tools for Refuse {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                *self.0.borrow_mut() += 1;
+                Ok(json!({"receipt": {"status": "NotApplied"}}))
+            }
+        }
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State {
+            clock: START,
+            wall: Some(0),
+            act_seconds: Some(47),
+            ..State::default()
+        };
+        let send = |state: &mut State, name: &str, hour: GameHour, wall: u64| -> String {
+            state.clock = hour;
+            state.wall = Some(wall);
+            state
+                .act(&tools, "l", name, json!({"state_id": 559}), "t")
+                .unwrap()
+                .1
+        };
+        // a 47 s search that ends in a refusal
+        send(&mut state, "hoi4_army_create", START, 0);
+        assert_eq!(*tools.0.borrow(), 1);
+        // a month of game time later (80 s at speed 3) the same order is not sent
+        let why = send(&mut state, "hoi4_army_create", START + 30 * DAY, 80);
+        assert_eq!(*tools.0.borrow(), 1);
+        assert!(
+            why.starts_with("skipped: the last try of this order failed after 47 s on the input; it waits 390 more"),
+            "{why}"
+        );
+        // ten times its duration later it may be tried again
+        send(&mut state, "hoi4_army_create", START + 30 * DAY, 470);
+        assert_eq!(*tools.0.borrow(), 2);
+        // a quick refusal is not held back before the third failure
+        state.act_seconds = Some(1);
+        send(&mut state, "hoi4_army_assign", START, 500);
+        send(&mut state, "hoi4_army_assign", START, 501);
+        assert_eq!(*tools.0.borrow(), 4);
     }
 
     #[test]
@@ -10865,6 +10959,67 @@ mod tests {
         let step = acted(tick(&mut state, &game(None), &unmatched, "l", START).unwrap());
         assert!(step.starts_with("event ita_eth.5 option 1: true"), "{step}");
         assert!(state.strategy.unknown["event_rules ita_eth.5"].contains("Retreat"));
+    }
+
+    #[test]
+    fn event_rules_find_an_option_by_its_script_name() {
+        // The window shows texts only; hoi4_events adds the script name of each shown option.
+        let events = json!({"events": [{"event": "war_events.01",
+            "options": ["By any means necessary", "We need to be methodical and deliberate"],
+            "option_keys": ["war_events.01.a", "war_events.01.b"]}]});
+        let plan = json!({"event_rules": [{"event": "war_events.01",
+            "option_name": "war_events.01.b"}]});
+        let step = acted(
+            tick(
+                &mut State::default(),
+                &fake(vec![("hoi4_events", events)]),
+                &plan,
+                "l",
+                START,
+            )
+            .unwrap(),
+        );
+        assert!(
+            step.starts_with("event war_events.01 option 1 (event_rules 'war_events.01.b'): true"),
+            "{step}"
+        );
+        // the first option is hidden: the wanted one is shown first and still found by its name
+        let hidden = json!({"events": [{"event": "war_events.01",
+            "options": ["We need to be methodical and deliberate"],
+            "option_keys": ["war_events.01.b"]}]});
+        let step = acted(
+            tick(
+                &mut State::default(),
+                &fake(vec![("hoi4_events", hidden)]),
+                &plan,
+                "l",
+                START,
+            )
+            .unwrap(),
+        );
+        assert!(step.starts_with("event war_events.01 option 0 "), "{step}");
+        // a name that cannot be told (null) leaves the text as the only name
+        let unknown = json!({"events": [{"event": "war_events.01",
+            "options": ["Yes", "No"], "option_keys": [null, null]}]});
+        let mut state = State::default();
+        assert_eq!(
+            tick(
+                &mut state,
+                &fake(vec![("hoi4_events", unknown)]),
+                &plan,
+                "l",
+                START
+            )
+            .unwrap(),
+            Tick::Waiting {
+                event: "war_events.01".into(),
+                new: true
+            }
+        );
+        assert!(state
+            .strategy
+            .unknown
+            .contains_key("event_rules war_events.01"));
     }
 
     #[test]

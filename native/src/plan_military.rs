@@ -286,7 +286,7 @@ fn days(v: &Value, default: i64) -> i64 {
 }
 
 /// The error code of a refused order (`State::act` reports "code: message").
-fn code(why: &str) -> &str {
+pub(super) fn code(why: &str) -> &str {
     why.split(':').next().unwrap_or("").trim()
 }
 
@@ -2050,7 +2050,9 @@ fn navy_step(
                 if ok || code(&why) == "already_assigned" {
                     state.done.insert(format!("nreg:{rkey}"), now);
                 } else if code(&why) == "region_not_found" {
-                    state.skip(now, "nreg", &rkey, 30 * DAY);
+                    // The sea does not move: the same name from the same state is not searched
+                    // for again this year (each search holds the input for most of a minute).
+                    state.skip(now, "nreg", &rkey, 365 * DAY);
                     wake(
                         state,
                         plan,

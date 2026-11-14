@@ -271,6 +271,9 @@ fn autopilot_stops_on(code: &str) -> bool {
                 | ""
         )
 }
+/// An executor step that lasts this long is logged with its timing.
+#[cfg(target_os = "macos")]
+const SLOW_STEP: std::time::Duration = std::time::Duration::from_secs(5);
 /// One executor step on the input lane when it is idle (see `hoi4_autopilot`). True when it ran.
 #[cfg(target_os = "macos")]
 fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Commands) -> bool {
@@ -279,6 +282,7 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
         return false;
     };
     autopilot().set_in_step(true);
+    let began = std::time::Instant::now();
     let reply = server.handle_with_commands(
         serde_json::json!({"jsonrpc":"2.0","id":0,"method":"tools/call",
             "params":{"name":"hoi4_plan_run","arguments":{"seconds":1,"lease_token":token}}}),
@@ -293,6 +297,23 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
         .as_str()
         .and_then(|t| serde_json::from_str(t).ok())
         .unwrap_or_default();
+    // A step holds the input lane: one that took long is written down with where the time
+    // went (the reads and panel walks of a step have no action line of their own).
+    let lasted = began.elapsed();
+    if lasted >= SLOW_STEP {
+        eprintln!(
+            "[step] {}",
+            serde_json::json!({"unix_ms": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+                "ms": lasted.as_millis() as u64,
+                "reason": body["reason"],
+                "actions": body["actions"],
+                "timing_ms": body["timing_ms"],
+                "error": body["error"]["code"]})
+        );
+    }
     if result["isError"] == serde_json::json!(true) {
         let code = body["error"]["code"].as_str().unwrap_or("");
         if autopilot_stops_on(code) {

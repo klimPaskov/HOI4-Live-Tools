@@ -515,9 +515,21 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let open = read(process, open_events)?;
     let peace = read(process, peace_conference_open)?;
     let last = open.len().saturating_sub(1);
+    // The content folder (install, or the merged mod layer) names each shown option the way
+    // the event script does; without it the names are simply unknown.
+    let content = process
+        .identity()
+        .and_then(|i| super::game_content(&i.exe).ok())
+        .map(|found| found.content);
+    let keys = |e: &Open| -> Vec<Option<String>> {
+        match &content {
+            Some(dir) => super::event_options::option_keys(dir, &e.id, &e.options),
+            None => vec![None; e.options.len()],
+        }
+    };
     Ok(
         json!({"peace_conference_open":peace,"events":open.iter().enumerate().map(|(i, e)| json!({
-        "event":e.id,"title":e.title,"description":e.description,"leader":e.leader,"options":e.options,"on_top":i == last,
+        "event":e.id,"title":e.title,"description":e.description,"leader":e.leader,"options":e.options,"option_keys":keys(e),"on_top":i == last,
         "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout,
         "option_points":e.centres.as_ref().map(|c| c.iter().map(|(x, y)| [x.round(), y.round()]).collect::<Vec<_>>())})).collect::<Vec<_>>()}),
     )
