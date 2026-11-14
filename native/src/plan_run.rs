@@ -498,6 +498,8 @@ struct Stages {
     /// or ends clears the counts too: the conditions the server cannot read (flags, events)
     /// mostly move with the wars.
     focus_refused_wars: Option<String>,
+    /// When the wars were last read for refused keys alone (no other key was left to ask about).
+    focus_wars_read: GameHour,
 }
 
 /// Refused focuses one tick may open (each look costs seconds of the input lane).
@@ -1401,8 +1403,27 @@ pub fn tick(
         // What the game's own files and the readable state settle is asked first, without input:
         // a focus known to be unavailable is never opened (one shakedown opened three such
         // focuses about a hundred times at 7 to 12 s each).
-        let mut known = focus_verdicts(tools, &candidates);
+        // With every listed key waiting out a refusal there is nothing to ask about, yet a war
+        // that ends must still be noticed: the refused keys are asked about once a game day.
+        let mut watch: Vec<String> = Vec::new();
+        if candidates.is_empty()
+            && !state.stages.focus_refused.is_empty()
+            && now - state.stages.focus_wars_read >= DAY
+        {
+            watch = state.stages.focus_refused.keys().cloned().collect();
+            watch.sort_unstable();
+            state.stages.focus_wars_read = now;
+        }
+        let mut known = focus_verdicts(
+            tools,
+            if watch.is_empty() {
+                &candidates
+            } else {
+                &watch
+            },
+        );
         if let Some(wars) = known.wars.clone() {
+            state.stages.focus_wars_read = now;
             let before = state.stages.focus_refused_wars.replace(wars.clone());
             if before.is_some_and(|b| b != wars) && !state.stages.focus_refused.is_empty() {
                 // A war started or ended: every refused key gets a fresh try at once.
@@ -9420,11 +9441,35 @@ mod tests {
             actions: RefCell::new(vec![]),
             replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
         };
-        // The key is skipped, so another listed key keeps the question being asked.
-        let plan = json!({"focus_path": ["A"], "focus_fallback": ["Z"]});
+        // A is the only listed key and it waits out its refusal: the wars are read all the same.
         let step = tick(&mut state, &tools, &plan, "l", START + DAY).unwrap();
         assert_eq!(step, Tick::Acted("focus A".into()));
         assert!(state.stages.focus_refused.is_empty());
+    }
+
+    #[test]
+    fn refused_keys_alone_are_asked_about_once_a_game_day() {
+        let reads = focus_reads_knowing(&[("A", "unknown", "has_global_flag = the_war")], &["ETH"]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A"]});
+        // Eight ticks a day for five days, all inside the ten-day refusal window.
+        for tick_no in 0..40 {
+            tick(&mut state, &tools, &plan, "l", START + tick_no * 3).unwrap();
+        }
+        assert_eq!(focus_starts(&tools), ["A"]);
+        let asked = reads
+            .calls
+            .borrow()
+            .iter()
+            .filter(|c| c.0 == "hoi4_focus_available")
+            .count();
+        // The first tick asks before the look; then once on each of the following four days.
+        assert_eq!(asked, 5);
     }
 
     #[test]
