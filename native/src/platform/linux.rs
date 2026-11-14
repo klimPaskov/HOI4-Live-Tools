@@ -393,12 +393,14 @@ fn executable_bytes(path: &Path, expected: &ExpectedBuild) -> Result<Vec<u8>> {
     if bytes.len() > 256 << 20 {
         return Err(Error::new("invalid_elf", "Executable exceeds bound"));
     }
-    if format!("{:x}", Sha256::digest(&bytes)) != expected.sha256()
-        || elf_build_id(&bytes)? != expected.build_id()
-    {
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    if hash != expected.sha256() || elf_build_id(&bytes)? != expected.build_id() {
         return Err(Error::new(
             "unsupported_build",
-            "Actual executable hash/build differs",
+            crate::builds::refusal(&format!(
+                "the game executable's SHA-256 starts {}",
+                &hash[..16]
+            )),
         ));
     }
     Ok(bytes)
@@ -542,7 +544,7 @@ impl LinuxProcess {
         if session.build_id != expected.build_id() || session.sha256 != expected.sha256() {
             return Err(Error::new(
                 "unsupported_build",
-                "Session executable build is not verified",
+                crate::builds::refusal(&format!("the session names build {}", session.build_id)),
             ));
         }
         let meta = fs::metadata(format!("/proc/{}/exe", session.game.pid))?;

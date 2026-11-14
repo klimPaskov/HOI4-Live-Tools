@@ -20,6 +20,13 @@ One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (W
 - The release workflow publishes `install.py`, `install.sh` and `install.ps1` with the archives, lists them in
   `SHA256SUMS.txt` and installs the release from the built files before publishing.
 - `HOI4_LIVE_RELEASE_BASE` names another release location: an https address or a local folder of release files.
+A game build the native runtime cannot read is now refused with the builds it does read and what works meanwhile.
+
+- The `unsupported_build` refusal names the runtime's version, what it saw (the start of the executable's SHA-256,
+  or the build a session names), every supported build (HOI4 1.19.4.1 on macOS and on Linux x86_64, with the build
+  identifiers) and the three ways forward: `hoi4-live update`, an earlier game version through Steam's Betas tab,
+  or the Python server, which reads the screen and has no build check.
+- `hoi4-live-native --supported-builds` prints the same table as JSON, for the installer's doctor.
 
 `hoi4-live-native --doctor` says whether memory access will work on this computer and names the one step if not.
 

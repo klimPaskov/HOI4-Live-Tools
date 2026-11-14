@@ -36,6 +36,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             print!("{}", report.render());
             std::process::exit(if report.usable() { 0 } else { 1 });
         }
+        Some("--supported-builds") => {
+            println!("{}", hoi4_live_native::builds::report());
+            return Ok(());
+        }
         Some("--list-tools") => {
             println!("{}", hoi4_live_native::protocol::list_tools_offline());
             return Ok(());
@@ -98,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         Some("--help") => {
-            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\n--doctor: will memory access work on this computer, and the one step to take if not (macOS: --doctor --sign signs this binary).\nmacOS 15+: --record OWNED_SESSION RECORDING_CONFIG (owned window only; no input).\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys; optional owned ID research preview).\nLinux: --bind-management RUN_DIRECTORY BINDING (full management tools; needs a verified layout for the running build).\nExplicit: --close-window RUN_DIRECTORY PRIVATE_WINDOW_CONFIG (one WM close attempt; no signal fallback).\nWindows/macOS launch/input adapters unverified.");
+            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\n--doctor: will memory access work on this computer, and the one step to take if not (macOS: --doctor --sign signs this binary).\n--supported-builds: the game builds this runtime reads, as JSON.\nmacOS 15+: --record OWNED_SESSION RECORDING_CONFIG (owned window only; no input).\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys; optional owned ID research preview).\nLinux: --bind-management RUN_DIRECTORY BINDING (full management tools; needs a verified layout for the running build).\nExplicit: --close-window RUN_DIRECTORY PRIVATE_WINDOW_CONFIG (one WM close attempt; no signal fallback).\nWindows/macOS launch/input adapters unverified.");
             return Ok(());
         }
         Some(_) => return Err("Unknown argument".into()),
