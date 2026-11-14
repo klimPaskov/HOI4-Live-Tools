@@ -526,7 +526,7 @@ class World:
                "faction": [], "access": [], "subjects": [], "characters": [], "doctrines": [],
                "techs": [], "events": [], "completed_focuses": [], "dynamic_modifiers": [],
                "political_power": None, "command_power": None, "power_balance": [], "experience": {},
-               "state_scopes": [], "variants": [], "threats": [], "agency": None}
+               "state_scopes": [], "variants": [], "threats": [], "agency": None, "stockpile": []}
         path = self.game.file(rel) if rel else None
         if not path:
             return out
@@ -615,6 +615,9 @@ class World:
                                                  left_side=get1(v, "left_side"), right_side=get1(v, "right_side")))
             elif kl == "add_power_balance_value" and isinstance(v, list):
                 out["power_balance"].append(dict(F(get1(v, "id"), line), kind="add", value=num(get1(v, "value"))))
+            elif kl == "add_equipment_to_stockpile" and isinstance(v, list):
+                out["stockpile"].append(dict(F(get1(v, "type"), line), amount=num(get1(v, "amount"), 0),
+                                             variant=get1(v, "variant_name")))
             elif kl == "create_equipment_variant" and isinstance(v, list):
                 mods, ups = get1(v, "modules"), get1(v, "upgrades")
                 out["variants"].append(dict(F(get1(v, "name"), line), type=get1(v, "type"),
@@ -1190,8 +1193,10 @@ class World:
                                               "src": self.src(path, line)}
                 elif k == "division":
                     loc = num(get1(v, "location"))
+                    fill = num(get1(v, "start_equipment_factor"))
                     out["divisions"].append({"template": get1(v, "division_template"), "location": loc,
-                                             "state": ps.get(loc), "src": self.src(path, line)})
+                                             "state": ps.get(loc), "src": self.src(path, line),
+                                             "start_equipment_factor": 1.0 if fill is None else fill})
                 elif k == "units":
                     run_effects(v, ctx, visit, with_line=True)
                 elif k == "air_wings":
