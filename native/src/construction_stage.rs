@@ -1,6 +1,12 @@
 //! Two durable ordinary construction stages with an independently opted-in adapter.
 //! The backend supplies witnessed own state, a stable private identity scope,
 //! an admitted PointCandidate, and at most one ordinary pointer dispatch.
+//!
+//! Every intent ends in a terminal record before `execute` returns (`stage_settle`): after the
+//! one input the journal keeps observing, reading only, and records `Verified` or
+//! `Unconfirmed` with the last own readback and the cause. A request closed without proof
+//! answers `action_unconfirmed`, is never replayed and holds nothing. Only an intent left
+//! open by a stopped server holds its game, for a bounded time; the next request closes it.
 use crate::{
     actions::Epoch,
     error::{Error, Result},

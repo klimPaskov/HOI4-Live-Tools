@@ -1,11 +1,13 @@
 //! One durable ordinary factory-allocation step. Original identity and count
-//! survive restart; uncertain input is observed only and is never replayed.
+//! survive restart; an attempt whose effect was not proven is closed with a
+//! terminal record (`stage_settle`), is never replayed and holds nothing.
 use crate::{
     actions::Epoch,
     construction_stage::{Delivery, Diagnostic, DispatchOutcome},
     error::{Error, Result},
     input_lease::InputAuthority,
     platform::Identity,
+    stage_settle::{self, Seen, Settled},
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -16,7 +18,6 @@ use std::{
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::RwLock,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -63,7 +64,12 @@ pub trait UnresolvedInputs {
 pub enum Status {
     Intent,
     NotQueued,
-    Uncertain,
+    /// Input may have been sent and the observation ended without proof of the target; the
+    /// record keeps the last own readback and the cause. Closed: never replayed, holds
+    /// nothing. A retry of the same id only reads (see `execute`). Older builds wrote it as
+    /// `Uncertain`.
+    #[serde(alias = "Uncertain")]
+    Unconfirmed,
     Verified,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -77,6 +83,10 @@ struct Record {
     status: Status,
     delivery: Option<Delivery>,
     cause: Option<Diagnostic>,
+    /// When the intent was written; bounds how long an interrupted intent holds its game.
+    /// Absent on records of older builds (their serialized shape is kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unix_ms: Option<u64>,
 }
 fn request_id(id: &str) -> Result<()> {
     if id.is_empty()
@@ -117,7 +127,7 @@ impl Record {
                         && self.delivery == Some(Delivery::NotQueued)
                         && self.cause.is_some()
                 }
-                Status::Uncertain => {
+                Status::Unconfirmed => {
                     self.before.step(&self.target).is_ok() && possible && self.cause.is_some()
                 }
                 Status::Verified => {
@@ -475,12 +485,15 @@ impl Journal {
         Ok(())
     }
     #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
+    /// A persistence failure, or an intent an interrupted server left open that may still
+    /// have input in flight (`stage_settle::ORPHAN_MS`). A closed request is not unresolved.
     pub(crate) fn unresolved(&self) -> bool {
+        let now = stage_settle::now_ms();
         self.poisoned
             || self
                 .records
                 .values()
-                .any(|r| matches!(r.status, Status::Intent | Status::Uncertain))
+                .any(|r| r.status == Status::Intent && stage_settle::holds(r.unix_ms, now))
     }
     fn transition(previous: &Record, next: &Record) -> Result<()> {
         if previous.target != next.target
@@ -488,9 +501,10 @@ impl Journal {
             || !match previous.status {
                 Status::Intent => matches!(
                     next.status,
-                    Status::Verified | Status::NotQueued | Status::Uncertain
+                    Status::Verified | Status::NotQueued | Status::Unconfirmed
                 ),
-                Status::Uncertain => {
+                // A later read of the original target may still settle an unproven record.
+                Status::Unconfirmed => {
                     next.status == Status::Verified && next.delivery == previous.delivery
                 }
                 _ => false,
@@ -560,12 +574,50 @@ impl Journal {
         self.poisoned = false;
         Ok(r)
     }
+    /// A persistence failure holds everything. Otherwise only an intent an interrupted server
+    /// left open holds its game, and only for `stage_settle::ORPHAN_MS`: every call closes
+    /// its own intent before it returns.
     pub fn blocks_game(&self, game: &Identity) -> bool {
+        let now = stage_settle::now_ms();
         self.poisoned
             || self.records.values().any(|r| {
                 r.target.epoch().game == *game
-                    && matches!(r.status, Status::Intent | Status::Uncertain)
+                    && r.status == Status::Intent
+                    && stage_settle::holds(r.unix_ms, now)
             })
+    }
+    /// Close every intent an interrupted server left open once it no longer holds its game.
+    /// Nothing is read and nothing is sent: the record only says the outcome was never
+    /// observed.
+    fn close_orphans(&mut self) -> Result<()> {
+        let now = stage_settle::now_ms();
+        let stale: Vec<Record> = self
+            .records
+            .values()
+            .filter(|r| r.status == Status::Intent && !stage_settle::holds(r.unix_ms, now))
+            .cloned()
+            .collect();
+        for intent in stale {
+            self.append(Record {
+                status: Status::Unconfirmed,
+                delivery: Some(Delivery::Unknown),
+                cause: Some(Diagnostic {
+                    code: "orphaned".into(),
+                    message: "The server stopped before the outcome was observed".into(),
+                }),
+                ..intent
+            })?;
+        }
+        Ok(())
+    }
+    /// The typed error of a request closed without proof, with its recorded cause.
+    fn closed_error(record: &Record) -> Error {
+        const CONTEXT: &str = "Production outcome was not observed; the request is closed, is \
+                               never replayed and blocks nothing. Read the state again";
+        match &record.cause {
+            Some(cause) => cause.as_error("action_unconfirmed", CONTEXT),
+            None => error("action_unconfirmed", CONTEXT),
+        }
     }
     /// Classify only an immediate execute error. Never infer no input merely
     /// from an error code or absence of a successful public receipt.
@@ -578,7 +630,7 @@ impl Journal {
         use crate::construction_stage::FailureEvidence as F;
         if self.poisoned
             || self.blocks_game(&target.epoch().game)
-            || cause.code == "action_uncertain"
+            || matches!(cause.code, "action_uncertain" | "action_unconfirmed")
         {
             return F::Unknown;
         }
@@ -594,7 +646,10 @@ impl Journal {
             _ => F::Unknown,
         }
     }
-    fn uncertain(
+    /// Write the terminal record of an attempt whose target was not proven and return its
+    /// error. Only a record that cannot be written leaves the intent (or a poisoned writer)
+    /// behind.
+    fn unconfirmed(
         &mut self,
         original: &Record,
         delivery: Delivery,
@@ -603,21 +658,19 @@ impl Journal {
         token: &str,
     ) -> Error {
         let cause = Diagnostic::from_error(&cause, token);
-        let saved = self.append(Record {
-            status: Status::Uncertain,
+        match self.append(Record {
+            status: Status::Unconfirmed,
             delivery: Some(delivery),
             last,
             cause: Some(cause.clone()),
             ..original.clone()
-        });
-        cause.as_error(
-            "action_uncertain",
-            if saved.is_ok() {
-                "Production step unverified; never replay"
-            } else {
-                "Cannot persist outcome; preserve original intent"
-            },
-        )
+        }) {
+            Ok(closed) => Self::closed_error(&closed),
+            Err(_) => cause.as_error(
+                "action_uncertain",
+                "Cannot persist outcome; preserve original intent",
+            ),
+        }
     }
     #[allow(clippy::too_many_arguments)]
     pub fn execute<B: Backend>(
@@ -664,8 +717,13 @@ impl Journal {
                         .unwrap()
                         .as_error("input_not_queued", "Historical refusal; never replay"))
                 }
-                Status::Intent | Status::Uncertain => {
-                    // One settlement attempt, no new baseline, candidate or input.
+                Status::Intent | Status::Unconfirmed => {
+                    // A step closed without proof, or an intent a stopped server left open.
+                    // The allocation and the panel are fully readable, so a retry of the
+                    // same id gets one read-only settlement attempt against the original
+                    // baseline: no new baseline, candidate or input, and only the original
+                    // target observed reached settles it. Otherwise the answer stays the
+                    // closed record.
                     let settled = (|| -> Result<State> {
                         domains.clear(&target.epoch().game)?;
                         let observed = backend.observe(&target, deadline)?;
@@ -688,12 +746,22 @@ impl Journal {
                         }
                         Ok(confirmed)
                     })();
-                    let last = settled.map_err(|e| {
-                        Diagnostic::from_error(&e, token).as_error(
-                            "action_uncertain",
-                            "Original production intent remains unresolved",
-                        )
-                    })?;
+                    let last = match settled {
+                        Ok(last) => last,
+                        Err(_) if original.status == Status::Unconfirmed => {
+                            return Err(Self::closed_error(&original))
+                        }
+                        // An interrupted intent's input may still be in flight: wait out the
+                        // bound.
+                        Err(_) if stage_settle::holds(original.unix_ms, stage_settle::now_ms()) => {
+                            return Err(stage_settle::interrupted("production"))
+                        }
+                        // Otherwise it closes now, as never observed.
+                        Err(_) => {
+                            self.close_orphans()?;
+                            return Err(Self::closed_error(&self.records[id]));
+                        }
+                    };
                     let record = self
                         .append(Record {
                             last,
@@ -710,11 +778,9 @@ impl Journal {
                 }
             }
         }
+        self.close_orphans()?;
         if self.blocks_game(&target.epoch().game) {
-            return Err(error(
-                "action_uncertain",
-                "Unresolved production step blocks new IDs",
-            ));
+            return Err(stage_settle::interrupted("production"));
         }
         domains.clear(&target.epoch().game)?;
         let before = backend.observe(&target, deadline)?;
@@ -729,6 +795,7 @@ impl Journal {
             status: Status::Verified,
             delivery: None,
             cause: None,
+            unix_ms: None,
         };
         if before.reached(&target) {
             return self.append(initial).map(|r| Execution::new(&r, false));
@@ -759,6 +826,7 @@ impl Journal {
         }
         let intent = self.append(Record {
             status: Status::Intent,
+            unix_ms: Some(stage_settle::now_ms()),
             ..initial
         })?;
         let final_check = (|| -> Result<()> {
@@ -782,7 +850,7 @@ impl Journal {
             }
             Err(e) => DispatchOutcome::NotQueued(e),
         };
-        let delivery = match outcome {
+        let (delivery, dispatch_cause) = match outcome {
             DispatchOutcome::NotQueued(e) => {
                 let cause = Diagnostic::from_error(&e, token);
                 self.append(Record {
@@ -802,70 +870,104 @@ impl Journal {
                     "Ordinary production click proved not queued; never replay",
                 ));
             }
-            DispatchOutcome::Unknown(Some(e)) => {
-                return Err(self.uncertain(&intent, Delivery::Unknown, before, e, token))
-            }
-            DispatchOutcome::Unknown(None) => Delivery::Unknown,
-            DispatchOutcome::ServerConfirmed => Delivery::ServerConfirmed,
+            DispatchOutcome::Unknown(cause) => (Delivery::Unknown, cause),
+            DispatchOutcome::ServerConfirmed => (Delivery::ServerConfirmed, None),
         };
+        // From here the request always closes: observe (reading only, no lease needed) until
+        // the deadline or the settlement window ends, then write the terminal record. `why`
+        // is what the record says when the target is never proven: the dispatcher's own
+        // doubt, else the last thing that stood in the way.
         let mut last = before;
-        loop {
-            let checked = (|| -> Result<Option<State>> {
-                live(authority, token, &target, deadline, gate)?;
-                domains.clear(&target.epoch().game)?;
-                let observed = backend.observe(&target, deadline)?;
-                observed.validate(&target)?;
-                if !observed.same_identity(&intent.before) {
-                    return Err(error(
-                        "ownership_changed",
-                        "Original production identity changed after input",
-                    ));
-                }
-                live(authority, token, &target, deadline, gate)?;
-                last = observed.clone();
-                if !observed.reached(&target) {
-                    return Ok(None);
-                }
-                backend.confirm_input_idle(deadline)?;
-                let confirmed = backend.observe(&target, deadline)?;
-                confirmed.validate(&target)?;
-                live(authority, token, &target, deadline, gate)?;
-                if confirmed != observed {
-                    return Err(error(
-                        "production_state_changed",
-                        "Canonical allocation changed after idle check",
-                    ));
-                }
-                Ok(Some(confirmed))
-            })();
-            match checked {
-                Ok(Some(last)) => {
-                    let saved = self
-                        .append(Record {
-                            status: Status::Verified,
-                            delivery: Some(delivery),
-                            last,
-                            ..intent
-                        })
-                        .map_err(|e| {
-                            Diagnostic::from_error(&e, token).as_error(
-                                "action_uncertain",
-                                "Cannot persist verified production result",
-                            )
-                        })?;
-                    return Ok(Execution::new(&saved, false));
-                }
-                Ok(None) => {}
-                Err(e)
-                    if Instant::now() < deadline
-                        && (e.code == "torn_read"
-                            || (matches!(target, Target::Panel(_))
-                                && e.code == "production_panel_transition")) => {}
-                Err(e) => return Err(self.uncertain(&intent, delivery, last, e, token)),
+        let mut why = dispatch_cause.unwrap_or_else(|| {
+            error(
+                "production_deadline",
+                "Target not observed before the observation ended",
+            )
+        });
+        let settled = stage_settle::settle(stage_settle::end(deadline, Instant::now()), |end| {
+            if let Err(cause) = permit(gate) {
+                let text = stage_settle::readback(&cause);
+                why = cause;
+                return Seen::Stop(text);
             }
-            thread::sleep(
-                Duration::from_millis(20).min(deadline.saturating_duration_since(Instant::now())),
-            );
+            let mut unreadable = |cause: Error| {
+                let text = stage_settle::readback(&cause);
+                why = cause;
+                Seen::Unreadable(text)
+            };
+            // A torn read, or the panel still in its own transition, proves nothing yet.
+            let moving = |e: &Error| {
+                e.code == "torn_read"
+                    || (matches!(target, Target::Panel(_))
+                        && e.code == "production_panel_transition")
+            };
+            if let Err(cause) = domains.clear(&target.epoch().game) {
+                return unreadable(cause);
+            }
+            let observed = match backend.observe(&target, end) {
+                Err(e) if moving(&e) => return Seen::Pending(String::new()),
+                Err(cause) => return unreadable(cause),
+                Ok(observed) => observed,
+            };
+            if let Err(cause) = observed.validate(&target) {
+                return unreadable(cause);
+            }
+            if !observed.same_identity(&intent.before) {
+                return unreadable(error(
+                    "ownership_changed",
+                    "Original production identity changed after input",
+                ));
+            }
+            last = observed.clone();
+            if !observed.reached(&target) {
+                return Seen::Pending(String::new());
+            }
+            // A target that shows while input idle stays unverified for a whole window closes
+            // without proof: a held key or button does not release itself.
+            if let Err(cause) = backend.confirm_input_idle(end) {
+                return unreadable(cause);
+            }
+            let confirmed = match backend.observe(&target, end) {
+                Err(e) if moving(&e) => return Seen::Pending(String::new()),
+                Err(cause) => return unreadable(cause),
+                Ok(confirmed) => confirmed,
+            };
+            if let Err(cause) = confirmed.validate(&target) {
+                return unreadable(cause);
+            }
+            if confirmed != observed {
+                // The allocation moved during the idle check: observe again from the top.
+                return Seen::Pending("canonical allocation changed after idle check".into());
+            }
+            Seen::Reached(confirmed)
+        });
+        match settled {
+            Settled::Reached(last) => {
+                let saved = self
+                    .append(Record {
+                        status: Status::Verified,
+                        delivery: Some(delivery),
+                        last,
+                        ..intent
+                    })
+                    .map_err(|e| {
+                        Diagnostic::from_error(&e, token).as_error(
+                            "action_uncertain",
+                            "Cannot persist verified production result",
+                        )
+                    })?;
+                Ok(Execution::new(&saved, false))
+            }
+            // No production step has a contradicting settled state of its own.
+            Settled::Diverged(_, ended) | Settled::Unconfirmed(ended) => {
+                // How the observation ended ("target not observed (polls=.. ..)").
+                why.message = format!(
+                    "{}; {}",
+                    why.message,
+                    ended.split(';').next().unwrap_or_default()
+                );
+                Err(self.unconfirmed(&intent, delivery, last, why, token))
+            }
         }
     }
 }
@@ -944,6 +1046,8 @@ mod retained_storage_tests {
             status: Status::Intent,
             delivery: None,
             cause: None,
+            // Just written: an interrupted intent whose input may still be in flight.
+            unix_ms: Some(stage_settle::now_ms()),
         }
     }
     #[test]

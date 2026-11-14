@@ -1,6 +1,12 @@
 //! Durable single-stage ordinary research attempts with borrowed input authority.
 //! The adapter supplies fresh own state/candidates and one ordinary dispatcher.
 //! No MCP registration, engine invocation or automatic input replay occurs here.
+//!
+//! Every intent ends in a terminal receipt before `execute` returns (`stage_settle`): after
+//! the one input the journal keeps observing, reading only, and records `Verified`,
+//! `Diverged` or `Unconfirmed`. A request closed without proof answers `action_unconfirmed`,
+//! is never replayed and holds nothing. Only an intent left open by a stopped server holds
+//! its game, for a bounded time; the next request closes it.
 use crate::{
     actions::Epoch,
     error::{Error, Result},
@@ -960,8 +966,8 @@ impl Journal {
             unix_ms: Some(stage_settle::now_ms()),
             closed: None,
         })?;
-        // A known local refusal after intent is durable too; uncertain delivery
-        // retains Intent and never authorizes a second event.
+        // A known local refusal after intent is durable too. Any other delivery is observed
+        // below and closed with a terminal receipt; it never authorizes a second event.
         let delivery =
             match live(authority, token, &target, deadline, gate).and_then(|()| permit(gate)) {
                 Ok(p) => {

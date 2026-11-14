@@ -526,7 +526,7 @@ fn opaque_production_proof_ignores_mutable_public_summary_and_rejects_historical
         )
         .is_err());
     execution.request_id = "public-summary-cannot-rebind-proof".into();
-    execution.status = ordinary::Status::Uncertain;
+    execution.status = ordinary::Status::Unconfirmed;
     execution.historical = true;
     execution.current_state_verified = false;
     n.verified_production(&id, &execution, closed_destination(original()), date())
