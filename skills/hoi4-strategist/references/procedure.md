@@ -114,6 +114,9 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
    convoys before anything else).
 2. Name the arms the goal does not need and why; their research and doctrine folders stay out.
 3. Every start line, wing and fleet the posture does not use is marked for removal in item 8 (PR08, L18).
+4. Military factories and dockyards are two pools: a naval line (ships, convoys) in `production` takes
+   dockyards and no military factory, and the lint counts each pool on its own. Free dockyards get a line
+   (convoys when the theatre is overseas) like free military factories do.
 Resolution: executor `production` (factories per line, `from`), `production_priority`,
 `phases[].overrides.production_priority`, `research_fallback_exclude`, `doctrines` folders; plan.md §12.
 Check: lint `production.factories`, `research.folders`; rubric row 12.
