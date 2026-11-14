@@ -294,6 +294,16 @@ class SeededBadPlans(unittest.TestCase):
         self.assertTrue(hit, f"no {rule} error containing {text!r}; new errors: {errs}")
         return errs
 
+    def test_phase_override_axes_are_checked_for_supply(self):
+        # axes a phase carries in overrides.war are advances like any other and need the same supply check
+        plan = copy.deepcopy(self.base)
+        plan["phases"] = [{"id": "PX", "overrides": {"war": {"axes": [[271]]}}}] + list(plan.get("phases") or [])
+        plan["war"] = dict(plan.get("war") or {}, axes=[])
+        plan["war_by_phase"] = {}
+        found = [f for f in lint_plan.lint(plan, self.game)["findings"]
+                 if f["rule"] == "supply.axis_reach" and f["where"].startswith("phases[0].overrides.war")]
+        self.assertTrue(found, "the phase override axis to state 271 was not checked")
+
     def test_factory_on_the_front(self):
         plan = copy.deepcopy(self.base)
         plan["construction_plan"].append({"id": "cp99_arms_factory_550", "order": 99, "building": "arms_factory",

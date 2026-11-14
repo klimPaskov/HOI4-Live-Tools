@@ -171,7 +171,7 @@ def pass_mark(maximum):
     return -(-PASS_TOTAL * maximum // MAX_TOTAL)
 
 
-def review_passes(critic):
+def review_passes(critic, allow_majors=False):
     if not critic:
         return False, "no critic output"
     scores = {str(k): v for k, v in (critic.get("scores") or {}).items()}
@@ -179,11 +179,15 @@ def review_passes(critic):
     maximum = max_total(critic, scores)
     mark = pass_mark(maximum)
     zeros = [r for r in CRITICAL_ROWS if scores.get(r) == 0]
-    blockers = [f.get("id") for f in critic.get("findings") or [] if f.get("severity") == "blocker"
+    def open_ids(severity):
+        return [f.get("id") for f in critic.get("findings") or [] if f.get("severity") == severity
                 and f.get("status", "open") == "open"]
-    ok = total >= mark and not zeros and not blockers
-    return ok, "total %s/%s (pass %s), zero rows %s, open blockers %s" % (
-        total, maximum, mark, zeros or "none", blockers or "none")
+    blockers, majors = open_ids("blocker"), open_ids("major")
+    # A score above the mark does not excuse an open major finding: the strategist answers it while rounds
+    # remain (allow_majors is set only for the last round, where the plan ships with them reported).
+    ok = total >= mark and not zeros and not blockers and (allow_majors or not majors)
+    return ok, "total %s/%s (pass %s), zero rows %s, open blockers %s, open majors %s" % (
+        total, maximum, mark, zeros or "none", blockers or "none", majors or "none")
 
 
 def latest(run_dir, pattern):
@@ -281,7 +285,7 @@ def strategize(args, runner=None):
                 return finish(run_dir, report, "the critic wrote no RUN/review/critic-<n>.json twice "
                               "(check its tools and RUN/review/*.message.md)", started)
         critic = read_json(critic_path) if critic_path else None
-        passed, why = review_passes(critic)
+        passed, why = review_passes(critic, allow_majors=review_round == REVIEW_ROUNDS)
         report["review"] = {"round": review_round, "pass": passed, "detail": why,
                             "file": os.path.basename(critic_path) if critic_path else None}
         report["steps"].append({"step": "critic", "round": review_round, "exit": code, "pass": passed,

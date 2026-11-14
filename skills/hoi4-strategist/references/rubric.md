@@ -61,7 +61,7 @@ The critic writes `RUN/review/critic-<n>.json` (n = 1 + the number of existing `
 ```
 
 `max` is 32 (2 points × 16 rows); `scripts/strategist/strategize.py` reads `total`, `max`, `scores` and
-the open blockers.
+the open blocker and major findings (a finding's `status` is `open` unless the critic marks it `fixed`).
 
 Severities:
 * `blocker`: the plan cannot reach the goal or breaks a hard rule (wrong goal, contradicted fact, FAIR
@@ -69,12 +69,13 @@ Severities:
   `check_calls.py RUN` rejects, a checklist item with no resolution, an overseas theatre with no convoy
   plan). Any open blocker fails the gate.
 * `major`: likely to cost the goal or weeks of game time (timing off, supply late, a likely failure
-  without a contingency).
+  without a contingency). An open major finding sends the plan back to the strategist in round 1 even
+  when the total passes; after the last round the plan ships with its open majors listed in the report.
 * `minor`: clarity, tagging or efficiency.
 
 Each finding has one claim, the evidence that shows it (command output or file line), and a concrete
 fix. No finding without evidence. In round 2 the critic re-checks only the open findings and the parts
-the answers changed, and keeps the ids.
+the answers changed, keeps the ids, and sets each finding's `status` to `fixed` or `open`.
 
 ## 3. Answer protocol (strategist)
 
@@ -83,7 +84,7 @@ the answers changed, and keeps the ids.
    A rebuttal needs a source; "I disagree" is not an answer.
 2. Re-run step 7 (validate and lint) after the fixes.
 3. Run the critic for round 2 with the same command. It reads the answers.
-4. At most 2 rounds. Gate: no open blocker, total ≥ 22 of 32, no 0 in rows 1, 2, 7, 13. If round 2
+4. At most 2 rounds. Gate: no open blocker, no open major (round 1), total ≥ 22 of 32, no 0 in rows 1, 2, 7, 13. If round 2
    fails, write `RUN/strategist-blocked.md` (failed rows, open findings, what would fix them) and stop;
    do not run a third round and do not freeze.
 5. List every finding and its answer in plan.md §11.
