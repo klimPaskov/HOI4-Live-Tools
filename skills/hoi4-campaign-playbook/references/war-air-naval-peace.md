@@ -158,6 +158,13 @@ Under enemy air superiority infantry retreats 30% slower and is easy to pocket; 
 treat the line as open to tanks, so win or contest the air before holding a plain front. With enough divisions hold in
 two lines so the rear line regains organisation while the front fights.
 
+A plan states these orders in `defense_lines` (kind `fallback`: a line through own states,
+toolbar key C; kind `area_defense`: own states to cover with the order window's toggles in
+`settings`, key V; `until` deletes the order). It is a gap today (not executable, gap register
+orders.defensive_lines): the executor works the orders out but sends nothing until the
+fallback-line, area-defence and delete-order tools are built; list the army in `war.reserve` so
+the war step leaves it on the line.
+
 ---------------------------------------------------------------------------
 
 ## 5. Air war
@@ -655,7 +662,8 @@ Use `poland-meta.md` for the route. War specifics:
 Real gaps (no tool; use the workaround):
 
 - Battle-plan execution mode and army cohesion: the default (balanced) applies.
-- Fallback line, area-defence and spearhead orders: use front lines.
+- Fallback line, area-defence and spearhead orders: use front lines (`defense_lines` is planned
+  but waits on its tools: a gap).
 - Planning % and entrenchment reads: count days since the order (+2% a day).
 - Army HQ deploy: none.
 - Sea-region dominance and naval intel read: patrol 50+ days per region before relying on control.

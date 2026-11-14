@@ -269,6 +269,11 @@ mod plan_war;
 #[path = "plan_route.rs"]
 mod plan_route;
 
+/// Steps written ahead of their game action (defensive lines): they send an order only once its
+/// tool is built (in RECEIPT_TOOLS), and say in the digest what waits on which tool until then.
+#[path = "plan_seams.rs"]
+mod plan_seams;
+
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
 /// span of game hours, so the plan behaves the same at speed 1, 5 or paused.
@@ -475,6 +480,8 @@ pub struct State {
     war_rules: plan_war::Memory,
     /// Victory-point routes: where each waypoint lies, legs taken, jump-off moves (plan_route.rs).
     routes: plan_route::Memory,
+    /// Steps ahead of their tools (plan_seams.rs): digest lines.
+    seams: plan_seams::Memory,
     /// Army moves: the commitment rule, the budget and each move's reason.
     moves: Moves,
     /// divisions disbanded by the `disband` stage
@@ -634,6 +641,7 @@ impl Default for State {
             affairs: Default::default(),
             war_rules: Default::default(),
             routes: Default::default(),
+            seams: Default::default(),
             moves: Moves::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
@@ -1713,7 +1721,7 @@ type Step = fn(&mut State, &dyn Tools, &Value, &str, GameHour) -> Result<Option<
 /// production, construction, management) waits as long as the war finds an order to give.
 /// [`overdue_step`] offers a domain not reached for `scheduler.max_wait_days` game days a turn
 /// ahead of the war-first block.
-const DOMAINS: [(&str, Step); 9] = [
+const DOMAINS: [(&str, Step); 10] = [
     ("politics", politics_step),
     // `decision_rules` (guarded, targeted, counted, never-take) before the plain `decisions` list
     ("decisions", decisions_step),
@@ -1758,6 +1766,9 @@ const DOMAINS: [(&str, Step); 9] = [
     // state, economy and diplomacy affairs (plan_affairs.rs): diplomacy, faction, trade, designs
     // and line switches, MIOs, intelligence
     ("affairs", plan_affairs::step),
+    // steps ahead of their tools (plan_seams.rs): defensive lines; nothing is sent until the
+    // order's tool is built
+    ("seams", plan_seams::step),
 ];
 
 /// The scheduler's turn guarantee: the domains not offered a turn for `scheduler.max_wait_days`
@@ -6089,6 +6100,9 @@ pub fn run(
     }
     if let Some(war) = plan_war::digest(state) {
         result["war"] = war;
+    }
+    if let Some(seams) = plan_seams::digest(state) {
+        result["seams"] = seams;
     }
     if let Some(moves) = state.moves.digest(state.last_hour) {
         result["moves"] = moves;

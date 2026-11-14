@@ -68,6 +68,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            war.guard_states or war.guards); warning: a hold_targets post outside the guard
                            states of the layout guard it moves (that border loses the guard while the hold runs)
   army.templates           layout template not in the start order of battle
+  orders.defense_reserve   (warning) a defense_lines army the war step may still drive (not in war.reserve and
+                           not a war.guards army): it would pull the army off its fallback line or area; a
+                           settings list on a fallback entry (only area_defense has the settings window)
   army.counts              layout count above the divisions of its templates in its state (warning
                            when the entries of one state together need more than it has)
   army.generals            general, army_group marshal or navy admiral unknown or not a commander of the tag; a
@@ -3971,6 +3974,25 @@ class Lint:
                      f"does not take them before the conference (no vp target or axis there); rank the states the "
                      f"armies hold first, they cost fewer points")
 
+    def defense_lines(self):
+        """orders.defense_reserve: a defensive order's army the war step may still drive; settings on a fallback."""
+        war = self.plan.get("war") if isinstance(self.plan.get("war"), dict) else {}
+        kept = {a for a in war.get("reserve") or [] if isinstance(a, str)}
+        guards = war.get("guards")
+        if isinstance(guards, dict):
+            kept |= set(guards)
+        driven = bool(war) and war.get("enabled") is not False
+        for i, e in enumerate(self.list_of("defense_lines")):
+            where = f"defense_lines[{i}] {e.get('id')}"
+            army = e.get("army")
+            if driven and isinstance(army, str) and army not in kept:
+                self.add("warning", "orders.defense_reserve", where,
+                         f"{army!r} holds a {e.get('kind')} order but is not in war.reserve (or war.guards): the war "
+                         f"step can drive it off the line; list it in war.reserve")
+            if e.get("kind") == "fallback" and e.get("settings"):
+                self.add("warning", "orders.defense_reserve", where,
+                         "settings belong to the area defence order's window; a fallback line ignores them")
+
     # ------------------------------------------------------------------
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
@@ -3985,7 +4007,7 @@ class Lint:
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.politics_pp_budget,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
-                 self.navy_strike_without_patrol, self.peace_order]
+                 self.navy_strike_without_patrol, self.peace_order, self.defense_lines]
         for step in steps:
             step()
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
