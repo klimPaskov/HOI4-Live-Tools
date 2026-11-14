@@ -35,7 +35,9 @@
 //!                          destroyer, cruiser, battleship, torpedo, convoy; [] allows everything)
 //!   focus_path             focus keys; the first not completed key the game accepts. A key the game blocks
 //!                          (focus_not_available, prerequisite, exclusive) is skipped for `skip_hours.focus_blocked`
-//!                          and the next key is tried at once; `focus_blocked:[key:reason]` is in the digest
+//!                          (doubled on each further refusal, up to 8 times; cleared when a focus completes)
+//!                          and the next key is tried (two refused keys per tick); `focus_blocked:[key:reason]`
+//!                          is in the digest
 //!   focus_fallback         focus keys tried only after every focus_path key is completed or skipped
 //!   skip_hours             {"tech":72,"tech_fallback":168,"focus":24,"focus_blocked":6}: game hours a refused key
 //!                          is left alone (defaults shown); all optional
@@ -386,7 +388,6 @@ pub struct State {
     done: HashMap<String, GameHour>,
     seen: HashMap<String, GameHour>,
     seq: u64,
-    sent: HashMap<String, (String, Value)>,
     war_assign: HashMap<String, i32>,
     war_stage: HashMap<String, u8>,
     war_cool: HashMap<String, GameHour>,
@@ -484,8 +485,17 @@ struct Stages {
     fallback_used: Vec<String>,
     /// short refusal reason per focus key, for `focus_blocked`
     focus_why: HashMap<String, String>,
+    /// How many times in a row the game refused each focus as not available (Start disabled),
+    /// and the completed-focus count when that was counted. Each further refusal doubles the
+    /// key's wait; a newly completed focus clears the counts (prerequisites may now be met).
+    focus_refused: HashMap<String, u32>,
+    focus_refused_at_completed: usize,
 }
 
+/// Refused focuses one tick may open (each look costs seconds of the input lane).
+const FOCUS_PROBES_PER_TICK: u32 = 2;
+/// A focus refused again waits `2^n` times the blocked window, up to this many doublings.
+const FOCUS_REFUSAL_DOUBLINGS: u32 = 3;
 /// Skip window in game hours: `skip_hours.<key>` of the plan, else `default`.
 fn skip_hours(plan: &Value, key: &str, default: GameHour) -> GameHour {
     plan["skip_hours"][key]
@@ -539,7 +549,6 @@ impl Default for State {
             done: HashMap::new(),
             seen: HashMap::new(),
             seq: 0,
-            sent: HashMap::new(),
             war_assign: HashMap::new(),
             war_stage: HashMap::new(),
             war_cool: HashMap::new(),
@@ -817,8 +826,6 @@ impl State {
             );
             object.insert("lease_token".into(), json!(lease));
         }
-        let id = args["request_id"].as_str().unwrap_or("").to_string();
-        self.sent.insert(id, (name.to_string(), args.clone()));
         let result = self.dispatch(tools, name, &args);
         self.last_ok = Some(matches!(&result, Ok((true, _))));
         match &result {
@@ -881,26 +888,11 @@ impl State {
     }
     fn dispatch(&mut self, tools: &dyn Tools, name: &str, args: &Value) -> Result<(bool, String)> {
         let args = args.clone();
-        let mut result = tools.call(name, &args);
-        if matches!(&result, Err(e) if e.code == "action_uncertain") {
-            // Another dispatch of this run is unresolved and blocks input: settle
-            // it by retrying its own request id, then send this one again.
-            let blocker = match &result {
-                Err(e) => e
-                    .message
-                    .split("Unresolved dispatch ")
-                    .nth(1)
-                    .and_then(|rest| rest.split_whitespace().next())
-                    .map(String::from),
-                _ => None,
-            };
-            if let Some((blocked_name, blocked_args)) =
-                blocker.and_then(|b| self.sent.get(&b).cloned())
-            {
-                let _ = tools.call(&blocked_name, &blocked_args);
-            }
-            result = tools.call(name, &args);
-        }
+        // Every request ends in a terminal receipt. `action_unconfirmed` (effect not observed,
+        // request closed) is an ordinary failure for the ledger: the next tick reads the state
+        // again and re-plans. `action_uncertain` only remains for an action interrupted by a
+        // server stop moments ago (at most ten seconds) and ends this step.
+        let result = tools.call(name, &args);
         match result {
             Err(e) if e.code == "action_uncertain" => Err(e),
             Err(e) if self.stop_on_failure => Err(e),
@@ -1388,8 +1380,20 @@ pub fn tick(
                 .cloned()
                 .collect()
         };
+        // A completed focus can unlock others: every refused key gets a fresh try at once.
+        if state.stages.focus_refused_at_completed != completed.len() {
+            state.stages.focus_refused_at_completed = completed.len();
+            let refused: Vec<String> = state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+            for key in refused {
+                state.bad.remove(&skip_key("focus", &key));
+            }
+        }
         let mut candidates: Vec<String> = startable(state, &path).into_iter().take(8).collect();
         candidates.extend(startable(state, &fallback).into_iter().take(4));
+        // Whether a focus can start is only known from its detail window, and one look costs
+        // seconds of the input lane (a far node up to the whole action deadline). One tick looks
+        // at no more than this many refused focuses; the rest keep their turn for the next tick.
+        let mut probes_left = FOCUS_PROBES_PER_TICK;
         for key in candidates {
             let (ok, why) = state.act(
                 tools,
@@ -1412,7 +1416,14 @@ pub fn tick(
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
             let hours = if blocked {
-                skip_hours(plan, "focus_blocked", 10 * DAY)
+                // The same focus refused again and again waits twice as long each time (10, 20,
+                // 40, 80 game days by default): in one shakedown three fallback focuses that
+                // could not start yet were opened about a hundred times, a quarter of the
+                // input lane.
+                let refusals = state.stages.focus_refused.entry(key.clone()).or_insert(0);
+                let doubling = 1 << (*refusals).min(FOCUS_REFUSAL_DOUBLINGS);
+                *refusals += 1;
+                skip_hours(plan, "focus_blocked", 10 * DAY) * doubling
             } else {
                 skip_hours(plan, "focus", DAY)
             };
@@ -1420,6 +1431,10 @@ pub fn tick(
             let code = why.split(':').next().unwrap_or("refused").to_string();
             state.stages.focus_why.insert(key, code);
             if !blocked {
+                break;
+            }
+            probes_left -= 1;
+            if probes_left == 0 {
                 break;
             }
         }
@@ -5075,10 +5090,7 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
         Ok((true, _)) => "paused".into(),
         Ok((false, why)) => format!("pause refused ({why}); not retried"),
         Err(e) if e.code == "action_uncertain" => {
-            format!(
-                "pause uncertain ({}); not retried, settle by hand",
-                e.message
-            )
+            format!("pause uncertain ({}); not retried", e.message)
         }
         Err(e) => format!("pause failed ({}: {}); not retried", e.code, e.message),
     }
@@ -5710,7 +5722,7 @@ mod tests {
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([uncertain(), uncertain()].into()),
+            replies: RefCell::new([uncertain()].into()),
         };
         let mut state = State::default();
         let error = tick(
@@ -5723,8 +5735,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.code, "action_uncertain");
         let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1], "Only the same request may be settled");
+        assert_eq!(calls.len(), 1, "an interrupted action is never resent");
         assert_eq!(calls[0].1["technology"], "radio");
         assert!(!names(&reads).contains(&"hoi4_technology_list".into()));
         assert!(
@@ -5734,16 +5745,21 @@ mod tests {
     }
 
     #[test]
-    fn same_request_settled_as_verified_completes_normally() {
+    fn an_unconfirmed_action_is_an_ordinary_failure_for_the_ledger_and_is_not_resent() {
         let reads = fake(vec![]);
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
             replies: RefCell::new(
-                [uncertain(), Ok(json!({"receipt":{"status":"Verified"}}))].into(),
+                [Err(Error::new(
+                    "action_unconfirmed",
+                    "Input may have been sent but its effect was not observed; the request is closed",
+                ))]
+                .into(),
             ),
         };
-        let result = State::default()
+        let mut state = State::default();
+        let (ok, why) = state
             .act(
                 &tools,
                 "l",
@@ -5752,10 +5768,11 @@ mod tests {
                 "rs",
             )
             .unwrap();
-        assert_eq!(result, (true, "Verified".into()));
-        let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1]);
+        assert!(!ok);
+        assert!(why.starts_with("action_unconfirmed"), "{why}");
+        assert_eq!(tools.actions.borrow().len(), 1);
+        // Counted like any failed order, so repeats back off.
+        assert_eq!(state.failures.values().map(Vec::len).sum::<usize>(), 1);
     }
 
     #[test]
@@ -8604,14 +8621,13 @@ mod tests {
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([uncertain(), uncertain()].into()),
+            replies: RefCell::new([uncertain()].into()),
         };
         let mut state = State::default();
         let error = tick(&mut state, &tools, &war_plan(), "l", START).unwrap_err();
         assert_eq!(error.code, "action_uncertain");
         let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1]);
+        assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "hoi4_army_front");
         assert!(state.war_stage.is_empty());
         assert!(state.war_cool.is_empty());
@@ -8824,12 +8840,12 @@ mod tests {
     }
 
     #[test]
-    fn an_uncertain_pause_settles_its_own_id_once_then_reports_without_retrying() {
+    fn an_uncertain_pause_is_reported_once_without_retrying() {
         let reads = fake(vec![]);
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([uncertain(), uncertain()].into()),
+            replies: RefCell::new([uncertain()].into()),
         };
         let mut state = State::default();
         let step = tick(&mut state, &tools, &date_plan(), "l", target()).unwrap();
@@ -8841,12 +8857,7 @@ mod tests {
             tick(&mut state, &tools, &date_plan(), "l", target() + 1).unwrap(),
             Tick::DateStop(_)
         ));
-        let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(
-            calls[0], calls[1],
-            "only the same request id may be settled"
-        );
+        assert_eq!(tools.actions.borrow().len(), 1);
     }
 
     #[test]
@@ -9102,6 +9113,68 @@ mod tests {
             ["A:focus_not_available"]
         );
         assert!(focus_blocked(&state, &plan, START + 10 * DAY).is_empty());
+    }
+
+    #[test]
+    fn a_focus_refused_again_waits_twice_as_long_and_a_completed_focus_clears_it() {
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked(), blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A"]});
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.skipped(START + 10 * DAY - 1, "focus", "A"));
+        assert!(!state.skipped(START + 10 * DAY, "focus", "A"));
+        // Refused a second time: twenty game days now.
+        let second = START + 10 * DAY;
+        tick(&mut state, &tools, &plan, "l", second).unwrap();
+        assert_eq!(tools.actions.borrow().len(), 2);
+        assert!(state.skipped(second + 20 * DAY - 1, "focus", "A"));
+        assert!(!state.skipped(second + 20 * DAY, "focus", "A"));
+        // Another focus completes (prerequisites may now be met): A is tried again at once.
+        let reads = fake(vec![
+            ("hoi4_research", json!({"slots": [{"researching": "x"}]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done", "Other"]}),
+            ),
+        ]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let step = tick(&mut state, &tools, &plan, "l", second + DAY).unwrap();
+        assert_eq!(step, Tick::Acted("focus A".into()));
+        assert!(state.stages.focus_refused.is_empty());
+    }
+
+    #[test]
+    fn one_tick_opens_at_most_two_refused_focuses() {
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked(), blocked(), blocked(), blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A", "B"], "focus_fallback": ["C", "D"]});
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        let tried = |tools: &ActionReplies| -> Vec<String> {
+            tools
+                .actions
+                .borrow()
+                .iter()
+                .map(|a| a.1["focus"].as_str().unwrap().into())
+                .collect()
+        };
+        assert_eq!(tried(&tools), ["A", "B"]);
+        // The next tick goes on with the keys that had no turn yet.
+        tick(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(tried(&tools), ["A", "B", "C", "D"]);
     }
 
     #[test]

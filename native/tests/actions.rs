@@ -177,65 +177,26 @@ fn verified_receipt_survives_restart_without_second_dispatch() {
         "idempotency_conflict"
     );
 }
+/// An open request left by a server that stopped right after it sent the key.
+fn stopped_mid_dispatch(temp: &Temp, backend: &Fake, action: &str) {
+    let epoch = serde_json::to_value(&backend.state.epoch).unwrap();
+    let mut before = serde_json::to_value(&backend.state).unwrap();
+    before["paused"] = serde_json::json!(false);
+    let line = serde_json::json!({
+        "version": 1, "id": "pause", "epoch": epoch,
+        "action": {"kind": action, "value": true},
+        "status": "Dispatching", "dispatched": true, "observed": before,
+    });
+    fs::write(temp.path(), format!("{line}\n")).unwrap();
+}
 #[test]
-fn crash_after_dispatch_cannot_be_replayed_or_bypassed_but_settles_by_reading() {
-    let temp = Temp::new("crash");
+fn a_dispatch_error_whose_key_took_effect_is_verified_from_fresh_state() {
+    let temp = Temp::new("late-effect");
     let mut backend = Fake::new();
-    backend.dispatch_error = true;
+    backend.dispatch_error = true; // the transport reports failure, the key still applied
     let epoch = backend.state.epoch.clone();
     let mut journal = Journal::open(&temp.path()).unwrap();
-    assert_eq!(
-        journal
-            .execute(
-                "pause",
-                &epoch,
-                Action::SetPaused(true),
-                &mut backend,
-                TIMEOUT
-            )
-            .unwrap_err()
-            .code,
-        "action_uncertain"
-    );
-    assert!(backend.state.paused);
-    assert_eq!(backend.dispatches, 1);
-    drop(journal);
-    backend.dispatch_error = false;
-    let mut reopened = Journal::open(&temp.path()).unwrap();
-    assert_eq!(
-        reopened
-            .execute(
-                "new-id",
-                &epoch,
-                Action::SetPaused(true),
-                &mut backend,
-                TIMEOUT
-            )
-            .unwrap_err()
-            .code,
-        "action_uncertain"
-    );
-    // A changed campaign identifier cannot evade quarantine for the same PID.
-    backend.state.epoch.campaign = "new-campaign".into();
-    let changed = backend.state.epoch.clone();
-    assert_eq!(
-        reopened
-            .execute(
-                "another-id",
-                &changed,
-                Action::SetPaused(true),
-                &mut backend,
-                TIMEOUT
-            )
-            .unwrap_err()
-            .code,
-        "action_uncertain"
-    );
-    assert_eq!(backend.dispatches, 1);
-    // Retrying the uncertain request itself settles it from fresh state,
-    // without sending the key again, and lifts the quarantine.
-    backend.state.epoch = epoch.clone();
-    let settled = reopened
+    let receipt = journal
         .execute(
             "pause",
             &epoch,
@@ -244,13 +205,33 @@ fn crash_after_dispatch_cannot_be_replayed_or_bypassed_but_settles_by_reading() 
             TIMEOUT,
         )
         .unwrap();
-    assert_eq!(settled.status, Status::Verified);
+    assert_eq!(receipt.status, Status::Verified);
+    assert!(backend.state.paused);
     assert_eq!(backend.dispatches, 1);
-    backend.state.paused = false;
+}
+#[test]
+fn a_request_left_open_by_a_stopped_server_settles_by_reading_and_blocks_nothing() {
+    // The key applied before the server stopped: the next request of any id settles the open
+    // one as Verified without sending it again, then runs normally.
+    let temp = Temp::new("crash");
+    let mut backend = Fake::new();
+    stopped_mid_dispatch(&temp, &backend, "SetPaused");
+    backend.state.paused = true;
+    let epoch = backend.state.epoch.clone();
+    let mut reopened = Journal::open(&temp.path()).unwrap();
+    assert!(reopened.blocks_game_for_test(&epoch));
+    let other = reopened
+        .execute("speed", &epoch, Action::SetSpeed(3), &mut backend, TIMEOUT)
+        .unwrap();
+    assert_eq!(other.status, Status::Verified);
+    assert_eq!(reopened.receipt("pause").unwrap().status, Status::Verified);
+    assert!(!reopened.blocks_game_for_test(&epoch));
+    assert_eq!(backend.dispatches, 1, "only the new speed key was sent");
+    // Its own id replays the settled receipt; a different action on it still conflicts.
     assert_eq!(
         reopened
             .execute(
-                "pause-2",
+                "pause",
                 &epoch,
                 Action::SetPaused(true),
                 &mut backend,
@@ -260,32 +241,17 @@ fn crash_after_dispatch_cannot_be_replayed_or_bypassed_but_settles_by_reading() 
             .status,
         Status::Verified
     );
-    assert_eq!(backend.dispatches, 2);
+    assert_eq!(backend.dispatches, 1);
 }
 #[test]
-fn a_target_that_disappeared_cannot_clear_uncertainty_even_after_restart() {
+fn an_open_request_whose_target_is_not_shown_closes_as_not_applied() {
     let temp = Temp::new("notapplied");
     let mut backend = Fake::new();
-    backend.dispatch_error = true;
+    stopped_mid_dispatch(&temp, &backend, "SetPaused");
+    // Fresh state does not show the target (the key never applied, or it was undone).
     let epoch = backend.state.epoch.clone();
     let mut journal = Journal::open(&temp.path()).unwrap();
-    assert_eq!(
-        journal
-            .execute(
-                "pause",
-                &epoch,
-                Action::SetPaused(true),
-                &mut backend,
-                TIMEOUT
-            )
-            .unwrap_err()
-            .code,
-        "action_uncertain"
-    );
-    assert!(backend.state.paused, "The first key actually applied");
-    backend.state.paused = false; // The game or user changes it again.
-    backend.dispatch_error = false;
-    let error = journal
+    let settled = journal
         .execute(
             "pause",
             &epoch,
@@ -293,33 +259,33 @@ fn a_target_that_disappeared_cannot_clear_uncertainty_even_after_restart() {
             &mut backend,
             TIMEOUT,
         )
-        .unwrap_err();
-    assert_eq!(error.code, "action_uncertain");
+        .unwrap();
+    assert_eq!(settled.status, Status::NotApplied);
     assert_eq!(
-        journal.receipt("pause").unwrap().status,
-        Status::Dispatching
+        backend.dispatches, 0,
+        "settlement never sends the key again"
     );
-    assert_eq!(backend.dispatches, 1);
-    // Restart preserves the unresolved outcome and blocks replacement IDs.
+    // Closed for good and valid after a restart; a fresh id pauses normally.
     drop(journal);
     let mut reopened = Journal::open(&temp.path()).unwrap();
-    for id in ["pause", "replacement"] {
-        assert_eq!(
-            reopened
-                .execute(id, &epoch, Action::SetPaused(true), &mut backend, TIMEOUT)
-                .unwrap_err()
-                .code,
-            "action_uncertain"
-        );
-    }
-    assert_eq!(backend.dispatches, 1);
     assert_eq!(
         reopened.receipt("pause").unwrap().status,
-        Status::Dispatching
+        Status::NotApplied
     );
+    let fresh = reopened
+        .execute(
+            "replacement",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(fresh.status, Status::Verified);
+    assert_eq!(backend.dispatches, 1);
 }
 #[test]
-fn failed_clock_settlement_preserves_uncertainty_and_original_cause() {
+fn an_unreadable_game_keeps_the_request_open_until_the_next_readable_call() {
     for code in [
         "invalid_target",
         "permission_denied",
@@ -328,40 +294,27 @@ fn failed_clock_settlement_preserves_uncertainty_and_original_cause() {
     ] {
         let temp = Temp::new(code);
         let mut backend = Fake::new();
-        backend.dispatch_error = true;
+        stopped_mid_dispatch(&temp, &backend, "SetPaused");
+        backend.state.paused = true;
         let epoch = backend.state.epoch.clone();
         let mut journal = Journal::open(&temp.path()).unwrap();
-        journal
-            .execute(
-                "pause",
-                &epoch,
-                Action::SetPaused(true),
-                &mut backend,
-                TIMEOUT,
-            )
-            .unwrap_err();
-        drop(journal);
-        let mut journal = Journal::open(&temp.path()).unwrap();
         backend.observe_error = Some(code);
-        let error = journal
-            .execute(
-                "pause",
-                &epoch,
-                Action::SetPaused(true),
-                &mut backend,
-                TIMEOUT,
-            )
-            .unwrap_err();
-        assert_eq!(error.code, "action_uncertain");
-        assert!(error.message.contains(code));
+        for id in ["pause", "another"] {
+            let error = journal
+                .execute(id, &epoch, Action::SetPaused(true), &mut backend, TIMEOUT)
+                .unwrap_err();
+            assert_eq!(error.code, "action_uncertain");
+            assert!(error.message.contains(code));
+        }
         assert_eq!(
             journal.receipt("pause").unwrap().status,
             Status::Dispatching
         );
+        // The moment the game reads again, any request settles it.
         backend.observe_error = None;
         let settled = journal
             .execute(
-                "pause",
+                "another",
                 &epoch,
                 Action::SetPaused(true),
                 &mut backend,
@@ -369,7 +322,8 @@ fn failed_clock_settlement_preserves_uncertainty_and_original_cause() {
             )
             .unwrap();
         assert_eq!(settled.status, Status::Verified);
-        assert_eq!(backend.dispatches, 1);
+        assert_eq!(journal.receipt("pause").unwrap().status, Status::Verified);
+        assert_eq!(backend.dispatches, 0);
     }
 }
 #[test]
@@ -415,33 +369,65 @@ fn failed_preflight_leaves_plan_entry_retryable_and_target_noop_is_recorded() {
     );
 }
 #[test]
-fn changed_epoch_after_dispatch_and_unobserved_target_are_uncertain() {
-    for lose_epoch in [false, true] {
-        let temp = Temp::new("epoch");
-        let mut backend = Fake::new();
-        backend.lose_epoch = lose_epoch;
-        backend.no_change = !lose_epoch;
-        let epoch = backend.state.epoch.clone();
-        let mut journal = Journal::open(&temp.path()).unwrap();
-        assert_eq!(
-            journal
-                .execute(
-                    "pause",
-                    &epoch,
-                    Action::SetPaused(true),
-                    &mut backend,
-                    TIMEOUT
-                )
-                .unwrap_err()
-                .code,
-            "action_uncertain"
-        );
-        assert_eq!(
-            journal.receipt("pause").unwrap().status,
-            Status::Dispatching
-        );
-        assert_eq!(backend.dispatches, 1);
-    }
+fn a_key_without_effect_closes_as_not_applied_and_a_lost_campaign_stays_open() {
+    // The key was sent and the clock never changed: a clean, terminal failure.
+    let temp = Temp::new("no-change");
+    let mut backend = Fake::new();
+    backend.no_change = true;
+    let epoch = backend.state.epoch.clone();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let receipt = journal
+        .execute(
+            "pause",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(receipt.status, Status::NotApplied);
+    assert!(receipt.dispatched);
+    assert_eq!(backend.dispatches, 1);
+    assert!(!journal.blocks_game_for_test(&epoch));
+    backend.no_change = false;
+    assert_eq!(
+        journal
+            .execute(
+                "pause-2",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap()
+            .status,
+        Status::Verified
+    );
+    // The campaign changed under the dispatch: nothing of this campaign can be read, so the
+    // request stays open (and is never judged by another campaign's clock).
+    let temp = Temp::new("epoch");
+    let mut backend = Fake::new();
+    backend.lose_epoch = true;
+    let epoch = backend.state.epoch.clone();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    assert_eq!(
+        journal
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
+    assert_eq!(
+        journal.receipt("pause").unwrap().status,
+        Status::Dispatching
+    );
+    assert_eq!(backend.dispatches, 1);
 }
 #[test]
 fn exclusive_writer_and_corrupt_tail_fail_before_any_input() {

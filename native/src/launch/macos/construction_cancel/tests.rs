@@ -441,7 +441,7 @@ fn verified_replay_is_historical_with_no_read_or_new_append() {
     std::fs::remove_dir_all(d).unwrap();
 }
 #[test]
-fn unknown_keeps_intent_and_reopen_never_settles_or_retries() {
+fn unknown_closes_the_request_and_reopen_never_settles_or_retries() {
     for fail in [Fail::Down, Fail::Up, Fail::Readback] {
         let d = dir();
         let p = d.join("actions");
@@ -457,19 +457,20 @@ fn unknown_keeps_intent_and_reopen_never_settles_or_retries() {
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
-        assert!(j.blocked());
+        // Closed at once: the intent and its Unconfirmed receipt, nothing held.
+        assert!(!j.blocked());
         let bytes = std::fs::read(&p).unwrap();
-        assert_eq!(String::from_utf8(bytes.clone()).unwrap().lines().count(), 1);
+        assert_eq!(String::from_utf8(bytes.clone()).unwrap().lines().count(), 2);
         drop(j);
         let mut j = GameJournal::open(&p).unwrap();
-        assert!(j.blocked());
+        assert!(!j.blocked());
         assert_eq!(
             historical_receipt(&request(), &epoch(), &j)
                 .unwrap_err()
                 .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
         assert_eq!(
             j.execute_strict(
@@ -481,7 +482,7 @@ fn unknown_keeps_intent_and_reopen_never_settles_or_retries() {
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
         assert_eq!(std::fs::read(&p).unwrap(), bytes);
         assert_eq!(a.presses, 1);

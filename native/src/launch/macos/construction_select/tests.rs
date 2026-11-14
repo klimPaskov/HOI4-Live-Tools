@@ -99,7 +99,7 @@ fn only_pre_input_or_zero_input_failure_can_be_a_positive_refusal() {
 }
 
 #[test]
-fn post_move_and_post_click_errors_remain_quarantined_after_reopen() {
+fn post_move_and_post_click_errors_close_the_request_and_are_never_replayed() {
     for failure in [2, 3] {
         let dir = directory();
         let path = dir.join("actions");
@@ -115,11 +115,11 @@ fn post_move_and_post_click_errors_remain_quarantined_after_reopen() {
             )
             .is_err());
         assert_eq!(a.clicks, 1);
-        assert!(j.blocked());
+        assert!(!j.blocked());
         drop(j);
         let before = std::fs::read(&path).unwrap();
         let mut j = GameJournal::open(&path).unwrap();
-        assert!(j.blocked());
+        assert!(!j.blocked());
         assert!(j
             .execute_strict(
                 request().id,

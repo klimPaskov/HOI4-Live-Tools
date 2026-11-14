@@ -456,11 +456,13 @@ mod tests {
         assert!(journal.receipt("late-preflight").is_none());
     }
     #[test]
-    fn late_postdelivery_target_is_quarantined_across_journal_restart() {
+    fn late_postdelivery_target_closes_as_not_applied_and_is_never_sent_again() {
         let dir = TempJournal::new();
         let mut journal = Journal::open(&dir.file()).unwrap();
         let mut backend = GeneratedBackend::new(Delay::DeliveredLate);
         let epoch = backend.state.epoch.clone();
+        // The key went out and the clock did not change inside the step window: fresh state
+        // decides, and it does not show the target. A clean failure with the transport's cause.
         let error = journal
             .execute(
                 "one-delivery",
@@ -470,39 +472,30 @@ mod tests {
                 OPERATION_TIMEOUT,
             )
             .unwrap_err();
-        assert_eq!(error.code, "action_uncertain");
+        assert_eq!(error.code, "input_readback_failed");
+        assert!(error.message.contains("NotApplied"));
         assert_eq!(backend.dispatches, 1);
         assert_eq!(backend.samples, 1);
         assert_eq!(
             journal.receipt("one-delivery").unwrap().status,
-            Status::Dispatching
+            Status::NotApplied
         );
         drop(journal);
+        // The closed request survives a restart and answers from its receipt: no read, no key.
         let mut reopened = Journal::open(&dir.file()).unwrap();
         let reads = backend.observations;
-        for id in ["one-delivery", "another-id"] {
-            assert_eq!(
-                reopened
-                    .execute(
-                        id,
-                        &epoch,
-                        Action::SetSpeed(1),
-                        &mut backend,
-                        OPERATION_TIMEOUT
-                    )
-                    .unwrap_err()
-                    .code,
-                "action_uncertain"
-            );
-        }
+        let replay = reopened
+            .execute(
+                "one-delivery",
+                &epoch,
+                Action::SetSpeed(1),
+                &mut backend,
+                OPERATION_TIMEOUT,
+            )
+            .unwrap();
+        assert_eq!(replay.status, Status::NotApplied);
         assert_eq!(backend.dispatches, 1);
-        // The original ID gets one read-only settlement attempt. The new ID
-        // stays blocked before observation, and neither sends another key.
-        assert_eq!(backend.observations, reads + 1);
-        assert_eq!(
-            reopened.receipt("one-delivery").unwrap().status,
-            Status::Dispatching
-        );
+        assert_eq!(backend.observations, reads);
     }
     #[test]
     fn three_samples_verify_one_delivery_without_resetting_overall_budget() {

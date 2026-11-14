@@ -295,7 +295,7 @@ fn producer_positive_no_queue_survives_reopen_and_preserves_refusal_on_fresh_att
 }
 
 #[test]
-fn identical_error_after_possible_delivery_remains_quarantined_despite_new_producer_proof() {
+fn identical_error_after_possible_delivery_is_closed_and_never_settled_by_new_producer_proof() {
     for fail in [Fail::Down, Fail::Up, Fail::Readback] {
         let d = directory();
         let path = d.join("actions");
@@ -307,9 +307,9 @@ fn identical_error_after_possible_delivery_remains_quarantined_despite_new_produ
         };
         assert_eq!(
             attempt(&mut j, &path, "lost", &mut p).unwrap_err().code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
-        assert!(j.blocked());
+        assert!(!j.blocked());
         assert_eq!(&trace.borrow()[..2], ["down", "up"]);
         assert_eq!(
             trace.borrow().len(),
@@ -318,16 +318,14 @@ fn identical_error_after_possible_delivery_remains_quarantined_despite_new_produ
         drop(j);
         let bytes = std::fs::read(&path).unwrap();
         let mut j = GameJournal::open(&path).unwrap();
-        for id in ["lost", "replacement"] {
-            assert_eq!(
-                j.execute_strict(id, &epoch(), action(), Value::Null, &mut || {
-                    panic!("A new producer classification cannot settle an old uncertain intent")
-                })
-                .unwrap_err()
-                .code,
-                "action_uncertain"
-            );
-        }
+        assert_eq!(
+            j.execute_strict("lost", &epoch(), action(), Value::Null, &mut || {
+                panic!("A new producer classification cannot settle an old uncertain intent")
+            })
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
         assert_eq!(
             j.execute(
                 "lost",
@@ -341,7 +339,7 @@ fn identical_error_after_possible_delivery_remains_quarantined_despite_new_produ
             "action_uncertain"
         );
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
-        assert!(j.blocked());
+        assert!(!j.blocked());
         drop(j);
         std::fs::remove_dir_all(d).unwrap();
     }

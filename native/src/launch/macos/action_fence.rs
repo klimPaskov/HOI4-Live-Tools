@@ -40,17 +40,38 @@ fn same_scope(before: &ClockContext, now: &ClockContext, epoch: &Epoch) -> Resul
     Ok(())
 }
 impl Fence<'_> {
+    /// Reads. Inside the journal's settlement window (`journal::settling_until`) a read needs
+    /// neither the action's deadline nor its lease: re-observing what an action did sends
+    /// nothing, and it is exactly the action that ran out of time that must still be settled.
     fn live(&self) -> Result<()> {
+        match super::journal::settling_until() {
+            Some(window) => self.live_at(Instant::now(), Some(window)),
+            None => self.live_input(),
+        }
+    }
+    fn live_at(&self, now: Instant, settling: Option<Instant>) -> Result<()> {
         if self.stop.is_some_and(|s| s.load(Ordering::Acquire)) {
             return Err(Error::new("session_closed", "Owned action stop requested"));
         }
-        if Instant::now() >= self.until {
-            return Err(Error::new(
-                "action_deadline",
-                "Original action deadline expired",
-            ));
+        match settling {
+            Some(window) => {
+                if now >= window {
+                    return Err(Error::new(
+                        "settlement_deadline",
+                        "Read-only settlement window ended",
+                    ));
+                }
+            }
+            None => {
+                if now >= self.until {
+                    return Err(Error::new(
+                        "action_deadline",
+                        "Original action deadline expired",
+                    ));
+                }
+                self.authority.authorize(self.token, self.epoch)?;
+            }
         }
-        self.authority.authorize(self.token, self.epoch)?;
         if self.process.identity() != Some(&self.epoch.game) {
             return Err(Error::new(
                 "ownership_changed",
@@ -59,10 +80,25 @@ impl Fence<'_> {
         }
         Ok(())
     }
+    /// Input: always the action's own deadline and lease, and never inside a settlement window
+    /// (settlement is read-only).
+    fn live_input(&self) -> Result<()> {
+        if super::journal::settling_until().is_some() {
+            return Err(Error::new(
+                "action_deadline",
+                "Settlement is read-only; no input after the action ended",
+            ));
+        }
+        self.live_at(Instant::now(), None)
+    }
     /// Called before each new native input, including after cursor settling.
     /// Key/button release cleanup remains unconditional in the transport.
     pub(super) fn input_check(&self) -> Result<()> {
-        self.check_context(|| game::clock_context(self), || self.live(), thread::sleep)
+        self.check_context(
+            || game::clock_context(self),
+            || self.live_input(),
+            thread::sleep,
+        )
     }
     fn check_context(
         &self,
@@ -419,6 +455,121 @@ mod tests {
             "ownership_changed"
         );
         assert_eq!(foreign.reads.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn settlement_window_reads_past_the_deadline_and_lease_but_never_sends_input() {
+        let epoch = epoch_fixture();
+        let expected = context();
+        let process = Probe::new(&epoch);
+        // No lease at all (it ended with the action) and a deadline already in the past.
+        let unleased = InputAuthority::new("fixture".into(), epoch.clone()).unwrap();
+        let token = "a".repeat(32);
+        let fence = Fence {
+            process: &process,
+            epoch: &epoch,
+            expected: &expected,
+            authority: &unleased,
+            token: &token,
+            until: Instant::now(),
+            stop: None,
+        };
+        assert_ne!(
+            fence.read(0x10000, 8).unwrap_err().code,
+            "settlement_deadline"
+        );
+        assert_eq!(process.reads.load(Ordering::SeqCst), 0);
+        {
+            let _window =
+                super::super::journal::Settling::enter(Instant::now() + Duration::from_secs(5));
+            assert_eq!(fence.read(0x10000, 8).unwrap().len(), 8);
+            fence.check().unwrap();
+            assert_eq!(process.reads.load(Ordering::SeqCst), 1);
+            // Input stays refused: settlement is read-only.
+            assert_eq!(fence.input_check().unwrap_err().code, "action_deadline");
+        }
+        {
+            let _ended = super::super::journal::Settling::enter(Instant::now());
+            assert_eq!(
+                fence.read(0x10000, 8).unwrap_err().code,
+                "settlement_deadline"
+            );
+        }
+        // Outside a window the expired action reads nothing again.
+        assert!(fence.read(0x10000, 8).is_err());
+        assert_eq!(process.reads.load(Ordering::SeqCst), 1);
+        // A foreign process is refused inside the window too.
+        let mut foreign = Probe::new(&epoch);
+        foreign.id.start_ticks = "2.000001".into();
+        let fence = Fence {
+            process: &foreign,
+            epoch: &epoch,
+            expected: &expected,
+            authority: &unleased,
+            token: &token,
+            until: Instant::now(),
+            stop: None,
+        };
+        let _window =
+            super::super::journal::Settling::enter(Instant::now() + Duration::from_secs(5));
+        assert_eq!(
+            fence.read(0x10000, 8).unwrap_err().code,
+            "ownership_changed"
+        );
+    }
+
+    /// The live failure, end to end: an action whose deadline ended while it was still sending
+    /// input is read back through the same fence and settled, instead of staying open.
+    #[test]
+    fn an_action_that_ran_out_of_time_is_settled_through_its_own_expired_fence() {
+        use super::super::journal::{GameJournal, Outcome, Status};
+        let epoch = epoch_fixture();
+        let expected = context();
+        let process = Probe::new(&epoch);
+        let (authority, token) = leased_authority(&epoch);
+        let fence = Fence {
+            process: &process,
+            epoch: &epoch,
+            expected: &expected,
+            authority: &authority,
+            token: &token,
+            until: Instant::now(),
+            stop: None,
+        };
+        let dir = std::env::temp_dir().join(format!("hoi4-fence-settle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir(&dir).unwrap();
+        let mut journal = GameJournal::open(&dir.join("game-actions.jsonl")).unwrap();
+        for (id, started) in [("ran-out", false), ("started-late", true)] {
+            let mut settle = || {
+                // Every adapter's readback reads the game through its fence.
+                fence.read(0x10000, 8)?;
+                Ok(if started {
+                    Outcome::Reached(serde_json::json!({"active": "focus"}))
+                } else {
+                    Outcome::Unchanged(serde_json::json!({"active": null}))
+                })
+            };
+            // The dispatch fails on the expired deadline, as it did mid-pan.
+            let mut dispatch = || fence.read(0x10000, 8).map(|_| ());
+            let result = journal.execute_with(
+                id,
+                &epoch,
+                serde_json::json!({"kind": "focus_start", "focus": id}),
+                &mut settle,
+                &mut dispatch,
+                true,
+            );
+            if started {
+                assert_eq!(result.unwrap().status, Status::Verified);
+            } else {
+                // A clean failure with the action's own cause, not an open intent.
+                assert_eq!(result.unwrap_err().code, "action_deadline");
+            }
+            assert!(!journal.blocked() && !journal.blocked_for("focus"));
+        }
+        drop(journal);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

@@ -79,6 +79,11 @@ mod pan;
 mod probe;
 use binding::{Control, Owner};
 pub(crate) use probe::snapshot as input_probe;
+/// Drags one start may use to bring its node into view.
+const MAX_PANS: u32 = 12;
+/// Time one start may take: opening a cold tree, `MAX_PANS` drags, the node and Start clicks.
+/// A deadline shorter than the pan loop it bounds made far nodes unreachable.
+pub(super) const START_BUDGET: Duration = Duration::from_secs(24);
 /// Tree area clear of the title bar, filter buttons and the bottom scrollbar.
 const SAFE: (f64, f64, f64, f64) = (260.0, 200.0, 1860.0, 1000.0);
 
@@ -415,7 +420,7 @@ fn start_inner(
     })?;
     let mut previous: Option<Rect> = None;
     let mut revealed = false;
-    for _ in 0..12 {
+    for _ in 0..MAX_PANS {
         trace.stage("pan_candidate");
         deadline(until)?;
         let ready = |rect: &Rect| {
@@ -510,6 +515,13 @@ fn start_inner(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_start_budget_covers_a_cold_tree_and_the_whole_pan_loop() {
+        // About 1.2 s per drag (measured live), 3 s to open a cold tree, 3 s for the two clicks
+        // and their readbacks.
+        let needed = 3.0 + f64::from(super::MAX_PANS) * 1.2 + 3.0;
+        assert!(super::START_BUDGET.as_secs_f64() >= needed);
+    }
     use super::*;
     #[test]
     fn disabled_start_is_typed_with_the_limits_of_the_evidence() {

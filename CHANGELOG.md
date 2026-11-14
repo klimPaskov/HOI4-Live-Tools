@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+Every action ends in a terminal receipt; one uncertain action can no longer hold input.
+
+- After a dispatch the game journal re-observes the game for a bounded settlement window (3 s) and records what it sees:
+  `Verified`, `NotApplied`, `Diverged`, or the new `Unconfirmed` when the effect could not be proven either way. An
+  unconfirmed request answers `action_unconfirmed`, is closed, is never replayed and blocks nothing; the caller reads the
+  state again before a fresh request. Before, such a request stayed open and held its domain for three minutes (all
+  input, with no limit, in the first version).
+- Settlement reads pass the action fence after the action's own deadline or lease ended (input stays refused). An action
+  that ran out of time could not be read back at all, because its readback failed on the same expired deadline: the
+  commonest uncertain case could never settle.
+- The clock journal settles every pause and speed request from the readable clock state: `Verified` when the target
+  shows, `NotApplied` when it does not after the verification window. A request left open by an unreadable game or a
+  stopped server is settled by the next call that can read; before, it blocked every later input with no limit.
+- Only an action interrupted by a server stop still holds its own domain (and global input), for at most ten seconds;
+  the next action closes it as `Unconfirmed`.
+- The executor counts `action_unconfirmed` as an ordinary failed order (failure ledger and backoff) and re-plans from
+  fresh state on its next tick.
+
+Focus starts cost less of the input lane.
+
+- A focus the game refuses as not available waits twice as long after each further refusal (10, 20, 40, 80 game days by
+  default) and one executor tick opens at most two refused focuses. A completed focus clears the waits. In one shakedown
+  three fallback focuses that could not start yet were opened about a hundred times, a quarter of the input lane.
+- `hoi4_focus_start` has 24 s for one start, enough for a cold tree and all twelve drags of its pan loop. With 12 s the
+  deadline ended at the tenth drag, so a focus far across the tree could never start.
+
 Four launch and menu fixes found on 1.19.4.2 (9 November 2026).
 
 - `hoi4_launch` stops at once when the owned game process exits or the game opens its fatal-error dialog (the helper
