@@ -267,7 +267,10 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 5. Every construction item states its cost in points (`base_cost`, table in `economy-build-orders.md`
    §1.1; `F grep base_cost --folder common/buildings`) and its estimated finish date from
    `C build-order` (5 points per civilian factory per day, at most 15 factories per project,
-   × (1 + 0.2 × infrastructure), law and focus speed modifiers as `--bonus`).
+   × (1 + 0.2 × infrastructure), law and focus speed modifiers as `--bonus`). Name the state of every
+   item that is not a factory from the ranking (`naval_base:1@1#<state>`, `supply_node:1#<state>`,
+   `infrastructure:1#<state>`): the calculator takes that state's infrastructure, and a date printed
+   under `WARNING` or with `ASSUMED` rests on a guessed level and may not go into the plan.
 6. Supply construction on the attack axis is item 19: railways first, then a port where no supply
    reaches the shore, trucks, and a hub only after the cost and time check there. Idle-factory check: no date where civilian factories have no queued project
    (`construction` filler list).
@@ -516,7 +519,7 @@ cost in points, its estimated finish date (`C build-order`) and the source:
    stock it needs (item 8): the cheap way to carry supply beyond the railhead.
 4. **A supply hub** (`supply_node`, 20000 points: about 190-270 days with 15 civilian factories at
    infrastructure 2 to 0, longer under a construction-speed malus) only when
-   `C build-order --order supply_node:1` shows it finishes before the date it is needed and no port or
+   `C build-order --order supply_node:1#<state>` shows it finishes before the date it is needed and no port or
    railway can serve the same provinces. Never on day 1 of a short war; only where the game can build
    it when the trigger fires (no enemy-held province in the state).
 5. Overseas theatres: naval base level and throughput at each landing port, convoys (item 8) and
