@@ -42,6 +42,11 @@ One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (W
 - The release workflow publishes `install.py`, `install.sh` and `install.ps1` with the archives, lists them in
   `SHA256SUMS.txt` and installs the release from the built files before publishing.
 - `HOI4_LIVE_RELEASE_BASE` names another release location: an https address or a local folder of release files.
+- `uninstall` removes only the client registrations that start this install; another install's entry is left and
+  named. A home named with `--home` or `HOI4_LIVE_HOME` holds every client file, also when the session sets
+  `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, so a scratch install never writes the running client's configuration.
+- The doctor reports a native runtime from before its memory-access check (1.4.2) as a note asking for an update,
+  not as a bare argument error.
 A game build the native runtime cannot read is now refused with the builds it does read and what works meanwhile.
 
 - The `unsupported_build` refusal names the runtime's version, what it saw (the start of the executable's SHA-256,

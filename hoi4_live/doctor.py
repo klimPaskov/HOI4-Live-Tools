@@ -113,6 +113,10 @@ def check_memory(facts):
     if memory["code"] is None:
         return [item(FIX, f"the native runtime does not start ({memory['text'].strip()[:160]})",
                      "hoi4-live update", NATIVE)]
+    if memory["code"] != 0 and "Unknown argument" in memory["text"]:
+        # A runtime from before its own memory-access check (1.4.2 and earlier) cannot answer; a newer one can.
+        return [item(NOTE, "this native runtime predates its memory-access check, so memory access was not checked",
+                     "hoi4-live update", NATIVE)]
     checks, notes = parse_native_doctor(memory["text"])
     out = [item(OK if good else FIX, title, fix, NATIVE) for good, title, fix in checks]
     if memory["code"] != 0 and not any(i["status"] == FIX for i in out):

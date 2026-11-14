@@ -127,6 +127,13 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(len(fixes(doctor.check_memory(f))), 1)
         self.assertEqual(doctor.check_memory(facts("windows")), [])
 
+    def test_a_runtime_from_before_its_memory_check_asks_for_an_update_without_a_bare_error(self):
+        # 1.4.2 answers --doctor with its argument error (seen on a real install).
+        f = facts("macos", memory={"code": 1, "text": 'Error: "Unknown argument"\n'})
+        items = doctor.check_memory(f)
+        self.assertEqual([(i["status"], i["fix"]) for i in items], [(doctor.NOTE, "hoi4-live update")])
+        self.assertNotIn("Unknown argument", items[0]["title"])
+
     def test_macos_permissions_name_the_settings_pane_and_are_never_changed_here(self):
         f = facts("macos", accessibility=False, screen_capture=False)
         found = fixes(doctor.check_permissions(f))

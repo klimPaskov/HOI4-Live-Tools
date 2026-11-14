@@ -764,9 +764,12 @@ def home_dir(home=None):
 
 
 def client_files(home=None):
+    # A home named on purpose (--home, HOI4_LIVE_HOME) holds every client file, so a scratch install or a test run
+    # inside a Claude Code or Codex session never writes the session's own configuration.
+    explicit = bool(home or os.environ.get("HOI4_LIVE_HOME"))
     home = home_dir(home)
-    codex_home = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
-    claude_dir = os.environ.get("CLAUDE_CONFIG_DIR") or home
+    codex_home = (None if explicit else os.environ.get("CODEX_HOME")) or os.path.join(home, ".codex")
+    claude_dir = (None if explicit else os.environ.get("CLAUDE_CONFIG_DIR")) or home
     return {
         "claude": os.path.join(claude_dir, ".claude.json"),
         "codex": os.path.join(codex_home, "config.toml"),
@@ -827,7 +830,11 @@ def register_json(client, path, command):
     return {"client": client, "status": "updated" if existing is not None else "registered", "path": path}
 
 
-def unregister_json(client, path):
+def same_path(a, b):
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def unregister_json(client, path, launcher=None):
     if not os.path.exists(path):
         return {"client": client, "status": "absent", "path": path}
     key = _json_servers_key(client)
@@ -840,6 +847,10 @@ def unregister_json(client, path):
     if not is_ours(command):
         return {"client": client, "status": "conflict", "path": path,
                 "detail": f"{SERVER_ID} belongs to another program ({command}); left unchanged"}
+    first = command[0] if isinstance(command, list) and command else command
+    if launcher and not same_path(first, launcher):
+        return {"client": client, "status": "other_install", "path": path,
+                "detail": f"{SERVER_ID} starts another install ({first}); left unchanged"}
     del servers[SERVER_ID]
     atomic_write(path, dump_json(data))
     return {"client": client, "status": "removed", "path": path}
@@ -877,13 +888,18 @@ def register_codex(path, command):
     return {"client": "codex", "status": "registered", "path": path}
 
 
-def unregister_codex(path):
+def unregister_codex(path, launcher=None):
     if not os.path.exists(path):
         return {"client": "codex", "status": "absent", "path": path}
     with open(path, encoding="utf-8-sig") as f:
         text = f.read()
-    if not _BLOCK.search(text):
+    block = _BLOCK.search(text)
+    if not block:
         return {"client": "codex", "status": "absent", "path": path}
+    command = re.search(r"^command = '([^']*)'", block.group(0), re.M)
+    if launcher and command and not same_path(command.group(1), launcher):
+        return {"client": "codex", "status": "other_install", "path": path,
+                "detail": f"{SERVER_ID} starts another install ({command.group(1)}); left unchanged"}
     updated = _BLOCK.sub("", text, count=1).rstrip("\n")
     atomic_write(path, updated + "\n" if updated else "")
     return {"client": "codex", "status": "removed", "path": path}
@@ -903,13 +919,15 @@ def register_clients(clients, prefix, home=None):
     return results
 
 
-def unregister_clients(clients, home=None):
+def unregister_clients(clients, home=None, launcher=None):
+    """Remove the registrations of the clients; with `launcher`, only those that start that launcher."""
     files = client_files(home)
     results = []
     for client in clients:
         path = files[client]
         try:
-            results.append(unregister_codex(path) if client == "codex" else unregister_json(client, path))
+            results.append(unregister_codex(path, launcher) if client == "codex"
+                           else unregister_json(client, path, launcher))
         except (OSError, ValueError) as exc:
             results.append({"client": client, "status": "failed", "path": path, "detail": str(exc)})
     return results
@@ -1152,10 +1170,11 @@ def remove_after_exit(path, folder):
 
 def cmd_uninstall(args, out):
     prefix = os.path.abspath(args.prefix or default_prefix())
-    results = unregister_clients(list(CLIENTS), args.home)
+    # Only the registrations of this install: another install's entry (another prefix) is left to that install.
+    results = unregister_clients(list(CLIENTS), args.home, launcher_path(prefix))
     for r in results:
         if r["status"] != "absent":
-            out.info(f"{r['client']}: {r['status']}")
+            out.info(f"{r['client']}: {r['status']}" + (f" - {r['detail']}" if r.get("detail") else ""))
     link = unlink_command(read_record(prefix))
     if link:
         out.info(f"removed {link}")
