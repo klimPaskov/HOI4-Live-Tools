@@ -565,6 +565,17 @@ class Supervisor:
             err, stats = self.native.call("hoi4_war_stats", {})
             if not err:
                 final["war_stats"] = stats
+            # VP held against what the plan needs to capitulate each enemy (hoi4_states with a country tag)
+            plan = runs.read_json(os.path.join(self.run, "plan.json")) or {}
+            rows = []
+            for tag, needed in report.capitulation_aims(plan):
+                err, states = self.native.call("hoi4_states", {"query": tag})
+                vp = (states or {}).get("victory_points") if not err and isinstance(states, dict) else None
+                if vp:
+                    rows.append({"tag": tag, "held": vp.get("held_by_others"), "total": vp.get("total"),
+                                 "needed": needed})
+            if rows:
+                final["capitulation"] = rows
         self.release()
         self.event("stopped", reason=reason)
         self.state = "ended"

@@ -78,6 +78,37 @@ def _idle_line(pause, resume):
         "the game was paused" if pause.get("game_paused") else "the game was already paused", lifted)
 
 
+def capitulation_aims(plan):
+    """[(tag, VP needed or None)] for each country the plan's goal capitulates: goal.capitulation's enemy with
+    its vp_needed (the threshold the plan aims at, after the levers that lower it), then every other
+    capitulated:TAG predicate with no aim."""
+    goal = plan.get("goal") if isinstance(plan.get("goal"), dict) else {}
+    cap = goal.get("capitulation") if isinstance(goal.get("capitulation"), dict) else {}
+    out = []
+    if isinstance(cap.get("enemy"), str):
+        out.append((cap["enemy"], cap.get("vp_needed") if isinstance(cap.get("vp_needed"), int) else None))
+    for p in goal.get("predicates") or []:
+        if isinstance(p, str) and p.startswith("capitulated:"):
+            tag = p.split(":", 1)[1].strip()
+            if tag and all(tag != t for t, _ in out):
+                out.append((tag, None))
+    return out
+
+
+def capitulation_lines(rows):
+    """Progress against the VP the plan needs to capitulate each enemy, not against the enemy's total."""
+    lines = []
+    for r in rows:
+        held, total, needed = r.get("held") or 0, r.get("total") or 0, r.get("needed")
+        if needed:
+            lines.append("- %s: held %g of the %d VP needed to capitulate (%s; %g VP in all)" % (
+                r.get("tag"), held, needed, "reached" if held >= needed else "%g to go" % (needed - held), total))
+        else:
+            lines.append("- %s: held %g VP of %g in all; the plan states no capitulation aim "
+                         "(goal.capitulation.vp_needed)" % (r.get("tag"), held, total))
+    return lines
+
+
 def build(run, reason, counts, final, started, ended):
     request = runs.read_json(os.path.join(run, "request.json")) or {}
     calls = _jsonl(os.path.join(run, "calls.jsonl"))
@@ -119,6 +150,8 @@ def build(run, reason, counts, final, started, ended):
         lines += ["- %s: %d" % (name, got.get(name, 0)) for name in RECEIPTS]
     else:
         lines.append("- no action journal in the run folder")
+    if final.get("capitulation"):
+        lines += ["", "## Capitulation", ""] + capitulation_lines(final["capitulation"])
     stats = final.get("war_stats")
     if stats:
         lines += ["", "## War statistics at the end", "", "```", json.dumps(stats, indent=1)[:3000], "```"]

@@ -804,6 +804,17 @@ class ReportTests(Folder):
                      "Verified: 1", "Self-pauses recorded by the runtime: 1"):
             self.assertIn(word, text)
 
+    def test_capitulation_progress_against_the_aim(self):
+        plan = {"goal": {"predicates": ["capitulated:ETH", "capitulated:AFA"],
+                         "capitulation": {"enemy": "ETH", "vp_needed": 22, "levers": []}}}
+        self.assertEqual(report.capitulation_aims(plan), [("ETH", 22), ("AFA", None)])
+        run = self.make_run()
+        final = {"date": "1936.09.01", "capitulation": [{"tag": "ETH", "held": 14.0, "total": 32.0, "needed": 22},
+                                                        {"tag": "AFA", "held": 0, "total": 1.0, "needed": None}]}
+        text = report.build(run, "stopped_by_player", {}, final, 0, 60)
+        self.assertIn("ETH: held 14 of the 22 VP needed to capitulate (8 to go; 32 VP in all)", text)
+        self.assertIn("AFA: held 0 VP of 1 in all; the plan states no capitulation aim", text)
+
 
 if __name__ == "__main__":
     unittest.main()
