@@ -45,9 +45,10 @@ def prepare(prefix, plan, goal, template, minutes=180, now=None):
     runs.write_json(os.path.join(run, "request.json"), {
         "country": plan["name"], "tag": plan["tag"], "goal": goal, "mode": plan["mode"], "plan": plan["id"],
         "start": plan.get("start"), "stop": plan.get("stop"), "runtime": "native"})
-    for extra in ("brief", "guide"):
-        if plan.get(extra) and os.path.isfile(plan[extra]):
-            shutil.copyfile(plan[extra], os.path.join(run, "plan.brief.md" if extra == "brief" else "plan.md"))
+    if plan.get("guide") and os.path.isfile(plan["guide"]):
+        shutil.copyfile(plan["guide"], os.path.join(run, "plan.md"))
+    # The brief sends the player back to plan.brief.md when the plan is revised: it always exists.
+    runs.write_private(os.path.join(run, "plan.brief.md"), runs.plan_brief_text(plan) + "\n")
     runs.write_private(os.path.join(run, "BRIEF.txt"), runs.render_brief(template, plan, goal, run, minutes))
     runs.write_private(os.path.join(run, "prompt.txt"), runs.instruction(run) + "\n")
     return run

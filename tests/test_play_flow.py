@@ -147,6 +147,9 @@ class RunFolderTests(Folder):
         self.assertIn("1937.1.1", brief)
         with open(os.path.join(run, "prompt.txt"), encoding="utf-8") as f:
             self.assertEqual(f.read().strip(), runs.instruction(run))
+        with open(os.path.join(run, "plan.brief.md"), encoding="utf-8") as f:
+            self.assertEqual(f.read().strip(), runs.plan_brief_text(ITALY))
+        self.assertTrue(os.path.isfile(os.path.join(run, "plan.md")))
         if os.name != "nt":
             self.assertEqual(os.stat(run).st_mode & 0o777, 0o700)
             self.assertEqual(os.stat(os.path.join(run, "BRIEF.txt")).st_mode & 0o777, 0o600)
