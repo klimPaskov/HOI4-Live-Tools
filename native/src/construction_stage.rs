@@ -7,6 +7,7 @@ use crate::{
     input_lease::InputAuthority,
     platform::Identity,
     research_attempt::PointCandidate,
+    stage_settle::{self, Seen, Settled},
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,6 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
     sync::RwLock,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -548,9 +548,11 @@ pub enum Status {
     Intent,
     NotQueued,
     Verified,
-    /// Durable actual own readback when possible input was not verified.
-    /// This remains blocking and can NEVER authorize replay.
-    Uncertain,
+    /// Input may have been sent and the observation ended without proof of the target; the
+    /// record keeps the last own readback and the cause. Closed: never replayed, blocks
+    /// nothing. The caller reads the state again. Older builds wrote it as `Uncertain`.
+    #[serde(alias = "Uncertain")]
+    Unconfirmed,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Uncertainty {
@@ -560,6 +562,8 @@ pub enum Uncertainty {
     Ownership,
     Scope,
     InputIdle,
+    /// The server stopped between the intent and its outcome; nothing was observed.
+    Interrupted,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -676,6 +680,10 @@ pub struct Receipt {
     pub observed: OwnState,
     pub uncertainty: Option<Uncertainty>,
     pub cause: Option<Diagnostic>,
+    /// When the intent was written; bounds how long an interrupted intent holds its game.
+    /// Absent on records of older builds (their serialized shape is kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unix_ms: Option<u64>,
 }
 #[derive(Debug, Serialize)]
 pub struct Execution {
@@ -714,7 +722,7 @@ impl Receipt {
                         && self.cause.is_none()
                         && self.delivery != Some(Delivery::NotQueued)
                 }
-                Status::Uncertain => {
+                Status::Unconfirmed => {
                     matches!(
                         self.delivery,
                         Some(Delivery::Unknown | Delivery::ServerConfirmed)
@@ -893,7 +901,7 @@ impl Journal {
                     ));
                 }
             } else if receipt.status == Status::NotQueued
-                || receipt.status == Status::Uncertain
+                || receipt.status == Status::Unconfirmed
                 || (receipt.status == Status::Verified && receipt.delivery.is_some())
             {
                 return Err(error(
@@ -941,17 +949,59 @@ impl Journal {
         self.poisoned = false;
         Ok(receipt)
     }
+    /// A persistence failure holds everything. Otherwise only an intent an interrupted server
+    /// left open holds its game, and only for `stage_settle::ORPHAN_MS`: every call closes
+    /// its own intent before it returns.
     pub fn blocks_game(&self, game: &Identity) -> bool {
+        let now = stage_settle::now_ms();
         self.poisoned
             || self.receipts.values().any(|r| {
-                matches!(r.status, Status::Intent | Status::Uncertain)
+                r.status == Status::Intent
                     && &r.target.epoch.game == game
+                    && stage_settle::holds(r.unix_ms, now)
             })
     }
+    /// Close every intent an interrupted server left open once it no longer holds its game.
+    /// Nothing is read and nothing is sent: the record only says the outcome was never
+    /// observed.
+    fn close_orphans(&mut self) -> Result<()> {
+        let now = stage_settle::now_ms();
+        let stale: Vec<Receipt> = self
+            .receipts
+            .values()
+            .filter(|r| r.status == Status::Intent && !stage_settle::holds(r.unix_ms, now))
+            .cloned()
+            .collect();
+        for intent in stale {
+            self.append(Receipt {
+                status: Status::Unconfirmed,
+                delivery: Some(Delivery::Unknown),
+                uncertainty: Some(Uncertainty::Interrupted),
+                cause: Some(Diagnostic {
+                    code: "orphaned".into(),
+                    message: "The server stopped before the outcome was observed".into(),
+                }),
+                ..intent
+            })?;
+        }
+        Ok(())
+    }
+    /// The typed error of a request closed without proof, with its recorded cause.
+    fn closed_error(receipt: &Receipt) -> Error {
+        const CONTEXT: &str = "Construction outcome was not observed; the request is closed, is \
+                               never replayed and blocks nothing. Read the state again";
+        match &receipt.cause {
+            Some(cause) => cause.as_error("action_unconfirmed", CONTEXT),
+            None => error("action_unconfirmed", CONTEXT),
+        }
+    }
     /// Classify only the immediate error from execute. An unresolved durable
-    /// record or poisoned writer always defeats a retryable producer category.
+    /// record or poisoned writer always defeats a retryable producer category, and a
+    /// request closed without proof may have sent input.
     pub fn failure_evidence(&self, id: &str, target: &Target, cause: &Error) -> FailureEvidence {
-        if self.poisoned || self.blocks_game(&target.epoch.game) || cause.code == "action_uncertain"
+        if self.poisoned
+            || self.blocks_game(&target.epoch.game)
+            || matches!(cause.code, "action_uncertain" | "action_unconfirmed")
         {
             return FailureEvidence::Unknown;
         }
@@ -977,6 +1027,7 @@ impl Journal {
             observed: state,
             uncertainty: None,
             cause: None,
+            unix_ms: None,
         })?;
         Ok(Execution {
             receipt,
@@ -1007,8 +1058,10 @@ impl Journal {
             "Ordinary attempt proved not queued; never replay this ID",
         ))
     }
-    #[allow(clippy::too_many_arguments)]
-    fn uncertain(
+    /// Write the terminal record of an attempt whose target was not proven and return its
+    /// error. Only a record that cannot be written leaves the intent (or a poisoned writer)
+    /// behind; the producer's cause is in the returned error either way.
+    fn unconfirmed(
         &mut self,
         token: &str,
         intent: &Receipt,
@@ -1018,11 +1071,8 @@ impl Journal {
         cause: Error,
     ) -> Error {
         let diagnostic = Diagnostic::from_error(&cause, token);
-        // A failed terminal append retains the original durable intent (or
-        // poisons the writer), both blocking. Preserve the actual producer
-        // cause in the returned error even if terminal persistence fails.
         let result = self.append(Receipt {
-            status: Status::Uncertain,
+            status: Status::Unconfirmed,
             delivery: Some(delivery),
             observed: last,
             uncertainty: Some(reason),
@@ -1030,14 +1080,11 @@ impl Journal {
             ..intent.clone()
         });
         match result {
-            Ok(_) => diagnostic.as_error(
-                "action_uncertain",
-                "Construction outcome unverified; never replay",
-            ),
+            Ok(closed) => Self::closed_error(&closed),
             Err(write) => diagnostic.as_error(
                 "action_uncertain",
                 &format!(
-                    "Uncertainty could not be committed; preserve intent; journal_cause={}",
+                    "Outcome could not be committed; preserve intent; journal_cause={}",
                     Diagnostic::from_error(&write, token).code
                 ),
             ),
@@ -1067,6 +1114,12 @@ impl Journal {
             let deadline =
                 (Instant::now() + timeout).min(authority.authorize(token, &target.epoch)?);
             live(authority, token, &target, deadline, gate)?;
+            if self.poisoned {
+                return Err(error(
+                    "action_uncertain",
+                    "Construction journal requires recovery",
+                ));
+            }
             if let Some(receipt) = self.receipts.get(id) {
                 if receipt.target != target {
                     return Err(error(
@@ -1086,21 +1139,22 @@ impl Journal {
                         .as_ref()
                         .unwrap()
                         .as_error("input_not_queued", "Historical local refusal; never replay")),
-                    Status::Uncertain => Err(receipt.cause.as_ref().unwrap().as_error(
-                        "action_uncertain",
-                        "Historical uncertain outcome; never replay",
-                    )),
-                    Status::Intent => Err(error(
-                        "action_uncertain",
-                        "Unresolved construction intent; never replay",
-                    )),
+                    // A closed request answers from its receipt: no read, no input.
+                    Status::Unconfirmed => Err(Self::closed_error(receipt)),
+                    Status::Intent
+                        if stage_settle::holds(receipt.unix_ms, stage_settle::now_ms()) =>
+                    {
+                        Err(stage_settle::interrupted("construction"))
+                    }
+                    Status::Intent => {
+                        self.close_orphans()?;
+                        Err(Self::closed_error(&self.receipts[id]))
+                    }
                 };
             }
+            self.close_orphans()?;
             if self.blocks_game(&target.epoch.game) {
-                return Err(error(
-                    "action_uncertain",
-                    "Unresolved construction input blocks new IDs and stages",
-                ));
+                return Err(stage_settle::interrupted("construction"));
             }
             domains_clear(domains, &target.epoch.game)?;
             live(authority, token, &target, deadline, gate)?;
@@ -1187,6 +1241,7 @@ impl Journal {
                 observed: fresh.state,
                 uncertainty: None,
                 cause: None,
+                unix_ms: Some(stage_settle::now_ms()),
             })?;
             // Read-only final checks AFTER fsync, so a scope replacement during
             // durable intent cannot slip into dispatch. Backend additionally checks
@@ -1229,199 +1284,129 @@ impl Journal {
                 }
                 Err(cause) => DispatchOutcome::NotQueued(cause),
             };
-            let delivery = match outcome {
+            let (delivery, dispatch_cause) = match outcome {
                 DispatchOutcome::NotQueued(cause) => return self.not_queued(intent, cause, token),
-                DispatchOutcome::Unknown(Some(cause)) => {
-                    return Err(self.uncertain(
-                        token,
-                        &intent,
-                        Delivery::Unknown,
-                        intent.observed.clone(),
-                        Uncertainty::Dispatch,
-                        cause,
-                    ))
-                }
-                DispatchOutcome::Unknown(None) => Delivery::Unknown,
-                DispatchOutcome::ServerConfirmed => Delivery::ServerConfirmed,
+                DispatchOutcome::Unknown(cause) => (Delivery::Unknown, cause),
+                DispatchOutcome::ServerConfirmed => (Delivery::ServerConfirmed, None),
             };
+            // From here the request always closes: observe (reading only, no lease needed)
+            // until the deadline or the settlement window ends, then write the terminal
+            // record. `why` is what the record says when the target is never proven: the
+            // dispatcher's own doubt, else the last thing that stood in the way.
             let mut last = intent.observed.clone();
-            loop {
-                if let Err(cause) = live(authority, token, &target, deadline, gate) {
-                    return Err(self.uncertain(
-                        token,
-                        &intent,
-                        delivery,
-                        last,
-                        Uncertainty::DeadlineOrAuthority,
-                        cause,
-                    ));
-                }
-                if let Err(cause) = domains_clear(domains, &target.epoch.game) {
-                    return Err(self.uncertain(
-                        token,
-                        &intent,
-                        delivery,
-                        last,
-                        Uncertainty::Observation,
-                        cause,
-                    ));
-                }
-                match backend.observe(&target) {
-                    Err(e) if e.code == "torn_read" => {}
-                    Err(cause) => {
-                        return Err(self.uncertain(
-                            token,
-                            &intent,
-                            delivery,
-                            last,
-                            Uncertainty::Observation,
-                            cause,
-                        ))
+            let mut why = match dispatch_cause {
+                Some(cause) => (Uncertainty::Dispatch, cause),
+                None => (
+                    Uncertainty::DeadlineOrAuthority,
+                    error(
+                        "construction_deadline",
+                        "Target not observed before the observation ended",
+                    ),
+                ),
+            };
+            let settled =
+                stage_settle::settle(stage_settle::end(deadline, Instant::now()), |end| {
+                    if let Err(cause) = permit(gate) {
+                        let text = stage_settle::readback(&cause);
+                        why = (Uncertainty::DeadlineOrAuthority, cause);
+                        return Seen::Stop(text);
                     }
-                    Ok(observed) => {
-                        if let Err(cause) = observed.state.validate(&target) {
-                            return Err(self.uncertain(
-                                token,
-                                &intent,
-                                delivery,
-                                last,
-                                Uncertainty::Ownership,
-                                cause,
-                            ));
-                        }
-                        if observed.scope != scope {
-                            return Err(self.uncertain(
-                                token,
-                                &intent,
-                                delivery,
-                                last,
-                                Uncertainty::Scope,
-                                error(
-                                    "ownership_changed",
-                                    "Own identity scope changed after possible input",
-                                ),
-                            ));
-                        }
-                        last = observed.state;
-                        if let Err(cause) = live(authority, token, &target, deadline, gate) {
-                            return Err(self.uncertain(
-                                token,
-                                &intent,
-                                delivery,
-                                last,
-                                Uncertainty::DeadlineOrAuthority,
-                                cause,
-                            ));
-                        }
-                        if last.reached(&target) {
-                            if let Err(cause) = backend.confirm_input_idle(&candidate, deadline) {
-                                return Err(self.uncertain(
-                                    token,
-                                    &intent,
-                                    delivery,
-                                    last,
-                                    Uncertainty::InputIdle,
-                                    cause,
-                                ));
-                            }
-                            if let Err(cause) = live(authority, token, &target, deadline, gate) {
-                                return Err(self.uncertain(
-                                    token,
-                                    &intent,
-                                    delivery,
-                                    last,
-                                    Uncertainty::DeadlineOrAuthority,
-                                    cause,
-                                ));
-                            }
-                            // Idle acknowledgement is not a canonical state read.
-                            // Require another same-scope witnessed result afterwards.
-                            let terminal =
-                                match backend.observe(&target) {
-                                    Ok(v) => v,
-                                    // A torn terminal witness proves nothing either way
-                                    // (Run090 tore in the panel's choice list right after
-                                    // the place click). Re-observe and re-confirm idle
-                                    // from the top within the same original deadline.
-                                    Err(e) if e.code == "torn_read" => {
-                                        thread::sleep(Duration::from_millis(20).min(
-                                            deadline.saturating_duration_since(Instant::now()),
-                                        ));
-                                        continue;
-                                    }
-                                    Err(cause) => {
-                                        return Err(self.uncertain(
-                                            token,
-                                            &intent,
-                                            delivery,
-                                            last,
-                                            Uncertainty::Observation,
-                                            cause,
-                                        ))
-                                    }
-                                };
-                            if let Err(cause) = terminal.state.validate(&target) {
-                                return Err(self.uncertain(
-                                    token,
-                                    &intent,
-                                    delivery,
-                                    last,
-                                    Uncertainty::Ownership,
-                                    cause,
-                                ));
-                            }
-                            if terminal.scope != scope {
-                                return Err(self.uncertain(
-                                    token,
-                                    &intent,
-                                    delivery,
-                                    last,
-                                    Uncertainty::Scope,
-                                    error(
-                                        "ownership_changed",
-                                        "Identity scope changed during input-idle confirmation",
-                                    ),
-                                ));
-                            }
-                            last = terminal.state;
-                            if let Err(cause) = live(authority, token, &target, deadline, gate) {
-                                return Err(self.uncertain(
-                                    token,
-                                    &intent,
-                                    delivery,
-                                    last,
-                                    Uncertainty::DeadlineOrAuthority,
-                                    cause,
-                                ));
-                            }
-                            if last.reached(&target) {
-                                let receipt = self
-                                    .append(Receipt {
-                                        status: Status::Verified,
-                                        delivery: Some(delivery),
-                                        observed: last,
-                                        ..intent
-                                    })
-                                    .map_err(|cause| {
-                                        Error::after_possible_input(
-                                        "Verified state could not be committed; preserve intent",
-                                        cause,
-                                    )
-                                    })?;
-                                return Ok(Execution {
-                                    receipt,
-                                    historical: false,
-                                    current_state_verified: true,
-                                    event_causality_verified: false,
-                                });
-                            }
-                        }
+                    let mut unreadable = |reason: Uncertainty, cause: Error| {
+                        let text = stage_settle::readback(&cause);
+                        why = (reason, cause);
+                        Seen::Unreadable(text)
+                    };
+                    if let Err(cause) = domains_clear(domains, &target.epoch.game) {
+                        return unreadable(Uncertainty::Observation, cause);
                     }
+                    let observed = match backend.observe(&target) {
+                        Err(e) if e.code == "torn_read" => return Seen::Pending(String::new()),
+                        Err(cause) => return unreadable(Uncertainty::Observation, cause),
+                        Ok(observed) => observed,
+                    };
+                    if let Err(cause) = observed.state.validate(&target) {
+                        return unreadable(Uncertainty::Ownership, cause);
+                    }
+                    if observed.scope != scope {
+                        return unreadable(
+                            Uncertainty::Scope,
+                            error(
+                                "ownership_changed",
+                                "Own identity scope changed after possible input",
+                            ),
+                        );
+                    }
+                    last = observed.state;
+                    if !last.reached(&target) {
+                        return Seen::Pending(String::new());
+                    }
+                    // A target that shows while input idle stays unverified for a whole window
+                    // closes without proof: a held key or button does not release itself.
+                    if let Err(cause) = backend.confirm_input_idle(&candidate, end) {
+                        return unreadable(Uncertainty::InputIdle, cause);
+                    }
+                    // Idle acknowledgement is not a canonical state read.
+                    // Require another same-scope witnessed result afterwards.
+                    let terminal = match backend.observe(&target) {
+                        // A torn terminal witness proves nothing either way (Run090 tore in
+                        // the panel's choice list right after the place click): observe and
+                        // confirm idle again from the top.
+                        Err(e) if e.code == "torn_read" => return Seen::Pending(String::new()),
+                        Err(cause) => return unreadable(Uncertainty::Observation, cause),
+                        Ok(terminal) => terminal,
+                    };
+                    if let Err(cause) = terminal.state.validate(&target) {
+                        return unreadable(Uncertainty::Ownership, cause);
+                    }
+                    if terminal.scope != scope {
+                        return unreadable(
+                            Uncertainty::Scope,
+                            error(
+                                "ownership_changed",
+                                "Identity scope changed during input-idle confirmation",
+                            ),
+                        );
+                    }
+                    last = terminal.state;
+                    if last.reached(&target) {
+                        Seen::Reached(last.clone())
+                    } else {
+                        Seen::Pending(String::new())
+                    }
+                });
+            match settled {
+                Settled::Reached(state) => {
+                    let receipt = self
+                        .append(Receipt {
+                            status: Status::Verified,
+                            delivery: Some(delivery),
+                            observed: state,
+                            ..intent
+                        })
+                        .map_err(|cause| {
+                            Error::after_possible_input(
+                                "Verified state could not be committed; preserve intent",
+                                cause,
+                            )
+                        })?;
+                    Ok(Execution {
+                        receipt,
+                        historical: false,
+                        current_state_verified: true,
+                        event_causality_verified: false,
+                    })
                 }
-                thread::sleep(
-                    Duration::from_millis(20)
-                        .min(deadline.saturating_duration_since(Instant::now())),
-                );
+                // No construction stage has a contradicting settled state of its own.
+                Settled::Diverged(_, ended) | Settled::Unconfirmed(ended) => {
+                    let (reason, mut cause) = why;
+                    // How the observation ended ("target not observed (polls=.. ..)").
+                    cause.message = format!(
+                        "{}; {}",
+                        cause.message,
+                        ended.split(';').next().unwrap_or_default()
+                    );
+                    Err(self.unconfirmed(token, &intent, delivery, last, reason, cause))
+                }
             }
         })();
         result.map_err(|cause| {

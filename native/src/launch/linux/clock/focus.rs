@@ -286,7 +286,6 @@ pub(super) fn execute_internal(
     }
     let execution = result
         .map_err(|error| stage::with_transport_cause(error, backend.last_transport.as_ref()))?;
-    service.journal.finish_before_deadline(&execution, until)?;
     let binding = crate::daily_focus_navigation::receipt_binding(
         &execution,
         backend.last_observed_binding.as_ref(),

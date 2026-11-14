@@ -7,6 +7,7 @@ use crate::{
     input_lease::InputAuthority,
     platform::Identity,
     research_attempt::PointCandidate,
+    stage_settle::{self, Seen, Settled},
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -16,7 +17,6 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
     sync::RwLock,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -456,6 +456,12 @@ pub enum Status {
     Intent,
     NotQueued,
     Verified,
+    /// Input may have been sent and a settled state contradicts the stage (the close key
+    /// changed what it must preserve). Closed like `Unconfirmed`.
+    Diverged,
+    /// Input may have been sent and the observation ended without proof of the target.
+    /// Closed: never replayed, blocks nothing. The caller reads the state again.
+    Unconfirmed,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -465,7 +471,16 @@ pub struct Receipt {
     pub target: Target,
     pub status: Status,
     pub delivery: Option<Delivery>,
+    /// For `Diverged` and `Unconfirmed` this stays the state the intent recorded before the
+    /// input; `closed` says what was seen afterwards.
     pub observed: OwnState,
+    /// When the intent was written; bounds how long an interrupted intent holds its game.
+    /// Absent on records of older builds (their serialized shape is kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unix_ms: Option<u64>,
+    /// Why a `Diverged` or `Unconfirmed` record closed (one bounded line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<String>,
 }
 #[derive(Debug, Serialize)]
 pub struct Execution {
@@ -628,6 +643,7 @@ impl Journal {
                 || (receipt.status == Status::Intent && receipt.delivery.is_some())
                 || (receipt.status == Status::NotQueued
                     && receipt.delivery != Some(Delivery::NotQueued))
+                || !closed_shape(&receipt)
             {
                 return Err(error("invalid_journal", "Invalid research receipt witness"));
             }
@@ -662,8 +678,10 @@ impl Journal {
                         receipt.delivery,
                         Some(Delivery::Unknown | Delivery::ServerConfirmed)
                     ))
-                    || (receipt.status == Status::NotQueued
-                        && receipt.observed != previous.observed)
+                    || (matches!(
+                        receipt.status,
+                        Status::NotQueued | Status::Diverged | Status::Unconfirmed
+                    ) && receipt.observed != previous.observed)
                 {
                     return Err(error(
                         "invalid_journal",
@@ -681,8 +699,10 @@ impl Journal {
                             )
                         })?;
                 }
-            } else if receipt.status == Status::NotQueued
-                || (receipt.status == Status::Verified && receipt.delivery.is_some())
+            } else if matches!(
+                receipt.status,
+                Status::NotQueued | Status::Diverged | Status::Unconfirmed
+            ) || (receipt.status == Status::Verified && receipt.delivery.is_some())
             {
                 return Err(error("invalid_journal", "Missing durable research intent"));
             }
@@ -725,16 +745,41 @@ impl Journal {
         self.poisoned = false;
         Ok(receipt)
     }
+    /// A persistence failure holds everything. Otherwise only an intent an interrupted server
+    /// left open holds its game, and only for `stage_settle::ORPHAN_MS`: every call closes
+    /// its own intent before it returns.
     pub fn blocks_game(&self, game: &Identity) -> bool {
+        let now = stage_settle::now_ms();
         self.poisoned
-            || self
-                .receipts
-                .values()
-                .any(|r| r.status == Status::Intent && &r.target.epoch.game == game)
+            || self.receipts.values().any(|r| {
+                r.status == Status::Intent
+                    && &r.target.epoch.game == game
+                    && stage_settle::holds(r.unix_ms, now)
+            })
+    }
+    /// Close every intent an interrupted server left open once it no longer holds its game.
+    /// Nothing is read and nothing is sent: the record only says the outcome was never
+    /// observed.
+    fn close_orphans(&mut self) -> Result<()> {
+        let now = stage_settle::now_ms();
+        let stale: Vec<Receipt> = self
+            .receipts
+            .values()
+            .filter(|r| r.status == Status::Intent && !stage_settle::holds(r.unix_ms, now))
+            .cloned()
+            .collect();
+        for intent in stale {
+            self.append(Receipt {
+                status: Status::Unconfirmed,
+                closed: Some("orphaned: the server stopped before the outcome was observed".into()),
+                ..intent
+            })?;
+        }
+        Ok(())
     }
     /// Only an immediate error from execute may use this classification.
-    /// execute calls dispatch_once only after a durable Intent. Post-dispatch
-    /// observation errors become action_uncertain and keep that Intent.
+    /// execute calls dispatch_once only after a durable Intent. A request closed without
+    /// proof (`action_unconfirmed`) may have sent input: its evidence is Unknown.
     #[cfg(any(target_os = "linux", test))]
     pub(crate) fn failure_evidence(
         &self,
@@ -742,7 +787,9 @@ impl Journal {
         target: &Target,
         error: &Error,
     ) -> FailureEvidence {
-        if self.poisoned || self.blocks_game(&target.epoch.game) || error.code == "action_uncertain"
+        if self.poisoned
+            || self.blocks_game(&target.epoch.game)
+            || matches!(error.code, "action_uncertain" | "action_unconfirmed")
         {
             return FailureEvidence::Unknown;
         }
@@ -779,16 +826,23 @@ impl Journal {
         }
         let deadline = (Instant::now() + timeout).min(authority.authorize(token, &target.epoch)?);
         live(authority, token, &target, deadline, gate)?;
-        if let Some(r) = self.receipts.get(id) {
+        if self.poisoned {
+            return Err(error(
+                "action_uncertain",
+                "Research journal requires recovery",
+            ));
+        }
+        if let Some(r) = self.receipts.get(id).cloned() {
             if r.target != target {
                 return Err(error(
                     "request_id_conflict",
                     "Request token is bound to another stage/target",
                 ));
             }
+            // A closed request answers from its receipt: no read, no input.
             return match r.status {
                 Status::Verified => Ok(Execution {
-                    receipt: r.clone(),
+                    receipt: r,
                     historical: true,
                     current_state_verified: false,
                     event_causality_verified: false,
@@ -797,17 +851,27 @@ impl Journal {
                     "input_not_queued",
                     "Historical local refusal; preserved plan needs a fresh attempt token",
                 )),
-                Status::Intent => Err(error(
-                    "action_uncertain",
-                    "Unresolved research attempt; never replay",
-                )),
+                Status::Diverged => Err(stage_settle::diverged(r.closed.as_deref().unwrap_or(""))),
+                Status::Unconfirmed => {
+                    Err(stage_settle::unconfirmed(r.closed.as_deref().unwrap_or("")))
+                }
+                Status::Intent if stage_settle::holds(r.unix_ms, stage_settle::now_ms()) => {
+                    Err(stage_settle::interrupted("research"))
+                }
+                Status::Intent => {
+                    self.close_orphans()?;
+                    Err(stage_settle::unconfirmed(
+                        self.receipts
+                            .get(id)
+                            .and_then(|r| r.closed.as_deref())
+                            .unwrap_or(""),
+                    ))
+                }
             };
         }
+        self.close_orphans()?;
         if self.blocks_game(&target.epoch.game) {
-            return Err(error(
-                "action_uncertain",
-                "Unresolved input blocks new IDs and stages for this owned game",
-            ));
+            return Err(stage_settle::interrupted("research"));
         }
         live(authority, token, &target, deadline, gate)?;
         let before = backend.observe()?;
@@ -821,6 +885,8 @@ impl Journal {
                 status: Status::Verified,
                 delivery: None,
                 observed: before,
+                unix_ms: None,
+                closed: None,
             })?;
             return Ok(Execution {
                 receipt,
@@ -891,6 +957,8 @@ impl Journal {
             status: Status::Intent,
             delivery: None,
             observed: fresh,
+            unix_ms: Some(stage_settle::now_ms()),
+            closed: None,
         })?;
         // A known local refusal after intent is durable too; uncertain delivery
         // retains Intent and never authorizes a second event.
@@ -920,105 +988,132 @@ impl Journal {
                 "Ordinary attempt was refused before possible input; plan remains unfinished",
             ));
         }
-        // Timeout diagnostics only: successful recovered-read counts are not
-        // part of the existing Execution/Receipt schema. Success still needs
-        // the complete final own-state proof and input-idle confirmation.
+        // From here the request always closes: observe (reading only, no lease needed) until
+        // the deadline or the settlement window ends, then write the terminal receipt.
+        // Rejected transition reads are diagnostics for the close reason only; success still
+        // needs the complete final own-state proof and input-idle confirmation.
         let mut identity_rejections: usize = 0;
-        let mut last_identity_transition = String::new();
         let mut open_rejections: usize = 0;
-        let mut last_open_transition = String::new();
-        loop {
-            live(authority, token, &target, deadline, gate).map_err(|cause| {
-                let mut failure = Error::after_possible_input(
-                    "Readback deadline/authority ended; never replay",
-                    cause,
-                );
-                if identity_rejections != 0 {
-                    failure.message.push_str(&format!("; rejected_identity_reads={identity_rejections}; last_identity_transition={last_identity_transition}"));
-                }
-                if open_rejections != 0 {
-                    failure.message.push_str(&format!("; rejected_open_reads={open_rejections}; last_open_transition={last_open_transition}"));
-                }
-                if identity_rejections != 0 || open_rejections != 0 {
-                    let mut end = failure.message.len().min(512);
-                    while !failure.message.is_char_boundary(end) { end -= 1; }
-                    failure.message.truncate(end);
-                }
-                failure
-            })?;
-            match backend.observe() {
+        let settled = stage_settle::settle(stage_settle::end(deadline, Instant::now()), |end| {
+            if permit(gate).is_err() {
+                return Seen::Stop("session_closed: owned input session closed".into());
+            }
+            let state = match backend.observe() {
                 Err(cause)
                     if target.stage == Stage::OpenPanel
                         && cause.code == "research_open_transition" =>
                 {
                     open_rejections = open_rejections.saturating_add(1);
-                    last_open_transition = cause
-                        .message
-                        .chars()
-                        .filter(|c| !c.is_control())
-                        .take(160)
-                        .collect();
+                    return Seen::Pending(format!(
+                        "rejected_open_reads={open_rejections}; last_open_transition={}",
+                        stage_settle::bounded(&cause.message, 120)
+                    ));
                 }
                 Err(cause) if cause.code == "research_identity_transition" => {
-                    // Complete rejected reads only. The original authority and
-                    // absolute deadline above remain in force; no input repeats.
                     identity_rejections = identity_rejections.saturating_add(1);
-                    last_identity_transition = cause
-                        .message
-                        .chars()
-                        .filter(|c| !c.is_control())
-                        .take(160)
-                        .collect();
+                    return Seen::Pending(format!(
+                        "rejected_identity_reads={identity_rejections}; last_identity_transition={}",
+                        stage_settle::bounded(&cause.message, 120)
+                    ));
                 }
                 Err(e)
                     if e.code == "torn_read"
                         || (target.stage == Stage::ClosePanel
-                            && e.code == "research_panel_transition") => {}
-                Err(cause) => {
-                    return Err(Error::after_possible_input(
-                        "Own readback unavailable; never replay",
-                        cause,
-                    ))
+                            && e.code == "research_panel_transition") =>
+                {
+                    return Seen::Pending(String::new())
                 }
-                Ok(state) => {
-                    state.validate(&target).map_err(|cause| {
-                        Error::after_possible_input(
-                            "Own context changed after possible input",
-                            cause,
-                        )
-                    })?;
-                    if target.stage == Stage::ClosePanel {
-                        state.preserves_close(&intent.observed).map_err(|cause| Error::after_possible_input("Original research panel proof changed after possible close input; never replay", cause))?;
-                    }
-                    if Instant::now() >= deadline {
-                        return Err(error(
-                            "action_uncertain",
-                            "Readback completed after bounded deadline",
-                        ));
-                    }
-                    if state.reached(&target) {
-                        backend.confirm_input_idle(&candidate,deadline).map_err(|cause|Error::after_possible_input(
-                            "Canonical result observed but input idle remains unverified; never replay",cause))?;
-                        live(authority, token, &target, deadline, gate).map_err(|cause| {
-                            Error::after_possible_input(
-                                "Input-idle check exceeded attempt authority/deadline",
-                                cause,
-                            )
-                        })?;
-                        let receipt=self.append(Receipt{status:Status::Verified,delivery:Some(delivery),observed:state,..intent})
-                            .map_err(|cause|Error::after_possible_input("Canonical result observed but terminal receipt could not be committed",cause))?;
-                        return Ok(Execution {
-                            receipt,
-                            historical: false,
-                            current_state_verified: true,
-                            event_causality_verified: false,
-                        });
-                    }
+                Err(e) => return Seen::Unreadable(stage_settle::readback(&e)),
+                Ok(state) => state,
+            };
+            if let Err(e) = state.validate(&target) {
+                return Seen::Unreadable(format!(
+                    "own context changed after possible input; {}",
+                    stage_settle::readback(&e)
+                ));
+            }
+            if target.stage == Stage::ClosePanel {
+                if let Err(e) = state.preserves_close(&intent.observed) {
+                    return Seen::Diverged(
+                        state,
+                        format!(
+                            "original research panel proof changed after possible close input; {}",
+                            stage_settle::readback(&e)
+                        ),
+                    );
                 }
             }
-            thread::sleep(
-                Duration::from_millis(20).min(deadline.saturating_duration_since(Instant::now())),
-            );
+            if !state.reached(&target) {
+                return Seen::Pending(String::new());
+            }
+            // A target that shows while input idle stays unverified for a whole window closes
+            // without proof: a held key or button does not release itself.
+            match backend.confirm_input_idle(&candidate, end) {
+                Ok(()) => Seen::Reached(state),
+                Err(e) => Seen::Unreadable(format!(
+                    "target observed but input idle is unverified; {}",
+                    stage_settle::readback(&e)
+                )),
+            }
+        });
+        let committed = |cause| {
+            Error::after_possible_input(
+                "Observed outcome could not be committed to the research journal",
+                cause,
+            )
+        };
+        match settled {
+            Settled::Reached(state) => {
+                let receipt = self
+                    .append(Receipt {
+                        status: Status::Verified,
+                        delivery: Some(delivery),
+                        observed: state,
+                        ..intent
+                    })
+                    .map_err(committed)?;
+                Ok(Execution {
+                    receipt,
+                    historical: false,
+                    current_state_verified: true,
+                    event_causality_verified: false,
+                })
+            }
+            Settled::Diverged(_, why) => {
+                self.append(Receipt {
+                    status: Status::Diverged,
+                    delivery: Some(delivery),
+                    closed: Some(why.clone()),
+                    ..intent
+                })
+                .map_err(committed)?;
+                Err(stage_settle::diverged(&why))
+            }
+            Settled::Unconfirmed(why) => {
+                self.append(Receipt {
+                    status: Status::Unconfirmed,
+                    delivery: Some(delivery),
+                    closed: Some(why.clone()),
+                    ..intent
+                })
+                .map_err(committed)?;
+                Err(stage_settle::unconfirmed(&why))
+            }
+        }
+    }
+}
+
+/// `closed` is present exactly on the two closed-without-proof statuses, as one bounded line.
+fn closed_shape(receipt: &Receipt) -> bool {
+    let closed = matches!(receipt.status, Status::Diverged | Status::Unconfirmed);
+    match &receipt.closed {
+        None => !closed,
+        Some(why) => {
+            closed
+                && !why.is_empty()
+                && why.len() <= 256
+                && !why.chars().any(char::is_control)
+                && receipt.delivery != Some(Delivery::NotQueued)
         }
     }
 }

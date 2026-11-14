@@ -98,6 +98,8 @@ fn research_execution(id: &str) -> research_adapter::Execution {
             status: research_adapter::Status::Verified,
             delivery: Some(research_adapter::Delivery::ServerConfirmed),
             observed: state,
+            unix_ms: None,
+            closed: None,
         },
         historical: false,
         current_state_verified: true,
