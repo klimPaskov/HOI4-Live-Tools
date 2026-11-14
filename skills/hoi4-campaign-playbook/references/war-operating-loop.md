@@ -115,9 +115,12 @@ the player decides strategy:
 - `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
   every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
   axis whose next enemy-held state is nearest: front line, offensive line, execute.
-- `"stall_days": 8` (default): an ordered army without progress first gets a second direction
-  (an offensive on another axis, `second_direction`, default on), then a direct `hoi4_army_move`
-  into its target. The direct move burns planning (3% a day) and has no flank cover.
+- `"stall_days": 8` (default): an ordered army that took no province of its target for that long
+  first has its plan stopped and planned again (`replans`, default 2 per target: it stands on its
+  line, regains organisation, entrenches and rebuilds planning bonus, then executes through the
+  planning wait), then gets a second direction (an offensive on another axis, `second_direction`,
+  default on), then a direct `hoi4_army_move` into its target. The direct move burns planning
+  (3% a day) and has no flank cover.
 - Rest and resume (defaults): an army rests below 30% of the highest organisation it has shown
   (`rest_below_pct` 0.3) and resumes at 80% (`resume_above_pct` 0.8) with supply at 70%
   (`supply_resume`), after at most `rest_max_days` 20 unless supply is under `supply_hold`.

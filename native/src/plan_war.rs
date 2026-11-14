@@ -22,9 +22,10 @@
 //!                      at "planning_gain" (0.02 a game day), at most "planning_max_days" (15).
 //!                      The army's planning bonus is read (hoi4_armies planning.mean, the mean of
 //!                      its divisions): it executes once the bonus reaches that share of the cap,
-//!                      or once it has stopped rising for a game day (it stands at the army's own
-//!                      cap, which techs, doctrines, traits and the HQ distance set and no tool
-//!                      reads). Without the read the bonus is estimated from the game days since
+//!                      or once it has stopped rising for a game day at half that level or more
+//!                      (it stands at the army's own cap, which techs, doctrines, traits and the HQ
+//!                      distance set and no tool reads; a lower bonus that stands still belongs to
+//!                      divisions still fighting or moving, and the wait goes on). Without the read the bonus is estimated from the game days since
 //!                      the line was drawn and the digest says so; the 1.19 x0.8 without a deployed
 //!                      HQ scales cap and speed alike, so the wait is the same. No wait when the
 //!                      goal deadline is less than "planning_skip_days" (20) away. A rest resumes at
@@ -43,7 +44,9 @@
 //!   pocket_share       0.5: an army falls back when this share of the land provinces around it is
 //!                      held by others (hoi4_armies threat.share) and it stands outside a fully held
 //!                      own state; the game-side flag (encirclement_risk, 0.7) falls back anywhere.
-//!                      The neck back to own land is not readable, so it is not judged
+//!                      Either only when at most one land province around the army is still the
+//!                      player's (threat.neighbour_provinces - held_by_others): with more own land
+//!                      around it the army stands on a front, not in a pocket
 //!   second_direction   false: a stall goes straight to the direct move. Default: the first stall
 //!                      on a target (no progress for stall_days) brings a second direction from
 //!                      the target's own neighbours (hoi4_wars enemy_held_adjacent_states): an
@@ -412,6 +415,12 @@ pub(super) fn drawn(state: &mut State, army: &str, target: i32, now: GameHour) {
         .insert(army.to_string(), (target, now));
 }
 
+/// A stalled offensive is planned again: the planning wait starts over on the same line.
+pub(super) fn replan(state: &mut State, army: &str, target: i32, now: GameHour) {
+    state.war_rules.planning.remove(army);
+    drawn(state, army, target, now);
+}
+
 /// Why the army's execute order waits (None: execute now): the bound pause, then planning.
 /// `planning` is the army's planning bonus read now (hoi4_armies planning.mean), if any.
 #[allow(clippy::too_many_arguments)]
@@ -501,6 +510,10 @@ fn planning_wait(
 
 /// The planning wait on the bonus read from the army: execute at `wanted`, once the bonus has
 /// not risen for a game day (it stands at the army's own cap) or after `max_days`.
+/// Share of the wanted planning bonus from which a bonus that stopped rising is taken for the
+/// army's own cap.
+const FLAT_CAP_SHARE: f64 = 0.5;
+
 #[allow(clippy::too_many_arguments)]
 fn planning_read(
     state: &mut State,
@@ -529,7 +542,11 @@ fn planning_read(
             pct(bonus),
             pct(wanted)
         ))
-    } else if bonus > 0.0 && flat_days >= 1.0 {
+    } else if bonus + 1e-9 >= wanted * FLAT_CAP_SHARE && flat_days >= 1.0 {
+        // A bonus that stands still below half of the wanted level is not the army's cap:
+        // the divisions are still fighting or moving and have not begun to plan (after a
+        // stopped offensive the read stood at 10-16% for a day and the attack went in again
+        // two days after it was stopped, live 14 Nov 2026). The wait goes on, max_days bounds it.
         Some(format!(
             "planning stopped rising at {:.0}% for {flat_days:.1} game days (the army's cap)",
             pct(bonus)
@@ -711,6 +728,18 @@ pub(super) fn bound_wait(
 /// fully held own states (`safe`).
 pub(super) fn pocket_risk(plan: &Value, army: &Value, safe: &[(i32, (f64, f64))]) -> bool {
     let threat = &army["threat"];
+    // The share alone describes a front as well as a pocket: an army on a line of contact has
+    // about half of the land around it held by others, and one advancing into enemy land far
+    // more. What makes a pocket is the way back: with the counts read, the army falls back
+    // only when at most POCKET_NECK land provinces around it are still the player's.
+    if let (Some(around), Some(others)) = (
+        threat["neighbour_provinces"].as_u64(),
+        threat["held_by_others"].as_u64(),
+    ) {
+        if around.saturating_sub(others) > POCKET_NECK {
+            return false;
+        }
+    }
     if threat["encirclement_risk"] == json!(true) {
         return true;
     }
@@ -721,6 +750,10 @@ pub(super) fn pocket_risk(plan: &Value, army: &Value, safe: &[(i32, (f64, f64))]
     let here = army["main_state"].as_i64();
     held >= limit && !safe.iter().any(|(id, _)| Some(i64::from(*id)) == here)
 }
+
+/// Own land provinces around an army at or below which a high share of foreign land is a
+/// pocket and not a front.
+const POCKET_NECK: u64 = 1;
 
 // ---------------------------------------------------------------------------------------------
 // The stall response: a second direction before the direct move.
@@ -1108,6 +1141,8 @@ mod tests {
                     }
                     "28" => json!({"states": [{"state_id": 28, "provinces": [
                         {"province": 280, "controller": "GER"}, {"province": 281, "controller": "GER"}]}]}),
+                    // a single state (the province count of a progress measurement): no rows
+                    other if other.parse::<i32>().is_ok() => json!({"states": []}),
                     other => panic!("unexpected query {other}"),
                 },
                 "hoi4_armies" => {
@@ -1140,7 +1175,9 @@ mod tests {
         }
     }
     fn plan(extra: Value) -> Value {
-        let mut war = json!({"enemies": ["FRA"], "axes": [[28, 18]], "cooldown_hours": 1});
+        // "replans": 0: these tests are about what follows the planning cycles of a stall
+        let mut war =
+            json!({"enemies": ["FRA"], "axes": [[28, 18]], "cooldown_hours": 1, "replans": 0});
         for (k, v) in extra.as_object().unwrap() {
             war[k] = v.clone();
         }
@@ -1291,6 +1328,29 @@ mod tests {
         assert!(state.war_rules.notes["planning:Army 1"].contains("stopped rising"));
     }
 
+    #[test]
+    fn a_low_bonus_that_stands_still_is_not_the_cap_and_the_wait_goes_on() {
+        let w = W::new();
+        let plan = plan(json!({}));
+        let mut state = State::default();
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        tick(&mut state, &w, &plan, "l", START + 3).unwrap();
+        // 10% for days: divisions still fighting after a stopped offensive, not a cap
+        w.planning.set(Some(0.10));
+        for day in 1..5 {
+            assert_eq!(
+                tick(&mut state, &w, &plan, "l", START + 3 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        // from half of the wanted 27% a flat bonus is the cap
+        w.planning.set(Some(0.14));
+        tick(&mut state, &w, &plan, "l", START + 3 + 5 * DAY).unwrap();
+        let step = acted(tick(&mut state, &w, &plan, "l", START + 3 + 6 * DAY + 1).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+    }
+
     fn plan_with(extra: Value) -> Value {
         plan(extra)
     }
@@ -1433,6 +1493,65 @@ mod tests {
         w.executing.set(true);
         assert_eq!(tick(&mut state, w, p, "l", START).unwrap(), Tick::Nothing);
         (state, START + 8 * DAY)
+    }
+
+    #[test]
+    fn a_stalled_offensive_is_planned_again_before_anything_else() {
+        let w = W::new();
+        let p = plan(json!({"replans": 1}));
+        let (mut state, now) = stalled(&w, &p);
+        let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+        assert!(
+            step.starts_with(
+                "war stalled Army 1 8 days on state 28: plan stopped to plan again (1 of 1): true"
+            ),
+            "{step}"
+        );
+        let (tool, args) = w.actions().last().unwrap().clone();
+        assert_eq!(
+            (tool.as_str(), &args["execute"]),
+            ("hoi4_army_plan", &json!(false))
+        );
+        // back before the execute order: the planning wait holds it, no move is sent
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        w.executing.set(false);
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", now + 2).unwrap(),
+            Tick::Nothing
+        );
+        assert_eq!(w.actions().last().unwrap().0, "hoi4_army_plan");
+    }
+
+    #[test]
+    fn a_plan_stopped_by_a_rest_goes_back_to_the_planning_wait_not_into_a_stall() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let (mut state, now) = stalled(&w, &p);
+        // something else stopped the plan (a casualty rest): the read says it is not executing
+        w.executing.set(false);
+        assert_eq!(tick(&mut state, &w, &p, "l", now).unwrap(), Tick::Nothing);
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        assert!(
+            w.actions().iter().all(|(tool, _)| tool != "hoi4_army_move"),
+            "no direct move"
+        );
+    }
+
+    #[test]
+    fn an_army_left_in_move_mode_with_its_lines_drawn_returns_to_its_plan() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let (mut state, now) = stalled(&w, &p);
+        // a direct move was its last order; the plan is not executing, both lines stand
+        state.war_move.insert("Army 1".into());
+        w.executing.set(false);
+        assert_eq!(tick(&mut state, &w, &p, "l", now).unwrap(), Tick::Nothing);
+        assert!(!state.war_move.contains("Army 1"));
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        // planning is at the wanted level: the execute order follows
+        w.planning.set(Some(0.3));
+        let step = acted(tick(&mut state, &w, &p, "l", now + 2).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
     }
 
     #[test]

@@ -12,7 +12,9 @@ mods) through hoi4facts.Game and hoi4facts.derive; nothing is country specific.
 
 Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/references/lessons.jsonl):
   research.start_year      research_path tech with start_year after its block year
-  research.idle            more than 25% of the slots' time to the horizon has nothing planned (an error,
+  research.idle            the slots' time to the horizon is taken 15% larger than the calendar gives (the
+                           game researches faster than base days and the run goes on past the horizon);
+                           more than 25% of that time has nothing planned (an error,
                            with or without a fallback: the fallback is a safety net, not the plan); or any
                            slot time is left unplanned (above 2%) while in-time techs the country can
                            research are not listed (land, industry, electronics and support folders; naval
@@ -307,6 +309,11 @@ _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([
 TRADE_UNITS_PER_FACTORY = 8
 TRADE_CONVOYS_PER_UNIT = 0.1
 RESEARCH_IDLE_SLACK = 0.02  # research.idle: unplanned share of the slot time allowed while in-time techs remain
+# The planned techs are counted in base research days; the game researches faster (research-speed
+# bonuses from ideas, focuses and technologies) and the run goes on past the horizon (the war's last
+# weeks, the peace). A list that fills the slots on paper ran out five weeks early in a live year, so
+# the slots' time is taken this much larger than the calendar gives.
+RESEARCH_SPEED_MARGIN = 0.15
 
 
 def folder_family(folder):
@@ -547,6 +554,7 @@ class Lint:
                 end_day = derive.day(last["until"])
             else:
                 capacity = slots * (end_day - begin)
+            capacity = round(capacity * (1.0 + RESEARCH_SPEED_MARGIN))
             idle = max(0.0, 1.0 - total / capacity)
             fallback = plan.get("research_fallback", True)
             self.facts["research"]["idle_share"] = round(idle, 3)
@@ -555,7 +563,7 @@ class Lint:
             if RESEARCH_IDLE_SLACK < idle <= 0.25 and spare:
                 self.add("error", "research.idle", "research_path",
                          f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
-                         f"nothing planned ({total:.0f} of {capacity} slot-days) while {len(spare)} in-time techs are "
+                         f"nothing planned ({total:.0f} of {capacity} slot-days, research-speed margin included) while {len(spare)} in-time techs are "
                          f"not listed (e.g. {', '.join(spare[:8])}): every slot stays busy while an in-time tech "
                          f"remains (industry and production first, then the army's equipment and support, then "
                          f"what later wars need); the campaign goes on after this war")
@@ -567,7 +575,7 @@ class Lint:
                        % ", ".join(plan.get("research_fallback_prefixes") or ["the whole catalogue"]))
                 self.add("error", "research.idle", "research_path",
                          f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
-                         f"nothing planned ({total:.0f} of {capacity} slot-days); {how}: list in-time techs "
+                         f"nothing planned ({total:.0f} of {capacity} slot-days, research-speed margin included); {how}: list in-time techs "
                          f"(industry first, then the templates' equipment) or pull the next tier forward")
         # naval / air folders
         planned = [t for b in blocks for t in b[3]] + [x for x in plan.get("research_priority") or [] if isinstance(x, str)]

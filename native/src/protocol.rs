@@ -1446,9 +1446,34 @@ impl Server {
                                 })?;
                             crate::plan_run::merge_plan(&path, changes)
                         }
+                        // The player asks for a revised plan. The request goes to the change
+                        // feed (whoever revises plans reads it there); the plan in force stays.
+                        Some("request_revision") if given == 2 => {
+                            let reason: String = object
+                                .get("reason")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|r| !r.is_empty())
+                                .ok_or_else(|| {
+                                    Error::new(
+                                        "invalid_arguments",
+                                        "request_revision needs reason: one line saying what no longer fits",
+                                    )
+                                })?
+                                .chars()
+                                .take(300)
+                                .collect();
+                            crate::watch::feed().note(
+                                "revision_requested",
+                                false,
+                                json!({"reason": reason, "mode": "quick", "by": "player"}),
+                            );
+                            Ok(json!({"recorded": true, "reason": reason,
+                                "next": "the plan in force stays; keep playing it. A revised plan arrives as the feed change plan_revised"}))
+                        }
                         _ => Err(Error::new(
                             "invalid_arguments",
-                            "Use {op:get} or {op:set, plan:{...}}",
+                            "Use {op:get}, {op:set, plan:{...}} or {op:request_revision, reason:\"...\"}",
                         )),
                     };
                 }

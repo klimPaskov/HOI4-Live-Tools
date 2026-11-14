@@ -27,21 +27,28 @@ SETUP (game is PAUSED on day one; at most 3 batches, then unpause):
 THE LOOP (every turn):
  A. hoi4_wait_change '{"since":SEQ,"urgent_only":true,"timeout_seconds":10}'  (SEQ from the last reply).
  B. React only to what it says, with ONE batch:
-    own_province_lost        -> nothing if the executor already ordered it back (next feed); a key province
-                                the brief names still lost after 3 game days: hoi4_army_move with the
-                                nearest army
+    wake_player              -> the one item the executor hands you: read its `message` and `evidence`
+                                and do that item (the tool it names, once)
+    own_province_lost        -> nothing: the executor retakes own land with the armies on that front. An
+                                order of yours takes an army off its line and its plan
     army_encirclement_risk   -> the executor falls back; never order that army forward
-    event_opened             -> hoi4_events; choose only if the executor has not answered in 2 game days,
-                                by the brief's rule for that event
+    event_opened             -> nothing if the plan names the event (the executor answers it within a
+                                game day). An event still open 2 game days later: hoi4_events once,
+                                then hoi4_event_choose {"event":"<id>","option":<index from 0>} by the
+                                brief's rule for it (option_keys names each option as the brief does)
     research_slot_idle       -> nothing (the executor fills it); still idle 5 game days later:
                                 hoi4_technology_list {"available":true}, start the plan's next tech
     focus_finished           -> nothing
-    checkpoint_missed / goal_at_risk / phase_changed -> follow the brief's "if not" action for it
+    checkpoint_missed        -> the executor has already applied the plan's contingency for it. When
+                                the brief's action for it is `revise`: one hoi4_plan
+                                {"op":"request_revision","reason":"<checkpoint id> missed"}; log it
+    goal_at_risk / phase_changed / contingency_triggered -> log one line
     plan_revised             -> re-read {RUN}/plan.brief.md once; drop items it no longer lists
     army_gone / big army_size_changed -> hoi4_war_stats; one log line
     peace_conference_opened  -> follow the brief's peace items (the executor runs them when the plan has
                                 a peace key)
- C. At each checkpoint date in the brief (not more often): the brief's win check; log on track or missed.
+ C. Checkpoints are judged by the executor and arrive in the feed (checkpoint_missed; no change means
+    met). Do not check them yourself.
  D. Your items from the brief, at their dates, one batch per turn.
 
 READS (exact calls; no other arguments exist — never guess one):
@@ -51,7 +58,9 @@ READS (exact calls; no other arguments exist — never guess one):
     {CALL} hoi4_events '{}'                  open events and their options
     {CALL} hoi4_states '{"query":"<TAG or state id>"}'   ownership, control, victory points
     {CALL} hoi4_war_stats '{}'               losses
-    Read a thing once per change, not every turn; the feed (step A) says what changed.
+    Each read at most once per feed change that concerns it. The reply of step A carries `now` (date,
+    wars, armies, open events, idle slots, own provinces held by others): that is the situation; a read
+    repeats it only in more detail. The win check and hoi4_war_stats: once, for the final reply.
 
 ONE ACTION, ONE TRY: if an action returns action_unconfirmed (its effect was not observed; the request is
 closed and blocks nothing), do not resend it blindly: re-read the state and act only if the effect is missing.
