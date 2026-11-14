@@ -13,6 +13,8 @@ validate and lint need the planning tools and the game files (facts.tools_dir); 
 are skipped and the result says `partial`.
 """
 
+import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -112,18 +114,25 @@ class ToolGates:
             out += ["--mod", m]
         return out
 
+    @staticmethod
+    def content_key(plan):
+        """The plan's content without its version meta: an applied candidate is the next incumbent."""
+        body = {k: v for k, v in plan.items() if k != "_meta"} if isinstance(plan, dict) else plan
+        return hashlib.sha256(json.dumps(body, sort_keys=True).encode("utf-8")).hexdigest()
+
     def counts(self, plan, key=None):
-        """{"validate": n, "lint": {rule: n}} for a plan (cached by `key`)."""
-        if key and key in self._cache:
+        """{"validate": n, "lint": {rule: n}} for a plan, cached by its content; both tools run at once."""
+        key = self.content_key(plan)
+        if key in self._cache:
             return self._cache[key]
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "plan.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(plan, f)
-            _, vout = self.runner([sys.executable, "-I", os.path.join(self.tools, "validate_plan.py"), path,
-                                   "--strict"] + self._args())
-            _, lout = self.runner([sys.executable, "-I", os.path.join(self.tools, "hoi4facts", "lint_plan.py"), path,
-                                   "--json"] + self._args())
+            argvs = [[sys.executable, "-I", os.path.join(self.tools, "validate_plan.py"), path, "--strict"],
+                     [sys.executable, "-I", os.path.join(self.tools, "hoi4facts", "lint_plan.py"), path, "--json"]]
+            with concurrent.futures.ThreadPoolExecutor(2) as pool:
+                (_, vout), (_, lout) = pool.map(lambda a: self.runner(a + self._args()), argvs)
         found = re.findall(r"(\d+) error\(s\)", vout)
         rules = {}
         try:
@@ -134,8 +143,9 @@ class ToolGates:
         except ValueError:
             rules = {"_unreadable": 1}
         out = {"validate": int(found[-1]) if found else 0, "lint": rules}
-        if key:
-            self._cache[key] = out
+        if len(self._cache) > 32:
+            self._cache.clear()
+        self._cache[key] = out
         return out
 
 
