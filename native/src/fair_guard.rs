@@ -36,8 +36,8 @@
 //!                               (fair.submarines), a mine-laying module (fair.naval_mines)
 //!   hoi4_production_add, hoi4_design_set_production  a submarine above II named by its
 //!                               equipment key (fair.submarines)
-//!   hoi4_operative_assign       an Axis collaboration-government operation on the Soviet Union
-//!                               (fair.collaboration)
+//!   hoi4_operative_assign, hoi4_operation_start  an Axis collaboration-government operation on
+//!                               the Soviet Union (fair.collaboration)
 //!
 //! Not guarded (needs live state the action's arguments do not carry; the player and the plan
 //! lint own them): convoy_raiding at peace and submarine task forces below 5 (hoi4_fleet_mission),
@@ -76,6 +76,7 @@ pub const GUARDED_TOOLS: &[&str] = &[
     "hoi4_production_add",
     "hoi4_design_set_production",
     "hoi4_operative_assign",
+    "hoi4_operation_start",
 ];
 
 /// The rules in plain words (the end of every refusal).
@@ -335,10 +336,10 @@ fn breach(
                 .find_map(|key| facts.sub_equipment.get(key).map(|why| (key, why)))
                 .map(|(key, why)| ("fair.submarines", format!("{key}: {why}")))
         }
-        "hoi4_operative_assign" => {
+        "hoi4_operative_assign" | "hoi4_operation_start" => {
             let op = format!("{} {}", text(args, "operation"), text(args, "mission"))
                 .to_ascii_lowercase();
-            let target = text(args, "country").to_ascii_uppercase();
+            let target = format!("{}{}", text(args, "country"), text(args, "target")).to_ascii_uppercase();
             (op.contains("collaboration")
                 && target == "SOV"
                 && (has(EURO_AXIS, me) || has(JAPAN_SIDE, me)))
@@ -902,6 +903,19 @@ mod tests {
             "hoi4_operative_assign",
             json!({"operative": 0, "mission": "build_intel_network", "state_id": 219}),
             &fair("GER"),
+        );
+        assert_eq!(
+            refused(
+                "hoi4_operation_start",
+                json!({"operation": "operation_collaboration_government", "target": "SOV"}),
+                &fair("JAP")
+            ),
+            "fair.collaboration"
+        );
+        allowed(
+            "hoi4_operation_start",
+            json!({"operation": "operation_collaboration_government", "target": "ETH"}),
+            &fair("ITA"),
         );
     }
 

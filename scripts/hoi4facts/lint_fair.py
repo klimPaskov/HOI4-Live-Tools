@@ -91,7 +91,8 @@ module doc lists what it guards and what is not guarded yet (needs live state):
   hoi4_construction_add / _place  France: ports or air bases in France before capitulation; any demolition of
                             factories or research facilities (dockyards only when out of slots)
   hoi4_naval_invasion       the invasion prerequisites of fair.invasions, checked against hoi4_states
-  hoi4_operative_assign (operations)  Axis: no collaboration government in the Soviet Union
+  hoi4_operative_assign (operations), hoi4_operation_start  Axis: no collaboration government in the
+                            Soviet Union
   (equipment toggles)       no mastery grinding with the main equipment type switched off (no tool today)
 
 Stdlib only, Python 3.9+.
