@@ -63,6 +63,16 @@ audit of the exact branch.
 10. **After release.** Record the version in `docs/STATUS.md` and, for a machine that runs agents, run
     `python install.py` from the new archive so the installed copy matches.
 
+## What the tag workflow publishes
+
+Pushing the tag `v<version>` runs `.github/workflows/release.yml`. It builds the Python archive and the native
+archives (Linux x86_64, macOS arm64 signed with the debugger entitlement), copies `install.py`, `install.sh` and
+`install.ps1` beside them, writes `SHA256SUMS.txt` over all of them, installs the release from those files with
+`install.sh` as a last check, attests every file and creates the GitHub release. The one-line installers in the
+README download `install.sh` or `install.ps1` from `releases/latest/download/`, so they work from the first
+release that carries these files. The tag must match `hoi4_live/__init__.py`, `pyproject.toml` and
+`native/Cargo.toml`.
+
 ## What the archive contains
 
 The files listed by `install.py` (`PAYLOAD_DIRS`, `PAYLOAD_DOCS`, `PAYLOAD_FILES`): the package, the campaign skill,

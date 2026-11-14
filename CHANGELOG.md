@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (Windows) find Python, download
+`install.py` from the release, check it against `SHA256SUMS.txt` and run it.
+
+- `install.py` now runs on Linux too and can run on its own: without a copy of the program next to it, or with
+  `--version` or `update`, it downloads the release and refuses any file whose SHA-256 is not the one in
+  `SHA256SUMS.txt`.
+- It installs the native runtime where a build exists (macOS on Apple silicon, Linux x86_64) into `native/`,
+  verifies the macOS signature and debugger entitlement, signs the binary with its own `--doctor --sign` when they
+  are missing, and starts it once to confirm that it runs. A failed native install is reported (exit code 5) and
+  leaves the rest installed; `--native skip` leaves it out.
+- The install has one command, `hoi4-live` (`doctor`, `update`, `uninstall`, `status`, `register`), linked into
+  `~/.local/bin` or `%LOCALAPPDATA%\Microsoft\WindowsApps` when that folder is on the PATH. `uninstall` removes
+  the program, the native runtime, the command, its link and the client registrations.
+- An install ends with the doctor. On Linux no client is registered yet: the native runtime serves one game run at
+  a time and is started for that run.
+- The release workflow publishes `install.py`, `install.sh` and `install.ps1` with the archives, lists them in
+  `SHA256SUMS.txt` and installs the release from the built files before publishing.
+- `HOI4_LIVE_RELEASE_BASE` names another release location: an https address or a local folder of release files.
 A game build the native runtime cannot read is now refused with the builds it does read and what works meanwhile.
 
 - The `unsupported_build` refusal names the runtime's version, what it saw (the start of the executable's SHA-256,

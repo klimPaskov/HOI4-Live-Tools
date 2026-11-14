@@ -152,12 +152,6 @@ class PlatformLayoutTests(unittest.TestCase):
             self.assertEqual(install.venv_python("P"), os.path.join("P", "venv", "Scripts", "python.exe"))
             install.check_platform()
 
-    def test_linux_is_refused(self):
-        with mock.patch.object(install.sys, "platform", "linux"):
-            with self.assertRaises(install.InstallError) as caught:
-                install.check_platform()
-        self.assertEqual(caught.exception.code, install.EXIT_USAGE)
-
     def test_prefix_override_wins(self):
         with mock.patch.dict(os.environ, {"HOI4_LIVE_PREFIX": "/x/y"}):
             self.assertEqual(install.default_prefix(), os.path.abspath("/x/y"))
