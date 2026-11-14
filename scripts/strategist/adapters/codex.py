@@ -63,6 +63,12 @@ class Codex(Adapter):
             tid = event.get("thread_id") or _find(event, "thread_id")
             if tid and "session_id" not in out:
                 out["session_id"] = tid
+            usage = event.get("usage")
+            if isinstance(usage, dict):
+                total = out.setdefault("usage", {})
+                for key, value in usage.items():
+                    if isinstance(value, (int, float)):
+                        total[key] = total.get(key, 0) + int(value)
         return out
 
 

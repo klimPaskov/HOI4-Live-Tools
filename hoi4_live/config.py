@@ -40,9 +40,11 @@ DEFAULTS = {
     # normalised scale below; each launcher adapter maps it to its provider and clamps a missing level.
     # Defaults decided by the user: Claude strategist sonnet/xhigh, player haiku/medium, revisions xhigh.
     # The critic (sonnet/high, fresh context) is a proposal. OpenAI models are left for the user to set.
+    # The planner makes the rolling plan's detail updates while the game runs (docs/ROLLING_PLAN.md): a
+    # cheaper, faster model than the strategist; strategy changes escalate to the strategist.
     "agents": {
         "provider": "claude",
-        "roles": ["strategist", "critic", "player"],
+        "roles": ["strategist", "critic", "player", "planner"],
         "effort_scale": ["low", "medium", "high", "xhigh", "max"],
         "providers": {
             "claude": {
@@ -52,6 +54,7 @@ DEFAULTS = {
                                "tools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]},
                 "critic": {"model": "sonnet", "effort": "high", "tools": ["Read", "Write", "Glob", "Grep", "Bash"]},
                 "player": {"model": "haiku", "effort": "medium", "tools": ["Read", "Bash", "mcp__hoi4-live"]},
+                "planner": {"model": "haiku", "effort": "high", "tools": ["Read", "Write"]},
                 "revision": {"quick_effort": "xhigh", "full_effort": "xhigh"},
             },
             "openai": {
@@ -61,12 +64,13 @@ DEFAULTS = {
                 "strategist": {"model": None, "effort": "high"},
                 "critic": {"model": None, "effort": "high"},
                 "player": {"model": None, "effort": "medium"},
+                "planner": {"model": None, "effort": "medium"},
             },
         },
     },
 }
 
-AGENT_ROLES = ("strategist", "critic", "player")
+AGENT_ROLES = ("strategist", "critic", "player", "planner")
 EFFORT_SCALE = ("low", "medium", "high", "xhigh", "max")
 
 
