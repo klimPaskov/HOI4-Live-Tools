@@ -138,7 +138,8 @@ COMMAND_METHOD = ("spirits = common/ideas in idea categories of type army/navy/a
                   "command power; duration and cooldown in hours [?]); traits = common/unit_leader assignable traits "
                   "with gui row/column, parents and `cost` as in the file [?]; skills = leader_skills level costs")
 AGENCY_DEFINES = ("AGENCY_CREATION_DAYS", "AGENCY_UPGRADE_DAYS", "AGENCY_CREATION_FACTORIES", "AGENCY_UPGRADE_PER_OPERATIVE_SLOT",
-                  "MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES", "AGENCY_OPERATIVE_RECRUITMENT_TIME")
+                  "MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES", "AGENCY_OPERATIVE_RECRUITMENT_TIME",
+                  "OPERATIVE_BASE_INTEL_NETWORK_GAIN")
 AGENCY_METHOD = ("common/intelligence_agency_upgrades (one block per branch; `level` blocks in order), common/operations "
                  "(blocks with days), common/operation_phases; the agency needs La Resistance; operations with a "
                  "static `allowed` false for the tag are left out")
@@ -414,6 +415,16 @@ class Loc:
 def norm_date(date):
     t = date_tuple(date)
     return f"{t[0]}.{t[1]}.{t[2]}" if t else date
+
+
+def _added_collaboration(block):
+    """The add_collaboration value an operation's outcome_execute gives (0 when it adds none)."""
+    out = 0.0
+    for _, scope in block if isinstance(block, list) else []:
+        for k, v in scope if isinstance(scope, list) else []:
+            if k == "add_collaboration" and isinstance(v, list):
+                out = num(get1(v, "value"), 0.0) or 0.0
+    return out
 
 
 def num(v, default=None):
@@ -2717,6 +2728,7 @@ class World:
                         "requirements": render(get1(b, "requirements", []), 160),
                         "visible": render(get1(b, "visible", []), 160), "allowed": al,
                         "awarded_tokens": bare(get1(b, "awarded_tokens", [])),
+                        "collaboration": _added_collaboration(get1(b, "outcome_execute")),
                         "src": self.src(p, ln), "mod": self.content.source(p)})
         return {"tag": tag or None, "agency_at_start": self.country(tag)["agency"] if tag else None,
                 "upgrades": ups, "operations": ops, "phases": phases, "defines": self.defines_rows(AGENCY_DEFINES),

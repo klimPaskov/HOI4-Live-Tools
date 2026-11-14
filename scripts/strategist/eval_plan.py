@@ -20,6 +20,8 @@ Rows (game = needs the game folder, through hoi4facts.lint_plan):
     vp_targets  cumulative_vp  VP of the targets (file values with the game, else the plan's vp)
     vp_targets  spearman       order agreement over the shared target provinces ((rho + 1) / 2)
     vp_targets  reachable      share of targets next to own land or an earlier target (game)
+    vp_targets  selection      1 / (1 + lint conquest.vp_selection and conquest.levers errors): the cheapest set to the
+                               stated capitulation aim, in value-for-difficulty order, with every lever used or answered
     construction rail_first    share of railway/infrastructure items queued before the first factory
     construction hubs          supply_node items (20000 points each; fewer is better, each must pass hub_cost)
     construction factory_infra mean infrastructure percentile of the factory states (game)
@@ -346,6 +348,9 @@ def evaluate(gen, ref, game=None, schema=None):
     rho = spearman(go, ro)
     row("vp_targets", "spearman", None if rho is None else round(rho, 3), 1.0, None if rho is None else (rho + 1) / 2)
     row("vp_targets", "reachable", gv.reachable(), rv.reachable(), higher_better(gv.reachable(), rv.reachable()))
+    if gv.result:
+        bad = gv.count("conquest.vp_selection") + gv.count("conquest.levers")
+        row("vp_targets", "selection", bad, 0, 1.0 / (1 + bad))
     # Cheap supply (railway levels, infrastructure) ahead of factories is good; supply hubs cost
     # 20000 points (common/buildings), so they are counted separately and every one must pass
     # the lint rule construction.hub_cost (finishes before it is needed).

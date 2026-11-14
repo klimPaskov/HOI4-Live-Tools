@@ -175,6 +175,8 @@ class HandPlans(unittest.TestCase):
             # the Dessie and Addis Ababa legs take the Afar road, Aussa's land at the start
             ("conquest.neutral_land", "vp_targets[7] 5097"),
             ("conquest.neutral_land", "vp_targets[8] 5010"),
+            # the deprecated surrender_goal states no goal.capitulation aim
+            ("conquest.vp_selection", "goal.capitulation"),
             # the four railways start at plain provinces, not at a hub, port or the capital (sk2 shakedown)
             ("construction.railway_node", "construction_plan[2] cp04_rail_way_842"),
             ("construction.railway_node", "construction_plan[4] cp07_rail_way_271"),
@@ -750,6 +752,89 @@ class TacticsRules(unittest.TestCase):
         plan = copy.deepcopy(self.ita)
         plan.update(copy.deepcopy(changes))
         return plan
+
+    # -------------------------------------------------------------- capitulation aim and vp selection
+    SK_TARGETS = [  # the 1114e pass-2 strategist list: every target in the order the plan took them, 26 VP
+        (13238, 842), (13237, 842), (12812, 835), (2072, 842), (5097, 843), (1984, 841), (7980, 835), (5010, 271),
+        (8036, 836), (13249, 835), (10775, 836), (13246, 837), (8019, 837), (13247, 837), (13242, 840)]
+
+    def capitulation_plan(self, targets, aim=26, levers=None, **cap):
+        plan = self.plan(vp_targets=[dict({"province": t[0], "state": t[1]}, **({"path": t[2]} if len(t) > 2 else {}))
+                                     for t in targets])
+        plan["goal"] = {"predicates": ["capitulated:ETH"]}
+        plan.pop("surrender_goal", None)
+        if aim is not None:
+            plan["goal"]["capitulation"] = dict(cap, enemy="ETH", vp_needed=aim, levers=levers if levers is not None else [
+                {"lever": "war_support", "use": False, "why": "aims at the unlowered threshold"},
+                {"lever": "collaboration_government", "use": False, "why": "aims at the unlowered threshold"}])
+        out = lint_plan.lint(plan, self.game)
+        for e, r in zip(plan["vp_targets"], out["facts"]["vp_selection"]["plan"]):
+            e["running_vp"] = r["running_vp"]
+        return plan
+
+    def reference_plan(self, ref, **kw):
+        return self.capitulation_plan([(r["province"], r["state"], r["path"][:-1]) for r in ref], **kw)
+
+    def selection(self, plan, rule="conquest.vp_selection"):
+        return [f for f in lint_plan.lint(plan, self.game)["findings"] if f["rule"] == rule and f["severity"] == "error"]
+
+    def test_vp_selection(self):
+        sk = self.capitulation_plan(self.SK_TARGETS, aim=None)
+        self.assertTrue(any("states no aim" in f["message"] for f in self.selection(sk)))
+        sk = self.capitulation_plan(self.SK_TARGETS)
+        bad = self.selection(sk)
+        # Aksum (1 VP behind the Tigray garrison, cost 16) is taken before Gondar (2 VP, cost 8, one step from Eritrea)
+        self.assertTrue(any("13237" in f["where"] and "order: 1984" in f["message"] for f in bad), bad)
+        ref = lint_plan.lint(sk, self.game)["facts"]["vp_selection"]["reference"]
+        self.assertGreaterEqual(ref[-1]["running_vp"], 26)
+        fixed = self.reference_plan(ref)
+        self.assertEqual(self.selection(fixed), [])
+        self.assertEqual(self.selection(fixed, "conquest.levers"), [])
+        # a target past the aim the others do not need
+        extra = copy.deepcopy(fixed)
+        extra["vp_targets"].append({"province": 8019, "state": 837, "running_vp": ref[-1]["running_vp"] + 1})
+        self.assertTrue(any("not needed" in f["message"] for f in self.selection(extra)))
+        extra["vp_targets"][-1]["reserve"] = True
+        self.assertEqual(self.selection(extra), [])
+        # running totals must be the VP held after each target
+        wrong = copy.deepcopy(fixed)
+        wrong["vp_targets"][0]["running_vp"] += 1
+        self.assertTrue(any("running_vp" in f["message"] for f in self.selection(wrong)))
+
+    def test_capitulation_levers(self):
+        ref = lint_plan.lint(self.capitulation_plan(self.SK_TARGETS), self.game)["facts"]["vp_selection"]["reference"]
+        targets = [(r["province"], r["state"], r["path"][:-1]) for r in ref]
+        out = lint_plan.lint(self.capitulation_plan(targets), self.game)
+        rows = {r["lever"]: r for r in out["facts"]["capitulation_levers"]}
+        self.assertEqual(rows["war_support"]["effect_vp"], 10)  # 26 at 50% war support, 16 at 0%
+        collab = rows["operation_collaboration_government"]
+        self.assertEqual(collab["timeline_days"], {"agency": 30, "recruit": 30, "network": 125, "operation": 90})
+        self.assertEqual(collab["earliest_ready"], "1936.10.03")
+        self.assertTrue(collab["tool_gap"])
+        # no lever listed
+        plan = self.capitulation_plan(targets, levers=[])
+        self.assertEqual(len(self.selection(plan, "conquest.levers")), 2)
+        # an aim at the start war support needs a used war support lever
+        plan = self.capitulation_plan(targets, aim=22, war_support=0.3)
+        self.assertTrue(any("no used war_support lever" in f["message"] for f in self.selection(plan)))
+        self.assertTrue(any("not needed" in f["message"] for f in self.selection(plan)))
+        plan = self.capitulation_plan(targets, aim=21, war_support=0.3)
+        self.assertTrue(any("asks 22" in f["message"] for f in self.selection(plan)))
+        # the collaboration operation used: the intelligence key and the tool gap
+        used = [{"lever": "war_support", "use": True, "start": "1936.1.1", "cost": "casualties, propaganda",
+                 "effect_vp": 4},
+                {"lever": "collaboration_government", "use": True, "start": "1936.1.1", "ready_by": "1936.10.3",
+                 "cost": "2 operatives, 1000 rifles, 200 support, 10 civilian factories for 60 days", "effect_vp": 1}]
+        plan = self.capitulation_plan(targets, levers=used, war_support=0.3, collaboration=0.3)
+        msgs = [f["message"] for f in self.selection(plan, "conquest.levers")]
+        self.assertTrue(any("set tool_gap" in m for m in msgs), msgs)
+        self.assertTrue(any("needs intelligence.agency" in m for m in msgs), msgs)
+        used[1]["tool_gap"] = "hoi4_operative_assign refuses operations"
+        plan["goal"]["capitulation"]["levers"] = used
+        plan["intelligence"] = {"agency": True, "upgrades": ["upgrade_training_centers"], "operatives": [
+            {"mission": "build_intel_network", "state_id": 271}, {"mission": "build_intel_network", "state_id": 840}]}
+        self.assertEqual(self.selection(plan, "conquest.levers"), [])
+        self.assertTrue(self.hits(plan, "conquest.tool_gap", "warning"))
 
     # -------------------------------------------------------------- production
     def test_equipment_balance(self):

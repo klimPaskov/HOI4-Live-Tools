@@ -510,10 +510,26 @@ contingency; plan.md §16. Check: rubric row 6.
 Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strategy.md` "Land operations";
 `generic-playbook.md` §4. Facts: `F vp <ENEMY>`, `F route <from> <to> [--avoid-rivers]`,
 `F province <id>`, `F weather <region>`, `F terrain-width <theatre>`.
-1. VP order: targets by value and adjacency until cumulative VP ≥ threshold with and without modifiers;
-   every mandatory control state. The threshold to reach is the one at war support 50% or more; the
-   `F vp` rows for low war support are the earliest the enemy can fall (a checkpoint and the
-   `goal_reached` alarm, never the plan's end point). No leg, path or supply line crosses a neutral country's land (no unit
+1. **Capitulation aim, then the cheapest set.** Take only enough VP to capitulate the enemy, the easiest and
+   most valuable first. In order:
+   a. **Lower the threshold first.** List every lever in lint `facts.capitulation_levers` (enemy war support
+      under 50%: casualties, strategic bombing, propaganda; each operation that adds collaboration, with the
+      agency, recruitment, network and operation days from the defines) in `goal.capitulation.levers`: `use`
+      true with `start`, `ready_by`, `cost`, `effect_vp`, `tools`, or `use` false with `why`. A lever that pays
+      within the run is used unless the plan says why not. Collaboration needs the `intelligence` key: the
+      agency on day 1, the training-centres upgrade, two operatives with `build_intel_network` on enemy states
+      the armies take last (a captured state loses its network), then the operation. A lever no tool carries
+      (lint `conquest.tool_gap`, `LEVER_TOOL_GAPS`) keeps `tool_gap` set and goes in RUN/tool-gaps.md.
+   b. **State the aim.** `goal.capitulation` {`enemy`, `vp_needed`, `war_support`, `collaboration`}: the
+      threshold at the war support and collaboration the used levers give (`F vp <TAG> --war-support S`).
+   c. **Pick the cheapest set to the aim.** Start from lint `facts.vp_selection.reference` (greedy by VP on
+      the route over cost: terrain, infrastructure and rivers on the route, enemy divisions in the state,
+      supply short of 1.0) and keep the main targets to the set that reaches the aim, in value-for-difficulty
+      order per army. A target that is not needed is dropped; a target the aim needs only if the levers fail
+      is `reserve` true and goes after the main set, so all targets still reach the unlowered threshold
+      (`conquest.threshold`). Every target carries `running_vp`, the enemy VP held after it.
+   d. Every mandatory control state is taken, needed or not. The `F vp` rows for low war support are also
+      the `goal_reached` checkpoint. No leg, path or supply line crosses a neutral country's land (no unit
    crosses a neutral border; lint `conquest.neutral_land`): take the `F route` path, and plan a leg over
    land that opens later (an annexation, a new war) only behind the predicate that opens it. `by` dates from distance, terrain and river counts (`[D route]`),
    non-decreasing per army; more than 2 river crossings on a leg is a warning to answer.
@@ -552,7 +568,8 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
 5. Phase-specific `war` in `phases[].overrides.war`.
 6. Naval invasions are item 21 (`invasions`).
 Resolution: executor `war`, `vp_targets`, `phases`, `hold_targets`; player `retake_rules`; plan.md §7,
-§7.1, §8. Check: lint `conquest.threshold`, `conquest.mandatory`, `conquest.adjacency`,
+§7.1, §8. Check: lint `conquest.vp_selection`, `conquest.levers`, `conquest.tool_gap`, `conquest.threshold`,
+`conquest.mandatory`, `conquest.adjacency`,
 `conquest.by_order`, `conquest.rivers`, `army.guards` (a hold post outside its army's guard states),
 `war.planning_wait`, `war.supply_floor`; validate_plan (hold corridors touch on the map graph, armies
 known); rubric rows 7 and 8.
