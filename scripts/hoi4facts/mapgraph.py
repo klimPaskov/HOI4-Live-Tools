@@ -639,8 +639,9 @@ def step_cost(graph, a, b, edge, w, avoid_rivers=False):
     return cost
 
 
-def route(graph, src, dst, avoid_rivers=False, weights=None, land_only=True):
-    """Cheapest province path src -> dst (Dijkstra).
+def route(graph, src, dst, avoid_rivers=False, weights=None, land_only=True, allowed=None):
+    """Cheapest province path src -> dst (Dijkstra). `allowed(province)` False keeps the path out of a
+    province (land the mover may not enter: a neutral country's); the start is always allowed.
 
     Cost of each step = cost of entering the next province: terrain movement cost (common/terrain, else
     DEFAULT_WEIGHTS) x (1 + infra * (max_infra - state infrastructure) / max_infra), plus `river` for a river
@@ -665,6 +666,8 @@ def route(graph, src, dst, avoid_rivers=False, weights=None, land_only=True):
             if e.get("impassable") or v not in provs:
                 continue
             if land_only and provs[v]["type"] != "land":
+                continue
+            if allowed is not None and not allowed(v):
                 continue
             nd = d + step_cost(graph, u, v, e, w, avoid_rivers)
             if nd < dist.get(v, float("inf")):

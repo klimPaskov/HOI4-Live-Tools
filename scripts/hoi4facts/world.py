@@ -47,6 +47,7 @@ import re
 from collections import defaultdict
 
 from . import derive
+from . import mapgraph
 from .defines import Defines
 from .script import (Block, Ctx, _sub, bare, date_tuple, get, get1, history_walk, line_of, op_of, parse_file, render,
                      run_effects, trigger)
@@ -694,6 +695,93 @@ class World:
             elif w["target"] == tag:
                 enemies.add(w["attacker"])
         return sorted(e for e in enemies if e)
+
+    # ------------------------------------------------------------ whose land a country may enter
+    def relations(self):
+        """Start relations from the country histories: {"factions": [set of tags], "subjects": {overlord:
+        set}, "access": {giver: set of tags it lets in}}."""
+
+        def load():
+            out = {"factions": [], "subjects": defaultdict(set), "access": defaultdict(set)}
+            words = ("add_to_faction", "create_faction", "give_military_access", "puppet", "set_autonomy")
+            for p in self.game.files("history/countries"):
+                try:
+                    with open(p, encoding="utf-8-sig", errors="replace") as fh:
+                        text = fh.read()
+                except OSError:
+                    continue
+                m = re.match(r"^([A-Z][A-Z0-9]{2})", os.path.basename(p))
+                if not m or not any(w in text for w in words):
+                    continue
+                tag = m.group(1)
+                c = self.country(tag)
+                members = {f["v"] for f in c["faction"] if f.get("kind") == "add_to_faction" and f.get("v")}
+                if members:
+                    out["factions"].append(members | {tag})
+                for s in c["subjects"]:
+                    if s.get("v") and s.get("kind") != "release_puppet":
+                        out["subjects"][tag].add(s["v"])
+                for a in c["access"]:
+                    if a.get("v"):
+                        out["access"][tag].add(a["v"])
+            return out
+
+        return self.cached("relations", load)
+
+    def land_access(self, tag=None, enemies=(), through=()):
+        """Whose land the land units of `tag` may enter at the start: {"own", "friends" (its faction, its
+        subjects and its overlord), "access" (countries that give it military access), "enemies" (at war at
+        the start, plus the `enemies` named), "through" (extra tags the caller vouches for), "tags": all of
+        them}. Every other country is neutral: the game lets no unit cross its border."""
+        tag = tag or self.tag
+        rel = self.relations()
+        friends = set()
+        for members in rel["factions"]:
+            if tag in members:
+                friends |= members
+        friends |= rel["subjects"].get(tag, set())
+        friends |= {o for o, subs in rel["subjects"].items() if tag in subs}
+        friends.discard(tag)
+        access = {giver for giver, tags in rel["access"].items() if tag in tags} - friends - {tag}
+        foes = (set(self.at_war_with(tag)) | {e for e in enemies if e}) - {tag}
+        extra = {t for t in through if t} - {tag}
+        return {"own": tag, "friends": sorted(friends), "access": sorted(access), "enemies": sorted(foes),
+                "through": sorted(extra), "tags": sorted({tag} | friends | access | foes | extra)}
+
+    def land_route(self, src, dst, tag=None, enemies=(), through=(), any_land=False, avoid_rivers=False):
+        """mapgraph.route kept to land `tag` may enter (land_access; provinces with no owner stay open), with
+        "access" (the tags used) and, when the cheapest open path crosses neutral land, "neutral": {tag:
+        [provinces]} of that path. `any_land` drops the limit. None when no such route exists; then
+        `land_route_blockers` says whose land the open path needs."""
+        g = self.graph()
+        if any_land:
+            r = mapgraph.route(g, src, dst, avoid_rivers=avoid_rivers)
+            if r is not None:
+                r["access"] = None
+            return r
+        acc = self.land_access(tag, enemies, through)
+        ok = set(acc["tags"])
+        own = self.owner_of_province
+        r = mapgraph.route(g, src, dst, avoid_rivers=avoid_rivers, allowed=lambda p: own(p) is None or own(p) in ok)
+        if r is None:
+            return None
+        r["access"] = acc
+        r["neutral"] = self.land_route_blockers(src, dst, tag, enemies, through, avoid_rivers)
+        return r
+
+    def land_route_blockers(self, src, dst, tag=None, enemies=(), through=(), avoid_rivers=False):
+        """{neutral tag: [provinces]} on the cheapest path that ignores borders ({} when that path is open to
+        `tag`, None when there is no land path at all)."""
+        ok = set(self.land_access(tag, enemies, through)["tags"])
+        r = mapgraph.route(self.graph(), src, dst, avoid_rivers=avoid_rivers)
+        if r is None:
+            return None
+        out = defaultdict(list)
+        for p in r["path"]:
+            o = self.owner_of_province(p)
+            if o is not None and o not in ok:
+                out[o].append(p)
+        return dict(out)
 
     # ------------------------------------------------------------ states
     def state_categories(self):

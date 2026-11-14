@@ -480,20 +480,49 @@ def cmd_province(args):
     return emit(args, p, text)
 
 
+def _route_tag(w, args):
+    """The country that moves: --tag (or the manifest's), else the owner of the start province."""
+    return w.tag or w.owner_of_province(args.src if hasattr(args, "src") else args.route[0])
+
+
+def _no_route(w, src, dst, tag, args):
+    block = w.land_route_blockers(src, dst, tag, args.enemy or [], args.through)
+    if block is None:
+        return f"no land route {src} -> {dst}"
+    acc = w.land_access(tag, args.enemy or [], args.through)
+    need = "; ".join(f"{t} ({len(ps)} provinces: {' '.join(map(str, ps[:6]))}{' ...' if len(ps) > 6 else ''})"
+                     for t, ps in sorted(block.items()))
+    return (f"no land route {src} -> {dst} over land {tag} may enter ({', '.join(acc['tags'])}); the open path "
+            f"crosses neutral {need}. A unit cannot cross a neutral border: go by sea, or pass --enemy TAG for a "
+            f"country the plan is at war with by then, --through TAG for land it annexes or gets access to")
+
+
 def cmd_route(args):
     w = world(args)
     g = w.graph()
     if g is None:
         return fail("no map graph")
-    r = mapgraph.route(g, args.src, args.dst, avoid_rivers=args.avoid_rivers)
+    tag = _route_tag(w, args)
+    r = w.land_route(args.src, args.dst, tag, args.enemy, args.through, args.any_land, args.avoid_rivers)
     if r is None:
-        return fail(f"no land route {args.src} -> {args.dst}")
+        return fail(_no_route(w, args.src, args.dst, tag, args))
     r["provinces"] = [{"id": p, "terrain": g["provinces"][p]["terrain"], "state": g["provinces"][p].get("state"),
                        "owner": w.owner_of_province(p)} for p in r["path"]]
 
     def text(x):
-        return [f"{x['steps']} steps, {x['rivers']} river crossings {x['river_crossings']}, cost {x['cost']}",
-                " -> ".join(f"{p['id']}({p['terrain'][:4]},{p['owner']})" for p in x["provinces"])]
+        out = [f"{x['steps']} steps, {x['rivers']} river crossings {x['river_crossings']}, cost {x['cost']}",
+               " -> ".join(f"{p['id']}({p['terrain'][:4]},{p['owner']})" for p in x["provinces"])]
+        acc = x.get("access")
+        if acc is None:
+            out.append("borders ignored (--any-land): a unit cannot cross a neutral border")
+        else:
+            parts = [f"own {acc['own']}"] + [f"{k} {' '.join(acc[k])}" for k in ("friends", "access", "enemies", "through")
+                                             if acc[k]]
+            out.append(f"kept to land {acc['own']} may enter: {'; '.join(parts)}")
+            for t, ps in sorted((x.get("neutral") or {}).items()):
+                out.append(f"  the shorter open path crosses neutral {t} ({' '.join(map(str, ps[:8]))}): not used; "
+                           f"--enemy {t} or --through {t} if the plan fights or annexes it first")
+        return out
 
     return emit(args, r, text)
 
@@ -797,9 +826,10 @@ def cmd_terrain_width(args):
         return fail("no map graph")
     subsets = {}
     if args.route:
-        r = mapgraph.route(g, args.route[0], args.route[1])
+        tag = _route_tag(w, args)
+        r = w.land_route(args.route[0], args.route[1], tag, args.enemy or [], args.through, args.any_land)
         if r is None:
-            return fail(f"no land route {args.route[0]} -> {args.route[1]}")
+            return fail(_no_route(w, args.route[0], args.route[1], tag, args))
         subsets["route"] = r["path"]
     targets = [x for t in (args.target or []) for x in str(t).replace(",", " ").split()]
     ids = [int(x) for x in targets if x.isdigit()]
@@ -1464,6 +1494,16 @@ def _globals(p, suppress):
     p.add_argument("--out", default=d, help="dossier folder")
 
 
+def _access_options(p, enemy=True):
+    """Whose land a route may cross (World.land_access): own, friendly and enemy land unless told more."""
+    if enemy:
+        p.add_argument("--enemy", action="append", default=[], metavar="TAG",
+                       help="a country the plan is at war with by then (repeat); wars at the start count already")
+    p.add_argument("--through", action="append", default=[], metavar="TAG",
+                   help="a country whose land is open by then (annexed, puppeted, access granted; repeat)")
+    p.add_argument("--any-land", action="store_true", help="ignore borders (a unit cannot cross a neutral one)")
+
+
 def parser():
     ap = argparse.ArgumentParser(prog="facts.py", description=__doc__.split("\n")[0])
     _globals(ap, False)
@@ -1499,6 +1539,7 @@ def parser():
     add("province", cmd_province, ("id", {"type": int}))
     p = add("route", cmd_route, ("src", {"type": int}), ("dst", {"type": int}))
     p.add_argument("--avoid-rivers", action="store_true")
+    _access_options(p)
     p = add("vp", cmd_vp, "TAG")
     p.add_argument("--war-support", type=float, metavar="SHARE",
                    help="the tag's war support as read in the game (0.3 = 30%%): gives the surrender limit that "
@@ -1525,6 +1566,7 @@ def parser():
     add("defines", cmd_defines, "KEY")
     p = add("terrain-width", cmd_terrain_width, ("target", {"nargs": "*", "help": "a TAG or state ids"}))
     p.add_argument("--route", nargs=2, type=int, metavar=("FROM", "TO"))
+    _access_options(p, enemy=False)
     p.add_argument("--enemy", action="append", help="attacker tag when TAG is ours (default: wars at start)")
     p = add("units", cmd_units)
     p.add_argument("--category", help="row, group, id or category substring (regimental, support, armor, ...)")

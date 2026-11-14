@@ -171,6 +171,9 @@ class HandPlans(unittest.TestCase):
             ("army.formations", "army_layout[6] 'Afar guard'"),
             # 6-8 wide colonial and irregular divisions fill the highland battles at 0.86-0.92, width 14 at 0.99
             ("army.width_terrain", "army_layout"),
+            # the Dessie and Addis Ababa legs take the Afar road, Aussa's land at the start
+            ("conquest.neutral_land", "vp_targets[7] 5097"),
+            ("conquest.neutral_land", "vp_targets[8] 5010"),
             # the four railways start at plain provinces, not at a hub, port or the capital (sk2 shakedown)
             ("construction.railway_node", "construction_plan[2] cp04_rail_way_842"),
             ("construction.railway_node", "construction_plan[4] cp07_rail_way_271"),
@@ -192,6 +195,8 @@ class HandPlans(unittest.TestCase):
             ("supply.port_convoys", "production"),
             # the highland states lie past what the Eritrean hub and the Somali ports reach
             ("supply.axis_reach", "war_by_phase.P2_tigray.axes[0] state 271"),
+            # Dessie by the highland road: supply does not cross Aussa either
+            ("supply.axis_reach", "war_by_phase.P2_tigray.axes[0] state 843"),
             ("supply.axis_reach", "war_by_phase.P2_tigray.axes[1] state 835"),
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[0] state 840"),
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 836"),
