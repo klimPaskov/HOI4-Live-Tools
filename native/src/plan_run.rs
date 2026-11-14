@@ -35,7 +35,9 @@
 //!                          destroyer, cruiser, battleship, torpedo, convoy; [] allows everything)
 //!   focus_path             focus keys; the first not completed key the game accepts. A key the game blocks
 //!                          (focus_not_available, prerequisite, exclusive) is skipped for `skip_hours.focus_blocked`
-//!                          and the next key is tried at once; `focus_blocked:[key:reason]` is in the digest
+//!                          (doubled on each further refusal, up to 8 times; cleared when a focus completes)
+//!                          and the next key is tried (two refused keys per tick); `focus_blocked:[key:reason]`
+//!                          is in the digest
 //!   focus_fallback         focus keys tried only after every focus_path key is completed or skipped
 //!   skip_hours             {"tech":72,"tech_fallback":168,"focus":24,"focus_blocked":6}: game hours a refused key
 //!                          is left alone (defaults shown); all optional
@@ -483,8 +485,17 @@ struct Stages {
     fallback_used: Vec<String>,
     /// short refusal reason per focus key, for `focus_blocked`
     focus_why: HashMap<String, String>,
+    /// How many times in a row the game refused each focus as not available (Start disabled),
+    /// and the completed-focus count when that was counted. Each further refusal doubles the
+    /// key's wait; a newly completed focus clears the counts (prerequisites may now be met).
+    focus_refused: HashMap<String, u32>,
+    focus_refused_at_completed: usize,
 }
 
+/// Refused focuses one tick may open (each look costs seconds of the input lane).
+const FOCUS_PROBES_PER_TICK: u32 = 2;
+/// A focus refused again waits `2^n` times the blocked window, up to this many doublings.
+const FOCUS_REFUSAL_DOUBLINGS: u32 = 3;
 /// Skip window in game hours: `skip_hours.<key>` of the plan, else `default`.
 fn skip_hours(plan: &Value, key: &str, default: GameHour) -> GameHour {
     plan["skip_hours"][key]
@@ -1369,8 +1380,20 @@ pub fn tick(
                 .cloned()
                 .collect()
         };
+        // A completed focus can unlock others: every refused key gets a fresh try at once.
+        if state.stages.focus_refused_at_completed != completed.len() {
+            state.stages.focus_refused_at_completed = completed.len();
+            let refused: Vec<String> = state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+            for key in refused {
+                state.bad.remove(&skip_key("focus", &key));
+            }
+        }
         let mut candidates: Vec<String> = startable(state, &path).into_iter().take(8).collect();
         candidates.extend(startable(state, &fallback).into_iter().take(4));
+        // Whether a focus can start is only known from its detail window, and one look costs
+        // seconds of the input lane (a far node up to the whole action deadline). One tick looks
+        // at no more than this many refused focuses; the rest keep their turn for the next tick.
+        let mut probes_left = FOCUS_PROBES_PER_TICK;
         for key in candidates {
             let (ok, why) = state.act(
                 tools,
@@ -1393,7 +1416,14 @@ pub fn tick(
                 || why.contains("exclusive")
                 || why.contains("invalid_target");
             let hours = if blocked {
-                skip_hours(plan, "focus_blocked", 10 * DAY)
+                // The same focus refused again and again waits twice as long each time (10, 20,
+                // 40, 80 game days by default): in one shakedown three fallback focuses that
+                // could not start yet were opened about a hundred times, a quarter of the
+                // input lane.
+                let refusals = state.stages.focus_refused.entry(key.clone()).or_insert(0);
+                let doubling = 1 << (*refusals).min(FOCUS_REFUSAL_DOUBLINGS);
+                *refusals += 1;
+                skip_hours(plan, "focus_blocked", 10 * DAY) * doubling
             } else {
                 skip_hours(plan, "focus", DAY)
             };
@@ -1401,6 +1431,10 @@ pub fn tick(
             let code = why.split(':').next().unwrap_or("refused").to_string();
             state.stages.focus_why.insert(key, code);
             if !blocked {
+                break;
+            }
+            probes_left -= 1;
+            if probes_left == 0 {
                 break;
             }
         }
@@ -9079,6 +9113,68 @@ mod tests {
             ["A:focus_not_available"]
         );
         assert!(focus_blocked(&state, &plan, START + 10 * DAY).is_empty());
+    }
+
+    #[test]
+    fn a_focus_refused_again_waits_twice_as_long_and_a_completed_focus_clears_it() {
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked(), blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A"]});
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.skipped(START + 10 * DAY - 1, "focus", "A"));
+        assert!(!state.skipped(START + 10 * DAY, "focus", "A"));
+        // Refused a second time: twenty game days now.
+        let second = START + 10 * DAY;
+        tick(&mut state, &tools, &plan, "l", second).unwrap();
+        assert_eq!(tools.actions.borrow().len(), 2);
+        assert!(state.skipped(second + 20 * DAY - 1, "focus", "A"));
+        assert!(!state.skipped(second + 20 * DAY, "focus", "A"));
+        // Another focus completes (prerequisites may now be met): A is tried again at once.
+        let reads = fake(vec![
+            ("hoi4_research", json!({"slots": [{"researching": "x"}]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done", "Other"]}),
+            ),
+        ]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let step = tick(&mut state, &tools, &plan, "l", second + DAY).unwrap();
+        assert_eq!(step, Tick::Acted("focus A".into()));
+        assert!(state.stages.focus_refused.is_empty());
+    }
+
+    #[test]
+    fn one_tick_opens_at_most_two_refused_focuses() {
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked(), blocked(), blocked(), blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A", "B"], "focus_fallback": ["C", "D"]});
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        let tried = |tools: &ActionReplies| -> Vec<String> {
+            tools
+                .actions
+                .borrow()
+                .iter()
+                .map(|a| a.1["focus"].as_str().unwrap().into())
+                .collect()
+        };
+        assert_eq!(tried(&tools), ["A", "B"]);
+        // The next tick goes on with the keys that had no turn yet.
+        tick(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(tried(&tools), ["A", "B", "C", "D"]);
     }
 
     #[test]

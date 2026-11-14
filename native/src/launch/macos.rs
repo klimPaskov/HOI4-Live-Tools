@@ -5771,9 +5771,11 @@ impl MacClock {
                 expected: &expected,
                 authority,
                 token,
-                // A cold focus tree needs ~3 s before the pan stage (live: 5 s expired mid-pan,
-                // leaving an unsettleable Dispatching intent); fixed up front, never extended later.
-                until: (Instant::now() + Duration::from_secs(12)).min(lease_end),
+                // Fixed up front, never extended later. The budget covers what the action is
+                // built to do: a cold tree needs ~3 s before the pan stage and the pan loop may
+                // take its full twelve drags at about 1.2 s each (live: 12 s expired at the tenth
+                // drag of a node that was still coming closer, so far nodes could never start).
+                until: (Instant::now() + focus::START_BUDGET).min(lease_end),
                 stop: None,
             };
             let check_input = || fence.input_check();
