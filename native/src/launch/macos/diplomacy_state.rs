@@ -617,6 +617,19 @@ pub(super) struct PlayerWars {
     pub json: Value,
 }
 
+/// Surrender progress (the bar under a country's flag in the war overview, `surrender_progressbar`
+/// of `war_ally_entry` in interface/waroverview.gui; the own one is `surrender_text` in the politics
+/// view) is a per-country value 0..1: the share of its surrender limit reached, where the limit is
+/// NDefines.NCountry.BASE_SURRENDER_LIMIT of its core victory points held by enemies (times
+/// SURRENDER_LIMIT_MULT_FOR_COUNTRIES_WITH_NO_CORES without cores, never under MIN_SURRENDER_LIMIT,
+/// lowered by war support and collaboration, scripted as the `surrender_progress` trigger). It is
+/// not located in memory yet: the fields stay null with this reason until the read is built and
+/// compared with the war overview live (gap register peace.surrender_progress_read). The plan
+/// predicate `surrender_progress:<TAG>` reads `wars[].enemy_surrender_progress` and stays unknown
+/// while it is null.
+const SURRENDER_NOT_MAPPED: &str =
+    "not_mapped: the country's surrender progress is not located in memory yet";
+
 fn goal_json(names: &mut Names<'_>, g: &Goal) -> Value {
     json!({"type":g.kind,"attacker":names.who(g.attacker),"target":names.who(g.target),
         "diplomacy_array_offset":format!("0x{:x}",g.array),
@@ -658,7 +671,8 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
             "relation_id":format!("0x{:x}",rel.ptr),
             "war_goals_involving_enemy":related,
             "attacker":null,"defender":null,"sides_reason":"offset_not_validated",
-            "war_score":null,"war_score_reason":"offset_not_validated"}),
+            "war_score":null,"war_score_reason":"offset_not_validated",
+            "enemy_surrender_progress":null,"enemy_surrender_progress_reason":SURRENDER_NOT_MAPPED}),
         );
     }
     let allies: Vec<Value> = picture.allies.iter().map(|t| names.who(*t)).collect();
@@ -666,6 +680,7 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
         json!({"at_war":true,"count":wars.len(),
         "enemies":enemy_codes.iter().collect::<Vec<_>>(),"wars":wars,
         "allies_at_war":allies,"leaders":null,"leaders_reason":"offset_not_validated",
+        "own_surrender_progress":null,"own_surrender_progress_reason":SURRENDER_NOT_MAPPED,
         "validated":"enemies and start date by pointer identity (structure live-validated on a civil war); not yet compared with a player war on screen",
         "validation_note":"the player's own war has not been observed live"}),
         enemy_codes,

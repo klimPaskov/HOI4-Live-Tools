@@ -224,7 +224,7 @@ PRED_OK = [
     "convoys_free <= 10", "world_tension >= 0.4", "resistance:550 >= 50", "compliance:550 > 40",
     "equipment_fill:North strike (Army 1) < 0.8", "stockpile_days:infantry_equipment < 30",
     "var:ITA_escalation > 4", "var:ETH.war_level != 0", "bop:ETH_centralization_balance >= -0.5",
-    "mission_days:ITA_missiolini_conquer_ethiopia < 15",
+    "mission_days:ITA_missiolini_conquer_ethiopia < 15", "surrender_progress:ETH >= 0.6", "surrender_progress:POL > 50%",
     # the spellings native/src/plan_predicate.rs reads today
     "at_war_with:ETH", "controls_state:550", "controller:550 == ITA", "focus_done:ITA_paris", "tech_done:radio",
     "war_support >= 25", "war_support >= 25%", "stability<50%", "date:1936.6.1", "xp:land > 5", "xp:naval < 9",
@@ -234,7 +234,7 @@ PRED_BAD = [  # rejected by the schema pattern and by validate.parse_atom
     "stability", "at_war:ETH == 1", "xp:sea > 5", "owner:908 > ITA", "foo > 1", " stability > 0.5",
     "stability > 0.5 ", "stability >> 0.5", "vp_share:Ethiopia>0.5", "resistance:Eritrea > 5", "phase:P-2",
     "stability = 0.5", "Ethiopia capitulated", "at_peace_conference:ETH", "equipment_fill: x < 0.8",
-    "date >= soon", "manpower < 20k",
+    "date >= soon", "manpower < 20k", "surrender_progress:Poland > 0.5", "surrender_progress:ETH",
 ]
 PRED_RANGE = [  # pattern-valid, rejected by the parser's ranges, percent rule and calendar
     "stability >= 150", "war_support > 101%", "resistance:550 >= 150", "bop:x < -2", "date >= 1936.13.01",
@@ -266,7 +266,7 @@ class PredicateGrammar(unittest.TestCase):
             "resistance", "compliance", "equipment_fill", "stockpile_days", "var", "bop", "mission_days",
             "at_peace_conference", "date", "province_controlled", "state_fully_controlled", "owner"}, True)
         self.assertEqual({k for k, a in self.table.items() if not a["readable"]},
-                         {"var", "mission_days"})
+                         {"var", "mission_days", "surrender_progress"})
         for k in ("at_war_with", "controls_state", "controller", "focus_done", "tech_done", "exists"):
             self.assertTrue(self.table[k]["readable"], k)
         for name, atom in self.table.items():
@@ -293,6 +293,7 @@ class PredicateGrammar(unittest.TestCase):
         self.assertTrue(self.v.parse_atom("bop:ETH_centralization > 0.5", self.table)[0]["readable"])
         self.assertTrue(self.v.parse_atom("stockpile_days:infantry_equipment < 30", self.table)[0]["readable"])
         self.assertFalse(self.v.parse_atom("var:ITA_escalation > 4", self.table)[0]["readable"])
+        self.assertFalse(self.v.parse_atom("surrender_progress:ETH >= 0.6", self.table)[0]["readable"])
 
     def test_can_hold(self):
         can = lambda p: self.v.predicate_can_hold(p, self.table)  # noqa: E731

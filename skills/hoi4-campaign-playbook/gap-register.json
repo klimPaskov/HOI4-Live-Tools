@@ -1724,17 +1724,25 @@
     "war-air-naval-peace.md#9.1 Capitulation (when a country quits)",
     "rubric.md#7 Conquest"
    ],
-   "plan": [],
+   "plan": [
+    "goal.predicates",
+    "phases[].enter",
+    "checkpoints[].must",
+    "contingencies[].when"
+   ],
    "tools": [
     "hoi4_wars",
     "hoi4_states"
    ],
-   "blocked": "no surrender-progress read; war score and sides are 'unvalidated' in hoi4_wars; goal.capitulation is lint only",
+   "blocked": "hoi4_wars reports wars[].enemy_surrender_progress null (not located in memory); the predicate atom surrender_progress:<TAG> reads it and stays unknown; war score and sides are 'unvalidated'",
    "payoff": "high",
    "why": "the war ends at the surrender limit, not at full conquest",
    "closing": "both",
-   "owner": "surrender progress + war score read and a predicate atom, then live",
-   "priority": 4
+   "owner": "offline done: atom surrender_progress:<TAG> (plan_predicate.rs, x-atoms readable:false), null seam field in hoi4_wars; live: locate the country's surrender progress in memory, fill enemy_surrender_progress/own_surrender_progress, flip x-atoms readable, then live-verify against the war overview",
+   "priority": 4,
+   "blocked_terms": [
+    "surrender_progress"
+   ]
   },
   {
    "id": "peace.white_peace_offers",
