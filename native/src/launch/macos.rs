@@ -276,6 +276,8 @@ pub struct MacClock {
     directory: std::path::PathBuf,
     daily: daily::Controller,
     keys: Arc<dyn GameInput>,
+    /// The pause watch on `keys`; every input lane brackets its actions with it.
+    pause: Arc<crate::pause_guard::Watch>,
     state: Arc<Mutex<Control>>,
     process: Arc<dyn Process + Send + Sync>,
 }
@@ -296,6 +298,12 @@ impl MacClock {
     ) -> Result<Self> {
         let config: Config = serde_json::from_slice(&std::fs::read(directory.join("input.json"))?)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
+        // Every key of every tool, the executor and the daily worker goes through the watch.
+        let pause = Arc::new(crate::pause_guard::Watch::for_process(process.clone()));
+        let keys: Arc<dyn GameInput> = Arc::new(crate::pause_guard::Watched::new(
+            Box::new(keys),
+            pause.clone(),
+        ));
         let qualification_clock_origin = Instant::now();
         let wall = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -366,6 +374,7 @@ impl MacClock {
             daily,
             directory: directory.to_path_buf(),
             keys,
+            pause,
             process,
             state: Arc::new(Mutex::new(Control {
                 authority: InputAuthority::new(config.controller, epoch.clone())?,
@@ -412,7 +421,7 @@ impl ClockBackend<'_> {
         };
         // An open focus tree's search box would take the key as text.
         let _ = panelkit::close_focus_tree(self.process, self.keys);
-        self.keys.press(key)?;
+        self.keys.press_clock(key)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
             let now = self.guard.observe(self.process)?;
@@ -981,14 +990,15 @@ impl MacClock {
                     .unwrap_or(false)
             });
         // Real campaigns never pause: an action (not the clock tool, not the peace screens) that
-        // leaves the game newly paused is undone with the game's own pause key (Ethiopia run 11:
-        // the game stood paused for 100 s after a plan-runner tick with a focus and a front).
+        // changes the pause state through its own input gets the starting state put back (see
+        // pause_guard; Ethiopia run 11: the game stood paused for 100 s after a plan-runner
+        // tick with a focus and a front).
         let guard_pause = !journaled
             && arguments.get("request_id").is_some()
             && name != "hoi4_time"
             && !name.starts_with("hoi4_peace")
             && process.identity() == self.process.identity();
-        let was_paused = if guard_pause { self.paused_now() } else { None };
+        let scope = guard_pause.then(|| self.pause.begin());
         let menus_before = ui::menus_closed();
         let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
@@ -1025,38 +1035,44 @@ impl MacClock {
         {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
-        // One context line per action for the run report: which actions leave the game paused
-        // (w24: pauses coincided with army creation and disbanding; cause unknown).
-        if guard_pause {
-            let after = self.paused_now();
-            eprintln!(
-                "[action] {}",
-                json!({"unix_ms": std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0),
-                    "tool": name,
-                    "request_id": arguments.get("request_id"),
-                    "ms": started.elapsed().as_millis() as u64,
-                    "ok": result.is_ok(),
-                    "error": result.as_ref().err().map(|e| e.code),
-                    "paused_before": was_paused,
-                    "paused_after": after,
-                    "executor": crate::autopilot::autopilot().in_step()})
-            );
+        let Some(scope) = scope else {
+            return result;
+        };
+        let verdict = end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before);
+        // One context line per action for the run report: which actions changed the pause
+        // state, whether the change was our own input and whether it was put back.
+        eprintln!(
+            "[action] {}",
+            json!({"unix_ms": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+                "tool": name,
+                "request_id": arguments.get("request_id"),
+                "ms": started.elapsed().as_millis() as u64,
+                "ok": result.is_ok(),
+                "error": result.as_ref().err().map(|e| e.code),
+                "paused_before": verdict.before,
+                "paused_after": verdict.after,
+                "self_pause": verdict.ours,
+                "restored": verdict.restored,
+                "executor": crate::autopilot::autopilot().in_step()})
+        );
+        if !verdict.ours {
+            return result;
         }
-        if was_paused == Some(false) {
-            // Undo only a pause our own input caused: the game menu (a stray Escape) pauses the
-            // game and closing it leaves it paused (w11). A pause without the menu came from the
-            // player or a multiplayer host and stays (live 8 Nov 2026: a pause given while an
-            // executor step ran was undone).
-            let menu = ui::menu_shown(self.process.as_ref());
-            let _ = ui::close_menu(self.process.as_ref(), &*self.keys);
-            if (menu || ui::menus_closed() != menus_before) && self.paused_now() == Some(true) {
-                let _ = self.keys.press(Key::Pause);
+        // The caller sees it too: a pause of ours is a defect to count even when undone.
+        result.map(|mut value| {
+            if let Some(object) = value.as_object_mut() {
+                object.insert(
+                    "pause_guard".into(),
+                    json!({"changed_by_own_input": true,
+                        "paused_before": verdict.before,
+                        "restored": verdict.restored}),
+                );
             }
-        }
-        result
+            value
+        })
     }
     /// Role bindings the executor keeps (plan_state.json `layout` next to plan.json) and the
     /// role names of the plan (`army_layout`); empty without a plan.
@@ -1110,14 +1126,6 @@ impl MacClock {
     /// mode with the diplomacy panel open and every army order failed until both were cleared
     /// by hand (Ethiopia run 10). F1 is the game's own political map-mode key.
     /// The game's paused flag, read like the clock tool reads it (None when unreadable).
-    fn paused_now(&self) -> Option<bool> {
-        let mut control = self.state.lock().ok()?;
-        control
-            .guard
-            .observe(self.process.as_ref())
-            .ok()
-            .map(|s| s.paused)
-    }
     fn army_screen_ready(&self, process: &dyn Process, name: &str, leased: bool) -> Result<()> {
         // Input (panel closing, F1) only for actions: a lease-free read such as
         // hoi4_army_assign_plan runs on the read lane, beside an action, and must send nothing.
@@ -1132,6 +1140,30 @@ impl MacClock {
         std::thread::sleep(std::time::Duration::from_millis(150));
         Ok(())
     }
+}
+/// Close one action's pause bracket for any input lane. The game menu is closed first (an
+/// Escape with nothing left to close opens it; it pauses the game and closing it leaves the
+/// game paused), then a pause state our own input changed is put back with the game's own
+/// pause key. A pause by the player or a multiplayer host stays.
+pub(super) fn end_pause_scope(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    scope: crate::pause_guard::Scope<'_>,
+    menus_before: u64,
+) -> crate::pause_guard::Verdict {
+    // A key sent as the action's last input has had its effect before the menu is looked for.
+    scope.settle();
+    let menu = ui::menu_shown(process);
+    let _ = ui::close_menu(process, keys);
+    scope.end(menu || ui::menus_closed() != menus_before, &mut |attempt| {
+        // An open focus tree's search box would take the pause key as text.
+        let _ = panelkit::close_focus_tree(process, keys);
+        if attempt > 0 {
+            // The first key changed nothing: a text box of an open panel may hold the keyboard.
+            let _ = panelkit::close_panels(process, keys);
+        }
+        keys.press_clock(Key::Pause)
+    })
 }
 /// Army names are checked before anything is journaled: a typo used to become an uncertain
 /// dispatch that blocked every later action (seen live: "Army 1 1 ").
