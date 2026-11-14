@@ -193,6 +193,7 @@ pub(super) struct Limits {
     supply_floor: f64,
     supply_hold: f64,
     supply_resume: f64,
+    fill_floor: f64,
 }
 
 impl Limits {
@@ -208,7 +209,14 @@ impl Limits {
             supply_floor,
             supply_hold,
             supply_resume: percent(&cfg["supply_resume"], 70.0).max(supply_floor),
+            // Every missing 1% of equipment costs about 1% attack: no new offensive below this mean
+            // fill (playbook OP20; sk9 and sk10 attacked at 0.08-0.3 and lost 4-6 men per enemy).
+            fill_floor: share(&cfg["fill_floor"], 0.9),
         }
+    }
+    /// Mean equipment fill below the floor: no new attack, and no resume after a rest.
+    pub(super) fn underfilled(&self, fill: Option<f64>) -> bool {
+        fill.is_some_and(|f| f < self.fill_floor)
     }
     fn line(&self, state: &State, army: &str, abs: Option<f64>, pct: f64) -> f64 {
         abs.unwrap_or_else(|| pct * state.war_rules.peak.get(army).copied().unwrap_or(0.0))
@@ -236,6 +244,24 @@ impl Limits {
     pub(super) fn floor(&self) -> f64 {
         self.supply_floor
     }
+}
+
+/// Mean equipment fill per army (hoi4_supply divisions[].equipment_fill_min, 0..1); an army none
+/// of whose divisions reads a fill is absent (the gate then does not hold it).
+pub(super) fn army_fill(supply: Option<&Value>) -> HashMap<String, f64> {
+    let mut sums: HashMap<String, (f64, f64)> = HashMap::new();
+    for d in supply
+        .and_then(|s| s["divisions"].as_array())
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(army), Some(fill)) = (d["army"].as_str(), d["equipment_fill_min"].as_f64()) {
+            let e = sums.entry(army.to_string()).or_insert((0.0, 0.0));
+            e.0 += fill;
+            e.1 += 1.0;
+        }
+    }
+    sums.into_iter().map(|(a, (s, n))| (a, s / n)).collect()
 }
 
 /// Record each army's organisation: the highest value seen is its maximum estimate.

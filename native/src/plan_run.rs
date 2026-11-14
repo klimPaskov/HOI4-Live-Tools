@@ -3731,6 +3731,7 @@ fn war_step(
         })
         .unwrap_or_default();
     plan_war::observe(state, &condition);
+    let fill = plan_war::army_fill(supply_read.as_ref());
     state.moves.tired = condition
         .iter()
         .filter(|(army, (org, _))| limits.tired(state, army, *org))
@@ -4204,8 +4205,11 @@ fn war_step(
                     state.war_rest.insert(name.clone(), now);
                 }
             }
+            let army_fill = fill.get(&name).copied();
+            let underfilled = limits.underfilled(army_fill);
             if let Some(&since_rest) = state.war_rest.get(&name) {
-                let recovered = limits.fresh(state, &name, org) && limits.supplied(supply);
+                let recovered =
+                    limits.fresh(state, &name, org) && limits.supplied(supply) && !underfilled;
                 let overdue = now - since_rest >= rest_max && !limits.held(supply);
                 if !recovered && !overdue {
                     if now - since_rest >= rest_max {
@@ -4244,14 +4248,17 @@ fn war_step(
             let blocked = if own_target {
                 limits.held(supply)
             } else {
-                tired || starving
+                tired || starving || underfilled
             };
             if blocked {
+                let fill_note = army_fill
+                    .map(|f| format!(", equipment fill {:.0}%", f * 100.0))
+                    .unwrap_or_default();
                 plan_war::held_note(
                     state,
                     &name,
                     format!(
-                        "{name} gets no attack order: organisation {org:.0}, supply {supply:.0}%"
+                        "{name} gets no attack order: organisation {org:.0}, supply {supply:.0}%{fill_note}"
                     ),
                 );
                 state.war_cool.insert(name.clone(), now + cooldown);
@@ -9120,6 +9127,7 @@ mod tests {
         executing: Cell<bool>,
         org: Cell<f64>,
         supply: Cell<f64>,
+        fill: Cell<f64>,
         calls: RefCell<Vec<(String, Value)>>,
     }
     impl War2 {
@@ -9128,6 +9136,7 @@ mod tests {
                 executing: Cell::new(false),
                 org: Cell::new(40.0),
                 supply: Cell::new(80.0),
+                fill: Cell::new(1.0),
                 calls: RefCell::new(vec![]),
             }
         }
@@ -9168,7 +9177,9 @@ mod tests {
                      "battle_plan_orders": 0, "plan_executing": self.executing.get(), "commander": "X"}]})),
                 "hoi4_supply" => Ok(
                     json!({"armies": [{"army": "Army 1", "organisation_mean": self.org.get(),
-                        "supply_percent_mean": self.supply.get()}]}),
+                        "supply_percent_mean": self.supply.get()}],
+                        "divisions": [{"army": "Army 1", "equipment_fill_min": self.fill.get()},
+                                      {"army": "Army 1", "equipment_fill_min": self.fill.get()}]}),
                 ),
                 _ if args.get("request_id").is_some() => {
                     Ok(json!({"receipt": {"status": "Verified"}}))
@@ -9261,6 +9272,46 @@ mod tests {
         let step = tick(&mut state, &w, &plan, "l", START + 12 * DAY).unwrap();
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("war resume Army 1")),
+            "{step:?}"
+        );
+    }
+
+    #[test]
+    fn an_army_under_the_fill_floor_gets_no_attack_order() {
+        // sk9/sk10 (14 Nov): offensives at 8-30% equipment fill lost 4-6 own per enemy.
+        let w = War2::new();
+        w.fill.set(0.6);
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        assert!(!w
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_army_front" || n == "hoi4_army_plan"));
+        let held = plan_war::digest(&state).unwrap_or_default();
+        assert!(
+            held["hold:Army 1"]
+                .as_str()
+                .is_some_and(|v| v.contains("equipment fill 60%")),
+            "{held}"
+        );
+        // refilled: the attack goes ahead; a plan may lower the floor
+        w.fill.set(0.95);
+        let step = tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1")),
+            "{step:?}"
+        );
+        let low = json!({"war": {"enemies": ["FRA"], "fill_floor": 0.5}});
+        let mut fresh = State::default();
+        w.fill.set(0.6);
+        let step = tick(&mut fresh, &w, &low, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1")),
             "{step:?}"
         );
     }
