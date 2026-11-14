@@ -104,10 +104,14 @@ fn capture_process(pid: i32) -> Result<(Identity, i32)> {
 /// Verify the executable file is the inspected Mach-O build.
 pub fn verify_executable(path: &str) -> Result<()> {
     let bytes = std::fs::read(path)?;
-    if format!("{:x}", Sha256::digest(&bytes)) != SHA256 || macho_uuid(&bytes)? != BUILD_UUID {
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    if hash != SHA256 || macho_uuid(&bytes)? != BUILD_UUID {
         return Err(Error::new(
             "unsupported_build",
-            "Game executable is not the inspected macOS build",
+            crate::builds::refusal(&format!(
+                "the game executable's SHA-256 starts {}",
+                &hash[..16]
+            )),
         ));
     }
     Ok(())
@@ -177,7 +181,7 @@ impl MacProcess {
         if session.build_id != BUILD_UUID || session.sha256 != SHA256 {
             return Err(Error::new(
                 "unsupported_build",
-                "Session executable build is not verified",
+                crate::builds::refusal(&format!("the session names build {}", session.build_id)),
             ));
         }
         check_ownership(&session)?;
