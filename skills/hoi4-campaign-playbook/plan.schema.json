@@ -3804,7 +3804,14 @@
           "default": 8,
           "minimum": 0,
           "x-owner": "executor",
-          "description": "game days without progress on a target before the stall response: a second direction first, then a direct move with a back-off (default 8)"
+          "description": "game days without progress on a target (no new main state and no province taken in the target or the state the army stands in) before the stall response: the executing plan is stopped and planned again (replans), then a second direction, then a direct move with a back-off (default 8)"
+        },
+        "replans": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "times a stalled executing offensive is stopped and planned again on one target (the army regains organisation and planning bonus on its line and executes through the planning wait) before the second direction and the direct move (default 2; 0 goes straight to them)"
         },
         "rest": {
           "type": "boolean",
