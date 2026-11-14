@@ -1797,6 +1797,14 @@ fn overdue_step(
     Ok(None)
 }
 
+/// The done-memory and skip-timer key of the plan's `politics` pick at `index`.
+fn politics_key(index: usize, pick: &Value) -> String {
+    item_id(pick).map_or_else(
+        || format!("pol:{index}:{}", text(&pick["idea"])),
+        |id| format!("pol:id:{id}"),
+    )
+}
+
 /// Politics (tick step 4): the plan's one-shot picks, then the standing political-power policy
 /// (`politics_auto`, plan_manage.rs) for the power the picks leave unspent.
 fn politics_step(
@@ -1808,10 +1816,7 @@ fn politics_step(
 ) -> Result<Option<String>> {
     let mut political_power: Option<f64> = None;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
-        let key = item_id(pick).map_or_else(
-            || format!("pol:{index}:{}", text(&pick["idea"])),
-            |id| format!("pol:id:{id}"),
-        );
+        let key = politics_key(index, pick);
         if state.done.contains_key(&key) || state.skipped(now, "pol", &key) {
             continue;
         }

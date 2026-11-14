@@ -230,15 +230,16 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            50%; (info) the executor's 70% when no key exists
   politics.pp_budget       the PP income over the whole run simulated the way the executor spends it (calc.pp_rates:
                            (base + gain) x (1 + factor + stability) minus the running focus's cost): politics,
-                           decisions and decision_rules picks once due, affordable and open, every pick not yet
-                           taken keeping its cost in reserve, politics_auto.order buying only above that reserve
+                           decisions and decision_rules picks once due, affordable and open, every pick that could
+                           be taken now (due, gate open) keeping its cost in reserve, politics_auto.order buying only
+                           above that reserve
                            and its threshold; a pick the income cannot pay by the horizon; projected PP above
                            100 (or above the next pick that can still be bought) with nothing bought for more
                            than 60 days in a row; (warning) a dated buy affordable more than 30 days late
   politics.available       a politics pick or every idea of a politics_auto.order entry whose `available` gate
                            (advisor or law, game files) stays closed to the horizon under the plan's facts: the
                            focuses the focus slot walk completes, the date, the war (plan_gates); the executor
-                           would keep such a pick's cost in reserve for good
+                           would try such a pick again and again and never buy it
   politics.unneeded_conscription  a politics conscription law above the lowest law whose recruitable
                            manpower covers the plan's divisions plus manage.manpower_months of losses (15% a
                            month assumed); (warning) manage.conscription_laws unset or listing laws with an
@@ -3458,11 +3459,11 @@ class Lint:
 
     def politics_pp_budget(self):
         """Planned PP spending against the net income over the whole run, the way the executor spends it:
-        dated picks (politics, decisions, decision_rules) in order once affordable and open, every pick not
-        yet taken keeping its cost in reserve, and politics_auto.order buying only from the power above that
-        reserve (and above its threshold). A pick whose `available` gate never opens under the plan
-        (politics.available) is never bought and keeps its reserve for good. Power above PP_IDLE (or above
-        the next pick that can still be bought) with nothing bought for PP_IDLE_DAYS is idle."""
+        dated picks (politics, decisions, decision_rules) in order once affordable and open, every pick that
+        could be taken now (date due, gate open) keeping its cost in reserve, and politics_auto.order buying
+        only from the power above that reserve (and above its threshold). A pick whose `available` gate never
+        opens under the plan (politics.available) is never bought and holds nothing back. Power above PP_IDLE
+        (or above the next pick that can still be bought) with nothing bought for PP_IDLE_DAYS is idle."""
         if not self.tag:
             return
         start = derive.day(self.start)
@@ -3479,8 +3480,8 @@ class Lint:
                 if ok is False:
                     self.add("error", "politics.available", f"politics[{i}]",
                              f"{p.get('idea')} cannot be taken by {derive.fmt(derive.date_of(end))} under the plan: "
-                             f"its `available` gate stays closed ({'; '.join(why[:3])}); the executor keeps its "
-                             f"{c:g} PP in reserve for it all the same, which starves politics_auto: drop it, or "
+                             f"its `available` gate stays closed ({'; '.join(why[:3])}); the executor tries it "
+                             f"again and again (each try opens the politics screen) and never buys it: drop it, or "
                              f"plan what opens the gate (a focus in focus_path) before its date")
                 buys.append({"label": label, "cost": c, "due": due, "idea": p.get("idea"), "never": ok is False})
         w = self.world
@@ -3541,7 +3542,10 @@ class Lint:
                 bought[b["label"]] = (day, b["due"], b["cost"])
                 pending.remove(b)
                 got = True
-            reserve = sum(b["cost"] for b in pending)
+            # the executor holds back only what a pending pick could take now: its date is due and its gate
+            # is open (a gated or refused pick is paid for once it opens, from the power there is then)
+            reserve = sum(b["cost"] for b in pending if not b["never"] and (b["due"] is None or b["due"] <= day)
+                          and (b["idea"] is None or self.idea_open(b["idea"], day)[0] is not False))
             if auto_left and balance >= threshold:
                 for e in list(auto_left):
                     if balance - reserve < e["cost"]:
@@ -3572,7 +3576,7 @@ class Lint:
         how = (f"{rates['per_day_focus']:g} PP a day with a focus running ((base {rates['base']['v']:g} + gain "
                f"{gain:g}) x (1 + {factor + rates['stability_factor']:g}) - {rates['focus_cost']:g} for the focus"
                + (f" - {rates['cost']:g} daily costs" if rates["cost"] else "") + ")")
-        reserved = sum(b["cost"] for b in pending)
+        reserved = sum(b["cost"] for b in pending if not b["never"])
         self.facts["pp_budget"] = {"per_day_focus": rates["per_day_focus"], "per_day_idle": rates["per_day_idle"],
                                    "income": round(income), "end_balance": round(balance),
                                    "bought": {k: derive.fmt(derive.date_of(v[0])) for k, v in bought.items()},
@@ -3581,14 +3585,13 @@ class Lint:
                                    "reserved_at_end": round(reserved)}
         if idle_worst[0] > PP_IDLE_DAYS:
             blocked = [b["label"] for b in pending if b["never"]]
-            tail = (f"; the never-available {', '.join(blocked)} keep{'s' if len(blocked) == 1 else ''} "
-                    f"{sum(b['cost'] for b in pending if b['never']):g} PP in reserve, so politics_auto cannot "
-                    f"spend it" if blocked else
+            tail = (f"; the never-available {', '.join(blocked)} {'is' if len(blocked) == 1 else 'are'} never "
+                    f"bought and nothing in politics_auto.order takes the power instead" if blocked else
                     "; politics_auto is off, so it piles up to the cap" if off else
                     "; politics_auto.order runs out" if policy and not auto_left and orders else
                     "; politics_auto.order cannot use it (empty, or nothing it names opens)" if policy else
-                    "; set politics_auto.order (the executor's default order only buys the chief of army and the "
-                    "economy and trade laws)")
+                    "; set politics_auto.order (the executor's default order only fills vacant military staff "
+                    "seats; laws and political advisors only when the plan names them)")
             self.add("error", "politics.pp_budget", "politics",
                      f"political power stays at about {idle_worst[2]:.0f} with nothing bought for {idle_worst[0]} days "
                      f"from {derive.fmt(derive.date_of(idle_worst[1]))} ({how}; {round(income)} PP come in to "
