@@ -72,7 +72,18 @@
 //!                    base of `base_region` with the most free room when its own base is outside that
 //!                    region or over capacity) and then flies `mission` over `region` (hoi4_air_mission);
 //!                    once `switch_when` holds, over `then_region` with `then_mission`. Wings the air plan
-//!                    names are left out of `air.war_missions`
+//!                    names are left out of `air.war_missions`.
+//!                    `follow_region` true: the wing is based inside the region it flies over now
+//!                    (`region`, or `then_region` once switched), so a mission region that moves with
+//!                    the front takes its wings along: own base there with the most free room; with
+//!                    none, `base_state` / `base_region` as above.
+//!                    `deploy` true or {"min_planes":50,"max_wings"?,"wing_size":100} (needs
+//!                    `airframe`): reserve planes of the entry's airframe (hoi4_stockpile variants)
+//!                    beyond what its wings below `wing_size` draw as reinforcements found a new wing
+//!                    (hoi4_air_wing_create, at most 100 a wing) at `base_state`, else at the base of
+//!                    the mission region (`follow_region`) or `base_region` with the most free room,
+//!                    once at least `min_planes` wait and fewer than `max_wings` wings match; the new
+//!                    wing matches the entry and gets its mission on the next tick
 //!   politics_auto    {"enabled":true,"threshold":100,"cap":2000,"cap_margin":30,"order"?,"never"?,
 //!                    "recheck_days":30,"recheck_pp":25,"idle_wake_days":30} or false (rule 4, run by
 //!                    the politics domain after the plan's `politics` picks): political power at or
@@ -91,7 +102,7 @@
 //!                    only when the plan has it, the resource rule also with `auto_import`, the alerts
 //!                    and the ledger always):
 //!                    "off":["alerts","ledger","manpower","stability","equipment_fill","resources",
-//!                    "stockpile","trucks"] switches rules off; "wake_repeat_days":7 one wake per reason;
+//!                    "stockpile","trucks","overdrawn"] switches rules off; "wake_repeat_days":7 one wake per reason;
 //!                    "alerts_ignore":[alert names]; "alert_persist_days":14;
 //!                    "manpower_months":2 free manpower below that many months of losses (hoi4_war_stats)
 //!                    takes the next enabled law of "conscription_laws" in government slot 0 (the next
@@ -110,7 +121,13 @@
 //!                    when none builds it); with no idle factory, cover below
 //!                    "stockpile_days_critical":7 wakes the player. A stock that is not falling,
 //!                    or one whose trend the server has not measured yet, is left alone;
-//!                    "deficit_wake_days":14.
+//!                    "deficit_wake_days":14;
+//!                    overdrawn (supply.split_overdrawn, once a game day from hoi4_supply): in an
+//!                    overdrawn province whose divisions' mean supply is below "overdrawn_floor":35
+//!                    the weakest divisions of the army with most divisions there (at most
+//!                    "overdrawn_share":0.5 of them) are detached until their supply need covers the
+//!                    shortfall and moved to a province with room; their army rests
+//!                    "overdrawn_rest_days":10 before the war step or consolidation take it back.
 //!                    These keys act whether or not the plan has `manage` (defaults shown):
 //!                    "rebalance_step":3 idle military factories per action to a priority line (tick
 //!                    step 6b, `production_priority` in plan_run.rs: the line whose equipment the
@@ -166,6 +183,18 @@ pub(super) struct Memory {
     pp_reads: HashMap<String, SlotRead>,
     /// `politics_auto`: per category, when its seats were last listed and the vacant ones.
     pp_vacant: HashMap<String, (GameHour, Vec<i64>)>,
+    /// Divisions pulled out of overdrawn provinces: their new army and where it goes.
+    spread: Vec<Spread>,
+}
+
+/// An army formed from divisions pulled out of an overdrawn province (supply.split_overdrawn).
+#[derive(Clone)]
+struct Spread {
+    army: String,
+    state: i64,
+    province: i64,
+    moved: bool,
+    since: GameHour,
 }
 
 /// What the runner did in the open peace conference.
@@ -354,6 +383,9 @@ pub fn step(
         return Ok(Some(done));
     }
     if let Some(done) = stockpile_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = overdrawn_rule(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
     equipment_rule(state, tools, plan, now);
@@ -1456,9 +1488,32 @@ fn region_matches(want: &Value, region: &Value) -> bool {
     }
 }
 
-/// The state to rebase a wing to, if it must move: `base_state`, or the base of `base_region`
-/// with the most free room when the wing's own base is outside that region or over capacity.
-fn rebase_target(entry: &Value, wing: &Value, bases: &[Value]) -> Option<i64> {
+/// The state of the own air base in `region` with the most free room for `planes`, leaving out
+/// `except` (the state the wing stands in).
+fn roomiest_base(bases: &[Value], region: &Value, except: Option<i64>, planes: i64) -> Option<i64> {
+    bases
+        .iter()
+        .filter(|b| region_matches(region, &b["region"]) && b["state_id"].as_i64() != except)
+        .filter(|b| b["free"].as_i64().unwrap_or(0) >= planes)
+        .max_by_key(|b| b["free"].as_i64().unwrap_or(0))
+        .and_then(|b| b["state_id"].as_i64())
+}
+
+/// Whether the wing's own base lies in `region` and is not over capacity.
+fn based_in(wing: &Value, bases: &[Value], region: &Value) -> bool {
+    bases
+        .iter()
+        .find(|b| b["base_id"] == wing["air_base"]["base_id"])
+        .is_some_and(|b| {
+            region_matches(region, &b["region"]) && b["free"].as_i64().unwrap_or(0) >= 0
+        })
+}
+
+/// The state to rebase a wing to, if it must move: `base_state`; with `follow_region`, the base
+/// with the most free room inside the region the wing flies over now (`flying`) unless its own
+/// base is there already; else (or with no base with room there) the base of `base_region` with
+/// the most free room when its own base is outside that region or over capacity.
+fn rebase_target(entry: &Value, flying: &Value, wing: &Value, bases: &[Value]) -> Option<i64> {
     if wing["transfer_to_base_id"].as_i64().is_some() {
         return None;
     }
@@ -1470,25 +1525,129 @@ fn rebase_target(entry: &Value, wing: &Value, bases: &[Value]) -> Option<i64> {
             bases.is_empty() || bases.iter().any(|b| b["state_id"].as_i64() == Some(target));
         return (here != Some(target) && lands).then_some(target);
     }
-    let want = &entry["base_region"];
-    if want.is_null() {
-        return None;
-    }
-    let own = bases
-        .iter()
-        .find(|b| b["base_id"] == wing["air_base"]["base_id"]);
-    if own
-        .is_some_and(|b| region_matches(want, &b["region"]) && b["free"].as_i64().unwrap_or(0) >= 0)
-    {
-        return None;
-    }
     let planes = wing["aircraft"].as_i64().unwrap_or(0);
-    bases
+    if entry["follow_region"] == json!(true) && !flying.is_null() {
+        // the mission region moves with the front: a base inside it keeps the region in range
+        if based_in(wing, bases, flying) {
+            return None;
+        }
+        if let Some(target) = roomiest_base(bases, flying, here, planes) {
+            return Some(target);
+        }
+    }
+    let want = &entry["base_region"];
+    if want.is_null() || based_in(wing, bases, want) {
+        return None;
+    }
+    roomiest_base(bases, want, here, planes)
+}
+
+/// An `air_plan` entry's `deploy` settings: (min_planes, max_wings, wing_size), None without one.
+fn deploy_settings(entry: &Value) -> Option<(i64, Option<i64>, i64)> {
+    let d = &entry["deploy"];
+    if !(d == &json!(true) || d.is_object()) {
+        return None;
+    }
+    let min = d["min_planes"].as_i64().filter(|n| *n > 0).unwrap_or(50);
+    let size = d["wing_size"].as_i64().filter(|n| *n > 0).unwrap_or(100);
+    Some((min, d["max_wings"].as_i64().filter(|n| *n >= 0), size))
+}
+
+/// The reserve planes a `deploy` entry turns into a new wing now: (aircraft name for
+/// hoi4_air_wing_create, planes), or why none. Reserve = hoi4_stockpile variants of the entry's
+/// airframe (and `version`, by design name from hoi4_designs); the entry's own wings below
+/// `wing_size` draw their refill from it first, so only what is left beyond that counts.
+fn deploy_choice(
+    entry: &Value,
+    air: &Value,
+    stock: &Value,
+    designs: &Value,
+) -> std::result::Result<(String, i64), String> {
+    let Some((min, max_wings, size)) = deploy_settings(entry) else {
+        return Err("no deploy".into());
+    };
+    let Some(airframe) = entry["airframe"].as_str().filter(|a| !a.is_empty()) else {
+        return Err("deploy needs the entry's airframe".into());
+    };
+    let wings: Vec<&Value> = list(air, "wings")
         .iter()
-        .filter(|b| region_matches(want, &b["region"]) && b["state_id"].as_i64() != here)
-        .filter(|b| b["free"].as_i64().unwrap_or(0) >= planes)
-        .max_by_key(|b| b["free"].as_i64().unwrap_or(0))
-        .and_then(|b| b["state_id"].as_i64())
+        .filter(|w| wing_matches(entry, w))
+        .collect();
+    if let Some(max) = max_wings {
+        if wings.len() as i64 >= max {
+            return Err(format!("{} wing(s) already (max_wings {max})", wings.len()));
+        }
+    }
+    let refill: i64 = wings
+        .iter()
+        .map(|w| (size - w["aircraft"].as_i64().unwrap_or(size)).max(0))
+        .sum();
+    let names: HashMap<i64, String> = list(designs, "designs")
+        .iter()
+        .filter_map(|d| Some((d["id"].as_i64()?, d["name"].as_str()?.trim().to_string())))
+        .filter(|(_, n)| !n.is_empty())
+        .collect();
+    let version = entry["version"].as_str().filter(|v| !v.is_empty());
+    let mut reserve: Vec<(Option<String>, i64)> = Vec::new();
+    for v in list(stock, "equipment")
+        .iter()
+        .flat_map(|row| list(row, "variants"))
+        .filter(|v| text(&v["type"]).starts_with(airframe))
+    {
+        let amount = v["amount"].as_f64().unwrap_or(0.0).floor() as i64;
+        let name = v["design_id"]
+            .as_i64()
+            .and_then(|id| names.get(&id).cloned());
+        if let Some(want) = version {
+            // a variant whose design name is unknown may still be the planned one: the tool
+            // matches the reserve row by the version name
+            if name.as_ref().is_some_and(|n| !n.eq_ignore_ascii_case(want)) {
+                continue;
+            }
+        }
+        if amount > 0 {
+            reserve.push((name.or_else(|| version.map(String::from)), amount));
+        }
+    }
+    let total: i64 = reserve.iter().map(|(_, n)| n).sum();
+    if total - refill < min {
+        return Err(format!(
+            "{total} {airframe} in reserve, {refill} kept for the refill of {} wing(s): below min_planes {min}",
+            wings.len()
+        ));
+    }
+    reserve.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+    match reserve.into_iter().find(|(_, n)| *n >= min) {
+        Some((Some(name), n)) => Ok((name, n.min(size).min(100))),
+        Some((None, _)) => Err(format!(
+            "the {airframe} reserve variant has no design name (hoi4_designs); name it in `version`"
+        )),
+        None => Err(format!(
+            "no single {airframe} variant has min_planes {min} in reserve"
+        )),
+    }
+}
+
+/// Where a new wing of `planes` is founded: `base_state` when its own base has room; else the base
+/// with the most free room in the mission region (`follow_region`) or in `base_region`.
+fn deploy_base(entry: &Value, flying: &Value, bases: &[Value], planes: i64) -> Option<i64> {
+    if let Some(target) = entry["base_state"].as_i64() {
+        return bases
+            .iter()
+            .any(|b| {
+                b["state_id"].as_i64() == Some(target) && b["free"].as_i64().unwrap_or(0) >= planes
+            })
+            .then_some(target);
+    }
+    if entry["follow_region"] == json!(true) && !flying.is_null() {
+        if let Some(target) = roomiest_base(bases, flying, None, planes) {
+            return Some(target);
+        }
+    }
+    let want = &entry["base_region"];
+    (!want.is_null())
+        .then(|| roomiest_base(bases, want, None, planes))
+        .flatten()
 }
 
 fn air_plan_step(
@@ -1507,8 +1666,10 @@ fn air_plan_step(
         note(state, "air_plan", "hoi4_air unreadable");
         return Ok(None);
     };
+    let bases = list(&air, "air_bases");
     let mut flying = 0;
-    for entry in entries {
+    let mut deploy_notes: Vec<String> = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
         if when_holds(state, tools, &entry["when"], now) != Truth::True {
             continue;
         }
@@ -1541,7 +1702,7 @@ fn air_plan_step(
             if name.is_empty() || state.skipped(now, "airplan", &name) {
                 continue;
             }
-            if let Some(base) = rebase_target(entry, wing, list(&air, "air_bases")) {
+            if let Some(base) = rebase_target(entry, region, wing, bases) {
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -1578,13 +1739,58 @@ fn air_plan_step(
                 "air_plan {name} {mission} over region {region_arg}: {ok} {why}"
             )));
         }
+        // reserve planes of the entry's airframe become a new wing (W: air.deploy_new_wings)
+        let key = item_id(entry).unwrap_or_else(|| index.to_string());
+        if deploy_settings(entry).is_none() || state.skipped(now, "airdeploy", &key) {
+            continue;
+        }
+        let stock = stockpile(state, tools, now).unwrap_or(Value::Null);
+        let airframe = text(&entry["airframe"]);
+        let in_reserve = !airframe.is_empty()
+            && list(&stock, "equipment")
+                .iter()
+                .flat_map(|row| list(row, "variants"))
+                .any(|v| text(&v["type"]).starts_with(airframe));
+        let designs = if in_reserve {
+            tools
+                .call("hoi4_designs", &json!({"kind": "plane"}))
+                .unwrap_or(Value::Null)
+        } else {
+            Value::Null
+        };
+        let (aircraft, planes) = match deploy_choice(entry, &air, &stock, &designs) {
+            Ok(choice) => choice,
+            Err(why) => {
+                deploy_notes.push(format!("{key}: {why}"));
+                continue;
+            }
+        };
+        let Some(base) = deploy_base(entry, region, bases, planes) else {
+            deploy_notes.push(format!(
+                "{key}: {planes} {aircraft} wait: no own air base of the plan with room for them"
+            ));
+            continue;
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_air_wing_create",
+            json!({"state_id": base, "aircraft": aircraft}),
+            "aw",
+        )?;
+        if !ok {
+            state.skip(now, "airdeploy", &key, 7 * DAY);
+        }
+        return Ok(Some(format!(
+            "air_plan {key}: new wing of {planes} {aircraft} from reserve at state {base}: {ok} {why}"
+        )));
     }
     state.skip(now, "mair", "x", 3 * DAY);
-    note(
-        state,
-        "air_plan",
-        format!("{flying} wing(s) on their planned mission"),
-    );
+    let mut line = format!("{flying} wing(s) on their planned mission");
+    if !deploy_notes.is_empty() {
+        line.push_str(&format!("; deploy: {}", deploy_notes.join("; ")));
+    }
+    note(state, "air_plan", line);
     Ok(None)
 }
 
@@ -2207,6 +2413,258 @@ pub(super) fn politics_auto_step(
             seen.join(", ")
         ),
     );
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rule 17 (supply.split_overdrawn): a stack that draws more than its province receives starves
+// every division in it alike; pulling out enough of them restores the rest.
+
+fn division_id(v: &Value) -> Option<String> {
+    v.as_str()
+        .map(String::from)
+        .or_else(|| v.as_i64().map(|n| n.to_string()))
+}
+
+/// The divisions to pull out of an overdrawn province: the army with most divisions there, its
+/// weakest ones first (lowest equipment fill, then hit points), until their supply need covers
+/// the province's shortfall, at most `share` of its divisions there (at least one, at most 18,
+/// never the whole army). (army, division ids, their supply need) or None.
+fn overdrawn_pick(
+    rows: &[&Value],
+    shortfall: f64,
+    share: f64,
+    army_size: impl Fn(&str) -> usize,
+    skip_army: impl Fn(&str) -> bool,
+) -> Option<(String, Vec<String>, f64)> {
+    let mut by_army: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    for r in rows {
+        if let Some(a) = r["army"].as_str().filter(|a| !a.is_empty()) {
+            by_army.entry(a.to_string()).or_default().push(r);
+        }
+    }
+    let (army, mut here) = by_army
+        .into_iter()
+        .filter(|(a, _)| !skip_army(a))
+        .max_by_key(|(a, v)| (v.len(), std::cmp::Reverse(a.clone())))?;
+    let total = army_size(&army).max(here.len());
+    let cap = ((here.len() as f64 * share).floor() as usize)
+        .clamp(1, 18)
+        .min(total.saturating_sub(1));
+    if cap == 0 {
+        return None;
+    }
+    let key = |r: &Value, k: &str| r[k].as_f64().unwrap_or(1.0);
+    here.sort_by(|a, b| {
+        key(a, "equipment_fill_min")
+            .total_cmp(&key(b, "equipment_fill_min"))
+            .then(key(a, "hp_percent").total_cmp(&key(b, "hp_percent")))
+    });
+    let (mut ids, mut need) = (Vec::new(), 0.0);
+    for r in here {
+        if ids.len() >= cap || (need >= shortfall && !ids.is_empty()) {
+            break;
+        }
+        if let Some(id) = division_id(&r["id"]) {
+            ids.push(id);
+            need += r["supply_need"].as_f64().unwrap_or(0.0);
+        }
+    }
+    (!ids.is_empty()).then_some((army, ids, need))
+}
+
+/// Where the pulled-out divisions go: a province where own divisions stand that still has
+/// `need` of headroom, in the source's state first, then where the same army stands, then
+/// anywhere; the most headroom first. (state, province) or None.
+fn overdrawn_destination(read: &Value, source: i64, army: &str, need: f64) -> Option<(i64, i64)> {
+    let src_state = list(read, "provinces")
+        .iter()
+        .find(|p| p["province_id"].as_i64() == Some(source))
+        .and_then(|p| p["state_id"].as_i64());
+    let army_provinces: HashSet<i64> = list(read, "divisions")
+        .iter()
+        .filter(|d| d["army"].as_str() == Some(army))
+        .filter_map(|d| d["province_id"].as_i64())
+        .collect();
+    list(read, "provinces")
+        .iter()
+        .filter_map(|p| {
+            let (pid, sid) = (p["province_id"].as_i64()?, p["state_id"].as_i64()?);
+            let room = p["headroom"].as_f64()?;
+            (pid != source && room >= need).then_some((pid, sid, room))
+        })
+        .max_by(|a, b| {
+            let rank = |(pid, sid, _): &(i64, i64, f64)| {
+                (Some(*sid) == src_state, army_provinces.contains(pid))
+            };
+            rank(a).cmp(&rank(b)).then(a.2.total_cmp(&b.2))
+        })
+        .map(|(pid, sid, _)| (sid, pid))
+}
+
+/// supply.split_overdrawn (`manage.overdrawn_floor` 35, `overdrawn_share` 0.5,
+/// `overdrawn_rest_days` 10), once a game day from hoi4_supply: in a province on
+/// `overdrawn_provinces` whose divisions' mean supply is below the floor (attrition starts at
+/// 35%), the weakest divisions of the army with most divisions there are detached into their own
+/// army (hoi4_army_detach), at most `overdrawn_share` of them, until their supply need covers the
+/// shortfall; the next tick moves that army to the province with room for them
+/// (hoi4_army_move: in the same state first, then where the same army stands). The new army rests
+/// there for `overdrawn_rest_days`: the war step does not drive it and the army consolidation
+/// does not fold it back until then. No province with room: nothing is detached and the digest
+/// says so (the supply relief's railway and hub levers remain).
+fn overdrawn_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let m = &plan["manage"];
+    if !m.is_object() || off(plan, "overdrawn") {
+        return Ok(None);
+    }
+    let rest = m["overdrawn_rest_days"]
+        .as_i64()
+        .filter(|d| *d >= 0)
+        .unwrap_or(10)
+        * DAY;
+    // a detached group moves on the tick after its detach
+    if let Some(at) = state.manage.spread.iter().position(|s| !s.moved) {
+        let go = state.manage.spread[at].clone();
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_move",
+            json!({"army": go.army, "state_id": go.state, "province_id": go.province}),
+            "so",
+        )?;
+        state.manage.spread[at].moved = true;
+        let line = format!(
+            "{} out of the overdrawn stack to state {} province {}: {ok} {why}",
+            go.army, go.state, go.province
+        );
+        note(state, "overdrawn", line.clone());
+        return Ok(Some(format!("overdrawn: {line}")));
+    }
+    state.manage.spread.retain(|s| now - s.since < rest);
+    if state.skipped(now, "mspread", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mspread", "x", DAY);
+    let Some(read) = supply(state, tools, now) else {
+        note(state, "overdrawn", "unknown: hoi4_supply unreadable");
+        return Ok(None);
+    };
+    let floor = fraction(&m["overdrawn_floor"], 0.35);
+    let share = fraction(&m["overdrawn_share"], 0.5);
+    let divisions: HashMap<String, &Value> = list(&read, "divisions")
+        .iter()
+        .filter_map(|d| Some((division_id(&d["id"])?, d)))
+        .collect();
+    let sizes: HashMap<String, usize> = list(&read, "armies")
+        .iter()
+        .filter_map(|a| {
+            Some((
+                a["army"].as_str()?.to_string(),
+                a["divisions"].as_u64()? as usize,
+            ))
+        })
+        .collect();
+    let mut lines: Vec<String> = Vec::new();
+    for o in list(&read, "overdrawn_provinces") {
+        let Some(pid) = o["province_id"].as_i64() else {
+            continue;
+        };
+        if state.skipped(now, "spread", &pid.to_string()) {
+            continue;
+        }
+        let rows: Vec<&Value> = list(o, "division_ids")
+            .iter()
+            .filter_map(|id| divisions.get(&division_id(id)?).copied())
+            .collect();
+        let pcts: Vec<f64> = rows
+            .iter()
+            .filter_map(|r| r["supply_percent"].as_f64())
+            .collect();
+        if pcts.is_empty() {
+            continue;
+        }
+        let mean = pcts.iter().sum::<f64>() / pcts.len() as f64;
+        if mean >= floor * 100.0 {
+            lines.push(format!(
+                "province {pid}: {mean:.0}% supply, above the floor"
+            ));
+            continue;
+        }
+        let shortfall = o["shortfall"].as_f64().unwrap_or(0.0);
+        let Some((army, ids, need)) = overdrawn_pick(
+            &rows,
+            shortfall,
+            share,
+            |a| sizes.get(a).copied().unwrap_or(0),
+            |a| {
+                super::plan_military::holding(state, a)
+                    || super::plan_military::invading(state, plan, a)
+                    || state.manage.spread.iter().any(|s| s.army == a)
+            },
+        ) else {
+            lines.push(format!("province {pid}: no army whose divisions may leave"));
+            continue;
+        };
+        let Some((to_state, to_province)) = overdrawn_destination(&read, pid, &army, need) else {
+            state.skip(now, "spread", &pid.to_string(), 3 * DAY);
+            lines.push(format!(
+                "province {pid} ({mean:.0}% supply): no province with {need:.2} supply of room for {} of {army}'s divisions; railway or hub needed",
+                ids.len()
+            ));
+            continue;
+        };
+        let present: HashSet<String> = sizes.keys().cloned().collect();
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_detach",
+            json!({"army": army, "divisions": ids}),
+            "so",
+        )?;
+        state.skip(now, "spread", &pid.to_string(), 5 * DAY);
+        let new = if ok {
+            tools
+                .call("hoi4_armies", &json!({"threat": false}))
+                .ok()
+                .and_then(|after| {
+                    list(&after, "armies")
+                        .iter()
+                        .map(|a| text(&a["army"]).to_string())
+                        .find(|n| !n.is_empty() && !present.contains(n))
+                })
+        } else {
+            None
+        };
+        if let Some(new) = &new {
+            state.war_cool.insert(new.clone(), now + rest);
+            state.manage.spread.push(Spread {
+                army: new.clone(),
+                state: to_state,
+                province: to_province,
+                moved: false,
+                since: now,
+            });
+        }
+        let line = format!(
+            "province {pid} at {mean:.0}% supply (shortfall {shortfall:.2}): {} of {army}'s divisions out into {} for state {to_state} province {to_province}: {ok} {why}",
+            ids.len(),
+            new.as_deref().unwrap_or("no new army seen")
+        );
+        note(state, "overdrawn", line.clone());
+        return Ok(Some(format!("overdrawn: {line}")));
+    }
+    let line = if lines.is_empty() {
+        "no overdrawn province".to_string()
+    } else {
+        lines.join("; ")
+    };
+    note(state, "overdrawn", line);
     Ok(None)
 }
 
@@ -3649,16 +4107,224 @@ mod tests {
         let bases = read["air_bases"].as_array().unwrap();
         // base 3 stands in state 550: the wing goes there
         assert_eq!(
-            rebase_target(&json!({"base_state": 550}), wing, bases),
+            rebase_target(&json!({"base_state": 550}), &Value::Null, wing, bases),
             Some(550)
         );
         // no own base in state 908 (not built yet): no rebase order
         assert_eq!(
-            rebase_target(&json!({"base_state": 908}), wing, bases),
+            rebase_target(&json!({"base_state": 908}), &Value::Null, wing, bases),
             None
         );
         // already there
-        assert_eq!(rebase_target(&json!({"base_state": 2}), wing, bases), None);
+        assert_eq!(
+            rebase_target(&json!({"base_state": 2}), &Value::Null, wing, bases),
+            None
+        );
+    }
+
+    #[test]
+    fn a_wing_that_follows_its_region_is_based_inside_it() {
+        let read = air_read();
+        let wing = &read["wings"][0]; // based in state 2 (region Italy, over capacity)
+        let bases = read["air_bases"].as_array().unwrap();
+        let follow = json!({"follow_region": true, "base_region": 10});
+        // flying over Ethiopia: the base there with the most room
+        assert_eq!(rebase_target(&follow, &json!(273), wing, bases), Some(551));
+        // already based inside the region it flies over: it stays
+        let mut there = wing.clone();
+        there["air_base"] = json!({"base_id": 3, "state_id": 550});
+        assert_eq!(
+            rebase_target(&follow, &json!("Ethiopia"), &there, bases),
+            None
+        );
+        // no own base inside the region flown over: the planned base_region decides
+        let far = json!({"follow_region": true, "base_region": 273});
+        assert_eq!(rebase_target(&far, &json!(999), wing, bases), Some(551));
+        // without follow_region the mission region does not move the wing
+        assert_eq!(
+            rebase_target(&json!({"base_region": 273}), &json!(10), &there, bases),
+            None
+        );
+    }
+
+    fn reserve(amount: f64) -> Value {
+        json!({"equipment": [{"archetype": "small_plane_airframe", "stockpile": amount,
+            "variants": [{"type": "small_plane_airframe_0", "design_id": 7, "amount": amount}]}]})
+    }
+
+    #[test]
+    fn reserve_planes_beyond_the_wings_refill_found_a_new_wing() {
+        let designs = json!({"designs": [{"id": 7, "name": "CR.32"}]});
+        let entry = json!({"airframe": "small_plane_airframe_0", "version": "CR.32",
+            "mission": "air_superiority", "region": 273, "base_region": 273, "deploy": true});
+        // 1. Stormo holds 40 of 100: 60 of the reserve are its refill
+        assert_eq!(
+            deploy_choice(&entry, &air_read(), &reserve(160.0), &designs),
+            Ok(("CR.32".to_string(), 100))
+        );
+        let short = deploy_choice(&entry, &air_read(), &reserve(90.0), &designs).unwrap_err();
+        assert!(short.contains("below min_planes 50"), "{short}");
+        let capped = json!({"airframe": "small_plane_airframe_0", "deploy": {"max_wings": 1}});
+        assert!(
+            deploy_choice(&capped, &air_read(), &reserve(500.0), &designs)
+                .unwrap_err()
+                .contains("max_wings 1")
+        );
+        let named = json!({"wing": "1. Stormo", "deploy": true});
+        assert!(
+            deploy_choice(&named, &air_read(), &reserve(500.0), &designs)
+                .unwrap_err()
+                .contains("airframe")
+        );
+        // another variant than the planned version is left in reserve
+        let other = json!({"designs": [{"id": 7, "name": "CR.42"}]});
+        assert!(deploy_choice(&entry, &air_read(), &reserve(500.0), &other).is_err());
+
+        let tools = fake(vec![
+            ("hoi4_air", air_read()),
+            ("hoi4_stockpile", reserve(160.0)),
+            ("hoi4_designs", designs),
+        ]);
+        let mut wings = air_read();
+        wings["wings"][0]["air_base"] = json!({"base_id": 4, "state_id": 551});
+        wings["wings"][0]["missions"] = json!(["air_superiority"]);
+        wings["wings"][0]["region"] = json!({"id": 273, "name": "Ethiopia"});
+        tools.replies.borrow_mut().insert("hoi4_air".into(), wings);
+        let plan = json!({"air_plan": [entry]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("air_plan 0: new wing of 100 CR.32 from reserve at state 551: true Verified")
+        );
+        assert_eq!(
+            actions(&tools)[0].1["state_id"],
+            json!(551),
+            "the base of base_region with the most room"
+        );
+        // too few in reserve: nothing is sent and the digest says why
+        let tools = fake(vec![
+            ("hoi4_air", air_read()),
+            ("hoi4_stockpile", reserve(30.0)),
+        ]);
+        let plan = json!({"air_plan": [{"airframe": "fighter_equipment_0", "deploy": true,
+            "base_state": 2}]});
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        assert!(
+            state.manage.notes["air_plan"].contains("0 fighter_equipment_0 in reserve"),
+            "{}",
+            state.manage.notes["air_plan"]
+        );
+        assert_eq!(
+            reads(&tools, "hoi4_designs"),
+            0,
+            "no reserve of it: no design read"
+        );
+    }
+
+    #[test]
+    fn a_new_wing_waits_for_a_base_with_room() {
+        let bases = air_read()["air_bases"].as_array().unwrap().clone();
+        // state 2's base is over capacity
+        assert_eq!(
+            deploy_base(&json!({"base_state": 2}), &Value::Null, &bases, 50),
+            None
+        );
+        assert_eq!(
+            deploy_base(&json!({"base_state": 550}), &Value::Null, &bases, 100),
+            Some(550)
+        );
+        assert_eq!(
+            deploy_base(&json!({"follow_region": true}), &json!(273), &bases, 100),
+            Some(551)
+        );
+        assert_eq!(
+            deploy_base(&json!({"base_region": 273}), &Value::Null, &bases, 400),
+            None
+        );
+    }
+
+    fn overdrawn_read(pct: f64, room_here: f64) -> Value {
+        let div = |id: &str, province: i64, fill: f64| {
+            json!({"id": id, "army": "A", "state_id": 10, "province_id": province,
+                "supply_percent": pct, "supply_need": 0.5, "equipment_fill_min": fill, "hp_percent": 90.0})
+        };
+        json!({"divisions": [
+                div("1", 100, 0.9), div("2", 100, 0.4), div("3", 100, 0.95), div("4", 100, 0.6),
+                div("5", 100, 0.5), div("6", 100, 1.0), div("7", 200, 1.0), div("8", 200, 1.0)],
+            "armies": [{"army": "A", "divisions": 8}],
+            "provinces": [
+                {"province_id": 100, "state_id": 10, "headroom": -1.2},
+                {"province_id": 200, "state_id": 10, "headroom": room_here},
+                {"province_id": 300, "state_id": 11, "headroom": 5.0}],
+            "overdrawn_provinces": [{"province_id": 100, "shortfall": 1.2,
+                "division_ids": ["1", "2", "3", "4", "5", "6"]}]})
+    }
+
+    #[test]
+    fn the_weakest_divisions_leave_an_overdrawn_stack_for_a_province_with_room() {
+        let tools = fake(vec![
+            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
+            (
+                "hoi4_armies",
+                json!({"armies": [{"army": "A"}, {"army": "Army 9"}]}),
+            ),
+        ]);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("overdrawn: province 100 at 20% supply (shortfall 1.20): 3 of A's divisions out into Army 9 for state 10 province 200: true Verified")
+        );
+        // the three with the lowest equipment fill cover the 1.2 shortfall (3 x 0.5)
+        assert_eq!(actions(&tools)[0].1["divisions"], json!(["2", "5", "4"]));
+        assert!(state
+            .war_cool
+            .get("Army 9")
+            .is_some_and(|t| *t == START + 10 * DAY));
+        // the next tick moves the new army; then nothing until the next game day
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("overdrawn: Army 9 out of the overdrawn stack to state 10 province 200: true Verified")
+        );
+        assert_eq!(
+            actions(&tools)[1].1,
+            json!({"army": "Army 9", "state_id": 10, "province_id": 200,
+                "request_id": actions(&tools)[1].1["request_id"], "lease_token": "l"})
+        );
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn an_overdrawn_stack_above_the_floor_or_without_room_elsewhere_stays() {
+        let plan = json!({"manage": {"overdrawn_floor": 35}});
+        let tools = fake(vec![("hoi4_supply", overdrawn_read(60.0, 2.0))]);
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(state.manage.notes["overdrawn"].contains("above the floor"));
+        // no province has 1.5 of room: nothing leaves, the digest names the lever
+        let mut read = overdrawn_read(20.0, 0.1);
+        read["provinces"][2]["headroom"] = json!(1.0);
+        let tools = fake(vec![("hoi4_supply", read)]);
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        assert!(
+            state.manage.notes["overdrawn"].contains("railway or hub needed"),
+            "{}",
+            state.manage.notes["overdrawn"]
+        );
+        // switched off
+        let off = json!({"manage": {"off": ["overdrawn"]}});
+        let tools = fake(vec![("hoi4_supply", overdrawn_read(20.0, 2.0))]);
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &off, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
     }
 
     #[test]

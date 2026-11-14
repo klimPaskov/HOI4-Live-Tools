@@ -309,6 +309,7 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_agency_upgrade",
     "hoi4_air_mission",
     "hoi4_air_rebase",
+    "hoi4_air_wing_create",
     "hoi4_army_assign",
     "hoi4_army_commander",
     "hoi4_army_create",
@@ -337,8 +338,12 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_faction_create",
     "hoi4_faction_invite_accept",
     "hoi4_fleet_admiral",
+    "hoi4_fleet_assign",
+    "hoi4_fleet_merge",
     "hoi4_fleet_mission",
     "hoi4_fleet_region",
+    "hoi4_fleet_reserve",
+    "hoi4_fleet_split",
     "hoi4_focus_start",
     "hoi4_mio_design_team",
     "hoi4_mio_policy",
@@ -2197,13 +2202,22 @@ fn armies_step(
         // An army with battle-plan orders is never emptied (the game deletes its orders).
         if cfg["consolidate"] != json!(false) {
             // Armies with a planned role (army_layout, a guard post or a hold_targets post) are
-            // small on purpose: never fold them into others or others into them.
+            // small on purpose: never fold them into others or others into them. Nor is an army
+            // the executor formed for a purpose that still holds (war_cool: a landing army, a
+            // group pulled out of an overdrawn province to rest).
             let roles: HashSet<String> = state
                 .layout
                 .values()
                 .filter(|a| !a.is_empty())
                 .cloned()
                 .chain(state.war_guard.keys().cloned())
+                .chain(
+                    state
+                        .war_cool
+                        .iter()
+                        .filter(|(_, until)| **until > now)
+                        .map(|(a, _)| a.clone()),
+                )
                 .collect();
             let mut sizes: Vec<(String, u64, bool)> = list(&roster, "armies")
                 .iter()

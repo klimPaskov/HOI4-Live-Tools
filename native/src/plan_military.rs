@@ -36,6 +36,14 @@
 //!                1. any own task force on a mission whose strength is below `repair_below`
 //!                   (default 0.5; 50 means 50%) is sent to port with mission hold and left
 //!                   there until it is back at `repair_until` (default 0.9);
+//!                1b. task-force shape (hoi4_fleet_assign / merge / split / reserve, one order per
+//!                   tick, re-read every time): a task force named in `fleets[].task_forces` that
+//!                   sails in another fleet joins this one; `fleets[].merge` true joins all of the
+//!                   fleet's task forces into one (again at most once a week: task forces in other
+//!                   ports stay apart); a task force of the fleet with more ships than
+//!                   `fleets[].task_force_max` is split in half (not with merge); a task force named
+//!                   in `reserve` goes to the reserve fleet once. Repairing task forces and the
+//!                   running invasion's fleet are left alone;
 //!                2. admirals once: `fleets[].admiral` or `admirals` ({"<fleet>":"<admiral>"} or
 //!                   [{"fleet","admiral"}]) through hoi4_fleet_admiral, only for a fleet without
 //!                   one, and never an admiral who leads another fleet (the tool would move him);
@@ -1836,6 +1844,131 @@ fn region_spec(v: &Value) -> Option<(String, Option<i64>)> {
     }
 }
 
+/// Step 1b of the navy: one shaping order (assign, merge, split, reserve) or None.
+fn fleet_shape(
+    state: &mut State,
+    tools: &dyn Tools,
+    cfg: &Value,
+    fleets: &[Value],
+    invasion: Option<&str>,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let repairing = |state: &State, tf: &str| state.done.contains_key(&format!("nrep:{tf}"));
+    let fleet_of = |tf: &str| {
+        fleets.iter().find(|row| {
+            list(row, "task_forces")
+                .iter()
+                .any(|t| same_name(text(&t["task_force"]), tf))
+        })
+    };
+    let mut order: Option<(&'static str, Value, String, String)> = None;
+    'fleets: for f in list(cfg, "fleets") {
+        let Some(row) = fleets
+            .iter()
+            .find(|r| same_name(text(&f["fleet"]), text(&r["fleet"])))
+        else {
+            continue;
+        };
+        let fleet = text(&row["fleet"]).to_string();
+        if invasion.is_some_and(|i| same_name(i, &fleet)) {
+            continue;
+        }
+        // task forces the plan puts in this fleet
+        for want in strings(f, "task_forces") {
+            let Some(home) = fleet_of(&want) else {
+                continue;
+            };
+            let home_name = text(&home["fleet"]);
+            if same_name(home_name, &fleet)
+                || invasion.is_some_and(|i| same_name(i, home_name))
+                || repairing(state, &want)
+                || state.skipped(now, "nshape", &want)
+            {
+                continue;
+            }
+            order = Some((
+                "hoi4_fleet_assign",
+                json!({"task_force": want, "to_fleet": fleet}),
+                want.clone(),
+                format!("{want} from {home_name} into {fleet}"),
+            ));
+            break 'fleets;
+        }
+        let tfs: Vec<&Value> = list(row, "task_forces")
+            .iter()
+            .filter(|t| t["mission"]["name"] != json!("reserve"))
+            .collect();
+        if f["merge"] == json!(true) {
+            if tfs.len() > 1 && !state.skipped(now, "nshape", &fleet) {
+                order = Some((
+                    "hoi4_fleet_merge",
+                    json!({"fleet": fleet}),
+                    fleet.clone(),
+                    format!("{fleet}: {} task forces into one", tfs.len()),
+                ));
+                break;
+            }
+            continue;
+        }
+        if let Some(max) = f["task_force_max"].as_u64().filter(|m| *m >= 1) {
+            for t in &tfs {
+                let name = text(&t["task_force"]).to_string();
+                let ships = t["ship_count"].as_u64().unwrap_or(0);
+                if ships > max
+                    && !name.is_empty()
+                    && !repairing(state, &name)
+                    && !state.skipped(now, "nshape", &name)
+                {
+                    order = Some((
+                        "hoi4_fleet_split",
+                        json!({"task_force": name}),
+                        name.clone(),
+                        format!("{name} ({fleet}): {ships} ships above task_force_max {max}, split in half"),
+                    ));
+                    break 'fleets;
+                }
+            }
+        }
+    }
+    if order.is_none() {
+        for want in strings(cfg, "reserve") {
+            let Some(home) = fleet_of(&want) else {
+                continue;
+            };
+            let in_reserve = list(home, "task_forces").iter().any(|t| {
+                same_name(text(&t["task_force"]), &want) && t["mission"]["name"] == json!("reserve")
+            });
+            if in_reserve
+                || invasion.is_some_and(|i| same_name(i, text(&home["fleet"])))
+                || state.skipped(now, "nshape", &want)
+            {
+                continue;
+            }
+            order = Some((
+                "hoi4_fleet_reserve",
+                json!({"task_force": want}),
+                want.clone(),
+                format!("{want} to the reserve fleet"),
+            ));
+            break;
+        }
+    }
+    let Some((tool, args, key, what)) = order else {
+        return Ok(None);
+    };
+    let (ok, why) = state.act(tools, lease, tool, args, "ns")?;
+    // a refused order waits a week; a merge is not repeated within the week either (task
+    // forces in other ports stay apart and would be merged again every tick)
+    if !ok || tool == "hoi4_fleet_merge" {
+        state.skip(now, "nshape", &key, 7 * DAY);
+    }
+    if !ok && code(&why) == "nothing_to_change" {
+        note(state, "navy_shape", format!("{what}: nothing to change"));
+    }
+    Ok(Some(format!("navy shape: {what}: {ok} {why}")))
+}
+
 fn navy_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -1905,6 +2038,18 @@ fn navy_step(
             "navy: {name} at {:.0}% strength to port (hold): {ok} {why}",
             share * 100.0
         )));
+    }
+    // 1b. task-force shape: assign, merge, split, reserve
+    if let Some(line) = fleet_shape(
+        state,
+        tools,
+        cfg,
+        fleets,
+        invasion_fleet.as_deref(),
+        lease,
+        now,
+    )? {
+        return Ok(Some(line));
     }
     // 2. admirals, once per fleet, never moved from another fleet
     for (fleet, admiral) in admiral_plans(cfg) {
@@ -3110,6 +3255,102 @@ mod tests {
                 "mission": {"name": m}})).collect::<Vec<_>>()},
             {"fleet": "Squadra 2", "admiral": "Cavagnari", "home_port": {"state_id": 9},
              "assigned_regions": [], "task_forces": []}]})
+    }
+
+    #[test]
+    fn the_navy_shapes_task_forces_before_their_missions() {
+        let read = |tfs: &[(&str, &str, u64)], other: &[(&str, &str, u64)]| {
+            let rows = |v: &[(&str, &str, u64)]| {
+                v.iter()
+                    .map(|(t, m, n)| {
+                        json!({"task_force": t, "ship_count": n,
+                        "strength_percent": 100.0, "mission": {"name": m}})
+                    })
+                    .collect::<Vec<_>>()
+            };
+            json!({"fleets": [
+                {"fleet": "Squadra 1", "admiral": "A", "home_port": {"state_id": 2},
+                 "assigned_regions": [], "task_forces": rows(tfs)},
+                {"fleet": "Squadra 2", "admiral": "B", "home_port": {"state_id": 9},
+                 "assigned_regions": [], "task_forces": rows(other)}]})
+        };
+        let tools = fake(vec![(
+            "hoi4_fleets",
+            read(
+                &[("Screens", "hold", 20)],
+                &[("Cruisers", "hold", 4), ("Old BB", "hold", 2)],
+            ),
+        )]);
+        let plan = json!({"navy": {"posture": "coastal", "reserve": ["Old BB"],
+            "fleets": [{"fleet": "Squadra 1", "task_forces": ["Cruisers"], "task_force_max": 12},
+                       {"fleet": "Squadra 2", "merge": true}]}});
+        let mut state = State::default();
+        // 1. the planned task force joins its fleet
+        let out = navy_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("navy shape: Cruisers from Squadra 2 into Squadra 1: true Verified")
+        );
+        // 2. 20 ships above task_force_max 12: split in half
+        tools.reply(
+            "hoi4_fleets",
+            read(
+                &[("Screens", "hold", 20), ("Cruisers", "hold", 4)],
+                &[("Old BB", "hold", 2), ("Sub", "hold", 3)],
+            ),
+        );
+        let out = navy_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("navy shape: Screens (Squadra 1): 20 ships above task_force_max 12, split in half: true Verified")
+        );
+        // 3. Squadra 2 is merged into one task force, once a week at most
+        tools.reply(
+            "hoi4_fleets",
+            read(
+                &[
+                    ("Screens", "hold", 10),
+                    ("Screens 2", "hold", 10),
+                    ("Cruisers", "hold", 4),
+                ],
+                &[("Old BB", "hold", 2), ("Sub", "hold", 3)],
+            ),
+        );
+        let out = navy_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("navy shape: Squadra 2: 2 task forces into one: true Verified")
+        );
+        // 4. the planned reserve; the merge waits its week (the other port's task force stays)
+        let out = navy_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("navy shape: Old BB to the reserve fleet: true Verified")
+        );
+        let sent: Vec<String> = actions(&tools).iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(
+            sent,
+            [
+                "hoi4_fleet_assign",
+                "hoi4_fleet_split",
+                "hoi4_fleet_merge",
+                "hoi4_fleet_reserve"
+            ]
+        );
+        // in the reserve fleet: nothing more to shape, the missions step runs
+        tools.reply(
+            "hoi4_fleets",
+            read(
+                &[
+                    ("Screens", "hold", 10),
+                    ("Screens 2", "hold", 10),
+                    ("Cruisers", "hold", 4),
+                ],
+                &[("Old BB", "reserve", 2), ("Sub", "hold", 3)],
+            ),
+        );
+        let out = navy_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(out, None);
     }
 
     #[test]

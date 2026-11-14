@@ -518,6 +518,44 @@ class CoverageBuildRules(unittest.TestCase):
         plan["air_plan"][0]["count"] = 600
         self.assertHit(plan, "air.base_capacity", "warning", "state 550")
 
+    # -------------------------------------------------------------- supply.overdrawn
+    def test_supply_overdrawn(self):
+        self.assertNoHit(self.ita, "supply.overdrawn")
+        plan = copy.deepcopy(self.ita)
+        plan.setdefault("manage", {})["overdrawn_floor"] = 20
+        self.assertHit(plan, "supply.overdrawn", "warning", "attrition starts")
+        plan["manage"]["overdrawn_floor"] = 0.4
+        self.assertNoHit(plan, "supply.overdrawn")
+
+    # -------------------------------------------------------------- navy.shape
+    def test_navy_shape(self):
+        self.assertNoHit(self.ita, "navy.shape")
+        plan = copy.deepcopy(self.ita)
+        plan["navy"] = {"posture": "coastal", "reserve": ["Old"],
+                        "fleets": [{"fleet": "A", "merge": True, "task_force_max": 10, "task_forces": ["X"]},
+                                   {"fleet": "B", "task_forces": ["x", "Old"]}]}
+        self.assertHit(plan, "navy.shape", "error", "merge and task_force_max")
+        self.assertHit(plan, "navy.shape", "error", "planned into 'A'")
+        self.assertHit(plan, "navy.shape", "error", "into the reserve")
+
+    # -------------------------------------------------------------- air.deploy
+    def test_air_deploy(self):
+        self.assertNoHit(self.ita, "air.deploy")
+        plan = copy.deepcopy(self.ita)
+        plan["air_plan"][0]["deploy"] = True
+        plan["air_plan"][0].pop("base_state", None)
+        plan["air_plan"][0].pop("base_region", None)
+        self.assertHit(plan, "air.deploy", "error", "no base")
+        plan["air_plan"][0]["follow_region"] = True
+        self.assertNoHit(plan, "air.deploy", "error")
+        plan["air_plan"][0].pop("airframe", None)
+        plan["air_plan"][0]["wing"] = "1. Stormo"
+        self.assertHit(plan, "air.deploy", "error", "needs `airframe`")
+        plan = copy.deepcopy(self.ita)
+        plan["air_plan"][0]["deploy"] = {"min_planes": 40}
+        plan["air_plan"][0]["base_state"] = 842  # no air base there at the start
+        self.assertHit(plan, "air.deploy", "warning", "base_state 842")
+
     # -------------------------------------------------------------- templates
     def test_templates(self):
         plan = copy.deepcopy(self.ita)

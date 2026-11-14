@@ -1831,6 +1831,42 @@
           "fallback_mission": {
             "type": "string"
           },
+          "follow_region": {
+            "type": "boolean",
+            "default": false,
+            "description": "true: the wing is based inside the region it flies over now (region, or then_region once switch_when holds), at the own base there with the most free room, so a mission region that moves with the front takes its wings along; with no base with room there, base_state / base_region decide"
+          },
+          "deploy": {
+            "type": [
+              "boolean",
+              "object"
+            ],
+            "properties": {
+              "min_planes": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 50,
+                "description": "reserve planes of one variant needed before a new wing is founded"
+              },
+              "max_wings": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "no new wing while this many wings match the entry"
+              },
+              "wing_size": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 100,
+                "description": "planes a full wing holds: the entry's wings below it draw their refill from the reserve first"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "description": "true or {min_planes, max_wings, wing_size}: reserve planes of the entry's airframe (needs airframe; version by design name) beyond the refill of its wings found a new wing (hoi4_air_wing_create, at most 100) at base_state, else at the base with the most free room in the mission region (follow_region) or base_region; the new wing then flies the entry's mission"
+          },
           "rule": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
@@ -2665,7 +2701,8 @@
               "stockpile",
               "trucks",
               "casualties",
-              "air_superiority"
+              "air_superiority",
+              "overdrawn"
             ]
           }
         },
@@ -2744,6 +2781,29 @@
           "description": "a deficit that outlasts this with auto_import on wakes the player",
           "x-rule": "resources",
           "minimum": 1
+        },
+        "overdrawn_floor": {
+          "type": "number",
+          "default": 35,
+          "description": "an overdrawn province (hoi4_supply overdrawn_provinces) whose divisions' mean supply is below this is thinned: its weakest divisions leave for a province with room; a fraction (0.35) or a percent (35); the lint compares it with SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION",
+          "x-rule": "overdrawn",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "overdrawn_share": {
+          "type": "number",
+          "default": 0.5,
+          "description": "at most this share of an army's divisions in the overdrawn province leave at once (the weakest first, until their supply need covers the shortfall)",
+          "x-rule": "overdrawn",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "overdrawn_rest_days": {
+          "type": "integer",
+          "default": 10,
+          "description": "the army formed from the pulled-out divisions rests this many game days: the war step does not drive it and consolidation does not fold it back before",
+          "x-rule": "overdrawn",
+          "minimum": 0
         },
         "convoys_free": {
           "type": "number",
@@ -3058,6 +3118,24 @@
                   "$ref": "#/definitions/fleet_mission"
                 }
               },
+              "task_forces": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "task forces (names as hoi4_fleets lists them) that belong in this fleet: one sailing in another fleet is moved here (hoi4_fleet_assign)"
+              },
+              "merge": {
+                "type": "boolean",
+                "default": false,
+                "description": "true: the fleet's task forces are joined into one (hoi4_fleet_merge, at most once a game week; task forces in other ports stay apart)"
+              },
+              "task_force_max": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "a task force of this fleet with more ships is split in half (hoi4_fleet_split) until none is above it; not with merge"
+              },
               "why": {
                 "type": "string",
                 "description": "Free text for people and the player; never read by the executor."
@@ -3148,6 +3226,14 @@
             ]
           },
           "description": "{\"<fleet>\": \"<admiral>\"} or [{fleet, admiral}], after fleets[].admiral"
+        },
+        "reserve": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "task forces sent to the reserve fleet once (hoi4_fleet_reserve): old hulls kept out of battle without deleting them"
         },
         "repair_below": {
           "type": "number",
