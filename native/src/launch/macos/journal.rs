@@ -105,7 +105,13 @@ pub enum Outcome {
     /// so no input could have acted on it: settles even an unresolved retry as NotApplied.
     TargetAbsent(Value),
     Diverged(Value),
+    /// Not provable yet: partial or foreign effects, or state still moving. Re-observed until
+    /// the settlement window ends.
     Unknown,
+    /// The adapter has nothing in the game to read for this action (its verdict comes only from
+    /// what its own dispatch saw): re-observing cannot change it, so the request closes as
+    /// `Unconfirmed` at once instead of holding the input lane for the whole window.
+    Unobservable,
 }
 
 /// A new strict adapter supplies a result from this attempt only. It must
@@ -611,6 +617,10 @@ impl GameJournal {
                     Ok(Outcome::Unknown) => {
                         last = "state neither reached the target nor stayed unchanged".into();
                     }
+                    Ok(Outcome::Unobservable) => {
+                        last = "the action's effect cannot be read back".into();
+                        break None;
+                    }
                     Ok(outcome) => break Some(outcome),
                     Err(error) => {
                         last = bounded(&format!("{}: {}", error.code, error.message), 200);
@@ -631,7 +641,7 @@ impl GameJournal {
             Some(Outcome::Reached(v)) => (Status::Verified, v),
             Some(Outcome::Unchanged(v) | Outcome::TargetAbsent(v)) => (Status::NotApplied, v),
             Some(Outcome::Diverged(v)) => (Status::Diverged, v),
-            Some(Outcome::Unknown) | None => (
+            Some(Outcome::Unknown | Outcome::Unobservable) | None => (
                 Status::Unconfirmed,
                 serde_json::json!({
                     "closed": "settlement_window",
@@ -1041,6 +1051,31 @@ mod tests {
         assert_eq!(e.code, "action_deadline");
         assert_eq!(j.receipts["absent"].status, Status::NotApplied);
         assert!(j.unresolved().is_none());
+    }
+    #[test]
+    fn an_unobservable_outcome_closes_at_once_without_polling() {
+        let dir = dir("unobservable");
+        let mut j = journal(&dir);
+        j.window = Duration::from_secs(30);
+        let started = Instant::now();
+        let mut polls = 0;
+        let err = j
+            .execute(
+                "u1",
+                &epoch(),
+                json!({"kind":"construction_order","line":1}),
+                &mut || {
+                    polls += 1;
+                    Ok(Outcome::Unobservable)
+                },
+                &mut || Err(Error::new("input_readback_failed", "x")),
+            )
+            .unwrap_err();
+        assert_eq!(err.code, "action_unconfirmed");
+        assert_eq!(polls, 1);
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(j.receipts["u1"].status, Status::Unconfirmed);
+        assert!(!j.blocked());
     }
     #[test]
     fn settlement_reads_run_inside_the_read_only_window() {

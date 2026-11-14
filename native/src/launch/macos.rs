@@ -3207,7 +3207,8 @@ impl MacClock {
                     (None, true) => {
                         journal::Outcome::Unchanged(json!({"note": "refused before any click"}))
                     }
-                    (None, false) => journal::Outcome::Unknown,
+                    // Only this dispatch's own result says what happened to the order.
+                    (None, false) => journal::Outcome::Unobservable,
                 })
             };
             let keys = &self.keys;
