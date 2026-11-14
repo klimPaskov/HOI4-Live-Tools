@@ -619,6 +619,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
 | `hoi4_focus_completed` | Preview: own engine completion-membership IDs and active key without opening GUI; bounded sorted pages; actual Rhineland membership verified in run052 |
+| `hoi4_focus_available` | Whether listed own focuses can be started now, without opening the tree: the focus files of the running content (install plus enabled mods) judged against the own state read from memory; `available`, `unavailable` (certain, with the failing requirement) or `unknown` (a trigger nothing reads); read-only |
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics; paused Sprite closure and the later capacity refusal recorded |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |

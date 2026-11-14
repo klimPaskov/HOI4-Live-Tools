@@ -1,0 +1,45 @@
+focus_tree = {
+	id = zeta_focus
+	country = { factor = 0 modifier = { add = 10 tag = ZZA } }
+	shared_focus = ZZS_shared
+	focus = { id = ZZA_root cost = 5 }
+	focus = { id = ZZA_peace_works cost = 10 prerequisite = { focus = ZZA_root } available = { has_war = no } }
+	focus = { id = ZZA_war_plan cost = 10 prerequisite = { focus = ZZA_root } available = { has_war_with = QQB } }
+	focus = { id = ZZA_left cost = 10 prerequisite = { focus = ZZA_root } mutually_exclusive = { focus = ZZA_right } }
+	focus = { id = ZZA_right cost = 10 prerequisite = { focus = ZZA_root } mutually_exclusive = { focus = ZZA_left } }
+	focus = { id = ZZA_either cost = 10 prerequisite = { focus = ZZA_left focus = ZZA_right } prerequisite = { focus = ZZA_peace_works } }
+	focus = { id = ZZA_flagged cost = 10 available = { has_country_flag = zza_secret } }
+	focus = { id = ZZA_flag_or_war cost = 10 available = { OR = { has_country_flag = zza_secret has_war = yes } } }
+	focus = { id = ZZA_flag_and_peace cost = 10 available = { has_country_flag = zza_secret has_war = no } }
+	focus = { id = ZZA_dlc_branch cost = 10 allow_branch = { has_dlc = "Zeta Expansion" } }
+	focus = { id = ZZA_dyn_branch cost = 10 allow_branch = { has_completed_focus = ZZA_root } }
+	focus = { id = ZZA_bypassed cost = 10 available = { QQB = { exists = yes } } bypass = { QQB = { exists = no } } }
+	focus = { id = ZZA_late cost = 10 available = { date > 1938.1.1 } }
+	focus = { id = ZZA_state cost = 10 available = { owns_state = 9001 9002 = { is_controlled_by = ROOT } } }
+	focus = { id = ZZA_scripted cost = 10 available = { zza_is_ready = yes } }
+	focus = { id = ZZA_too_deep cost = 10 available = { zza_deep_1 = yes } }
+	focus = { id = ZZA_if cost = 10 available = {
+		if = { limit = { has_war = yes } has_war_with = QQB }
+		else = { has_completed_focus = ZZA_root }
+	} }
+	focus = { id = ZZA_if_agree cost = 10 available = {
+		if = { limit = { has_country_flag = zza_secret } has_completed_focus = ZZA_root }
+		else = { has_war = no }
+	} }
+	focus = { id = ZZA_count cost = 10 available = {
+		count_triggers = { amount = 2 has_war = no has_completed_focus = ZZA_root has_country_flag = zza_secret }
+	} }
+	focus = { id = ZZA_tooltip cost = 10 available = {
+		custom_trigger_tooltip = { tooltip = ZZA_TOOLTIP NOT = { is_subject = yes } }
+		hidden_trigger = { is_ai = no }
+	} }
+	focus = { id = ZZA_numbers cost = 10 available = { has_stability > 0.5 has_political_power > 100 } }
+	focus = { id = ZZA_neighbours cost = 10 available = { any_neighbor_country = { has_war = yes } } }
+	focus = { id = ZZA_faction cost = 10 available = { is_in_faction_with = QQC NOT = { has_subject = QQB } } }
+	focus = { id = ZZA_their_war cost = 10 available = { QQB = { has_war_with = ROOT NOT = { has_government = fascism } } } }
+	focus = { id = ZZA_one_sided cost = 10 }
+	focus = { id = ZZA_excluder cost = 10 mutually_exclusive = { focus = ZZA_one_sided } }
+	focus = { id = ZZA_twice cost = 10 available = { has_war = no } }
+	focus = { id = ZZA_twice cost = 10 available = { has_war = yes } }
+}
+shared_focus = { id = ZZS_shared cost = 10 available = { tag = ZZA NOT = { original_tag = QQB } } }

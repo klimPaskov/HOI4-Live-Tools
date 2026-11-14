@@ -33,14 +33,18 @@
 //!                          so a category is a word inside the key). With either list the fallback is restricted
 //!   research_fallback_exclude    words the fallback never takes (default ship, hull, naval, carrier, submarine,
 //!                          destroyer, cruiser, battleship, torpedo, convoy; [] allows everything)
-//!   focus_path             focus keys; the first not completed key the game accepts. A key the game blocks
-//!                          (focus_not_available, prerequisite, exclusive) is skipped for `skip_hours.focus_blocked`
-//!                          (doubled on each further refusal, up to 8 times; cleared when a focus completes)
+//!   focus_path             focus keys; the first not completed key that can start. Whether a key can start is
+//!                          first asked of `hoi4_focus_available` (the game's focus files judged against the
+//!                          state read from memory, no input): a key it knows to be unavailable is never opened
+//!                          and is asked again after `skip_hours.focus_unavailable`. Only a key it cannot judge
+//!                          is tried in the game; one the game then blocks (focus_not_available, prerequisite,
+//!                          exclusive) is skipped for `skip_hours.focus_blocked` (doubled on each further
+//!                          refusal, up to 8 times; cleared when a focus completes or a war starts or ends)
 //!                          and the next key is tried (two refused keys per tick); `focus_blocked:[key:reason]`
 //!                          is in the digest
 //!   focus_fallback         focus keys tried only after every focus_path key is completed or skipped
-//!   skip_hours             {"tech":72,"tech_fallback":168,"focus":24,"focus_blocked":6}: game hours a refused key
-//!                          is left alone (defaults shown); all optional
+//!   skip_hours             {"tech":72,"tech_fallback":168,"focus":24,"focus_blocked":240,"focus_unavailable":24}:
+//!                          game hours a refused key is left alone (defaults shown); all optional
 //!                          The digest carries one `research` line and one `focus` line per run (like `construction`)
 //!                          and the alarms `research_slot_idle_plan_exhausted` / `no_active_focus_plan_exhausted`
 //!                          when nothing from the plan could be started. `active` missing means active; only
@@ -490,6 +494,10 @@ struct Stages {
     /// key's wait; a newly completed focus clears the counts (prerequisites may now be met).
     focus_refused: HashMap<String, u32>,
     focus_refused_at_completed: usize,
+    /// The countries at war with the player when the refusals were counted. A war that starts
+    /// or ends clears the counts too: the conditions the server cannot read (flags, events)
+    /// mostly move with the wars.
+    focus_refused_wars: Option<String>,
 }
 
 /// Refused focuses one tick may open (each look costs seconds of the input lane).
@@ -1390,11 +1398,44 @@ pub fn tick(
         }
         let mut candidates: Vec<String> = startable(state, &path).into_iter().take(8).collect();
         candidates.extend(startable(state, &fallback).into_iter().take(4));
-        // Whether a focus can start is only known from its detail window, and one look costs
-        // seconds of the input lane (a far node up to the whole action deadline). One tick looks
-        // at no more than this many refused focuses; the rest keep their turn for the next tick.
+        // What the game's own files and the readable state settle is asked first, without input:
+        // a focus known to be unavailable is never opened (one shakedown opened three such
+        // focuses about a hundred times at 7 to 12 s each).
+        let mut known = focus_verdicts(tools, &candidates);
+        if let Some(wars) = known.wars.clone() {
+            let before = state.stages.focus_refused_wars.replace(wars.clone());
+            if before.is_some_and(|b| b != wars) && !state.stages.focus_refused.is_empty() {
+                // A war started or ended: every refused key gets a fresh try at once.
+                let refused: Vec<String> =
+                    state.stages.focus_refused.drain().map(|(k, _)| k).collect();
+                for key in refused {
+                    state.bad.remove(&skip_key("focus", &key));
+                }
+                candidates = startable(state, &path).into_iter().take(8).collect();
+                candidates.extend(startable(state, &fallback).into_iter().take(4));
+                known = focus_verdicts(tools, &candidates);
+            }
+        }
+        // For the rest, whether a focus can start is only known from its detail window, and one
+        // look costs seconds of the input lane (a far node up to the whole action deadline). One
+        // tick looks at no more than this many refused focuses; the rest keep their turn for the
+        // next tick.
         let mut probes_left = FOCUS_PROBES_PER_TICK;
         for key in candidates {
+            if let Some(why) = known.unavailable.get(&key) {
+                // Read again after a game day: no input was spent, so no back-off is needed.
+                state.skip(
+                    now,
+                    "focus",
+                    &key,
+                    skip_hours(plan, "focus_unavailable", DAY),
+                );
+                state
+                    .stages
+                    .focus_why
+                    .insert(key, format!("unavailable ({why})"));
+                continue;
+            }
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -5094,6 +5135,59 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
         }
         Err(e) => format!("pause failed ({}: {}); not retried", e.code, e.message),
     }
+}
+
+/// What `hoi4_focus_available` settles about focus keys without input.
+#[derive(Default)]
+struct FocusVerdicts {
+    /// key -> the first reason, for the keys that are certainly unavailable now
+    unavailable: HashMap<String, String>,
+    /// the countries at war with the player, sorted and joined (None: not read)
+    wars: Option<String>,
+}
+
+/// Ask `hoi4_focus_available` about `keys`. A server without the tool, a game whose files
+/// cannot be read or a failed read settles nothing: every key is then tried in the game as before.
+fn focus_verdicts(tools: &dyn Tools, keys: &[String]) -> FocusVerdicts {
+    let mut out = FocusVerdicts::default();
+    // The tool takes 32 keys and plan keys it would refuse (odd characters) are left to the game.
+    let ask: Vec<&String> = keys
+        .iter()
+        .filter(|k| {
+            !k.is_empty()
+                && k.len() <= 128
+                && k.bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        })
+        .take(32)
+        .collect();
+    if ask.is_empty() {
+        return out;
+    }
+    let Ok(reply) = tools.call("hoi4_focus_available", &json!({"focuses": ask})) else {
+        return out;
+    };
+    out.wars = reply["wars"].as_array().map(|list| {
+        let mut tags: Vec<&str> = list.iter().filter_map(Value::as_str).collect();
+        tags.sort_unstable();
+        tags.join(",")
+    });
+    for row in reply["focuses"].as_array().into_iter().flatten() {
+        if row["state"] != json!("unavailable") {
+            continue;
+        }
+        let Some(key) = row["focus"].as_str() else {
+            continue;
+        };
+        let why: String = row["why"][0]
+            .as_str()
+            .unwrap_or("requirements unmet")
+            .chars()
+            .take(100)
+            .collect();
+        out.unavailable.insert(key.to_string(), why);
+    }
+    out
 }
 
 /// `focus_blocked` digest entries: `key:reason` for every listed focus that is
@@ -9175,6 +9269,188 @@ mod tests {
         // The next tick goes on with the keys that had no turn yet.
         tick(&mut state, &tools, &plan, "l", START + 1).unwrap();
         assert_eq!(tried(&tools), ["A", "B", "C", "D"]);
+    }
+
+    /// `focus_reads` plus a `hoi4_focus_available` reply: (focus, state, first reason) rows and the
+    /// countries at war with the player.
+    fn focus_reads_knowing(rows: &[(&str, &str, &str)], wars: &[&str]) -> Fake {
+        let focuses: Vec<Value> = rows
+            .iter()
+            .map(|(focus, state, why)| match *state {
+                "unavailable" => json!({"focus": focus, "state": state, "why": [why]}),
+                "unknown" => json!({"focus": focus, "state": state, "unknown": [why]}),
+                _ => json!({"focus": focus, "state": state}),
+            })
+            .collect();
+        fake(vec![
+            ("hoi4_research", json!({"slots": [{"researching": "x"}]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done"]}),
+            ),
+            (
+                "hoi4_focus_available",
+                json!({"focuses": focuses, "wars": wars}),
+            ),
+        ])
+    }
+    fn focus_starts(tools: &ActionReplies) -> Vec<String> {
+        tools
+            .actions
+            .borrow()
+            .iter()
+            .map(|a| a.1["focus"].as_str().unwrap().into())
+            .collect()
+    }
+
+    #[test]
+    fn a_focus_known_to_be_unavailable_is_never_opened() {
+        let reads = focus_reads_knowing(
+            &[
+                ("A", "unavailable", "needs has_war = no"),
+                ("B", "available", ""),
+            ],
+            &["ETH"],
+        );
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["Done", "A", "B"]});
+        let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(step, Tick::Acted("focus B".into()));
+        // Only B went to the game: A cost no input.
+        assert_eq!(focus_starts(&tools), ["B"]);
+        // The question was asked once, about the keys that are not completed.
+        let asked: Vec<Value> = reads
+            .calls
+            .borrow()
+            .iter()
+            .filter(|c| c.0 == "hoi4_focus_available")
+            .map(|c| c.1.clone())
+            .collect();
+        assert_eq!(asked, [json!({"focuses": ["A", "B"]})]);
+        // A is asked again after one game day, and the digest says why it waits.
+        assert!(state.skipped(START + DAY - 1, "focus", "A"));
+        assert!(!state.skipped(START + DAY, "focus", "A"));
+        assert_eq!(
+            focus_blocked(&state, &plan, START + 1),
+            ["A:unavailable (needs has_war = no)"]
+        );
+        // No refusal was counted: the game was never asked.
+        assert!(state.stages.focus_refused.is_empty());
+    }
+
+    #[test]
+    fn nothing_is_opened_while_every_listed_focus_is_known_unavailable() {
+        let reads = focus_reads_knowing(
+            &[
+                ("A", "unavailable", "needs has_war = no"),
+                ("C", "unavailable", "needs A"),
+                ("D", "unavailable", "needs A"),
+            ],
+            &["ETH"],
+        );
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A"], "focus_fallback": ["C", "D"], "skip_hours": {"focus_unavailable": 48}});
+        // Many ticks through a long war: not one focus window is opened.
+        for day in 0..120 {
+            tick(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        assert!(focus_starts(&tools).is_empty());
+        // The files are asked again every `focus_unavailable` hours, not every tick.
+        let asked = reads
+            .calls
+            .borrow()
+            .iter()
+            .filter(|c| c.0 == "hoi4_focus_available")
+            .count();
+        assert_eq!(asked, 60);
+        let line = state.stages.focus.clone().unwrap();
+        assert!(
+            line.0.contains("A:unavailable (needs has_war = no)"),
+            "{line:?}"
+        );
+    }
+
+    #[test]
+    fn a_focus_the_files_cannot_judge_is_looked_at_once_and_then_backs_off() {
+        let reads = focus_reads_knowing(&[("A", "unknown", "has_country_flag = secret")], &["ETH"]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked(), blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A"]});
+        for day in 0..10 {
+            tick(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        // One look in ten game days; the second comes when the blocked window ends.
+        assert_eq!(focus_starts(&tools), ["A"]);
+        tick(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap();
+        assert_eq!(focus_starts(&tools), ["A", "A"]);
+        assert_eq!(state.stages.focus_refused["A"], 2);
+    }
+
+    #[test]
+    fn a_war_that_ends_gives_a_refused_focus_a_fresh_try() {
+        let at_war =
+            focus_reads_knowing(&[("A", "unknown", "has_global_flag = the_war")], &["ETH"]);
+        let tools = ActionReplies {
+            reads: &at_war,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([blocked()].into()),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A"]});
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.skipped(START + DAY, "focus", "A"));
+        // The war ends the next day: the flag behind the refusal may have gone with it.
+        let at_peace = focus_reads_knowing(&[("A", "unknown", "has_global_flag = the_war")], &[]);
+        let tools = ActionReplies {
+            reads: &at_peace,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+        };
+        // The key is skipped, so another listed key keeps the question being asked.
+        let plan = json!({"focus_path": ["A"], "focus_fallback": ["Z"]});
+        let step = tick(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        assert_eq!(step, Tick::Acted("focus A".into()));
+        assert!(state.stages.focus_refused.is_empty());
+    }
+
+    #[test]
+    fn a_server_without_the_availability_tool_looks_in_the_game_as_before() {
+        struct Old<'a>(&'a ActionReplies<'a>);
+        impl Tools for Old<'_> {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_focus_available" {
+                    return Err(Error::new("capability_unavailable", "Unknown tool"));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let reads = focus_reads();
+        let inner = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new(
+                [blocked(), Ok(json!({"receipt": {"status": "Verified"}}))].into(),
+            ),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["A", "B"]});
+        let step = tick(&mut state, &Old(&inner), &plan, "l", START).unwrap();
+        assert_eq!(step, Tick::Acted("focus B".into()));
+        assert_eq!(focus_starts(&inner), ["A", "B"]);
     }
 
     #[test]

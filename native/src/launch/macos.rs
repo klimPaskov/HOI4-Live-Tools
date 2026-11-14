@@ -86,7 +86,6 @@ mod research;
 mod research_extras;
 mod resources;
 mod screenmap;
-mod script;
 mod settle;
 mod special_project_rules;
 mod special_projects;
@@ -114,6 +113,7 @@ use crate::{
         Process,
     },
     protocol::Commands,
+    script,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -627,6 +627,22 @@ impl MacClock {
 
 /// Every macOS tool descriptor (name, description, input schema); no session needed, so the
 /// catalogue can be listed offline (`hoi4-live-native --list-tools`).
+/// Where the running game's files are: the install, the content folder the readers use (the
+/// install, or the install with the enabled mods layered over it), and the DLCs the user
+/// folder switches off (None when its `dlc_load.json` cannot be read).
+pub(crate) struct GameContent {
+    pub install: std::path::PathBuf,
+    pub content: std::path::PathBuf,
+    pub disabled_dlcs: Option<Vec<String>>,
+}
+pub(crate) fn game_content(exe: &str) -> Result<GameContent> {
+    let install = mapdata::install_dir(exe)?;
+    Ok(GameContent {
+        content: modlayer::content_dir(&install, exe).unwrap_or_else(|| install.clone()),
+        disabled_dlcs: modlayer::disabled_dlcs(exe),
+        install,
+    })
+}
 pub fn mac_tool_list() -> Vec<Value> {
     vec![
         country_status::tool(),

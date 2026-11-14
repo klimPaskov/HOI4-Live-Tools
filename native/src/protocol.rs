@@ -61,6 +61,37 @@ impl crate::plan_run::Tools for Internal<'_> {
         self.server.call(name, args, Some(self.commands))
     }
 }
+/// The server's read tools for a rule that only reads (with or without a command adapter).
+struct Reads<'a> {
+    server: &'a Server,
+    commands: Option<&'a dyn Commands>,
+}
+impl crate::plan_run::Tools for Reads<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        self.server.call(name, args, self.commands)
+    }
+}
+/// The content folder holding the running game's focus files and the DLCs it has.
+fn focus_content(exe: &str) -> Result<(std::path::PathBuf, crate::focus_rules::live::Dlcs)> {
+    use crate::focus_rules::live::Dlcs;
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let found = crate::launch::macos::game_content(exe)?;
+        let dlcs = Dlcs::read(&found.install, found.disabled_dlcs.as_deref());
+        Ok((found.content, dlcs))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        // No mod layer here: the install that holds the focus files, DLC switches unknown.
+        let install = std::path::Path::new(exe)
+            .ancestors()
+            .find(|d| d.join("common/national_focus").is_dir())
+            .map(std::path::Path::to_path_buf)
+            .ok_or_else(|| Error::new("map_data_unavailable", "Focus files not found"))?;
+        let dlcs = Dlcs::read(&install, None);
+        Ok((install, dlcs))
+    }
+}
 /// The full tool catalogue without a game or session: the common tools plus the platform's
 /// command tools (macOS/Linux builds). Printed by `hoi4-live-native --list-tools`.
 pub fn list_tools_offline() -> Value {
@@ -98,6 +129,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     if let Some(list) = value["tools"].as_array_mut() {
+        list.push(json!({"name":"hoi4_focus_available","description":"Read-only: whether own national focuses can be started now, decided without opening the focus tree. The rules come from the focus files of the running game's content (the install with the enabled mods layered over it): prerequisites, mutually exclusive focuses and the available, bypass and allow_branch triggers, with scripted triggers expanded. They are judged against the own state read from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war support, political power, manpower, factory counts, faction, overlord and subjects, researched technologies, and the install's DLCs. Each focus answers state available | unavailable | unknown: unavailable is certain and comes with why (the failing requirement in the game's own script words); unknown lists the triggers that cannot be read (ideas, flags, the ruling ideology, variables, leaders, other countries' affairs, any_/all_ scopes), and then only hoi4_focus_start can tell; bypass:true means taking the focus completes it at once without its reward. No input, no lease, never pauses.","inputSchema":{"type":"object","properties":{"focuses":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_-]+$"},"minItems":1,"maxItems":32}},"required":["focuses"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
         list.push(json!({"name":"hoi4_observe","description":"What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}}));
         list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. An army you order yourself (any hoi4_army_* action) is left to you by its war rules for war.player_claim_seconds (default 300); release:[names] hands armies back at once. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"release":{"type":"array","items":{"type":"string"},"maxItems":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
         list.push(json!({"name":"hoi4_wait_change","description":"Block until a change after `since` arrives (optionally only given kinds or urgent ones), or until timeout_seconds (1-30) pass; then reply like hoi4_observe with woke_because change|timeout. Use it instead of polling: the reply comes within a few hundred milliseconds of the change. Pure read; never pauses.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":30},"limit":{"type":"integer","minimum":1,"maximum":200}},"required":["since"],"additionalProperties":false}}));
@@ -618,6 +650,63 @@ impl Server {
                     ));
                 }
                 own_focus::completion_snapshot(self.process()?, offset, limit)
+            }
+            "hoi4_focus_available" => {
+                let focuses: Vec<String> = match object.get("focuses").and_then(Value::as_array) {
+                    Some(list) if object.len() == 1 && (1..=32).contains(&list.len()) => list
+                        .iter()
+                        .map(|v| {
+                            v.as_str()
+                                .filter(|key| {
+                                    !key.is_empty()
+                                        && key.len() <= 128
+                                        && key.bytes().all(|b| {
+                                            b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
+                                        })
+                                })
+                                .map(str::to_string)
+                        })
+                        .collect::<Option<_>>()
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid focus key"))?,
+                    _ => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "focuses must list 1 to 32 focus keys",
+                        ))
+                    }
+                };
+                let exe = self
+                    .process()?
+                    .identity()
+                    .map(|i| i.exe.clone())
+                    .ok_or_else(|| {
+                        Error::new("map_data_unavailable", "Game identity unavailable")
+                    })?;
+                let (content, dlcs) = focus_content(&exe)?;
+                let catalog = crate::focus_rules::Catalog::load(&content);
+                if catalog.is_empty() {
+                    return Err(Error::new(
+                        "map_data_unavailable",
+                        "No focus files in the game content",
+                    ));
+                }
+                let tools = Reads {
+                    server: self,
+                    commands,
+                };
+                use crate::plan_run::Tools as _;
+                // Without a date the date triggers are unknown.
+                let now = tools
+                    .call("hoi4_overview", &json!({}))
+                    .ok()
+                    .and_then(|overview| overview["date"]["raw"].as_i64())
+                    .unwrap_or(-1);
+                let mut ctx = crate::plan_predicate::Ctx::new(&tools, now);
+                let wars = ctx.war_enemies();
+                let facts = crate::focus_rules::live::Live::new(&mut ctx, Some(&dlcs));
+                Ok(crate::focus_rules::live::report(
+                    &catalog, &facts, &focuses, wars,
+                ))
             }
             "hoi4_focus_input_probe" => {
                 if !object.contains_key("focus_id")

@@ -53,6 +53,7 @@ How to use it:
 | `L22_unneeded_conscription` | 13 gated laws, 17 manpower |
 | `L23_invasion_prep_default` | 21 naval plan |
 | `L26_every_resource_has_an_owner` | 13-15 politics; every domain's standing policy |
+| `L28_ask_the_files_before_the_screen` | 12 focus and balance of power (the executor asks `hoi4_focus_available` before it opens a focus; list focuses that can start while the plan is at war) |
 
 ## Why each lesson matters
 
@@ -78,3 +79,4 @@ These are the failures the lessons record (design section 4.4). The ids are in t
 | Day-1 or wartime supply hubs (20000 points) that cannot finish in a short war | A hub takes about 190-270 days with 15 civilian factories and blocks the factory build-up meanwhile. Railways first, then ports, then trucks; a hub only when `calc build-order` shows it finishes before it is needed, with its cost and finish date in plan.md §4. |
 | A resource with no owner and no default use (political power spent only on a few named picks; domains behind a busy one never reached) | Idle power, slots or factories compound against the plan. Every spendable resource has an owning domain with a default use, the plan sets priorities and standing orders rather than only one-off items, and the executor gives every domain a turn each game day. |
 | Axes pushed past supply reach; railways planned from plain provinces; failing orders repeated forever | Supply flow falls with every province from its node, so an advance beyond the hubs, ports and capital starves the army whatever its strength. A railway runs only from a node. Pace each axis to its estimated reach, bring a port, a railway from a real node or trucks forward first, and expect the executor to give up an item after a few tries and ask for a revision. |
+| Whether a focus could start was found out by opening it in the game, about a hundred times | Every look costs seconds of the one input lane the armies also need. The game files say what a focus requires; the executor reads them against the live state and opens only what it cannot judge. A plan still has to list focuses that can start during its wars, or the slot idles. |

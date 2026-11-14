@@ -318,7 +318,7 @@ Specific events:
 | PP, stability, war support, world tension | `hoi4_country_status`, `hoi4_economy` (exact PP) | `alarms` |
 | Laws, advisors, designers | `hoi4_politics_options` (slot ideas with enabled state), `hoi4_politics_choose` | `politics` |
 | Decisions | `hoi4_decisions_list`, `hoi4_decision_take` (`target` for targeted rows) | `decision_rules`, `decisions` |
-| Focuses | `hoi4_focus_list`, `hoi4_focus_start`, `hoi4_focus_completed` | `focus_path` |
+| Focuses | `hoi4_focus_list`, `hoi4_focus_available`, `hoi4_focus_start`, `hoi4_focus_completed` | `focus_path` |
 | Events | `hoi4_events` (full text and options), `hoi4_event_choose` | `event_rules`, `auto_events` |
 | Diplomacy | `hoi4_diplomacy` (offered actions, cost, AI refusal, justification preview), `hoi4_diplomacy_act`, `hoi4_diplomacy_countries`, `hoi4_diplomacy_state`, `hoi4_diplomacy_incoming`, `hoi4_war_risk` (who joins a war), `hoi4_wars` | `diplomacy`, `war` |
 | Factions | `hoi4_faction_create`, `hoi4_faction_invite_accept`, `hoi4_faction_leave`; invite, join and kick through `hoi4_diplomacy_act` | `faction` |

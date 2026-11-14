@@ -2415,6 +2415,30 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_focus_available": {
+   "description": "Read-only: whether own national focuses can be started now, decided without opening the focus tree. The rules come from the focus files of the running game's content (the install with the enabled mods layered over it): prerequisites, mutually exclusive focuses and the available, bypass and allow_branch triggers, with scripted triggers expanded. They are judged against the own state read from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war support, political power, manpower, factory counts, faction, overlord and subjects, researched technologies, and the install's DLCs. Each focus answers state available | unavailable | unknown: unavailable is certain and comes with why (the failing requirement in the game's own script words); unknown lists the triggers that cannot be read (ideas, flags, the ruling ideology, variables, leaders, other countries' affairs, any_/all_ scopes), and then only hoi4_focus_start can tell; bypass:true means taking the focus completes it at once without its reward. No input, no lease, never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focuses": {
+      "items": {
+       "maxLength": 128,
+       "minLength": 1,
+       "pattern": "^[A-Za-z0-9_-]+$",
+       "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "focuses"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_focus_completed": {
    "description": "Preview: fresh own completed-focus membership from the current Linux engine predicate, with active key and bounded sorted pages. Independent of open GUI; all members validated before paging. Completion cause, repeat counts, changed/shared trees and eligibility unavailable. Bounded Linux Rhineland completion verified; other Focus trees and full campaigns unverified. Pure reads; never pauses.",
    "inputSchema": {

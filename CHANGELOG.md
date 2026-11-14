@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+Whether a national focus can start is read from the game files, not tried in the game.
+
+- New read-only tool `hoi4_focus_available {focuses:[...]}`: for each focus `available`, `unavailable` or `unknown`,
+  decided without opening the focus tree. The rules are the focus files of the running game's content (the install with
+  the enabled mods layered over it): prerequisite groups, mutually exclusive focuses and the `available`, `bypass` and
+  `allow_branch` triggers, with scripted triggers expanded. They are judged against the state the server already reads
+  from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war
+  support, political power, manpower, factory counts, the faction, overlord and subjects, researched technologies, and
+  the install's DLCs. Any country, any mod: nothing is tied to a tag or to the base game.
+- `unavailable` is only said when it is certain and names the failing requirement in the game's own script words
+  (`needs has_war = no`). A trigger nothing reads (ideas, flags, the ruling ideology, variables, leaders, other
+  countries' affairs, `any_`/`all_` scopes) gives `unknown` with the triggers listed. `allow_branch` is judged by the
+  game when the tree is laid out, so only its static part (tag, DLC) can make a focus unavailable. A reading that may be
+  off by its rounding (the top bar shows whole percent) does not settle a comparison that close.
+- The executor asks before it opens a focus: a listed focus that is certainly unavailable is never opened and is asked
+  about again after `skip_hours.focus_unavailable` (24 game hours); `focus_blocked` in the digest carries the reason.
+  Only an `unknown` focus is tried in the game, with the refusal back-off, and the back-off now also ends when a war
+  starts or ends (the conditions nothing reads mostly move with the wars). A server without the tool behaves as before.
+- 72 cases on a mod's focus tree (its own tags, states, DLC and scripted triggers) are kept as data in
+  `tests/fixtures/focus_availability_cases.json`, so any other reader of the focus files can be held to the same answers.
+- The script reader moved from the macOS lane to the crate root (`script.rs`) so every platform builds the focus rules.
+
 Every action ends in a terminal receipt; one uncertain action can no longer hold input.
 
 - After a dispatch the game journal re-observes the game for a bounded settlement window (3 s) and records what it sees:
