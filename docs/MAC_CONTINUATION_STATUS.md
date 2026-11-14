@@ -38,6 +38,19 @@ Linux component checks do not replace native Mac campaign recordings. See the
 [capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026)
 and [current next work](LINUX_RUST_HANDOFF.md#next-work).
 
+## Memory access no longer needs renewal
+
+The task-port "lapses" noted below (status -60007 after about 10 hours) came from
+the tool's own preflight, which asked about `system.privilege.taskport`. macOS
+judges a binary signed with the debugger entitlement on
+`system.privilege.taskport.debug` instead, which a `_developer` member holds with
+no password and no timeout while Developer mode is on. The preflight now asks
+about the right that applies to the running binary: the `.debug` right for a
+signed build, the plain right for an unsigned one. A signed build therefore needs
+Developer mode, `_developer` membership and the signature once, and no periodic
+`security authorize -u`. The port request itself is bounded to five seconds and
+is not repeated while the system holds it open.
+
 ## 25 October update
 
 A noninteractive `system.privilege.taskport` query (same flags as the Rust

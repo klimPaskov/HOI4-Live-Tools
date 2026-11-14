@@ -290,9 +290,16 @@ Pointer actions also reject windows covering the intended point, including
 floating panels. Decimal character admission has separate checks; mixed
 construction plans remain under development. See [current evidence](docs/CLAUSEWITZ_VALIDATION.md).
 
-Mac memory access requires Developer Tools authorization and a signed tool with
-`native/macos/debugger.entitlements`; the game is never re-signed. Missing access
-returns a capability error for telemetry/UI fallback. Screenshots and saves are
+Mac memory access needs three things, each set up once: Developer mode on
+(`sudo DevToolsSecurity -enable`), your user in the `_developer` group, and the
+tool signed with `native/macos/debugger.entitlements`. With those in place macOS
+grants access with no password and nothing to renew. A tool without that
+signature falls back to the password-protected right, which lapses after about
+10 hours (`security authorize -u system.privilege.taskport` renews it). The tool
+checks the right that applies to it without showing a dialog and never changes
+system settings; the game is never re-signed. Missing access returns a
+capability error that names the right and the missing step, for telemetry/UI
+fallback. Screenshots and saves are
 not the primary native observation path. The public Research-folder diagnostic
 remains Linux-only.
 
