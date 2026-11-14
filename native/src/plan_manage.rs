@@ -1579,7 +1579,7 @@ fn country_rules(
         let floor = fraction(&m["stability_floor"], 0.5);
         match status
             .as_ref()
-            .and_then(|s| s["stability"]["value"].as_f64())
+            .and_then(|s| s["fields"]["stability"]["value"].as_f64())
         {
             None => note(
                 state,
@@ -1634,7 +1634,7 @@ fn country_rules(
     let need = (per_day * 30.0 * months).round();
     let Some(free) = status
         .as_ref()
-        .and_then(|s| s["manpower"]["value"].as_f64())
+        .and_then(|s| s["fields"]["manpower"]["value"].as_f64())
     else {
         note(
             state,
@@ -3549,7 +3549,7 @@ mod tests {
         let tools = fake(vec![
             (
                 "hoi4_country_status",
-                json!({"manpower": {"value": 50000.0}, "stability": {"value": 0.7}}),
+                json!({"fields": {"manpower": {"value": 50000.0}, "stability": {"value": 0.7}}}),
             ),
             ("hoi4_war_stats", war_stats(10000.0)),
             (
@@ -3622,7 +3622,10 @@ mod tests {
     #[test]
     fn low_stability_and_low_equipment_fill_wake_and_an_unread_stockpile_is_unknown() {
         let tools = fake(vec![
-            ("hoi4_country_status", json!({"stability": {"value": 0.42}})),
+            (
+                "hoi4_country_status",
+                json!({"fields": {"stability": {"value": 0.42}}}),
+            ),
             (
                 "hoi4_supply",
                 json!({"divisions": [division("Inf", 50, 100), division("Inf", 70, 100)]}),
