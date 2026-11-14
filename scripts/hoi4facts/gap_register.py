@@ -255,6 +255,14 @@ def _headings(lines):
     return out
 
 
+def _rel(path):
+    """The path relative to the repository, or as given when it is on another drive (Windows temp dirs)."""
+    try:
+        return os.path.relpath(path, ROOT)
+    except ValueError:
+        return path
+
+
 def check(rows=None, cat=None, rdr=None, page=PAGE, files=None):
     """Problems as [str]; [] when the register is complete and current."""
     rows = load() if rows is None else rows
@@ -310,7 +318,7 @@ def check(rows=None, cat=None, rdr=None, page=PAGE, files=None):
         with open(path, encoding="utf-8") as f:
             lines = f.read().splitlines()
         heads = _headings(lines)
-        rel = os.path.relpath(path, ROOT)
+        rel = _rel(path)
         for i, line in enumerate(lines):
             for name in set(TOOL_TOKEN.findall(line)):
                 if name not in cat and name not in PLACEHOLDERS:
@@ -326,7 +334,7 @@ def check(rows=None, cat=None, rdr=None, page=PAGE, files=None):
         have = open(page, encoding="utf-8").read() if os.path.exists(page) else ""
         if have != want:
             problems.append("%s is stale: run python scripts/hoi4facts/gap_register.py build"
-                            % os.path.relpath(page, ROOT))
+                            % _rel(page))
     return problems
 
 
@@ -368,7 +376,7 @@ def main(argv=None):
         text = render()
         with open(a.out, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
-        print("wrote %s" % os.path.relpath(a.out, ROOT))
+        print("wrote %s" % _rel(a.out))
         return 0
     if a.cmd == "blocked":
         if a.format == "json":
