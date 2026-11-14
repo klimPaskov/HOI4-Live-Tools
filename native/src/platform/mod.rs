@@ -33,6 +33,10 @@ pub struct Session {
     pub sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translated: Option<TranslatedImage>,
+    /// A game the user started (Steam, their own profile): held by the game's identity alone, not
+    /// by a parent supervisor. `supervisor` then records the process that attached. macOS only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub attached: bool,
 }
 pub trait Process: ReadMemory {
     fn check(&self) -> Result<()>;
@@ -232,6 +236,22 @@ mod session_tests {
         assert_eq!(session.translated.unwrap().executable, "/game");
         translated["translated"]["build_override"] = json!("unreviewed");
         assert!(serde_json::from_value::<Session>(translated).is_err());
+    }
+
+    #[test]
+    fn attached_is_written_only_when_set() {
+        let native = json!({
+            "game":{"pid":2,"start_ticks":"20","exe":"/game","uid":1000},
+            "supervisor":{"pid":1,"start_ticks":"10","exe":"/owner","uid":1000},
+            "build_id":"known", "sha256":"known"
+        });
+        let session: Session = serde_json::from_value(native.clone()).unwrap();
+        assert!(!session.attached);
+        let mut attached = native;
+        attached["attached"] = json!(true);
+        let session: Session = serde_json::from_value(attached.clone()).unwrap();
+        assert!(session.attached);
+        assert_eq!(serde_json::to_value(session).unwrap(), attached);
     }
 }
 

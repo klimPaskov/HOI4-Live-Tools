@@ -58,6 +58,7 @@ impl Fixture {
                 supervisor: server_identity,
                 build_id: "generated-fixture".into(),
                 sha256: "generated-fixture".into(),
+                attached: false,
                 translated,
             },
         };

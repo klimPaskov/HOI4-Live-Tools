@@ -264,6 +264,9 @@ impl MacProcess {
 pub(crate) fn check_ownership(session: &Session) -> Result<()> {
     // SAFETY: getuid has no arguments and no memory effects.
     let uid = unsafe { libc::getuid() };
+    if session.attached {
+        return check_attached(session, uid);
+    }
     if uid == 0
         || session.game.uid != uid
         || session.supervisor.uid != uid
@@ -296,6 +299,49 @@ pub(crate) fn check_ownership(session: &Session) -> Result<()> {
         ));
     }
     Ok(())
+}
+/// A game the user started is held by its own identity: same ordinary user, and the same process
+/// (ID, start time, executable) as when it was attached, checked again on every call so a reused
+/// process ID is never read.
+fn check_attached(session: &Session, uid: u32) -> Result<()> {
+    if uid == 0 || session.game.uid != uid || session.game.pid <= 0 {
+        return Err(Error::new(
+            "ownership_changed",
+            "An attached game must belong to the same ordinary user",
+        ));
+    }
+    if capture_identity(session.game.pid)? != session.game {
+        return Err(Error::new(
+            "ownership_changed",
+            "Game process identity changed",
+        ));
+    }
+    Ok(())
+}
+
+/// The session for a game the user started: the process must run as this ordinary user and be
+/// the supported build (hash and Mach-O UUID). `supervisor` records the attaching process.
+pub fn attached_session(pid: i32) -> Result<Session> {
+    // SAFETY: getuid has no arguments and no memory effects.
+    let uid = unsafe { libc::getuid() };
+    let game = capture_identity(pid)?;
+    if uid == 0 || game.uid != uid {
+        return Err(Error::new(
+            "ownership_changed",
+            "The game must run as the same ordinary user as the runtime",
+        ));
+    }
+    verify_executable(&game.exe)?;
+    let session = Session {
+        game,
+        supervisor: capture_identity(std::process::id() as i32)?,
+        build_id: BUILD_UUID.into(),
+        sha256: SHA256.into(),
+        translated: None,
+        attached: true,
+    };
+    check_ownership(&session)?;
+    Ok(session)
 }
 impl Drop for MacProcess {
     fn drop(&mut self) {
@@ -378,6 +424,7 @@ mod tests {
                 supervisor,
                 build_id: String::new(),
                 sha256: String::new(),
+                attached: false,
                 translated: None,
             },
         )
@@ -414,6 +461,58 @@ mod tests {
         let error = check_ownership(&unrelated).unwrap_err();
         assert_eq!(error.code, "ownership_changed");
         assert!(error.message.contains("parent"));
+    }
+
+    #[test]
+    fn attached_game_is_held_by_its_identity_not_its_parent() {
+        let (_child, owned) = child_session();
+        if owned.game.uid == 0 {
+            return;
+        }
+        // The parent is not recorded for an attached game: a supervisor that is not the parent
+        // (here an unrelated process) does not matter.
+        let (_other, other) = child_session();
+        let mut session = owned.clone();
+        session.attached = true;
+        session.supervisor = other.game;
+        check_ownership(&session).unwrap();
+        for field in 0..4 {
+            let mut changed = session.clone();
+            match field {
+                0 => changed.game.start_ticks.push('0'),
+                1 => changed.game.exe.push_str(".different"),
+                2 => changed.game.uid = 0,
+                _ => changed.game.pid = 0,
+            }
+            assert_eq!(
+                check_ownership(&changed).unwrap_err().code,
+                "ownership_changed"
+            );
+        }
+    }
+
+    #[test]
+    fn attaching_refuses_a_process_that_is_not_the_supported_game() {
+        let (_child, owned) = child_session();
+        if owned.game.uid == 0 {
+            return;
+        }
+        // /bin/sleep runs as this user but is not the reviewed game build.
+        assert_eq!(
+            attached_session(owned.game.pid).unwrap_err().code,
+            "unsupported_build"
+        );
+        // A process ID that does not exist.
+        assert_eq!(attached_session(0).unwrap_err().code, "process_absent");
+    }
+
+    #[test]
+    fn exited_attached_game_is_not_adopted_by_its_old_pid() {
+        let (mut child, mut session) = child_session();
+        session.attached = true;
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert!(check_ownership(&session).is_err());
     }
 
     #[test]

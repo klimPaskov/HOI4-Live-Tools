@@ -1571,6 +1571,7 @@ pub fn serve(path: &Path) -> Result<()> {
         supervisor: supervisor.clone(),
         build_id: BUILD_ID.into(),
         sha256: SHA256.into(),
+        attached: false,
         translated: config.fex.map(|fex| platform::TranslatedImage {
             executable: executable.to_string_lossy().into_owned(),
             translator_sha256: fex.sha256,

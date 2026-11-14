@@ -149,6 +149,7 @@ mod tests {
             supervisor: identity,
             build_id: crate::game::BUILD_ID.into(),
             sha256: crate::game::SHA256.into(),
+            attached: false,
             translated: Some(platform::TranslatedImage {
                 executable: "/fixture/hoi4".into(),
                 translator_sha256: platform::FEX_SHA256.into(),

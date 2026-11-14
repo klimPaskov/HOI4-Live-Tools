@@ -637,6 +637,12 @@ impl LinuxProcess {
     }
 }
 fn check_ownership(session: &Session, device: u64, inode: u64) -> Result<()> {
+    if session.attached {
+        return Err(Error::new(
+            "platform_unavailable",
+            "Attaching to a game the user started is macOS-only today; Linux holds only games its owned launcher started",
+        ));
+    }
     // SAFETY: getuid has no arguments and no memory effects.
     let uid = unsafe { libc::getuid() };
     if uid == 0 || session.game.uid != uid || session.supervisor.uid != uid {
