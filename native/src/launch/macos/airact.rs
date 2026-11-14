@@ -1031,6 +1031,19 @@ pub(super) fn region_json(v: &airui::RegionView) -> Value {
         "note":"As the player's air map shows it (counts of currently active aircraft by type in the region)"})
 }
 
+/// Air superiority per strategic region is what the air map mode colours each region by (red
+/// under 40% own share, contested 40-60%, own over 60%): each side's superiority comes from the
+/// air superiority stat of its wings on air superiority missions in the region (anti-air buildings
+/// take NDefines.NBuildings.ANTI_AIR_SUPERIORITY_MULT per level off the enemy's), the region map
+/// scale is NAir.AIR_REGION_SUPERIORITY_PIXEL_SCALE. Enemy air superiority slows
+/// (NMilitary.ENEMY_AIR_SUPERIORITY_SPEED_IMPACT) and weakens (ENEMY_AIR_SUPERIORITY_IMPACT) land
+/// units under it, and paradrops need NCountry.PARADROP_AIR_SUPERIORITY_RATIO. The value is not located in memory yet: `regions[]` carries
+/// `enemy_air_superiority` null with this reason until the read is built and compared with the air
+/// map live (gap register air.enemy_superiority_read); the plan rule `manage.enemy_air_superiority`
+/// (plan_military.rs) reads that field and acts on nothing while it is null.
+const ENEMY_SUPERIORITY_NOT_MAPPED: &str =
+    "not_mapped: the enemy's air superiority per region is not located in memory yet";
+
 /// `hoi4_air_regions`: own wings and air bases grouped by strategic air region (memory and game
 /// files only; the enemy's presence is what `hoi4_air_region_probe` reads from the air map).
 pub(super) fn regions(process: &dyn Process) -> Result<Value> {
@@ -1071,7 +1084,8 @@ pub(super) fn regions(process: &dyn Process) -> Result<Value> {
     Ok(json!({
         "regions":rows.into_iter().map(|(id, (w, b))| json!({"region_id":id,"name":names.get(&id),
             "wings_assigned":w.len(),"aircraft_assigned":w.iter().map(|x| x["aircraft"].as_i64().unwrap_or(0)).sum::<i64>(),
-            "wings":w,"air_bases_here":b})).collect::<Vec<_>>(),
+            "wings":w,"air_bases_here":b,
+            "enemy_air_superiority":null,"enemy_air_superiority_reason":ENEMY_SUPERIORITY_NOT_MAPPED})).collect::<Vec<_>>(),
         "wings_without_region":idle,
         "enemy_air":"Not in memory: hoi4_air_region_probe {state_id} opens the air map's region window and reads what it shows (active aircraft by type, detection and efficiency)",
         "validated":{"wings_by_region":"wing +0xb8 points at the CStrategicRegion; its file id (+0x40) matched the overview's Area column for Western and Eastern Germany","bases_by_region":"the base province's region pointer (+0xc8), file id +0x40"}

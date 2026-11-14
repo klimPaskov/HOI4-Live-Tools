@@ -182,7 +182,7 @@
    "source": "--list-tools"
   },
   "hoi4_air_regions": {
-   "description": "Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.",
+   "description": "Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter. regions[].enemy_air_superiority is not yet built: always null with enemy_air_superiority_reason.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
