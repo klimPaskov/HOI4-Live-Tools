@@ -1820,7 +1820,10 @@ def check_misc(plan, rep):
         rep.error("alarms must be an object")
     elif isinstance(al, dict):
         for k, v in al.items():
-            if not isinstance(v, (bool, int, float)) and v is not None:
+            if k in ("why", "note"):
+                if not isinstance(v, str):
+                    rep.error(f"alarms.{k}: must be text")
+            elif not isinstance(v, (bool, int, float)) and v is not None:
                 rep.error(f"alarms.{k}: must be a number, boolean or null")
     eo = plan.get("event_options", {})
     if eo and not isinstance(eo, dict):

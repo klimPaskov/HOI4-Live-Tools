@@ -324,7 +324,10 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
    horizon:** the campaign goes on after this war, so a tech no current template uses (support companies,
    the next weapons, armour, electronics) still earns its slot when the alternative is an empty one; a tech
    taken out of the list is replaced by another in-time tech, never by idle time, and
-   `alarms.research_slot_empty` stays on. Lint `research.idle` fails a plan with more than 25% of slot-time
+   `alarms.research_slot_empty` stays on: while the plan lists research the executor owns the slots, so
+   the alarm waits `alarms.slot_empty_grace_days` (default 2) for the executor to fill a slot and leaves
+   a list that ran out to `research_slot_idle_plan_exhausted`; what it still reports is a slot nobody is
+   filling. Lint `research.idle` fails a plan with more than 25% of slot-time
    unplanned, with or without a fallback, and one with any unplanned slot-time (above 2%) while in-time
    techs remain unlisted; it names them.
 5. `research_fallback` false, or restricted with `research_fallback_prefixes` to the same families; it is
@@ -764,7 +767,7 @@ the rule is a brief line (read, threshold, call) when the player must act.
 
 | Rule | Default threshold | Key today |
 |---|---|---|
-| Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`) | `alarms` |
+| Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`); an alarm is never switched off to stop noise: one set to false needs `alarms.why` naming it with the reason (lint `alarms.silenced`), and a noisy alarm goes into the tool-gap list | `alarms` |
 | Game alert row (`hoi4_alerts {}`) | any named alert → its fix; officer corps, MIO, admiral alerts wake the player | `manage` |
 | Armies and generals | few formations (≤ 3 per marshal, ≥ 3 divisions, ≤ 24), small roles are tasks inside them, a general on every army | `armies`, `army_layout` |
 | Rest and resume | rest below 30% of the army's highest organisation seen, resume at 80% and 70% supply; at most 20 days (not while supply is under 35%). These are the executor defaults; absolute `rest_below` / `resume_above` replace the shares | `war.rest_below_pct`, `war.resume_above_pct`, `war.supply_resume`, `war.rest_max_days` |

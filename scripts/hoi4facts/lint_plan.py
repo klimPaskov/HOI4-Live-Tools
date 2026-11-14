@@ -117,6 +117,11 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            focus_path rewards + FIELD_EXPERIENCE_MAX_PER_DAY x days at war (the NMilitary
                            country-pool defines; UNIT_EXPERIENCE_* is a division's veterancy); facts.xp
                            holds the floor and the ceiling
+  alarms.silenced          an alarm switched off (false or null in alarms, or in the alarms of a phase or
+                           contingency override) whose code the same object's `why` does not name with a
+                           reason: an alarm is a safety net, and one that seems noisy is a defect to report,
+                           not to silence. research_slot_empty and no_active_focus already stay quiet while
+                           the executor owns the slot (alarms.slot_empty_grace_days)
   supply.axis_reach        an axis state (war, war_by_phase, phase overrides) whose main province gets an estimated supply
                            flow below 1.0 from the best node held by then (start nodes, planned hubs and
                            ports, nodes of earlier axis states), from the NSupply defines, terrain, state
@@ -280,7 +285,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
-             "predicates.unreadable", "conquest.neutral_land",
+             "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
@@ -2237,6 +2242,40 @@ class Lint:
         self.facts["manage"] = {k: (m[k] if k in m else v.get("default")) for k, v in spec.items()
                                 if "default" in v and k not in ("why", "note")}
 
+    def alarm_blocks(self):
+        """[(label, alarms object)]: the base alarms and those of phase and contingency overrides."""
+        out = [("alarms", self.plan.get("alarms"))]
+        for key in ("phases", "contingencies"):
+            for j, p in enumerate(self.list_of(key)):
+                then = p.get("then") if isinstance(p.get("then"), dict) else {}
+                for label, ov in ((f"{key}[{j}].overrides", p.get("overrides")),
+                                  (f"{key}[{j}].then.overrides", then.get("overrides"))):
+                    if isinstance(ov, dict):
+                        out.append((f"{label}.alarms", ov.get("alarms")))
+        return [(label, a) for label, a in out if isinstance(a, dict)]
+
+    def alarms_silenced(self):
+        """An alarm switched off needs its reason next to it: `why` of the same alarms object names the code."""
+        for label, block in self.alarm_blocks():
+            why = block.get("why") if isinstance(block.get("why"), str) else ""
+            words = set(re.findall(r"[A-Za-z0-9_]+", why))
+            # a reason is more than the bare code: something has to be said about it
+            said = len(words - set(block)) >= 3
+            for code, v in block.items():
+                if code in ("why", "note") or not (v is False or v is None):
+                    continue
+                if code in words and said:
+                    continue
+                extra = ""
+                if code in ("research_slot_empty", "no_active_focus"):
+                    extra = ("; this alarm already waits while the plan's lists own the slot (a slot the executor "
+                             "fills next is not reported, a list that ran out raises the plan-exhausted alarm), so "
+                             "an empty slot it reports is one nobody is filling")
+                self.add("error", "alarms.silenced", f"{label}.{code}",
+                         f"{code} is switched off and {label}.why "
+                         f"{'does not name it' if why else 'is missing'}: keep the alarm (delete the key), or name "
+                         f"{code} in {label}.why with the reason it must stay quiet{extra}")
+
     def unreadable(self):
         """Strategy predicates that can never hold while their atoms are unreadable (always unknown)."""
         table = self.table
@@ -3299,6 +3338,7 @@ class Lint:
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
                  self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.alarms_silenced,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus
                  # timeline)
