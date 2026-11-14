@@ -75,7 +75,7 @@ GAP_WORDS = re.compile(r"\bgaps?\b|blocked|refuse|not executable|unvalidated|not
                        re.I)
 TOOL_TOKEN = re.compile(r"\bhoi4_[a-z0-9_]+\b")
 # Names in the skills that are placeholders, not tools.
-PLACEHOLDERS = {"hoi4_x"}
+PLACEHOLDERS = {"hoi4_x", "hoi4_live"}  # a placeholder in a usage line; the Python package
 
 
 def load(path=DATA):

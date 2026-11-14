@@ -3991,6 +3991,7 @@
     "xp_budget.army[].when"
    ],
    "tools": [],
+   "blocked": "no tool starts or stops army exercises (the army card's exercise button is not driven)",
    "blocked_terms": [
     "exercise"
    ],
