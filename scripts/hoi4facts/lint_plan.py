@@ -53,7 +53,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   army.marshal             (warning) two or more formations and no army_group over them (one field marshal per
                            theatre); (info) a group with no marshal: the executor picks the best free field marshal
   conquest.threshold       vp_targets below the enemy's surrender threshold (base limit plus its
-                           starting surrender_limit modifiers), when the goal is a capitulation
+                           starting surrender_limit modifiers), when the goal is a capitulation; the
+                           threshold is the one at war support 50% or more (low war support lowers it, and
+                           facts.surrender.war_support gives the lower numbers for earlier checkpoints)
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
                            fully-controlled state left out)
   conquest.adjacency       target (or the first province of its path) not next to own land or an
@@ -1028,9 +1030,14 @@ class Lint:
             s["planned_vp"] = got
             if got < s["vp_needed"]:
                 mods = ", ".join(f"{n} {v:+g}" for n, v in s["modifiers"]) or "no starting modifier"
+                ws, low = s["war_support"], ""
+                if ws["at_zero"]["vp_needed"] < s["vp_needed"]:
+                    low = (f"; low war support lowers it (to {ws['at_start']['vp_needed']} at the start value "
+                           f"{ws['start'] * 100:g}%, {ws['at_zero']['vp_needed']} at 0%), but war support can rise "
+                           f"to {ws['split'] * 100:g}% during the war, so the plan must reach {s['vp_needed']}")
                 self.add("error", "conquest.threshold", "vp_targets",
                          f"targets hold {got:g} of {enemy}'s {s['total_vp']:g} VP; capitulation needs {s['vp_needed']} "
-                         f"(limit {s['limit']:g}: base {s['base']:g}, {mods})")
+                         f"(limit {s['limit']:g}: base {s['base']:g}, {mods}){low}")
         self.facts["surrender"] = surr
         if surr:
             # rows on another country's state count nothing towards the surrender (owner at the start)

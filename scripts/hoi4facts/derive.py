@@ -532,11 +532,56 @@ def research_slots(game, tag, ctx, date=DEFAULT_START, history_file=None):
     return n if n is not None else int(define(game, "BASE_RESEARCH_SLOTS", 2))
 
 
-def surrender(game, tag, ctx, date=DEFAULT_START):
+# War support below this share brings in war_support_bad_modifier in proportion to the gap (all of it
+# at zero), above it war_support_good_modifier; the split itself is not in the game files.
+WAR_SUPPORT_SPLIT = 0.5
+LOW_WAR_SUPPORT_MODIFIER = "war_support_bad_modifier"
+
+
+def static_modifiers(game):
+    """{name: {key: number}} of the static modifiers in common/modifiers (later files and mods override)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/modifiers"):
+            for name, body in parse_file(f):
+                if name and isinstance(body, list):
+                    out[name] = {k: _num(v) for k, v in body if k and _num(v) is not None}
+        return out
+
+    return game.cached("derive:staticmods", load)
+
+
+def start_war_support(game, tag, ctx, date=DEFAULT_START):
+    """War support the history gives `tag` at date (set_war_support), else DEFAULT_WAR_SUPPORT. The live
+    value moves with world tension, the war (attacker or defender), casualties, bombing and convoy losses."""
+    _, fx = history_effects_of(game, tag, Ctx(tag, ctx.dlcs) if ctx else None, date)
+    val = None
+    for k, v in fx:
+        if k == "set_war_support" and _num(v) is not None:
+            val = _num(v)
+    return val if val is not None else float(define(game, "DEFAULT_WAR_SUPPORT", 0.5))
+
+
+def low_war_support_malus(game, war_support):
+    """surrender_limit the game adds for low war support: the war_support_bad_modifier value scaled by how far
+    war support sits below WAR_SUPPORT_SPLIT (0 at or above it, the whole value at zero)."""
+    full = static_modifiers(game).get(LOW_WAR_SUPPORT_MODIFIER, {}).get("surrender_limit") or 0.0
+    gap = max(0.0, WAR_SUPPORT_SPLIT - max(0.0, float(war_support))) / WAR_SUPPORT_SPLIT
+    return full * gap
+
+
+def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None):
     """Capitulation arithmetic of `tag` at date: {"total_vp", "base", "modifiers": [[idea, value]],
-    "limit", "vp_needed", "vp_needed_base"}. Total VP = the victory points of the states it owns;
-    limit = BASE_SURRENDER_LIMIT plus the surrender_limit of its starting ideas, floored at
-    MIN_SURRENDER_LIMIT. Ideas gained later (events, spirits added in war) are not counted."""
+    "limit", "vp_needed", "vp_needed_base", "war_support": {...}}. Total VP = the victory points of the
+    states it owns; limit = BASE_SURRENDER_LIMIT plus the surrender_limit of its starting ideas, floored at
+    MIN_SURRENDER_LIMIT. Ideas gained later (events, spirits added in war) are not counted.
+
+    `limit` and `vp_needed` hold while war support is WAR_SUPPORT_SPLIT or more: the most the country can
+    ask for, so the number a plan must reach. Low war support lowers the limit (low_war_support_malus), and
+    "war_support" gives the rows a planner compares: `start` (the history's war support), `at_start` and
+    `at_zero` ({"war_support", "malus", "limit", "vp_needed"}), `at` for the war_support argument when given,
+    and `applies`: which row holds at that war support (the argument, else the start value)."""
     ectx = Ctx(tag, ctx.dlcs) if ctx else None
     facts = game.state_facts(ectx, date)
     total = sum(sum(r["vps"].values()) for r in facts.values() if r["owner"] == tag)
@@ -548,10 +593,25 @@ def surrender(game, tag, ctx, date=DEFAULT_START):
         v = table.get(idea, {}).get("surrender_limit")
         if v:
             mods.append([idea, v])
-    limit = max(floor, base + sum(v for _, v in mods))
+    ideas_limit = base + sum(v for _, v in mods)
+    limit = max(floor, ideas_limit)
     need = lambda lim: int(math.ceil(total * lim - 1e-9))  # noqa: E731
+
+    def at(ws):
+        malus = low_war_support_malus(game, ws)
+        lim = max(floor, ideas_limit + malus)
+        return {"war_support": round(ws, 4), "malus": round(malus, 4), "limit": round(lim, 4), "vp_needed": need(lim)}
+
+    start_ws = start_war_support(game, tag, ctx, date)
+    full = static_modifiers(game).get(LOW_WAR_SUPPORT_MODIFIER, {}).get("surrender_limit") or 0.0
+    ws = {"start": round(start_ws, 4), "split": WAR_SUPPORT_SPLIT, "modifier": LOW_WAR_SUPPORT_MODIFIER,
+          "full_malus": full, "at_start": at(start_ws), "at_zero": at(0.0)}
+    if war_support is not None:
+        ws["at"] = at(float(war_support))
+    now = ws.get("at") or ws["at_start"]
+    ws["applies"] = "limit" if not now["malus"] else ("at" if "at" in ws else "at_start")
     return {"tag": tag, "total_vp": total, "base": base, "modifiers": mods, "limit": round(limit, 4),
-            "vp_needed": need(limit), "vp_needed_base": need(base)}
+            "vp_needed": need(limit), "vp_needed_base": need(base), "war_support": ws}
 
 
 # --------------------------------------------------------------------------- characters

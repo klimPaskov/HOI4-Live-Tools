@@ -500,7 +500,7 @@ def cmd_route(args):
 
 def cmd_vp(args):
     w = world(args)
-    v = w.vp(args.TAG)
+    v = w.vp(args.TAG, args.war_support)
     rules = [o for o in scenariomod.outcomes(w, args.TAG) if o.get("requires_control")]
     for t in w.at_war_with(args.TAG):  # the other side's rules about this tag's states
         rules += [o for o in scenariomod.outcomes(w, t) if o.get("requires_control")]
@@ -511,6 +511,7 @@ def cmd_vp(args):
                f"[{x['base_limit']['src']}]"]
         for t in x["thresholds"]:
             out.append(f"  limit {t['limit']} -> {t['vp_needed']} VP ({t['with']})")
+        out += w.surrender_lines(x)
         for m in x["modifiers"]:
             out.append(f"  modifier {m['idea']} {m['value']} {'held' if m['held_at_start'] else 'possible'} [{m['src']}]")
         for r in x["provinces"]:
@@ -1498,7 +1499,10 @@ def parser():
     add("province", cmd_province, ("id", {"type": int}))
     p = add("route", cmd_route, ("src", {"type": int}), ("dst", {"type": int}))
     p.add_argument("--avoid-rivers", action="store_true")
-    add("vp", cmd_vp, "TAG")
+    p = add("vp", cmd_vp, "TAG")
+    p.add_argument("--war-support", type=float, metavar="SHARE",
+                   help="the tag's war support as read in the game (0.3 = 30%%): gives the surrender limit that "
+                        "holds at it (default: the start value)")
     add("oob", cmd_oob, "TAG")
     p = add("characters", cmd_characters, "TAG")
     p.add_argument("--role", choices=("general", "marshal", "admiral", "advisor", "leader"))

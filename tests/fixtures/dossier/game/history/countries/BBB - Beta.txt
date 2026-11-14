@@ -4,3 +4,4 @@ set_oob = "BBB_1936"
 set_technology = { t_b = 1 }
 set_politics = { ruling_party = democratic }
 create_intelligence_agency = yes
+set_war_support = 0.2
