@@ -4,6 +4,7 @@ use std::{
     collections::VecDeque,
     fs,
     sync::atomic::{AtomicUsize, Ordering},
+    thread,
 };
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -223,6 +224,9 @@ struct Fake {
     dispatch_error: bool,
     deadline: Option<Instant>,
     preinput_phases: Vec<read_recovery::Phase>,
+    /// A queued `fixture_end` error was reached: every later read fails the same way, so an
+    /// outcome that stays unproven closes after one settlement window whatever the deadline.
+    ended: bool,
 }
 impl Fake {
     fn new(stage: Stage) -> Self {
@@ -246,6 +250,7 @@ impl Fake {
             dispatch_error: false,
             deadline: None,
             preinput_phases: Vec::new(),
+            ended: false,
         }
     }
     fn success(stage: Stage) -> Self {
@@ -270,9 +275,14 @@ impl Backend for Fake {
     type Scope = u64; // Fixture identity token only; not an actual game pointer.
     fn observe(&mut self, _: &Target) -> Result<Observation<u64>> {
         self.observations += 1;
+        if self.ended {
+            return Err(error("fixture_end", "End of fixture"));
+        }
         if let Some(result) = self.states.pop_front() {
-            if let Ok(value) = &result {
-                self.last = value.clone();
+            match &result {
+                Ok(value) => self.last = value.clone(),
+                Err(e) if e.code == "fixture_end" => self.ended = true,
+                Err(_) => {}
             }
             result
         } else {
@@ -339,7 +349,9 @@ impl Backend for Fake {
         }
     }
     fn confirm_input_idle(&mut self, _: &Candidate<u64>, deadline: Instant) -> Result<()> {
-        self.same_deadline(deadline);
+        // The idle check is read-only: it is bounded by the end of the observation, which is
+        // the action's deadline or later.
+        assert!(deadline >= self.deadline.unwrap());
         self.idle_checks += 1;
         if self.exhaust_on_idle {
             thread::sleep(
@@ -814,24 +826,23 @@ fn scope_or_foreign_epoch_change_after_input_never_commits_replaced_payload() {
         } else {
             f.states[3].as_mut().unwrap().scope = 2;
         }
-        assert_eq!(
-            execute(
-                &mut j,
-                "changed",
-                target(stage),
-                &authority(),
-                &RwLock::new(true),
-                &Domains::default(),
-                &mut f,
-                TIME
-            )
-            .unwrap_err()
-            .code,
-            "action_uncertain"
-        );
+        // The replaced identity stays: nothing of the original scope is readable again.
+        f.states.truncate(4);
+        let e = execute(
+            &mut j,
+            "changed",
+            target(stage),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            TIME,
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_unconfirmed");
         let r = &j.receipts["changed"];
         assert_eq!(r.observed, before(stage));
-        assert_eq!(r.status, Status::Uncertain);
+        assert_eq!(r.status, Status::Unconfirmed);
         assert_eq!(
             r.uncertainty,
             Some(if foreign {
@@ -840,9 +851,32 @@ fn scope_or_foreign_epoch_change_after_input_never_commits_replaced_payload() {
                 Uncertainty::Scope
             })
         );
-        assert!(j.blocks_game(&epoch().game));
+        assert!(!j.blocks_game(&epoch().game));
         assert_eq!(f.possible_inputs, 1);
     }
+}
+#[test]
+fn a_replaced_scope_for_one_read_decides_nothing_the_original_scope_does() {
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let stage = Stage::SelectBuilding;
+    let mut f = Fake::success(stage);
+    f.states[3].as_mut().unwrap().scope = 2;
+    f.states.push_back(Ok(observation(reached(stage), 1)));
+    let out = execute(
+        &mut j,
+        "one-read",
+        target(stage),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!(out.receipt.status, Status::Verified);
+    assert_eq!(out.receipt.observed, reached(stage));
+    assert_eq!(f.possible_inputs, 1);
 }
 #[test]
 fn already_reached_during_preintent_refresh_becomes_noop_without_click() {
@@ -880,6 +914,8 @@ fn changed_canonical_postcondition_persists_actual_own_state_and_never_replays()
         .into_iter()
         .map(|s| Ok(observation(s, 1)))
         .collect();
+    f.states
+        .push_back(Err(error("fixture_end", "Nothing readable afterwards")));
     let a = authority();
     let gate = RwLock::new(true);
     let domains = Domains::default();
@@ -892,64 +928,78 @@ fn changed_canonical_postcondition_persists_actual_own_state_and_never_replays()
             &gate,
             &domains,
             &mut f,
-            Duration::from_millis(200)
+            TIME
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     assert_eq!(j.receipts["mismatch"].observed, wrong);
     assert_eq!(f.possible_inputs, 1);
     drop(j);
     let mut j = Journal::open(&s.path()).unwrap();
+    assert!(!j.blocks_game(&epoch().game));
+    // The closed id answers from its record: no read, no input.
     let mut retry = Fake::success(stage);
-    for id in ["mismatch", "fresh-id"] {
-        assert_eq!(
-            execute(
-                &mut j,
-                id,
-                target(stage),
-                &a,
-                &gate,
-                &domains,
-                &mut retry,
-                TIME
-            )
-            .unwrap_err()
-            .code,
-            "action_uncertain"
-        );
-    }
+    assert_eq!(
+        execute(
+            &mut j,
+            "mismatch",
+            target(stage),
+            &a,
+            &gate,
+            &domains,
+            &mut retry,
+            TIME
+        )
+        .unwrap_err()
+        .code,
+        "action_unconfirmed"
+    );
     assert_eq!((retry.observations, retry.possible_inputs), (0, 0));
+    // A fresh id is accepted and decided by fresh state.
+    let out = execute(
+        &mut j,
+        "fresh-id",
+        target(stage),
+        &a,
+        &gate,
+        &domains,
+        &mut retry,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!(out.receipt.status, Status::Verified);
+    assert_eq!(retry.possible_inputs, 1);
 }
 #[test]
-fn transport_error_after_possible_input_is_durable_uncertainty() {
+fn transport_error_after_possible_input_closes_with_its_cause_and_holds_nothing() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();
     let stage = Stage::EnsureOpen;
     let mut f = Fake::success(stage);
     f.states[3] = Err(error("io_error", "transport lost"));
-    assert_eq!(
-        execute(
-            &mut j,
-            "lost",
-            target(stage),
-            &authority(),
-            &RwLock::new(true),
-            &Domains::default(),
-            &mut f,
-            TIME
-        )
-        .unwrap_err()
-        .code,
-        "action_uncertain"
-    );
+    f.states[4] = Err(error("fixture_end", "Nothing readable afterwards"));
+    let e = execute(
+        &mut j,
+        "lost",
+        target(stage),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME,
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
     assert_eq!(
         j.receipts["lost"].uncertainty,
         Some(Uncertainty::Observation)
     );
     drop(j);
-    assert!(Journal::open(&s.path()).unwrap().blocks_game(&epoch().game));
+    let j = Journal::open(&s.path()).unwrap();
+    assert_eq!(j.receipts["lost"].status, Status::Unconfirmed);
+    assert!(!j.blocks_game(&epoch().game));
 }
 #[test]
 fn crash_after_durable_intent_survives_restart_and_blocks_other_stage_and_id() {
@@ -1123,7 +1173,9 @@ fn revoked_lease_and_closed_gate_refuse_before_observation() {
     }
 }
 #[test]
-fn original_deadline_is_not_extended_after_dispatch_or_input_idle() {
+fn a_target_proven_after_the_deadline_is_verified() {
+    // The click, or the idle check, consumes the action's whole deadline. What follows is
+    // reading only, and what it proves counts.
     for idle in [false, true] {
         let s = Scratch::new();
         let mut j = Journal::open(&s.path()).unwrap();
@@ -1131,59 +1183,99 @@ fn original_deadline_is_not_extended_after_dispatch_or_input_idle() {
         let mut f = Fake::success(stage);
         f.exhaust_on_dispatch = !idle;
         f.exhaust_on_idle = idle;
-        assert_eq!(
-            execute(
-                &mut j,
-                "late",
-                target(stage),
-                &authority(),
-                &RwLock::new(true),
-                &Domains::default(),
-                &mut f,
-                // Durable journal writes precede dispatch. Give those the
-                // normal fixture budget; the backend deliberately consumes the
-                // ORIGINAL remaining deadline in the selected input phase.
-                TIME
-            )
-            .unwrap_err()
-            .code,
-            "action_uncertain"
-        );
+        let out = execute(
+            &mut j,
+            "late",
+            target(stage),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert_eq!(out.receipt.status, Status::Verified);
+        assert!(out.current_state_verified);
         assert_eq!(f.dispatches, 1);
         assert_eq!(f.possible_inputs, 1);
-        assert_eq!(f.idle_checks, usize::from(idle));
+        assert_eq!(f.idle_checks, 1);
         assert!(Instant::now() >= f.deadline.unwrap());
-        assert_eq!(
-            j.receipts["late"].uncertainty,
-            Some(Uncertainty::DeadlineOrAuthority)
-        );
+        assert!(!j.blocks_game(&epoch().game));
     }
 }
 #[test]
-fn canonical_readback_without_idle_confirmation_remains_uncertain() {
+fn a_target_never_shown_after_the_deadline_closes_as_deadline_uncertainty() {
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let stage = Stage::EnsureOpen;
+    let mut f = Fake::new(stage);
+    f.exhaust_on_dispatch = true;
+    let e = execute(
+        &mut j,
+        "never",
+        target(stage),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("target not observed"), "{}", e.message);
+    assert_eq!(f.possible_inputs, 1);
+    assert_eq!(f.idle_checks, 0);
+    assert_eq!(
+        j.receipts["never"].uncertainty,
+        Some(Uncertainty::DeadlineOrAuthority)
+    );
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn canonical_readback_without_idle_confirmation_closes_unconfirmed() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();
     let mut f = Fake::success(Stage::EnsureOpen);
     f.idle_error = true;
+    let a = authority();
+    let gate = RwLock::new(true);
+    let domains = Domains::default();
     assert_eq!(
         execute(
             &mut j,
             "held",
             target(Stage::EnsureOpen),
-            &authority(),
-            &RwLock::new(true),
-            &Domains::default(),
+            &a,
+            &gate,
+            &domains,
             &mut f,
             TIME
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     assert!(j.receipts["held"]
         .observed
         .reached(&target(Stage::EnsureOpen)));
     assert_eq!(j.receipts["held"].uncertainty, Some(Uncertainty::InputIdle));
+    assert!(!j.blocks_game(&epoch().game));
+    // The panel is open: a fresh request verifies that from state, without input.
+    let mut again = Fake::new(Stage::EnsureOpen);
+    again.last.state = reached(Stage::EnsureOpen);
+    let fresh = execute(
+        &mut j,
+        "fresh",
+        target(Stage::EnsureOpen),
+        &a,
+        &gate,
+        &domains,
+        &mut again,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!(fresh.receipt.delivery, None);
+    assert_eq!((f.possible_inputs, again.possible_inputs), (1, 0));
 }
 #[test]
 fn torn_terminal_witness_is_reobserved_within_the_original_deadline() {
@@ -1221,6 +1313,8 @@ fn persistently_torn_terminal_witness_never_verifies() {
     f.states.extend(
         std::iter::repeat_with(|| Err(error("torn_read", "Snapshot witness changed"))).take(4000),
     );
+    // The click consumes the deadline; the terminal witness keeps tearing afterwards.
+    f.exhaust_on_dispatch = true;
     assert_eq!(
         execute(
             &mut j,
@@ -1230,15 +1324,14 @@ fn persistently_torn_terminal_witness_never_verifies() {
             &RwLock::new(true),
             &Domains::default(),
             &mut f,
-            // Allow the durable intent to reach dispatch on loaded runners;
-            // the persistent terminal tear must still exhaust this deadline.
-            TIME
+            Duration::from_secs(1)
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     assert_eq!(f.dispatches, 1);
+    assert_eq!(j.receipts["always-torn"].status, Status::Unconfirmed);
     assert_eq!(
         j.receipts["always-torn"].uncertainty,
         Some(Uncertainty::DeadlineOrAuthority)
@@ -1263,12 +1356,13 @@ fn final_post_idle_scope_change_cannot_be_verified() {
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     assert_eq!(
         j.receipts["idle-race"].uncertainty,
         Some(Uncertainty::Scope)
     );
+    assert!(!j.blocks_game(&epoch().game));
 }
 #[test]
 fn candidate_cannot_assert_authority_or_escape_its_client_bounds() {
@@ -1398,7 +1492,7 @@ fn insufficient_capacity_refuses_before_intent_and_possible_input() {
     assert_eq!(f.dispatches, 0);
 }
 #[test]
-fn failed_uncertainty_append_poison_preserves_durable_intent_across_restart() {
+fn a_terminal_record_that_cannot_be_written_poisons_and_keeps_the_intent() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();
     let intent = j
@@ -1411,12 +1505,13 @@ fn failed_uncertainty_append_poison_preserves_durable_intent_across_restart() {
             observed: before(Stage::EnsureOpen),
             uncertainty: None,
             cause: None,
+            unix_ms: Some(stage_settle::now_ms()),
         })
         .unwrap();
     // Deliberately make the writer read-only only in this isolated fixture.
     j.file = File::open(s.path()).unwrap();
     assert_eq!(
-        j.uncertain(
+        j.unconfirmed(
             TOKEN,
             &intent,
             Delivery::Unknown,
@@ -1427,11 +1522,210 @@ fn failed_uncertainty_append_poison_preserves_durable_intent_across_restart() {
         .code,
         "action_uncertain"
     );
+    // A persistence failure is not an uncertain action: it holds everything, for good.
     assert!(j.poisoned && j.blocks_game(&epoch().game));
+    let mut f = Fake::success(Stage::EnsureOpen);
+    for id in ["intent", "new"] {
+        assert_eq!(
+            execute(
+                &mut j,
+                id,
+                target(Stage::EnsureOpen),
+                &authority(),
+                &RwLock::new(true),
+                &Domains::default(),
+                &mut f,
+                TIME
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!((f.observations, f.possible_inputs), (0, 0));
     drop(j);
+    // After a restart the intent is an interrupted one: it holds for the orphan bound only.
     let j = Journal::open(&s.path()).unwrap();
     assert_eq!(j.receipts["intent"].status, Status::Intent);
     assert!(j.blocks_game(&epoch().game));
+}
+/// Rewrite every record of the journal file through `edit` (as another build or time would
+/// have left it).
+fn rewrite_records(path: &std::path::Path, edit: impl Fn(&mut serde_json::Value)) {
+    let text: String = fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let mut record: serde_json::Value = serde_json::from_str(line).unwrap();
+            edit(&mut record);
+            format!("{record}\n")
+        })
+        .collect();
+    fs::write(path, text).unwrap();
+}
+#[test]
+fn an_interrupted_intent_holds_for_the_orphan_bound_and_the_next_call_closes_it() {
+    // `aged`: written by this build, the bound has passed. Otherwise: written by an older
+    // build, which recorded no time at all.
+    for aged in [true, false] {
+        let s = Scratch::new();
+        let stage = Stage::EnsureOpen;
+        let a = authority();
+        let gate = RwLock::new(true);
+        let domains = Domains::default();
+        let mut j = Journal::open(&s.path()).unwrap();
+        let mut f = Fake::success(stage);
+        f.panic_dispatch = true;
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| execute(
+                &mut j,
+                "crashed",
+                target(stage),
+                &a,
+                &gate,
+                &domains,
+                &mut f,
+                TIME
+            )))
+            .is_err()
+        );
+        drop(j);
+        let mut j = Journal::open(&s.path()).unwrap();
+        assert!(j.receipts["crashed"].unix_ms.is_some());
+        assert!(j.blocks_game(&epoch().game));
+        let mut next = Fake::success(stage);
+        for id in ["crashed", "next"] {
+            let e = execute(
+                &mut j,
+                id,
+                target(stage),
+                &a,
+                &gate,
+                &domains,
+                &mut next,
+                TIME,
+            )
+            .unwrap_err();
+            assert_eq!(e.code, "action_uncertain");
+            assert!(e.message.contains("at most 10 s"), "{}", e.message);
+        }
+        assert_eq!((next.observations, next.possible_inputs), (0, 0));
+        drop(j);
+        rewrite_records(&s.path(), |record| {
+            if aged {
+                record["unix_ms"] =
+                    serde_json::json!(stage_settle::now_ms() - stage_settle::ORPHAN_MS);
+            } else {
+                record.as_object_mut().unwrap().remove("unix_ms");
+            }
+        });
+        let mut j = Journal::open(&s.path()).unwrap();
+        assert_eq!(j.receipts["crashed"].status, Status::Intent);
+        assert!(!j.blocks_game(&epoch().game));
+        // A new request closes the orphan without reading for it and then runs normally.
+        let out = execute(
+            &mut j,
+            "next",
+            target(stage),
+            &a,
+            &gate,
+            &domains,
+            &mut next,
+            TIME,
+        )
+        .unwrap();
+        assert_eq!(out.receipt.status, Status::Verified);
+        assert_eq!(next.possible_inputs, 1);
+        let closed = &j.receipts["crashed"];
+        assert_eq!(closed.status, Status::Unconfirmed);
+        assert_eq!(closed.uncertainty, Some(Uncertainty::Interrupted));
+        assert_eq!(closed.cause.as_ref().unwrap().code, "orphaned");
+        // The interrupted request itself answers from that record: no read, no input.
+        let reads = next.observations;
+        let e = execute(
+            &mut j,
+            "crashed",
+            target(stage),
+            &a,
+            &gate,
+            &domains,
+            &mut next,
+            TIME,
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_unconfirmed");
+        assert!(e.message.contains("cause=orphaned"), "{}", e.message);
+        assert_eq!((next.observations, next.possible_inputs), (reads, 1));
+        drop(j);
+        let j = Journal::open(&s.path()).unwrap();
+        assert_eq!(j.receipts["crashed"].status, Status::Unconfirmed);
+        assert!(!j.blocks_game(&epoch().game));
+    }
+}
+#[test]
+fn a_record_an_older_build_wrote_as_uncertain_loads_closed_and_holds_nothing() {
+    let s = Scratch::new();
+    let stage = Stage::EnsureOpen;
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(stage);
+    f.idle_error = true;
+    let a = authority();
+    let gate = RwLock::new(true);
+    let domains = Domains::default();
+    execute(
+        &mut j,
+        "old",
+        target(stage),
+        &a,
+        &gate,
+        &domains,
+        &mut f,
+        TIME,
+    )
+    .unwrap_err();
+    drop(j);
+    // As the older build wrote it: the status by its old name, no time on any record.
+    rewrite_records(&s.path(), |record| {
+        record.as_object_mut().unwrap().remove("unix_ms");
+        if record["status"] == "Unconfirmed" {
+            record["status"] = serde_json::json!("Uncertain");
+        }
+    });
+    assert!(fs::read_to_string(s.path())
+        .unwrap()
+        .contains("\"Uncertain\""));
+    let mut j = Journal::open(&s.path()).unwrap();
+    assert_eq!(j.receipts["old"].status, Status::Unconfirmed);
+    assert!(!j.blocks_game(&epoch().game));
+    let mut next = Fake::success(stage);
+    assert_eq!(
+        execute(
+            &mut j,
+            "old",
+            target(stage),
+            &a,
+            &gate,
+            &domains,
+            &mut next,
+            TIME
+        )
+        .unwrap_err()
+        .code,
+        "action_unconfirmed"
+    );
+    assert_eq!(next.observations, 0);
+    let out = execute(
+        &mut j,
+        "new",
+        target(stage),
+        &a,
+        &gate,
+        &domains,
+        &mut next,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!(out.receipt.status, Status::Verified);
 }
 
 #[test]
@@ -1505,10 +1799,11 @@ fn uncertain_terminal_record_cannot_be_rewritten_to_verified_on_reopen() {
             observed: before(stage),
             uncertainty: None,
             cause: None,
+            unix_ms: None,
         })
         .unwrap();
     let terminal = Receipt {
-        status: Status::Uncertain,
+        status: Status::Unconfirmed,
         delivery: Some(Delivery::Unknown),
         observed: reached(stage),
         uncertainty: Some(Uncertainty::InputIdle),
@@ -1619,7 +1914,7 @@ fn final_readonly_refusal_keeps_exact_producer_cause_with_no_dispatch() {
 }
 
 #[test]
-fn uncertain_readback_keeps_exact_bounded_sanitized_producer_cause_on_restart() {
+fn unproven_readback_keeps_exact_bounded_sanitized_producer_cause_on_restart() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();
     let stage = Stage::SelectBuilding;
@@ -1629,7 +1924,11 @@ fn uncertain_readback_keeps_exact_bounded_sanitized_producer_cause_on_restart() 
         TOKEN.to_uppercase(),
         "é".repeat(600)
     );
-    f.states[3] = Err(Error::new("permission_denied", message));
+    // The read stays denied for the whole observation.
+    f.states.truncate(3);
+    f.states.extend(
+        std::iter::repeat_with(|| Err(Error::new("permission_denied", message.clone()))).take(4000),
+    );
     let a = authority();
     let gate = RwLock::new(true);
     let domains = Domains::default();
@@ -1678,31 +1977,49 @@ fn uncertain_readback_keeps_exact_bounded_sanitized_producer_cause_on_restart() 
 }
 
 #[test]
-fn explicit_ambiguous_dispatch_error_stops_without_extra_observation_and_retains_cause() {
-    let s = Scratch::new();
-    let mut j = Journal::open(&s.path()).unwrap();
-    let mut f = Fake::success(Stage::EnsureOpen);
-    f.dispatch_error = true;
-    let err = execute(
-        &mut j,
-        "ambiguous",
-        target(Stage::EnsureOpen),
-        &authority(),
-        &RwLock::new(true),
-        &Domains::default(),
-        &mut f,
-        TIME,
-    )
-    .unwrap_err();
-    assert_eq!(f.observations, 3);
-    assert_eq!(f.possible_inputs, 1);
-    assert_eq!(err.code, "action_uncertain");
-    assert!(err.message.contains("cause=transport_lost:"));
-    assert_eq!(
-        j.receipts["ambiguous"].uncertainty,
-        Some(Uncertainty::Dispatch)
-    );
-    assert!(j.blocks_game(&epoch().game));
+fn an_ambiguous_dispatch_error_is_decided_by_what_the_game_shows() {
+    // The dispatcher lost its connection after a possible event. With the target on screen
+    // the dispatch only failed late; with nothing to read the record keeps its cause.
+    for shown in [true, false] {
+        let s = Scratch::new();
+        let mut j = Journal::open(&s.path()).unwrap();
+        let mut f = Fake::success(Stage::EnsureOpen);
+        f.dispatch_error = true;
+        if !shown {
+            f.states.truncate(3);
+            f.states
+                .push_back(Err(error("torn_read", "Snapshot witness changed")));
+            f.exhaust_on_dispatch = true;
+        }
+        let result = execute(
+            &mut j,
+            "ambiguous",
+            target(Stage::EnsureOpen),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            Duration::from_secs(1),
+        );
+        assert_eq!(f.possible_inputs, 1);
+        assert!(!j.blocks_game(&epoch().game));
+        if shown {
+            assert_eq!(result.unwrap().receipt.status, Status::Verified);
+            assert_eq!(j.receipts["ambiguous"].delivery, Some(Delivery::Unknown));
+        } else {
+            let err = result.unwrap_err();
+            assert_eq!(err.code, "action_unconfirmed");
+            assert!(
+                err.message.contains("cause=transport_lost:"),
+                "{}",
+                err.message
+            );
+            assert_eq!(
+                j.receipts["ambiguous"].uncertainty,
+                Some(Uncertainty::Dispatch)
+            );
+        }
+    }
 }
 
 #[test]
@@ -1721,7 +2038,7 @@ fn diagnostic_redacts_before_utf8_byte_bound_including_embedded_token() {
 }
 
 #[test]
-fn failure_evidence_never_downgrades_unresolved_intent_or_terminal_uncertainty() {
+fn failure_evidence_never_downgrades_a_request_that_may_have_sent_input() {
     for (delivery, dispatch_error, expected) in [
         (
             Delivery::NotQueued,
@@ -1740,6 +2057,9 @@ fn failure_evidence_never_downgrades_unresolved_intent_or_terminal_uncertainty()
         let mut f = Fake::success(Stage::EnsureOpen);
         f.delivery = delivery;
         f.dispatch_error = dispatch_error;
+        f.states.truncate(3);
+        f.states
+            .push_back(Err(error("fixture_end", "Nothing readable afterwards")));
         let err = execute(
             &mut j,
             "attempt",
@@ -1753,13 +2073,20 @@ fn failure_evidence_never_downgrades_unresolved_intent_or_terminal_uncertainty()
         .unwrap_err();
         assert_eq!(j.failure_evidence("attempt", &t, &err), expected);
         if expected == FailureEvidence::Unknown {
+            // The closed request may have sent input whatever a later error says about it;
+            // a different id that never reached its own intent sent none.
+            assert_eq!(err.code, "action_unconfirmed");
+            assert_eq!(
+                j.failure_evidence("attempt", &t, &error("torn_read", "retry-looking cause")),
+                FailureEvidence::Unknown
+            );
             assert_eq!(
                 j.failure_evidence(
                     "different-id",
                     &t,
                     &error("torn_read", "retry-looking cause")
                 ),
-                FailureEvidence::Unknown
+                FailureEvidence::BeforeIntent
             );
         }
     }

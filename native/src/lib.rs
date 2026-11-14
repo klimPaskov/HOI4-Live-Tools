@@ -81,6 +81,8 @@ mod focus_candidate_observation;
 
 pub mod focus_stage;
 
+mod stage_settle;
+
 #[doc(hidden)]
 pub mod politics_focus;
 

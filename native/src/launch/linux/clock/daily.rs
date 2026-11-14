@@ -1551,6 +1551,10 @@ impl core::Backend for DailyBackend<'_> {
             until.min(self.until),
         ) {
             Ok((e, _)) => e,
+            // Nothing is held: a refusal before input, or an assignment the stage journal
+            // closed without proof (`action_unconfirmed`). The entry stays pending and a
+            // later day plans again from fresh state; the stage's own preflight refuses a
+            // duplicate assignment. Only an interrupted or unrecorded outcome stops the worker.
             Err(e) if e.code != "action_uncertain" && !unresolved(self.state) => {
                 return Ok(core::Outcome::NotQueued(e.code.into()))
             }

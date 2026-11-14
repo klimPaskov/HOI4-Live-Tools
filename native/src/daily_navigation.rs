@@ -786,6 +786,8 @@ mod tests {
                 status: Status::Verified,
                 delivery: None,
                 observed,
+                unix_ms: None,
+                closed: None,
             },
             historical: false,
             current_state_verified: true,

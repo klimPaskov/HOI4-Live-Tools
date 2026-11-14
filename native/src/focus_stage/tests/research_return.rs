@@ -121,29 +121,34 @@ fn research_return_cannot_substitute_old_q_or_pointer_candidate() {
     }
 }
 #[test]
-fn research_return_changed_focus_after_input_quarantines_across_restart() {
+fn research_return_changed_focus_after_input_closes_diverged_across_restart() {
     let sc = Scratch::new();
     let mut j = Journal::open(&sc.path()).unwrap();
     let mut after = research_state(12);
     after.active_focus = ActiveFocus::Active("GER_other".into());
     let mut f = Fake::sequence(Stage::OpenPoliticsFromResearch, research_state(5), after);
-    assert_eq!(
-        attempt(&mut j, "uncertain", &mut f).unwrap_err().code,
-        "action_uncertain"
-    );
+    let e = attempt(&mut j, "changed", &mut f).unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("diverged="), "{}", e.message);
     assert_eq!(f.dispatches, 1);
     drop(j);
     let mut j = Journal::open(&sc.path()).unwrap();
-    assert!(j.blocks_game(&epoch().game));
-    for id in ["uncertain", "new"] {
-        assert_eq!(
-            attempt(&mut j, id, &mut f).unwrap_err().code,
-            "action_uncertain"
-        );
-    }
+    assert!(!j.blocks_game(&epoch().game));
+    assert_eq!(j.receipts["changed"].status, Status::Diverged);
+    // The closed id answers from its receipt; a new id is read afresh (and refused by its
+    // own preflight here: the panel is no longer the research panel).
+    f.ended = true;
+    assert_eq!(
+        attempt(&mut j, "changed", &mut f).unwrap_err().code,
+        "action_unconfirmed"
+    );
+    assert_eq!(
+        attempt(&mut j, "new", &mut f).unwrap_err().code,
+        "fixture_end"
+    );
     assert_eq!(f.dispatches, 1);
     drop(j);
-    assert_eq!(fs::read_to_string(sc.path()).unwrap().lines().count(), 1);
+    assert_eq!(fs::read_to_string(sc.path()).unwrap().lines().count(), 2);
 }
 #[test]
 fn research_return_unsettled_post_root_never_becomes_verified() {
@@ -153,15 +158,17 @@ fn research_return_unsettled_post_root_never_becomes_verified() {
         let mut after = research_state(12);
         after.research_panel_root = root;
         let mut f = Fake::sequence(Stage::OpenPoliticsFromResearch, research_state(5), after);
+        f.queue
+            .push_back(Err(error("fixture_end", "Root never settles")));
         assert_eq!(
-            attempt(&mut j, "uncertain", &mut f).unwrap_err().code,
-            "action_uncertain"
+            attempt(&mut j, "unproven", &mut f).unwrap_err().code,
+            "action_unconfirmed"
         );
         assert_eq!(f.dispatches, 1);
         drop(j);
-        assert!(Journal::open(&sc.path())
-            .unwrap()
-            .blocks_game(&epoch().game));
+        let j = Journal::open(&sc.path()).unwrap();
+        assert_eq!(j.receipts["unproven"].status, Status::Unconfirmed);
+        assert!(!j.blocks_game(&epoch().game));
     }
 }
 #[test]

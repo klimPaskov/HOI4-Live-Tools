@@ -667,6 +667,8 @@ fn neither_current_nor_historical_research_panel_receipts_complete_the_final_goa
                     status: Status::Verified,
                     delivery: Some(Delivery::ServerConfirmed),
                     observed: proof.observed().research().clone(),
+                    unix_ms: None,
+                    closed: None,
                 },
                 historical,
                 current_state_verified: !historical,

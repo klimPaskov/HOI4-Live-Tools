@@ -89,7 +89,7 @@ fn opening_pending_before_intent_never_sleeps_retries_or_dispatches() {
     }
 }
 #[test]
-fn persistent_opening_animation_obeys_original_deadline_and_quarantines_without_replay() {
+fn persistent_opening_animation_past_the_deadline_closes_unconfirmed_without_replay() {
     struct PendingUntilDeadline {
         inner: Fake,
         dispatched_deadline: Option<Instant>,
@@ -146,78 +146,96 @@ fn persistent_opening_animation_obeys_original_deadline_and_quarantines_without_
             Duration::from_secs(5),
         )
         .unwrap_err();
-    assert_eq!(e.code, "action_uncertain");
-    assert!(e.message.contains("cause=research_deadline"));
-    assert!(e.message.contains("rejected_open_reads="));
-    assert!(e
-        .message
-        .contains("root=research_panel; transitions=[1, 0]"));
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("rejected_open_reads=1"), "{}", e.message);
+    assert!(
+        e.message
+            .contains("root=research_panel; transitions=[1, 0]"),
+        "{}",
+        e.message
+    );
     assert!(e.message.len() <= 512);
     assert_eq!(f.inner.dispatches, 1);
     assert_eq!(f.inner.calls, 3);
     assert!(Instant::now() >= f.dispatched_deadline.unwrap());
-    assert!(j.blocks_game(&epoch().game));
+    assert!(!j.blocks_game(&epoch().game));
     drop(j);
     let bytes = fs::read(scratch.journal()).unwrap();
     let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert_eq!(j.receipts["opening-timeout"].status, Status::Unconfirmed);
+    // The closed id answers from its receipt: no read, no key, no new record.
     let calls = f.inner.calls;
-    for id in ["opening-timeout", "new-opening-id"] {
-        assert_eq!(
-            j.execute(
-                id,
-                t.clone(),
-                &"a".repeat(32),
-                &a,
-                &gate,
-                &mut f,
-                Duration::from_secs(1)
-            )
-            .unwrap_err()
-            .code,
-            "action_uncertain"
-        );
-    }
+    assert_eq!(
+        j.execute(
+            "opening-timeout",
+            t.clone(),
+            &"a".repeat(32),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_unconfirmed"
+    );
     assert_eq!(f.inner.dispatches, 1);
     assert_eq!(f.inner.calls, calls);
     drop(j);
     assert_eq!(fs::read(scratch.journal()).unwrap(), bytes);
 }
 #[test]
-fn unknown_animation_ownership_and_other_stages_never_gain_opening_wait_authority() {
+fn an_unreadable_moment_after_the_input_decides_nothing_fresh_state_does() {
+    // A read that fails for any reason after the key is not an outcome. When a complete
+    // state follows inside the observation it is the proof; when none follows the request
+    // closes without proof and names the last failure.
     for code in [
         "research_precondition",
         "ownership_changed",
         "invalid_gui_type",
         "input_lease_required",
     ] {
-        let scratch = Scratch::new();
-        let mut j = Journal::open(&scratch.journal()).unwrap();
-        let mut f = opener(vec![
-            Ok(closed_map_state()),
-            Ok(closed_map_state()),
-            Err(pending("[1, 0]")),
-            Err(error(
-                code,
-                "Unknown root state or changed original ownership",
-            )),
-            Ok(panel_state()),
-        ]);
-        let e = execute(
-            &mut j,
-            "strict-after",
-            target(Stage::OpenPanel),
-            &authority(),
-            &RwLock::new(true),
-            &mut f,
-            Duration::from_secs(2),
-        )
-        .unwrap_err();
-        assert_eq!(e.code, "action_uncertain");
-        assert!(e.message.contains(&format!("cause={code}")));
-        assert_eq!(f.calls, 4);
-        assert_eq!(f.dispatches, 1);
-        assert!(j.blocks_game(&epoch().game));
+        for recovers in [true, false] {
+            let scratch = Scratch::new();
+            let mut j = Journal::open(&scratch.journal()).unwrap();
+            let mut f = opener(vec![
+                Ok(closed_map_state()),
+                Ok(closed_map_state()),
+                Err(pending("[1, 0]")),
+                Err(error(
+                    code,
+                    "Unknown root state or changed original ownership",
+                )),
+                if recovers {
+                    Ok(panel_state())
+                } else {
+                    Err(error("fixture_end", "Never readable again"))
+                },
+            ]);
+            let result = execute(
+                &mut j,
+                "after-input",
+                target(Stage::OpenPanel),
+                &authority(),
+                &RwLock::new(true),
+                &mut f,
+                Duration::from_secs(5),
+            );
+            assert_eq!(f.dispatches, 1);
+            assert!(!j.blocks_game(&epoch().game));
+            if recovers {
+                assert_eq!(result.unwrap().receipt.status, Status::Verified);
+                assert_eq!(f.calls, 5);
+            } else {
+                let e = result.unwrap_err();
+                assert_eq!(e.code, "action_unconfirmed");
+                assert!(e.message.contains("state unreadable"), "{}", e.message);
+                assert_eq!(j.receipts["after-input"].status, Status::Unconfirmed);
+            }
+        }
     }
+    // The opening-transition error is a known wait only for the stage that opens the panel;
+    // for any other stage it is one more unreadable moment.
     let scratch = Scratch::new();
     let mut j = Journal::open(&scratch.journal()).unwrap();
     let mut f = Fake::new();
@@ -225,27 +243,24 @@ fn unknown_animation_ownership_and_other_stages_never_gain_opening_wait_authorit
         Ok(state()),
         Ok(state()),
         Err(pending("[1, 0]")),
-        Ok(reached()),
+        Err(error("fixture_end", "Never readable again")),
     ]);
-    assert_eq!(
-        execute(
-            &mut j,
-            "other-stage",
-            target(Stage::Research),
-            &authority(),
-            &RwLock::new(true),
-            &mut f,
-            Duration::from_secs(2)
-        )
-        .unwrap_err()
-        .code,
-        "action_uncertain"
-    );
-    assert_eq!(f.calls, 3);
+    let e = execute(
+        &mut j,
+        "other-stage",
+        target(Stage::Research),
+        &authority(),
+        &RwLock::new(true),
+        &mut f,
+        Duration::from_secs(5),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(!e.message.contains("rejected_open_reads"), "{}", e.message);
     assert_eq!(f.dispatches, 1);
 }
 #[test]
-fn input_authority_loss_during_opening_wait_stops_before_another_read_or_dispatch() {
+fn a_closing_session_during_the_opening_wait_stops_before_another_read_or_dispatch() {
     struct Revoked<'a> {
         inner: Fake,
         gate: &'a RwLock<bool>,
@@ -292,9 +307,11 @@ fn input_authority_loss_during_opening_wait_stops_before_another_read_or_dispatc
             Duration::from_secs(2),
         )
         .unwrap_err();
-    assert_eq!(e.code, "action_uncertain");
-    assert!(e.message.contains("cause=session_closed"));
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("observation stopped"), "{}", e.message);
+    assert!(e.message.contains("session_closed"), "{}", e.message);
     assert_eq!(f.inner.calls, 3);
     assert_eq!(f.inner.dispatches, 1);
-    assert!(j.blocks_game(&epoch().game));
+    assert_eq!(j.receipts["revoked-opening"].status, Status::Unconfirmed);
+    assert!(!j.blocks_game(&epoch().game));
 }

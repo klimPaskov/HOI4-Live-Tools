@@ -1155,6 +1155,8 @@ mod tests {
                 status: Status::Verified,
                 delivery: Some(Delivery::ServerConfirmed),
                 observed: s,
+                unix_ms: None,
+                closed: None,
             },
             historical: false,
             current_state_verified: true,

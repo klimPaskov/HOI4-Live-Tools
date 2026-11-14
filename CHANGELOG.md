@@ -45,6 +45,34 @@ Every action ends in a terminal receipt; one uncertain action can no longer hold
 - The executor counts `action_unconfirmed` as an ordinary failed order (failure ledger and backoff) and re-plans from
   fresh state on its next tick.
 
+The stage journals of the Linux lane end every attempt in a terminal receipt too.
+
+- The focus, research, construction and production stage journals keep observing after their one input, reading only,
+  until the stage's deadline or for a settlement window (3 s) after the dispatch, whichever ends later, and always write
+  a terminal record: `Verified`, `Diverged` (the active focus or the search order changed under a focus navigation
+  stage, or a research close changed what it must preserve) or `Unconfirmed`. A request closed without proof answers `action_unconfirmed`, is never replayed and
+  holds nothing; the caller reads the state again and a fresh request is decided by fresh state. Before, the intent stayed
+  open and every later clock, focus, research, construction and production request of that game answered
+  `action_uncertain` with no limit, also after a restart.
+- A result that shows after the deadline is `Verified`. The focus journal no longer writes a terminal quarantine marker
+  for it, and the read after the input is not refused on the expired deadline any more (the construction read was, so a
+  stage that ran out of time could never settle).
+- A read that fails once after the input decides nothing: the next complete state does. A state that stays unreadable for
+  a whole window, or a target that shows while input idle cannot be confirmed, closes the request as `Unconfirmed` with
+  its cause.
+- An ambiguous dispatch error (connection lost after a possible event) is decided by what the game shows instead of being
+  recorded as uncertain without a read.
+- Only an intent left open by a server that stopped in the middle of a stage still holds its game, for at most ten
+  seconds from the time it was written; the next request closes it as `Unconfirmed`. A journal that cannot be written
+  still refuses everything: that is a persistence failure, not an uncertain action.
+- Journals of older builds load unchanged: an open intent without a time is closed by the next request, a record written
+  as `Uncertain` reads as `Unconfirmed`, and a focus terminal quarantine marker is checked and then ignored.
+- A production step closed without proof can still be settled by a retry of the same id, by reading only, when its
+  original target shows.
+- The optional daily worker of the Linux lane keeps its own durable records above these journals. A final research
+  assignment that closes unconfirmed is planned again on a later day; its navigation, focus, production and mixed-panel
+  layers and the research transit journal still stop the worker on an unproven step.
+
 Focus starts cost less of the input lane.
 
 - A focus the game refuses as not available waits twice as long after each further refusal (10, 20, 40, 80 game days by
