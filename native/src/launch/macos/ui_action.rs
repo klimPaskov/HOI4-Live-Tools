@@ -81,6 +81,23 @@ pub(super) fn run(
     authority: &InputAuthority,
     actions: &mut GameJournal,
 ) -> Result<Value> {
+    run_bounded(job, 12, id, token, process, keys, guard, authority, actions)
+}
+
+/// `run` with an input fence of `seconds` (multi-window routes such as an operation's
+/// preparation need more than the usual 12 s).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn run_bounded(
+    job: Job<'_>,
+    seconds: u64,
+    id: &str,
+    token: &str,
+    process: &(dyn Process + Send + Sync),
+    keys: &dyn GameInput,
+    guard: &mut Guard,
+    authority: &InputAuthority,
+    actions: &mut GameJournal,
+) -> Result<Value> {
     let expected = guard.observe_context(process)?;
     let epoch = guard.epoch.clone();
     let lease_end = authority.authorize(token, &epoch)?;
@@ -90,7 +107,7 @@ pub(super) fn run(
         expected: &expected,
         authority,
         token,
-        until: (Instant::now() + Duration::from_secs(12)).min(lease_end),
+        until: (Instant::now() + Duration::from_secs(seconds)).min(lease_end),
         stop: None,
     };
     let check_input = || fence.input_check();

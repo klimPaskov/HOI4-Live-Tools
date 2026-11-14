@@ -4,6 +4,7 @@
 //! contract; research starts are driven by live GUI geometry.
 mod action_fence;
 mod agency_act;
+mod operation_act;
 mod air;
 mod airact;
 mod airread;
@@ -784,6 +785,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(std::iter::once(invasion::tool()))
     .chain(faction::tools())
     .chain(agency_act::tools())
+    .chain(operation_act::tools())
     .chain(mio_act::tools())
     .collect()
 }
@@ -904,6 +906,7 @@ impl Commands for MacClock {
                     | "hoi4_agency_upgrade"
                     | "hoi4_operative_recruit"
                     | "hoi4_operative_assign"
+                    | "hoi4_operation_start"
                     | "hoi4_army_group_create"
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
@@ -1685,6 +1688,9 @@ impl MacClock {
         }
         if agency_act::TOOLS.contains(&name) {
             return agency_act::call(name, args, process, &self.keys, guard, authority, actions);
+        }
+        if operation_act::TOOLS.contains(&name) {
+            return operation_act::call(name, args, process, &self.keys, guard, authority, actions);
         }
         if name == "hoi4_doctrine_adopt" {
             return doctrine_act::call(args, process, &self.keys, guard, authority, actions);

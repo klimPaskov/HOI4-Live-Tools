@@ -120,6 +120,16 @@ pub(super) const OPERATIVE_RECRUIT: Class = Class {
     // operativeleaderwindow (mapped live 6 Nov 2026; it shared the bar's name before).
     root_name: "operativeleaderwindow",
 };
+pub(super) const OPERATION_OVERVIEW: Class = Class {
+    name: "COperationOverviewWindow",
+    vtable: 0x36208e0,
+    root_name: "operation_overview_window",
+};
+pub(super) const OPERATIVE_FOR_OPERATION: Class = Class {
+    name: "COperativeLeaderForOperationWindow",
+    vtable: 0x369beb0,
+    root_name: "operativeleaderwindow",
+};
 pub(super) const MIO_LIST: Class = Class {
     name: "NIndustrialOrganisation::COrganisationListWindow",
     vtable: 0x362d5b0,
@@ -273,7 +283,7 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
         }
         // Windows reached by a fixed path from a manager slot (slot, field, root field), accepted
         // only when the root carries the class's .gui root name.
-        for (root_name, slot, hops, root_at) in SLOT_PATHS {
+        for (root_name, slot, hops, root_at, typed) in SLOT_PATHS {
             if *root_name != class.root_name {
                 continue;
             }
@@ -289,6 +299,11 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
                 ok = plausible(window);
             }
             if !ok {
+                continue;
+            }
+            // Windows sharing a .gui root name (the recruitment and the operation selection
+            // windows are both operativeleaderwindow) are told apart by their class.
+            if *typed && r.u64(window).ok() != Some(image + img(abi, class.vtable)?) {
                 continue;
             }
             let Ok(p) = r.u64(window + root_at) else {
@@ -334,17 +349,23 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
         }
     }
     // Windows owned by another view rather than the manager.
-    for (child, owner_class, offset, root_at) in CHILD_WINDOWS {
+    for (child, owner_class, hops, root_at) in CHILD_WINDOWS {
         if child.vtable != class.vtable {
             continue;
         }
         let owner = img(abi, owner_class.vtable)?;
-        let offset = fld(abi, &owner_class.owner(), *offset)?;
         let root_at = fld(abi, &child.owner(), *root_at)?;
         for chunk in bytes.chunks_exact(8) {
             let p = u64::from_le_bytes(chunk.try_into().unwrap());
             if plausible(p) && r.u64(p).ok() == Some(image + owner) {
-                let w = r.u64(p + offset).unwrap_or(0);
+                // Each hop is a field (of the named class's layout) of the window the previous
+                // one reached; the first starts at the owning view.
+                let mut w = p;
+                for (n, hop) in hops.iter().enumerate() {
+                    let of = if n == 0 { owner_class } else { &hops[n - 1].0 };
+                    let at = fld(abi, &of.owner(), hop.1)?;
+                    w = if plausible(w) { r.u64(w + at).unwrap_or(0) } else { 0 };
+                }
                 if plausible(w) && r.u64(w).ok() == Some(want) {
                     let root = r
                         .u64(w + root_at)
@@ -396,20 +417,67 @@ const OWNER_SCANS: &[OwnerScan] = &[
 /// The policy window hangs off a detail window (+0x1ca8 seen live): detail objects found in
 /// the list window, then their fields up to this span.
 const POLICY_IN_DETAIL_SPAN: u64 = 0x2000;
-const SLOT_PATHS: &[(&str, u64, &[u64], u64)] = &[
-    ("operative_leader_window", 0x1d0, &[0x530], 0x430),
+/// The last field says whether the window object must carry the class's own vtable.
+const SLOT_PATHS: &[(&str, u64, &[u64], u64, bool)] = &[
+    ("operative_leader_window", 0x1d0, &[0x530], 0x430, false),
     // the candidate window opened from an empty operative slot (dbg_slot_object 1d0:930)
-    ("operativeleaderwindow", 0x1d0, &[0x930], 0x518),
+    ("operativeleaderwindow", 0x1d0, &[0x930], 0x518, true),
     // the mission bar shown over an operative's portrait (dbg_slot_object 1d0:938)
-    ("operative_order_bar", 0x1d0, &[0x938], 0x440),
+    ("operative_order_bar", 0x1d0, &[0x938], 0x440, false),
 ];
-const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
-    (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
+/// Hops are (class reached, field of the previous window) pairs.
+type Hops = &'static [(Class, u64)];
+const CHILD_WINDOWS: &[(Class, Class, Hops, u64)] = &[
+    (AGENCY_UPGRADES, AGENCY_VIEW, &[(AGENCY_UPGRADES, 0x4a8)], 0x50),
+    // The operation overview (Prepare on an operation row) at agency view +0x4a0, root +0x50;
+    // its operative selection window at overview +0x1358, root +0x518 (live 14 Nov 2026).
+    (OPERATION_OVERVIEW, AGENCY_VIEW, &[(OPERATION_OVERVIEW, 0x4a0)], 0x50),
+    (
+        OPERATIVE_FOR_OPERATION,
+        AGENCY_VIEW,
+        &[(OPERATION_OVERVIEW, 0x4a0), (OPERATIVE_FOR_OPERATION, 0x1358)],
+        0x518,
+    ),
     // Name and insignia window (the logo window Create Agency opens): Linux +0x340, root +0x50 (live
     // 5 Nov 2026); macOS +0x498 -> 0x48 (dbg_find_root e8, live 6 Nov 2026).
-    (AGENCY_LOGO, AGENCY_VIEW, 0x498, 0x48),
-    (MIO_LIST, POLITICS_VIEW, 0x3958, 0xf0),
+    (AGENCY_LOGO, AGENCY_VIEW, &[(AGENCY_LOGO, 0x498)], 0x48),
+    (MIO_LIST, POLITICS_VIEW, &[(MIO_LIST, 0x3958)], 0xf0),
 ];
+
+/// The window object (not its root container) of a class reached from its owning view
+/// (`CHILD_WINDOWS`), for windows whose own fields name what they show.
+pub(super) fn child_object(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option<u64>> {
+    let abi = r.string_abi();
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+    if !plausible(manager) {
+        return Ok(None);
+    }
+    let bytes = r.read(manager, MANAGER_SCAN)?;
+    let want = image + img(abi, class.vtable)?;
+    for (child, owner_class, hops, _) in CHILD_WINDOWS {
+        if child.vtable != class.vtable {
+            continue;
+        }
+        let owner = image + img(abi, owner_class.vtable)?;
+        for chunk in bytes.chunks_exact(8) {
+            let p = u64::from_le_bytes(chunk.try_into().unwrap());
+            if !plausible(p) || r.u64(p).ok() != Some(owner) {
+                continue;
+            }
+            let mut w = p;
+            for (n, hop) in hops.iter().enumerate() {
+                let of = if n == 0 { owner_class } else { &hops[n - 1].0 };
+                let at = fld(abi, &of.owner(), hop.1)?;
+                w = if plausible(w) { r.u64(w + at).unwrap_or(0) } else { 0 };
+            }
+            if plausible(w) && r.u64(w).ok() == Some(want) {
+                return Ok(Some(w));
+            }
+        }
+    }
+    Ok(None)
+}
 
 /// The window exists and is shown.
 pub(super) fn is_open(r: &Reader<'_>, image: u64, class: &Class) -> Result<bool> {
