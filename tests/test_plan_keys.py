@@ -49,7 +49,9 @@ class Reconcile(unittest.TestCase):
         items["detour"] = {"type": "array", "x-owner": "player", "description": "waypoints (executor support later)"}
         self.assertIn("read by nobody", _problems(schema)["vp_targets[].detour"])
         items["detour"]["x-executor-planned"] = "W1-99"
-        self.assertNotIn("vp_targets[].detour", _problems(schema))
+        # A planned build item is allowed, but only as an open row of the gap register (gap_register.py).
+        self.assertEqual(_problems(schema)["vp_targets[].detour"],
+                         "its executor step is not built (x-executor-planned) and no open gap-register row names it")
 
     def test_an_unmarked_key_nothing_reads_is_reported(self):
         schema = copy.deepcopy(self.schema)

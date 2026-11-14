@@ -48,6 +48,9 @@ DATA = os.path.join(PLAYBOOK, "gap-register.json")
 CATALOGUE = os.path.join(PLAYBOOK, "tools.schema.json")
 PAGE = os.path.join(ROOT, "docs", "GAP_REGISTER.md")
 SKILLS = os.path.join(ROOT, "skills")
+# Where a row's playbook file is looked up (a bare name, or a path from the repository root).
+DOC_DIRS = (os.path.join(PLAYBOOK, "references"), PLAYBOOK, os.path.join(SKILLS, "hoi4-strategist", "references"),
+            os.path.join(SKILLS, "hoi4-strategist"), SKILLS, ROOT)
 
 DOMAINS = OrderedDict([
     ("politics", "Politics and laws"), ("advisors", "Advisors"), ("decisions", "Decisions"),
@@ -233,13 +236,22 @@ def skill_files():
                 yield os.path.join(dirpath, name)
 
 
+GAPS_START = re.compile(r"^\W*(\w+ )?(tool )?gaps\b", re.I)
+
+
 def _headings(lines):
-    """The nearest heading above each line (0-based index -> heading text)."""
-    out, cur = [], ""
+    """The context of each line (0-based index -> text): the nearest heading above it, or the "Gaps:" line that opens
+    the list it belongs to (a list runs to the next blank line or heading)."""
+    out, cur, gaps, prev = [], "", "", ""
     for line in lines:
         if line.startswith("#"):
-            cur = line
-        out.append(cur)
+            cur, gaps = line, ""
+        elif GAPS_START.match(line):
+            gaps = line
+        elif not line.strip() and prev is not gaps:
+            gaps = ""  # the blank line right after "Gaps:" still opens its list
+        out.append(gaps or cur)
+        prev = line
     return out
 
 
@@ -274,8 +286,7 @@ def check(rows=None, cat=None, rdr=None, page=PAGE, files=None):
                 problems.append("%s: plan key %s is not in plan.schema.json" % (rid, k))
         for ref in r["playbook"]:
             path = ref.split("#", 1)[0]
-            if not os.path.exists(os.path.join(PLAYBOOK, "references", path)) and \
-                    not os.path.exists(os.path.join(ROOT, path)):
+            if not any(os.path.exists(os.path.join(d, path)) for d in DOC_DIRS):
                 problems.append("%s: playbook file %s does not exist" % (rid, path))
         st = status(r, rdr)
         if st in OPEN:

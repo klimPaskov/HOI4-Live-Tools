@@ -250,7 +250,7 @@ Democracies justify only on threat countries, cannot puppet, cannot declare on a
   3. `upgrade_decryption_boost` when decryption is planned; `upgrade_blueprint_stealing` and `upgrade_invisible_ink` only when steal tech is planned.
   4. Skip `upgrade_suicide_pills`, `upgrade_diplo_training`, `upgrade_psycho_warfare` unless the plan uses those missions.
 - **Spymaster**: 3+ upgrades and 1 faction initiative (50 PP without the faction system), 180-day cooldown.
-- **Operative missions** (`hoi4_operative_assign` keys): `build_intel_network` (the default; +0.4 network a day for the first operative, less for each extra: IN03), `quiet_intel_network`, `counter_intelligence` (IN04), `root_out_resistance` (IN08), `boost_ideology` (up to 0.25 drift a day per operative, detection x3, risky), `control_trade`, `diplomatic_pressure`, `propaganda` (IN05).
+- **Operative missions** (`hoi4_operative_assign` keys): `build_intel_network` (the default; +0.4 network a day for the first operative, less for each extra: IN03), `quiet_intel_network`, `counter_intelligence` (IN04), `root_out_resistance` (IN08), `boost_ideology` (up to 0.25 drift a day per operative, detection x3, risky; the tool refuses it today, a gap in the register), `control_trade`, `diplomatic_pressure`, `propaganda` (IN05).
 - **Operations** need network strength in the target:
 
 | Operation | Days | Operatives | Risk | Network | Notes |
