@@ -3622,7 +3622,10 @@ mod tests {
     #[test]
     fn low_stability_and_low_equipment_fill_wake_and_an_unread_stockpile_is_unknown() {
         let tools = fake(vec![
-            ("hoi4_country_status", json!({"fields": {"stability": {"value": 0.42}}})),
+            (
+                "hoi4_country_status",
+                json!({"fields": {"stability": {"value": 0.42}}}),
+            ),
             (
                 "hoi4_supply",
                 json!({"divisions": [division("Inf", 50, 100), division("Inf", 70, 100)]}),
