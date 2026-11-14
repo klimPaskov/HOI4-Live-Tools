@@ -37,6 +37,11 @@ TOOLS = [
         "paused": {}, "speed": {}, "request_id": {}, "lease_token": {}}, "required": ["lease_token"]}},
     {"name": "hoi4_autopilot", "inputSchema": {"type": "object", "properties": {
         "enabled": {}, "interval_ms": {}, "request_id": {}, "lease_token": {}}, "required": ["lease_token"]}},
+    {"name": "hoi4_daily_governor", "inputSchema": {"type": "object", "oneOf": [
+        {"properties": {"lease_token": {}, "op": {"enum": ["start"]}, "plan": {}}, "required": ["op", "lease_token"]},
+        {"properties": {"op": {"enum": ["digest"]}}, "required": ["op"]}]}},
+    {"name": "hoi4_diplomacy_incoming", "inputSchema": {"type": "object", "properties": {
+        "answer": {}, "index": {}, "request_id": {}}}},
 ]
 
 
@@ -242,7 +247,7 @@ class SupervisorTests(Folder):
         self.assertEqual((args["enabled"], args["lease_token"]), (True, "secret-token"))
         self.assertIn("request_id", args)
         self.assertEqual(s.leased, {"hoi4_input_lease", "hoi4_plan_run", "hoi4_research_start", "hoi4_time",
-                                    "hoi4_autopilot"})
+                                    "hoi4_autopilot", "hoi4_daily_governor"})
 
     def test_start_waits_while_the_user_is_in_the_menus_then_binds(self):
         attempts = []
@@ -316,6 +321,20 @@ class SupervisorTests(Folder):
             text = f.read()
         self.assertNotIn("secret-token", text)
         self.assertIn("hoi4_research_start", text)
+
+    def test_a_lease_inside_one_alternative_of_a_schema_and_an_answer_to_a_proposal_get_the_token(self):
+        s = self.ready()
+        s.handle("hoi4_daily_governor", {"op": "start", "plan": {}})
+        self.assertEqual(self.fake.calls[-1][1]["lease_token"], "secret-token")
+        s.handle("hoi4_diplomacy_incoming", {})
+        self.assertNotIn("lease_token", self.fake.calls[-1][1])          # without an answer it is a read
+        s.handle("hoi4_diplomacy_incoming", {"answer": "refuse"})
+        self.assertEqual(self.fake.calls[-1][1]["lease_token"], "secret-token")
+        again = s.handle("hoi4_diplomacy_incoming", {"answer": "refuse"})
+        self.assertIn("already_done", again["body"])
+        shown = {t["name"]: t for t in supervisor.player_tools(TOOLS)}["hoi4_daily_governor"]["inputSchema"]
+        self.assertNotIn("lease_token", json.dumps(shown))
+        self.assertEqual(shown["oneOf"][0]["required"], ["op"])
 
     def test_an_identical_success_is_answered_from_memory_within_the_window(self):
         s = self.ready()

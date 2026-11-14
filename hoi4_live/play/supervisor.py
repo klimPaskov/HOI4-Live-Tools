@@ -45,6 +45,8 @@ HOLDER = "hoi4-live-play"
 NOT_DEDUPED = {"hoi4_time", "hoi4_army_plan", "hoi4_plan_run", "hoi4_autopilot", "hoi4_input_lease"}
 # The supervisor's own tools: the player never holds the lease or runs the executor's step itself.
 HIDDEN = {"hoi4_input_lease", "hoi4_plan_run"}
+# Tools that take the lease only with one argument (a read without it): the answer to a diplomatic proposal.
+LEASED_WITH = {"hoi4_diplomacy_incoming": "answer"}
 GONE = {"process_exited", "process_absent", "process_lost", "ownership_changed"}
 FATAL_START = {"unsupported_build", "task_access_denied", "input_permission_denied", "ownership_changed",
                "process_absent", "platform_unavailable", "invalid_session", "permission_denied"}
@@ -95,14 +97,23 @@ def stderr_code(text):
     return codes[-1] if codes else ""
 
 
+def branches(schema):
+    """The schema and each of its oneOf / anyOf alternatives (a tool may take different arguments per op)."""
+    schema = schema or {}
+    return [schema] + [b for key in ("oneOf", "anyOf") for b in (schema.get(key) or []) if isinstance(b, dict)]
+
+
+def takes(tool, key):
+    return any(key in (b.get("properties") or {}) for b in branches(tool.get("inputSchema")))
+
+
 def player_tool(tool):
-    """The tool as the player sees it: no lease token, request id optional."""
+    """The tool as the player sees it: no lease token, request id optional, in every alternative of its schema."""
     shown = copy.deepcopy(tool)
-    schema = shown.get("inputSchema") or {}
-    props = schema.get("properties") or {}
-    props.pop("lease_token", None)
-    if "required" in schema:
-        schema["required"] = [k for k in schema["required"] if k not in ("lease_token", "request_id")]
+    for schema in branches(shown.get("inputSchema")):
+        (schema.get("properties") or {}).pop("lease_token", None)
+        if "required" in schema:
+            schema["required"] = [k for k in schema["required"] if k not in ("lease_token", "request_id")]
     return shown
 
 
@@ -196,9 +207,12 @@ class Supervisor:
             self._log.flush()
 
     # ------------------------------------------------------------------------------------------ start
+    def is_action(self, name, args):
+        return name in self.leased or (name in LEASED_WITH and LEASED_WITH[name] in args)
+
     def native_call(self, name, args):
         args = dict(args)
-        if name in self.leased and self.token:
+        if self.is_action(name, args) and self.token:
             args["lease_token"] = self.token
         if name in self.takes_request_id and "request_id" not in args:
             with self.lock:
@@ -244,10 +258,9 @@ class Supervisor:
             self.sleep(self.retry_every)
         self.tools = listed
         for tool in listed:
-            props = (tool.get("inputSchema") or {}).get("properties") or {}
-            if "lease_token" in props:
+            if takes(tool, "lease_token"):
                 self.leased.add(tool["name"])
-            if "request_id" in props:
+            if takes(tool, "request_id"):
                 self.takes_request_id.add(tool["name"])
         err, lease = self.native.call("hoi4_input_lease", {"op": "acquire", "holder": HOLDER, "seconds": LEASE_SECONDS})
         if err or not lease.get("lease_token"):
@@ -304,7 +317,7 @@ class Supervisor:
         return out
 
     def signature(self, name, args):
-        if name not in self.leased or name in NOT_DEDUPED:
+        if not self.is_action(name, args) or name in NOT_DEDUPED:
             return None
         return name + json.dumps({k: v for k, v in args.items() if k not in ("request_id", "lease_token")},
                                  sort_keys=True)
@@ -323,7 +336,7 @@ class Supervisor:
                     "to see its effect instead of repeating it; if the game shows it undone, change the target or "
                     "the arguments." % int(now - prev[0]))}}
         err, body = self.native_call(name, args)
-        if err and error_code(body) == "input_target_not_frontmost" and self.front and name in self.leased:
+        if err and error_code(body) == "input_target_not_frontmost" and self.front and self.is_action(name, args):
             pid = (self.session.get("game") or {}).get("pid")
             if pid and self.front(pid):
                 self.counts["front"] += 1
