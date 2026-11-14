@@ -19,7 +19,7 @@ start Italy 1936, paused    5. attaches to that game (no restart, no menus)
                                native runtime, input lease, executor on
                             7. prints one instruction                  -->  "Read <run>/BRIEF.txt and follow it"
                                                                             plays through the hoi4-live-play tools
-                            supervisor: duplicate guard, watchdog,
+                            supervisor: duplicate guard, idle guard,
                             stops when the game closes, writes report.md
 ```
 
@@ -82,16 +82,42 @@ whole campaign. It does what the developer rig's broker, plan loop and monitor d
 - injects the lease token and a request id where a tool's schema takes them, so the agent never sees either;
 - refuses an identical action that succeeded in the last 45 seconds and answers with the earlier result
   (`already_done`), so a repeated turn costs nothing and undoes nothing;
-- **watchdog**: no call from the player for five minutes pauses a running game and turns the executor off (the
-  only pause the product ever makes; the player itself never pauses after the first unpause). The next player
-  call turns the executor back on; the player unpauses as its brief says;
-- passes supervisor notes (watchdog pause, executor stopped, game closed) on the player's next reply;
+- **never pauses on its own**: a real campaign keeps running while the agent plays, through slow model turns and
+  short silences. The game is paused only when the player or the user asks for it, or by the **idle guard** below;
+- **idle guard** (a last resort for a player that has died): with no player call at all for half the idle pause
+  the supervisor raises a `wake_player` change (reason `idle`) and records it in `status.json` and
+  `supervisor.log`; the player gets it in the feed of its next `hoi4_observe` or `hoi4_wait_change` reply. With
+  no call for the whole idle pause it turns the executor off and pauses a running game, recording when, the game
+  date and why. The next player call lifts that pause: the executor goes back on and the game runs again (unless
+  that call is itself a pause). Any player call resets the timer. A game that was already paused is left as it
+  is, and a pause the player or the user asked for is never lifted by the supervisor;
+- the idle pause is `idle_pause_minutes` in the run's `settings.json`, 15 by default. `hoi4-live play
+  --idle-pause MINUTES` sets it for a run, `--idle-pause 0` switches it off, and an edit of `settings.json`
+  during the run takes effect at the next check (every five seconds);
+- passes supervisor notes (idle wake, idle pause and its lift, executor stopped, game closed) on the player's
+  next reply;
 - **stops cleanly** when the game closes or the runtime loses it: executor off, lease released, report written,
   the active-run pointer removed. `hoi4-live stop` and `hoi4_run {"op":"stop"}` do the same and leave the game
   running;
 - writes `calls.jsonl` (token-free), `supervisor.log` and, at the end, `report.md`: wall time, game dates, calls,
-  action receipts by outcome, duplicates refused, watchdog pauses, self-pauses the runtime recorded, why it ended,
-  and the user-file check below.
+  action receipts by outcome, duplicates refused, idle wakes, idle pauses (each with its time, game date, reason
+  and when it was lifted), pauses the player asked for, self-pauses the runtime recorded, why it ended, and the
+  user-file check below.
+
+### Every pause in the flow
+
+| Pause | When | Kept because |
+| --- | --- | --- |
+| The player's `hoi4_time {"paused":true}` | the player asks | an explicit request; counted in the report |
+| The user's own pause in the game | the user asks | the user's; nothing undoes it |
+| Idle guard | no player call for `idle_pause_minutes` (15; 0 = off) | the only pause the product makes itself; lifted by the next call |
+| The plan's end date | the game reaches the plan's `stop_on_date`: the executor stops acting for good and pauses once | the plan asks for it; `"stop_on_date_pause": false` in the plan keeps the game running |
+| Pause guard in the runtime (`pause_guard`) | an Escape or Space of an action changed the pause state | it puts back the state the action started with, running or paused; it never adds a pause |
+
+The user starts the campaign paused and the player's opening runs while paused; the player unpauses once its
+armies are placed, and from then on it never pauses. The Python server's step tools (`hoi4_advance`,
+`hoi4_time {"action":"step"}`) run the clock for the days they are asked for and stop paused: that is their request,
+and the native play flow does not use them.
 
 ## 4. The user's files
 

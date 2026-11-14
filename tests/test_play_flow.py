@@ -45,6 +45,9 @@ TOOLS = [
 ]
 
 
+IDLE_LIMIT = supervisor.IDLE_PAUSE_MINUTES * 60
+
+
 def template():
     with open(TEMPLATE, encoding="utf-8") as f:
         return f.read()
@@ -394,27 +397,124 @@ class SupervisorTests(Folder):
         self.assertEqual(fronted, [4242])
         self.assertEqual(s.counts["front"], 1)
 
-    def test_the_watchdog_pauses_a_running_game_once_and_the_next_call_resumes_the_executor(self):
+    def test_the_idle_pause_defaults_to_fifteen_minutes_from_the_runs_settings(self):
+        s = self.ready()
+        self.assertEqual(supervisor.IDLE_PAUSE_MINUTES, 15)
+        self.assertEqual(runs.read_json(os.path.join(self.run_dir, "settings.json")), {"idle_pause_minutes": 15})
+        self.assertEqual(s.idle_limit(), 900)
+
+    def test_a_silence_shorter_than_half_the_threshold_does_nothing(self):
         s = self.ready()
         self.fake.paused = False
-        self.clock.now += supervisor.IDLE_PAUSE - 1
+        self.clock.now += IDLE_LIMIT / 2 - 1
+        before = len(self.fake.calls)
         self.assertFalse(s.watchdog(self.clock()))
-        self.clock.now += 2
+        self.assertEqual(self.fake.calls[before:], [])
+        self.assertEqual((s.counts["idle_wakes"], s.counts["idle_pauses"]), (0, 0))
+        self.assertFalse(self.fake.paused)
+
+    def test_a_wake_is_raised_once_at_half_the_threshold_and_recorded(self):
+        s = self.ready()
+        self.fake.paused = False
+        self.clock.now += IDLE_LIMIT / 2
+        before = len(self.fake.calls)
+        self.assertFalse(s.watchdog(self.clock()))
+        self.assertFalse(s.watchdog(self.clock() + 60))
+        self.assertEqual(s.counts["idle_wakes"], 1)
+        self.assertEqual(self.fake.calls[before:], [])                   # no input, no pause, executor on
+        self.assertFalse(self.fake.paused)
+        self.assertTrue(runs.read_json(os.path.join(self.run_dir, "status.json"))["idle_woken"])
+        with open(os.path.join(self.run_dir, "supervisor.log"), encoding="utf-8") as f:
+            self.assertIn('"idle_wake"', f.read())
+        out = s.handle("hoi4_observe", {"since": 0})                      # the wake arrives as a feed change
+        wake = out["body"]["changes"][-1]
+        self.assertEqual((wake["kind"], wake["urgent"], wake["detail"]["reason"]), ("wake_player", True, "idle"))
+        self.assertTrue(any("no call from you" in n for n in out["body"]["supervisor_notes"]))
+        self.assertNotIn("supervisor_notes", s.handle("hoi4_observe", {"since": 1})["body"])   # once
+
+    def test_the_game_is_paused_at_the_threshold_and_the_next_call_lifts_it(self):
+        s = self.ready()
+        self.fake.paused = False
+        self.clock.now += IDLE_LIMIT - 1
+        self.assertFalse(s.watchdog(self.clock()))
+        self.assertFalse(self.fake.paused)
+        self.clock.now += 1
         self.assertTrue(s.watchdog(self.clock()))
         self.assertTrue(self.fake.paused)
         self.assertIn(("hoi4_autopilot", False), [(n, a.get("enabled")) for n, a in self.fake.calls])
-        self.assertFalse(s.watchdog(self.clock() + 1000))               # once
+        self.assertTrue(runs.read_json(os.path.join(self.run_dir, "status.json"))["idle_paused"])
+        self.assertFalse(s.watchdog(self.clock() + 1000))                 # once
         out = s.handle("hoi4_overview", {})
-        self.assertFalse(s.watchdog_paused)
-        self.assertEqual(self.fake.calls[-2][0], "hoi4_autopilot")
-        self.assertTrue(self.fake.calls[-2][1]["enabled"])
-        self.assertTrue(any("watchdog" in n or "no call" in n for n in out["body"]["supervisor_notes"]))
+        self.assertFalse(s.idle_paused)
+        self.assertFalse(self.fake.paused)                                # lifted: the game runs again
+        self.assertIn(("hoi4_autopilot", True), [(n, a.get("enabled")) for n, a in self.fake.calls[-3:]])
+        self.assertTrue(any("lifted the idle pause" in n for n in out["body"]["supervisor_notes"]))
+        s.stop("stopped_by_player")
+        with open(os.path.join(self.run_dir, "report.md"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("## Idle pauses", text)
+        self.assertIn("no player call for 15 minutes", text)
+        self.assertIn("lifted 0.0 minutes later by the next player call", text)
 
-    def test_the_watchdog_never_unpauses_or_pauses_a_paused_game(self):
+    def test_a_player_call_resets_the_timer(self):
         s = self.ready()
-        self.clock.now += supervisor.IDLE_PAUSE + 1
+        self.fake.paused = False
+        self.clock.now += IDLE_LIMIT - 10
+        s.watchdog(self.clock())                                          # the wake
+        s.handle("hoi4_wait_change", {"since": 0})
+        self.clock.now += IDLE_LIMIT - 10
+        self.assertFalse(s.watchdog(self.clock()))
+        self.assertFalse(self.fake.paused)
+        self.assertEqual((s.counts["idle_wakes"], s.counts["idle_pauses"]), (2, 0))
+
+    def test_the_idle_pause_can_be_switched_off_or_changed_during_the_run(self):
+        s = self.ready()
+        self.fake.paused = False
+        runs.write_json(os.path.join(self.run_dir, "settings.json"), {"idle_pause_minutes": 0})
+        self.assertIsNone(s.idle_limit())
+        self.clock.now += 24 * 3600
+        self.assertFalse(s.watchdog(self.clock()))
+        self.assertFalse(self.fake.paused)
+        self.assertEqual((s.counts["idle_wakes"], s.counts["idle_pauses"]), (0, 0))
+        runs.write_json(os.path.join(self.run_dir, "settings.json"), {"idle_pause_minutes": 45})
+        self.assertEqual(s.idle_limit(), 2700)
+        runs.write_json(os.path.join(self.run_dir, "settings.json"), {"idle_pause_minutes": None})
+        self.assertIsNone(s.idle_limit())
+
+    def test_an_explicit_pause_is_kept_and_never_lifted_by_the_supervisor(self):
+        s = self.ready()
+        self.fake.paused = False
+        s.handle("hoi4_time", {"paused": True})
+        self.assertTrue(self.fake.paused)
+        self.assertEqual(s.counts["pause_requests"], 1)
+        self.clock.now += IDLE_LIMIT + 1
+        self.assertTrue(s.watchdog(self.clock()))                         # executor off, no clock change
+        self.assertEqual([a["paused"] for n, a in self.fake.calls if n == "hoi4_time"], [True])
+        s.handle("hoi4_overview", {})
+        self.assertTrue(self.fake.paused)                                 # the player's pause stays
+        self.assertEqual([a["paused"] for n, a in self.fake.calls if n == "hoi4_time"], [True])
+
+    def test_a_pause_asked_for_while_idle_paused_is_kept(self):
+        s = self.ready()
+        self.fake.paused = False
+        self.clock.now += IDLE_LIMIT
         s.watchdog(self.clock())
+        s.handle("hoi4_batch", {"calls": [["hoi4_time", {"paused": True}]]})
+        self.assertTrue(self.fake.paused)
+        self.assertFalse(s.idle_paused)
+        self.assertEqual(s.counts["pause_requests"], 1)
+
+    def test_the_idle_guard_never_unpauses_or_pauses_a_paused_game(self):
+        s = self.ready()
+        self.clock.now += IDLE_LIMIT + 1
+        s.watchdog(self.clock())
+        s.handle("hoi4_overview", {})
         self.assertNotIn("hoi4_time", self.fake.names())
+
+    def test_play_writes_the_idle_pause_given_for_the_run(self):
+        run = start.prepare(self.prefix, ITALY, "conquer Ethiopia", template(), idle_pause_minutes=0)
+        self.assertEqual(runs.read_json(os.path.join(run, "settings.json")), {"idle_pause_minutes": 0})
+        self.assertIsNone(runs.idle_pause_seconds(run, 20))
 
     def test_a_closed_game_stops_the_run_with_a_report(self):
         s = self.ready()

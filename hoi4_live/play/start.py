@@ -34,8 +34,12 @@ def pid_alive(pid):
         return False
 
 
-def prepare(prefix, plan, goal, template, minutes=180, now=None):
-    """The run folder: the plan switched on, the runtime's input binding, the request, the brief, the prompt."""
+IDLE_PAUSE_MINUTES = runs.IDLE_PAUSE_MINUTES
+
+
+def prepare(prefix, plan, goal, template, minutes=180, now=None, idle_pause_minutes=IDLE_PAUSE_MINUTES):
+    """The run folder: the plan switched on, the runtime's input binding, the request, the run's settings, the
+    brief, the prompt."""
     run = runs.new_run(prefix, plan["tag"], now)
     with open(plan["path"], encoding="utf-8") as f:
         data = json.load(f)
@@ -45,6 +49,8 @@ def prepare(prefix, plan, goal, template, minutes=180, now=None):
     runs.write_json(os.path.join(run, "request.json"), {
         "country": plan["name"], "tag": plan["tag"], "goal": goal, "mode": plan["mode"], "plan": plan["id"],
         "start": plan.get("start"), "stop": plan.get("stop"), "runtime": "native"})
+    # The supervisor reads this during the run: editing it changes the idle pause of a running campaign.
+    runs.write_json(os.path.join(run, runs.SETTINGS), {"idle_pause_minutes": idle_pause_minutes or 0})
     if plan.get("guide") and os.path.isfile(plan["guide"]):
         shutil.copyfile(plan["guide"], os.path.join(run, "plan.md"))
     # The brief sends the player back to plan.brief.md when the plan is revised: it always exists.
@@ -94,6 +100,7 @@ def busy(prefix):
 
 
 def start_native(prefix, plan, goal, facts, out, template, launch=False, wait_minutes=15, minutes=180,
+                 idle_pause_minutes=IDLE_PAUSE_MINUTES,
                  finder=game.find_games, attacher=attach, spawner=spawn_supervisor, steam=game.launch_through_steam,
                  sleep=time.sleep, clock=time.time, now=None):
     active = busy(prefix)
@@ -106,7 +113,7 @@ def start_native(prefix, plan, goal, facts, out, template, launch=False, wait_mi
         out.write("\nBefore the game starts, set these (the runtime refuses input otherwise):\n")
         for title, step in steps:
             out.write("  [set]  %s\n          do this: %s\n" % (title, step))
-    run = prepare(prefix, plan, goal, template, minutes, now)
+    run = prepare(prefix, plan, goal, template, minutes, now, idle_pause_minutes)
     out.write("Run folder: %s\n" % run)
 
     pids = finder(exe)

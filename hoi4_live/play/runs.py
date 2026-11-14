@@ -1,7 +1,7 @@
 """The run folder of a native campaign and the install's pointer to the active one.
 
     <prefix>/runs/<stamp>-<TAG>/      private (0700): everything of one run
-        plan.json  input.json  request.json  BRIEF.txt  prompt.txt
+        plan.json  input.json  request.json  settings.json  BRIEF.txt  prompt.txt
         session.json                      written by `hoi4-live-native --attach`
         status.json  endpoint.json        written by the supervisor
         calls.jsonl  supervisor.log  native.stderr  report.md
@@ -16,6 +16,9 @@ import os
 import shutil
 
 ACTIVE = "active.json"
+SETTINGS = "settings.json"
+# A long silence only: the player is taken for dead (a real campaign never pauses itself).
+IDLE_PAUSE_MINUTES = 15
 USER_FILES = ("settings.txt", "pdx_settings.txt", "dlc_load.json")
 SAVES = "save games"
 
@@ -53,6 +56,18 @@ def read_json(path):
         return data if isinstance(data, dict) else None
     except (OSError, ValueError):
         return None
+
+
+def idle_pause_seconds(run, default_minutes):
+    """The run's idle pause in seconds from settings.json (idle_pause_minutes), or None when it is off (0, false
+    or null). A missing file or key gives the default; a value that is not a number is ignored."""
+    settings = read_json(os.path.join(run, SETTINGS)) or {}
+    value = settings.get("idle_pause_minutes", default_minutes)
+    if value is None or value is False:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        value = default_minutes
+    return value * 60.0 if value > 0 else None
 
 
 def new_run(prefix, tag, now=None):

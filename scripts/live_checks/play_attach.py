@@ -2,7 +2,7 @@
 """Live checks of `hoi4-live play` on the native runtime (macOS). Never run in CI; needs a running game.
 
     python3 scripts/live_checks/play_attach.py --prefix INSTALL --tag ITA --i-started-this-game
-                                               [--actions] [--watchdog 60] [--close-test] [--out FOLDER]
+                                               [--actions] [--idle 60] [--close-test] [--out FOLDER]
 
 INSTALL is an install of the branch under test (python install.py --prefix INSTALL). Before running: start
 Hearts of Iron IV yourself (Steam, or the owner's own launcher), set Windowed 1920x1080 at UI scaling 1.0, and
@@ -12,9 +12,10 @@ and `hoi4-live stop`. It attaches only to the one game of this user and only wit
 
 Without --actions it sends no input to the game (reads only; the executor the run switches on does act).
 --actions       also: an identical harmless action twice (map mode), input after another window took the focus,
-                and an unpause at speed 1 for the watchdog check
---watchdog N    the supervisor's idle pause is N seconds; checks that it pauses a running game and turns the
-                executor off, and that the next call turns it back on (needs --actions to unpause first)
+                and an unpause at speed 1 for the idle check
+--idle N        the supervisor's idle pause is N seconds (a run's own default is 15 minutes); checks the wake at
+                half of it, that the pause at N turns the executor off and pauses the running game, and that the
+                next call lifts it: executor on, the game running again (needs --actions to unpause first)
 --close-test    at the end, a second run; you quit the game when asked; checks the run ends as game_closed
 
 Each check prints PASS, FAIL or SKIP with its evidence; results.json in --out keeps them. Exit 0 when nothing
@@ -112,7 +113,7 @@ def main(argv=None):
     parser.add_argument("--goal", default="live check of the play flow")
     parser.add_argument("--i-started-this-game", action="store_true", dest="confirmed")
     parser.add_argument("--actions", action="store_true")
-    parser.add_argument("--watchdog", type=int, default=0)
+    parser.add_argument("--idle", type=int, default=0)
     parser.add_argument("--close-test", action="store_true")
     parser.add_argument("--wait", type=int, default=10)
     parser.add_argument("--out")
@@ -124,8 +125,8 @@ def main(argv=None):
     out = args.out or tempfile.mkdtemp(prefix="hoi4live_livecheck_")
     os.makedirs(out, exist_ok=True)
     env = dict(os.environ)
-    if args.watchdog:
-        env["HOI4_LIVE_IDLE_PAUSE"] = str(args.watchdog)
+    if args.idle:
+        env["HOI4_LIVE_IDLE_PAUSE"] = str(args.idle)
 
     # 1. the doctor, as the user runs it
     done = subprocess.run([sys.executable, "-m", "hoi4_live.doctor", "--prefix", prefix, "--json"],
@@ -190,19 +191,25 @@ def main(argv=None):
     else:
         check("duplicate / front", True, "needs --actions", skip=True)
 
-    if args.watchdog and args.actions:
+    if args.idle and args.actions:
         client.call("hoi4_time", {"paused": False, "speed": 1})
-        print("Waiting %d s without a call for the watchdog..." % (args.watchdog + 20))
-        seen = wait_status(run, lambda s: s.get("watchdog_paused") is True, args.watchdog + 40)
+        print("Waiting %d s without a call for the idle pause..." % (args.idle + 20))
+        woken = wait_status(run, lambda s: s.get("idle_woken") is True, args.idle // 2 + 20)
+        check("idle: a wake is raised at half the idle pause and the game keeps running",
+              woken.get("idle_woken") is True and woken.get("idle_paused") is False, woken)
+        seen = wait_status(run, lambda s: s.get("idle_paused") is True, args.idle // 2 + 40)
+        check("idle: no call for N seconds pauses a running game and turns the executor off",
+              seen.get("idle_paused") is True and seen.get("executor") is False, seen)
         err, overview = client.call("hoi4_overview")
         notes = overview.get("supervisor_notes") or []
-        check("watchdog: no call for N seconds pauses a running game and turns the executor off",
-              seen.get("watchdog_paused") is True and overview.get("paused") is True, {"status": seen, "notes": notes})
-        resumed = wait_status(run, lambda s: s.get("watchdog_paused") is False, 20)
-        check("watchdog: the next call turns the executor back on", resumed.get("watchdog_paused") is False,
-              resumed)
+        resumed = wait_status(run, lambda s: s.get("idle_paused") is False, 20)
+        err, after = client.call("hoi4_overview")
+        check("idle: the next call lifts the pause (executor on, the game running)",
+              resumed.get("idle_paused") is False and after.get("paused") is False, {"status": resumed,
+                                                                                     "notes": notes})
+        client.call("hoi4_time", {"paused": True})
     else:
-        check("watchdog", True, "needs --watchdog N and --actions", skip=True)
+        check("idle pause", True, "needs --idle N and --actions", skip=True)
 
     # 5. stop from the terminal
     client.close()

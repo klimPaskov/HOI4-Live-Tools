@@ -11,8 +11,9 @@
   `hoi4-live-play` MCP server the installer registers beside `hoi4-live` (the runtime's tools without lease tokens,
   plus `hoi4_batch` and `hoi4_run`).
 - The supervisor refuses repeated successful actions, brings the game forward when another window took the focus,
-  pauses a running game after five minutes without an agent call (the only pause it makes), ends the run when the
-  game closes and writes `report.md`. `hoi4-live stop` ends a run from the terminal; the game keeps running.
+  never pauses the game on its own, ends the run when the game closes and writes `report.md`. Only a long silence
+  (no agent call for 15 minutes; `--idle-pause MINUTES` or the run's `settings.json`, 0 = off) pauses a running
+  game, after a `wake_player` at half that time; the agent's next call lifts that pause. `hoi4-live stop` ends a run from the terminal; the game keeps running.
 - Your settings, saves and mods are never written: they are recorded at the start and the report says whether
   anything changed during the run.
 - `--plan FOLDER` plays a strategist plan; without a shipped plan the command explains the strategist step and what
