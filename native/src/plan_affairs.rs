@@ -38,11 +38,22 @@
 //!                a line whose efficiency (hoi4_production_lines output.efficiency, percent) is at least
 //!                `manage.mature_line_efficiency` (30) is mature; without that read, a line the executor
 //!                did not add in the last `manage.mature_line_days` (30) game days is. A mature line
-//!                is never switched: the design starts as a
+//!                is never switched at once: the design starts as a
 //!                separate line (hoi4_production_add with `design`, 10% of the old line's factories,
-//!                1-5) on free factories and the old line keeps building; "switch_mature": true on the
-//!                entry (or on the `designs` item) switches the whole line anyway. A same-type variant
+//!                1-5) on free factories and the old line keeps building until its old gear covers
+//!                `switch_at_cover_days` (30; on the entry or the `designs` item; false: never) game days
+//!                of field demand (hoi4_stockpile: no division short of it and days_of_cover at least
+//!                that, or a stock that is not falling), then switches whole; "switch_mature": true on the
+//!                entry (or on the `designs` item) switches the whole line at once. A same-type variant
 //!                (90% kept) switches as before;
+//!   production[].replace  the equipment type the line moves to from `from`: the newest own design of
+//!                that type (hoi4_designs hull_or_chassis, not decommissioned; `design` names one), with the
+//!                guard above; a line the game cannot switch to that type (design_wrong_type) moves its
+//!                factories to a line of the new type (hoi4_production_set, else hoi4_production_add) and
+//!                then closes (factories 0). The production step adds no line for a `replace` entry
+//!   designs[].decommission  older designs (names or ids) decommissioned once each through
+//!                hoi4_design_obsolete after the item's design (by `name`) runs on a production line;
+//!                already_obsolete counts as done;
 //!                `designs[].production` asks the same from the design's side. It waits until the design
 //!                and the line exist. The production step (tick step 7) adds lines without a design
 //!                (hoi4_production_add takes `design`, step 7 does not pass it), so a new line starts on
@@ -238,12 +249,13 @@ pub fn step(
         lease,
         now,
     };
-    let sections: [Section; 7] = [
+    let sections: [Section; 8] = [
         diplomacy_step,
         faction_step,
         trade_step,
         designs_step,
         line_design_step,
+        decommission_step,
         mio_step,
         intelligence_step,
     ];
@@ -399,9 +411,41 @@ fn designs_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     Ok(None)
 }
 
-/// One wanted switch: (line equipment, design label, design by name or id, the `designs` item
-/// key it waits for, accept_progress_loss, switch_mature).
-type Switch = (String, String, Value, Option<String>, bool, bool);
+/// One wanted switch of a production line to another design: `production[].design`,
+/// `production[].replace` or `designs[].production`.
+struct Switch {
+    /// The plan's line equipment (a live line whose type is it or starts with it).
+    equipment: String,
+    /// The design's label in notes and in the done key.
+    label: String,
+    /// The design by name or id; Null with `by_type`: the newest own design of that type.
+    design: Value,
+    /// `replace`: the equipment type the line moves to (its factories go with it).
+    by_type: Option<String>,
+    /// The `designs` item key the switch waits for.
+    gate: Option<String>,
+    accept: bool,
+    /// `switch_mature`: a mature line switches whole at once.
+    mature: bool,
+    /// `switch_at_cover_days`: a mature line kept beside the new tier switches whole once its old
+    /// gear covers this many game days of field demand; None keeps it building for good.
+    cover_days: Option<f64>,
+    /// The entry's `from`: nothing happens before it.
+    from: Value,
+}
+
+/// Game days of old-gear cover after which a mature line switches whole (the playbook's tier
+/// rule: start the new tier beside it, switch the old line once its gear covers about a month).
+const SWITCH_COVER_DAYS: f64 = 30.0;
+
+/// `switch_at_cover_days`: a number of game days, false (never), or absent (`default`).
+fn cover_days(v: &Value, default: Option<f64>) -> Option<f64> {
+    match v {
+        Value::Bool(false) => None,
+        Value::Bool(true) => Some(SWITCH_COVER_DAYS),
+        v => v.as_f64().filter(|d| *d >= 0.0).or(default),
+    }
+}
 
 fn wanted_switches(plan: &Value) -> Vec<Switch> {
     let designs = list(plan, "designs");
@@ -409,61 +453,140 @@ fn wanted_switches(plan: &Value) -> Vec<Switch> {
     for line in list(plan, "production") {
         let equipment = text(&line["equipment"]).trim().to_string();
         let design = &line["design"];
-        if equipment.is_empty() || design.is_null() {
+        let replace = text(&line["replace"]).trim().to_string();
+        if equipment.is_empty() || line["remove"] == json!(true) {
+            continue;
+        }
+        let by_type = (!replace.is_empty() && replace != equipment).then_some(replace);
+        if design.is_null() && by_type.is_none() {
             continue;
         }
         let accept = line["accept_progress_loss"] != json!(false);
         let mature = line["switch_mature"] == json!(true);
+        let own_cover = &line["switch_at_cover_days"];
         // a `designs` id names the design that item makes
         let item = design.as_str().and_then(|d| {
             designs
                 .iter()
                 .find(|e| item_id(e).as_deref() == Some(d.trim()))
         });
-        match (item, design) {
-            (Some(e), _) => out.push((
-                equipment,
+        let (label, wanted, gate, mature, cover) = match (item, design) {
+            (Some(e), _) => (
                 text(&e["name"]).trim().to_string(),
                 json!(text(&e["name"]).trim()),
                 item_id(e).map(|id| format!("design:id:{id}")),
-                accept,
                 mature || e["switch_mature"] == json!(true),
-            )),
-            (None, Value::String(name)) => out.push((
-                equipment,
+                if own_cover.is_null() {
+                    cover_days(&e["switch_at_cover_days"], Some(SWITCH_COVER_DAYS))
+                } else {
+                    cover_days(own_cover, Some(SWITCH_COVER_DAYS))
+                },
+            ),
+            (None, Value::String(name)) => (
                 name.trim().to_string(),
                 json!(name.trim()),
                 None,
-                accept,
                 mature,
-            )),
-            (None, Value::Number(id)) => out.push((
-                equipment,
+                cover_days(own_cover, Some(SWITCH_COVER_DAYS)),
+            ),
+            (None, Value::Number(id)) => (
                 id.to_string(),
                 design.clone(),
                 None,
-                accept,
                 mature,
-            )),
-            _ => {}
-        }
+                cover_days(own_cover, Some(SWITCH_COVER_DAYS)),
+            ),
+            // `replace` without a design: the newest own design of the new type
+            _ => match &by_type {
+                Some(t) => (
+                    t.clone(),
+                    Value::Null,
+                    None,
+                    mature,
+                    cover_days(own_cover, Some(SWITCH_COVER_DAYS)),
+                ),
+                None => continue,
+            },
+        };
+        out.push(Switch {
+            equipment,
+            label,
+            design: wanted,
+            by_type,
+            gate,
+            accept,
+            mature,
+            cover_days: cover,
+            from: line["from"].clone(),
+        });
     }
-    for entry in designs {
-        let equipment = text(&entry["production"]).trim().to_string();
-        let name = text(&entry["name"]).trim().to_string();
-        if equipment.is_empty() || out.iter().any(|w| w.0 == equipment && w.1 == name) {
+    for e in designs {
+        let equipment = text(&e["production"]).trim().to_string();
+        let name = text(&e["name"]).trim().to_string();
+        if equipment.is_empty()
+            || out
+                .iter()
+                .any(|w| w.equipment == equipment && w.label == name)
+        {
             continue;
         }
-        out.push((
+        out.push(Switch {
             equipment,
-            name.clone(),
-            json!(name),
-            item_id(entry).map(|id| format!("design:id:{id}")),
-            entry["accept_progress_loss"] != json!(false),
-            entry["switch_mature"] == json!(true),
-        ));
+            label: name.clone(),
+            design: json!(name),
+            by_type: None,
+            gate: item_id(e).map(|id| format!("design:id:{id}")),
+            accept: e["accept_progress_loss"] != json!(false),
+            mature: e["switch_mature"] == json!(true),
+            cover_days: cover_days(&e["switch_at_cover_days"], Some(SWITCH_COVER_DAYS)),
+            from: Value::Null,
+        });
     }
     out
+}
+
+/// Requested factories of a live line.
+fn line_factories(line: &Value) -> i64 {
+    line["factory_counters"]["requested_factories_raw_signed"]
+        .as_i64()
+        .unwrap_or(0)
+}
+
+/// Whether the stock of a line's old gear lets the line switch whole (hoi4_stockpile, the
+/// archetype or variant row of `line_type`): no division still short of it, and either a measured
+/// stock that is not falling or at least `days` game days of cover. Ok(what holds) or Err(why it waits);
+/// an unreadable or unmeasured stock waits.
+fn old_gear_covers(
+    tools: &dyn Tools,
+    line_type: &str,
+    days: f64,
+) -> std::result::Result<String, String> {
+    let read = tools
+        .call("hoi4_stockpile", &json!({"equipment": line_type}))
+        .map_err(|_| "hoi4_stockpile unreadable".to_string())?;
+    let row = list(&read, "equipment")
+        .iter()
+        .find(|r| {
+            let a = text(&r["archetype"]);
+            (!a.is_empty() && line_type.starts_with(a))
+                || list(r, "variants")
+                    .iter()
+                    .any(|v| text(&v["type"]) == line_type)
+        })
+        .ok_or_else(|| format!("no stockpile row for {line_type}"))?;
+    let short = row["fielded_short"].as_f64().unwrap_or(0.0);
+    if short > 0.0 {
+        return Err(format!("the divisions still lack {short:.0}"));
+    }
+    // a trend the server has not measured yet says nothing
+    if row["depleting"] == json!(false) && row["net_per_day"].is_number() {
+        return Ok("the stock is not falling".into());
+    }
+    match row["days_of_cover"].as_f64() {
+        Some(d) if d >= days => Ok(format!("{d:.0} days of cover")),
+        Some(d) => Err(format!("{d:.0} days of cover < {days:.0}")),
+        None => Err("cover not measured yet".into()),
+    }
 }
 
 fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
@@ -475,7 +598,8 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
     let mut lines: Option<Vec<Value>> = None;
     let mut all_designs: Option<Vec<Value>> = None;
     let mut waits: Vec<String> = Vec::new();
-    for (equipment, label, design, gate_key, accept, mature) in wanted {
+    for sw in wanted {
+        let (equipment, label) = (sw.equipment.as_str(), sw.label.as_str());
         let key = format!("pdes:{equipment}:{label}");
         if state.done.contains_key(&key) {
             continue;
@@ -488,45 +612,73 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
             waits.push(format!("{equipment} -> {label}: waiting after a refusal"));
             continue;
         }
-        if gate_key
+        if !super::reached(&json!({"from": sw.from}), now) {
+            waits.push(format!("{equipment} -> {label}: from {}", sw.from));
+            continue;
+        }
+        if sw
+            .gate
             .as_ref()
             .is_some_and(|k| !state.done.contains_key(k))
         {
             waits.push(format!("{equipment} -> {label}: design not made yet"));
             continue;
         }
+        let found = match &sw.design {
+            Value::String(name) => design_named(tools, name),
+            design => {
+                let all = all_designs.get_or_insert_with(|| {
+                    tools
+                        .call("hoi4_designs", &json!({}))
+                        .map(|r| list(&r, "designs").to_vec())
+                        .unwrap_or_default()
+                });
+                match &sw.by_type {
+                    // `replace`: the newest own design of the new type that is not decommissioned
+                    Some(t) if design.is_null() => all
+                        .iter()
+                        .filter(|d| {
+                            text(&d["hull_or_chassis"]) == t && d["obsolete"] != json!(true)
+                        })
+                        .max_by_key(|d| d["design_id"].as_i64().unwrap_or(0))
+                        .cloned(),
+                    _ => all
+                        .iter()
+                        .find(|d| d["design_id"].as_i64() == design.as_i64())
+                        .cloned(),
+                }
+            }
+        };
+        let Some(found) = found else {
+            waits.push(match &sw.by_type {
+                Some(t) if sw.design.is_null() => {
+                    format!("{equipment} -> {label}: no own design of {t} yet")
+                }
+                _ => format!("{equipment} -> {label}: design not found"),
+            });
+            continue;
+        };
+        let design_type = text(&found["hull_or_chassis"]).to_string();
         let rows = lines.get_or_insert_with(|| {
             tools
                 .call("hoi4_production_lines", &json!({"limit": 128}))
                 .map(|r| list(&r, "lines").to_vec())
                 .unwrap_or_default()
         });
+        // The line to switch: one of the plan's equipment, a line of another type than the
+        // design's first (a separate line of the new tier may already run beside it).
+        let of_equipment = |l: &&Value| {
+            let e = text(&l["equipment_id"]);
+            !e.is_empty() && (e == equipment || e.starts_with(equipment))
+        };
         let Some(line) = rows
             .iter()
-            .find(|l| {
-                let e = text(&l["equipment_id"]);
-                !e.is_empty() && (e == equipment || e.starts_with(&equipment))
-            })
+            .filter(of_equipment)
+            .find(|l| design_type.is_empty() || text(&l["equipment_id"]) != design_type)
+            .or_else(|| rows.iter().find(of_equipment))
             .cloned()
         else {
             waits.push(format!("{equipment} -> {label}: no line yet"));
-            continue;
-        };
-        let found = match &design {
-            Value::String(name) => design_named(tools, name),
-            _ => all_designs
-                .get_or_insert_with(|| {
-                    tools
-                        .call("hoi4_designs", &json!({}))
-                        .map(|r| list(&r, "designs").to_vec())
-                        .unwrap_or_default()
-                })
-                .iter()
-                .find(|d| d["design_id"].as_i64() == design.as_i64())
-                .cloned(),
-        };
-        let Some(found) = found else {
-            waits.push(format!("{equipment} -> {label}: design not found"));
             continue;
         };
         let handle = &line["line_handle"];
@@ -542,18 +694,72 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
             .get("design_id")
             .filter(|d| d.is_u64())
             .cloned()
-            .unwrap_or(design);
+            .unwrap_or_else(|| sw.design.clone());
+        let line_type = text(&line["equipment_id"]).to_string();
+        let move_key = format!("pmove:{equipment}:{label}");
+        if state.done.contains_key(&move_key) || state.done.contains_key(&format!("pwrong:{key}")) {
+            // The game does not switch this line to the new type (another family): its factories
+            // move to a line of the new type, then the old line closes.
+            if !state.done.contains_key(&move_key) {
+                let have = line_factories(&line);
+                let new_line = rows
+                    .iter()
+                    .find(|l| text(&l["equipment_id"]) == design_type)
+                    .cloned();
+                let (tool, args) = match &new_line {
+                    Some(n) => (
+                        "hoi4_production_set",
+                        json!({"line": n["entry_index"], "equipment": design_type,
+                            "factories": (line_factories(n) + have).clamp(1, 150)}),
+                    ),
+                    None => (
+                        "hoi4_production_add",
+                        json!({"equipment": design_type, "design": target,
+                            "factories": have.clamp(1, 150)}),
+                    ),
+                };
+                let (ok, why) = state.act(tools, run.lease, tool, args, "dm")?;
+                if ok {
+                    state.done.insert(move_key, now);
+                } else {
+                    state.skip(now, "pdes", &key, 3 * DAY);
+                }
+                return Ok(Some(format!(
+                    "production replace {equipment} -> {design_type}: {have} factories to the new line: {ok} {why}"
+                )));
+            }
+            let (ok, why) = state.act(
+                tools,
+                run.lease,
+                "hoi4_production_set",
+                json!({"line": line["entry_index"], "equipment": line_type, "factories": 0}),
+                "dr",
+            )?;
+            if ok {
+                state.done.insert(key, now);
+            } else {
+                state.skip(now, "pdes", &key, 3 * DAY);
+            }
+            return Ok(Some(format!(
+                "production replace {equipment} -> {design_type}: old line {line_type} closed: {ok} {why}"
+            )));
+        }
         // Mature-line guard: a switch to another equipment type (a tier or chassis change keeps
         // 30% or less of the line's efficiency, a same-type variant 90%) never takes the
-        // factories of a mature line; the new design starts as a separate line on free factories
-        // and the old line keeps building. Only `switch_mature: true` switches the whole line.
-        // The line's efficiency is read (hoi4_production_lines output.efficiency, percent): at
-        // or above `manage.mature_line_efficiency` (30) the line is mature. Without the read a
-        // line counts as young only when the executor added it less than
-        // `manage.mature_line_days` (30) game days ago.
-        let line_type = text(&line["equipment_id"]).to_string();
-        let design_type = text(&found["hull_or_chassis"]).to_string();
-        if !mature && !line_type.is_empty() && !design_type.is_empty() && line_type != design_type {
+        // factories of a mature line at once. The new design starts as a separate line on free
+        // factories while the old line keeps building; the old line switches whole once its gear
+        // covers `switch_at_cover_days` (30) game days of field demand (false: never). Only
+        // `switch_mature: true` switches the whole line at once. The line's efficiency is read
+        // (hoi4_production_lines output.efficiency, percent): at or above
+        // `manage.mature_line_efficiency` (30) the line is mature. Without the read a line counts
+        // as young only when the executor added it less than `manage.mature_line_days` (30) game
+        // days ago.
+        let mut covered: Option<String> = None;
+        if !sw.mature
+            && !line_type.is_empty()
+            && !design_type.is_empty()
+            && line_type != design_type
+        {
             let mature_days = plan["manage"]["mature_line_days"]
                 .as_i64()
                 .filter(|d| *d >= 0)
@@ -569,22 +775,6 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                 None => !added.is_some_and(|h| now - h < mature_days * DAY),
             };
             if is_mature {
-                let factories = line["factory_counters"]["requested_factories_raw_signed"]
-                    .as_i64()
-                    .unwrap_or(0);
-                let start = ((factories as f64 * 0.1).round() as i64).clamp(1, 5);
-                let (ok, why) = state.act(
-                    tools,
-                    run.lease,
-                    "hoi4_production_add",
-                    json!({"equipment": design_type, "design": target, "factories": start}),
-                    "dn",
-                )?;
-                if ok {
-                    state.done.insert(key, now);
-                } else {
-                    state.skip(now, "pdes", &key, 3 * DAY);
-                }
                 let age = match efficiency {
                     Some(e) => {
                         format!("efficiency {e:.0}% read, mature from {mature_efficiency:.0}%")
@@ -594,26 +784,70 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
                         |h| format!("added {} game days ago", (now - h) / DAY),
                     ),
                 };
-                note(
-                    state,
-                    "production_tier_guard",
-                    format!("{equipment} -> {label}: {line_type} to {design_type} changes the type and the line is mature ({age}): it keeps its factories, the new design starts on a separate line with {start}: {ok}"),
-                );
-                return Ok(Some(format!(
-                    "production {label} on a separate line ({start} factories), mature line {equipment} kept: {ok} {why}"
-                )));
+                let separate_key = format!("pdesnew:{equipment}:{label}");
+                let separate = state.done.contains_key(&separate_key)
+                    || rows.iter().any(|l| text(&l["equipment_id"]) == design_type);
+                if !separate {
+                    let start = ((line_factories(&line) as f64 * 0.1).round() as i64).clamp(1, 5);
+                    let (ok, why) = state.act(
+                        tools,
+                        run.lease,
+                        "hoi4_production_add",
+                        json!({"equipment": design_type, "design": target, "factories": start}),
+                        "dn",
+                    )?;
+                    if ok {
+                        state.done.insert(separate_key, now);
+                    } else {
+                        state.skip(now, "pdes", &key, 3 * DAY);
+                    }
+                    note(
+                        state,
+                        "production_tier_guard",
+                        format!("{equipment} -> {label}: {line_type} to {design_type} changes the type and the line is mature ({age}): it keeps its factories, the new design starts on a separate line with {start}: {ok}"),
+                    );
+                    return Ok(Some(format!(
+                        "production {label} on a separate line ({start} factories), mature line {equipment} kept: {ok} {why}"
+                    )));
+                }
+                let Some(days) = sw.cover_days else {
+                    state.done.insert(key, now);
+                    note(
+                        state,
+                        "production_tier_guard",
+                        format!("{equipment} -> {label}: {design_type} runs on its own line; the mature {line_type} line keeps building (switch_at_cover_days false)"),
+                    );
+                    continue;
+                };
+                match old_gear_covers(tools, &line_type, days) {
+                    Ok(why) => covered = Some(why),
+                    Err(why) => {
+                        waits.push(format!(
+                            "{equipment} -> {label}: mature {line_type} line kept until its gear covers {days:.0} days ({why})"
+                        ));
+                        note(
+                            state,
+                            "production_tier_guard",
+                            format!("{equipment} -> {label}: {design_type} runs on its own line; the mature {line_type} line ({age}) switches whole at {days:.0} days of cover: {why}"),
+                        );
+                        continue;
+                    }
+                }
             }
         }
         let (ok, why) = state.act(
             tools,
             run.lease,
             "hoi4_design_set_production",
-            json!({"line": line["entry_index"], "design": target, "accept_progress_loss": accept}),
+            json!({"line": line["entry_index"], "design": target, "accept_progress_loss": sw.accept}),
             "dl",
         )?;
         let c = code(&why);
         if ok || c == "already_building" {
             state.done.insert(key, now);
+        } else if c == "design_wrong_type" && sw.by_type.is_some() {
+            // `replace` across families: the factories move instead (next ticks)
+            state.done.insert(format!("pwrong:{key}"), now);
         } else {
             let days = match c {
                 "design_wrong_type" | "progress_loss_unconfirmed" => {
@@ -630,8 +864,11 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
             };
             state.skip(now, "pdes", &key, days * DAY);
         }
+        let whole = covered.map_or_else(String::new, |why| {
+            format!(" (mature line switched whole: old gear {why})")
+        });
         return Ok(Some(format!(
-            "production line {equipment} -> design {label}: {ok} {why}"
+            "production line {equipment} -> design {label}{whole}: {ok} {why}"
         )));
     }
     if !waits.is_empty() {
@@ -639,6 +876,92 @@ fn line_design_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> 
         state.skip(now, "mpdes", "x", DAY);
     }
     Ok(None)
+}
+
+/// `designs[].decommission`: once the item's design is made and a production line builds it,
+/// each listed older design (a name or a design id) is decommissioned once through
+/// hoi4_design_obsolete, so training and the selection lists stop offering it. already_obsolete
+/// counts as done; an unknown design is noted and tried again after 30 game days.
+fn decommission_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    if state.skipped(now, "mdecom", "x") {
+        return Ok(None);
+    }
+    let mut waits: Vec<String> = Vec::new();
+    let mut any = false;
+    for entry in list(plan, "designs") {
+        let old: Vec<&Value> = list(entry, "decommission")
+            .iter()
+            .filter(|d| d.is_string() || d.is_u64())
+            .collect();
+        if old.is_empty() {
+            continue;
+        }
+        any = true;
+        let name = text(&entry["name"]).trim().to_string();
+        let label = item_id(entry).unwrap_or_else(|| name.clone());
+        let pending: Vec<&Value> = old
+            .into_iter()
+            .filter(|d| {
+                let k = format!("decom:{}", text_or_number(d));
+                !state.done.contains_key(&k) && !state.skipped(now, "decom", &k)
+            })
+            .collect();
+        if pending.is_empty() {
+            continue;
+        }
+        let new = if name.is_empty() {
+            None
+        } else {
+            design_named(tools, &name)
+        };
+        let Some(new) = new else {
+            waits.push(format!("{label}: the new design is not made yet"));
+            continue;
+        };
+        if list(&new, "production_lines").is_empty() {
+            waits.push(format!("{label}: no line builds {name} yet"));
+            continue;
+        }
+        let design = pending[0].clone();
+        let k = format!("decom:{}", text_or_number(&design));
+        let (ok, why) = state.act(
+            tools,
+            run.lease,
+            "hoi4_design_obsolete",
+            json!({"design": design, "obsolete": true}),
+            "do",
+        )?;
+        let c = code(&why);
+        if ok || c == "already_obsolete" {
+            state.done.insert(k, now);
+        } else {
+            let days = if c == "design_unknown" { 30 } else { 3 };
+            note(
+                state,
+                "designs_decommission",
+                format!("{label}: decommission {}: {why}", text_or_number(&design)),
+            );
+            state.skip(now, "decom", &k, days * DAY);
+        }
+        return Ok(Some(format!(
+            "design {} decommissioned ({name} in production): {ok} {why}",
+            text_or_number(&design)
+        )));
+    }
+    if any {
+        if !waits.is_empty() {
+            note(state, "designs_decommission", waits.join("; "));
+        }
+        state.skip(now, "mdecom", "x", DAY);
+    }
+    Ok(None)
+}
+
+/// A design reference as text: a name, or a design id number.
+fn text_or_number(v: &Value) -> String {
+    v.as_str()
+        .map_or_else(|| v.to_string(), |s| s.trim().to_string())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2170,6 +2493,247 @@ mod tests {
             actions(&tools).last().unwrap().0,
             "hoi4_design_set_production"
         );
+    }
+
+    fn run<'a>(tools: &'a Fake, plan: &'a Value, now: GameHour) -> Run<'a> {
+        Run {
+            tools,
+            plan,
+            lease: "l",
+            now,
+        }
+    }
+    fn rifle_lines(efficiency: f64, with_new: bool) -> Value {
+        let mut lines = vec![json!({"entry_index": 0, "line_kind": "military",
+            "equipment_id": "infantry_equipment_1", "line_handle": "0x10",
+            "factory_counters": {"requested_factories_raw_signed": 20},
+            "output": {"efficiency": efficiency}})];
+        if with_new {
+            lines.push(json!({"entry_index": 1, "line_kind": "military",
+                "equipment_id": "infantry_equipment_2", "line_handle": "0x11",
+                "factory_counters": {"requested_factories_raw_signed": 2}}));
+        }
+        json!({ "lines": lines })
+    }
+    fn rifle_designs(building: &[&str]) -> Value {
+        let lines: Vec<Value> = building.iter().map(|h| json!({"line_handle": h})).collect();
+        json!({"designs": [
+            {"design_id": 11, "name": "Rifle I", "hull_or_chassis": "infantry_equipment_1",
+                "production_lines": [{"line_handle": "0x10"}]},
+            {"design_id": 12, "name": "Rifle II", "hull_or_chassis": "infantry_equipment_2",
+                "production_lines": lines},
+            {"design_id": 9, "name": "Rifle II old", "hull_or_chassis": "infantry_equipment_2",
+                "production_lines": []}]})
+    }
+    fn rifle_cover(days: Option<f64>, short: f64) -> Value {
+        json!({"equipment": [{"archetype": "infantry_equipment", "stockpile": 3000.0,
+            "fielded_short": short, "depleting": days.is_some(), "days_of_cover": days,
+            "net_per_day": if days.is_some() { -5.0 } else { 4.0 },
+            "variants": [{"type": "infantry_equipment_1", "amount": 3000.0}]}]})
+    }
+
+    #[test]
+    fn a_replace_starts_the_new_tier_beside_a_mature_line_and_switches_it_whole_at_cover() {
+        let tools = fake(vec![
+            ("hoi4_production_lines", rifle_lines(40.0, false)),
+            ("hoi4_designs", rifle_designs(&[])),
+            ("hoi4_stockpile", rifle_cover(Some(12.0), 0.0)),
+        ]);
+        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+            "replace": "infantry_equipment_2", "from": "1936.6.1"}]});
+        let at = date_hour("1936.6.1").unwrap();
+        let mut state = State::default();
+        // before `from` nothing happens
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", at - DAY).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        assert!(state.affairs.notes["production_designs"].contains("from"));
+        // the mature line is kept; the newest design of the new type starts beside it
+        let out = step(&mut state, &tools, &plan, "l", at).unwrap().unwrap();
+        assert!(out.contains("separate line (2 factories)"), "{out}");
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_production_add");
+        assert_eq!(sent[0].1["equipment"], "infantry_equipment_2");
+        assert_eq!(sent[0].1["design"], 12);
+        // the old gear covers 12 days: the old line keeps building
+        tools.reply("hoi4_production_lines", rifle_lines(40.0, true));
+        tools.reply("hoi4_designs", rifle_designs(&["0x11"]));
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", at + DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 1);
+        let note = &state.affairs.notes["production_tier_guard"];
+        assert!(note.contains("12 days of cover < 30"), "{note}");
+        // divisions still short of the gear: kept even with a stock that is not falling
+        tools.reply("hoi4_stockpile", rifle_cover(None, 50.0));
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", at + 2 * DAY).unwrap(),
+            None
+        );
+        assert!(state.affairs.notes["production_tier_guard"].contains("still lack 50"));
+        // 40 days of cover: the old line switches whole to the new design (it keeps its factories)
+        tools.reply("hoi4_stockpile", rifle_cover(Some(40.0), 0.0));
+        let out = step(&mut state, &tools, &plan, "l", at + 3 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("mature line switched whole: old gear 40 days of cover"),
+            "{out}"
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[1].0, "hoi4_design_set_production");
+        assert_eq!(sent[1].1["line"], 0);
+        assert_eq!(sent[1].1["design"], 12);
+        assert!(state
+            .done
+            .contains_key("pdes:infantry_equipment_1:infantry_equipment_2"));
+        // done once, also after a restart
+        let mut state = restarted(&state, at + 4 * DAY);
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", at + 4 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn old_gear_cover_needs_full_divisions_and_a_measured_stock() {
+        let tools = fake(vec![("hoi4_stockpile", rifle_cover(None, 0.0))]);
+        let covers = |t: &Fake| old_gear_covers(t, "infantry_equipment_1", 30.0);
+        assert_eq!(covers(&tools).unwrap(), "the stock is not falling");
+        // a trend not measured yet is no cover
+        tools.reply(
+            "hoi4_stockpile",
+            json!({"equipment": [{"archetype": "infantry_equipment", "fielded_short": 0.0,
+                "depleting": false, "net_per_day": null, "days_of_cover": null}]}),
+        );
+        assert_eq!(covers(&tools).unwrap_err(), "cover not measured yet");
+        tools.reply("hoi4_stockpile", json!({"equipment": []}));
+        assert!(covers(&tools).unwrap_err().contains("no stockpile row"));
+        tools
+            .unreadable
+            .borrow_mut()
+            .insert("hoi4_stockpile".into());
+        assert_eq!(covers(&tools).unwrap_err(), "hoi4_stockpile unreadable");
+    }
+
+    #[test]
+    fn switch_at_cover_days_false_keeps_the_mature_line_building() {
+        let tools = fake(vec![
+            ("hoi4_production_lines", rifle_lines(40.0, true)),
+            ("hoi4_designs", rifle_designs(&["0x11"])),
+            ("hoi4_stockpile", rifle_cover(Some(90.0), 0.0)),
+        ]);
+        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+            "replace": "infantry_equipment_2", "switch_at_cover_days": false}]});
+        let mut state = State::default();
+        // the new tier already runs on its own line: nothing to add, and the old line stays
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
+        assert!(state.affairs.notes["production_tier_guard"].contains("keeps building"));
+        assert!(state
+            .done
+            .contains_key("pdes:infantry_equipment_1:infantry_equipment_2"));
+    }
+
+    #[test]
+    fn a_replace_the_game_cannot_switch_moves_the_factories_then_closes_the_old_line() {
+        let tools = fake(vec![
+            ("hoi4_production_lines", rifle_lines(12.0, false)),
+            ("hoi4_designs", rifle_designs(&[])),
+        ]);
+        tools.refuse("hoi4_design_set_production", "design_wrong_type");
+        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+            "replace": "infantry_equipment_2"}]});
+        let mut state = State::default();
+        // a young line (12%) switches at once; the game refuses the type
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(actions(&tools)[0].0, "hoi4_design_set_production");
+        // its 20 factories go to a new line of the new type
+        let out = step(&mut state, &tools, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("20 factories to the new line"), "{out}");
+        let sent = actions(&tools);
+        assert_eq!(sent[1].0, "hoi4_production_add");
+        assert_eq!(sent[1].1["factories"], 20);
+        assert_eq!(sent[1].1["design"], 12);
+        // then the old line closes
+        tools.reply("hoi4_production_lines", rifle_lines(12.0, true));
+        let out = step(&mut state, &tools, &plan, "l", START + 2 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("old line infantry_equipment_1 closed"),
+            "{out}"
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[2].0, "hoi4_production_set");
+        assert_eq!(sent[2].1["line"], 0);
+        assert_eq!(sent[2].1["factories"], 0);
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 3);
+    }
+
+    #[test]
+    fn a_replace_waits_for_a_design_of_the_new_type_and_adds_no_line_of_the_old_one() {
+        let tools = fake(vec![
+            ("hoi4_production_lines", json!({"lines": []})),
+            ("hoi4_designs", json!({"designs": []})),
+        ]);
+        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+            "replace": "infantry_equipment_2", "factories": 10}]});
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(state.affairs.notes["production_designs"]
+            .contains("no own design of infantry_equipment_2 yet"));
+        // the production step never adds a line for a replace entry
+        assert_eq!(
+            super::super::production_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+    }
+
+    #[test]
+    fn old_designs_are_decommissioned_once_the_new_one_is_on_a_line() {
+        let tools = fake(vec![("hoi4_designs", rifle_designs(&[]))]);
+        let plan = json!({"designs": [{"id": "r2", "kind": "other", "base": "infantry_equipment_2",
+            "name": "Rifle II", "decommission": ["Rifle I", 9]}]});
+        let mut state = State::default();
+        state.done.insert("design:id:r2".into(), START);
+        // made, but no line builds it yet
+        assert_eq!(
+            decommission_step(&mut state, &run(&tools, &plan, START)).unwrap(),
+            None
+        );
+        assert!(state.affairs.notes["designs_decommission"].contains("no line builds Rifle II"));
+        tools.reply("hoi4_designs", rifle_designs(&["0x11"]));
+        let out = decommission_step(&mut state, &run(&tools, &plan, START + DAY))
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("design Rifle I decommissioned"), "{out}");
+        // one per tick; already_obsolete counts as done
+        tools.refuse("hoi4_design_obsolete", "already_obsolete");
+        decommission_step(&mut state, &run(&tools, &plan, START + 2 * DAY)).unwrap();
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[0].0, "hoi4_design_obsolete");
+        assert_eq!(sent[0].1["design"], "Rifle I");
+        assert_eq!(sent[0].1["obsolete"], true);
+        assert_eq!(sent[1].1["design"], 9);
+        assert!(state.done.contains_key("decom:9"));
+        assert_eq!(
+            decommission_step(&mut state, &run(&tools, &plan, START + 3 * DAY)).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 2);
     }
 
     #[test]

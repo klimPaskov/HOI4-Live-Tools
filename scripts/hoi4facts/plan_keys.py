@@ -93,7 +93,7 @@ ENTRY_VARS = {
     "air_plan": (["air_plan_step", "wing_matches", "rebase_target"], ["entry"]),
     "decision_rules": (["decisions_step", "decision_forbidden"], ["rule", "r"]),
     "event_rules": (["event_rule_choice"], ["rule"]),
-    "designs": (["designs_step", "wanted_switches"], ["entry", "e"]),
+    "designs": (["designs_step", "wanted_switches", "decommission_step"], ["entry", "e"]),
     "diplomacy": (["diplomacy_step", "justify", "declare", "relation", "widening", "expiry_watch",
                    "justify_items", "dip_target"], ["item", "j", "o"]),
     "mio": (["mio_step"], ["entry"]),
