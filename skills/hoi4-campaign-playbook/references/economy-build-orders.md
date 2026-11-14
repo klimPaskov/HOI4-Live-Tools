@@ -252,6 +252,12 @@ state; worth it only in states with 6+ factories or large resource output.
 - MIOs: a design team on a research slot costs 0.1 PP a day; a manufacturer on a line costs nothing. Funds come from
   research and from IC produced (0.1 per IC a day, cap 100). Value: +5% research on the matching tech, and traits.
   Rule: one MIO on each active equipment line and one design team per matching research slot while PP/day is positive.
+- A line's manufacturer is picked in the organisation chooser that opens when a design is clicked to start a line
+  (only organisations whose equipment_type covers the line's equipment, its archetype, its unit type or an
+  equipment group from common/equipment_groups are offered; each serves at most its task capacity of lines). A
+  plan names it in `production[].organization`; validate_plan checks the organisation is the player's and makes
+  that equipment. This is a gap today (gap register mio.line_manufacturer, not executable): the tools skip the
+  chooser, so the executor adds the line without an organisation and says so in its receipt line.
 - **Does NOT apply:** if PP is under the 150 bank and a law is still missing.
 
 ## 10. Country notes (focus and idea modifiers that change the order)

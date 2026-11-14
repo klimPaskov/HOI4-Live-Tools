@@ -578,6 +578,20 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(rep.errors, [])
         self.assertTrue(any("agency false and no agency at the start" in w for w in rep.warnings))
 
+    def test_production_line_organisation(self):
+        rep = self.wave2(production=[
+            {"equipment": "tank_chassis_1", "factories": 2, "organization": "AAA_works_organization"},
+            {"equipment": "tank_chassis_1", "factories": 2, "organisation": "BBB_works_organization"},
+            {"equipment": "tank_chassis_1", "factories": 2, "organization": "nope"},
+            {"equipment": "ship_hull", "factories": 2, "organization": "AAA_works_organization"}])
+        text = "\n".join(rep.errors)
+        self.assertNotIn("production[0].organization", text)  # armor maker on a tank_chassis_1 line (type armor)
+        self.assertIn("production[1].organization BBB_works_organization: BBB_works_organization is not allowed "
+                      "for AAA", text)
+        self.assertIn("production[2].organization nope: no organisation nope", text)
+        self.assertIn("production[3].organization AAA_works_organization: AAA_works_organization makes armor, not "
+                      "ship_hull", text)
+
     def test_when_parser(self):
         self.assertEqual(vp.parse_when(""), ("now",))
         self.assertEqual(vp.parse_when("1936.01.01"), ("date", (1936, 1, 1)))

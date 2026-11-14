@@ -775,6 +775,16 @@
             "x-owner": "executor",
             "description": "a designs[] id, a design name or a design id number: the line of this equipment switches to it once (hoi4_design_set_production; waits until the design and the line exist)"
           },
+          "organization": {
+            "type": "string",
+            "minLength": 1,
+            "description": "military-industrial organisation (script key, facts.py mio <TAG>) the new line is made with: its traits apply to the line and its funds grow from it. Not sent yet: the executor adds the line without it (hoi4_production_add refuses the argument with not_yet_built until the organisation chooser is built) and says so; validate_plan checks the organisation is the player's and makes this equipment"
+          },
+          "organisation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "same as organization"
+          },
           "accept_progress_loss": {
             "type": "boolean",
             "default": true,
