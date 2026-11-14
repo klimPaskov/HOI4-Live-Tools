@@ -5138,11 +5138,11 @@
     "hoi4_air_region_probe",
     "hoi4_air_regions"
    ],
-   "blocked": "Executor rule reads hoi4_air_regions regions[].enemy_air_superiority, which no tool maps: 'today the rule reports unknown and acts on nothing'; hoi4_air reports air_superiority_by_region 'not mapped'; hoi4_air_region_probe needs input and is not read by the executor",
+   "blocked": "hoi4_air_regions reports regions[].enemy_air_superiority null (not located in memory); the executor rule (manage.enemy_air_superiority) reads that field and acts on nothing while it is null; hoi4_air_region_probe counts active planes through input (not a superiority value) and is not read by the executor",
    "payoff": "high",
    "why": "Without it air superiority is assumed, attacks run under red air and fighters pile up past 3:1",
    "closing": "both",
-   "owner": "Map per-region superiority (memory) into hoi4_air_regions or feed hoi4_air_region_probe to the rule; live-verify the probe on 1.19.4 (1.19.3 only)",
+   "owner": "offline done: null seam field with reason in hoi4_air_regions, the rule's digest note names it, tests; live: locate per-region air superiority (both sides) in memory, fill enemy_air_superiority (0..1 enemy share), verify against the air map for 3 regions; the probe is not fed to the rule (it holds the input lane and reads plane counts, not superiority)",
    "priority": 10
   },
   {

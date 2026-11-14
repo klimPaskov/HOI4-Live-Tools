@@ -139,9 +139,12 @@
 //!                air_plan names or one over another such region, a moved wing stays 14 days),
 //!                and when that is the only front region its attacking armies hold
 //!                "air_hold_days":10 (resumed earlier once no front region is above the limit).
-//!                The superiority is read from hoi4_air_regions `regions[].enemy_air_superiority`;
-//!                no tool maps it yet (hoi4_air lists air_superiority_by_region as not mapped), so
-//!                today the rule reports unknown and acts on nothing.
+//!                The superiority is read from hoi4_air_regions `regions[].enemy_air_superiority`
+//!                (0..1 or a percent: the enemy's share of the region's air superiority, the
+//!                region colour of the air map); the tool reports it null with
+//!                `enemy_air_superiority_reason` until it is located in memory, so today the
+//!                rule reports unknown (with that reason) and acts on nothing. A front region
+//!                without a value is never judged troubled.
 //!                "off":["casualties","air_superiority"] switches these rules off
 //!   air_ops      not a key: air_plan (plan_manage.rs) sends its `mission` to hoi4_air_mission as
 //!                written, so strategic_bombing, naval_strike, port_strike, logistics_strike,
@@ -1376,7 +1379,14 @@ fn air_superiority_rule(
         .collect();
     if read.is_empty() {
         state.skip(now, "mairsup", "x", 3 * DAY);
-        note(state, "air_superiority", "unknown: no tool reads enemy air superiority (hoi4_air_regions has no enemy_air_superiority; hoi4_air: air_superiority_by_region not mapped): no action");
+        // The seam: hoi4_air_regions carries the field per region, null with the tool's reason
+        // until the value is located in memory (gap register air.enemy_air_superiority_read).
+        let why = list(&regions, "regions")
+            .iter()
+            .find_map(|r| r["enemy_air_superiority_reason"].as_str())
+            .unwrap_or("hoi4_air_regions has no enemy_air_superiority")
+            .to_string();
+        note(state, "air_superiority", format!("unknown: no region has an enemy air superiority read ({why}; gap register air.enemy_superiority_read): no action"));
         return Ok(None);
     }
     let Ok(air) = tools.call("hoi4_air", &json!({})) else {
@@ -3428,6 +3438,33 @@ mod tests {
         assert!(state.military.notes["air_superiority"].starts_with("unknown"));
         assert!(actions(&tools).is_empty());
         assert!(take_alarms(&mut state).is_empty());
+    }
+
+    #[test]
+    fn a_null_superiority_seam_says_why_and_acts_on_nothing() {
+        let tools = fake(vec![
+            (
+                "hoi4_air_regions",
+                json!({"regions": [{"region_id": 273, "name": "Ethiopia",
+                    "enemy_air_superiority": null,
+                    "enemy_air_superiority_reason": "not_mapped: test"}]}),
+            ),
+            ("hoi4_air", air()),
+        ]);
+        let plan = json!({"manage": {"enemy_air_superiority": 0.6}});
+        let mut state = State::default();
+        assert_eq!(
+            air_superiority_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let line = &state.military.notes["air_superiority"];
+        assert!(
+            line.starts_with("unknown") && line.contains("not_mapped: test"),
+            "{line}"
+        );
+        assert!(actions(&tools).is_empty());
+        // read once per 3 game days, not every tick
+        assert!(state.skipped(START + DAY, "mairsup", "x"));
     }
 
     #[test]
