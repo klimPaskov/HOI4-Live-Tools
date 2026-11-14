@@ -221,9 +221,12 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
    `production.balance` prints the balance per family in `facts.equipment_balance` (start shortfall, theatre
    need, losses a month, output, the date the family is covered). A stockpile target for equipment no line
    builds is a contradiction, not a policy.
-2. Removals and replacements of starting lines (obsolete equipment): `production[].remove` / `replace`
-   when the schema has them (W1-9); until then a player `hoi4_production_set {line, equipment,
-   factories}`; 0 factories empties or removes the line (removal is not live-verified yet).
+2. Removals and replacements of starting lines (obsolete equipment): `production[].remove` closes a line,
+   `production[].replace` moves a line to the next type and keeps its factories; on a mature line the
+   executor starts the new type beside it and switches the old line whole once its gear covers
+   `switch_at_cover_days` (30) of field demand (lint `production.replace`, `production.mature_switch`).
+   `designs[].decommission` retires old variants once the new design runs on a line (lint
+   `designs.decommission`). Neither is live-verified yet.
 3. Stockpile targets in days of cover per item (item 28 defaults), trucks for every `war.motorization`
    level (truck stock ≥ 1.5× wanted), convoys for overseas supply and trade (item 21), aircraft to keep
    wings at strength (item 20).

@@ -1313,7 +1313,7 @@ lint step does not.
 | 4 | Air superiority by region | the air-superiority rule reports unknown because no read gives superiority per strategic region | a read of air superiority per region, then the rule's region check |
 | 5 | Idle factories by deficit | idle military factories go to the first `production_priority` line; `hoi4_stockpile` now gives days of cover, so they can go to the worst deficit | management: rebalance by days of cover (the playbook's PR10) |
 | 6 | Veteran guard on template edits | no check before an upgrade that would change the battalions of veteran divisions (loses experience) | template step: refuse or warn when the fielded divisions are mostly veteran |
-| 7 | Parallel ramp of a new tier | `production[].ramp` (start factories, step, keep the old line) is not executed; only straight switches and the mature-line guard exist | production step: grow the new line in steps while the old one runs |
+| 7 | Parallel ramp of a new tier | built: the mature-line guard starts the new tier on its own line and switches the old line whole at `switch_at_cover_days` of old-gear cover (`production[].replace`, `production[].design`, `designs[].production`); a stepwise move of factories is not | (closed offline; live check open in the gap register) |
 | 8 | Per-division reads | no experience/veteran share and no entrenchment per division | `hoi4_division_detail` fields |
 | 9 | Peace bid order | the peace step takes states by rank only; the playbook's order (controlled first, faction states at half, uncontrolled last) is not applied | peace step ordering |
 | 10 | Navy region cap | no `navy.max_regions` key: a task force spread over more than two regions loses its strike bonus | navy step and schema key |
@@ -1323,8 +1323,7 @@ Lint rules proposed by the audit and not built (each needs data the plan does no
 
 | Rule | Checks | Blocker |
 | --- | --- | --- |
-| `production.ramp` | a ramp whose start plus steps exceed the factories, or whose old line is never retired | needs the ramp key above |
-| `production.remove` extension | removing or switching an expensive land or air line with no ramp | needs the ramp key |
+| `production.ramp` | built as `production.replace` (an old line never switched: switch_at_cover_days false) and `production.mature_switch` (switch_mature on a mature line) | none |
 | `navy.screens` | a task force with under 3 screens per capital ship | the plan's fleets carry no ship composition |
 | `navy.raid_target` | convoy raiding against an enemy with no overseas states or seaborne trade | needs the enemy's convoy need from the game facts |
 | `air.cas_cap` | more CAS than about 3 x the axis enemy width x attacking armies | needs per-axis width facts |

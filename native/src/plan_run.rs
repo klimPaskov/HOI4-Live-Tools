@@ -322,6 +322,7 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_construction_order",
     "hoi4_decision_take",
     "hoi4_design_create",
+    "hoi4_design_obsolete",
     "hoi4_design_set_production",
     "hoi4_diplomacy_act",
     "hoi4_division_disband",
@@ -1939,7 +1940,8 @@ fn production_step(
         }
     }
     for line in list(plan, "production") {
-        if line["remove"] == json!(true) {
+        // a `replace` entry changes a live line (plan_affairs.rs line switches); it adds none
+        if line["remove"] == json!(true) || !line["replace"].is_null() {
             continue;
         }
         let equipment = text(&line["equipment"]).to_string();

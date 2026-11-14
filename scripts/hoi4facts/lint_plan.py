@@ -188,18 +188,27 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   manage.thresholds        no manage key (plan_manage.rs runs the manpower, stability, equipment and
                            stockpile rules only with it; {} takes every default); warning for a threshold
                            whose rule is in manage.off or that the executor does not run yet
-  production.remove        (warning) a `replace` entry (not run by the executor yet; removals are
-                           production.in_progress)
+  production.replace        a `replace` entry that cannot run: an unknown equipment key, the line's own equipment, a
+                           `remove` on the same entry, or equipment no tech at the start or in the research plan
+                           unlocks; (warning) no line of `equipment` in force on its date (start lines and earlier
+                           entries: the executor waits for one), or a tier change of a mature line with
+                           switch_at_cover_days false (the old line keeps building and the factories never move)
+  designs.decommission     a designs[].decommission list on an item without a `name` (the executor finds the new
+                           design by name), naming the item's own design, or naming a design a production entry or
+                           another designs item still puts on a line; (warning) an item whose design no line builds
+                           (no `production` on it, no production[].design naming it): the decommission waits for
+                           a line for good
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: var, mission_days, surrender_progress)
 
 Tactics rules (the strong-player habits the plan can state; numbers from the defines and files):
   production.mature_switch an entry that moves a mature line (a start line, or one 30+ days old) to another
-                           tier of its family (replace, a design on another tier, or a remove plus an add
-                           within 14 days) instead of starting the new tier on new factories: a switch keeps
-                           30% (parent/child) or 20% (same archetype) of the line's efficiency, new factories
-                           start at 10%
+                           tier of its family at once (replace or a design on another tier with switch_mature
+                           true, or a remove plus an add within 14 days) instead of starting the new tier on new
+                           factories: a switch keeps 30% (parent/child) or 20% (same archetype) of the line's
+                           efficiency, new factories start at 10%; (info) without switch_mature the executor starts
+                           the new tier on a separate line and switches the old line whole at switch_at_cover_days
   production.cull          a start line whose equipment no template (plan or kept start template), air_plan
                            wing, design, stockpile target, training guard, plan line or production_priority
                            prefix uses, and no remove entry (naval lines: when navy.posture is none; trucks
@@ -349,7 +358,8 @@ BALANCE_ERROR_DAYS = 120
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
              "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
-             "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
+             "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.replace",
+             "designs.decommission",
              "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
@@ -2681,13 +2691,77 @@ class Lint:
                          f"use a readable atom (x-atoms readable) or an any[] with one")
 
     def production_changes(self):
-        """production.remove: a `replace` entry the executor does not run yet (removals: production.in_progress)."""
-        for i, x in enumerate(self.list_of("production")):
-            eq = str(x.get("equipment") or "")
-            if "replace" in x:
-                self.add("warning", "production.remove", f"production[{i}]",
-                         f"replace of {eq} is not read by the executor yet: remove the line and add the new "
-                         f"equipment as two entries, or start the new line small next to it (efficiency)")
+        """production.replace and designs.decommission: line changes the executor cannot carry out."""
+        g = self.game
+        equip = g.equipment()
+        unlocks = derive.equipment_unlocks(g)
+        have = start_tech_set(g, self.meta)
+        planned = {t for e in self.list_of("research_path") for t in e.get("techs") or [] if isinstance(t, str)}
+        planned |= {t for t in self.plan.get("research_priority") or [] if isinstance(t, str)}
+        start = derive.day(self.start)
+        start_types = {r["type"] for r in self.start_lines()}
+        lines = self.list_of("production")
+        for i, x in enumerate(lines):
+            new = x.get("replace")
+            if new is None:
+                continue
+            eq, where = x.get("equipment"), f"production[{i}]"
+            if not isinstance(new, str) or new not in equip:
+                self.add("error", "production.replace", where, f"replace names unknown equipment {new}")
+                continue
+            if new == eq:
+                self.add("error", "production.replace", where, f"replace names the line's own equipment {eq}")
+                continue
+            if x.get("remove"):
+                self.add("error", "production.replace", where,
+                         f"an entry both removes {eq} and replaces it with {new}: write one of the two")
+                continue
+            need = unlocks.get(new)
+            if need and not need & have and not need & planned:
+                self.add("error", "production.replace", where,
+                         f"{new} is unlocked by {', '.join(sorted(need))}, none at the start or in the research plan: "
+                         f"the executor finds no design of it and waits")
+            d = derive.day(x.get("from")) or start
+            earlier = any(y.get("equipment") == eq and not y.get("remove") and "replace" not in y
+                          and (derive.day(y.get("from")) or start) <= d for y in lines)
+            if isinstance(eq, str) and eq not in start_types and not earlier:
+                self.add("warning", "production.replace", where,
+                         f"no {eq} line runs on {derive.fmt(derive.date_of(d))} (start lines and earlier entries): "
+                         f"the replace waits until one exists")
+            link = derive.equipment_tier_link(g, eq, new) if isinstance(eq, str) else None
+            if link in ("parent", "family") and x.get("switch_at_cover_days") is False and not x.get("switch_mature"):
+                self.add("warning", "production.replace", where,
+                         f"switch_at_cover_days false: if the {eq} line is mature the executor starts {new} on a "
+                         f"separate line and the old line keeps building for good, so its factories never move")
+        built = {str(x["design"]) for x in lines if x.get("design") is not None and not x.get("remove")}
+        designs = self.list_of("designs")
+        for i, e in enumerate(designs):
+            old = e.get("decommission")
+            if not old:
+                continue
+            where, name = f"designs[{i}]", e.get("name")
+            if not isinstance(name, str) or not name.strip():
+                self.add("error", "designs.decommission", where,
+                         "decommission needs the item's `name`: the executor finds the new design by name and waits "
+                         "for a line building it")
+                continue
+            keys = {str(e.get("id")), name}
+            for ref in old:
+                ref = str(ref)
+                if ref in keys:
+                    self.add("error", "designs.decommission", where, f"decommission names the item's own design {ref}")
+                    continue
+                users = [f"production[{j}]" for j, x in enumerate(lines)
+                         if x.get("design") is not None and str(x["design"]) == ref and not x.get("remove")]
+                users += [f"designs[{j}]" for j, y in enumerate(designs)
+                          if j != i and y.get("production") and ref in {str(y.get("id")), str(y.get("name"))}]
+                if users:
+                    self.add("error", "designs.decommission", where,
+                             f"decommission names {ref}, which {', '.join(users)} still puts on a line")
+            if not e.get("production") and not keys & built:
+                self.add("warning", "designs.decommission", where,
+                         f"no line builds {name} (no `production` on the item, no production[].design naming it): "
+                         f"the decommission waits for such a line for good")
 
     # ------------------------------------------------------------------ tactics research rules: helpers
     @property
@@ -2818,20 +2892,30 @@ class Lint:
                 continue
             d = derive.day(x.get("from")) or start
             when = derive.fmt(derive.date_of(d))
-            new, how = None, None
+            new, how, item = None, None, {}
             if isinstance(x.get("replace"), str):
                 new, how = x["replace"], "replace"
             elif x.get("design") is not None and isinstance((designs.get(str(x["design"])) or {}).get("base"), str):
-                new, how = designs[str(x["design"])]["base"], f"design {x['design']}"
+                item = designs[str(x["design"])]
+                new, how = item["base"], f"design {x['design']}"
             if new:
                 link = derive.equipment_tier_link(g, eq, new)
                 if link in keep and mature(eq, d):
                     pct, key = kept(link)
-                    self.add("error", "production.mature_switch", f"production[{i}]",
-                             f"{how} switches the mature {eq} line to {new} on {when}, another tier of "
-                             f"{derive.equipment_family(g, eq)}: the line keeps {pct:g}% of its efficiency ({key}) "
-                             f"and loses the unit in progress; start {new} on new or idle factories (3-5) and keep "
-                             f"the {eq} line while its gear is still needed, then switch it whole")
+                    if x.get("switch_mature") or item.get("switch_mature"):
+                        self.add("error", "production.mature_switch", f"production[{i}]",
+                                 f"{how} with switch_mature switches the mature {eq} line to {new} on {when}, another "
+                                 f"tier of {derive.equipment_family(g, eq)}: the line keeps {pct:g}% of its efficiency "
+                                 f"({key}) and loses the unit in progress; drop switch_mature so {new} starts on new "
+                                 f"or idle factories (3-5) and the {eq} line switches whole once its gear covers "
+                                 f"switch_at_cover_days")
+                    else:
+                        cover = x.get("switch_at_cover_days", item.get("switch_at_cover_days", 30))
+                        then = ("keeps building" if cover is False
+                                else f"switches whole at {30 if cover is True else cover} days of old-gear cover")
+                        self.add("info", "production.mature_switch", f"production[{i}]",
+                                 f"{how} on the mature {eq} line on {when}: the executor starts {new} on a separate "
+                                 f"line (3-5 factories) and the {eq} line {then}")
                 continue
             if not x.get("remove") or not mature(eq, d):
                 continue

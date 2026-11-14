@@ -2779,16 +2779,19 @@
     "procedure.md#8. Production (item 2)"
    ],
    "plan": [
-    "production[].replace"
+    "production[].replace",
+    "production[].switch_at_cover_days"
    ],
    "tools": [
-    "hoi4_production_set",
-    "hoi4_production_add"
+    "hoi4_designs",
+    "hoi4_design_set_production",
+    "hoi4_production_add",
+    "hoi4_production_set"
    ],
    "payoff": "medium",
    "why": "plans must split replace into remove + add or leave it to the player",
-   "closing": "offline",
-   "owner": "offline: W1-9, the executor step for production[].replace (swap the equipment, keep the factories)"
+   "closing": "live",
+   "owner": "live: one replace of a start rifle line on bed B (a young line switches whole; a mature one starts the new tier beside it); executor step plan_affairs.rs line switches, lint production.replace"
   },
   {
    "id": "production.tier_switch_guard",
@@ -2798,16 +2801,21 @@
     "templates-equipment-production.md#5 Rules for opening or changing lines (rule 2)",
     "templates-equipment-production.md#10 Tactics (PR04, PR39)"
    ],
-   "plan": [],
+   "plan": [
+    "production[].switch_at_cover_days",
+    "production[].switch_mature",
+    "designs[].switch_at_cover_days"
+   ],
    "tools": [
     "hoi4_production_lines",
     "hoi4_production_add",
-    "hoi4_design_set_production"
+    "hoi4_design_set_production",
+    "hoi4_stockpile"
    ],
    "payoff": "medium",
    "why": "a tier switch on a mature line drops efficiency to 30% and starves the stockpile",
-   "closing": "offline",
-   "owner": "offline: a ramp key (grow the new-tier line as the old one runs down)"
+   "closing": "live",
+   "owner": "live: watch a mature line kept beside its new tier switch whole once hoi4_stockpile shows the old gear at switch_at_cover_days of cover; lint production.mature_switch"
   },
   {
    "id": "production.line_priority_order",
@@ -2989,14 +2997,16 @@
    "playbook": [
     "templates-equipment-production.md#10 Tactics (PR24)"
    ],
-   "plan": [],
+   "plan": [
+    "designs[].decommission"
+   ],
    "tools": [
     "hoi4_design_obsolete"
    ],
    "payoff": "low",
    "why": "housekeeping before conversion and template refresh",
-   "closing": "offline",
-   "owner": "offline: a designs[] field the executor turns into hoi4_design_obsolete"
+   "closing": "live",
+   "owner": "live: validate hoi4_design_obsolete on an old variant once the new design runs on a line; lint designs.decommission"
   },
   {
    "id": "designers.equipment_conversion",

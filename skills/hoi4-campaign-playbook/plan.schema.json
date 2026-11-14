@@ -796,15 +796,24 @@
           },
           "replace": {
             "type": "string",
-            "x-owner": "player",
-            "x-executor-planned": "W1-9",
-            "description": "equipment key that replaces this line's equipment from `from`, keeping its factories (efficiency kept: same-model variant 90%, same family 70%, a tier change such as infantry_equipment_1 to _2 30%, same archetype 20%; a tier change on a mature line starts the new model on new factories first)"
+            "x-owner": "executor",
+            "description": "equipment key that replaces this line's equipment from `from` (plan_affairs.rs line switches): the line switches to the newest own design of that type (or to `design` when given) and keeps its factories; a line the game cannot switch to that type (another family) moves its factories to a line of the new type and closes. A tier change on a mature line starts the new type on a separate line (3-5 factories) first and switches the old line whole at `switch_at_cover_days` (efficiency kept: same-model variant 90%, same family 70%, a tier change such as infantry_equipment_1 to _2 30%, same archetype 20%)"
           },
           "switch_mature": {
             "type": "boolean",
             "default": false,
             "x-owner": "executor",
-            "description": "true switches a mature line to a new tier anyway (default: the design starts as a separate line and the old line keeps building)"
+            "description": "true switches a mature line to a new tier at once (default: the new tier starts as a separate line and the old line keeps building until switch_at_cover_days)"
+          },
+          "switch_at_cover_days": {
+            "type": [
+              "number",
+              "boolean"
+            ],
+            "minimum": 0,
+            "default": 30,
+            "x-owner": "executor",
+            "description": "a mature line kept beside its new tier (design or replace) switches whole once its old gear covers this many game days of field demand (hoi4_stockpile: no division short of it and days_of_cover at least this, or a measured stock that is not falling); false keeps the old line building for good"
           }
         },
         "additionalProperties": false,
@@ -3346,7 +3355,30 @@
             "type": "boolean",
             "default": false,
             "x-owner": "executor",
-            "description": "true switches a mature line to a new tier anyway (default: the design starts as a separate line and the old line keeps building)"
+            "description": "true switches a mature line to a new tier at once (default: the new tier starts as a separate line and the old line keeps building until switch_at_cover_days)"
+          },
+          "switch_at_cover_days": {
+            "type": [
+              "number",
+              "boolean"
+            ],
+            "minimum": 0,
+            "default": 30,
+            "x-owner": "executor",
+            "description": "a mature line kept beside its new tier (design or replace) switches whole once its old gear covers this many game days of field demand (hoi4_stockpile: no division short of it and days_of_cover at least this, or a measured stock that is not falling); false keeps the old line building for good"
+          },
+          "decommission": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "integer"
+              ],
+              "minLength": 1,
+              "minimum": 1
+            },
+            "x-owner": "executor",
+            "description": "older designs (names or design ids from hoi4_designs) decommissioned once each (hoi4_design_obsolete) after this item's design is made and a production line builds it, so training and the selection lists stop offering them; the item needs a `name`"
           }
         },
         "additionalProperties": false,

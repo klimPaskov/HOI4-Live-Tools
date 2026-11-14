@@ -378,12 +378,13 @@ class CoverageKeys(unittest.TestCase):
         for key in ("army_group", "navy", "invasions", "designs", "diplomacy", "faction", "intelligence", "mio", "trade",
                     "research_bonuses", "hold_targets", "stockpile_targets"):
             self.assertEqual(owners[key], "executor", key)
-        for path in ("production[].design", "production[].accept_progress_loss", "production[].remove"):
+        for path in ("production[].design", "production[].accept_progress_loss", "production[].remove",
+                     "production[].replace", "production[].switch_at_cover_days", "designs[].decommission"):
             self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
         for key, item in (("xp_budget", "W1-6"), ("sea_transfer", "W1-14"),
                           ("garrison_template", "W1-7"), ("occupation.per_state", "W1-7"),
-                          ("production[].replace", "W1-9"), ("manage.fuel_floor", "W3-10")):
+                          ("manage.fuel_floor", "W3-10")):
             self.assertEqual(planned.get(key), item, key)
         for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "stockpile_targets",
                     "manage.air_superiority",

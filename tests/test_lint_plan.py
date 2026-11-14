@@ -682,18 +682,66 @@ class CoverageBuildRules(unittest.TestCase):
         plan["production"].append({"equipment": "infantry_equipment_1", "remove": True, "from": "1936.06.01"})
         plan["production"].append({"equipment": "support_equipment_1", "replace": "infantry_equipment_1",
                                    "from": "1936.06.01"})
-        # a land-line removal is run by the executor now: no warning; a replace still warns
-        self.assertFalse(self.hits(plan, "production.remove", None, "production[4]"))
-        self.assertHit(plan, "production.remove", "warning", "production[5]")
+        # the executor runs both: neither warns that it is not read
+        self.assertFalse(self.hits(plan, "production.replace", None, "production[4]"))
+        self.assertFalse(self.hits(plan, "production.replace", None, "not read"))
         naval = copy.deepcopy(self.ita)
         naval["production"].append({"equipment": "ship_hull_light_1", "remove": True})
         last = "production[%d]" % (len(naval["production"]) - 1)
-        self.assertFalse(self.hits(naval, "production.remove", None, last))
         # the start Maestrale lines hold destroyers 60-70% built: production.in_progress
         self.assertHit(naval, "production.in_progress", "error", last)
         lt = lint_plan.Lint(plan, self.game)
         lines = lt.active_lines(derive.day("1936.07.01"))
         self.assertEqual(lines, {"artillery_equipment_1": 4, "infantry_equipment_1": 2, "motorized_equipment_1": 5})
+
+    def test_production_replace(self):
+        base = copy.deepcopy(self.ita)
+        base["research_priority"] = list(base.get("research_priority") or []) + ["improved_infantry_weapons"]
+        n = len(base["production"])
+
+        def with_entry(entry):
+            plan = copy.deepcopy(base)
+            plan["production"].append(entry)
+            return plan
+        where = "production[%d]" % n
+        # a start line moved to the next tier: runnable, no finding
+        self.assertFalse(self.hits(with_entry({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_2",
+                                               "from": "1937.01.01"}), "production.replace", None, where))
+        f = self.assertHit(with_entry({"equipment": "infantry_equipment_1", "replace": "no_such_gun"}),
+                           "production.replace", "error", where)
+        self.assertIn("unknown equipment no_such_gun", f["message"])
+        self.assertHit(with_entry({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_1"}),
+                       "production.replace", "error", "own equipment")
+        self.assertHit(with_entry({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_2",
+                                   "remove": True}), "production.replace", "error", "both removes")
+        # a tech nothing in the plan researches
+        f = self.assertHit(with_entry({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_3"}),
+                           "production.replace", None, where)
+        self.assertIn("none at the start or in the research plan", f["message"])
+        # no line of that equipment to replace
+        self.assertHit(with_entry({"equipment": "anti_air_equipment_2", "replace": "anti_air_equipment_3"}),
+                       "production.replace", "warning", "the replace waits")
+        self.assertHit(with_entry({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_2",
+                                   "switch_at_cover_days": False}),
+                       "production.replace", "warning", "keeps building for good")
+
+    def test_designs_decommission(self):
+        plan = copy.deepcopy(self.ita)
+        plan["designs"] = [{"id": "l2", "kind": "tank", "base": "light_tank_chassis_2", "name": "L6/40 b",
+                            "production": "light_tank_chassis_1", "decommission": ["L3/35"]}]
+        self.assertNoHit(plan, "designs.decommission")
+        bad = copy.deepcopy(plan)
+        bad["designs"][0]["decommission"] = ["L6/40 b"]
+        self.assertHit(bad, "designs.decommission", "error", "own design")
+        bad = copy.deepcopy(plan)
+        del bad["designs"][0]["name"]
+        self.assertHit(bad, "designs.decommission", "error", "needs the item's `name`")
+        bad = copy.deepcopy(plan)
+        bad["production"].append({"equipment": "light_tank_chassis_1", "design": "L3/35"})
+        self.assertHit(bad, "designs.decommission", "error", "still puts on a line")
+        idle = copy.deepcopy(plan)
+        del idle["designs"][0]["production"]
+        self.assertHit(idle, "designs.decommission", "warning", "waits for such a line for good")
 
     # -------------------------------------------------------------- wave-2 executor keys
     def test_army_group_marshals_and_navy_admirals(self):
@@ -885,6 +933,11 @@ class TacticsRules(unittest.TestCase):
         plan = self.plan()
         plan["production"].append({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_2",
                                    "from": "1937.06.01"})
+        # without switch_mature the executor guards the line: the new tier beside it, a whole switch at cover
+        f = self.assertHit(plan, "production.mature_switch", "info", "production[4]")
+        self.assertIn("switches whole at 30 days of old-gear cover", f["message"])
+        self.assertNoHit(plan, "production.mature_switch", "error")
+        plan["production"][4]["switch_mature"] = True
         f = self.assertHit(plan, "production.mature_switch", "error", "production[4]")
         self.assertIn("keeps 30%", f["message"])  # parent/child switch of the start rifle line
         plan = self.plan()
