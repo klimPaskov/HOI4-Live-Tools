@@ -1249,10 +1249,36 @@ def width_scores(game, mix, lo=10, hi=45):
 # --------------------------------------------------------------------------- laws, capital, coast, resistance
 
 
+def deep_gates(block):
+    """{"industry_ratio"|"surrender_progress": lowest threshold} of the enemy-industry and own-surrender
+    branches anywhere in a trigger block: `ic_ratio = { ratio > x }` (an enemy's industry against
+    the country's, the war-law gate) and `surrender_progress > x`. They usually stand in an OR beside
+    other branches, so they are ways in, not requirements."""
+    out = {}
+
+    def put(key, x):
+        if x is not None and (key not in out or x < out[key]):
+            out[key] = x
+
+    def walk(items):
+        for i, (k, v) in enumerate(items or []):
+            if k == "surrender_progress" and op_of(items, i) in (">", ">=") and _num(v) is not None:
+                put("surrender_progress", _num(v))
+            elif k == "ic_ratio" and isinstance(v, list):
+                for j, (a, b) in enumerate(v):
+                    if a == "ratio" and op_of(v, j) in (">", ">=") and _num(b) is not None:
+                        put("industry_ratio", _num(b))
+            elif isinstance(v, list):
+                walk(v)
+
+    walk(block)
+    return out
+
+
 def law_ideas(game):
-    """{idea: {"category", "available": block or None, "gates": {"war_support"|"stability": (op, x)}}}
-    of the ideas in law categories (`law = yes`) of common/ideas; gates are the plain
-    has_war_support / has_stability comparisons at the top level of `available`."""
+    """{idea: {"category", "available": block or None, "gates": {"war_support"|"stability": (op, x)},
+    "ways": deep_gates(available)}} of the ideas in law categories (`law = yes`) of common/ideas; gates
+    are the plain has_war_support / has_stability comparisons at the top level of `available`."""
 
     def load():
         out = {}
@@ -1272,7 +1298,8 @@ def law_ideas(game):
                         for i, (a, b) in enumerate(av or []):
                             if a in ("has_war_support", "has_stability") and _num(b) is not None:
                                 gates[a[4:]] = (op_of(av, i), _num(b))
-                        out[name] = {"category": cat, "available": av, "gates": gates}
+                        out[name] = {"category": cat, "available": av, "gates": gates,
+                                     "ways": deep_gates(av)}
         return out
 
     return game.cached("derive:lawideas", load)

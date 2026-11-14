@@ -21,10 +21,11 @@ class Facts:
     """What a plan says about one day: `date` (YYYY.M.D), `war` (True, False or None when the plan does not
     say), `enemies` (tags it is at war with when at war), `focuses` (completed), `flags` (global and country
     flags known to be set that day), `states` (state ids the country owns at the start: a plan keeps its own
-    land unless it says otherwise), `tag`, `dlcs`."""
+    land unless it says otherwise), `tag`, `dlcs`, `government` (the ruling ideology, None when not known)."""
 
-    def __init__(self, tag, dlcs, date, war=None, enemies=(), focuses=(), flags=(), states=()):
+    def __init__(self, tag, dlcs, date, war=None, enemies=(), focuses=(), flags=(), states=(), government=None):
         self.ctx = Ctx(tag, dlcs, date)
+        self.government = government
         self.war = war
         self.enemies = set(enemies)
         self.focuses = set(focuses)
@@ -71,6 +72,8 @@ def _one(key, value, op, facts):
         if facts.war and value in facts.enemies:
             return True
         return None  # a war the plan does not name can still start
+    if k == "has_government" and isinstance(value, str):
+        return None if getattr(facts, "government", None) is None else value == facts.government
     if k == "has_completed_focus" and isinstance(value, str):
         return value in facts.focuses
     if k in ("has_global_flag", "has_country_flag") and isinstance(value, str):

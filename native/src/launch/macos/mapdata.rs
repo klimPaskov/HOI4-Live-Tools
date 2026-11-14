@@ -166,6 +166,59 @@ pub(super) fn state_victory_points(dir: &Path) -> Result<VictoryIndex> {
         .insert(dir.to_path_buf(), index.clone());
     Ok(index)
 }
+/// Factories a state starts with (history/states `buildings`, dated history blocks left out):
+/// industrial complexes, arms factories and dockyards.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct Factories {
+    pub civilian: i64,
+    pub military: i64,
+    pub naval: i64,
+}
+impl Factories {
+    pub(super) fn total(&self) -> i64 {
+        self.civilian + self.military + self.naval
+    }
+}
+/// (state id, starting factories) of one history/states file.
+pub(super) fn parse_state_factories(text: &str) -> Option<(i32, Factories)> {
+    use crate::script::Block as _;
+    let root = crate::script::parse(text);
+    let state = root.find_val("state")?.block();
+    let id = state.number("id")? as i32;
+    let buildings = state
+        .find_val("history")
+        .map(|h| h.block())
+        .and_then(|h| h.find_val("buildings"))
+        .map(|b| b.block())
+        .unwrap_or(&[]);
+    let n = |key: &str| buildings.number(key).unwrap_or(0.0).max(0.0) as i64;
+    Some((
+        id,
+        Factories {
+            civilian: n("industrial_complex"),
+            military: n("arms_factory"),
+            naval: n("dockyard"),
+        },
+    ))
+}
+/// State id -> its starting factories, read once per content folder (mods included).
+pub(super) fn state_factories(dir: &Path) -> std::sync::Arc<HashMap<i32, Factories>> {
+    crate::script::cached(dir, "state_factories", |dir| {
+        let mut index = HashMap::new();
+        for entry in std::fs::read_dir(dir.join("history/states"))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            if let Ok(bytes) = std::fs::read(entry.path()) {
+                if let Some((id, f)) = parse_state_factories(&String::from_utf8_lossy(&bytes)) {
+                    index.insert(id, f);
+                }
+            }
+        }
+        index
+    })
+}
 /// State id -> its land provinces.
 pub(super) type StateIndex = std::sync::Arc<HashMap<i32, Vec<i32>>>;
 pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
@@ -427,6 +480,18 @@ mod tests {
         let s =
             "state={\n id=86\n history={ victory_points = { 1 2 } }\n provinces={\n 3 4 5\n }\n}";
         assert_eq!(parse_state_provinces(s), vec![3, 4, 5]);
+    }
+    #[test]
+    fn reads_the_starting_factories_of_a_state() {
+        let s = "state={ id=3 history={ owner = AAA buildings = { infrastructure = 4 \
+                 industrial_complex = 2 arms_factory = 3 dockyard = 1 77 = { naval_base = 3 } } \
+                 1939.1.1 = { buildings = { arms_factory = 9 } } } provinces={ 1 2 } }";
+        let (id, f) = parse_state_factories(s).unwrap();
+        assert_eq!(id, 3);
+        assert_eq!((f.civilian, f.military, f.naval, f.total()), (2, 3, 1, 6));
+        let (_, none) = parse_state_factories("state={ id=4 history={ owner = AAA } }").unwrap();
+        assert_eq!(none.total(), 0);
+        assert!(parse_state_factories("nothing = yes").is_none());
     }
     #[test]
     fn parses_coastal_land_provinces() {

@@ -43,7 +43,8 @@
 //!                    "change_days":30,"per_state"?} every 7 game days from hoi4_occupation (states
 //!                    occupied by us or owned and resisting): the default law is set once when `when`
 //!                    holds, then a state at resistance >= 50 moves the law one step harsher on
-//!                    `ladder` (default: the game's Default Law list, mild to harsh), and every state at
+//!                    `ladder` (default: the laws hoi4_occupation lists as shown to the player, from the
+//!                    game files, by the resistance target they set, mild to harsh), and every state at
 //!                    compliance >= 40 with resistance < 25 one step milder, at most once per
 //!                    `change_days`, through hoi4_occupation_law. `per_state` is noted, not applied
 //!                    (the tool sets the default law only); a garrison template action does not exist
@@ -933,19 +934,24 @@ fn templates_step(
 // ---------------------------------------------------------------------------------------------
 // Rule 17 / W1-7: occupation law.
 
-/// The game's Default Law list, mild to harsh (as hoi4_occupation_law lists it); a mod's laws
-/// go in `occupation.ladder`.
-const OCCUPATION_LADDER: [&str; 9] = [
-    "no_garrison",
-    "foreign_civilian_oversight",
-    "local_police_force_garrison",
-    "secret_police_oversight",
-    "military_governor_occupation",
-    "martial_law_occupation",
-    "forced_labor_occupation",
-    "harsh_quotas_occupation",
-    "brutally_oppressive_occupation",
-];
+/// The default ladder, mild to harsh: the laws hoi4_occupation lists as shown to the player (the
+/// game files' common/occupation_laws, mods included), ranked by the resistance target they
+/// set, highest first (a law that cuts resistance more is harsher), list order within a tie.
+fn occupation_ladder(read: &Value) -> Vec<String> {
+    let mut shown: Vec<(f64, String)> = list(read, "laws")
+        .iter()
+        .filter(|l| l["shown"] == json!(true))
+        .filter_map(|l| {
+            let key = l["key"].as_str().filter(|k| !k.is_empty())?;
+            Some((
+                l["resistance_target"].as_f64().unwrap_or(0.0),
+                key.to_string(),
+            ))
+        })
+        .collect();
+    shown.sort_by(|a, b| b.0.total_cmp(&a.0));
+    shown.into_iter().map(|(_, key)| key).collect()
+}
 
 fn occupation_step(
     state: &mut State,
@@ -973,7 +979,7 @@ fn occupation_step(
         .to_string();
     let mut ladder = strings(occ, "ladder");
     if ladder.is_empty() {
-        ladder = OCCUPATION_LADDER.map(String::from).to_vec();
+        ladder = occupation_ladder(&read);
     }
     let states: Vec<&Value> = list(&read, "states")
         .iter()
@@ -1040,6 +1046,14 @@ fn occupation_step(
     let calm = states.iter().all(|s| {
         s["compliance"].as_f64().unwrap_or(0.0) >= milder_at && resistance(s) < milder_below
     });
+    if ladder.is_empty() {
+        note(
+            state,
+            "occupation",
+            format!("law {current}: no ladder (hoi4_occupation lists no law shown to the player and the plan has no occupation.ladder); {tail}"),
+        );
+        return Ok(None);
+    }
     let Some(index) = ladder.iter().position(|l| *l == current) else {
         note(
             state,
@@ -3263,9 +3277,46 @@ mod tests {
     }
 
     fn occupation_read(law: &str, states: &[(i64, f64, f64)]) -> Value {
+        // the laws as hoi4_occupation lists them from the game files: list order, shown or not
         json!({"player_occupation_law": {"key": law},
+            "laws": [
+                {"key": "no_garrison", "shown": true, "resistance_target": 0.4},
+                {"key": "democratic_only", "shown": false, "resistance_target": 0.1},
+                {"key": "foreign_civilian_oversight", "shown": true},
+                {"key": "local_police_force_garrison", "shown": true, "resistance_target": -0.15},
+                {"key": "secret_police_oversight", "shown": true, "resistance_target": -0.3},
+                {"key": "colonial_police", "shown": null, "resistance_target": -0.3},
+                {"key": "martial_law_occupation", "shown": true, "resistance_target": -0.6},
+                {"key": "forced_labor_occupation", "shown": true, "resistance_target": -0.4}],
             "states": states.iter().map(|(id, r, c)| json!({"state_id": id, "role": "occupied_by_player",
                 "resistance": r, "compliance": c})).collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn the_default_occupation_ladder_is_the_shown_laws_by_their_resistance_target() {
+        let ladder = occupation_ladder(&occupation_read("x", &[]));
+        assert_eq!(
+            ladder,
+            [
+                "no_garrison",
+                "foreign_civilian_oversight",
+                "local_police_force_garrison",
+                "secret_police_oversight",
+                "forced_labor_occupation",
+                "martial_law_occupation"
+            ]
+        );
+        // no law list (an older server): no ladder, the step only notes it
+        let tools = fake(vec![(
+            "hoi4_occupation",
+            json!({"player_occupation_law": {"key": "a"},
+                "states": [{"state_id": 1, "role": "occupied_by_player", "resistance": 80.0}]}),
+        )]);
+        let plan = json!({"occupation": {}, "manage": {"off": ["manpower", "stability", "equipment_fill", "resources"]}});
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
+        assert!(state.manage.notes["occupation"].contains("no ladder"));
+        assert!(actions(&tools).is_empty());
     }
 
     #[test]
