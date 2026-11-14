@@ -234,6 +234,12 @@ pub(crate) trait GameInput: Send + Sync {
     fn press(&self, key: Key) -> Result<()> {
         self.press_code(key.code())
     }
+    /// A deliberate clock key (pause, speed) from a clock action or from the pause guard
+    /// putting a state back. The same key as `press`; the pause watch never counts it as a
+    /// stray toggle.
+    fn press_clock(&self, key: Key) -> Result<()> {
+        self.press(key)
+    }
     fn press_once(&self, key: Key) -> key_once::Dispatch;
     fn press_digit_once(&self, digit: char) -> key_once::Dispatch;
     /// The same binding with an additional per-action fence run before every input.
@@ -309,6 +315,9 @@ macro_rules! delegate_game_input {
             }
             fn press(&self, key: Key) -> Result<()> {
                 (**self).press(key)
+            }
+            fn press_clock(&self, key: Key) -> Result<()> {
+                (**self).press_clock(key)
             }
             fn press_once(&self, key: Key) -> key_once::Dispatch {
                 (**self).press_once(key)

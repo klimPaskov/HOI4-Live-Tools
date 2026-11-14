@@ -794,6 +794,34 @@ pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32
     super::screenmap::wait_camera_still(process, 700);
     Ok(())
 }
+/// Escape for something that reads as open, at most `presses` times: `open` reads what is
+/// still open (`None` once nothing is), and the next Escape waits until that has changed, the
+/// game menu has come up or `wait` has passed (see `pause_guard::escape_close`). The game menu
+/// a spare Escape opened is closed again; the pause it leaves is the pause guard's to undo.
+pub(super) fn escape_close<T: PartialEq>(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    presses: usize,
+    wait: Duration,
+    open: impl Fn(&Reader<'_>, u64) -> Result<Option<T>>,
+) -> Result<()> {
+    use crate::pause_guard::Seen;
+    crate::pause_guard::escape_close(
+        presses,
+        wait,
+        &mut || {
+            read(process, |r, i| {
+                let seen = match open(r, i)? {
+                    Some(state) => Seen::Open(state),
+                    None => Seen::Closed,
+                };
+                Ok((seen, menu_open(r, i)?))
+            })
+        },
+        &mut || keys.press(crate::platform::game_input::Key::Escape),
+    )?;
+    close_menu(process, keys)
+}
 /// Press Escape (at most three times) until `closed` holds; best effort, used
 /// to leave the UI tidy after the game refuses a target.
 pub(super) fn dismiss(
@@ -801,26 +829,9 @@ pub(super) fn dismiss(
     keys: &dyn GameInput,
     closed: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) {
-    for _ in 0..3 {
-        if read(process, &closed).unwrap_or(true) {
-            return;
-        }
-        if keys
-            .press(crate::platform::game_input::Key::Escape)
-            .is_err()
-        {
-            return;
-        }
-        // A closing window can take a moment; an Escape too many would open
-        // the game menu, so wait for this one to take effect first.
-        let deadline = Instant::now() + Duration::from_millis(1200);
-        while Instant::now() < deadline {
-            if read(process, &closed).unwrap_or(true) {
-                return;
-            }
-            thread::sleep(Duration::from_millis(40));
-        }
-    }
+    let _ = escape_close(process, keys, 3, crate::pause_guard::ESCAPE_WAIT, |r, i| {
+        Ok((!closed(r, i)?).then_some(()))
+    });
 }
 /// A click target whose rectangle is identical in two reads 60 ms apart, so
 /// sliding panels and animated windows have come to rest before input.

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+No action leaves a running game paused: one guard on the input binding covers every tool.
+
+- Cause of the pauses in the shakedown of 10 November (16 of 281 `hoi4_army_move` and 3 of 12 `hoi4_army_merge` calls):
+  an army order closes open top-bar panels with Escape first. The loop pressed Escape, slept 250 ms and read the panels
+  again; a panel left open by a focus or research action still read as open at that moment, so a second Escape went to
+  the free map and opened the game menu, which pauses the game and leaves it paused when closed. Every one of the 19
+  calls followed an action that leaves a panel open; army orders with no panel open never paused.
+- Escape is now pressed only for something that reads as open and never on a timer: the next Escape waits until what
+  was open has changed or the game menu has come up, and stops at the menu (`pause_guard::escape_close`; used for the
+  top-bar panels, the focus tree and every best-effort dismiss).
+- The pause guard moved from one tool path to the input binding itself (`pause_guard::Watched`): each Escape and each
+  Space of any tool, the executor or the daily worker is noted with the clock read just before it, and a change of the
+  pause state that follows the key is attributed to it. Each action reads the pause state before and after and puts the
+  starting state back when the change was its own, in both directions: a stray Space on a game still paused for setup
+  or by a host is put back to paused. A menu opened and closed inside one action is covered (the old guard needed to
+  see the menu), and so is a typed space that misses its text box.
+- A pause by the player or a multiplayer host stays: only a change right after one of our keys counts, and a pause
+  found later counts only while the game date still stands at the key. Deliberate clock keys (`hoi4_time`, a date stop)
+  go through `press_clock` and are never counted.
+- The `[action]` line on stderr gains `self_pause` and `restored`; a result whose action changed the pause state
+  carries `pause_guard {changed_by_own_input, paused_before, restored}` so a run report can count them.
+
 Whether a national focus can start is read from the game files, not tried in the game.
 
 - New read-only tool `hoi4_focus_available {focuses:[...]}`: for each focus `available`, `unavailable` or `unknown`,

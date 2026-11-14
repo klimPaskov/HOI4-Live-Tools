@@ -409,6 +409,7 @@ impl Controller {
         let worker = Worker {
             process: owner.process.clone(),
             keys: owner.keys.clone(),
+            pause: owner.pause.clone(),
             control: owner.state.clone(),
             retained: self.retained.clone(),
             producer: producer.clone(),
@@ -521,6 +522,7 @@ fn retain_terminal(mut terminal: Terminal, blocked: &AtomicBool, retained: Resul
 struct Worker {
     process: Arc<dyn Process + Send + Sync>,
     keys: Arc<dyn GameInput>,
+    pause: Arc<crate::pause_guard::Watch>,
     control: Arc<Mutex<Control>>,
     retained: Arc<Mutex<Retained>>,
     producer: Arc<Producer>,
@@ -709,12 +711,16 @@ impl Worker {
             last_context: None,
             previous_focus,
         };
+        // The worker's input is bracketed like any action: a pause its own key caused is undone.
+        let scope = self.pause.begin();
+        let menus_before = super::ui::menus_closed();
         let result = match continuation {
             Some(id) => {
                 governor.continue_entry(&mut backend, &id, daily_observation::unix_ms()?, until)
             }
             None => governor.run_next(&mut backend, daily_observation::unix_ms()?, until),
         };
+        let _ = super::end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before);
         if governor.blocks_work() {
             self.blocked.store(true, Ordering::Release);
         }
