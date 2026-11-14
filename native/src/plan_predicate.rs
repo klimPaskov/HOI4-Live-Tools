@@ -14,7 +14,7 @@
 //!   "province_controller:<p>=<TAG>" (a single = is ==), "vp_share:<TAG><=0.5", "at_war:<TAG>",
 //!   "not_at_war:<TAG>", "not_exists:<TAG>", "focus_completed:<key>", "tech_researched:<key>".
 //!   Ratio atoms (stability, war_support, world_tension, fuel_ratio, vp_share, equipment_fill,
-//!   resistance, compliance) are fractions 0..1; a value above 1 or written with % is a
+//!   resistance, compliance, surrender_progress) are fractions 0..1; a value above 1 or written with % is a
 //!   percentage ("war_support >= 25" is 0.25). Truth: all is false when one part is false,
 //!   unknown when one part is unknown and none false; any is the mirror; not keeps unknown.
 //!
@@ -59,6 +59,13 @@
 //!   mission_days:<id>           unknown: hoi4_decisions_list has no mission timers (W1-18)
 //!   capitulated:<TAG>           hoi4_wars + hoi4_events + hoi4_states: no longer at war with TAG and
 //!                               (a peace conference is open or TAG owns no state)
+//!   surrender_progress:<TAG>    hoi4_wars wars.wars[] row of the war with TAG, field
+//!                               enemy_surrender_progress (0..1: the share of TAG's surrender limit
+//!                               reached, the bar under TAG's flag in the war overview; 1 is the
+//!                               capitulation). Unknown today: the value is not located in memory
+//!                               yet and the tool reports null with enemy_surrender_progress_reason
+//!                               (gap register peace.surrender_progress_read); unknown as well when
+//!                               the player is not at war with TAG (no war overview row for it)
 //!   anything else               unknown atom (reported, never true)
 //!
 //! API (plan_run and plan_manage):
@@ -202,6 +209,7 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("var", Kind::Number, true),
     ("bop", Kind::Number, true),
     ("mission_days", Kind::Number, true),
+    ("surrender_progress", Kind::Ratio, true),
     ("at_peace_conference", Kind::Flag, false),
     ("at_war_with", Kind::Flag, true),
     ("controls_state", Kind::Flag, true),
@@ -776,6 +784,31 @@ fn enemies(ctx: &mut Ctx) -> Read<Vec<String>> {
     Err("own wars unreadable (hoi4_wars wars, hoi4_diplomacy_state wars)".into())
 }
 
+/// The surrender progress of enemy `tag` (0..1) from its row in hoi4_wars `wars.wars[]`
+/// (`enemy_surrender_progress`; a value above 1 is read as a percent). A null value is unknown with
+/// the tool's own reason: the read is a seam the tool fills once the value is located in memory.
+pub(crate) fn surrender_progress(ctx: &mut Ctx, tag: &str) -> Read<f64> {
+    let read = ctx
+        .read("hoi4_wars", &json!({}))
+        .ok_or("hoi4_wars unreadable")?;
+    let row = read["wars"]["wars"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|w| w["enemy"]["tag"].as_str().or_else(|| w["enemy"].as_str()) == Some(tag))
+        .ok_or_else(|| format!("no own war with {tag} in hoi4_wars (no war overview row)"))?;
+    match row["enemy_surrender_progress"].as_f64() {
+        Some(v) if v > 1.0 => Ok(v / 100.0),
+        Some(v) => Ok(v.max(0.0)),
+        None => Err(format!(
+            "hoi4_wars reads no surrender progress for {tag} ({}; gap register peace.surrender_progress_read)",
+            row["enemy_surrender_progress_reason"]
+                .as_str()
+                .unwrap_or("field missing")
+        )),
+    }
+}
+
 /// Who holds province `p`: looked up in the victory points and the provinces held by others of
 /// the player's and the enemies' hoi4_states reads.
 fn province_controller(ctx: &mut Ctx, p: i64) -> Read<String> {
@@ -968,6 +1001,7 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             num(row["value"].as_f64(), "balance of power value missing")
         }
         "mission_days" => Err("hoi4_decisions_list reports no mission timers (audit W1-18)".into()),
+        "surrender_progress" => surrender_progress(ctx, &tag_arg(atom)?).map(Reading::Number),
         "capitulated" => {
             // What a player sees: the war with TAG is over and either the peace conference that
             // follows a capitulation is open or TAG no longer exists (annexed). A white peace
@@ -1187,6 +1221,53 @@ mod tests {
         assert_eq!(eval(&f, json!("capitulated:ETH")), Truth::False);
         // war over, ETH owns nothing: annexed
         assert_eq!(eval(&f, json!("capitulated:AUS")), Truth::True);
+    }
+    #[test]
+    fn surrender_progress_is_unknown_until_hoi4_wars_maps_it() {
+        let mut f = game();
+        // today's tool: the war row has the field null with a reason
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["ETH"], "wars": [
+                {"enemy": {"tag": "ETH", "name": "Ethiopia"}, "enemy_surrender_progress": null,
+                 "enemy_surrender_progress_reason": "not_mapped"}]}}),
+        );
+        let mut ctx = Ctx::new(&f, date_hour("1936.05.01").unwrap());
+        assert_eq!(
+            check(&json!("surrender_progress:ETH >= 0.5"), &mut ctx),
+            Truth::Unknown
+        );
+        let why = ctx.unknown()["surrender_progress:ETH >= 0.5"].clone();
+        assert!(why.contains("not_mapped"), "{why}");
+        // a war that is not in the list (not at war): unknown, never false
+        assert_eq!(
+            eval(&f, json!("surrender_progress:AUS < 0.5")),
+            Truth::Unknown
+        );
+        // once the tool fills it: a fraction, or a percent above 1
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["ETH"], "wars": [
+                {"enemy": {"tag": "ETH"}, "enemy_surrender_progress": 0.62}]}}),
+        );
+        assert_eq!(
+            eval(&f, json!("surrender_progress:ETH >= 0.6")),
+            Truth::True
+        );
+        assert_eq!(
+            eval(&f, json!("surrender_progress:ETH >= 70%")),
+            Truth::False
+        );
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"wars": [{"enemy": {"tag": "ETH"}, "enemy_surrender_progress": 75.0}]}}),
+        );
+        assert_eq!(eval(&f, json!("surrender_progress:ETH > 0.7")), Truth::True);
+        // the argument is a tag
+        assert_eq!(
+            eval(&f, json!("surrender_progress:Ethiopia > 0.7")),
+            Truth::Unknown
+        );
     }
     fn eval(f: &Fake, p: Value) -> Truth {
         let mut ctx = Ctx::new(f, date_hour("1936.05.01").unwrap());

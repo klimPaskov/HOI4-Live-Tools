@@ -29,7 +29,8 @@ Items 1, 2 and 29 are never "not applicable". Write every resolution into the co
 (schema `x-executor-planned`: `xp_budget`, `sea_transfer`, `garrison_template`,
 `production[].remove` / `replace`, `manage.convoys_free`, `manage.fuel_floor`), keys that do not exist
 yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
-`var:<name>`, `mission_days:<id>`). Check the
+`var:<name>`, `mission_days:<id>`, `surrender_progress:<TAG>`, a gap the register lists as not
+executable until hoi4_wars reads the bar). Check the
 capability list (SKILL.md Inputs). When the key or atom is absent, never write it into `plan.json` (lint
 `schema.keys`); write the decision in its plan.md section and put it in the brief as a player line: the
 trigger in words, the read that checks it (for example `hoi4_country_status {}`), and the exact call.

@@ -381,6 +381,15 @@ Declare only with armies on the border, planning built (section 2) and
 - Capitulation does not end a war while major allies fight on; a minor can be
   forced out when its majors fall.
 - Capitulation gives the winner 50% of the loser's stockpile; annexation 100%.
+- Surrender progress is the share of that limit a country has reached (0 to 1; the
+  bar under its flag in the war overview, the `surrender_progress` trigger in
+  scripts). It moves with the enemy core victory points held, so the last
+  points of progress are the capital and the biggest remaining victory points:
+  plan the kill there, not on the whole map. Conditional surrender needs a
+  war of 3+ months and half the war score. Plans can gate a phase on
+  `surrender_progress:<TAG> >= 0.7`, but this is a gap today (gap register
+  peace.surrender_progress_read, not executable): hoi4_wars reports the value
+  as null, so the atom stays unknown; pair it in an `any` with `vp_share:<TAG>`.
 
 ### 9.2 Peace conference
 
