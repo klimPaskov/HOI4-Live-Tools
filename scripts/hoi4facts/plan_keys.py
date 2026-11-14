@@ -11,6 +11,8 @@ it. So each key path of the schema (x-owner on the key, else inherited from the 
   lint      only the planning tools read it (lint, the validator, the evaluator): it shapes estimates,
             the executor does not act on it, and the lint lists it for every plan that sets it;
   text      for people: a label or commentary nothing reads (`why` and `note` are text without a mark);
+  planner   the rolling planner (hoi4_live/planner) reads it while the game runs: the executor does not act
+            on it, the planner turns it into updates of the keys the executor does read;
   player    a top-level key the player acts on from the brief. Inside a key the executor owns, a
             player key is read by nobody, so it is allowed there only with x-executor-planned (the
             build item whose executor step takes it over).
@@ -20,7 +22,8 @@ it. So each key path of the schema (x-owner on the key, else inherited from the 
   * a key inside an executor-owned key has no mark and its name is nowhere in the executor's code;
   * a player key sits inside an executor-owned key without a planned build item;
   * a lint key is read by the executor, or its name is nowhere in the planning tools;
-  * a text key is read by the executor.
+  * a text key is read by the executor;
+  * a planner key's name is nowhere in the rolling planner's code, or it has no description.
 Reads are found in the sources (comments and tests stripped): `plan["key"]` and the helper reads the
 tables below name, and for unmarked nested keys the key's name as a string literal. Stdlib only,
 Python 3.9+.
@@ -54,10 +57,13 @@ LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
                                                    os.path.join("launch", "macos", "wars.rs"))]
 # The planning tools: what reads a lint key.
 TOOL_SOURCES = [os.path.join(ROOT, "scripts", *parts) for parts in (
-    ("hoi4facts", "lint_plan.py"), ("hoi4facts", "lint_fair.py"), ("hoi4facts", "validate.py"),
+    ("hoi4facts", "lint_plan.py"), ("hoi4facts", "lint_fair.py"), ("hoi4facts", "lint_horizons.py"), ("hoi4facts", "validate.py"),
     ("hoi4facts", "plan_gates.py"), ("hoi4facts", "check_calls.py"), ("strategist", "eval_plan.py"),
     ("strategist", "reconcile.py"), ("validate_plan.py",))]
-OWNERS = ("executor", "player", "lint", "text")
+# The rolling planner: what reads a planner key.
+PLANNER_SOURCES = [os.path.join(ROOT, "hoi4_live", "planner", name) for name in (
+    "targets.py", "triggers.py", "horizon.py", "patch.py", "packet.py", "menus.py")]
+OWNERS = ("executor", "player", "lint", "planner", "text")
 TEXT_KEYS = ("why", "note")
 # Definitions whose inner keys are grammar, not plan keys of their own (the predicate tree, a date).
 GRAMMAR_REFS = ("#/definitions/predicate", "#/definitions/date_object", "#/definitions/when")
@@ -285,7 +291,7 @@ def check(schema=None):
     """Problems as [(key path, message)]; [] when every key has its reader."""
     schema = load_schema() if schema is None else schema
     reads = consumed_keys()
-    code, tools = _literals(LITERAL_SOURCES), _literals(TOOL_SOURCES)
+    code, tools, planner = _literals(LITERAL_SOURCES), _literals(TOOL_SOURCES), _literals(PLANNER_SOURCES)
     problems = []
     for k in sorted(reads):
         if k in KNOWN_GAPS:
@@ -305,8 +311,11 @@ def check(schema=None):
         if owner not in OWNERS:
             problems.append((path, "x-owner %r is not one of %s" % (owner, ", ".join(OWNERS))))
         elif top:
-            if owner not in ("executor", "player"):
-                problems.append((path, "a top-level key is the executor's or the player's, not %s" % owner))
+            if owner not in ("executor", "player", "planner"):
+                problems.append((path, "a top-level key is the executor's, the player's or the planner's, not %s"
+                                 % owner))
+            elif owner == "planner" and path not in planner:
+                problems.append((path, "marked planner but the rolling planner never reads it"))
             elif owner == "executor" and not read and path not in LANDING:
                 problems.append((path, "marked executor but the executor never reads it"))
         elif owner == "executor":
@@ -321,6 +330,11 @@ def check(schema=None):
                 problems.append((path, "a player key inside an executor-owned key is read by nobody: make the "
                                        "executor read it, mark it lint or text, or name the build item that takes it "
                                        "over (x-executor-planned)"))
+        elif owner == "planner":
+            if e["name"] not in planner:
+                problems.append((path, "marked planner but nothing in the rolling planner reads it"))
+            if not (lookup(schema, path) or {}).get("description"):
+                problems.append((path, "a planner key says in its own description what it steers"))
         elif owner == "lint":
             if e["name"] not in tools:
                 problems.append((path, "marked lint but no planning tool reads it"))

@@ -114,6 +114,7 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   conquest.by_order        (warning) `by` dates going backwards for one army
   conquest.skipped_near    (warning) an enemy VP province next to own land or a planned target is never
                            taken while the plan takes targets farther away
+  plan.horizons            horizons out of order, overlapping or not starting at the start (lint_horizons.py)
   win.goal                 no goal.predicates
   win.deadline             goal.deadline differs from a scenario mission timer (info when the goal
                            has no deadline and timers exist)
@@ -3963,6 +3964,7 @@ class Lint:
         for step in steps:
             step()
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
+        __import__((__package__ or "hoi4facts") + ".lint_horizons", fromlist=["check"]).check(self)  # plan.horizons
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self
