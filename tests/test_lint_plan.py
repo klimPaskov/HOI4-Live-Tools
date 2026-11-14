@@ -742,6 +742,38 @@ class TacticsRules(unittest.TestCase):
         plan["navy"] = {"posture": "coastal", "reason": "escort"}
         self.assertNoHit(plan, "production.cull", text="start line ship_hull")
 
+    def test_unfinished_start_units_are_finished_then_culled(self):
+        # a land-only posture with every start naval line removed when its unit in progress is done:
+        # production.in_progress asks for exactly these dates, so the cull rule must not ask for earlier ones
+        plan = self.plan(navy={"posture": "none", "reason": "no naval enemy"})
+        plan["force_posture"] = {"reason": "land war", "phases": [{"phase": "base", "land": 100, "air": 0, "navy": 0}]}
+        lt = lint_plan.Lint(plan, self.game)
+        start = derive.day("1936.1.1")
+        naval = sorted({r["type"] for r in lt.start_lines() if derive.equipment_domain(self.game, r["type"]) == "navy"})
+        waits = {}
+        for eq in naval:
+            fin = lt.unit_finish(eq)
+            waits[eq] = fin[0] if fin else start
+            plan["production"].append({"equipment": eq, "remove": True, "from": derive.fmt(derive.date_of(waits[eq]))})
+        self.assertTrue(any(d > start for d in waits.values()))  # Italy starts with hulls past 10%
+        lt = lint_plan.Lint(plan, self.game)
+        self.assertEqual(lt.finishing_lines(start), {eq: d for eq, d in waits.items() if d > start})
+        self.assertNoHit(plan, "production.in_progress", "error")
+        self.assertNoHit(plan, "production.cull", text="gives navy 0%")
+        self.assertNoHit(plan, "production.cull", text="start line ship_hull")
+        # the same lines kept past their unit are naval production the posture rules out: a phase after the
+        # last finish date still finds them
+        last = max(waits.values())
+        late = copy.deepcopy(plan)
+        for x in late["production"]:
+            if x.get("remove") and x["equipment"] in naval:
+                x["from"] = derive.fmt(derive.date_of(last + 400))
+        late["phases"] = [{"id": "after", "enter": f"date>={derive.fmt(derive.date_of(last + 30))}"}]
+        late["force_posture"]["phases"].append({"phase": "after", "land": 100, "air": 0, "navy": 0})
+        f = self.assertHit(late, "production.cull", "error", "phase after gives navy 0%")
+        self.assertIn("ship_hull", f["message"])
+        self.assertNoHit(late, "production.cull", text="phase base gives navy 0%")
+
     def test_day0(self):
         f = self.assertHit(self.ita, "production.day0", "error", "production")
         self.assertIn("1 of the 10 free military factories", f["message"])
