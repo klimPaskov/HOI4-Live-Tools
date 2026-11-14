@@ -127,7 +127,7 @@ applicable".
 **6. Emit.**
 * `RUN/plan.json`: valid against the schema; `_meta.version` 1 (step 10 fills the rest). Write a
   `_validator` block from the run spec and the dossier manifest: `tag`, `start_date`, `stop_date` (the
-  horizon), `mode`, `history_file` and `dlcs` (the manifest's resolved list, never `auto`).
+  end of the first horizon: the detail horizon, item 27.5), `mode`, `history_file` and `dlcs` (the manifest's resolved list, never `auto`).
   `validate_plan.py` fills missing fields from `RUN/run_spec.json` and `RUN/dossier/manifest.json`
   beside the plan; with neither it checks the plan as GER and warns.
 * `RUN/plan.md`: from [templates/plan.md](templates/plan.md), the section order of

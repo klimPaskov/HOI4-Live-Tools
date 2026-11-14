@@ -91,6 +91,13 @@ class Triggers:
                 continue
             fire("checkpoint:%s" % ck["id"], "checkpoint_due", "checkpoint %s (%s) is due" % (ck["id"], ck.get("by")),
                  evidence={"checkpoint": ck["id"], "by": ck.get("by"), "else": ck.get("else")}, check_cool=False)
+        # 2b. the plan's horizons: extend the detail before the one in force ends, compare an ended one's targets
+        from . import targets as tg
+        for tid, kind, why, evidence in tg.due(plan, snap, self.m):
+            cls = "detail"
+            if kind == "deviation" and evidence.get("behind_in_a_row", 0) >= 2:
+                cls = "strategy"  # two horizons in a row ended behind: the strategy no longer fits
+            fire(tid, kind, why, cls=cls, evidence=evidence, check_cool=False)
         # 3. feed events
         enemies = set((plan.get("war") or {}).get("enemies") or [])
         for ev in events or []:

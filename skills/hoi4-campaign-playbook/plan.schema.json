@@ -117,6 +117,37 @@
           ],
           "description": "critic verdict recorded at freeze (strategize.py)",
           "x-owner": "text"
+        },
+        "updated": {
+          "type": "number",
+          "x-owner": "text",
+          "description": "when the rolling planner wrote this version (unix time)"
+        },
+        "update_summary": {
+          "type": "string",
+          "x-owner": "text"
+        },
+        "proposer": {
+          "type": "string",
+          "x-owner": "text",
+          "description": "who proposed the update: model, agent or default"
+        },
+        "trigger": {
+          "type": "string",
+          "x-owner": "text"
+        },
+        "gates": {
+          "type": "string",
+          "enum": [
+            "full",
+            "partial"
+          ],
+          "x-owner": "text"
+        },
+        "rolled_back_from": {
+          "type": "integer",
+          "minimum": 1,
+          "x-owner": "text"
         }
       },
       "additionalProperties": false,
@@ -1323,6 +1354,102 @@
       },
       "x-owner": "executor",
       "description": "judged once their date is reached: a false must -> checkpoint_missed and `else`; an unknown must waits"
+    },
+    "horizons": {
+      "type": "array",
+      "x-owner": "planner",
+      "description": "the run cut into horizons, read by the rolling planner (hoi4_live/planner/targets.py: it extends the detail before the horizon in force ends and compares an ended horizon's targets with the game) and checked by lint plan.horizons; the first is the opening's detail horizon (until = _validator.stop_date), later ones carry intent and numeric targets only",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id",
+            "description": "names the horizon in the planner's triggers (horizon_end:<id>, deviation:horizon:<id>)"
+          },
+          "from": {
+            "$ref": "#/definitions/date",
+            "description": "first day (default: the end of the horizon above, or the scenario start)"
+          },
+          "until": {
+            "$ref": "#/definitions/date",
+            "description": "end; the planner extends the detail into the next horizon 21 game days before it and compares the targets at it"
+          },
+          "intent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "what the horizon is for and what the first update in it extends first; given to the planner's model with the menus"
+          },
+          "targets": {
+            "type": "object",
+            "description": "numbers the horizon ends with (no item lists: the updates choose the items)",
+            "properties": {
+              "divisions": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "divisions in the field at the end (sum of the armies' divisions)"
+              },
+              "military_factories": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "military factories at the end (compared when the state reads them)"
+              },
+              "civilian_factories": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "civilian factories at the end (compared when the state reads them)"
+              },
+              "dockyards": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "dockyards at the end (compared when the state reads them)"
+              },
+              "equipment_fill": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "mean equipment fill of the armies at the end"
+              },
+              "pp_reserve": {
+                "type": "number",
+                "minimum": 0,
+                "description": "political power in stock at the end"
+              },
+              "manpower": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "manpower in stock at the end (compared when the state reads it)"
+              },
+              "vp_held": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "enemy victory points the player holds at the end"
+              },
+              "states_held": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                },
+                "description": "state ids the player controls at the end"
+              }
+            },
+            "additionalProperties": false
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "until",
+          "intent"
+        ]
+      }
     },
     "phases": {
       "type": "array",

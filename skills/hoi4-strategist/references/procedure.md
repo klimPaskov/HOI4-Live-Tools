@@ -791,7 +791,14 @@ the army survives".
    plan.md §9 or §10.
 4. One phase per expected capitulation with overrides for war (free the guards, new axes), production (the
    cull of item 8) and occupation (CP07, CP09).
-Resolution: `checkpoints`, `contingencies`, `phases` (player keys; executor evaluation is build item
+5. Cut the run into `horizons`. The first is the detail horizon: about one game year, or up to the first
+   major checkpoint, and `_validator.stop_date` is its `until`; research, focus, PP and production items
+   are listed in full only up to it. Each later horizon gets `intent` (what it is for, what the first
+   update in it extends first) and numeric `targets` (divisions, factories, equipment fill, PP reserve,
+   VP or states held), never item lists. The goal, phases, checkpoints and war axes still cover the
+   whole run. In a supervised campaign the rolling planner extends the detail from the live state
+   before each horizon ends and raises a deviation when one ends behind its targets (docs/ROLLING_PLAN.md).
+Resolution: `checkpoints`, `contingencies`, `phases`, `horizons` (player keys; executor evaluation is build item
 15). Check: rubric row 9.
 
 ### 28. Continuous management

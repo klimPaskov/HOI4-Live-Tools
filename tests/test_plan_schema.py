@@ -88,7 +88,7 @@ class PlanSchemaCoverage(unittest.TestCase):
 
     def test_every_top_level_key_has_an_owner(self):
         for key, node in self.schema["properties"].items():
-            self.assertIn(node.get("x-owner"), ("executor", "player"), key)
+            self.assertIn(node.get("x-owner"), ("executor", "player", "planner"), key)
 
     def test_executor_tagged_keys_are_read(self):
         top = {k.split(".")[0].split("[")[0] for k in self.keys}
