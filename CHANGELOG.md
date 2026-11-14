@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+`hoi4-live-native --doctor` says whether memory access will work on this computer and names the one step if not.
+
+- macOS: checks the binary's entitlement, Developer mode, `_developer` membership, the download quarantine mark and
+  the right macOS will evaluate, and prints the exact command for whatever is missing. `--doctor --sign` ad-hoc signs
+  a self-built binary with `debugger.entitlements` from its own folder and verifies the result. The release workflow
+  now fails if the packaged binary lacks the entitlement.
+- Linux: reads `kernel.yama.ptrace_scope` (0 and 1 work, since the launcher reads a game it started itself; 2 and 3
+  name the administrator's step).
+- Windows: states that the native adapter is unfinished and points to the Python package.
+- The check only reads system state. It changes no security setting, asks for no password and touches no game.
+- README: one "first run" section with what each system needs once.
+
+macOS memory access no longer needs a periodic renewal.
+
+- Cause: before attaching, the tool asked macOS about `system.privilege.taskport`, a password-protected right that
+  lapses after about 10 hours. macOS judges a binary signed with the debugger entitlement on
+  `system.privilege.taskport.debug` instead, which a `_developer` member holds with no password and no timeout while
+  Developer mode is on. The tool refused access macOS would have granted.
+- The preflight now reads the running binary's own entitlement and asks about the right that applies to it: the
+  `.debug` right for a signed build, the plain right for an unsigned one (which would otherwise raise the password
+  dialog). The refusal names the right, its status and the missing step.
+- The port request is still the final authority. It runs with a five-second bound, a refusal is reported once, and a
+  request the system holds open behind a dialog is not repeated while it is open.
+
 ## 1.4.2 - 2026-11-14
 
 Fixes for the four problems found on 1.19.4.2, the first live run of the R-5 mod checks (which found and fixed more), and the native and campaign changes merged since 1.4.1.
@@ -42,18 +68,6 @@ Run on 14 November 2026 against a scratch mod with events, decisions and a focus
   covered by tests only.
 
 ### Native runtime and campaign tools (changes merged since 1.4.1)
-
-macOS memory access no longer needs a periodic renewal.
-
-- Cause: before attaching, the tool asked macOS about `system.privilege.taskport`, a password-protected right that
-  lapses after about 10 hours. macOS judges a binary signed with the debugger entitlement on
-  `system.privilege.taskport.debug` instead, which a `_developer` member holds with no password and no timeout while
-  Developer mode is on. The tool refused access macOS would have granted.
-- The preflight now reads the running binary's own entitlement and asks about the right that applies to it: the
-  `.debug` right for a signed build, the plain right for an unsigned one (which would otherwise raise the password
-  dialog). The refusal names the right, its status and the missing step.
-- The port request is still the final authority. It runs with a five-second bound, a refusal is reported once, and a
-  request the system holds open behind a dialog is not repeated while it is open.
 
 The executor follows the route a plan gives to a victory-point target, and no plan key is left without a reader.
 

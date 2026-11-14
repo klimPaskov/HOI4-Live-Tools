@@ -45,6 +45,8 @@ jobs:
         run: |
           codesign --force --sign - --entitlements native/macos/debugger.entitlements native/target/release/hoi4-live-native
           codesign --display --entitlements - native/target/release/hoi4-live-native
+          codesign --verify --strict native/target/release/hoi4-live-native
+          codesign --display --entitlements - native/target/release/hoi4-live-native 2>&1 | grep -q com.apple.security.cs.debugger
       - run: python3 scripts/package_native.py --binary native/target/release/hoi4-live-native --platform ${{ matrix.platform }} --out dist
       - uses: actions/upload-artifact@v4
         with:

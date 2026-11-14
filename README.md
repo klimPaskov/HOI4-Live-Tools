@@ -179,9 +179,36 @@ gh attestation verify hoi4-live-native-1.4.2-linux-x86_64.tar.gz --repo klimPask
 tar -xzf hoi4-live-native-1.4.2-linux-x86_64.tar.gz
 ```
 
-The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memory
-access still needs Developer Tools access for the running user; see
-[native setup](native/README.md).
+The macOS binary is already signed with `debugger.entitlements` (included).
+
+### First run: memory access
+
+After unpacking, ask the tool whether it will be allowed to read the game:
+
+```sh
+./hoi4-live-native --doctor
+```
+
+It prints what is in place and, for anything missing, the one command to run. It
+only reads system state: it changes no security setting and never asks for a
+password. What each system needs, once:
+
+- **macOS**: Developer mode on (`sudo DevToolsSecurity -enable`) and your user in
+  the `_developer` group (`sudo dseditgroup -o edit -a "$USER" -t user _developer`,
+  then log out and back in). The release binary is already signed; a binary you
+  built yourself is signed with `./hoi4-live-native --doctor --sign`. If you
+  downloaded the archive with a browser, also run
+  `xattr -d com.apple.quarantine ./hoi4-live-native`. After that there is nothing
+  to renew.
+- **Linux**: nothing on a default system. The tool reads only a game it started
+  itself with its launcher, as your own user, which the usual
+  `kernel.yama.ptrace_scope` value of 1 (or 0) allows. If an administrator set it
+  to 2, `sudo sysctl kernel.yama.ptrace_scope=1` is needed; at 3 the setting must
+  be changed in the system configuration and the computer restarted.
+- **Windows**: use the [Windows package](#quick-start-windows-release) (the Python
+  server); the native runtime's Windows adapter is unfinished and refuses to
+  attach. Run the game and your coding client as the same Windows user, both
+  without "Run as administrator". Nothing else is needed.
 
 No Steam variable or overlay reaches the game, and the native Linux launcher gives
 it an empty private `HOME`.
@@ -293,8 +320,9 @@ construction plans remain under development. See [current evidence](docs/CLAUSEW
 
 Mac memory access needs three things, each set up once: Developer mode on
 (`sudo DevToolsSecurity -enable`), your user in the `_developer` group, and the
-tool signed with `native/macos/debugger.entitlements`. With those in place macOS
-grants access with no password and nothing to renew. A tool without that
+tool signed with `native/macos/debugger.entitlements` (`hoi4-live-native --doctor`
+checks all three, see [first run](#first-run-memory-access)). With those in place
+macOS grants access with no password and nothing to renew. A tool without that
 signature falls back to the password-protected right, which lapses after about
 10 hours (`security authorize -u system.privilege.taskport` renews it). The tool
 checks the right that applies to it without showing a dialog and never changes

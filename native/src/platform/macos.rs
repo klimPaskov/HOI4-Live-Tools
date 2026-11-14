@@ -11,6 +11,10 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::ffi::CStr;
 mod authorization;
+/// Read-only facts about memory access for `--doctor`.
+pub fn memory_access_facts() -> crate::doctor::MacFacts {
+    authorization::memory_access_facts()
+}
 
 /// The only Mach-O build whose layout has been inspected (1.19.3.0 c01a).
 pub const BUILD_UUID: &str = "DFA875A5-25BA-35E0-9736-627F8A5C4396";
