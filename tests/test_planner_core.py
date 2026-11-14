@@ -218,7 +218,9 @@ class PatchTests(unittest.TestCase):
         self.assertEqual(new["research_path"][-1]["techs"], ["e"])
         self.assertEqual(new["focus_path"], ["f1", "f9"])
         self.assertEqual(new["politics_auto"]["order"], [])
-        self.assertEqual(new["production"][0]["id"], "production_u1")
+        self.assertNotIn("id", new["production"][0])               # production items carry no id
+        added = patch.apply(PLAN, {"ops": [{"op": "add", "key": "construction_plan", "item": {"building": "x"}}]})
+        self.assertEqual(added["construction_plan"][0]["id"], "construction_plan_u1")
         self.assertEqual(PLAN["focus_path"], ["f1", "f2"])          # the incumbent is untouched
         self.assertEqual(patch.touched(p), ["focus_path", "politics_auto", "production", "research_path"])
 

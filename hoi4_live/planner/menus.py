@@ -195,7 +195,7 @@ def production(plan, snap, facts, ledger, h):
                         "variant": variant})
         if not has_line and not (ledger and ledger.failed(variant, snap.get("day"))):
             ops.append({"op": "add", "key": "production", "item": {
-                "id": "u_%s_%s" % (fam, snap.get("day")), "equipment": variant, "factories": step,
+                "equipment": variant, "factories": step,
                 "why": "rolling update: %s reported short and no line builds it" % fam}})
         if fam not in priority[:1]:
             priority = [fam] + [p for p in priority if p != fam]

@@ -79,7 +79,10 @@ class MenuTests(unittest.TestCase):
         self.assertEqual(ops[0]["item"]["equipment"], "artillery_equipment_1")
         self.assertEqual(ops[1]["value"][0], "artillery_equipment")
         c = menus.construction(PLAN, snap(), None, None)
-        self.assertEqual(c["default"]["ops"][0]["items"][0]["building"], "arms_factory")
+        self.assertEqual(c["default"]["ops"], [{"op": "set", "key": "construction_fallback_any_own_state",
+                                                "value": True}])        # the same item is already planned
+        peace = menus.construction(PLAN, snap(wars=[]), None, None)
+        self.assertEqual(peace["default"]["ops"][0]["items"][0]["building"], "industrial_complex")
         a = menus.army(PLAN, snap(), None, None)
         self.assertIn("held 4 of the 12 needed", a["progress"])
         self.assertEqual([i["state"] for i in a["default"]["ops"][0]["items"]], [835, 271])

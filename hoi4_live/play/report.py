@@ -109,6 +109,37 @@ def capitulation_lines(rows):
     return lines
 
 
+def planner_section(run):
+    """The rolling planner's updates, proposers, gates and model use (RUN/planner/)."""
+    summary = runs.read_json(os.path.join(run, "planner", "summary.json"))
+    journal = _jsonl(os.path.join(run, "planner", "journal.jsonl"))
+    if not summary and not journal:
+        return []
+    out = ["", "## Rolling plan", ""]
+    applied = [j for j in journal if j.get("version")]
+    by = collections.Counter(j.get("applied") for j in applied)
+    secs = [j.get("seconds") or 0 for j in journal]
+    out.append("- Updates: %d (%d applied: %s), triggers %s" % (
+        len(journal), len(applied), ", ".join("%s %d" % kv for kv in by.most_common()) or "none",
+        ", ".join("%s %d" % kv for kv in sorted(((summary or {}).get("triggers") or {}).items())) or "none"))
+    if secs:
+        out.append("- Update wall time: median %.1f s, max %.1f s" % (sorted(secs)[len(secs) // 2], max(secs)))
+    b = (summary or {}).get("budget") or {}
+    if b:
+        out.append("- Model use: %d calls, %.0f s, %d tokens (%d escalations); per hour %s calls, %s s, %s tokens; "
+                   "ceiling %s" % (b.get("model_calls", 0), b.get("model_seconds", 0), b.get("tokens", 0),
+                                   b.get("escalations", 0), b["per_hour"]["calls"], b["per_hour"]["seconds"],
+                                   b["per_hour"]["tokens"], json.dumps(b.get("limits"))))
+    skipped = sum(1 for j in journal for p in j.get("proposals") or [] if str(p.get("result", "")).startswith("skipped"))
+    rejected = sum(1 for j in journal for p in j.get("proposals") or []
+                   if str(p.get("result", "")).startswith(("refused", "gates")))
+    out.append("- Proposals refused by the gates: %d; model calls skipped at the ceiling: %d; rollbacks: %d"
+               % (rejected, skipped, (summary or {}).get("rollbacks", 0)))
+    for j in applied[-12:]:
+        out.append("  - v%s %s (%s): %s" % (j["version"], j.get("date"), j.get("applied"), (j.get("summary") or "")[:160]))
+    return out
+
+
 def build(run, reason, counts, final, started, ended):
     request = runs.read_json(os.path.join(run, "request.json")) or {}
     calls = _jsonl(os.path.join(run, "calls.jsonl"))
@@ -152,6 +183,7 @@ def build(run, reason, counts, final, started, ended):
         lines.append("- no action journal in the run folder")
     if final.get("capitulation"):
         lines += ["", "## Capitulation", ""] + capitulation_lines(final["capitulation"])
+    lines += planner_section(run)
     stats = final.get("war_stats")
     if stats:
         lines += ["", "## War statistics at the end", "", "```", json.dumps(stats, indent=1)[:3000], "```"]
