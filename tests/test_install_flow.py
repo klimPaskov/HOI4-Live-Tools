@@ -384,6 +384,40 @@ class FlowTests(Sandbox):
             with open(claude, encoding="utf-8") as f:
                 self.assertNotIn("hoi4-live", json.load(f)["mcpServers"])
 
+    def test_uninstall_removes_only_this_installs_registrations(self):
+        other = os.path.join(self.tmp, "elsewhere", "app", install.launcher_name())
+        claude = os.path.join(self.home, ".claude.json")
+        with open(claude, "w", encoding="utf-8") as f:
+            json.dump({"mcpServers": {"hoi4-live": {"type": "stdio", "command": other, "args": []}}}, f)
+        codex = os.path.join(self.home, ".codex", "config.toml")
+        os.makedirs(os.path.dirname(codex))
+        with open(codex, "w", encoding="utf-8") as f:
+            f.write(install.codex_block(other))
+        code, text = self.run_main("uninstall")
+        self.assertEqual(code, install.EXIT_OK, text)
+        self.assertIn("claude: other_install", text)
+        self.assertIn("codex: other_install", text)
+        with open(claude, encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["mcpServers"]["hoi4-live"]["command"], other)
+        with open(codex, encoding="utf-8") as f:
+            self.assertIn(other, f.read())
+        # The explicit command still removes any hoi4-live registration.
+        code, text = self.run_main("unregister")
+        self.assertEqual(code, install.EXIT_OK, text)
+        with open(claude, encoding="utf-8") as f:
+            self.assertNotIn("hoi4-live", json.load(f)["mcpServers"])
+
+    def test_a_named_home_wins_over_the_client_folders_of_the_session(self):
+        session = os.path.join(self.tmp, "session")
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": session, "CODEX_HOME": session}):
+            files = install.client_files(self.home)
+            self.assertEqual(files["claude"], os.path.join(self.home, ".claude.json"))
+            self.assertEqual(files["codex"], os.path.join(self.home, ".codex", "config.toml"))
+            os.environ.pop("HOI4_LIVE_HOME")
+            files = install.client_files()
+            self.assertEqual(files["claude"], os.path.join(session, ".claude.json"))
+            self.assertEqual(files["codex"], os.path.join(session, "config.toml"))
+
     def test_a_tampered_python_archive_installs_nothing(self):
         self.publish()
         with open(os.path.join(self.release, f"hoi4-live-tools-{VERSION}.zip"), "ab") as f:
@@ -444,6 +478,42 @@ class FlowTests(Sandbox):
             code, text = self.run_main("doctor")
         self.assertEqual(code, install.EXIT_OK, text)
         self.assertIn("memory access is ready", text)
+
+
+class InstalledCommandTests(Sandbox):
+    ARGS = ("--skip-dependencies", "--skip-verify", "--skip-selftest", "--register", "none", "--native", "skip")
+
+    def test_game_dir_records_the_folder_and_refuses_one_without_the_game(self):
+        code, text = self.run_main("game-dir", self.tmp)
+        self.assertEqual(code, install.EXIT_USAGE)
+        self.assertIn("not installed", text)
+        self.publish(native=False)
+        self.assertEqual(self.run_main("update", *self.ARGS)[0], install.EXIT_OK)
+        code, text = self.run_main("game-dir")
+        self.assertEqual(code, install.EXIT_USAGE)
+        code, text = self.run_main("game-dir", os.path.join(self.tmp, "nothing"))
+        self.assertEqual(code, install.EXIT_USAGE)
+        self.assertIn("does not hold the game", text)
+        game = os.path.join(self.tmp, "Hearts of Iron IV")
+        os.makedirs(game)
+        with open(os.path.join(game, "hoi4.exe"), "w", encoding="utf-8"):
+            pass
+        code, text = self.run_main("game-dir", game)
+        self.assertEqual(code, install.EXIT_OK, text)
+        with open(os.path.join(self.prefix, "config.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["game_dir"], game)
+
+    def test_doctor_of_an_install_is_the_programs_own_and_lists_the_steps(self):
+        self.publish(native=False)
+        self.assertEqual(self.run_main("update", *self.ARGS)[0], install.EXIT_OK)
+        with mock.patch.dict(os.environ, {"HOI4_LIVE_GAME_DIR": os.path.join(self.tmp, "no-game"),
+                                          "HOI4_LIVE_USER_DIR": os.path.join(self.tmp, "no-user")}):
+            code, text = self.run_main("doctor")
+        self.assertEqual(code, install.EXIT_FAILED, text)
+        self.assertIn("doctor (", text)
+        self.assertIn("hoi4-live game-dir", text)
+        self.assertIn("hoi4-live update", text)
+        self.assertIn("The doctor only reads", text)
 
 
 class StandaloneTests(Sandbox):

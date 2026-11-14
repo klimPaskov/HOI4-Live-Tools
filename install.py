@@ -6,6 +6,8 @@
     python install.py install --register none
     python install.py update [--version X.Y.Z]      fetch a release and install it over the current one
     python install.py doctor                check what a first run needs and print the fix for each failed item
+    python install.py play COUNTRY "GOAL"   the first campaign: checks, the plan, and what starts on this system
+    python install.py game-dir FOLDER       record where the game is, when the Steam library search misses it
     python install.py status
     python install.py register [--clients ...]      (re)write the client registrations only
     python install.py unregister
@@ -25,7 +27,7 @@ What is installed where a build exists for the computer:
 Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools on Windows,
 ~/Library/Application Support/hoi4-live-tools on macOS, ~/.local/share/hoi4-live-tools on Linux):
 
-    hoi4-live      the command: doctor, update, uninstall, status (hoi4-live.cmd on Windows)
+    hoi4-live      the command: doctor, play, update, uninstall, status, game-dir (hoi4-live.cmd on Windows)
     app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
     native\\         hoi4-live-native and its entitlements file
     venv\\           the private Python environment with the dependencies
@@ -94,7 +96,8 @@ TOOL_TIMEOUT_SEC = 1800
 
 # What an install (and a release archive) contains, relative to the source folder.
 PAYLOAD_DIRS = ("hoi4_live", "skills")
-PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md")
+PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md",
+                "docs/OWNED_LINUX_LAUNCHER.md")
 PAYLOAD_FILES = ("README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "config.json", "requirements.txt",
                  "pyproject.toml", "hoi4-live-tools.cmd", "hoi4-live-tools", "install.py")
 SKIP_NAMES = {"__pycache__", ".pytest_cache"}
@@ -761,9 +764,12 @@ def home_dir(home=None):
 
 
 def client_files(home=None):
+    # A home named on purpose (--home, HOI4_LIVE_HOME) holds every client file, so a scratch install or a test run
+    # inside a Claude Code or Codex session never writes the session's own configuration.
+    explicit = bool(home or os.environ.get("HOI4_LIVE_HOME"))
     home = home_dir(home)
-    codex_home = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
-    claude_dir = os.environ.get("CLAUDE_CONFIG_DIR") or home
+    codex_home = (None if explicit else os.environ.get("CODEX_HOME")) or os.path.join(home, ".codex")
+    claude_dir = (None if explicit else os.environ.get("CLAUDE_CONFIG_DIR")) or home
     return {
         "claude": os.path.join(claude_dir, ".claude.json"),
         "codex": os.path.join(codex_home, "config.toml"),
@@ -824,7 +830,11 @@ def register_json(client, path, command):
     return {"client": client, "status": "updated" if existing is not None else "registered", "path": path}
 
 
-def unregister_json(client, path):
+def same_path(a, b):
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def unregister_json(client, path, launcher=None):
     if not os.path.exists(path):
         return {"client": client, "status": "absent", "path": path}
     key = _json_servers_key(client)
@@ -837,6 +847,10 @@ def unregister_json(client, path):
     if not is_ours(command):
         return {"client": client, "status": "conflict", "path": path,
                 "detail": f"{SERVER_ID} belongs to another program ({command}); left unchanged"}
+    first = command[0] if isinstance(command, list) and command else command
+    if launcher and not same_path(first, launcher):
+        return {"client": client, "status": "other_install", "path": path,
+                "detail": f"{SERVER_ID} starts another install ({first}); left unchanged"}
     del servers[SERVER_ID]
     atomic_write(path, dump_json(data))
     return {"client": client, "status": "removed", "path": path}
@@ -874,13 +888,18 @@ def register_codex(path, command):
     return {"client": "codex", "status": "registered", "path": path}
 
 
-def unregister_codex(path):
+def unregister_codex(path, launcher=None):
     if not os.path.exists(path):
         return {"client": "codex", "status": "absent", "path": path}
     with open(path, encoding="utf-8-sig") as f:
         text = f.read()
-    if not _BLOCK.search(text):
+    block = _BLOCK.search(text)
+    if not block:
         return {"client": "codex", "status": "absent", "path": path}
+    command = re.search(r"^command = '([^']*)'", block.group(0), re.M)
+    if launcher and command and not same_path(command.group(1), launcher):
+        return {"client": "codex", "status": "other_install", "path": path,
+                "detail": f"{SERVER_ID} starts another install ({command.group(1)}); left unchanged"}
     updated = _BLOCK.sub("", text, count=1).rstrip("\n")
     atomic_write(path, updated + "\n" if updated else "")
     return {"client": "codex", "status": "removed", "path": path}
@@ -900,13 +919,15 @@ def register_clients(clients, prefix, home=None):
     return results
 
 
-def unregister_clients(clients, home=None):
+def unregister_clients(clients, home=None, launcher=None):
+    """Remove the registrations of the clients; with `launcher`, only those that start that launcher."""
     files = client_files(home)
     results = []
     for client in clients:
         path = files[client]
         try:
-            results.append(unregister_codex(path) if client == "codex" else unregister_json(client, path))
+            results.append(unregister_codex(path, launcher) if client == "codex"
+                           else unregister_json(client, path, launcher))
         except (OSError, ValueError) as exc:
             results.append({"client": client, "status": "failed", "path": path, "detail": str(exc)})
     return results
@@ -1070,6 +1091,47 @@ def cmd_doctor(args, out):
     return EXIT_OK if ready else EXIT_FAILED
 
 
+def cmd_play(args, out):
+    """The first campaign: the installed program's own front door (hoi4_live.firstrun)."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    app = os.path.join(prefix, "app")
+    if not os.path.isfile(os.path.join(app, "hoi4_live", "firstrun.py")):
+        raise InstallError(f"no install with the play command at {prefix}; run: {COMMAND} update", EXIT_USAGE)
+    argv = [sys.executable, "-m", "hoi4_live.firstrun", "--prefix", prefix]
+    argv += ["--mode", args.mode] if args.mode else []
+    argv += [part for part in [args.value] + list(args.more) if part]
+    env = dict(os.environ, PYTHONPATH=app, PYTHONIOENCODING="utf-8")
+    try:
+        return subprocess.run(argv, env=env, stdin=subprocess.DEVNULL, timeout=600).returncode
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise InstallError(f"the play command could not run: {exc}")
+
+
+GAME_EXECUTABLES = ("hoi4.exe", "hoi4", os.path.join("hoi4.app", "Contents", "MacOS", "hoi4"))
+
+
+def cmd_game_dir(args, out):
+    """Record where the game is installed, for a copy the Steam library search does not find."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    if not os.path.isdir(os.path.join(prefix, "app")):
+        raise InstallError(f"HOI4 Live Tools is not installed at {prefix}; run the install command first", EXIT_USAGE)
+    if not args.value:
+        raise InstallError(f"name the game's folder: {COMMAND} game-dir \"<folder>\"", EXIT_USAGE)
+    folder = os.path.abspath(os.path.expanduser(args.value))
+    if not any(os.path.isfile(os.path.join(folder, name)) for name in GAME_EXECUTABLES):
+        raise InstallError(f"{folder} does not hold the game (no hoi4 executable in it); name the folder called "
+                           "\"Hearts of Iron IV\"", EXIT_USAGE)
+    path = os.path.join(prefix, "config.json")
+    try:
+        data = read_json_object(path)
+    except (OSError, ValueError) as exc:
+        raise InstallError(f"{path} cannot be read ({exc}); nothing was changed")
+    data["game_dir"] = folder
+    atomic_write(path, dump_json(data))
+    out.info(f"game folder set to {folder}")
+    return EXIT_OK
+
+
 def cmd_register(args, out):
     check_platform()
     prefix = os.path.abspath(args.prefix or default_prefix())
@@ -1108,10 +1170,11 @@ def remove_after_exit(path, folder):
 
 def cmd_uninstall(args, out):
     prefix = os.path.abspath(args.prefix or default_prefix())
-    results = unregister_clients(list(CLIENTS), args.home)
+    # Only the registrations of this install: another install's entry (another prefix) is left to that install.
+    results = unregister_clients(list(CLIENTS), args.home, launcher_path(prefix))
     for r in results:
         if r["status"] != "absent":
-            out.info(f"{r['client']}: {r['status']}")
+            out.info(f"{r['client']}: {r['status']}" + (f" - {r['detail']}" if r.get("detail") else ""))
     link = unlink_command(read_record(prefix))
     if link:
         out.info(f"removed {link}")
@@ -1170,13 +1233,17 @@ def cmd_status(args, out):
     return EXIT_OK if installed else EXIT_FAILED
 
 
-COMMANDS = ("install", "update", "doctor", "status", "register", "unregister", "uninstall")
+COMMANDS = ("install", "update", "doctor", "play", "game-dir", "status", "register", "unregister", "uninstall")
 
 
 def build_parser():
     parser = argparse.ArgumentParser(prog=COMMAND if os.environ.get("HOI4_LIVE_COMMAND") else "install.py",
                                      description=__doc__.split("\n\n")[0])
     parser.add_argument("command", nargs="?", default=None, choices=COMMANDS)
+    parser.add_argument("value", nargs="?", default=None,
+                        help="game-dir: the folder the game is installed in; play: the country (tag or name)")
+    parser.add_argument("more", nargs="*", help="play: the goal, in your words")
+    parser.add_argument("--mode", choices=("fair", "meta"), default=None, help="play: the rule set")
     parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools on Windows, "
                                          "~/Library/Application Support/hoi4-live-tools on macOS, "
                                          "~/.local/share/hoi4-live-tools on Linux)")
@@ -1212,7 +1279,9 @@ def main(argv=None):
             return EXIT_USAGE
         args.command = "install"
     out = Output(args.quiet)
-    handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "register": cmd_register,
+    handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "play": cmd_play,
+                "game-dir": cmd_game_dir,
+                "register": cmd_register,
                 "unregister": cmd_unregister, "uninstall": cmd_uninstall, "status": cmd_status}
     try:
         return handlers[args.command](args, out)

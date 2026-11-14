@@ -13,9 +13,10 @@
 </p>
 
 <p align="center">
+  <a href="#install-check-play">Install, check, play</a> ·
   <a href="#which-version-should-i-use">Which version</a> ·
   <a href="#what-works-where">What works where</a> ·
-  <a href="#quick-start-windows-release">Quick start</a> ·
+  <a href="#manual-install-windows">Manual install</a> ·
   <a href="#launch-order-for-a-mod-test">Launch order</a> ·
   <a href="#native-rust-preview">Native preview</a> ·
   <a href="docs/tools.md">Tool reference</a> ·
@@ -31,6 +32,74 @@ Part of the HOI4 modding toolkit: [HOI4 Mod Setup](https://github.com/klimPaskov
 installs it for you, [Agentic HOI4 Modding](https://github.com/klimPaskov/Agentic-HOI4-Modding)
 gives your agent modding skills, and [HOI4 Agent Tools](https://github.com/klimPaskov/hoi4-agent-tools)
 builds and previews mod content.
+
+## Install, check, play
+
+Three commands, the same on every system. You need Hearts of Iron IV from Steam and Python 3.9 or newer.
+
+**1. Install.** macOS and Linux, in a terminal:
+
+```sh
+curl -fsSL https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest/download/install.sh | sh
+```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest/download/install.ps1 | iex
+```
+
+The installer downloads the release for your system and processor, checks every file against the release's
+checksums, puts the program in a private folder, registers the server with the coding clients it finds (Claude
+Code, Codex, Cursor, OpenCode) and ends with the doctor. On a Mac it also verifies the native runtime's signature
+and signs it when needed. Run it again to update. Nothing asks you to edit a file.
+
+> The one-line installer ships with the first release after 1.4.2. Until that release is out, use the
+> [manual install](#manual-install-windows).
+
+**2. Check.**
+
+```
+hoi4-live doctor
+```
+
+The doctor checks the install, the game and its version, memory access, input and screen permissions, the game's
+display mode and resolution, Steam and your mods. For each item that is not in place it prints the one step that
+fixes it. It only reads: it never changes a system setting and never asks for a password. If your shell does not
+find `hoi4-live`, use the full path the installer printed.
+
+**3. Play.**
+
+```
+hoi4-live play ITA "conquer Ethiopia before 1937"
+```
+
+It runs the checks, picks the reviewed plan that ships for the country, prepares a run folder and prints the one
+instruction to give your coding client. Plans ship for Italy, Ethiopia, Germany and China (FAIR) and Poland (META).
+
+`hoi4-live update` installs the newest release. `hoi4-live uninstall` removes the program, the native runtime, the
+command and the client registrations.
+
+### What each system gets today
+
+| | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Installed | Python server | Python server; native runtime on Apple silicon | Native runtime (x86_64) |
+| Registered with your coding client | Yes | Yes (the Python server) | Not yet |
+| `hoi4-live doctor` | Yes | Yes | Yes |
+| `hoi4-live play` | Hands the campaign to your coding client | Hands the campaign to your coding client; the Python server has no accepted live campaign on macOS | Tells you what is missing: nothing starts a campaign from the install yet |
+| Game versions | No version check; run on HOI4 1.19.4 | Native runtime: HOI4 1.19.4.1 only. Python server: no version check | HOI4 1.19.4.1 only |
+
+Not supported yet:
+
+- The native runtime on Windows. Windows uses the Python server.
+- Starting a native game from the install on macOS. The native runtime (the full management toolset and the plan
+  executor) is installed, signed and checked, but nothing in the install launches a game for it yet.
+- Starting a campaign on Linux, and registering a server there.
+- A plan for a country that has no shipped plan.
+
+When the game updates to a version the native runtime cannot read, the doctor and the runtime say so, name the
+version that works and what to use meanwhile.
 
 ## Which version should I use?
 
@@ -56,7 +125,7 @@ pick:
 
 | What you want to do | Windows, Python package | Linux | macOS |
 | --- | --- | --- | --- |
-| Install | `python install.py`, registers your coding client | Native `.tar.gz`; the Python installer refuses | Native `.tar.gz` (Apple silicon); the Python installer refuses |
+| Install | [One command](#install-check-play): Python server, registers your coding client | One command: native runtime; no server is registered yet | One command: Python server (registered) and native runtime (Apple silicon) |
 | Launch with your mods, `-debug`, new game, load, save, quit | **Works** (tested live on 1.19.4.1) | No. The Python package refuses; the native launcher starts the game with an empty playset | Not accepted. The Python code exists but has no live run; the native build has no launcher |
 | Console, `hoi4_eval_effect`, `hoi4_fire_event`, answer popups | **Works** in test mode | No | Not tested |
 | Smoke tests, trigger and focus checks, localisation sweep (they use the console) | In test mode. Offline-tested on recorded fixtures; the first live run is pending | No | Not tested |
@@ -96,10 +165,11 @@ on fakes and recorded log lines first, then run live on HOI4 1.19.4.2 on 14 Nove
 | `hoi4_check_focus` | Can this country take this focus? Names the unmet prerequisite, exclusive focus, `available` or `allow_branch` condition. |
 | `hoi4_sweep_loc` | Visits the map and each panel, reads the screen with OCR and lists `[missing_key]`, raw keys, unresolved `$VARIABLES$` and colour codes shown as text, plus localisation warnings in the logs. |
 
-## Quick start: Windows release
+## Manual install: Windows
 
-You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
-Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
+The [one-line installer](#install-check-play) does these steps for you. You need Windows 10 or 11, HOI4 from
+Steam (windowed or borderless, UI scale 1), Python 3.9 or newer, and the Windows English OCR component. FFmpeg
+is optional.
 
 1. Download `hoi4-live-tools-1.4.2.zip` from the
    [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
@@ -116,10 +186,10 @@ Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
 3. Restart your coding client and check the game side:
 
    ```
-   %LOCALAPPDATA%\hoi4-live-tools\app\hoi4-live-tools.cmd selftest
+   hoi4-live doctor
    ```
 
-To uninstall, run `python install.py uninstall`. See
+To uninstall, run `hoi4-live uninstall`. See
 [Windows setup and usage](docs/LEGACY_WINDOWS_USAGE.md) for manual registration,
 configuration and the command line, and [the tool reference](docs/tools.md) for
 every tool and argument.
@@ -183,7 +253,8 @@ The macOS binary is already signed with `debugger.entitlements` (included).
 
 ### First run: memory access
 
-After unpacking, ask the tool whether it will be allowed to read the game:
+`hoi4-live doctor` includes this check. For a binary you unpacked or built yourself, ask it directly whether it
+will be allowed to read the game:
 
 ```sh
 ./hoi4-live-native --doctor
@@ -205,7 +276,7 @@ password. What each system needs, once:
   `kernel.yama.ptrace_scope` value of 1 (or 0) allows. If an administrator set it
   to 2, `sudo sysctl kernel.yama.ptrace_scope=1` is needed; at 3 the setting must
   be changed in the system configuration and the computer restarted.
-- **Windows**: use the [Windows package](#quick-start-windows-release) (the Python
+- **Windows**: use the [Windows package](#install-check-play) (the Python
   server); the native runtime's Windows adapter is unfinished and refuses to
   attach. Run the game and your coding client as the same Windows user, both
   without "Run as administrator". Nothing else is needed.
@@ -235,7 +306,7 @@ runner), the refusals reached for the rest, and the fixes the Linux build needed
 conferences and the operative tools were not reached on Linux. The older Linux-only GUI
 diagnostics written for 1.19.3 refuse on 1.19.4.1.
 
-## Quick start: macOS (Python server)
+## Manual install: macOS (Python server)
 
 You need a Mac with HOI4 from Steam and Python 3.9 or newer (Apple's command-line tools
 Python or python.org). FFmpeg is optional.
@@ -245,15 +316,11 @@ Python or python.org). FFmpeg is optional.
 2. In that folder, run `python3 install.py`. It installs a private Python environment, with numpy, Pillow,
    OpenCV and PyObjC, under `~/Library/Application Support/hoi4-live-tools`, and registers the server with
    the coding clients it finds.
-3. Restart your coding client and check the game side:
-
-   ```
-   ~/Library/Application\ Support/hoi4-live-tools/app/hoi4-live-tools selftest
-   ```
+3. Restart your coding client and check the game side with `hoi4-live doctor`.
 
 The app that starts the server (your terminal or coding client) needs Screen Recording and Accessibility
-permission in System Settings; a tool that lacks one returns an error that names it. To uninstall, run
-`python3 install.py uninstall`.
+permission in System Settings; the doctor checks both, and a tool that lacks one returns an error that names it.
+To uninstall, run `hoi4-live uninstall`.
 
 ARM64 Linux through FEX has verified own-state reads and lower-level stationary
 Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:

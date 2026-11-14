@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+`hoi4-live doctor` checks everything a first run needs and prints the one step for each item that is not in place.
+
+- Checked on every system: the install itself, the game (found through the Steam libraries, with its version), the
+  game build against the builds the native runtime reads, memory access (the native runtime's own check), the
+  game's display mode, UI scaling and resolution, Steam where the native launcher needs it closed, enabled mods,
+  and the Python server's environment check. macOS adds the Accessibility and screen recording permissions and the
+  screen size; Windows and Linux say what input needs there.
+- Each item is ok, fix (with its step) or note, and belongs to the Python server, the native runtime or both. The
+  report ends with one line per runtime; the exit code is 0 when every runtime installed here has nothing to fix.
+- The doctor only reads. It changes no setting, asks for no password, starts no game and touches no game process.
+- `hoi4-live game-dir "<folder>"` records where the game is when the Steam library search does not find it.
+- An install now ends with this doctor.
+
+`hoi4-live play COUNTRY "GOAL"` is the front door of a first campaign.
+
+- It runs the doctor for the runtime that will play and stops with the steps when something is to fix, picks the
+  shipped reviewed plan for the country (by tag or name; FAIR first, `--mode` to choose), copies it into a new run
+  folder under the install and prints the one instruction to give the coding client.
+- It says plainly what the install cannot start yet: a native game on macOS (the coding client plays through the
+  Python server instead), anything on Linux, and a country without a shipped plan.
+- README: the first screen is install, check, play, per system, with what each system gets today.
+
 One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (Windows) find Python, download
 `install.py` from the release, check it against `SHA256SUMS.txt` and run it.
 
@@ -20,6 +42,11 @@ One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (W
 - The release workflow publishes `install.py`, `install.sh` and `install.ps1` with the archives, lists them in
   `SHA256SUMS.txt` and installs the release from the built files before publishing.
 - `HOI4_LIVE_RELEASE_BASE` names another release location: an https address or a local folder of release files.
+- `uninstall` removes only the client registrations that start this install; another install's entry is left and
+  named. A home named with `--home` or `HOI4_LIVE_HOME` holds every client file, also when the session sets
+  `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, so a scratch install never writes the running client's configuration.
+- The doctor reports a native runtime from before its memory-access check (1.4.2) as a note asking for an update,
+  not as a bare argument error.
 A game build the native runtime cannot read is now refused with the builds it does read and what works meanwhile.
 
 - The `unsupported_build` refusal names the runtime's version, what it saw (the start of the executable's SHA-256,
