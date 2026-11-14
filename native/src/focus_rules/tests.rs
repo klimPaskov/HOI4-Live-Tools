@@ -12,10 +12,15 @@ const MOD_TRIGGERS: &str = include_str!(
     "../../../tests/fixtures/focus_mod/user/mod/zeta_overhaul/common/scripted_triggers/zeta_triggers.txt"
 );
 
+const MOD_EFFECTS: &str = include_str!(
+    "../../../tests/fixtures/focus_mod/user/mod/zeta_overhaul/common/scripted_effects/zeta_effects.txt"
+);
+
 fn mod_catalog() -> Catalog {
     let mut catalog = Catalog::default();
     catalog.add_focus_file(MOD_TREE);
     catalog.add_scripted_file(MOD_TRIGGERS);
+    catalog.add_effects(MOD_EFFECTS);
     catalog
 }
 
@@ -33,6 +38,10 @@ fn the_shared_cases_hold() {
     assert_eq!(
         cases["scripted_files"],
         json!(["focus_mod/user/mod/zeta_overhaul/common/scripted_triggers/zeta_triggers.txt"])
+    );
+    assert_eq!(
+        cases["effect_files"],
+        json!(["focus_mod/user/mod/zeta_overhaul/common/scripted_effects/zeta_effects.txt"])
     );
     let catalog = mod_catalog();
     let list = cases["cases"].as_array().unwrap();
@@ -184,7 +193,24 @@ fn the_catalogue_is_read_from_a_content_folder() {
     )
     .unwrap();
     std::fs::write(triggers.join("zeta_triggers.txt"), MOD_TRIGGERS).unwrap();
+    // An unlock effect can sit in any script file: here in an event, two folders down.
+    let events = dir.join("events/zeta");
+    std::fs::create_dir_all(&events).unwrap();
+    std::fs::write(
+        events.join("zeta_events.txt"),
+        "country_event = { id = zeta.1 option = { unlock_national_focus = ZZA_never } }",
+    )
+    .unwrap();
     let catalog = Catalog::load(&dir);
+    let peace = json!({"tag": "ZZA", "completed": [], "wars": []});
+    assert_eq!(
+        verdict(&catalog, "ZZA_never", peace.clone()).state,
+        State::Unknown
+    );
+    assert_eq!(
+        verdict(&mod_catalog(), "ZZA_never", peace).state,
+        State::Unavailable
+    );
     assert!(catalog.focus("ZZA_peace_works").is_some());
     assert!(catalog.focus("ZZS_shared").is_some());
     assert!(catalog.focus("NOT_READ").is_none());

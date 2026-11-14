@@ -14,7 +14,14 @@ use std::{
 };
 
 /// Folders the tools read from the game's content.
-const LAYERED: [&str; 5] = ["map", "history", "common", "localisation", "interface"];
+const LAYERED: [&str; 6] = [
+    "map",
+    "history",
+    "common",
+    "localisation",
+    "interface",
+    "events",
+];
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct ModDescriptor {

@@ -15,7 +15,10 @@
 //! a trigger the server cannot read (a country flag, an idea, the ruling ideology, another
 //! country's affairs, any `any_`/`all_` scope) makes the answer `Unknown`, and the caller may then
 //! look at the game once. `allow_branch` is judged by the game when the tree is laid out, not
-//! every day: only its static part (tag, DLC) can make a focus certainly unavailable.
+//! every day: only its static part (tag, DLC) can make a focus certainly unavailable. A focus
+//! that any script of the content names in `unlock_national_focus` can be opened by that script
+//! whatever its requirements say, and whether that happened is not read: its failing
+//! requirements make it `Unknown`, never `Unavailable`.
 //!
 //! What can be judged: `tag`, `original_tag`, `has_dlc`, `always`, `date`, `exists`,
 //! `has_global_flag` and the player's `has_country_flag` (only when the facts name the flag as set),
@@ -67,7 +70,12 @@ pub struct Catalog {
     /// focus -> the focuses that list it as mutually exclusive.
     excluded_by: HashMap<String, Vec<String>>,
     scripted: HashMap<String, Vec<Entry>>,
+    /// Focuses some script unlocks (`unlock_national_focus`).
+    unlockable: HashSet<String>,
 }
+
+/// The effect that opens a focus from script.
+const UNLOCK: &str = "unlock_national_focus";
 
 fn scalars(block: &[Entry], key: &str) -> Vec<String> {
     block
@@ -115,6 +123,35 @@ impl Catalog {
             }
         }
     }
+    /// Note the focuses a script file unlocks (`unlock_national_focus = X`, also written
+    /// `= { focus = X }`). Any file of the content may hold effects.
+    pub fn add_effects(&mut self, text: &str) {
+        for (at, _) in text.match_indices(UNLOCK) {
+            let rest = text[at + UNLOCK.len()..].trim_start();
+            let Some(rest) = rest.strip_prefix('=') else {
+                continue;
+            };
+            let mut rest = rest.trim_start();
+            if let Some(inner) = rest.strip_prefix('{') {
+                let inner = inner.trim_start();
+                let Some(inner) = inner.strip_prefix("focus") else {
+                    continue;
+                };
+                let Some(inner) = inner.trim_start().strip_prefix('=') else {
+                    continue;
+                };
+                rest = inner.trim_start();
+            }
+            let id: String = rest
+                .trim_start_matches('"')
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '.')
+                .collect();
+            if !id.is_empty() {
+                self.unlockable.insert(id);
+            }
+        }
+    }
     fn add_focus(&mut self, body: &[Entry]) {
         let Some(id) = body.text("id").filter(|id| !id.is_empty()) else {
             return;
@@ -151,10 +188,27 @@ impl Catalog {
         }
     }
     /// The catalogue of a game content folder (`common/national_focus` and
-    /// `common/scripted_triggers` below it), read once per folder.
+    /// `common/scripted_triggers` below it, and the unlock effects of every script file under
+    /// `common`, `events` and `history`), read once per folder.
     pub fn load(dir: &Path) -> Arc<Catalog> {
         script::cached(dir, "focus_rules", |dir| {
             let mut catalog = Catalog::default();
+            for folder in ["common", "events", "history"] {
+                let mut files = Vec::new();
+                script_files(&dir.join(folder), &mut files, 0);
+                for file in files {
+                    let Ok(bytes) = std::fs::read(&file) else {
+                        continue;
+                    };
+                    // Most files hold no unlock: look at the bytes before decoding them.
+                    if bytes
+                        .windows(UNLOCK.len())
+                        .any(|window| window == UNLOCK.as_bytes())
+                    {
+                        catalog.add_effects(&String::from_utf8_lossy(&bytes));
+                    }
+                }
+            }
             for (folder, focus) in [
                 ("common/national_focus", true),
                 ("common/scripted_triggers", false),
@@ -191,6 +245,22 @@ impl Catalog {
     }
     pub fn focus(&self, id: &str) -> Option<&Focus> {
         self.focuses.get(id)
+    }
+}
+
+/// Every `.txt` file below `dir`.
+fn script_files(dir: &Path, out: &mut Vec<std::path::PathBuf>, depth: u32) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()) {
+        if path.is_dir() {
+            if depth < 6 {
+                script_files(&path, out, depth + 1);
+            }
+        } else if path.extension().is_some_and(|e| e == "txt") {
+            out.push(path);
+        }
     }
 }
 
@@ -1169,6 +1239,12 @@ impl Catalog {
                     why.extend(failing);
                 }
             }
+        }
+        if !why.is_empty() && self.unlockable.contains(id) {
+            // A script can open this focus whatever its requirements say; whether one did is
+            // not read.
+            unknown.insert(0, format!("a script can unlock it ({UNLOCK})"));
+            unknown.append(&mut why);
         }
         let state = if !why.is_empty() {
             State::Unavailable

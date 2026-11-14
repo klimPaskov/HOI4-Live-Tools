@@ -5,6 +5,9 @@
  "scripted_files": [
   "focus_mod/user/mod/zeta_overhaul/common/scripted_triggers/zeta_triggers.txt"
  ],
+ "effect_files": [
+  "focus_mod/user/mod/zeta_overhaul/common/scripted_effects/zeta_effects.txt"
+ ],
  "cases": [
   {
    "name": "a root focus without conditions is available",
@@ -1562,6 +1565,91 @@
     "why": [
      "needs tag = ZZA"
     ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus that can never start and that no script unlocks",
+   "focus": "ZZA_never",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unavailable",
+    "why": [
+     "needs always = no"
+    ],
+    "unknown": [],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus that can never start but a script unlocks: unknown",
+   "focus": "ZZA_unlocked",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "a script can unlock it (unlock_national_focus)",
+     "needs always = no"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a missing prerequisite of a focus a script unlocks: unknown",
+   "focus": "ZZA_unlocked_too",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "unknown",
+    "why": [],
+    "unknown": [
+     "a script can unlock it (unlock_national_focus)",
+     "needs ZZA_right"
+    ],
+    "bypass": false
+   }
+  },
+  {
+   "name": "a focus a script unlocks whose requirements hold anyway",
+   "focus": "ZZA_unlocked_too",
+   "state": {
+    "tag": "ZZA",
+    "date": "1936.1.1",
+    "dlcs": [],
+    "completed": [
+     "ZZA_root",
+     "ZZA_right"
+    ],
+    "wars": []
+   },
+   "expect": {
+    "state": "available",
+    "why": [],
     "unknown": [],
     "bypass": false
    }

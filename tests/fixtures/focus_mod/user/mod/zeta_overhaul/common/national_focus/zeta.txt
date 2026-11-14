@@ -37,6 +37,9 @@ focus_tree = {
 	focus = { id = ZZA_neighbours cost = 10 available = { any_neighbor_country = { has_war = yes } } }
 	focus = { id = ZZA_faction cost = 10 available = { is_in_faction_with = QQC NOT = { has_subject = QQB } } }
 	focus = { id = ZZA_their_war cost = 10 available = { QQB = { has_war_with = ROOT NOT = { has_government = fascism } } } }
+	focus = { id = ZZA_unlocked cost = 10 available = { always = no } }
+	focus = { id = ZZA_unlocked_too cost = 10 prerequisite = { focus = ZZA_right } }
+	focus = { id = ZZA_never cost = 10 available = { always = no } }
 	focus = { id = ZZA_one_sided cost = 10 }
 	focus = { id = ZZA_excluder cost = 10 mutually_exclusive = { focus = ZZA_one_sided } }
 	focus = { id = ZZA_twice cost = 10 available = { has_war = no } }
