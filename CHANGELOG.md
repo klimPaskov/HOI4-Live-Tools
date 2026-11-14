@@ -43,6 +43,18 @@ Run on 14 November 2026 against a scratch mod with events, decisions and a focus
 
 ### Native runtime and campaign tools (changes merged since 1.4.1)
 
+macOS memory access no longer needs a periodic renewal.
+
+- Cause: before attaching, the tool asked macOS about `system.privilege.taskport`, a password-protected right that
+  lapses after about 10 hours. macOS judges a binary signed with the debugger entitlement on
+  `system.privilege.taskport.debug` instead, which a `_developer` member holds with no password and no timeout while
+  Developer mode is on. The tool refused access macOS would have granted.
+- The preflight now reads the running binary's own entitlement and asks about the right that applies to it: the
+  `.debug` right for a signed build, the plain right for an unsigned one (which would otherwise raise the password
+  dialog). The refusal names the right, its status and the missing step.
+- The port request is still the final authority. It runs with a five-second bound, a refusal is reported once, and a
+  request the system holds open behind a dialog is not repeated while it is open.
+
 The executor follows the route a plan gives to a victory-point target, and no plan key is left without a reader.
 
 - Cause: `vp_targets[].path` was accepted by the plan schema as a player key ("executor support later") and used by the

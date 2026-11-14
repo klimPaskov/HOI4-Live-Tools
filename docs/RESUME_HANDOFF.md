@@ -64,9 +64,12 @@ days. Supply hubs are not worth building in this war (user).
 - Launch `hoi4.app/Contents/MacOS/hoi4 -userdir=…` directly, copy `dlc_signature` and
   `dlc_load.json` from `~/Documents/Paradox Interactive/Hearts of Iron IV` (10 DLCs),
   force 1920×1080 in `pdx_settings.txt`. Without Steam a fresh user folder has no DLCs.
-- Memory access needs the task-port authorization (`security authorize -u
-  system.privilege.taskport`, about 10 hours; the user approves the dialog) and the
-  binary ad-hoc signed with `native/macos/debugger.entitlements`.
+- Memory access needs, once: Developer mode on (`sudo DevToolsSecurity -enable`, run
+  by the user), the user in `_developer`, and the binary ad-hoc signed with
+  `native/macos/debugger.entitlements`. Nothing has to be renewed: a signed binary is
+  judged on `system.privilege.taskport.debug`, which has no password and no timeout.
+  Only an unsigned binary still depends on the 10-hour `system.privilege.taskport`
+  right (`security authorize -u system.privilege.taskport`).
 - The game window must stay front-most during runs; other apps taking focus stop
   input (`input_target_not_frontmost`).
 - Private harness (outside Git): `~/Projects/_scratch/hoi4-macos-native`

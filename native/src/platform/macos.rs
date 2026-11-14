@@ -178,18 +178,24 @@ impl MacProcess {
         }
         check_ownership(&session)?;
         verify_executable(&session.game.exe)?;
-        // MCP startup must never wait for an administrator password dialog.
-        // Check the existing policy without UI or changing shared rights first.
-        authorization::require_noninteractive_task_access()?;
-        let mut task: MachPort = 0;
-        // SAFETY: task_for_pid writes one port name into `task`.
-        let kr = unsafe { libc::task_for_pid(mach_task_self_, session.game.pid, &mut task) };
-        if kr != 0 {
-            return Err(Error::new(
-                "task_access_denied",
-                "Read-only task access denied; sign with the debugger entitlement and authorize Developer Tools access",
-            ));
-        }
+        // MCP startup must never wait for an administrator password dialog:
+        // the existing policy is checked without UI first, macOS then decides
+        // on the port itself, and the whole exchange is bounded in time.
+        let pid = session.game.pid;
+        let task = authorization::acquire_task_port(
+            move || {
+                let mut task: MachPort = 0;
+                // SAFETY: task_for_pid writes one port name into `task`.
+                let kr = unsafe { libc::task_for_pid(mach_task_self_, pid, &mut task) };
+                (kr, task)
+            },
+            |port| {
+                // SAFETY: releases a send right nobody else holds.
+                unsafe {
+                    mach_port_deallocate(mach_task_self_, port);
+                }
+            },
+        )?;
         let mut process = Self {
             session,
             task,

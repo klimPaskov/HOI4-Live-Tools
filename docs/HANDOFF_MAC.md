@@ -312,6 +312,10 @@ Memory access is separate from those permissions. `task_for_pid` generally
 requires elevated privilege or a correctly signed debugger with the debugger
 entitlement; hardened target restrictions also apply. The target's signing,
 `get-task-allow`, SIP and architecture can still block access even as root.
+The native runtime's route: the tool binary is signed with
+`native/macos/debugger.entitlements`, Developer mode is on and the user is in
+`_developer`. That is a one-time setup with nothing to renew; the game stays
+untouched.
 Options: start with telemetry/UI (no task port); build a narrowly scoped local
 read-only helper with explicit PID/creation/executable validation; or evaluate a
 properly signed debugger helper. Do not run the whole agent as root, disable SIP,
