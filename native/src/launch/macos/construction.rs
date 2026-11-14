@@ -246,6 +246,72 @@ fn aim_points(
     province_points(process, state, province)
 }
 
+/// Wheel events and arrow-key taps a named province may take to come into the open map.
+const PROVINCE_ZOOM_EVENTS: usize = 4;
+const PROVINCE_PAN_TAPS: usize = 6;
+
+/// The Find view centres a state, not a province, and comes in close: in a large state the
+/// named province can lie outside the open map (Massawa in Eritrea, 14 Nov 2026: refused every
+/// time as not on screen). The camera zooms out around the open map's centre until the
+/// province is inside it (one wheel event at a time, a few at most), then the arrow keys pan
+/// the rest.
+fn bring_province_in(process: &dyn Process, keys: &dyn GameInput, province: i32) -> Result<()> {
+    use crate::platform::game_input::vk;
+    let dir = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))?;
+    let positions = super::mapdata::positions(&dir)?;
+    let Some(&(x, z)) = positions.get(&province) else {
+        return Ok(());
+    };
+    // the open map right of the construction panel, and its centre
+    let (x0, x1, y0, y1) = (760.0, 1680.0, 140.0, 880.0);
+    let (mx, my) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+    let inside = |p: Option<(f64, f64)>| {
+        p.is_some_and(|(px, py)| (x0..x1).contains(&px) && (y0..y1).contains(&py))
+    };
+    let project = || read(process, |r, i| super::screenmap::to_screen(r, i, x, z));
+    for _ in 0..PROVINCE_ZOOM_EVENTS {
+        let at = project()?;
+        super::ui::trace_text(&format!("province {province} projects at {at:?}"));
+        if inside(at) {
+            return Ok(());
+        }
+        if !super::screenmap::aim_height_ok(process) {
+            break;
+        }
+        keys.scroll_burst(GAME, (mx, my), -120, 1)?;
+        thread::sleep(Duration::from_millis(60));
+        super::screenmap::wait_camera_still(process, 900);
+    }
+    for _ in 0..PROVINCE_PAN_TAPS {
+        let key = match project()? {
+            at if inside(at) => return Ok(()),
+            Some((px, py)) => {
+                let (dx, dy) = ((px - mx) / (x1 - x0), (py - my) / (y1 - y0));
+                if dx.abs() >= dy.abs() {
+                    if dx < 0.0 {
+                        vk::LEFT
+                    } else {
+                        vk::RIGHT
+                    }
+                } else if dy < 0.0 {
+                    vk::UP
+                } else {
+                    vk::DOWN
+                }
+            }
+            // behind the camera: it lies below the screen
+            None => vk::DOWN,
+        };
+        keys.press_code(key)?;
+        thread::sleep(Duration::from_millis(220));
+        super::screenmap::wait_camera_still(process, 900);
+    }
+    Ok(())
+}
+
 fn province_points(
     process: &dyn Process,
     state: i32,
@@ -394,6 +460,9 @@ pub(super) fn add(
         };
         let points = if visible.is_empty() {
             find_state(process, keys, state)?;
+            if let Some(p) = province {
+                bring_province_in(process, keys, p)?;
+            }
             aim_points(process, key, state, province)?
         } else {
             visible

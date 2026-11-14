@@ -43,7 +43,9 @@
 //!   pocket_share       0.5: an army falls back when this share of the land provinces around it is
 //!                      held by others (hoi4_armies threat.share) and it stands outside a fully held
 //!                      own state; the game-side flag (encirclement_risk, 0.7) falls back anywhere.
-//!                      The neck back to own land is not readable, so it is not judged
+//!                      Either only when at most one land province around the army is still the
+//!                      player's (threat.neighbour_provinces - held_by_others): with more own land
+//!                      around it the army stands on a front, not in a pocket
 //!   second_direction   false: a stall goes straight to the direct move. Default: the first stall
 //!                      on a target (no progress for stall_days) brings a second direction from
 //!                      the target's own neighbours (hoi4_wars enemy_held_adjacent_states): an
@@ -412,6 +414,12 @@ pub(super) fn drawn(state: &mut State, army: &str, target: i32, now: GameHour) {
         .insert(army.to_string(), (target, now));
 }
 
+/// A stalled offensive is planned again: the planning wait starts over on the same line.
+pub(super) fn replan(state: &mut State, army: &str, target: i32, now: GameHour) {
+    state.war_rules.planning.remove(army);
+    drawn(state, army, target, now);
+}
+
 /// Why the army's execute order waits (None: execute now): the bound pause, then planning.
 /// `planning` is the army's planning bonus read now (hoi4_armies planning.mean), if any.
 #[allow(clippy::too_many_arguments)]
@@ -711,6 +719,18 @@ pub(super) fn bound_wait(
 /// fully held own states (`safe`).
 pub(super) fn pocket_risk(plan: &Value, army: &Value, safe: &[(i32, (f64, f64))]) -> bool {
     let threat = &army["threat"];
+    // The share alone describes a front as well as a pocket: an army on a line of contact has
+    // about half of the land around it held by others, and one advancing into enemy land far
+    // more. What makes a pocket is the way back: with the counts read, the army falls back
+    // only when at most POCKET_NECK land provinces around it are still the player's.
+    if let (Some(around), Some(others)) = (
+        threat["neighbour_provinces"].as_u64(),
+        threat["held_by_others"].as_u64(),
+    ) {
+        if around.saturating_sub(others) > POCKET_NECK {
+            return false;
+        }
+    }
     if threat["encirclement_risk"] == json!(true) {
         return true;
     }
@@ -721,6 +741,10 @@ pub(super) fn pocket_risk(plan: &Value, army: &Value, safe: &[(i32, (f64, f64))]
     let here = army["main_state"].as_i64();
     held >= limit && !safe.iter().any(|(id, _)| Some(i64::from(*id)) == here)
 }
+
+/// Own land provinces around an army at or below which a high share of foreign land is a
+/// pocket and not a front.
+const POCKET_NECK: u64 = 1;
 
 // ---------------------------------------------------------------------------------------------
 // The stall response: a second direction before the direct move.
@@ -1108,6 +1132,8 @@ mod tests {
                     }
                     "28" => json!({"states": [{"state_id": 28, "provinces": [
                         {"province": 280, "controller": "GER"}, {"province": 281, "controller": "GER"}]}]}),
+                    // a single state (the province count of a progress measurement): no rows
+                    other if other.parse::<i32>().is_ok() => json!({"states": []}),
                     other => panic!("unexpected query {other}"),
                 },
                 "hoi4_armies" => {
@@ -1140,7 +1166,9 @@ mod tests {
         }
     }
     fn plan(extra: Value) -> Value {
-        let mut war = json!({"enemies": ["FRA"], "axes": [[28, 18]], "cooldown_hours": 1});
+        // "replans": 0: these tests are about what follows the planning cycles of a stall
+        let mut war =
+            json!({"enemies": ["FRA"], "axes": [[28, 18]], "cooldown_hours": 1, "replans": 0});
         for (k, v) in extra.as_object().unwrap() {
             war[k] = v.clone();
         }
@@ -1433,6 +1461,48 @@ mod tests {
         w.executing.set(true);
         assert_eq!(tick(&mut state, w, p, "l", START).unwrap(), Tick::Nothing);
         (state, START + 8 * DAY)
+    }
+
+    #[test]
+    fn a_stalled_offensive_is_planned_again_before_anything_else() {
+        let w = W::new();
+        let p = plan(json!({"replans": 1}));
+        let (mut state, now) = stalled(&w, &p);
+        let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+        assert!(
+            step.starts_with(
+                "war stalled Army 1 8 days on state 28: plan stopped to plan again (1 of 1): true"
+            ),
+            "{step}"
+        );
+        let (tool, args) = w.actions().last().unwrap().clone();
+        assert_eq!(
+            (tool.as_str(), &args["execute"]),
+            ("hoi4_army_plan", &json!(false))
+        );
+        // back before the execute order: the planning wait holds it, no move is sent
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        w.executing.set(false);
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", now + 2).unwrap(),
+            Tick::Nothing
+        );
+        assert_eq!(w.actions().last().unwrap().0, "hoi4_army_plan");
+    }
+
+    #[test]
+    fn a_plan_stopped_by_a_rest_goes_back_to_the_planning_wait_not_into_a_stall() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let (mut state, now) = stalled(&w, &p);
+        // something else stopped the plan (a casualty rest): the read says it is not executing
+        w.executing.set(false);
+        assert_eq!(tick(&mut state, &w, &p, "l", now).unwrap(), Tick::Nothing);
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        assert!(
+            w.actions().iter().all(|(tool, _)| tool != "hoi4_army_move"),
+            "no direct move"
+        );
     }
 
     #[test]

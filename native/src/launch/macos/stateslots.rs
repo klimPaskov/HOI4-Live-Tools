@@ -3,7 +3,7 @@
 //! one item per maximum slot, with a building template in each occupied one.
 //! Free slots (unlocked minus occupied) tell where a factory can still be
 //! queued; states are opened with the Find view and one click on the state.
-use super::ui::{clear_notices, dismiss, find_state, read, wait};
+use super::ui::{clear_notices, dismiss, find_state, read};
 use crate::{
     error::{Error, Result},
     game, gui_tree,
@@ -167,16 +167,41 @@ fn click_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         if read(process, opened)? {
             return Ok(());
         }
+        // An event that opened meanwhile lies over the screen centre: a click would answer it.
+        let events = read(process, super::events::open_ids).unwrap_or_default();
+        if !events.is_empty() {
+            return Err(Error::new(
+                "events_open",
+                format!(
+                    "an event opened ({}): no click on the map",
+                    events.join(", ")
+                ),
+            ));
+        }
         keys.click(GAME, x, y)?;
-        // The view slides in; give it time before judging the click.
-        std::thread::sleep(std::time::Duration::from_millis(900));
-        seen = wait(process, "state view", opened);
+        // The view slides in within a second of the click that opens it; a longer wait per
+        // point only holds the input (six points at four seconds each took 24 s a state).
+        let clicked = std::time::Instant::now();
+        seen = loop {
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            if read(process, opened)? {
+                break Ok(());
+            }
+            if clicked.elapsed() >= VIEW_WAIT {
+                break Err(Error::new(
+                    "input_readback_failed",
+                    "state view: expected game change not observed",
+                ));
+            }
+        };
         if seen.is_ok() {
             break;
         }
     }
     seen
 }
+/// How long one click is given to open the state view.
+const VIEW_WAIT: std::time::Duration = std::time::Duration::from_millis(1300);
 /// Open the state view of state `id` (plain map mode, Find, click) and return its root.
 pub(super) fn open_state_view(process: &dyn Process, keys: &dyn GameInput, id: i32) -> Result<u64> {
     clear_notices(process, keys)?;
@@ -215,10 +240,22 @@ pub(super) fn read_states(
         crate::construction::queued_shared_by_state(r, i)
     })
     .unwrap_or_default();
+    // The first state whose view does not open ends the walk: what keeps one view shut (an
+    // event over the map, a selection that takes the clicks) keeps the next ones shut too, and
+    // every further state would hold the input for its six clicks (14 Nov 2026: four states,
+    // 95 s, nothing read).
+    let mut shut: Option<i32> = None;
     for &id in ids {
+        if let Some(first) = shut {
+            rows.push(json!({"state_id":id,"error":format!("not tried: the state view did not open for state {first}")}));
+            continue;
+        }
         find_state(process, keys, id)?;
         std::thread::sleep(std::time::Duration::from_millis(600));
         let seen = click_open(process, keys);
+        if seen.is_err() {
+            shut = Some(id);
+        }
         let mut why = String::new();
         let row = match seen {
             Ok(()) => read(process, slots)?,

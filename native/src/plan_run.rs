@@ -148,7 +148,11 @@
 //!                          Optional: "axes":[[842,843,271],[835,271]] ordered targets (an army follows the
 //!                          axis whose next enemy-held state is nearest); "theatre":[550,559] own states an
 //!                          army must stand in to be driven (armies in enemy land always are);
-//!                          "stall_days":8 without progress -> a second direction first, then a direct
+//!                          "stall_days":8 without progress (no new main state and no province
+//!                          taken in the target or the state the army stands in) -> the executing
+//!                          plan is stopped and planned again ("replans":2 times per target: the
+//!                          army regains organisation and planning bonus on its line, then executes
+//!                          through the planning wait), then a second direction, then a direct
 //!                          hoi4_army_move into the target (with a back-off); an offensive executes
 //!                          only once its planning has built; "rest_below_pct":0.30 /
 //!                          "resume_above_pct":0.80 of the army's maximum organisation (or absolute
@@ -217,9 +221,9 @@
 //!                          `decisions` list included (`decision_forbidden`)
 //!   event_rules            [{"event","option_name","when" (or "condition")?,"else_option_name"?,
 //!                          "fallback_option_name"?,"fallback_index"?}]: the first rule of the open event
-//!                          whose condition holds picks the option whose text (hoi4_events options) is
-//!                          option_name, ignoring case, markup and punctuation (else the one option that
-//!                          contains it); a false condition takes else_option_name or leaves the event to
+//!                          whose condition holds picks the option whose text or script name
+//!                          (hoi4_events options, option_keys) is option_name, ignoring case, markup
+//!                          and punctuation (else the one option that contains it); a false condition takes else_option_name or leaves the event to
 //!                          the next rule; a name not offered falls back to fallback_option_name, then
 //!                          fallback_index, then event_options; an unknown condition waits
 //!
@@ -274,6 +278,19 @@ pub const DAY: GameHour = 24;
 /// How long a failure stays in the ledger (game hours): the backoff counts failures since the
 /// order last worked within this window.
 const LEDGER_KEEP: GameHour = 120 * DAY;
+/// A failed try that held the input this many seconds or longer waits in proportion.
+const COSTLY_FAILURE: u64 = 5;
+/// The wall-clock wait after a costly failed try, in multiples of the time it took.
+const COST_FACTOR: u64 = 10;
+/// Failures in a row after which an order is given up and reported.
+const GIVE_UP_AFTER: u32 = 5;
+/// Wall seconds a given-up order rests before one more try.
+const GIVE_UP_SECONDS: u64 = 1800;
+/// Game hours a second of wall time stands for while the game clock stands still (speed 3 runs
+/// about 22 game days a minute).
+const STILL_HOURS_PER_SECOND: u64 = 8;
+/// The longest skip timer that also runs on wall time while the game clock stands still.
+const STILL_RETRY: GameHour = 3 * DAY;
 
 /// Every game action the executor may send through `State::act`. Each one answers every
 /// success and every refusal after possible input with a terminal receipt
@@ -388,13 +405,25 @@ pub struct State {
     failures: HashMap<String, Vec<GameHour>>,
     /// Wall-clock second of each order's last failure (not persisted: a restart starts afresh).
     failed_wall: HashMap<String, u64>,
+    /// Seconds the last failed try of each order held the input (not persisted).
+    failed_cost: HashMap<String, u64>,
+    /// Failures in a row of each order since it last worked, with the last refusal (never
+    /// pruned by time: at speed 3 the ledger's 120 game days pass in five minutes, and an order
+    /// that fails every few minutes for the same reason must not start afresh).
+    failed_run: HashMap<String, (u32, String)>,
+    /// Orders given up this run, waiting to be reported once (wake_player alarms).
+    gave_up: Vec<Value>,
     /// Wall clock override for tests (seconds); None reads the system clock.
     wall: Option<u64>,
+    /// Duration override for tests: seconds every `act` is taken to have lasted.
+    act_seconds: Option<u64>,
     /// Whether the last `act` worked (None: no act since the caller reset it).
     last_ok: Option<bool>,
 
     boot: u64,
     bad: HashMap<String, GameHour>,
+    /// Game hour and wall second each skip timer was set (not persisted; see `skipped`).
+    bad_set: HashMap<String, (GameHour, u64)>,
     last_hour: GameHour,
     /// One-shot work done (`pol:..`, `prod:..`, `doc:..`): key -> game hour it was done.
     done: HashMap<String, GameHour>,
@@ -418,6 +447,11 @@ pub struct State {
     war_guard: HashMap<String, i32>,
     /// Direct moves issued without the army changing state since: (target, state, count).
     war_repeat: HashMap<String, (i32, Option<i32>, u32)>,
+    /// Provinces of the target (and of the state the army stands in) the player held when the
+    /// army's progress was last measured: (target, provinces).
+    war_held: HashMap<String, (i32, usize)>,
+    /// Times a stalled offensive was stopped and planned again on this target: (target, count).
+    war_replan: HashMap<String, (i32, u32)>,
     /// The enemy-held province of an own state last ordered for an army, and when.
     war_province: HashMap<String, (i32, GameHour)>,
     /// `construction_plan` items already queued (by `id`, else `order`) -> game hour queued.
@@ -562,12 +596,17 @@ impl Default for State {
             clock: 0,
             failures: HashMap::new(),
             failed_wall: HashMap::new(),
+            failed_cost: HashMap::new(),
+            failed_run: HashMap::new(),
+            gave_up: Vec::new(),
             wall: None,
+            act_seconds: None,
             last_ok: None,
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
             bad: HashMap::new(),
+            bad_set: HashMap::new(),
             last_hour: 0,
             done: HashMap::new(),
             seen: HashMap::new(),
@@ -582,6 +621,8 @@ impl Default for State {
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
             war_repeat: HashMap::new(),
+            war_held: HashMap::new(),
+            war_replan: HashMap::new(),
             war_province: HashMap::new(),
             plan_built: HashMap::new(),
             plan_blocked: HashMap::new(),
@@ -757,12 +798,28 @@ fn skip_key(kind: &str, key: &str) -> String {
 }
 impl State {
     fn skip(&mut self, now: GameHour, kind: &str, key: &str, hours: GameHour) {
-        self.bad.insert(skip_key(kind, key), now + hours);
+        let key = skip_key(kind, key);
+        self.bad_set.insert(key.clone(), (now, self.wall_now()));
+        self.bad.insert(key, now + hours);
     }
+    /// Whether a skip timer still runs. The timers count game hours; while the game stands
+    /// still (the setup before the first unpause, a host's pause) no game hour passes, so a
+    /// retry timer (a span of at most STILL_RETRY) set in the current game hour ends after the
+    /// wall time its span takes at speed 3, 5 s at least: a failed setup step is tried again
+    /// while the game is still paused. Longer timers (work done, a thing given up) keep to game
+    /// time.
     fn skipped(&self, now: GameHour, kind: &str, key: &str) -> bool {
-        self.bad
-            .get(&skip_key(kind, key))
-            .is_some_and(|until| *until > now)
+        let key = skip_key(kind, key);
+        let Some(until) = self.bad.get(&key).filter(|until| **until > now) else {
+            return false;
+        };
+        match self.bad_set.get(&key) {
+            Some((set, wall)) if *set == now && until - set <= STILL_RETRY => {
+                let span = ((until - set).max(0) as u64 / STILL_HOURS_PER_SECOND).max(5);
+                self.wall_now().saturating_sub(*wall) < span
+            }
+            _ => true,
+        }
     }
     /// Army `old` now carries the name `new`: everything kept by army name follows it (role
     /// bindings, war rules, done-memory and skip timers ending in the name, military memory).
@@ -782,6 +839,8 @@ impl State {
         rekey(&mut self.war_cool, old, new);
         rekey(&mut self.war_since, old, new);
         rekey(&mut self.war_rest, old, new);
+        rekey(&mut self.war_held, old, new);
+        rekey(&mut self.war_replan, old, new);
         rekey(&mut self.war_guard, old, new);
         rekey(&mut self.war_repeat, old, new);
         rekey(&mut self.war_province, old, new);
@@ -852,7 +911,11 @@ impl State {
             );
             object.insert("lease_token".into(), json!(lease));
         }
+        let began = std::time::Instant::now();
         let result = self.dispatch(tools, name, &args);
+        let lasted = self
+            .act_seconds
+            .unwrap_or_else(|| began.elapsed().as_secs());
         self.last_ok = Some(matches!(&result, Ok((true, _))));
         match &result {
             Ok((false, _)) => {
@@ -861,11 +924,34 @@ impl State {
                     .or_default()
                     .push(clock);
                 let wall = self.wall_now();
-                self.failed_wall.insert(signature, wall);
+                self.failed_cost.insert(signature.clone(), lasted);
+                self.failed_wall.insert(signature.clone(), wall);
+                let cause = match &result {
+                    Ok((_, why)) => why.clone(),
+                    Err(_) => String::new(),
+                };
+                let run = self.failed_run.entry(signature.clone()).or_default();
+                run.0 += 1;
+                run.1 = cause.clone();
+                if run.0 == GIVE_UP_AFTER {
+                    // Diagnosed once: the order, how often it failed and the game's last
+                    // answer go to the player; the executor stops sending it.
+                    let mut shown = args.clone();
+                    if let Some(object) = shown.as_object_mut() {
+                        object.remove("request_id");
+                        object.remove("lease_token");
+                    }
+                    self.gave_up.push(json!({"code": "wake_player", "rule": "ledger",
+                        "reason": format!("order_given_up:{signature}"),
+                        "message": format!("{name} failed {GIVE_UP_AFTER} times in a row and is given up: {cause}. The executor does not send it again for a long time; do it another way or change the plan item that asks for it"),
+                        "evidence": {"tool": name, "args": shown, "failures": GIVE_UP_AFTER, "last_refusal": cause}}));
+                }
             }
             Ok((true, _)) => {
                 self.failures.remove(&signature);
                 self.failed_wall.remove(&signature);
+                self.failed_cost.remove(&signature);
+                self.failed_run.remove(&signature);
                 if let Some(army) = &army_move {
                     self.moves.record(army, tag, &args, clock);
                 }
@@ -887,22 +973,63 @@ impl State {
     /// (at most 60) after its last failure. Game time alone was not enough: at speed 3 ten game
     /// days pass in about 25 s, so a failing selection went out about 40 times in one shakedown
     /// (10 Nov 2026). Some(reason) while the order waits.
+    ///
+    /// From the first failure on, a try that held the input for COSTLY_FAILURE seconds or more
+    /// waits COST_FACTOR times that long (at most an hour) before the same order goes out
+    /// again: every player call and every other executor step queue behind the input, so a
+    /// search that ends in a refusal after 47 s must not come back with the next skip timer
+    /// (14 Nov 2026: four such tries took 69 game days of input in one year).
     fn backing_off(&mut self, signature: &str) -> Option<String> {
         let clock = self.clock;
+        let since_failure = self
+            .failed_wall
+            .get(signature)
+            .map(|at| self.wall_now().saturating_sub(*at));
+        // Given up: the same order failed GIVE_UP_AFTER times in a row. It rests for
+        // GIVE_UP_SECONDS of wall time, then one more try decides (a success clears the count,
+        // another failure rests it again).
+        if let (Some((n, cause)), Some(passed)) = (self.failed_run.get(signature), since_failure) {
+            if *n >= GIVE_UP_AFTER && passed < GIVE_UP_SECONDS {
+                return Some(format!(
+                    "skipped: given up after {n} failures in a row ({cause}); the player was told, the order rests {} more wall minutes",
+                    (GIVE_UP_SECONDS - passed).div_ceil(60)
+                ));
+            }
+        }
+        let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
+        let cost_left = match since_failure {
+            Some(passed) if cost >= COSTLY_FAILURE => {
+                (COST_FACTOR * cost).min(3600).saturating_sub(passed)
+            }
+            _ => 0,
+        };
         let times = self.failures.get_mut(signature)?;
         times.retain(|t| clock - *t < LEDGER_KEEP);
         let n = times.len();
         if n < 3 {
-            return None;
+            return (cost_left > 0).then(|| {
+                format!(
+                    "skipped: the last try of this order failed after {cost} s on the input; it waits {cost_left} more wall seconds"
+                )
+            });
         }
         let last = times.iter().copied().max().unwrap_or(clock);
         let doubling = 1u64 << (n - 3).min(4);
         let game_wait = (10 * DAY * doubling as GameHour).min(80 * DAY);
         let wall_wait = (120 * doubling).min(3600);
-        let game_left = game_wait - (clock - last).clamp(0, game_wait);
-        let wall_left = self.failed_wall.get(signature).map_or(0, |at| {
-            wall_wait.saturating_sub(self.wall_now().saturating_sub(*at))
-        });
+        // no game hour has passed since the failure (a paused game): the wall wait alone counts
+        let game_left = if clock == last {
+            0
+        } else {
+            game_wait - (clock - last).clamp(0, game_wait)
+        };
+        let wall_left = self
+            .failed_wall
+            .get(signature)
+            .map_or(0, |at| {
+                wall_wait.saturating_sub(self.wall_now().saturating_sub(*at))
+            })
+            .max(cost_left);
         if game_left == 0 && wall_left == 0 {
             return None;
         }
@@ -952,6 +1079,14 @@ impl State {
 
 fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
+}
+/// The integers of a JSON list (anything else is left out).
+fn ints(v: &Value) -> Vec<i64> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_i64)
+        .collect()
 }
 /// The stable `id` of a plan list item (a non-empty string or a number), used for its
 /// done-memory instead of its position so a revised or reordered list keeps what was done.
@@ -2209,6 +2344,10 @@ fn layout_step(
             )?;
             if ok {
                 state.layout_fails.remove(&format!("create:{home}"));
+            } else if held_back(&why) {
+                // the ledger did not send it: no try was made, so none is counted
+                state.skip(now, "layoutcreate", &home.to_string(), DAY);
+                continue;
             } else {
                 state.skip(now, "layoutcreate", &home.to_string(), 2 * DAY);
                 if layout_failed(state, &format!("create:{home}")) {
@@ -2283,6 +2422,11 @@ fn layout_step(
             json!({"army": parent, "divisions": pick}),
             "la",
         )?;
+        if !ok && held_back(&why) {
+            // the ledger did not send it: no try was made, so none is counted
+            state.skip(now, "layoutentry", &hint, DAY);
+            continue;
+        }
         if !ok {
             // Only this role waits: the other roles go on (one failing detach skipped the whole
             // layout and fed the retry storm, shakedown 10 Nov 2026).
@@ -2376,6 +2520,11 @@ fn layout_allows(state: &State, plan: &Value, army: &str, id: i32) -> bool {
 
 /// Failures a layout item may have before it is given up.
 const LAYOUT_TRIES: u32 = 3;
+
+/// The answer of `State::act` when the failure ledger held the order back: nothing was sent.
+fn held_back(why: &str) -> bool {
+    why.starts_with("skipped:")
+}
 
 /// Count one failure of layout item `key`; true when it reached LAYOUT_TRIES (and is reset).
 fn layout_failed(state: &mut State, key: &str) -> bool {
@@ -3315,16 +3464,18 @@ fn extras_step(
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
         state.skip(now, "aircheck", "x", 3 * DAY);
         let wars = tools.call("hoi4_wars", &json!({}))?;
-        let front = list(&wars, "borders")
+        // The own states on a border with an enemy, the war's theatre and its guard states:
+        // a wing flies from a base that lies there. A wing based elsewhere (the home country
+        // of a colonial war) is out of range, and the game refuses the mission every time.
+        let fronts: Vec<i64> = list(&wars, "borders")
             .iter()
-            .find(|b| b["hostile"] == json!(true))
-            .and_then(|b| {
-                b["own_border_states"]
-                    .as_array()
-                    .and_then(|a| a.first())
-                    .and_then(Value::as_i64)
-            });
-        if let Some(state_id) = front {
+            .filter(|b| b["hostile"] == json!(true))
+            .flat_map(|b| ints(&b["own_border_states"]))
+            .collect();
+        let mut near: HashSet<i64> = fronts.iter().copied().collect();
+        near.extend(ints(&plan["war"]["theatre"]));
+        near.extend(ints(&plan["war"]["guard_states"]));
+        if let Some(first) = fronts.first().copied() {
             let air = tools.call("hoi4_air", &json!({}))?;
             for wing in list(&air, "wings") {
                 let name = text(&wing["wing"]).to_string();
@@ -3334,6 +3485,12 @@ fn extras_step(
                 {
                     continue;
                 }
+                // over the front its base lies on, else the first front of the theatre
+                let state_id = match wing["air_base"]["state_id"].as_i64() {
+                    Some(base) if !near.contains(&base) => continue,
+                    Some(base) if fronts.contains(&base) => base,
+                    _ => first,
+                };
                 let Some(mission) = war_mission(text(&wing["aircraft_type"])) else {
                     continue;
                 };
@@ -3356,6 +3513,32 @@ fn extras_step(
 
 /// Game hours between two stages of one army's war order.
 const WAR_STAGE_PAUSE: GameHour = 2;
+/// Times a stalled offensive is stopped and planned again on one target before the second
+/// direction and the direct move.
+const REPLANS: u32 = 2;
+
+/// Provinces of `states` the player controls (None when the read lists no province).
+fn provinces_held(tools: &dyn Tools, me: &str, states: &[i32]) -> Option<usize> {
+    let mut held = 0;
+    let mut listed = 0;
+    for id in states {
+        let detail = tools
+            .call("hoi4_states", &json!({"query": id.to_string()}))
+            .ok()?;
+        for row in list(&detail, "states") {
+            if row["state_id"].as_i64() != Some(i64::from(*id)) {
+                continue;
+            }
+            for province in list(row, "provinces") {
+                listed += 1;
+                if text(&province["controller"]) == me {
+                    held += 1;
+                }
+            }
+        }
+    }
+    (listed > 0).then_some(held)
+}
 
 /// One war decision: at most one action, or None when nothing needs doing.
 fn war_step(
@@ -3725,7 +3908,12 @@ fn war_step(
             state.war_cool.remove(&name);
         }
     }
-    for army in list(&roster, "armies") {
+    // The largest formation first: one order goes out per step, and the main effort must not
+    // wait behind the smaller ones (in roster order the strike army got its front a month
+    // after the two three-division groups, live 14 Nov 2026).
+    let mut driven: Vec<&Value> = list(&roster, "armies").iter().collect();
+    driven.sort_by_key(|a| std::cmp::Reverse(a["division_count"].as_u64().unwrap_or(0)));
+    for army in driven {
         let name = text(&army["army"]).to_string();
         if guards.contains_key(&name) {
             continue;
@@ -3907,11 +4095,18 @@ fn war_step(
         let executing = army["plan_executing"] == json!(true);
         let standing_in_target = here == Some(target);
         let org = condition.get(&name).copied();
-        // Progress: the army's main state changes, or the target changes. Reset on either.
+        // Progress: the army's main state changes, or the target changes. Reset on either,
+        // with the ground held then as the mark for the stall check (provinces count too).
+        let mut measured = vec![target];
+        measured.extend(here.filter(|h| *h != target));
         let since = match state.war_since.get(&name) {
             Some((t, h, at)) if *t == target && *h == here => *at,
             _ => {
                 state.war_since.insert(name.clone(), (target, here, now));
+                match provinces_held(tools, &me, &measured) {
+                    Some(count) => state.war_held.insert(name.clone(), (target, count)),
+                    None => state.war_held.remove(&name),
+                };
                 now
             }
         };
@@ -4135,7 +4330,66 @@ fn war_step(
         };
         let stall_now = stall * (1 << repeats.min(3));
         let stuck_inside = standing_in_target && now - since >= 2 * stall_now;
+        // A plan that was executing and stands stopped now, its lines still drawn (a rest for
+        // organisation, supply or casualties stopped it), is not a stall: nothing was attacking. It goes back before its
+        // execute order and through the planning wait, instead of into the stall's direct move
+        // (which broke the rest and sent tired divisions forward without a plan).
+        if stage >= 3
+            && army["plan_executing"] == json!(false)
+            && army["battle_plan_orders"].as_u64().unwrap_or(0) > 0
+            && !state.war_move.contains(&name)
+            && !direct
+            && !liberate
+        {
+            state.war_stage.insert(name.clone(), 2);
+            plan_war::replan(state, &name, target, now);
+            state.war_since.insert(name.clone(), (target, here, now));
+            state.war_cool.insert(name.clone(), now + cooldown);
+            continue;
+        }
         if ordered && (!standing_in_target || stuck_inside) && now - since >= stall_now {
+            // Progress is ground taken, not only a new main state: an offensive that takes
+            // provinces of its target is advancing, however long the state takes to fall.
+            if let Some(count) = provinces_held(tools, &me, &measured) {
+                let before = state.war_held.insert(name.clone(), (target, count));
+                if matches!(before, Some((t, n)) if t == target && count > n) {
+                    // ground was taken since the mark: the next stall plans again first
+                    state.war_replan.remove(&name);
+                    state.war_since.insert(name.clone(), (target, here, now));
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    continue;
+                }
+            }
+            // A stalled offensive is planned again before anything else: the plan stops, the
+            // divisions stand on their line, regain organisation, entrench and build planning
+            // bonus, and the execute order waits for the planning gate again. Attacking on
+            // without a pause spends the bonus in the first days and never gets it back.
+            let replans = match state.war_replan.get(&name) {
+                Some((t, n)) if *t == target => *n,
+                _ => 0,
+            };
+            let replans_max = cfg["replans"].as_u64().map_or(REPLANS, |n| n as u32);
+            if executing && !direct && !liberate && replans < replans_max {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_plan",
+                    json!({"army": name, "execute": false}),
+                    "wr",
+                )?;
+                if ok {
+                    state.war_stage.insert(name.clone(), 2);
+                    plan_war::replan(state, &name, target, now);
+                    state.war_replan.insert(name.clone(), (target, replans + 1));
+                    state.war_since.insert(name.clone(), (target, here, now));
+                }
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(format!(
+                    "war stalled {name} {} days on state {target}: plan stopped to plan again ({} of {replans_max}): {ok} {why}",
+                    (now - since) / DAY,
+                    replans + 1
+                )));
+            }
             // The first stall on a target brings a second direction (plan_war.rs): an idle army
             // beside the target, else this army goes round; the next stall is the direct move.
             // An army on a plan path keeps its route: its stall goes to the direct move.
@@ -5208,7 +5462,16 @@ fn event_rule_choice(
     top: &Value,
     now: GameHour,
 ) -> Option<Option<(u64, String)>> {
-    let options = list(top, "options");
+    // Each shown option answers to its text and to its script name (`option_keys`).
+    let named: Vec<Value> = list(top, "options")
+        .iter()
+        .enumerate()
+        .map(|(i, option)| match top["option_keys"][i].as_str() {
+            Some(key) => json!({"text": text_or(option), "key": key}),
+            None => option.clone(),
+        })
+        .collect();
+    let options = named.as_slice();
     for rule in list(plan, "event_rules") {
         if text(&rule["event"]) != key {
             continue;
@@ -5698,6 +5961,7 @@ pub fn run(
     // the digest uses the plan as the ticks did: with the active phase's overrides (alarms too)
     let plan = strategy_overrides(state, &plan).unwrap_or(plan);
     let mut alarms = observe_alarms(tools, &plan);
+    alarms.extend(std::mem::take(&mut state.gave_up));
     alarms.extend(plan_manage::take_alarms(state));
     alarms.extend(plan_military::take_alarms(state));
     alarms.extend(plan_affairs::take_alarms(state));
@@ -7211,7 +7475,11 @@ mod tests {
                     {"neighbour_tag": "POL", "hostile": true, "own_border_states": [64, 65]}]})),
                 "hoi4_air" => Ok(json!({"wings": [
                     {"wing": "KG 1", "aircraft_type": "tac_bomber_equipment_1", "standing_by": true},
-                    {"wing": "JG 1", "aircraft_type": "fighter_equipment_1", "standing_by": true}]})),
+                    // based far from every front: out of range, never ordered
+                    {"wing": "JG 9", "aircraft_type": "fighter_equipment_1", "standing_by": true,
+                        "air_base": {"base_id": 1, "state_id": 2}},
+                    {"wing": "JG 1", "aircraft_type": "fighter_equipment_1", "standing_by": true,
+                        "air_base": {"base_id": 2, "state_id": 64}}]})),
                 _ => Ok(json!({"receipt": {"status": "Verified"}})),
             }
         }
@@ -7401,6 +7669,8 @@ mod tests {
                         {"state_id": 28, "owner": "FRA", "controller": "FRA", "x": if self.liberate { 300.0 } else { 10.0 }, "z": 10.0},
                         {"state_id": 18, "owner": "FRA", "controller": "FRA", "x": 50.0, "z": 50.0}]})),
                     "POL" => Ok(json!({"states": []})),
+                    // a single state (the province count of a progress measurement): no rows
+                    other if other.parse::<i32>().is_ok() => Ok(json!({"states": []})),
                     other => panic!("unexpected query {other}"),
                 },
                 "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
@@ -7606,6 +7876,8 @@ mod tests {
                         {"province": 6, "controller": "GER", "x": 0.0, "z": 0.0},
                         {"province": 8, "controller": "POL", "x": 50.0, "z": 0.0},
                         {"province": 7, "controller": "POL", "x": 5.0, "z": 0.0}]}]})),
+                    // a single state (the province count of a progress measurement): no rows
+                    other if other.parse::<i32>().is_ok() => Ok(json!({"states": []})),
                     other => panic!("unexpected query {other}"),
                 },
                 "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
@@ -7757,6 +8029,139 @@ mod tests {
             )
             .unwrap();
         assert_eq!(*tools.0.borrow(), 5);
+    }
+
+    #[test]
+    fn a_retry_timer_also_ends_on_wall_time_while_the_game_stands_still() {
+        let mut state = State {
+            wall: Some(100),
+            ..State::default()
+        };
+        state.skip(START, "lay", "559", DAY);
+        state.skip(START, "cgen", "Army 1", 365 * DAY);
+        // paused: the same game hour, a few seconds later
+        state.wall = Some(103);
+        assert!(state.skipped(START, "lay", "559"));
+        state.wall = Some(106);
+        assert!(
+            !state.skipped(START, "lay", "559"),
+            "a day at speed 3 is past"
+        );
+        assert!(
+            state.skipped(START, "cgen", "Army 1"),
+            "long timers keep to game time"
+        );
+        // running: game time decides, whatever the wall clock says
+        state.skip(START, "lay", "844", DAY);
+        state.wall = Some(10_000);
+        assert!(state.skipped(START + 1, "lay", "844"));
+        assert!(!state.skipped(START + DAY, "lay", "844"));
+    }
+
+    #[test]
+    fn an_order_that_keeps_failing_is_given_up_and_reported_once() {
+        struct Refuse(RefCell<usize>);
+        impl Tools for Refuse {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                *self.0.borrow_mut() += 1;
+                Err(Error::new("unknown_wing", "No such wing here"))
+            }
+        }
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State {
+            clock: START,
+            wall: Some(0),
+            ..State::default()
+        };
+        let send = |state: &mut State, hour: GameHour, wall: u64| -> String {
+            state.clock = hour;
+            state.wall = Some(wall);
+            state
+                .act(
+                    &tools,
+                    "l",
+                    "hoi4_air_mission",
+                    json!({"wing": "5", "state_id": 550}),
+                    "t",
+                )
+                .unwrap()
+                .1
+        };
+        // Each try comes after the ledger's own waits, months of game time apart: the count
+        // does not start afresh when the old failures leave the 120-day window.
+        for k in 0..5u64 {
+            send(&mut state, START + (k as GameHour) * 200 * DAY, k * 10_000);
+        }
+        assert_eq!(*tools.0.borrow(), 5);
+        assert_eq!(state.gave_up.len(), 1);
+        let alarm = &state.gave_up[0];
+        assert_eq!(alarm["code"], "wake_player");
+        assert_eq!(alarm["evidence"]["tool"], "hoi4_air_mission");
+        assert_eq!(
+            alarm["evidence"]["args"],
+            json!({"wing": "5", "state_id": 550})
+        );
+        assert!(
+            alarm["evidence"]["last_refusal"]
+                .as_str()
+                .is_some_and(|c| c.starts_with("unknown_wing")),
+            "{alarm}"
+        );
+        // not sent again, however much game time passes, for half an hour of wall time
+        let why = send(&mut state, START + 2000 * DAY, 40_000 + 600);
+        assert!(
+            why.starts_with("skipped: given up after 5 failures"),
+            "{why}"
+        );
+        assert_eq!(*tools.0.borrow(), 5);
+        assert_eq!(state.gave_up.len(), 1, "reported once");
+        // then one more try
+        send(&mut state, START + 2000 * DAY, 40_000 + 1800);
+        assert_eq!(*tools.0.borrow(), 6);
+    }
+
+    #[test]
+    fn a_failed_try_that_held_the_input_long_waits_in_proportion_from_the_first_failure() {
+        struct Refuse(RefCell<usize>);
+        impl Tools for Refuse {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                *self.0.borrow_mut() += 1;
+                Ok(json!({"receipt": {"status": "NotApplied"}}))
+            }
+        }
+        let tools = Refuse(RefCell::new(0));
+        let mut state = State {
+            clock: START,
+            wall: Some(0),
+            act_seconds: Some(47),
+            ..State::default()
+        };
+        let send = |state: &mut State, name: &str, hour: GameHour, wall: u64| -> String {
+            state.clock = hour;
+            state.wall = Some(wall);
+            state
+                .act(&tools, "l", name, json!({"state_id": 559}), "t")
+                .unwrap()
+                .1
+        };
+        // a 47 s search that ends in a refusal
+        send(&mut state, "hoi4_army_create", START, 0);
+        assert_eq!(*tools.0.borrow(), 1);
+        // a month of game time later (80 s at speed 3) the same order is not sent
+        let why = send(&mut state, "hoi4_army_create", START + 30 * DAY, 80);
+        assert_eq!(*tools.0.borrow(), 1);
+        assert!(
+            why.starts_with("skipped: the last try of this order failed after 47 s on the input; it waits 390 more"),
+            "{why}"
+        );
+        // ten times its duration later it may be tried again
+        send(&mut state, "hoi4_army_create", START + 30 * DAY, 470);
+        assert_eq!(*tools.0.borrow(), 2);
+        // a quick refusal is not held back before the third failure
+        state.act_seconds = Some(1);
+        send(&mut state, "hoi4_army_assign", START, 500);
+        send(&mut state, "hoi4_army_assign", START, 501);
+        assert_eq!(*tools.0.borrow(), 4);
     }
 
     #[test]
@@ -8732,6 +9137,8 @@ mod tests {
                     "FRA" => Ok(json!({"states": [
                         {"state_id": 28, "owner": "FRA", "controller": "FRA", "x": 10.0, "z": 10.0},
                         {"state_id": 18, "owner": "FRA", "controller": "FRA", "x": 50.0, "z": 50.0}]})),
+                    // a single state (the province count of a progress measurement): no rows
+                    other if other.parse::<i32>().is_ok() => Ok(json!({"states": []})),
                     other => panic!("unexpected query {other}"),
                 },
                 "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
@@ -8867,7 +9274,8 @@ mod tests {
     #[test]
     fn a_stalled_plan_becomes_a_direct_move_into_the_target() {
         let w = War2::new();
-        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "planning_wait": false}});
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "planning_wait": false,
+            "replans": 0}});
         let mut state = State::default();
         let mut now = START;
         for _ in 0..3 {
@@ -10865,6 +11273,67 @@ mod tests {
         let step = acted(tick(&mut state, &game(None), &unmatched, "l", START).unwrap());
         assert!(step.starts_with("event ita_eth.5 option 1: true"), "{step}");
         assert!(state.strategy.unknown["event_rules ita_eth.5"].contains("Retreat"));
+    }
+
+    #[test]
+    fn event_rules_find_an_option_by_its_script_name() {
+        // The window shows texts only; hoi4_events adds the script name of each shown option.
+        let events = json!({"events": [{"event": "war_events.01",
+            "options": ["By any means necessary", "We need to be methodical and deliberate"],
+            "option_keys": ["war_events.01.a", "war_events.01.b"]}]});
+        let plan = json!({"event_rules": [{"event": "war_events.01",
+            "option_name": "war_events.01.b"}]});
+        let step = acted(
+            tick(
+                &mut State::default(),
+                &fake(vec![("hoi4_events", events)]),
+                &plan,
+                "l",
+                START,
+            )
+            .unwrap(),
+        );
+        assert!(
+            step.starts_with("event war_events.01 option 1 (event_rules 'war_events.01.b'): true"),
+            "{step}"
+        );
+        // the first option is hidden: the wanted one is shown first and still found by its name
+        let hidden = json!({"events": [{"event": "war_events.01",
+            "options": ["We need to be methodical and deliberate"],
+            "option_keys": ["war_events.01.b"]}]});
+        let step = acted(
+            tick(
+                &mut State::default(),
+                &fake(vec![("hoi4_events", hidden)]),
+                &plan,
+                "l",
+                START,
+            )
+            .unwrap(),
+        );
+        assert!(step.starts_with("event war_events.01 option 0 "), "{step}");
+        // a name that cannot be told (null) leaves the text as the only name
+        let unknown = json!({"events": [{"event": "war_events.01",
+            "options": ["Yes", "No"], "option_keys": [null, null]}]});
+        let mut state = State::default();
+        assert_eq!(
+            tick(
+                &mut state,
+                &fake(vec![("hoi4_events", unknown)]),
+                &plan,
+                "l",
+                START
+            )
+            .unwrap(),
+            Tick::Waiting {
+                event: "war_events.01".into(),
+                new: true
+            }
+        );
+        assert!(state
+            .strategy
+            .unknown
+            .contains_key("event_rules war_events.01"));
     }
 
     #[test]

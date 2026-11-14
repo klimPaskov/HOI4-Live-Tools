@@ -427,6 +427,7 @@ pub(super) fn select(
             .collect()
     };
     let t0 = std::time::Instant::now();
+    super::clear_selection(process, keys)?;
     let (mut stacks, mut height) = project(process, &positions, &want, &ok)?;
     // The camera already shows every wanted stack at counter height: no camera movement at all.
     let on_screen = |stacks: &[Stack]| {
@@ -552,8 +553,9 @@ pub(super) fn select(
                 "selection_mismatch",
                 format!(
                     "The selection in state {state} holds something other than own divisions \
-                     (size {}); the army card was not clicked.",
-                    super::read(process, selection_size).unwrap_or(0)
+                     (size {}, object types {:?}, after {how}); the army card was not clicked.",
+                    super::read(process, selection_size).unwrap_or(0),
+                    super::read(process, super::selection_types).unwrap_or_default()
                 ),
             ));
         };
@@ -570,10 +572,27 @@ pub(super) fn select(
         }
         Ok(v)
     };
-    let first = match rested {
+    let mut first = match rested {
         Some(selection) => selection,
         None => rested_selection(process)?,
     };
+    // A box that holds no division the engine can pick takes what else stands in it (a fleet in
+    // the port, an air wing): the selection is then not a division list. A plain click on a
+    // wanted stack replaces that selection, Shift+click adds the other stacks.
+    if first.is_none() && matches!(pick, Pick::Box(..)) {
+        let points = corrections(&stacks, wanted, AREA);
+        if !points.is_empty() {
+            for (k, (x, y)) in points.iter().enumerate() {
+                if k == 0 {
+                    keys.click(GAME, *x, *y)?;
+                } else {
+                    keys.shift_click(GAME, *x, *y)?;
+                }
+            }
+            how = format!("clicks:{} (the box took no division)", points.len());
+            first = rested_selection(process)?;
+        }
+    }
     let mut verdict = judge_now(first, &how)?;
     if !verdict.missing.is_empty() {
         let fix = corrections(&stacks, &verdict.missing, AREA);

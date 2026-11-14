@@ -1408,7 +1408,11 @@ fn rebase_target(entry: &Value, wing: &Value, bases: &[Value]) -> Option<i64> {
     }
     let here = wing["air_base"]["state_id"].as_i64();
     if let Some(target) = entry["base_state"].as_i64() {
-        return (here != Some(target)).then_some(target);
+        // A state without an own air base has nowhere to land (the base the plan counts on
+        // is not built yet, or the state was lost): the wing stays and flies from where it is.
+        let lands =
+            bases.is_empty() || bases.iter().any(|b| b["state_id"].as_i64() == Some(target));
+        return (here != Some(target) && lands).then_some(target);
     }
     let want = &entry["base_region"];
     if want.is_null() {
@@ -3357,6 +3361,25 @@ mod tests {
     }
 
     #[test]
+    fn a_wing_is_not_rebased_to_a_state_without_an_own_air_base() {
+        let read = air_read();
+        let wing = &read["wings"][0];
+        let bases = read["air_bases"].as_array().unwrap();
+        // base 3 stands in state 550: the wing goes there
+        assert_eq!(
+            rebase_target(&json!({"base_state": 550}), wing, bases),
+            Some(550)
+        );
+        // no own base in state 908 (not built yet): no rebase order
+        assert_eq!(
+            rebase_target(&json!({"base_state": 908}), wing, bases),
+            None
+        );
+        // already there
+        assert_eq!(rebase_target(&json!({"base_state": 2}), wing, bases), None);
+    }
+
+    #[test]
     fn default_war_missions_leave_the_air_plan_wings_alone() {
         let tools = fake(vec![
             ("hoi4_air", air_read()),
@@ -3369,6 +3392,20 @@ mod tests {
             "air_plan": [{"airframe": "small_plane_airframe_0", "mission": "cas", "region": 273}]});
         assert!(air_plan_claims(&plan, &air_read()["wings"][0]));
         assert!(!air_plan_claims(&plan, &air_read()["wings"][2]));
+        // 3. Stormo stands by at a base in the home country: the front is out of its range
+        let mut state = State::default();
+        let out = extras_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(out, None, "no wing is based at the front");
+        // based at the front it flies; 1. Stormo belongs to the air plan
+        let mut at_front = air_read();
+        at_front["wings"][2]["air_base"] = json!({"base_id": 3, "state_id": 550});
+        let tools = fake(vec![
+            ("hoi4_air", at_front),
+            (
+                "hoi4_wars",
+                json!({"borders": [{"hostile": true, "own_border_states": [550]}]}),
+            ),
+        ]);
         let mut state = State::default();
         let out = extras_step(&mut state, &tools, &plan, "l", START).unwrap();
         assert_eq!(

@@ -28,6 +28,9 @@ pub struct Autopilot {
     claims: Mutex<HashMap<String, Instant>>,
 }
 
+/// The longest wait after a step whose order failed.
+const FAILED_STEP_WAIT: Duration = Duration::from_secs(3);
+
 pub fn autopilot() -> &'static Autopilot {
     static A: OnceLock<Autopilot> = OnceLock::new();
     A.get_or_init(Autopilot::default)
@@ -59,7 +62,13 @@ impl Autopilot {
         (Instant::now() >= on.next).then(|| on.token.clone())
     }
     /// After a step: one with a successful action runs again at once (more may be waiting),
-    /// a quiet one waits the interval, one whose actions all failed waits longer each time.
+    /// a quiet one waits the interval, one whose actions all failed waits twice the interval.
+    ///
+    /// The wait after failures does not grow: a step is one order of one domain, and the order
+    /// that failed is held back by the failure ledger of the plan runner (its own waits, then
+    /// given up). A growing wait here stopped every domain for up to 30 s after each failed or
+    /// held order: events stayed unanswered, slots empty and armies without orders for a
+    /// minute at a time while one air order kept being refused (14 Nov 2026).
     pub fn ran(&self, actions: usize, last: Option<String>) {
         self.ran_with(actions, actions, last)
     }
@@ -76,7 +85,7 @@ impl Autopilot {
                     Duration::ZERO
                 } else if actions > 0 {
                     on.failing = (on.failing + 1).min(8);
-                    (on.interval * (1 << on.failing.min(5))).min(Duration::from_secs(30))
+                    (on.interval * 2).min(FAILED_STEP_WAIT)
                 } else {
                     on.interval
                 };
@@ -167,13 +176,12 @@ mod tests {
         };
         a.ran_with(1, 0, Some("x: false".into()));
         assert!(a.due().is_none(), "a failed step does not rerun at once");
-        assert!(around(2), "one failure doubles the wait");
-        a.ran_with(1, 0, Some("x: false".into()));
-        assert!(around(4), "two failures double it again");
+        assert!(around(2), "a failed step waits twice the interval");
+        // more failures do not stop the other domains for longer
         for _ in 0..10 {
-            a.ran_with(1, 0, None);
+            a.ran_with(1, 0, Some("x: false".into()));
         }
-        assert!(around(30), "capped at 30 s");
+        assert!(around(2), "the wait does not grow");
         a.ran_with(1, 1, None);
         assert!(a.due().is_some(), "a success reruns at once");
     }
