@@ -129,7 +129,8 @@ def idea_exits(world, tag):
 
 def _vp_short(vp):
     return {"total": vp["total"], "capital": vp["capital"], "thresholds": vp["thresholds"],
-            "base_limit": vp["base_limit"], "modifiers": vp["modifiers"], "d": vp["d"]}
+            "war_support": vp["war_support"], "base_limit": vp["base_limit"], "modifiers": vp["modifiers"],
+            "d": vp["d"]}
 
 
 def _enemy_oob(world, tag):
@@ -648,6 +649,8 @@ def _md_neighbours(d, s):
         for m in vp["modifiers"]:
             s.add(f"  - {m['idea']} \"{m['name']}\" surrender_limit {m['value']} "
                   f"({'held at start' if m['held_at_start'] else 'possible'}) [{m['src']}]")
+        for line in World.surrender_lines(vp):
+            s.add("  - " + line.strip())
         s.add(f"  - method: {vp['d']}")
         s.add("- VP provinces: " + "; ".join(f"{r['province']} {r['name'] or '?'} {r['vp']:g} (st {r['state']})"
                                             for r in vp["provinces"]), "vp", f"facts vp {e['tag']}")

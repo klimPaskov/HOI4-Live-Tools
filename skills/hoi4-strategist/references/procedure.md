@@ -49,7 +49,7 @@ write them in the shapes below (the schema descriptions and `native/src/plan_mil
 | `F tech <id>` / `F research-calendar <TAG> --date D --years Y1-Y2` / `F research-timeline RUN/plan.json` | eligibility, cost, days; startable techs by year; finish dates of the plan's path |
 | `F state <id>` / `F states <TAG>` | slots, infrastructure, buildings (naval base, air base), resources, VP, cores, neighbours |
 | `F province <id>` / `F route <from> <to> [--avoid-rivers]` | terrain, river edges, port, hub, railway / cheapest path with crossings |
-| `F vp <TAG>` | VP list, total, surrender threshold with modifiers, capital, mandatory-control rules |
+| `F vp <TAG> [--war-support S]` | VP list, total, surrender threshold with modifiers, the lower thresholds under low war support (at the start value, at S, at zero) and which one holds, capital, mandatory-control rules |
 | `F oob <TAG>` / `F characters <TAG> [--role general\|marshal\|admiral\|advisor\|leader]` | templates, divisions per state, wings, fleets / commanders and advisors with traits |
 | `F laws <TAG>` / `F idea <id>` / `F decisions <TAG>` / `F missions <TAG>` | costs, gates (`needs has_war_support > ...`), conditions, timers |
 | `F hooks <TAG>` / `F event <id>` | scenario reference graph (conditions in full) / event options with name, loc text, trigger, effects, and every caller: where it fires, the receiving scope, delay, conditions |
@@ -373,8 +373,9 @@ their exits), `F defines BASE_STABILITY_WAR_FACTOR`, `F idea <spirit>`, `F decis
    defensive one adds it (`politics-diplomacy-espionage.md` §2 "Drivers").
 2. Stability floor (50% unless the plan argues otherwise) and what happens below it.
 3. **Stability and war support at or above 50%:** both are multipliers (stability above 50% up to +20%
-   factory output, below it down to -50%; war support below 50% lowers the surrender limit 30% and cuts
-   command power gain 95%) (PO16, PO17). Name the source that holds each above 50%.
+   factory output, below it down to -50%; war support below 50% lowers the surrender limit by up to 30
+   points and cuts command power gain by up to 95%, both in proportion to the gap and in full at zero)
+   (PO16, PO17). Name the source that holds each above 50%.
 4. **War-support routes** for democracies and neutrals short of a 25% or 50% gate: an attaché to the Spanish
    Civil War or the Sino-Japanese War after improving relations to 20 (`diplomacy` `improve_relations`, then
    `send_attache`), war propaganda, focuses (PO19, PO21). Improve Worker Conditions when stability is under
@@ -452,7 +453,9 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
 `generic-playbook.md` §4. Facts: `F vp <ENEMY>`, `F route <from> <to> [--avoid-rivers]`,
 `F province <id>`, `F weather <region>`, `F terrain-width <theatre>`.
 1. VP order: targets by value and adjacency until cumulative VP ≥ threshold with and without modifiers;
-   every mandatory control state. `by` dates from distance, terrain and river counts (`[D route]`),
+   every mandatory control state. The threshold to reach is the one at war support 50% or more; the
+   `F vp` rows for low war support are the earliest the enemy can fall (a checkpoint and the
+   `goal_reached` alarm, never the plan's end point). `by` dates from distance, terrain and river counts (`[D route]`),
    non-decreasing per army; more than 2 river crossings on a leg is a warning to answer.
 2. Weather and season: no offensive planned into mud, snow or extreme cold on the axis (from
    `F weather <region>`); the season named per phase.

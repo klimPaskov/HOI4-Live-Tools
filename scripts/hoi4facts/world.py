@@ -1208,10 +1208,12 @@ class World:
         return None
 
     # ------------------------------------------------------------ victory points and surrender
-    def vp(self, tag=None):
+    def vp(self, tag=None, war_support=None):
         """VP list, total, capital, and the surrender threshold: NCountry.BASE_SURRENDER_LIMIT plus
         the surrender_limit modifiers of the tag's ideas (applied when held at the start, possible
-        otherwise), needed VP = ceil(limit x total)."""
+        otherwise), needed VP = ceil(limit x total). `war_support` rows give the limit under the
+        low-war-support modifier at the start war support, at zero and at the war_support argument,
+        and say which row holds (derive.surrender)."""
         tag = tag or self.tag
         states = self.states()
         rows = []
@@ -1235,8 +1237,12 @@ class World:
         mods.sort(key=lambda m: (not m["held_at_start"], m["idea"]))
         # the start threshold is derive.surrender's (shared with the lint); the possible modifiers and
         # the sources are added here
-        sur = derive.surrender(self.game, tag, self.ctx_for(tag), self.date)
+        sur = derive.surrender(self.game, tag, self.ctx_for(tag), self.date, war_support)
         start_limit = sur["limit"]
+        ws = dict(sur["war_support"])
+        ws["src"] = self._static_modifier_src(ws["modifier"])
+        hist = self.country(tag)["war_support"]
+        ws["start_src"] = hist["src"] if hist else "DEFAULT_WAR_SUPPORT"
 
         def need(limit):
             return int(math.ceil(round(limit * total, 6)))
@@ -1250,9 +1256,47 @@ class World:
         cap = self.country(tag)["capital"]
         return {"tag": tag, "provinces": rows, "total": total, "capital": cap["v"] if cap else None,
                 "base_limit": base_fact, "min_limit": mn_fact, "modifiers": mods, "thresholds": thresholds,
+                "war_support": ws,
                 "d": "vp_needed = ceil(limit x total VP of owned states at start); limit = BASE_SURRENDER_LIMIT "
-                     "+ surrender_limit of held ideas, floored at MIN_SURRENDER_LIMIT",
+                     "+ surrender_limit of held ideas, floored at MIN_SURRENDER_LIMIT; war support below "
+                     f"{derive.WAR_SUPPORT_SPLIT:g} adds the {ws['modifier']} surrender_limit in proportion to the "
+                     "gap (all of it at zero), so the limit moves with the live war support",
                 "fair": "public"}
+
+    def _static_modifier_src(self, name):
+        """file:line of a static modifier block in common/modifiers, or None."""
+        for p in reversed(list(self.game.files("common/modifiers"))):
+            items = parse_file(p)
+            for i, (k, v) in enumerate(items):
+                if k == name and isinstance(v, list):
+                    return self.src(p, line_of(items, i))
+        return None
+
+    @staticmethod
+    def surrender_lines(v):
+        """Text rows of the war-support part of vp(): the limit with and without the low-war-support
+        modifier, and which one holds."""
+        ws = v.get("war_support") or {}
+        if not ws.get("full_malus"):
+            return []
+        pct = lambda x: f"{x * 100:g}%"  # noqa: E731
+        mark = lambda key: "  <- applies" if ws["applies"] == key else ""  # noqa: E731
+        top = v["thresholds"][0]
+        out = [f"  war support: {pct(ws['start'])} at the start [{ws['start_src']}]; below {pct(ws['split'])} "
+               f"{ws['modifier']} adds surrender_limit {ws['full_malus']:g} x (gap below {pct(ws['split'])}) "
+               f"[{ws['src']}]",
+               f"    war support {pct(ws['split'])} or more: limit {top['limit']} -> {top['vp_needed']} VP "
+               f"(the most it can need: plan for this){mark('limit')}"]
+        rows = [("at_start", "the start value")] + ([("at", "asked")] if "at" in ws else []) + [("at_zero", "the floor")]
+        for key, label in rows:
+            r = ws[key]
+            if key == "at_start" and not r["malus"]:
+                continue
+            out.append(f"    war support {pct(r['war_support'])} ({label}): limit {r['limit']} -> {r['vp_needed']} VP "
+                       f"(modifier {r['malus']:+g}){mark(key)}")
+        out.append("    the live war support moves with world tension, the war, casualties, bombing and convoy "
+                   "losses: read it in the game and pass --war-support")
+        return out
 
     def _tag_ideas(self, tag):
         """Ideas that belong to a tag: key prefix TAG_, or defined in a file named after the country."""

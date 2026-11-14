@@ -110,6 +110,37 @@ class WorldFacts(unittest.TestCase):
         self.assertEqual(v["thresholds"][1], {"limit": 0.5, "vp_needed": 8, "with": "BBB_demoralized"})
         self.assertEqual(v["base_limit"]["src"], "common/defines/00_defines.lua:8")
 
+    def test_low_war_support_lowers_the_surrender_limit(self):
+        # BBB starts at war support 0.2: war_support_bad_modifier (surrender_limit -0.3) counts for the
+        # gap below one half, 0.3/0.5 of it, and for all of it at zero
+        v = self.w.vp("BBB")
+        ws = v["war_support"]
+        self.assertEqual((ws["start"], ws["full_malus"], ws["split"]), (0.2, -0.3, 0.5))
+        self.assertEqual(ws["at_start"], {"war_support": 0.2, "malus": -0.18, "limit": 0.52, "vp_needed": 8})
+        self.assertEqual(ws["at_zero"], {"war_support": 0.0, "malus": -0.3, "limit": 0.4, "vp_needed": 6})
+        self.assertEqual(ws["applies"], "at_start")
+        self.assertEqual(ws["src"], "common/modifiers/00_static_modifiers.txt:5")
+        self.assertEqual(ws["start_src"], "history/countries/BBB - Beta.txt:7")
+        # the number a plan must reach stays the one without the modifier (war support can rise)
+        self.assertEqual((v["thresholds"][0]["limit"], v["thresholds"][0]["vp_needed"]), (0.7, 11))
+        # a war support read in the game picks the row that holds
+        at = self.w.vp("BBB", 0.4)["war_support"]
+        self.assertEqual(at["at"], {"war_support": 0.4, "malus": -0.06, "limit": 0.64, "vp_needed": 10})
+        self.assertEqual(at["applies"], "at")
+        self.assertEqual(self.w.vp("BBB", 0.6)["war_support"]["applies"], "limit")
+        # AAA has no set_war_support: the default one half, no modifier
+        self.assertEqual(self.w.vp("AAA")["war_support"]["at_start"]["malus"], 0)
+
+    def test_vp_command_prints_both_limits(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            facts.main(["vp", "BBB", "--game", GAME, "--tag", "AAA", "--war-support", "0.4"])
+        text = out.getvalue()
+        self.assertIn("war support 50% or more: limit 0.7 -> 11 VP", text)
+        self.assertIn("war support 20% (the start value): limit 0.52 -> 8 VP (modifier -0.18)", text)
+        self.assertIn("war support 40% (asked): limit 0.64 -> 10 VP (modifier -0.06)  <- applies", text)
+        self.assertIn("war support 0% (the floor): limit 0.4 -> 6 VP", text)
+
     def test_decisions_missions_goals(self):
         m = self.w.decisions("AAA", missions=True)
         self.assertEqual([x["id"] for x in m], ["AAA_conquer_mission"])
