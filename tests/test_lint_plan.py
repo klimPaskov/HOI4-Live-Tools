@@ -607,6 +607,30 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertIn("never targeted", f["message"])
         self.assertFalse(self.hits(self.ita, "conquest.skipped_near", None, "province 1984"))
 
+    # -------------------------------------------------------------- production.factories: two pools
+    def test_dockyard_lines_count_against_dockyards(self):
+        base = lint_plan.lint(self.ita, self.game)
+        mils, docks = base["facts"]["military_factories"]["start"], base["facts"]["dockyards"]["start"]
+        self.assertEqual(mils, 20)
+        self.assertGreater(docks, 7)
+        self.assertNoHit(self.ita, "production.factories")
+        # a convoy line on 7 dockyards takes no military factory
+        plan = copy.deepcopy(self.ita)
+        plan["production"].append({"equipment": "convoy_1", "factories": 7})
+        self.assertNoHit(plan, "production.factories")
+        lt = lint_plan.Lint(plan, self.game)
+        self.assertEqual(lt.pool_lines(derive.day("1936.1.1"))["dockyards"], {"convoy_1": 7})
+        # more dockyards than the country has is its own finding
+        plan["production"][-1]["factories"] = docks + 1
+        f = self.assertHit(plan, "production.factories", "error", "dockyards allocated")
+        self.assertIn(f"has {docks} dockyards at the start", f["message"])
+        self.assertNotIn("military factories", f["message"])
+        # and land lines are still held to the military factories
+        over = copy.deepcopy(self.ita)
+        over["production"].append({"equipment": "infantry_equipment_1", "factories": mils + 1})
+        f = self.assertHit(over, "production.factories", "error", "military factories allocated")
+        self.assertIn(f"has {mils} military factories at the start", f["message"])
+
     # -------------------------------------------------------------- production remove / replace
     def test_production_remove(self):
         plan = copy.deepcopy(self.ita)

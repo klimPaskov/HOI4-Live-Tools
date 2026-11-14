@@ -286,11 +286,13 @@ def render(block, depth=0):
 
 def building_kinds(game):
     """Building keys by role, read from the building attributes (so a mod's buildings count):
-    factory (military_production / general_production / naval_production), infrastructure
+    factory (military_production / general_production / naval_production), military (military_production:
+    the factories of land and air equipment lines), naval (naval_production: the dockyards of naval lines),
+    infrastructure
     (infrastructure = yes), supply (supply_node = yes), railway (rail_way / railway)."""
 
     def load():
-        out = {"factory": set(), "military": set(), "infrastructure": set(), "supply": set(),
+        out = {"factory": set(), "military": set(), "naval": set(), "infrastructure": set(), "supply": set(),
                "railway": {"rail_way", "railway"}}
         for f in game.files("common/buildings"):
             for k, v in parse_file(f):
@@ -304,6 +306,8 @@ def building_kinds(game):
                             out["factory"].add(name)
                     if get1(body, "military_production") not in (None, "0"):
                         out["military"].add(name)
+                    if get1(body, "naval_production") not in (None, "0"):
+                        out["naval"].add(name)
                     if get1(body, "infrastructure") == "yes":
                         out["infrastructure"].add(name)
                     if get1(body, "supply_node") == "yes":

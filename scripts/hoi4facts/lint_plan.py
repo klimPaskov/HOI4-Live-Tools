@@ -33,7 +33,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            executor would move the start to the nearest node)
   construction.trigger_route  a province_controlled: trigger off every vp target route
   construction.hub         supply hub in a province or state an enemy still holds when it fires
-  production.factories     production lines need more military factories than the plan has
+  production.factories     production lines need more factories than the plan has, each pool on its own:
+                           land and air lines against the military factories, naval lines (ships, convoys)
+                           against the dockyards
   production.equipment     unknown equipment, or equipment no planned tech unlocks
   production.trucks        war.motorization set but no motorized (truck) line
   army.guards              own state bordering an enemy with no guard (layout guard role,
@@ -735,25 +737,35 @@ class Lint:
         kinds = derive.building_kinds(game)
         sb = derive.state_buildings(game, self.ctx, self.start)
         own = derive.tag_states(game, self.ctx, self.tag, self.start)
-        mils = sum(v for s in own for b, v in sb.get(s, {}).items() if b in kinds["military"])
-        planned = 0
-        for _, items in self.construction_lists()[:1]:
-            planned += sum(1 for e in items if e.get("building") in kinds["military"])
-        for e in self.list_of("construction"):
-            if e.get("building") in kinds["military"]:
-                planned += int(e.get("count", 1) or 1) * max(1, len(e.get("states") or []))
+        # two pools the game never mixes: military factories build land and air equipment, dockyards build
+        # naval equipment (ships and convoys)
+        pools = {"military": ("military factories", kinds["military"]), "dockyards": ("dockyards", kinds["naval"])}
+        have, planned = {}, {}
+        for pool, (_, buildings) in pools.items():
+            have[pool] = sum(v for s in own for b, v in sb.get(s, {}).items() if b in buildings)
+            planned[pool] = 0
+            for _, items in self.construction_lists()[:1]:
+                planned[pool] += sum(1 for e in items if e.get("building") in buildings)
+            for e in self.list_of("construction"):
+                if e.get("building") in buildings:
+                    planned[pool] += int(e.get("count", 1) or 1) * max(1, len(e.get("states") or []))
+        mils = have["military"]
         lines = self.list_of("production")
         start = derive.day(self.start)
         dates = sorted({start} | {derive.day(x["from"]) for x in lines if derive.day(x.get("from")) is not None})
         for d in dates:
-            n = sum(self.active_lines(d).values())
-            cap = mils if d == start else mils + planned
-            if n > cap:
-                extra = "" if d == start else f" plus {planned} planned"
-                self.add("error", "production.factories", "production",
-                         f"{n} factories allocated from {derive.fmt(derive.date_of(d))}, but {self.tag} has {mils} "
-                         f"military factories at the start{extra}")
-        self.facts["military_factories"] = {"start": mils, "planned": planned}
+            used = self.pool_lines(d)
+            for pool, (label, _) in pools.items():
+                n = sum(used[pool].values())
+                cap = have[pool] if d == start else have[pool] + planned[pool]
+                if n > cap:
+                    extra = "" if d == start else f" plus {planned[pool]} planned"
+                    what = ", ".join(f"{k} {v}" for k, v in sorted(used[pool].items()))
+                    self.add("error", "production.factories", "production",
+                             f"{n} {label} allocated from {derive.fmt(derive.date_of(d))} ({what}), but {self.tag} "
+                             f"has {have[pool]} {label} at the start{extra}")
+        self.facts["military_factories"] = {"start": mils, "planned": planned["military"]}
+        self.facts["dockyards"] = {"start": have["dockyards"], "planned": planned["dockyards"]}
         equip = game.equipment()
         unlocks = derive.equipment_unlocks(game)
         have = start_tech_set(game, self.meta)
@@ -1221,6 +1233,18 @@ class Lint:
                     out[x["replace"]] = out.get(x["replace"], 0) + out.pop(k)
             elif isinstance(x.get("factories"), int):
                 out[k] = out.get(k, 0) + x["factories"]
+        return out
+
+    def factory_pool(self, eq):
+        """Which factories build an equipment: "dockyards" for naval equipment (ships, convoys), else
+        "military"."""
+        return "dockyards" if derive.equipment_domain(self.game, eq) == "navy" else "military"
+
+    def pool_lines(self, d):
+        """{"military": {equipment: factories}, "dockyards": {...}} of the plan lines in force on day d."""
+        out = {"military": {}, "dockyards": {}}
+        for eq, n in self.active_lines(d).items():
+            out[self.factory_pool(eq)][eq] = n
         return out
 
     def has_path(self, dotted):
