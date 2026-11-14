@@ -3369,6 +3369,20 @@ mod tests {
             "air_plan": [{"airframe": "small_plane_airframe_0", "mission": "cas", "region": 273}]});
         assert!(air_plan_claims(&plan, &air_read()["wings"][0]));
         assert!(!air_plan_claims(&plan, &air_read()["wings"][2]));
+        // 3. Stormo stands by at a base in the home country: the front is out of its range
+        let mut state = State::default();
+        let out = extras_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(out, None, "no wing is based at the front");
+        // based at the front it flies; 1. Stormo belongs to the air plan
+        let mut at_front = air_read();
+        at_front["wings"][2]["air_base"] = json!({"base_id": 3, "state_id": 550});
+        let tools = fake(vec![
+            ("hoi4_air", at_front),
+            (
+                "hoi4_wars",
+                json!({"borders": [{"hostile": true, "own_border_states": [550]}]}),
+            ),
+        ]);
         let mut state = State::default();
         let out = extras_step(&mut state, &tools, &plan, "l", START).unwrap();
         assert_eq!(

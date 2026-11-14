@@ -348,6 +348,13 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
     for a in &actions {
         feed().note("autopilot_action", false, serde_json::json!({"action": a}));
     }
+    // What the executor cannot do itself goes to the player as an urgent change: a wake is
+    // raised once per reason, so each arrives once.
+    for alarm in body["alarms"].as_array().into_iter().flatten() {
+        if alarm["code"] == serde_json::json!("wake_player") {
+            feed().note("wake_player", true, alarm.clone());
+        }
+    }
     let succeeded = actions.iter().filter(|a| !a.contains(": false")).count();
     autopilot().ran_with(actions.len(), succeeded, actions.last().cloned());
     true

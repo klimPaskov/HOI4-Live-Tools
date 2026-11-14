@@ -31,7 +31,7 @@
 //!      marshal candidates and field-marshal traits are kept for the army group). A commander
 //!      is never moved from another army (no reassignment: assigning resets his bonuses);
 //!   3. the army groups (plan_military.rs `army_group_step`).
-use super::{list, plan_military, strings, text, GameHour, State, Tools, DAY};
+use super::{ints, list, plan_military, strings, text, GameHour, State, Tools, DAY};
 use crate::error::Result;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -53,14 +53,6 @@ pub(super) const MARSHAL_TRAITS: [&str; 9] = [
     "aggressive_assaulter",
     "charismatic",
 ];
-
-fn ints(v: &Value) -> Vec<i64> {
-    v.as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_i64)
-        .collect()
-}
 
 fn push_unique(target: &mut Value, key: &str, ids: &[i64]) {
     let mut have = ints(&target[key]);
