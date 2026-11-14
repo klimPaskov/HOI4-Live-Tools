@@ -308,8 +308,13 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
    year triples it, and ordinary bonuses do not reduce it (only ahead-of-time bonuses do; `F tech <id>` shows
    the days) (RE01). Order: industry (production, construction, industry folder: the concentrated/dispersed
    line, machine tools, construction), then the equipment the planned templates use, then what the war plan
-   needs. Never cut an industry tech because "it does not help this war". Lint `research.idle` fails a
-   plan with more than 25% of slot-time unplanned, with or without a fallback.
+   needs. Never cut an industry tech because "it does not help this war". **Every slot stays busy to the
+   horizon:** the campaign goes on after this war, so a tech no current template uses (support companies,
+   the next weapons, armour, electronics) still earns its slot when the alternative is an empty one; a tech
+   taken out of the list is replaced by another in-time tech, never by idle time, and
+   `alarms.research_slot_empty` stays on. Lint `research.idle` fails a plan with more than 25% of slot-time
+   unplanned, with or without a fallback, and one with any unplanned slot-time (above 2%) while in-time
+   techs remain unlisted; it names them.
 5. `research_fallback` false, or restricted with `research_fallback_prefixes` to the same families; it is
    a safety net, not the plan. No naval or air folder techs unless item 3 needs them.
 6. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or

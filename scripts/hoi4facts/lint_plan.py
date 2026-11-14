@@ -13,7 +13,11 @@ mods) through hoi4facts.Game and hoi4facts.derive; nothing is country specific.
 Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/references/lessons.jsonl):
   research.start_year      research_path tech with start_year after its block year
   research.idle            more than 25% of the slots' time to the horizon has nothing planned (an error,
-                           with or without a fallback: the fallback is a safety net, not the plan)
+                           with or without a fallback: the fallback is a safety net, not the plan); or any
+                           slot time is left unplanned (above 2%) while in-time techs the country can
+                           research are not listed (land, industry, electronics and support folders; naval
+                           and air ones when the plan has such a goal): an idle slot is only acceptable
+                           when nothing in-time remains
   research.throughput      (warning) a block's base research days do not fit the slots before the
                            next block year (research_cost x BASE_TECH_COST, no speed bonus)
   research.prerequisites   prerequisite not at the start or earlier in the path under either parent
@@ -195,6 +199,7 @@ if __package__ in (None, ""):
     from hoi4facts import content, derive, mapgraph, schema_check  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
+    from hoi4facts import research as researchmod  # noqa: E402
     from hoi4facts.validate import (Report, ctx_of, load_schema, parse_predicate, parse_when,  # noqa: E402
                                     predicate_dates, predicate_table, resolve_meta, start_of, start_oobs,
                                     start_tech_set, template_columns,
@@ -205,6 +210,7 @@ else:
     from . import content, derive, mapgraph, schema_check
     from . import tech as techrule
     from .game import Game
+    from . import research as researchmod
     from .validate import (Report, ctx_of, load_schema, parse_predicate, parse_when, predicate_dates,
                            predicate_table, resolve_meta, start_of, start_oobs, start_tech_set, template_columns,
                            predicate_can_hold)
@@ -252,6 +258,20 @@ SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
                          r"|^(state_fully_controlled|controls_state):(\d+)$")
+
+
+RESEARCH_IDLE_SLACK = 0.02  # research.idle: unplanned share of the slot time allowed while in-time techs remain
+
+
+def folder_family(folder):
+    """"naval" or "air" for a technology folder of that arm (naval_folder, mtgnavalfolder,
+    mtgnavalsupportfolder; air_techs_folder, bba_air_techs_folder), else None."""
+    f = (folder or "").lower()
+    if "naval" in f:
+        return "naval"
+    if re.search(r"(^|_)air(_|$)", f):
+        return "air"
+    return None
 
 
 def _atoms(pred):
@@ -454,6 +474,15 @@ class Lint:
             idle = max(0.0, 1.0 - total / capacity)
             fallback = plan.get("research_fallback", True)
             self.facts["research"]["idle_share"] = round(idle, 3)
+            spare = self.unlisted_in_time_techs(derive.date_of(end_day - 1)[0]) if idle > RESEARCH_IDLE_SLACK else []
+            self.facts["research"]["unlisted_in_time"] = len(spare)
+            if RESEARCH_IDLE_SLACK < idle <= 0.25 and spare:
+                self.add("error", "research.idle", "research_path",
+                         f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
+                         f"nothing planned ({total:.0f} of {capacity} slot-days) while {len(spare)} in-time techs are "
+                         f"not listed (e.g. {', '.join(spare[:8])}): every slot stays busy while an in-time tech "
+                         f"remains (industry and production first, then the army's equipment and support, then "
+                         f"what later wars need); the campaign goes on after this war")
             if idle > 0.25:
                 # The fallback is a safety net, not the plan (user rule: every slot busy with proper,
                 # in-time techs, industry first): an unplanned quarter of the slots fails either way.
@@ -470,7 +499,7 @@ class Lint:
         for t in planned:
             f = (meta.get(t) or {}).get("folder") or ""
             for fam in ("naval", "air"):
-                if re.search(r"(^|_)" + fam + r"(_|$)", f):
+                if folder_family(f) == fam:
                     fams[fam].append(t)
         goals = self.domain_goals()
         for fam, ts in sorted(fams.items()):
@@ -1246,6 +1275,40 @@ class Lint:
         for eq, n in self.active_lines(d).items():
             out[self.factory_pool(eq)][eq] = n
         return out
+
+    def unlisted_in_time_techs(self, last_year):
+        """Techs the country could research by `last_year` without an ahead-of-time penalty that the plan does
+        not list: not owned at the start, start_year up to last_year, not excluded by a listed or owned
+        either-or tech, outside the naval and air folders unless the plan lists a tech of that folder.
+        Industry, production and construction folders first."""
+        if not self.tag:
+            return []
+        first = derive.as_tuple(self.start)[0]
+        planned = {t for e in self.plan.get("research_path") or [] if isinstance(e, dict) for t in e.get("techs") or []}
+        planned |= {t for t in self.plan.get("research_priority") or [] if isinstance(t, str)}
+        have = start_tech_set(self.game, self.meta)
+        rows = [r for block in researchmod.calendar(self.world, self.tag, self.start, (min(first, last_year), last_year))
+                for r in block["techs"]]
+        # techs of earlier years the country does not have yet count too
+        early = researchmod.calendar(self.world, self.tag, self.start, (1900, first - 1)) if first > 1900 else []
+        rows = [r for block in early for r in block["techs"]] + rows
+        known = researchmod.techs(self.world)
+        fams = {folder_family(((known.get(t) or {}).get("folders") or [""])[0]) for t in planned} - {None}
+        # an either-or tech whose rival is listed or owned is closed, and so is everything behind it
+        closed = {r["id"] for r in rows if any(x in planned or x in have for x in r.get("xor") or [])}
+        closed |= {x for t in planned | have for x in (known.get(t) or {}).get("xor") or []} - planned - have
+        out = []
+        for r in rows:
+            tid, folder = r["id"], r.get("folder") or ""
+            if tid in planned or tid in have or tid in closed:
+                continue
+            if closed & set(r.get("chain_any") or r.get("chain_all") or []):
+                continue
+            fam = folder_family(folder)
+            if fam and fam not in fams:
+                continue
+            out.append((0 if re.search(r"industry|production|construction", folder) else 1, folder, tid))
+        return [tid for _, _, tid in sorted(out)]
 
     def has_path(self, dotted):
         node = self.plan
@@ -2656,7 +2719,7 @@ class Lint:
                 if c in known or not info["year"] or info["year"] > year or m.get("gated") or (m.get("xor") or set()) & known \
                         or f not in folders or techrule.missing(info, known, "any"):
                     continue
-                if any(re.search(r"(^|_)" + d + r"(_|$)", f) and not goals[d] for d in ("naval", "air")):
+                if any(folder_family(f) == d and not goals[d] for d in ("naval", "air")):
                     continue
                 idle.append(c)
             if idle:

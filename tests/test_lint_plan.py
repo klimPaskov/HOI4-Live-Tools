@@ -599,6 +599,39 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertIn("safety net", f["message"])
         self.assertFalse(self.hits(self.ita, "research.idle", None, "research_path"))
 
+    def test_any_idle_slot_time_fails_while_in_time_techs_remain(self):
+        # a plan that leaves under a quarter of the slot time empty still wastes it when the country has
+        # in-time techs it does not list
+        base = lint_plan.lint(self.ita, self.game)["facts"]["research"]
+        self.assertLessEqual(base["idle_share"], lint_plan.RESEARCH_IDLE_SLACK)
+        plan = copy.deepcopy(self.ita)
+        first = plan["research_path"][0]
+        for n in range(len(first["techs"]) - 1, 1, -1):
+            first["techs"] = first["techs"][:n]
+            facts = lint_plan.lint(plan, self.game)["facts"]["research"]
+            if facts["idle_share"] > lint_plan.RESEARCH_IDLE_SLACK:
+                break
+        self.assertLess(facts["idle_share"], 0.25)
+        self.assertGreater(facts["unlisted_in_time"], 0)
+        f = self.assertHit(plan, "research.idle", "error", "research_path")
+        self.assertIn("in-time techs are not listed", f["message"])
+        lt = lint_plan.Lint(plan, self.game)
+        spare = lt.unlisted_in_time_techs(1936)
+        self.assertIn("interwar_antitank", spare)
+        listed = {t for b in plan["research_path"] for t in b["techs"]} | set(plan.get("research_priority") or [])
+        self.assertFalse(listed & set(spare))
+        # the industry branch not taken stays closed, with what stands behind it
+        self.assertFalse([t for t in lt.unlisted_in_time_techs(1937) if t.startswith("dispersed_industry")])
+        # no naval tech is offered to a plan that lists none (Man the Guns folder names included)
+        folders = {t: (lint_plan.researchmod.techs(lt.world)[t]["folders"] or [""])[0] for t in spare}
+        self.assertFalse([t for t, f in folders.items() if lint_plan.folder_family(f) == "naval"])
+
+    def test_folder_family(self):
+        fam = lint_plan.folder_family
+        self.assertEqual([fam(f) for f in ("naval_folder", "mtgnavalfolder", "mtgnavalsupportfolder")], ["naval"] * 3)
+        self.assertEqual([fam(f) for f in ("air_techs_folder", "bba_air_techs_folder")], ["air", "air"])
+        self.assertEqual([fam(f) for f in ("industry_folder", "infantry_folder", "nsb_armour_folder", "")], [None] * 4)
+
     # -------------------------------------------------------------- conquest.skipped_near
     def test_near_vp_province_left_untaken_warns(self):
         plan = copy.deepcopy(self.ita)
