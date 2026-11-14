@@ -140,6 +140,28 @@ class Consumers(unittest.TestCase):
         self.assertEqual(lint_gaps.values_at(plan, "a[].b.c"), [1, 2])
 
 
+class Strategist(unittest.TestCase):
+    def test_the_run_gets_the_blocked_levers(self):
+        from strategist import strategize
+        with tempfile.TemporaryDirectory() as d:
+            path = strategize.write_blocked_levers(d)
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        self.assertIn("espionage.collaboration_government", text)
+        self.assertIn("RUN/tool-gaps.md", text)
+
+    def test_gap_findings_reach_tool_gaps(self):
+        import json
+        from strategist import strategize
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "lint.json"), "w", encoding="utf-8") as f:
+                json.dump({"findings": [{"rule": "gap.blocked", "where": "occupation.per_state",
+                                         "message": "relies on per-state laws"}]}, f)
+            self.assertEqual(len(strategize.lint_tool_gaps(d)), 1)
+            with open(os.path.join(d, "tool-gaps.md"), encoding="utf-8") as f:
+                self.assertIn("occupation.per_state", f.read())
+
+
 class PlannedKeys(unittest.TestCase):
     def test_a_planned_key_must_be_an_open_row(self):
         rdr = dict(RDR)
