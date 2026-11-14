@@ -315,6 +315,8 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     ("hoi4_template_edit", "regimental_support"),
     // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
     ("hoi4_doctrine_adopt", "replace"),
+    // the peace conference's force-government demand (gap register peace.force_government)
+    ("hoi4_peace_take", "force_government"),
 ];
 
 /// Whether the executor may send `arg` to `tool` (not held back in UNBUILT_ARGS).

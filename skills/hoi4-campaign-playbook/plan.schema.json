@@ -2432,6 +2432,14 @@
           },
           "description": "state ids to release, or a country tag (every state it owns)"
         },
+        "force_government": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]{2}$"
+          },
+          "description": "country tags whose government the conference forces to the player's ideology (one demand on one of the country's states). Not sent yet: the demand is not built (hoi4_peace_take refuses `force_government` with not_yet_built), so the executor notes it (gap register peace.force_government)"
+        },
         "max_cost": {
           "type": "number",
           "minimum": 0,

@@ -1444,6 +1444,9 @@ def check_coverage_keys(game, plan, meta, rep):
                     if tags and s not in tags:
                         rep.error(f"peace.{key}[{j}]: {s!r} is neither a state id nor a country tag")
                     # a tag stands for every state it owns when the conference opens (plan_manage.rs)
+        for j, t in enumerate(peace.get("force_government") or []):
+            if tags and t not in tags:
+                rep.error(f"peace.force_government[{j}]: {t!r} is not a country tag")
     st = plan.get("sea_transfer")
     if isinstance(st, dict):
         for j, r in enumerate(st.get("routes") or []):

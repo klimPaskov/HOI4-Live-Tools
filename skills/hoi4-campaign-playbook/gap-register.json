@@ -1672,11 +1672,13 @@
     "war-air-naval-peace.md#9.2 Peace conference",
     "war-air-naval-peace.md#18 PC06"
    ],
-   "plan": [],
+   "plan": [
+    "peace.force_government"
+   ],
    "tools": [
     "hoi4_peace_take"
    ],
-   "blocked": "hoi4_peace_take offers take, puppet and liberate only; force_government is read as a control but not demanded",
+   "blocked": "hoi4_peace_take refuses `force_government` with not_yet_built (held back in plan_run::UNBUILT_ARGS): it drives the take, puppet and release buttons only; the peace step notes the demand instead of making it",
    "blocked_terms": [
     "force government",
     "force_government"
@@ -1684,7 +1686,7 @@
    "payoff": "medium",
    "why": "turns a beaten major into an ally",
    "closing": "both",
-   "owner": "force_government demand in hoi4_peace_take and a plan key"
+   "owner": "offline done: peace.force_government [TAG] plan key, the tool argument (refused before input), the peace step demands it on one of the country's states once built; live: drive force_government_action plus a state of the loser, verify by the score drop and the post-war government, drop the UNBUILT_ARGS row, then live-verify"
   },
   {
    "id": "peace.take_navy_addons",

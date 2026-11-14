@@ -398,7 +398,7 @@ class CoverageKeys(unittest.TestCase):
 
     def test_planned_marks_are_build_items_on_non_executor_nodes(self):
         planned = schema_check.planned(self.schema)
-        self.assertGreater(len(planned), 5)
+        self.assertGreaterEqual(len(planned), 3)  # fewer as executor steps land
         for path, item in planned.items():
             self.assertRegex(item, r"^W[1-3]-\d+$", path)
             node = _lookup(self.schema, path)

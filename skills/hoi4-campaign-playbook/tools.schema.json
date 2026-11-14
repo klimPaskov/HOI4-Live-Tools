@@ -3323,10 +3323,13 @@
    "source": "--list-tools"
   },
   "hoi4_peace_take": {
-   "description": "In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false.",
+   "description": "In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false. `force_government` (the force-government demand on the country owning the state) is not yet built: refused with not_yet_built.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "force_government": {
+      "type": "boolean"
+     },
      "lease_token": {
       "type": "string"
      },

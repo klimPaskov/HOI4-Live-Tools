@@ -1268,6 +1268,25 @@ pub(super) fn peace(
             }
         }
     }
+    // force_government [TAG]: one demand per country, on one of its states
+    let force_built = super::arg_built("hoi4_peace_take", "force_government");
+    for v in list(p, "force_government") {
+        let Some(tag) = v.as_str().filter(|t| !t.is_empty()) else {
+            continue;
+        };
+        if !force_built {
+            tags.push(format!(
+                "force_government {tag}: the demand is not built yet \
+                 (gap register peace.force_government)"
+            ));
+            continue;
+        }
+        match tag_states(tools, tag).and_then(|ids| ids.first().copied()) {
+            Some(id) if !wanted.iter().any(|w| w.0 == id) => wanted.push((id, "force_government")),
+            Some(_) => {}
+            None => tags.push(format!("force_government {tag}: owns no readable state")),
+        }
+    }
     if !tags.is_empty() {
         note(state, "peace", format!("not demanded: {}", tags.join(", ")));
     }
@@ -1321,6 +1340,7 @@ pub(super) fn peace(
             match kind {
                 "puppet" => args["puppet"] = json!(true),
                 "liberate" => args["release"] = json!(true),
+                "force_government" => args["force_government"] = json!(true),
                 _ => {}
             }
             if let Some(max) = p["max_cost"].as_f64() {
@@ -1366,6 +1386,12 @@ pub(super) fn peace(
         conf.dropped.iter().collect::<BTreeSet<_>>(),
         conf.rounds
     );
+    // what the plan names but cannot be demanded stays in the digest after an action too
+    let line = if tags.is_empty() {
+        line
+    } else {
+        format!("{line}; not demanded: {}", tags.join(", "))
+    };
     note(state, "peace", line);
     if why.starts_with("skipped:") {
         wake(
@@ -3922,9 +3948,16 @@ mod tests {
                                   {"state_id": 550, "owner": "ITA", "controller": "ETH"}]}),
             ),
         ]);
-        let plan = json!({"peace": {"take": [271], "puppet": ["ETH"]}});
+        let plan =
+            json!({"peace": {"take": [271], "puppet": ["ETH"], "force_government": ["ETH"]}});
         let mut state = State::default();
         tick(&mut state, &tools, &plan, "l", START).unwrap();
+        // the force-government demand waits on its tool argument and says so
+        let line = &state.manage.notes["peace"];
+        assert!(
+            line.contains("force_government ETH") && line.contains("peace.force_government"),
+            "{line}"
+        );
         assert_eq!(
             tick(&mut state, &tools, &plan, "l", START).unwrap(),
             Tick::Acted("peace puppet state 274: true Verified".into())
@@ -3936,6 +3969,7 @@ mod tests {
         assert_eq!(sent[1].1["puppet"], true);
         // a state ETH controls but does not own is not ETH's to give
         assert!(!sent.iter().any(|a| a.1["states"] == json!([550])));
+        assert!(!sent.iter().any(|a| a.1.get("force_government").is_some()));
     }
 
     #[test]

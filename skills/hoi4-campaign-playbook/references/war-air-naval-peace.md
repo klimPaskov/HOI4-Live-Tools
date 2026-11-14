@@ -406,6 +406,10 @@ the window (score, turn, demand kinds, states); `hoi4_peace_take` adds take,
 puppet or liberate demands and reports each cost; `hoi4_peace_submit` ends the
 round; `hoi4_peace_exit` leaves (accepted bids persist); `hoi4_war_goal_targets`
 ranks the states worth demanding.
+A plan can name `peace.force_government` tags (force government is one demand on
+one of the loser's states), but this is a gap today (gap register
+peace.force_government, not executable): the tool does not drive that button yet,
+so the executor notes the demand instead of making it.
 
 | Rule | Detail |
 |---|---|
