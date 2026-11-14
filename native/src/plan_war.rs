@@ -22,9 +22,10 @@
 //!                      at "planning_gain" (0.02 a game day), at most "planning_max_days" (15).
 //!                      The army's planning bonus is read (hoi4_armies planning.mean, the mean of
 //!                      its divisions): it executes once the bonus reaches that share of the cap,
-//!                      or once it has stopped rising for a game day (it stands at the army's own
-//!                      cap, which techs, doctrines, traits and the HQ distance set and no tool
-//!                      reads). Without the read the bonus is estimated from the game days since
+//!                      or once it has stopped rising for a game day at half that level or more
+//!                      (it stands at the army's own cap, which techs, doctrines, traits and the HQ
+//!                      distance set and no tool reads; a lower bonus that stands still belongs to
+//!                      divisions still fighting or moving, and the wait goes on). Without the read the bonus is estimated from the game days since
 //!                      the line was drawn and the digest says so; the 1.19 x0.8 without a deployed
 //!                      HQ scales cap and speed alike, so the wait is the same. No wait when the
 //!                      goal deadline is less than "planning_skip_days" (20) away. A rest resumes at
@@ -509,6 +510,10 @@ fn planning_wait(
 
 /// The planning wait on the bonus read from the army: execute at `wanted`, once the bonus has
 /// not risen for a game day (it stands at the army's own cap) or after `max_days`.
+/// Share of the wanted planning bonus from which a bonus that stopped rising is taken for the
+/// army's own cap.
+const FLAT_CAP_SHARE: f64 = 0.5;
+
 #[allow(clippy::too_many_arguments)]
 fn planning_read(
     state: &mut State,
@@ -537,7 +542,11 @@ fn planning_read(
             pct(bonus),
             pct(wanted)
         ))
-    } else if bonus > 0.0 && flat_days >= 1.0 {
+    } else if bonus + 1e-9 >= wanted * FLAT_CAP_SHARE && flat_days >= 1.0 {
+        // A bonus that stands still below half of the wanted level is not the army's cap:
+        // the divisions are still fighting or moving and have not begun to plan (after a
+        // stopped offensive the read stood at 10-16% for a day and the attack went in again
+        // two days after it was stopped, live 14 Nov 2026). The wait goes on, max_days bounds it.
         Some(format!(
             "planning stopped rising at {:.0}% for {flat_days:.1} game days (the army's cap)",
             pct(bonus)
@@ -1317,6 +1326,29 @@ mod tests {
         let step = acted(tick(&mut state, &w, &plan, "l", START + 3 + 2 * DAY + 1).unwrap());
         assert!(step.starts_with("war execute Army 1"), "{step}");
         assert!(state.war_rules.notes["planning:Army 1"].contains("stopped rising"));
+    }
+
+    #[test]
+    fn a_low_bonus_that_stands_still_is_not_the_cap_and_the_wait_goes_on() {
+        let w = W::new();
+        let plan = plan(json!({}));
+        let mut state = State::default();
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        tick(&mut state, &w, &plan, "l", START + 3).unwrap();
+        // 10% for days: divisions still fighting after a stopped offensive, not a cap
+        w.planning.set(Some(0.10));
+        for day in 1..5 {
+            assert_eq!(
+                tick(&mut state, &w, &plan, "l", START + 3 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        // from half of the wanted 27% a flat bonus is the cap
+        w.planning.set(Some(0.14));
+        tick(&mut state, &w, &plan, "l", START + 3 + 5 * DAY).unwrap();
+        let step = acted(tick(&mut state, &w, &plan, "l", START + 3 + 6 * DAY + 1).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
     }
 
     fn plan_with(extra: Value) -> Value {
