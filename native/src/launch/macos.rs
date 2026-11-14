@@ -1344,8 +1344,8 @@ mod receipt_tools {
             );
             assert!(t["description"].as_str().unwrap().contains("not yet built"));
             let args = serde_json::json!({ *arg: "ITA_beretta_organization" });
-            let e = super::refuse_unbuilt_organization(tool, args.as_object().unwrap())
-                .unwrap_err();
+            let e =
+                super::refuse_unbuilt_organization(tool, args.as_object().unwrap()).unwrap_err();
             assert_eq!(e.code, "not_yet_built");
         }
         assert!(super::refuse_unbuilt_organization("t", &serde_json::Map::new()).is_ok());

@@ -6362,7 +6362,9 @@ mod tests {
         let plan = json!({"production": [{"equipment": "infantry_equipment", "factories": 4,
             "organization": "ITA_beretta_organization"}]});
         let mut state = State::default();
-        let out = production_step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        let out = production_step(&mut state, &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
         let sent: Vec<Value> = f
             .calls
             .borrow()
