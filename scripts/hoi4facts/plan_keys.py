@@ -23,7 +23,9 @@ it. So each key path of the schema (x-owner on the key, else inherited from the 
   * a player key sits inside an executor-owned key without a planned build item;
   * a lint key is read by the executor, or its name is nowhere in the planning tools;
   * a text key is read by the executor;
-  * a planner key's name is nowhere in the rolling planner's code, or it has no description.
+  * a planner key's name is nowhere in the rolling planner's code, or it has no description;
+  * a key whose executor step is not built yet (x-executor-planned) is in no open row of the gap register
+    (skills/hoi4-campaign-playbook/gap-register.json, scripts/hoi4facts/gap_register.py).
 Reads are found in the sources (comments and tests stripped): `plan["key"]` and the helper reads the
 tables below name, and for unmarked nested keys the key's name as a string literal. Stdlib only,
 Python 3.9+.
@@ -340,6 +342,12 @@ def check(schema=None):
                 problems.append((path, "marked lint but no planning tool reads it"))
             if not (lookup(schema, path) or {}).get("description"):
                 problems.append((path, "a lint key says in its own description what it shapes"))
+    # A key the plan can set but whose executor step is not built yet is read by nobody today: it must be an
+    # open row of the gap register, so the gap is visible and owned instead of silently dropped.
+    planned = [e["path"] for e in keys if e["planned"] and e["owner"] != "executor"]
+    if planned:
+        from hoi4facts import gap_register
+        problems += gap_register.planned_problems(planned, rdr=readers(schema))
     return problems
 
 

@@ -11,6 +11,10 @@ Inputs:
 * The dossier you build in step 1 under `RUN/dossier/`.
 * `skills/hoi4-campaign-playbook/plan.schema.json` and the playbook references the skill names.
 * `skills/hoi4-campaign-playbook/references/lessons.jsonl`.
+* `RUN/blocked-levers.md`: the levers the project knows but no tool carries yet (the gap register's
+  not-executable rows). Never drop one the goal would use because no tool carries it: plan it, write it in
+  `RUN/tool-gaps.md` with its payoff for this goal, and plan the best workaround the tools do carry (lint
+  `gap.blocked` and `conquest.tool_gap` name each one the plan relies on).
 
 Do steps 1 to 7 of the procedure, then stop. Step 5 is the 29-item checklist of
 `skills/hoi4-strategist/references/procedure.md`: decide every item, including the ones the goal's words

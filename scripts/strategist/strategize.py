@@ -244,6 +244,9 @@ def strategize(args, runner=None):
         if code != 0:
             return finish(run_dir, report, "dossier build failed:\n" + out[-3000:], started)
 
+    # The levers no tool carries yet, from the gap register: the strategist plans and reports them, never drops them.
+    write_blocked_levers(run_dir)
+
     # 2. strategist (skipped when resuming from the gates or the critic)
     if start_at == "dossier":
         code, _, secs = agent(runner, "strategist", run_dir, "strategist.md", args)
@@ -304,9 +307,31 @@ def strategize(args, runner=None):
     return finish(run_dir, report, None, started)
 
 
+def write_blocked_levers(run_dir):
+    """RUN/blocked-levers.md: the gap register's not-executable rows (scripts/hoi4facts/gap_register.py
+    blocked). Returns the path, or None when the register cannot be read."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    try:
+        from hoi4facts import gap_register
+        text = gap_register.blocked_markdown()
+    except Exception as e:  # noqa: BLE001 - the run goes on without the list; the lint still warns
+        log("gap register unreadable (%s): RUN/blocked-levers.md not written" % e)
+        return None
+    finally:
+        sys.path.pop(0)
+    path = os.path.join(run_dir, "blocked-levers.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
+GAP_RULES = ("conquest.tool_gap", "gap.blocked")
+
+
 def lint_tool_gaps(run_dir):
-    """Append the last lint's conquest.tool_gap findings (a lever the plan needs that no tool carries) to
-    tool-gaps.md, once each, so the gap reaches the operator even when the strategist did not write it."""
+    """Append the last lint's conquest.tool_gap and gap.blocked findings (a lever the plan needs that no tool
+    carries) to tool-gaps.md, once each, so the gap reaches the operator even when the strategist did not write
+    it."""
     try:
         with open(os.path.join(run_dir, "lint.json"), encoding="utf-8") as f:
             findings = json.load(f).get("findings") or []
@@ -318,10 +343,11 @@ def lint_tool_gaps(run_dir):
         with open(path, encoding="utf-8") as f:
             old = f.read()
     new = ["- %s: %s" % (f.get("where"), f.get("message")) for f in findings
-           if f.get("rule") == "conquest.tool_gap" and "- %s:" % f.get("where") not in old]
+           if f.get("rule") in GAP_RULES and "- %s:" % f.get("where") not in old]
     if new:
         with open(path, "a", encoding="utf-8") as f:
-            f.write(("\n" if old else "") + "## Levers the plan needs that no tool carries (lint conquest.tool_gap)\n\n"
+            f.write(("\n" if old else "") + "## Levers the plan needs that no tool carries (lint conquest.tool_gap, "
+                    "gap.blocked)\n\n"
                     + "\n".join(new) + "\n")
     return new
 

@@ -56,7 +56,7 @@ NEW keys, for an executor extension (the player applies them until then):
 
 ## 2. Opening — setup while paused on 1 January 1936
 
-**Batch 1 — read.** `sitrep`, `hoi4_armies`, `hoi4_research`, `hoi4_production_lines`, `hoi4_focuses`.
+**Batch 1 — read.** `sitrep`, `hoi4_armies`, `hoi4_research`, `hoi4_production_lines`, `hoi4_focus_list`.
 
 **Batch 2 — economy.**
 * Production: both military factories stay on `infantry_equipment_0` (cheaper than _1, numbers matter;

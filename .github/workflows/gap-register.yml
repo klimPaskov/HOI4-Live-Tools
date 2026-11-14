@@ -1,0 +1,26 @@
+name: Gap register
+# Runs on every change, Markdown included: a playbook edit can name a tool that does not exist or a use a tool
+# refuses, and the register page must stay current with its data.
+on:
+  push:
+    branches: [master]
+  pull_request:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      # Every known lever: plannable, executable and verified, or an open row with an owner; the playbook names
+      # only tools that exist and never a refused use without saying it is a gap; UNVALIDATED tools are registered.
+      - run: python scripts/hoi4facts/gap_register.py check
+      # Every plan key has a reader; a key whose executor step is not built is an open register row.
+      - run: python scripts/hoi4facts/plan_keys.py check

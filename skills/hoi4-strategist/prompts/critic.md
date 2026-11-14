@@ -13,6 +13,8 @@ Inputs:
   `--date` and `--mode` from the run spec; in fair mode no per-division enemy positions and no AI
   strategy files);
 * `RUN/plan.json`, `RUN/plan.md`, `RUN/plan.brief.md`, `RUN/lint.json`;
+* `RUN/blocked-levers.md` (levers no tool carries yet) and `RUN/tool-gaps.md`: a blocked lever the goal
+  would use that is neither planned with its gap reported nor answered with why not is a major finding;
 * in round 2: the earlier `RUN/review/critic-*.json` and `RUN/review/answers-*.json`.
 
 Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan files.

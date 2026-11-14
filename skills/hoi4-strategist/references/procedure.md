@@ -519,7 +519,9 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
       within the run is used unless the plan says why not. Collaboration needs the `intelligence` key: the
       agency on day 1, the training-centres upgrade, two operatives with `build_intel_network` on enemy states
       the armies take last (a captured state loses its network), then the operation. A lever no tool carries
-      (lint `conquest.tool_gap`, `LEVER_TOOL_GAPS`) keeps `tool_gap` set and goes in RUN/tool-gaps.md.
+      (lint `conquest.tool_gap`; the gap register's not-executable rows, listed in RUN/blocked-levers.md) keeps
+      `tool_gap` set and goes in RUN/tool-gaps.md. The same holds for every other lever in RUN/blocked-levers.md
+      (lint `gap.blocked`): planned and reported, never silently left out.
    b. **State the aim.** `goal.capitulation` {`enemy`, `vp_needed`, `war_support`, `collaboration`}: the
       threshold at the war support and collaboration the used levers give (`F vp <TAG> --war-support S`).
    c. **Pick the cheapest set to the aim.** Start from lint `facts.vp_selection.reference` (greedy by VP on
