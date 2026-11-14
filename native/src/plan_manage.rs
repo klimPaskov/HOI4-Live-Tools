@@ -40,6 +40,8 @@
 //!                    reserve (hoi4_template_edit priority only; no battalion changes), and the
 //!                    entry's `priority` (else regular) returns at peace; `manage.war_priority`
 //!                    false turns this off. Checked once a game day while an entry waits
+//!   template_cleanup [{"template","rename_to"?,"when"?}] once a game day: delete (or rename) each
+//!                    template once (`template_cleanup_step`); never one the plan trains or edits
 //!   occupation       {"default_law"|"law","when"?,"ladder"?,"harsher_at_resistance":50,
 //!                    "milder_at_compliance":40,"milder_below_resistance":25,"mildest"?,"harshest"?,
 //!                    "change_days":30,"per_state"?} every 7 game days from hoi4_occupation (states
@@ -295,7 +297,8 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.manage.notes.is_empty()).then(|| json!(state.manage.notes))
 }
 
-fn note(state: &mut State, rule: &str, line: impl Into<String>) {
+/// The rule's status line in the run result's `manage` digest (the last one per rule).
+pub(super) fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.manage.notes.insert(rule.to_string(), line.into());
 }
 
@@ -387,6 +390,9 @@ pub fn step(
     ledger_wake(state, plan, now);
     alerts(state, tools, plan, now);
     if let Some(done) = templates_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = template_cleanup_step(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
     if let Some(done) = occupation_step(state, tools, plan, lease, now)? {
@@ -1023,6 +1029,129 @@ fn occupation_ladder(read: &Value) -> Vec<String> {
         .collect();
     shown.sort_by(|a, b| b.0.total_cmp(&a.0));
     shown.into_iter().map(|(_, key)| key).collect()
+}
+
+/// The template names the plan's own steps still use: training entries and `templates[]`
+/// names and bases. Cleanup never deletes or renames one of them.
+fn templates_in_use(plan: &Value) -> HashSet<String> {
+    let training: Vec<&Value> = match &plan["training"] {
+        entry @ Value::Object(_) => vec![entry],
+        Value::Array(items) => items.iter().collect(),
+        _ => Vec::new(),
+    };
+    training
+        .iter()
+        .map(|t| text(&t["template"]))
+        .chain(
+            list(plan, "templates")
+                .iter()
+                .flat_map(|t| [text(&t["name"]), text(&t["base"])]),
+        )
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+/// `template_cleanup` [{"id"?,"template","rename_to"?,"when"?}] once a game day while an entry
+/// is open: once `when` holds, `template` is renamed to `rename_to` (hoi4_template_rename), or
+/// without it deleted (hoi4_template_delete). A template that is gone (or already carries the new
+/// name) counts as done. One the plan's training or templates still name is never touched; one
+/// with training lines queued waits; one the game refuses as used by divisions
+/// (template_in_use) or whose new name is taken waits 30 game days and is tried again (a
+/// disband or a reorganisation may free it). Each wait and its reason go in the digest
+/// (`manage.template_cleanup`).
+fn template_cleanup_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let entries = list(plan, "template_cleanup");
+    if entries.is_empty() || state.skipped(now, "mtclean", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mtclean", "x", DAY);
+    let used = templates_in_use(plan);
+    let mut read: Option<Value> = None;
+    let mut waits: Vec<String> = Vec::new();
+    for (index, entry) in entries.iter().enumerate() {
+        let template = text(&entry["template"]).trim().to_string();
+        let key = item_id(entry).map_or_else(
+            || format!("tclean:{index}:{template}"),
+            |id| format!("tclean:id:{id}"),
+        );
+        if template.is_empty()
+            || state.done.contains_key(&key)
+            || state.skipped(now, "tclean", &key)
+        {
+            continue;
+        }
+        let rename = entry["rename_to"]
+            .as_str()
+            .map(str::trim)
+            .filter(|n| !n.is_empty() && *n != template);
+        if used.contains(&template) {
+            waits.push(format!("{template}: the plan still trains or edits it"));
+            continue;
+        }
+        if when_holds(state, tools, &entry["when"], now) != Truth::True {
+            waits.push(format!("{template}: when not met"));
+            continue;
+        }
+        if read.is_none() {
+            read = Some(tools.call("hoi4_division_templates", &json!({}))?);
+        }
+        let rows = read.as_ref().map_or(&[][..], |r| list(r, "templates"));
+        let row = |name: &str| rows.iter().find(|t| text(&t["template"]) == name);
+        let Some(current) = row(&template) else {
+            // gone already (or renamed already): nothing left to do
+            state.done.insert(key, now);
+            continue;
+        };
+        let queued = current["queued_lines"].as_u64().unwrap_or(0);
+        if queued > 0 {
+            waits.push(format!("{template}: {queued} training line(s) queued"));
+            continue;
+        }
+        let (tool, args, what) = match rename {
+            Some(new) if row(new).is_some() => {
+                waits.push(format!("{template}: a template named {new} exists"));
+                state.skip(now, "tclean", &key, 30 * DAY);
+                continue;
+            }
+            Some(new) => (
+                "hoi4_template_rename",
+                json!({"template": template, "new_name": new}),
+                format!("renamed to {new}"),
+            ),
+            None => (
+                "hoi4_template_delete",
+                json!({"template": template}),
+                "deleted".to_string(),
+            ),
+        };
+        let (ok, why) = state.act(tools, lease, tool, args, "mc")?;
+        if ok {
+            state.done.insert(key, now);
+            // the next entry goes on the next tick
+            state.bad.remove("mtclean:x");
+        } else {
+            let code = why.split(':').next().unwrap_or("refused").to_string();
+            waits.push(format!("{template}: {code}"));
+            state.skip(now, "tclean", &key, 30 * DAY);
+        }
+        note(
+            state,
+            "template_cleanup",
+            format!("{template} {what}: {ok}"),
+        );
+        return Ok(Some(format!("template {template} {what}: {ok} {why}")));
+    }
+    if !waits.is_empty() {
+        note(state, "template_cleanup", waits.join("; "));
+    }
+    Ok(None)
 }
 
 fn occupation_step(
@@ -2538,8 +2667,8 @@ fn politics_auto_default(state: &State, now: GameHour, recheck: GameHour) -> Val
     )
 }
 
-/// Political power now (hoi4_economy, else hoi4_country_status).
-fn political_power(tools: &dyn Tools) -> Option<f64> {
+/// Political power now (hoi4_economy).
+pub(super) fn political_power(tools: &dyn Tools) -> Option<f64> {
     tools
         .call("hoi4_economy", &json!({}))
         .ok()
@@ -2608,7 +2737,7 @@ fn politics_auto_choice(
 /// now: its `when` holds (or it has none) and it is not backing off after the game refused it
 /// (tick step 4). Power held for a pick the game cannot take is idle power, so a gated or
 /// refused pick is paid for once it opens, from the power there is then.
-fn politics_reserve(
+pub(super) fn politics_reserve(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -3954,6 +4083,84 @@ mod tests {
 
     fn templates_read(rows: &[(&str, u64)]) -> Value {
         json!({"templates": rows.iter().map(|(t, q)| json!({"template": t, "queued_lines": q})).collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn template_cleanup_deletes_or_renames_unused_templates_and_never_one_the_plan_uses() {
+        let plan = json!({
+            "training": [{"template": "Inf", "queue": 1}],
+            "template_cleanup": [
+                {"template": "Inf"},
+                {"template": "Queued"},
+                {"template": "Old Cav"},
+                {"template": "Militia", "rename_to": "Garrison"},
+                {"template": "Gone"}]});
+        let read = templates_read(&[("Inf", 1), ("Queued", 2), ("Old Cav", 0), ("Militia", 0)]);
+        let tools = fake(vec![("hoi4_division_templates", read.clone())]);
+        let mut state = State::default();
+        let out = template_cleanup_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("template Old Cav deleted: true"), "{out}");
+        assert_eq!(actions(&tools)[0].0, "hoi4_template_delete");
+        assert_eq!(actions(&tools)[0].1["template"], json!("Old Cav"));
+        // the next entry goes on the next tick: the rename
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 1), ("Queued", 2), ("Militia", 0)]),
+        )]);
+        let out = template_cleanup_step(&mut state, &tools, &plan, "l", START + 1)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("template Militia renamed to Garrison: true"),
+            "{out}"
+        );
+        assert_eq!(actions(&tools)[0].1["new_name"], json!("Garrison"));
+        // then nothing: Inf is trained by the plan, Queued has lines queued, Gone is gone
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 1), ("Queued", 2), ("Garrison", 0)]),
+        )]);
+        assert_eq!(
+            template_cleanup_step(&mut state, &tools, &plan, "l", START + 2).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        let line = digest(&state).unwrap()["template_cleanup"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            line.contains("Inf: the plan still trains or edits it"),
+            "{line}"
+        );
+        assert!(line.contains("Queued: 2 training line(s) queued"), "{line}");
+        assert!(state.done.contains_key("tclean:4:Gone"));
+    }
+
+    #[test]
+    fn a_template_the_game_finds_in_use_waits_thirty_days() {
+        let plan = json!({"template_cleanup": [{"id": "old", "template": "Old"}]});
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Old", 0)]),
+        )]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_template_delete".into(), "template_in_use");
+        let mut state = State::default();
+        let out = template_cleanup_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("template Old deleted: false"), "{out}");
+        assert!(state.skipped(START + 29 * DAY, "tclean", "tclean:id:old"));
+        assert!(!state.skipped(START + 31 * DAY, "tclean", "tclean:id:old"));
+        assert!(digest(&state).unwrap()["template_cleanup"]
+            .as_str()
+            .unwrap()
+            .contains("Old deleted: false"));
     }
 
     #[test]

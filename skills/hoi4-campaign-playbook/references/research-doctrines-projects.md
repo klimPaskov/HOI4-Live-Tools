@@ -311,7 +311,7 @@ nation lacks (e.g. tungsten, chromium for China): it crawls at the 20% floor.
 3. A focus with `add_tech_bonus`: hold the matching tech until the bonus is active (plan `research_bonuses`; `hoi4_research_extras` shows uses left).
 4. Army XP: a subdoctrine per §2.2 when XP >= 100 and a track is empty (plan `doctrines`, `hoi4_doctrine_adopt`); otherwise keep 35 XP for variants.
 5. A new focus option with `add_research_slot`: pick it when no survival-critical focus is pending.
-6. A facility with an idle scientist: basic research (`hoi4_special_project_assign`).
+6. A facility with an idle scientist: basic research (`hoi4_special_project_assign`); the executor does it for every facility with nothing to start unless `special_projects.basic_research` is false. A facility nobody can staff recruits only with `special_projects.recruit` (`max_cost`, and never below the plan's pending politics picks); a crawling project is stopped (refund before the iteration completes) and its scientist freed with `special_projects.stop` (`when`, `unassign`).
 7. After each tech finishes, re-read completed techs (`hoi4_research`) and pick the next.
 8. Report in the journal when completed techs cannot be read.
 

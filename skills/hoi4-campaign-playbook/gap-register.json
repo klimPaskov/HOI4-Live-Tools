@@ -3589,14 +3589,18 @@
    "playbook": [
     "research-doctrines-projects.md#5 Special projects, scientists, facilities (Recruit scientists)"
    ],
-   "plan": [],
+   "plan": [
+    "special_projects.recruit",
+    "special_projects.recruit.max_cost",
+    "special_projects.recruit.when"
+   ],
    "tools": [
     "hoi4_special_project_recruit"
    ],
    "payoff": "medium",
    "why": "a new facility stays empty without a scientist",
-   "closing": "offline",
-   "owner": "offline: a special_projects key for recruiting (cost cap) the executor turns into hoi4_special_project_recruit"
+   "closing": "live",
+   "owner": "live: an empty facility with no fitting idle scientist and special_projects.recruit set; the executor recruits the best candidate within max_cost and the plan's PP reserve (lint projects.keys)"
   },
   {
    "id": "special_projects.basic_research",
@@ -3605,14 +3609,17 @@
    "playbook": [
     "research-doctrines-projects.md#5 Special projects, scientists, facilities (rule: idle facility does basic research)"
    ],
-   "plan": [],
+   "plan": [
+    "special_projects.basic_research",
+    "special_projects"
+   ],
    "tools": [
     "hoi4_special_project_assign"
    ],
    "payoff": "low",
    "why": "small research bonus and breakthrough points",
-   "closing": "offline",
-   "owner": "offline: assign an idle scientist to an empty facility without a project"
+   "closing": "live",
+   "owner": "live: a facility with no startable project gets its idle scientist (hoi4_special_project_assign with scientist only) and earns breakthrough progress"
   },
   {
    "id": "special_projects.reward_choice",
@@ -3633,15 +3640,19 @@
    "playbook": [
     "research-doctrines-projects.md#5 Special projects, scientists, facilities (cancelled before an iteration refunds)"
    ],
-   "plan": [],
+   "plan": [
+    "special_projects.stop",
+    "special_projects.stop[].unassign",
+    "special_projects.stop[].when"
+   ],
    "tools": [
     "hoi4_special_project_stop",
     "hoi4_special_project_unassign"
    ],
    "payoff": "low",
    "why": "recovers points from a project that crawls",
-   "closing": "offline",
-   "owner": "offline: a special_projects key for stop/unassign the executor applies"
+   "closing": "live",
+   "owner": "live: a special_projects.stop entry stops its project, waits out the stopping days, then frees the scientist (hoi4_special_project_stop and _unassign have no live record); lint projects.keys"
   },
   {
    "id": "special_projects.state_read",
@@ -3854,16 +3865,20 @@
    "playbook": [
     "templates-equipment-production.md#9. Tools, automation and gaps"
    ],
-   "plan": [],
+   "plan": [
+    "template_cleanup",
+    "template_cleanup[].rename_to",
+    "template_cleanup[].when"
+   ],
    "tools": [
     "hoi4_template_rename",
     "hoi4_template_delete"
    ],
-   "verified": "LIVE_VERIFICATION_1_19_4.md: template_rename 31 Oct, 3 DLC (template_delete: unknown, no live record)",
    "payoff": "low",
    "why": "housekeeping only",
    "closing": "live",
-   "owner": "one live run of hoi4_template_delete on an unused template"
+   "owner": "live: one template_cleanup entry deletes an unused template (hoi4_template_delete has no live record; rename has); lint templates.cleanup refuses a template the plan uses",
+   "evidence": "LIVE_VERIFICATION_1_19_4.md: template_rename 31 Oct, 3 DLC (template_delete: unknown, no live record)"
   },
   {
    "id": "training.queue_divisions",

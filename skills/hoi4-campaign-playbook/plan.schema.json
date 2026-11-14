@@ -1084,7 +1084,104 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "project keys (common/special_projects/projects) an empty facility starts first; else the first visible project of its specialisation"
+        },
+        "basic_research": {
+          "type": "boolean",
+          "default": true,
+          "description": "a facility with no project to start still gets an idle scientist of its specialisation (basic research: breakthrough progress, a research bonus, scientist experience); false leaves it empty"
+        },
+        "recruit": {
+          "type": [
+            "object",
+            "boolean"
+          ],
+          "properties": {
+            "max_cost": {
+              "type": "number",
+              "minimum": 0,
+              "default": 50,
+              "description": "highest recruit price in political power (the read's recruitable.cost_political_power: it rises with the idle scientists)"
+            },
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "when": {
+              "$ref": "#/definitions/predicate"
+            },
+            "why": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            },
+            "note": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            }
+          },
+          "additionalProperties": false,
+          "description": "true or {max_cost, when}: a facility with no scientist and no idle one that fits recruits the offered candidate with the most skill in its specialisation (hoi4_special_project_recruit), only while the price is at most max_cost and political power less the plan's pending politics picks covers it; absent: nobody is recruited"
+        },
+        "stop": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "project": {
+                "type": "string",
+                "minLength": 1,
+                "description": "stop the facility running this project key"
+              },
+              "scientist": {
+                "type": "string",
+                "minLength": 1,
+                "description": "the facility this scientist holds: its project is stopped first, then the scientist leaves it"
+              },
+              "facility_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "when": {
+                "$ref": "#/definitions/predicate"
+              },
+              "unassign": {
+                "type": "boolean",
+                "default": false,
+                "description": "after the project has finished stopping, take the scientist out of the facility (hoi4_special_project_unassign)"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              },
+              "note": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "project"
+                ]
+              },
+              {
+                "required": [
+                  "scientist"
+                ]
+              },
+              {
+                "required": [
+                  "facility_id"
+                ]
+              }
+            ]
+          },
+          "description": "once `when` holds: stop a project (hoi4_special_project_stop; stopped before an iteration completes, the breakthrough points come back) and optionally free its scientist; a stopped project is not started again by the executor and a freed scientist never goes back into the facility it left"
         },
         "why": {
           "type": "string",
@@ -1096,7 +1193,8 @@
         }
       },
       "additionalProperties": false,
-      "x-owner": "executor"
+      "x-owner": "executor",
+      "description": "special projects every 7 game days (plan_run.rs special_projects_step): stop entries, empty facilities (scientist and project, project alone, basic research), recruits"
     },
     "doctrines": {
       "type": "array",
@@ -2566,6 +2664,46 @@
       },
       "description": "division templates made once per id (else per name): base edits in place, else create (plan_manage.rs templates_step); width is checked against the theatre (lint templates.width)",
       "x-owner": "executor"
+    },
+    "template_cleanup": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "template": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "own template name (hoi4_division_templates)"
+          },
+          "rename_to": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "rename to this (hoi4_template_rename); absent: delete the template (hoi4_template_delete)"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "template"
+        ]
+      },
+      "x-owner": "executor",
+      "description": "templates to delete or rename once each, once a game day (plan_manage.rs template_cleanup_step): never one the plan's training or templates name; one with training lines queued waits; one the game finds in use by divisions waits 30 game days"
     },
     "garrison_template": {
       "type": "object",

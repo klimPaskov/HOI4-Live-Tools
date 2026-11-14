@@ -190,6 +190,13 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   templates.xp             a template with xp and no xp_budget.army spend ref template:<id>
   templates.locked         a template whose base is obsolete (decommissioned) or is_locked in the history
                            OOB: the game offers no Edit for it
+  templates.cleanup        a template_cleanup entry that deletes or renames a template the plan still trains
+                           (training), makes or edits (templates[] name or base) or lays out (army_layout), or
+                           renames to a name another start or plan template has (the game refuses it);
+                           (warning) a template neither in the start OOB nor made by the plan (nothing to clean)
+  projects.keys            a special_projects priority or stop project that is no project key of
+                           common/special_projects/projects; (warning) a project both in priority and in a stop
+                           entry (the executor never starts a stopped project again)
   politics.law_gates       an economy or conscription law with an `available` gate bought without a
                            `when` predicate (other gated laws: warning; warning when `when` skips the
                            gate's war support / stability; info when the gate also opens on an enemy's
@@ -404,6 +411,7 @@ BALANCE_ERROR_DAYS = 120
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "navy.shape", "supply.port_convoys",
              "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
+             "templates.cleanup", "projects.keys",
              "politics.law_gates", "diplomacy.incoming", "occupation.required", "occupation.law_shown", "peace.enemies",
              "manage.thresholds", "production.replace",
              "designs.decommission", "air.deploy", "supply.overdrawn", "manage.convoys", "manage.fuel",
@@ -431,6 +439,67 @@ RESEARCH_IDLE_SLACK = 0.02  # research.idle: unplanned share of the slot time al
 # weeks, the peace). A list that fills the slots on paper ran out five weeks early in a live year, so
 # the slots' time is taken this much larger than the calendar gives.
 RESEARCH_SPEED_MARGIN = 0.15
+
+
+def cleanup_findings(plan, start_templates):
+    """templates.cleanup: [(severity, where, message)] for the plan's template_cleanup entries against the
+    template names the plan uses and the start order of battle's templates (None: unknown)."""
+    entries = [e for e in plan.get("template_cleanup") or [] if isinstance(e, dict)]
+    if not entries:
+        return []
+    training = plan.get("training")
+    lines = [training] if isinstance(training, dict) else [t for t in training or [] if isinstance(t, dict)]
+    users = defaultdict(list)
+    for i, t in enumerate(lines):
+        users[t.get("template")].append("training" if isinstance(training, dict) else f"training[{i}]")
+    made = set()
+    for i, t in enumerate(plan.get("templates") or []):
+        if isinstance(t, dict):
+            users[t.get("name")].append(f"templates[{i}]")
+            users[t.get("base")].append(f"templates[{i}] base")
+            made.add(t.get("name"))
+    for i, e in enumerate(plan.get("army_layout") or []):
+        if isinstance(e, dict):
+            for t in e.get("templates") or []:
+                users[t].append(f"army_layout[{i}]")
+    known = set(start_templates or ()) | made
+    out = []
+    for i, e in enumerate(entries):
+        name, new = e.get("template"), e.get("rename_to")
+        where = f"template_cleanup[{i}] {name!r}"
+        what = f"renames it to {new!r}" if new else "deletes it"
+        if users.get(name):
+            out.append(("error", where, f"{what} but the plan still uses it ({', '.join(users[name])}): the executor "
+                                        "never touches a template the plan uses; drop the entry or the use"))
+        if new and new != name and new in known:
+            out.append(("error", where, f"{new!r} is already a template name; the game refuses a taken name"))
+        if start_templates is not None and name not in known:
+            out.append(("warning", where, "no start OOB or plan template has this name: nothing to clean"))
+    return out
+
+
+def special_project_findings(plan, project_keys):
+    """projects.keys: [(severity, where, message)] for the special_projects priority and stop projects
+    against the project keys of the game files (None: unknown, only the overlap is checked)."""
+    sp = plan.get("special_projects")
+    if not isinstance(sp, dict):
+        return []
+    out = []
+    priority = [p for p in sp.get("priority") or [] if isinstance(p, str)]
+    stops = [(i, e.get("project")) for i, e in enumerate(sp.get("stop") or [])
+             if isinstance(e, dict) and isinstance(e.get("project"), str)]
+    if project_keys:
+        for i, key in enumerate(priority):
+            if key not in project_keys:
+                out.append(("error", f"special_projects.priority[{i}]", f"{key!r} is no special project of the game files"))
+        for i, key in stops:
+            if key not in project_keys:
+                out.append(("error", f"special_projects.stop[{i}]", f"{key!r} is no special project of the game files"))
+    for i, key in stops:
+        if key in priority:
+            out.append(("warning", f"special_projects.stop[{i}]",
+                        f"{key!r} is also in priority: once stopped the executor never starts it again"))
+    return out
 
 
 def folder_family(folder):
@@ -2663,6 +2732,23 @@ class Lint:
             self.add("warning", "templates.equipment", where,
                      f"{what} needs {hits[0][1]}, planned for {hits[0][0]}, after the template's year {year}")
 
+    def template_cleanup(self):
+        if not self.plan.get("template_cleanup"):
+            return
+        oobs = start_oobs(self.game, self.meta)
+        start = set()
+        for o in oobs:
+            start |= self.game.oob(o, self.ctx)["templates"]
+        for sev, where, msg in cleanup_findings(self.plan, start if oobs else None):
+            self.add(sev, "templates.cleanup", where, msg)
+
+    def special_projects(self):
+        if not isinstance(self.plan.get("special_projects"), dict):
+            return
+        keys = set(self.world.special_projects())
+        for sev, where, msg in special_project_findings(self.plan, keys):
+            self.add(sev, "projects.keys", where, msg)
+
     def laws(self):
         laws = derive.law_ideas(self.game)
         for i, p in enumerate(self.list_of("politics")):
@@ -4433,6 +4519,7 @@ class Lint:
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
                  self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.air_deploy, self.templates, self.laws, self.incoming, self.occupation, self.peace, self.manage, self.supply_overdrawn,
                  self.manage_convoys, self.manage_fuel,
+                 self.template_cleanup, self.special_projects,
                  self.alarms_silenced,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus

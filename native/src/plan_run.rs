@@ -393,8 +393,13 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_railway_build",
     "hoi4_research_start",
     "hoi4_special_project_assign",
+    "hoi4_special_project_recruit",
+    "hoi4_special_project_stop",
+    "hoi4_special_project_unassign",
     "hoi4_template_create",
+    "hoi4_template_delete",
     "hoi4_template_edit",
+    "hoi4_template_rename",
     "hoi4_time",
     "hoi4_trade_set",
     "hoi4_train",
@@ -3429,9 +3434,304 @@ fn reached(entry: &Value, now: GameHour) -> bool {
     }
 }
 
+/// The facility of a `special_projects.stop` entry: the one stopped for it before (`stopped`),
+/// else the one running its `project`, holding its `scientist`, or its `facility_id`.
+fn sp_facility<'a>(read: &'a Value, entry: &Value, stopped: Option<i64>) -> Option<&'a Value> {
+    let facilities = list(read, "facilities");
+    if let Some(id) = stopped.or_else(|| entry["facility_id"].as_i64()) {
+        return facilities
+            .iter()
+            .find(|f| f["facility_id"].as_i64() == Some(id));
+    }
+    if let Some(project) = entry["project"].as_str() {
+        return facilities
+            .iter()
+            .find(|f| f["project"]["key"].as_str() == Some(project));
+    }
+    let scientist = entry["scientist"].as_str()?;
+    facilities
+        .iter()
+        .find(|f| f["scientist"]["name"].as_str() == Some(scientist))
+}
+
+/// The facility a stop entry stopped (kept in the done-memory as `<key>:stopped:<facility id>`).
+fn sp_stopped(state: &State, key: &str) -> Option<i64> {
+    let prefix = format!("{key}:stopped:");
+    state
+        .done
+        .keys()
+        .find_map(|k| k.strip_prefix(&prefix).and_then(|id| id.parse().ok()))
+}
+
+/// Special projects (`special_projects`), read from hoi4_special_projects every 7 game days and
+/// again on the next tick after an action, one action per tick:
+///   stop           [{"id"?,"project"|"scientist"|"facility_id","when"?,"unassign"?}] first: once
+///                  `when` holds, the facility running `project` (holding `scientist`, or
+///                  `facility_id`) stops its project (hoi4_special_project_stop; stopped before an
+///                  iteration completes, the breakthrough points come back). With `unassign` true,
+///                  or for an entry that names a `scientist`, the scientist then leaves the facility
+///                  once the project has finished stopping (hoi4_special_project_unassign). A
+///                  project a stop entry stopped is never started again by this step, and a freed
+///                  scientist never goes back into the facility it left
+///   priority       ["sp_key",..] an empty facility gets an idle scientist of its specialisation
+///                  (or one with a skill in it) and the first priority (else visible) project of it;
+///                  a facility that holds a scientist but runs no project gets the project alone
+///   basic_research (default true) a facility with no project to start still gets the idle
+///                  scientist: basic research (breakthrough progress, a research bonus of its
+///                  specialisation, scientist experience); false leaves it empty
+///   recruit        {"max_cost":50,"when"?} or true: a facility with no scientist and no idle one
+///                  that fits recruits the offered candidate with the most skill in its
+///                  specialisation (hoi4_special_project_recruit) while the read's recruit price is
+///                  at most `max_cost` and the political power the plan's own pending politics
+///                  picks leave (`plan_manage::politics_reserve`) covers it. Without the key
+///                  nobody is recruited: political power is the politics step's to spend
+fn special_projects_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &plan["special_projects"];
+    if !cfg.is_object() || state.skipped(now, "spcheck", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "spcheck", "x", 7 * DAY);
+    let sp = tools.call("hoi4_special_projects", &json!({}))?;
+    // an action is followed by a fresh read on the next tick, not after 7 game days
+    let again = |state: &mut State| {
+        state.bad.remove(&skip_key("spcheck", "x"));
+    };
+    // 1. stop entries
+    let mut stopped_projects: HashSet<String> = HashSet::new();
+    for (index, entry) in list(cfg, "stop").iter().enumerate() {
+        let key = item_id(entry)
+            .map_or_else(|| format!("spstop:{index}"), |id| format!("spstop:id:{id}"));
+        let stopped = sp_stopped(state, &key);
+        if let Some(project) = entry["project"].as_str() {
+            if stopped.is_some() || state.done.contains_key(&key) {
+                stopped_projects.insert(project.to_string());
+            }
+        }
+        if state.done.contains_key(&key) || state.skipped(now, "spstop", &key) {
+            continue;
+        }
+        if stopped.is_none()
+            && !entry["when"].is_null()
+            && !judge(state, tools, &entry["when"], now).is_true()
+        {
+            continue;
+        }
+        let free = entry["unassign"] == json!(true) || entry["scientist"].is_string();
+        let Some(facility) = sp_facility(&sp, entry, stopped) else {
+            if stopped.is_some() {
+                // the facility is gone: nothing left to free
+                state.done.insert(key, now);
+            }
+            continue;
+        };
+        let Some(id) = facility["facility_id"].as_i64() else {
+            continue;
+        };
+        let project = &facility["project"];
+        if project.is_object() {
+            if stopped.is_some() || project["stopping"] == json!(true) {
+                if stopped.is_none() {
+                    state.done.insert(format!("{key}:stopped:{id}"), now);
+                }
+                if project["stopping"] != json!(true) {
+                    // another project started there since: the facility is in use again
+                    state.done.insert(key, now);
+                } else if !free {
+                    state.done.insert(key, now);
+                }
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_special_project_stop",
+                json!({"facility_id": id}),
+                "sp",
+            )?;
+            if ok {
+                state.done.insert(format!("{key}:stopped:{id}"), now);
+                if !free {
+                    state.done.insert(key.clone(), now);
+                }
+                again(state);
+            } else {
+                state.skip(now, "spstop", &key, 7 * DAY);
+            }
+            let what = text(&project["key"]);
+            return Ok(Some(format!(
+                "special project {what} in facility {id} stopped: {ok} {why}"
+            )));
+        }
+        if !free || facility["scientist"].is_null() {
+            state.done.insert(key, now);
+            continue;
+        }
+        let name = text(&facility["scientist"]["name"]).to_string();
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_special_project_unassign",
+            json!({"facility_id": id}),
+            "sp",
+        )?;
+        if ok {
+            state.done.insert(key, now);
+            state.done.insert(format!("spfree:{id}:{name}"), now);
+            again(state);
+        } else {
+            state.skip(now, "spstop", &key, 7 * DAY);
+        }
+        return Ok(Some(format!(
+            "scientist {name} out of facility {id}: {ok} {why}"
+        )));
+    }
+    // 2. empty facilities: a scientist and a project, the project alone, or basic research
+    let priority = strings(cfg, "priority");
+    let basic = cfg["basic_research"] != json!(false);
+    let running: HashSet<String> = list(&sp, "projects")
+        .iter()
+        .filter(|p| !p["running_in_facility_id"].is_null())
+        .map(|p| text(&p["key"]).to_string())
+        .collect();
+    let mut unstaffed: Option<String> = None;
+    for facility in list(&sp, "facilities") {
+        let Some(id) = facility["facility_id"].as_i64() else {
+            continue;
+        };
+        if !facility["project"].is_null() || state.skipped(now, "spfac", &id.to_string()) {
+            continue;
+        }
+        let spec = text(&facility["specialization"]).to_string();
+        let held = !facility["scientist"].is_null();
+        let scientist = (!held)
+            .then(|| {
+                list(&sp, "scientists")
+                    .iter()
+                    .filter(|c| c["assigned_facility_id"].is_null())
+                    .filter(|c| {
+                        !state
+                            .done
+                            .contains_key(&format!("spfree:{id}:{}", text(&c["name"])))
+                    })
+                    .find(|c| {
+                        text(&c["specialization"]) == spec
+                            || c["skills"][&spec].as_i64().unwrap_or(0) > 0
+                    })
+                    .map(|c| text(&c["name"]).to_string())
+            })
+            .flatten();
+        if !held && scientist.is_none() {
+            unstaffed.get_or_insert(spec);
+            continue;
+        }
+        let pool: Vec<String> = list(&sp, "projects")
+            .iter()
+            .filter(|p| text(&p["specialization"]) == spec && p["running_in_facility_id"].is_null())
+            .map(|p| text(&p["key"]).to_string())
+            .filter(|k| !running.contains(k) && !stopped_projects.contains(k))
+            .collect();
+        let project = priority
+            .iter()
+            .find(|k| pool.contains(k))
+            .cloned()
+            .or_else(|| pool.first().cloned());
+        let mut args = json!({"facility_id": id});
+        let what = match (&scientist, &project) {
+            (_, None) if held || !basic => continue,
+            (Some(name), None) => {
+                args["scientist"] = json!(name);
+                format!("basic research in facility {id} by {name}")
+            }
+            (None, Some(project)) => {
+                args["project"] = json!(project);
+                format!("special project {project} in facility {id}")
+            }
+            (Some(name), Some(project)) => {
+                args["scientist"] = json!(name);
+                args["project"] = json!(project);
+                format!("special project {project} in facility {id} by {name}")
+            }
+            (None, None) => continue,
+        };
+        let (ok, why) = state.act(tools, lease, "hoi4_special_project_assign", args, "sj")?;
+        if ok {
+            again(state);
+        } else {
+            state.skip(now, "spfac", &id.to_string(), 30 * DAY);
+        }
+        return Ok(Some(format!("{what}: {ok} {why}")));
+    }
+    // 3. a facility nobody can staff: recruit, within the plan's price cap and its PP reserve
+    let recruit = &cfg["recruit"];
+    let wanted =
+        recruit.is_object() && recruit["enabled"] != json!(false) || *recruit == json!(true);
+    let Some(spec) = unstaffed.filter(|_| wanted) else {
+        return Ok(None);
+    };
+    if state.skipped(now, "sprecruit", "x")
+        || !recruit["when"].is_null() && !judge(state, tools, &recruit["when"], now).is_true()
+    {
+        return Ok(None);
+    }
+    let Some(cost) = sp["recruitable"]["cost_political_power"].as_f64() else {
+        return Ok(None);
+    };
+    let max_cost = recruit["max_cost"].as_f64().unwrap_or(50.0);
+    let (reserve, _) = plan_manage::politics_reserve(state, tools, plan, now);
+    let pp = plan_manage::political_power(tools);
+    let candidate = list(&sp["recruitable"], "candidates")
+        .iter()
+        .filter(|c| {
+            c["skills"][&spec].as_i64().unwrap_or(0) > 0 || text(&c["specialization"]) == spec
+        })
+        .max_by_key(|c| c["skills"][&spec].as_i64().unwrap_or(0))
+        .map(|c| text(&c["name"]).to_string());
+    let why_not = if cost > max_cost {
+        Some(format!("recruit price {cost} PP above max_cost {max_cost}"))
+    } else if pp.is_none_or(|pp| pp - reserve < cost) {
+        Some(format!(
+            "political power {} less the plan's pending picks {reserve} does not cover {cost}",
+            pp.map_or_else(|| "unknown".to_string(), |p| p.round().to_string())
+        ))
+    } else if candidate.is_none() {
+        Some(format!("no offered candidate has a {spec} skill"))
+    } else {
+        None
+    };
+    if let Some(why) = why_not {
+        plan_manage::note(
+            state,
+            "special_projects",
+            format!("recruit for a {spec} facility waits: {why}"),
+        );
+        return Ok(None);
+    }
+    let name = candidate.unwrap_or_default();
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_special_project_recruit",
+        json!({"scientist": name}),
+        "sr",
+    )?;
+    if ok {
+        again(state);
+    } else {
+        state.skip(now, "sprecruit", "x", 30 * DAY);
+    }
+    Ok(Some(format!(
+        "recruit scientist {name} for a {spec} facility ({cost} PP): {ok} {why}"
+    )))
+}
+
 /// Routine domains the player tends to forget, one action per tick:
-///   special_projects {"priority":["sp_key",..]}  an empty facility gets an idle scientist of its
-///                    specialisation and the first priority (else visible) project of it;
+///   special_projects see [`special_projects_step`];
 ///   doctrines [{"id","folder":"land","grand_doctrine"?,"track"?,"subdoctrine"?,"xp":100},..]  the
 ///                    next entry is adopted once that folder's experience reaches "xp" (old shape
 ///                    {"doctrine","track"} still read); see the module docs;
@@ -3444,60 +3744,8 @@ fn extras_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if plan["special_projects"].is_object() && !state.skipped(now, "spcheck", "x") {
-        state.skip(now, "spcheck", "x", 7 * DAY);
-        let sp = tools.call("hoi4_special_projects", &json!({}))?;
-        let priority = strings(&plan["special_projects"], "priority");
-        let running: HashSet<String> = list(&sp, "projects")
-            .iter()
-            .filter(|p| !p["running_in_facility_id"].is_null())
-            .map(|p| text(&p["key"]).to_string())
-            .collect();
-        for facility in list(&sp, "facilities") {
-            let Some(id) = facility["facility_id"].as_i64() else {
-                continue;
-            };
-            if !facility["project"].is_null() || state.skipped(now, "spfac", &id.to_string()) {
-                continue;
-            }
-            let spec = text(&facility["specialization"]).to_string();
-            let scientist = list(&sp, "scientists")
-                .iter()
-                .filter(|c| c["assigned_facility_id"].is_null())
-                .find(|c| {
-                    text(&c["specialization"]) == spec
-                        || c["skills"][&spec].as_i64().unwrap_or(0) > 0
-                })
-                .map(|c| text(&c["name"]).to_string());
-            let Some(scientist) = scientist else { continue };
-            let pool: Vec<String> = list(&sp, "projects")
-                .iter()
-                .filter(|p| {
-                    text(&p["specialization"]) == spec && p["running_in_facility_id"].is_null()
-                })
-                .map(|p| text(&p["key"]).to_string())
-                .filter(|k| !running.contains(k))
-                .collect();
-            let project = priority
-                .iter()
-                .find(|k| pool.contains(k))
-                .cloned()
-                .or_else(|| pool.first().cloned());
-            let Some(project) = project else { continue };
-            let (ok, why) = state.act(
-                tools,
-                lease,
-                "hoi4_special_project_assign",
-                json!({"facility_id": id, "scientist": scientist, "project": project}),
-                "sj",
-            )?;
-            if !ok {
-                state.skip(now, "spfac", &id.to_string(), 30 * DAY);
-            }
-            return Ok(Some(format!(
-                "special project {project} in facility {id} by {scientist}: {ok} {why}"
-            )));
-        }
+    if let Some(step) = special_projects_step(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
     }
     let doctrines = list(plan, "doctrines");
     if !doctrines.is_empty() && !state.skipped(now, "doccheck", "x") {
@@ -7765,6 +8013,255 @@ mod tests {
             step.starts_with("special project sp_land_b in facility 7 by Land Person: true"),
             "{step}"
         );
+    }
+
+    /// A special-projects read: facilities (id, specialization, scientist name, project key,
+    /// stopping), idle scientists (name, specialization), visible projects (key,
+    /// specialization), recruit price and candidates (name, specialization, skill).
+    #[allow(clippy::type_complexity)]
+    fn sp_read(
+        facilities: &[(i64, &str, Option<&str>, Option<(&str, bool)>)],
+        idle: &[(&str, &str)],
+        projects: &[(&str, &str)],
+        cost: i64,
+        candidates: &[(&str, &str, i64)],
+    ) -> Value {
+        json!({
+            "facilities": facilities.iter().map(|(id, spec, sci, project)| json!({
+                "facility_id": id, "specialization": spec,
+                "scientist": sci.map(|n| json!({"name": n})),
+                "project": project.map(|(k, stopping)| json!({"key": k, "stopping": stopping}))
+            })).collect::<Vec<_>>(),
+            "scientists": idle.iter().map(|(n, spec)| json!({
+                "name": n, "specialization": spec, "assigned_facility_id": null,
+                "skills": {*spec: 1}})).collect::<Vec<_>>(),
+            "projects": projects.iter().map(|(k, spec)| json!({
+                "key": k, "specialization": spec, "running_in_facility_id": null}))
+                .collect::<Vec<_>>(),
+            "recruitable": {"cost_political_power": cost,
+                "candidates": candidates.iter().map(|(n, spec, level)| json!({
+                    "name": n, "specialization": spec, "skills": {*spec: level}}))
+                    .collect::<Vec<_>>()}
+        })
+    }
+    fn sp_actions(f: &Fake) -> Vec<(String, Value)> {
+        f.calls
+            .borrow()
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .map(|(n, a)| {
+                let mut a = a.clone();
+                if let Some(o) = a.as_object_mut() {
+                    o.remove("request_id");
+                    o.remove("lease_token");
+                }
+                (n.clone(), a)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_facility_with_nothing_to_start_gets_its_idle_scientist_for_basic_research() {
+        let read = sp_read(&[(7, "air", None, None)], &[("Ada", "air")], &[], 25, &[]);
+        let tools = fake(vec![("hoi4_special_projects", read.clone())]);
+        let plan = json!({"special_projects": {}});
+        let mut state = State::default();
+        let out = special_projects_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("basic research in facility 7 by Ada: true"),
+            "{out}"
+        );
+        assert_eq!(
+            sp_actions(&tools),
+            vec![(
+                "hoi4_special_project_assign".to_string(),
+                json!({"facility_id": 7, "scientist": "Ada"})
+            )]
+        );
+        // the next tick reads again at once (the action ended the 7-day wait)
+        assert!(!state.skipped(START + 1, "spcheck", "x"));
+        // basic_research false leaves the facility empty
+        let tools = fake(vec![("hoi4_special_projects", read)]);
+        let plan = json!({"special_projects": {"basic_research": false}});
+        let mut state = State::default();
+        assert_eq!(
+            special_projects_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(sp_actions(&tools).is_empty());
+        assert!(state.skipped(START + 1, "spcheck", "x"));
+    }
+
+    #[test]
+    fn a_staffed_facility_without_a_project_gets_the_project_alone() {
+        let read = sp_read(
+            &[(3, "land", Some("Bo"), None)],
+            &[],
+            &[("sp_land_a", "land"), ("sp_land_b", "land")],
+            25,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", read)]);
+        let plan = json!({"special_projects": {"priority": ["sp_land_b"]}});
+        let mut state = State::default();
+        special_projects_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            sp_actions(&tools),
+            vec![(
+                "hoi4_special_project_assign".to_string(),
+                json!({"facility_id": 3, "project": "sp_land_b"})
+            )]
+        );
+    }
+
+    #[test]
+    fn recruiting_needs_the_key_a_price_under_the_cap_and_power_above_the_plans_picks() {
+        // no idle scientist fits the empty naval facility
+        let read = sp_read(
+            &[(5, "naval", None, None)],
+            &[("Ada", "air")],
+            &[],
+            50,
+            &[("Cy", "naval", 1), ("Di", "naval", 3), ("Ed", "air", 4)],
+        );
+        let economy = |pp: f64| json!({"political_power": {"raw_signed": pp * 100_000.0}});
+        let run = |plan: Value, pp: f64| {
+            let tools = fake(vec![
+                ("hoi4_special_projects", read.clone()),
+                ("hoi4_economy", economy(pp)),
+            ]);
+            let mut state = State::default();
+            let out = special_projects_step(&mut state, &tools, &plan, "l", START).unwrap();
+            (out, sp_actions(&tools), plan_manage::digest(&state))
+        };
+        // without `recruit` nobody is recruited
+        let (out, acts, _) = run(json!({"special_projects": {}}), 500.0);
+        assert_eq!((out, acts.len()), (None, 0));
+        // the best naval candidate within the cap and the power left after the plan's picks
+        let (out, acts, _) = run(
+            json!({"special_projects": {"recruit": {"max_cost": 50}}}),
+            500.0,
+        );
+        assert!(out
+            .unwrap()
+            .starts_with("recruit scientist Di for a naval facility (50 PP): true"));
+        assert_eq!(
+            acts,
+            vec![(
+                "hoi4_special_project_recruit".to_string(),
+                json!({"scientist": "Di"})
+            )]
+        );
+        // a price above the cap waits and says why
+        let (out, acts, digest) = run(
+            json!({"special_projects": {"recruit": {"max_cost": 25}}}),
+            500.0,
+        );
+        assert_eq!((out, acts.len()), (None, 0));
+        assert!(digest.unwrap()["special_projects"]
+            .as_str()
+            .unwrap()
+            .contains("above max_cost 25"));
+        // the plan's pending politics pick keeps its cost: 120 - 100 does not cover 50
+        let (out, acts, digest) = run(
+            json!({"special_projects": {"recruit": true},
+                "politics": [{"category": "government", "slot": 1, "idea": "x", "cost": 100}]}),
+            120.0,
+        );
+        assert_eq!((out, acts.len()), (None, 0));
+        assert!(digest.unwrap()["special_projects"]
+            .as_str()
+            .unwrap()
+            .contains("pending picks 100"));
+    }
+
+    #[test]
+    fn a_stop_entry_stops_its_project_frees_the_scientist_and_never_restarts_it() {
+        let plan = json!({"special_projects": {"priority": ["sp_slow", "sp_next"], "stop": [
+            {"id": "slow", "project": "sp_slow", "when": "date:1936.1.1", "unassign": true}]}});
+        let running = sp_read(
+            &[(4, "land", Some("Bo"), Some(("sp_slow", false)))],
+            &[],
+            &[("sp_next", "land")],
+            25,
+            &[],
+        );
+        let mut state = State::default();
+        let now = date_hour("1936.2.1").unwrap();
+        let tools = fake(vec![("hoi4_special_projects", running)]);
+        let out = special_projects_step(&mut state, &tools, &plan, "l", now)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("sp_slow in facility 4 stopped: true"), "{out}");
+        assert_eq!(sp_actions(&tools)[0].0, "hoi4_special_project_stop");
+        // still stopping: nothing to do, the scientist waits for it
+        let stopping = sp_read(
+            &[(4, "land", Some("Bo"), Some(("sp_slow", true)))],
+            &[],
+            &[("sp_next", "land")],
+            25,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", stopping)]);
+        assert_eq!(
+            special_projects_step(&mut state, &tools, &plan, "l", now + 1).unwrap(),
+            None
+        );
+        assert!(sp_actions(&tools).is_empty());
+        // stopped: the scientist leaves the facility
+        state.bad.clear();
+        let stopped = sp_read(
+            &[(4, "land", Some("Bo"), None)],
+            &[],
+            &[("sp_slow", "land"), ("sp_next", "land")],
+            25,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", stopped)]);
+        let out = special_projects_step(&mut state, &tools, &plan, "l", now + 2)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("scientist Bo out of facility 4: true"),
+            "{out}"
+        );
+        // the freed scientist never goes back, and the stopped project is not started again
+        let freed = sp_read(
+            &[(4, "land", None, None)],
+            &[("Bo", "land")],
+            &[("sp_slow", "land")],
+            25,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", freed)]);
+        assert_eq!(
+            special_projects_step(&mut state, &tools, &plan, "l", now + 3).unwrap(),
+            None
+        );
+        assert!(sp_actions(&tools).is_empty(), "{:?}", sp_actions(&tools));
+    }
+
+    #[test]
+    fn a_stop_entry_waits_for_its_when() {
+        let plan = json!({"special_projects": {"stop": [
+            {"project": "sp_slow", "when": "date:1937.1.1"}]}});
+        let read = sp_read(
+            &[(4, "land", Some("Bo"), Some(("sp_slow", false)))],
+            &[],
+            &[],
+            25,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", read)]);
+        let mut state = State::default();
+        let now = date_hour("1936.2.1").unwrap();
+        assert_eq!(
+            special_projects_step(&mut state, &tools, &plan, "l", now).unwrap(),
+            None
+        );
+        assert!(sp_actions(&tools).is_empty());
     }
 
     #[test]
