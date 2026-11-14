@@ -148,7 +148,13 @@ fn each_missing_piece_has_its_own_reason() {
     let v = verdict(&c, op, "ETH", &f);
     assert_eq!(v.ready, Truth::False);
     let codes: Vec<_> = v.reasons.iter().map(|r| r.code).collect();
-    assert_eq!(codes, ["network_too_weak", "not_enough_operatives", "missing_equipment"]);
+    assert_eq!(codes, ["network_too_weak", "not_enough_operatives"]);
+    // A short stockpile delays the commencement; the preparation can start.
+    assert_eq!(v.waits_for[0].code, "missing_equipment");
+    let mut f = ready_facts();
+    f.stock.insert("infantry_equipment".into(), 10.0);
+    let v = verdict(&c, op, "ETH", &f);
+    assert_eq!((v.ready, v.waits_for.len()), (Truth::True, 1));
     // Full collaboration ends the operation's availability.
     let mut f = ready_facts();
     f.collab = Some(1.0);

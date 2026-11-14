@@ -9,7 +9,8 @@
 //! * `CIntelligenceAgency` (country `+0xd68`): candidates array `+0x18`, finished upgrades
 //!   `+0x60` (`{CAgencyUpgrade*, level}`), created flag `+0xb0`, creating flag `+0xb1`, progress
 //!   of the creation or the running upgrade `+0xb8` (script fixed point, one unit a day),
-//!   running upgrade `+0xc0`, recruited operatives `+0xe0`, days a locked slot has waited `+0x100`.
+//!   running upgrade `+0xc0`, recruited operatives `+0xe0`, operative slots `+0xf8`, days a
+//!   newly opened slot has waited for its candidates `+0x100`.
 //! * `COperativeLeader`: name `+0x20`, nationalities `+0xd88` (tag ids), owner `+0xe20`, code
 //!   name `+0xe48`, embedded `COperativeMission` `+0xea0` whose `+0x10` is the mission object
 //!   (`NOperativeMissions::C*`: target tag id `+0x10`, `CState*` `+0x18` for state missions).
@@ -45,6 +46,7 @@ const CREATING: u64 = 0xb1;
 const PROGRESS: u64 = 0xb8;
 const UPGRADING: u64 = 0xc0;
 const OPERATIVES: u64 = 0xe0;
+const SLOTS: u64 = 0xf8;
 const SLOT_WAIT: u64 = 0x100;
 const UPGRADE_TYPE: &str = "14CAgencyUpgrade";
 const UPGRADE_KEY: u64 = 0x10;
@@ -54,6 +56,8 @@ const LEADER_NAME: u64 = 0x20;
 const LEADER_NATIONALITIES: u64 = 0xd88;
 const LEADER_CODENAME: u64 = 0xe48;
 const LEADER_MISSION: u64 = 0xea0;
+/// Index of the operation instance id the operative is assigned to (live 14 Nov 2026).
+const LEADER_OPERATION: u64 = 0xda4;
 const MISSION_TYPE: &str = "17COperativeMission";
 const MISSION_OBJECT: u64 = 0x10;
 const MISSION_TARGET: u64 = 0x10;
@@ -147,6 +151,9 @@ pub(super) struct Operative {
     pub id: i32,
     /// Key of the operation the operative works on.
     pub operation: Option<String>,
+    /// Index of the operation instance the operative is assigned to (leader +0xda4; the
+    /// operative may still be travelling to the target).
+    pub operation_id: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -191,6 +198,8 @@ pub(super) struct Agency {
     pub upgrades: Vec<(String, i32)>,
     pub operatives: Vec<Operative>,
     pub candidates: Vec<String>,
+    /// Operative slots the agency has (`+0xf8`: 1 at creation, 2 after five upgrades).
+    pub slots: i32,
     pub slot_wait_days: i32,
 }
 
@@ -239,8 +248,10 @@ fn operative(r: &Reader<'_>, image: u64, leader: u64) -> Result<Operative> {
         mission_target,
         mission_state,
         address: leader,
-        id: r.i32(leader + 8)?,
+        // The character id is {i32 kind, i32 index} at +0x8; the index tells operatives apart.
+        id: r.i32(leader + 0xc)?,
         operation: None,
+        operation_id: Some(r.i32(leader + LEADER_OPERATION)?).filter(|i| *i > 0),
     })
 }
 
@@ -263,6 +274,20 @@ pub(super) fn agency(r: &Reader<'_>, image: u64, country: u64) -> Result<Agency>
     for e in entries(r, a + f(OPERATIVES)?, 8, LIMIT)? {
         operatives.push(operative(r, image, r.u64(e)?)?);
     }
+    // Each operative's operation, joined by character index (an unreadable operation list
+    // leaves `operation` unknown rather than failing the agency read, except a torn read).
+    match operations(r, image, country) {
+        Ok(ops) => {
+            for o in operatives.iter_mut() {
+                o.operation = ops
+                    .iter()
+                    .find(|op| o.operation_id == Some(op.id) || op.operatives.contains(&o.id))
+                    .map(|op| op.key.clone());
+            }
+        }
+        Err(e) if e.code == "torn_read" => return Err(e),
+        Err(_) => {}
+    }
     let mut candidates = Vec::new();
     for e in entries(r, a + f(CANDIDATES)?, 8, LIMIT)? {
         let c = object(r, r.u64(e)?, LEADER_TYPE)?;
@@ -276,6 +301,7 @@ pub(super) fn agency(r: &Reader<'_>, image: u64, country: u64) -> Result<Agency>
         upgrades,
         operatives,
         candidates,
+        slots: r.i32(a + f(SLOTS)?)?,
         slot_wait_days: r.i32(a + f(SLOT_WAIT)?)?,
     })
 }
@@ -307,7 +333,8 @@ pub(super) fn networks(r: &Reader<'_>, image: u64, gs: u64, own_tag: i32) -> Res
         }
         let mut operatives = Vec::new();
         for p in entries(r, n + g(NETWORK_LOCATIONS)?, 16, LIMIT)? {
-            operatives.push((r.i32(p)?, r.i32(p + 8)?));
+            // {i32 kind, i32 index} character id, then the state id (live 14 Nov 2026).
+            operatives.push((r.i32(p + 4)?, r.i32(p + 8)?));
         }
         out.push(Network {
             target,
@@ -364,6 +391,7 @@ pub(super) fn agency_json(a: &Agency) -> Value {
         "upgrades_done": a.upgrades.iter().map(|(k, l)| json!({"key": k, "level": l})).collect::<Vec<_>>(),
         "upgrade_count": a.upgrades.iter().map(|(_, l)| *l).sum::<i32>(),
         "candidates": a.candidates,
+        "operative_slots": a.slots,
         "locked_slot_waited_days": a.slot_wait_days,
     })
 }
@@ -379,6 +407,75 @@ pub(super) fn network_json(n: &Network) -> Value {
         "states": states.iter().map(|(s, v)| json!({"state_id": s, "strength": v})).collect::<Vec<_>>(),
         "operative_states": n.operatives.iter().map(|(_, s)| *s).collect::<Vec<_>>(),
     })
+}
+
+/// One operation of the player (preparing or running).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Operation {
+    pub key: String,
+    pub target: String,
+    /// Index of the instance's own id `{kind, index}` at +0x8; operatives name it.
+    pub id: i32,
+    /// Character indexes of the operatives already at work in the target (an operative still
+    /// travelling there is assigned, `Operative::operation_id`, but not listed yet).
+    pub operatives: Vec<i32>,
+    /// The game commences the operation itself once its resources are gathered.
+    pub auto_commence: bool,
+    pub address: u64,
+}
+
+/// `CCountryOperationManager` at country +0x1308 holds the country's operations as an array of
+/// `COperationInstance*` at +0x10 (live 14 Nov 2026: one entry while a preparation ran, none
+/// after its refund). An instance: `COperation*` +0x48 (key +0x450), owner country +0x50, target
+/// tag id +0x58, operatives +0xd8 as 8-byte character ids `{kind, index}`.
+const OPERATION_MANAGER: u64 = 0x1308;
+const OPERATION_MANAGER_TYPE: &str = "24CCountryOperationManager";
+const OPERATION_LIST: u64 = 0x10;
+const INSTANCE_TYPE: &str = "18COperationInstance";
+const INSTANCE_OPERATION: u64 = 0x48;
+const INSTANCE_OWNER: u64 = 0x50;
+const INSTANCE_TARGET: u64 = 0x58;
+const INSTANCE_OPERATIVES: u64 = 0xd8;
+const INSTANCE_ID: u64 = 0xc;
+/// 1 with Commence when ready ticked, 0 without (live 14 Nov 2026, both seen).
+const INSTANCE_AUTO_COMMENCE: u64 = 0x40;
+const OPERATION_KEY: u64 = 0x450;
+
+pub(super) fn operations(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Operation>> {
+    let manager = mgmt::pointer(r, country + OPERATION_MANAGER)?;
+    mgmt::expect_type(r, manager, OPERATION_MANAGER_TYPE)?;
+    let mut out = Vec::new();
+    for p in entries(r, manager + OPERATION_LIST, 8, LIMIT)? {
+        let inst = mgmt::pointer(r, p)?;
+        mgmt::expect_type(r, inst, INSTANCE_TYPE)?;
+        if r.u64(inst + INSTANCE_OWNER)? != country {
+            return Err(Error::new("torn_read", "Operation owner changed during the read"));
+        }
+        let op = mgmt::pointer(r, inst + INSTANCE_OPERATION)?;
+        let key = mgmt::text(r, op + OPERATION_KEY, 128)?.unwrap_or_default();
+        let target = states::tag_name(r, image, r.i32(inst + INSTANCE_TARGET)?)?;
+        let mut operatives = Vec::new();
+        for e in entries(r, inst + INSTANCE_OPERATIVES, 8, 16)? {
+            let index = r.i32(e + 4)?;
+            if index > 0 {
+                operatives.push(index);
+            }
+        }
+        out.push(Operation {
+            key,
+            target,
+            id: r.i32(inst + INSTANCE_ID)?,
+            operatives,
+            auto_commence: r.byte(inst + INSTANCE_AUTO_COMMENCE)? != 0,
+            address: inst,
+        });
+    }
+    Ok(out)
+}
+
+pub(super) fn operation_json(o: &Operation) -> Value {
+    json!({"operation": o.key, "target": o.target, "id": o.id, "operatives_at_work": o.operatives,
+           "auto_commence": o.auto_commence})
 }
 
 #[cfg(test)]

@@ -414,6 +414,10 @@ pub struct Verdict {
     /// It can be prepared now (every requirement met).
     pub ready: Truth,
     pub reasons: Vec<Reason>,
+    /// Equipment the stockpile lacks now: Prepare still works and the preparation takes it as it
+    /// arrives (live 14 Nov 2026: prepared with 49 of 200 support equipment), so it delays the
+    /// commencement rather than blocking the preparation.
+    pub waits_for: Vec<Reason>,
     pub unknown_triggers: Vec<String>,
 }
 
@@ -423,6 +427,7 @@ impl Verdict {
             "visible": self.visible.label(),
             "ready": self.ready.label(),
             "reasons": self.reasons.iter().map(|r| json!({"code": r.code, "detail": r.detail})).collect::<Vec<_>>(),
+            "waits_for": self.waits_for.iter().map(|r| json!({"code": r.code, "detail": r.detail})).collect::<Vec<_>>(),
             "unknown_triggers": self.unknown_triggers,
         })
     }
@@ -475,15 +480,15 @@ pub fn verdict(catalog: &Catalog, op: &Operation, target: &str, facts: &dyn Fact
         }
         None => Truth::Unknown,
     };
-    let mut equipment = Vec::new();
+    let mut waits_for = Vec::new();
     for (key, amount) in &op.equipment {
         match facts.stockpile(key) {
-            Some(have) if have >= *amount => equipment.push(Truth::True),
-            Some(have) => {
-                reasons.push(Reason { code: "missing_equipment", detail: format!("{key}: {have:.0} in stock, {} needs {amount}", op.key) });
-                equipment.push(Truth::False);
-            }
-            None => equipment.push(judge.unknown(&format!("stockpile {key}"))),
+            Some(have) if have >= *amount => {}
+            Some(have) => waits_for.push(Reason {
+                code: "missing_equipment",
+                detail: format!("{key}: {have:.0} in stock, {} takes {amount} during its preparation", op.key),
+            }),
+            None => {}
         }
     }
     let mut tokens = Vec::new();
@@ -500,11 +505,10 @@ pub fn verdict(catalog: &Catalog, op: &Operation, target: &str, facts: &dyn Fact
     let ready = and(
         [visible, allowed, available, requirements, network, operatives]
             .into_iter()
-            .chain(equipment)
             .chain(tokens),
     );
     let unknown_triggers = judge.unknown.into_inner();
-    Verdict { visible, ready, reasons, unknown_triggers }
+    Verdict { visible, ready, reasons, waits_for, unknown_triggers }
 }
 
 /// The operation's costs and requirements as listed by the tools.

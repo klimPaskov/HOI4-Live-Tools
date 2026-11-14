@@ -265,6 +265,8 @@ fn load(dir: &Path) -> Catalog {
             "AGENCY_CREATION_FACTORIES",
             "AGENCY_UPGRADE_PER_OPERATIVE_SLOT",
             "MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES",
+            "AGENCY_OPERATIVE_RECRUITMENT_TIME",
+            "DEFAULT_OPERATION_COST_MULTIPLIER",
         ]
         .into_iter()
         .filter_map(|n| define(&defines, n).map(|v| (n, v)))
@@ -391,6 +393,7 @@ pub(super) fn intelligence(process: &dyn Process, include_operations: bool) -> R
 pub(super) struct LiveState {
     pub agency: std::result::Result<intel_live::Agency, Error>,
     pub networks: std::result::Result<Vec<intel_live::Network>, Error>,
+    pub operations: std::result::Result<Vec<intel_live::Operation>, Error>,
     pub ideology: Option<String>,
 }
 
@@ -406,10 +409,15 @@ pub(super) fn live_state(r: &Reader<'_>, image: u64) -> Result<LiveState> {
         Ok(n) => Ok(n),
         Err(e) => Err(keep(e)?),
     };
+    let operations = match intel_live::operations(r, image, own.country) {
+        Ok(o) => Ok(o),
+        Err(e) => Err(keep(e)?),
+    };
     let ideology = intel_live::ruling_ideology(r, own.country).ok();
     Ok(LiveState {
         agency,
         networks,
+        operations,
         ideology,
     })
 }
@@ -455,10 +463,19 @@ pub(super) fn merge_live(body: &mut Value, state: &LiveState) {
         }
         Err(e) => body["intel_network"] = unread(e),
     }
+    match &state.operations {
+        Ok(o) => {
+            body["operations_running"] = json!({
+                "state_read": true,
+                "list": o.iter().map(intel_live::operation_json).collect::<Vec<_>>(),
+            });
+        }
+        Err(e) => body["operations_running"] = unread(e),
+    }
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_intelligence","description":"Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Whether the agency is created, upgrade levels and progress, the operative roster and the intel network values are NOT mapped on this build state and are reported as state_read:false rather than guessed.","inputSchema":{"type":"object","properties":{"include_operations":{"type":"boolean"}},"additionalProperties":false}})
+    json!({"name":"hoi4_intelligence","description":"Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Live state from game memory (macOS 1.19.4.1): agency created/creating, upgrade levels and the running upgrade, operative slots, offered candidates, the recruited operatives with their mission, target and operation, intel network strength per target and state, and operations_running (operation, target, operatives at work, auto commence). A part that cannot be read on this build is reported as state_read:false with the error rather than guessed.","inputSchema":{"type":"object","properties":{"include_operations":{"type":"boolean"}},"additionalProperties":false}})
 }
 
 #[cfg(test)]
