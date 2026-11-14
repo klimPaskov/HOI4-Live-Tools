@@ -74,8 +74,24 @@ find `hoi4-live`, use the full path the installer printed.
 hoi4-live play ITA "conquer Ethiopia before 1937"
 ```
 
-It runs the checks, picks the reviewed plan that ships for the country, prepares a run folder and prints the one
-instruction to give your coding client. Plans ship for Italy, Ethiopia, Germany and China (FAIR) and Poland (META).
+It runs the checks, picks the reviewed plan that ships for the country and prints the one instruction to give your
+coding client. Plans ship for Italy, Ethiopia, Germany and China (FAIR) and Poland (META); for anything else the
+strategist writes a plan first (a separate, long step: `--plan FOLDER` then plays it).
+
+On a Mac with the native runtime:
+
+1. Start Hearts of Iron IV from Steam the way you always do (or add `--launch` and the command asks Steam). In
+   Options > Graphics choose Windowed, 1920x1080, UI scaling 1.0.
+2. Start the country's campaign (Normal difficulty, historical AI) and leave it paused on the first day.
+3. `hoi4-live play` attaches to that game, switches the plan's executor on, starts a supervisor in the background
+   and prints: `Read <run folder>/BRIEF.txt and follow it word for word.` Give that to your coding client; it plays
+   through the `hoi4-live-play` tools the installer registered (restart the client once after installing).
+4. The agent ends the run itself, or you run `hoi4-live stop`. Either way `report.md` is written in the run folder
+   and the game keeps running.
+
+The command never edits your game settings, saves or mods: it records them at the start and the report says if
+anything changed during the run. If no call comes from the agent for five minutes, the supervisor pauses the game;
+when the game closes, the run ends by itself. How it works: [docs/PLAY_FLOW.md](docs/PLAY_FLOW.md).
 
 `hoi4-live update` installs the newest release. `hoi4-live uninstall` removes the program, the native runtime, the
 command and the client registrations.
@@ -85,18 +101,19 @@ command and the client registrations.
 | | Windows | macOS | Linux |
 | --- | --- | --- | --- |
 | Installed | Python server | Python server; native runtime on Apple silicon | Native runtime (x86_64) |
-| Registered with your coding client | Yes | Yes (the Python server) | Not yet |
+| Registered with your coding client | Yes | Yes (the Python server, and `hoi4-live-play` for native campaigns) | Not yet |
 | `hoi4-live doctor` | Yes | Yes | Yes |
-| `hoi4-live play` | Hands the campaign to your coding client | Hands the campaign to your coding client; the Python server has no accepted live campaign on macOS | Tells you what is missing: nothing starts a campaign from the install yet |
+| `hoi4-live play` | Hands the campaign to your coding client (Python server) | Attaches to the game you started, executor on, supervisor running; one instruction for your coding client | Tells you what is missing: the runtime cannot attach to a game you start yet |
 | Game versions | No version check; run on HOI4 1.19.4 | Native runtime: HOI4 1.19.4.1 only. Python server: no version check | HOI4 1.19.4.1 only |
 
 Not supported yet:
 
 - The native runtime on Windows. Windows uses the Python server.
-- Starting a native game from the install on macOS. The native runtime (the full management toolset and the plan
-  executor) is installed, signed and checked, but nothing in the install launches a game for it yet.
-- Starting a campaign on Linux, and registering a server there.
-- A plan for a country that has no shipped plan.
+- Starting a campaign on Linux, and registering a server there: the Linux runtime plays only games its own launcher
+  started under its own X display.
+- A plan for a country that has no shipped plan without the repository: the strategist runs from a checkout.
+- The macOS attach flow has passed its offline tests; its live checks (`scripts/live_checks/play_attach.py`) have
+  not run yet.
 
 When the game updates to a version the native runtime cannot read, the doctor and the runtime say so, name the
 version that works and what to use meanwhile.

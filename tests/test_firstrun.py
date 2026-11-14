@@ -38,27 +38,39 @@ class PlanTests(unittest.TestCase):
 
 class StartPathTests(unittest.TestCase):
     def test_each_system_says_what_can_start_today(self):
-        for system, runtime, can in (("windows", "Python server", True), ("macos", "Python server", True),
-                                     ("linux", "native runtime", False)):
+        for system, runtime, can, native in (("windows", "Python server", True, False),
+                                             ("macos", "native runtime", True, True),
+                                             ("linux", "native runtime", False, False)):
             f = facts(system)
             path = firstrun.start_path(system, f, doctor.evaluate(f))
-            self.assertEqual((path["runtime"], path["ready"], path["can_start"]), (runtime, True, can), system)
-            self.assertTrue(path["missing"])
+            self.assertEqual((path["runtime"], path["ready"], path["can_start"], path["native"]),
+                             (runtime, True, can, native), system)
+            self.assertEqual(bool(path["missing"]), not native, system)
         f = facts("windows", game={"exe": None})
         self.assertFalse(firstrun.start_path("windows", f, doctor.evaluate(f))["ready"])
+        # A Mac without the native runtime (Intel) keeps the Python server.
+        f = facts("macos", native={"expected": False, "installed": False}, memory=None, builds=None)
+        self.assertEqual(firstrun.start_path("macos", f, doctor.evaluate(f))["runtime"], "Python server")
 
 
 class PlayTests(unittest.TestCase):
     def setUp(self):
         self.prefix = tempfile.mkdtemp(prefix="hoi4live_play_")
         self.addCleanup(shutil.rmtree, self.prefix, True)
-        shutil.copytree(os.path.join(helpers.ROOT, "skills", "hoi4-campaign-playbook", "plans"),
-                        os.path.join(self.prefix, "app", "skills", "hoi4-campaign-playbook", "plans"))
+        for part in ("plans", "briefs"):
+            shutil.copytree(os.path.join(helpers.ROOT, "skills", "hoi4-campaign-playbook", part),
+                            os.path.join(self.prefix, "app", "skills", "hoi4-campaign-playbook", part))
 
-    def play(self, country, goal, found, mode=None):
+    def play(self, country, goal, found, mode=None, **options):
         out = io.StringIO()
+        self.started = []
+
+        def start_native(prefix, plan, goal, facts, out, template, **kwargs):
+            self.started.append((plan, goal, template, kwargs))
+            out.write("native start\n")
+            return 0
         code = firstrun.play(self.prefix, country, goal, mode, gather=lambda _prefix: found, out=out,
-                             now=datetime.datetime(2026, 11, 14, 12, 0, 0))
+                             now=datetime.datetime(2026, 11, 14, 12, 0, 0), start_native=start_native, **options)
         return code, out.getvalue()
 
     def test_a_ready_windows_install_gets_a_run_folder_and_one_instruction(self):
@@ -80,17 +92,46 @@ class PlayTests(unittest.TestCase):
         self.assertIn("no Windows adapter yet", text)
 
     def test_steps_to_do_stop_the_start_and_are_listed_for_the_runtime_that_plays(self):
-        found = facts("macos", accessibility=False, steam_running=True)
+        found = facts("macos", accessibility=False, screen_capture=False)
         code, text = self.play("ITA", "win", found)
         self.assertEqual(code, firstrun.EXIT_DOCTOR)
         self.assertIn("Privacy & Security > Accessibility", text)
-        self.assertNotIn("quit Steam", text)               # a native-only step does not block the Python server
+        self.assertNotIn("Screen & System Audio Recording", text)   # a server-only step does not block native play
         self.assertFalse(os.path.exists(os.path.join(self.prefix, "runs")))
+        self.assertEqual(self.started, [])
+
+    def test_a_ready_mac_attaches_through_the_native_start(self):
+        code, text = self.play("ITA", "conquer Ethiopia", facts("macos"), launch=True, wait_minutes=3)
+        self.assertEqual(code, 0, text)
+        plan, goal, template, options = self.started[0]
+        self.assertEqual((plan["tag"], goal), ("ITA", "conquer Ethiopia"))
+        self.assertIn("{PLAN_BRIEF}", template)
+        self.assertEqual((options["launch"], options["wait_minutes"]), (True, 3))
+        self.assertIn("native start", text)
+
+    def test_a_strategist_folder_is_played_instead_of_a_shipped_plan(self):
+        folder = os.path.join(self.prefix, "strat")
+        os.makedirs(folder)
+        with open(os.path.join(folder, "run_spec.json"), "w", encoding="utf-8") as f:
+            json.dump({"tag": "SWE", "goal": "x", "mode": "fair", "date": "1936.1.1", "horizon": "1938.1.1"}, f)
+        with open(os.path.join(folder, "plan.json"), "w", encoding="utf-8") as f:
+            json.dump({"focus_path": []}, f)
+        open(os.path.join(folder, "plan.brief.md"), "w").close()
+        code, text = self.play("SWE", "win", facts("macos"), plan_folder=folder)
+        self.assertEqual(code, 0, text)
+        plan = self.started[0][0]
+        self.assertEqual((plan["tag"], plan["stop"]), ("SWE", "1938.1.1"))
+        self.assertTrue(plan["brief"].endswith("plan.brief.md"))
+        self.assertIn("strategist plan strat", text)
+        code, text = self.play("NOR", "win", facts("macos"), plan_folder=folder)
+        self.assertEqual(code, firstrun.EXIT_USAGE)
+        code, text = self.play("SWE", "win", facts("macos"), plan_folder=os.path.join(self.prefix, "absent"))
+        self.assertEqual(code, firstrun.EXIT_USAGE)
 
     def test_linux_is_told_which_piece_is_missing(self):
         code, text = self.play("GER", "win", facts("linux"))
         self.assertEqual(code, firstrun.EXIT_NO_START)
-        self.assertIn("OWNED_LINUX_LAUNCHER", text)
+        self.assertIn("cannot attach", text)
         self.assertFalse(os.path.exists(os.path.join(self.prefix, "runs")))
 
     def test_a_country_without_a_plan_lists_the_campaigns_that_have_one(self):
@@ -98,6 +139,8 @@ class PlayTests(unittest.TestCase):
         self.assertEqual(code, firstrun.EXIT_USAGE)
         self.assertIn("Italy (ITA, FAIR", text)
         self.assertIn("strategist", text)
+        self.assertIn("--plan", text)
+        self.assertIn("minutes", text)
         code, text = self.play("POL", "win", facts("windows"), mode="fair")
         self.assertEqual(code, firstrun.EXIT_USAGE)
         self.assertIn("FAIR mode", text)

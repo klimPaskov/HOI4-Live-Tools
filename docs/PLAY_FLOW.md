@@ -116,7 +116,8 @@ What each piece needs per system:
 | Supervisor and `hoi4-live-play` proxy | yes | yes (stdlib, same code) | yes (named pipe; same code) |
 | `play` today | attaches and hands over | prints what is missing | hands the campaign to the Python server |
 
-The doctor prints the same table's row for the system it runs on.
+The doctor ends with one line saying what `hoi4-live play` does on the system it runs on; the README has the
+same table.
 
 ## Live checks
 

@@ -7,6 +7,9 @@
     python install.py update [--version X.Y.Z]      fetch a release and install it over the current one
     python install.py doctor                check what a first run needs and print the fix for each failed item
     python install.py play COUNTRY "GOAL"   the first campaign: checks, the plan, and what starts on this system
+                                            (macOS: attaches to your game; --launch asks Steam to start it)
+    python install.py stop                  end the running campaign (report written, the game keeps running)
+    python install.py mcp                   the hoi4-live-play MCP server (what the clients start; stdio)
     python install.py game-dir FOLDER       record where the game is, when the Steam library search misses it
     python install.py status
     python install.py register [--clients ...]      (re)write the client registrations only
@@ -27,7 +30,8 @@ What is installed where a build exists for the computer:
 Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools on Windows,
 ~/Library/Application Support/hoi4-live-tools on macOS, ~/.local/share/hoi4-live-tools on Linux):
 
-    hoi4-live      the command: doctor, play, update, uninstall, status, game-dir (hoi4-live.cmd on Windows)
+    hoi4-live      the command: doctor, play, stop, mcp, update, uninstall, status, game-dir (hoi4-live.cmd on
+                   Windows)
     app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
     native\\         hoi4-live-native and its entitlements file
     venv\\           the private Python environment with the dependencies
@@ -39,6 +43,9 @@ Upgrading replaces app\\ and native\\ and keeps venv\\ (dependencies are re-reso
 the client registrations (the path does not change). The installer never touches the game, its settings or its
 playset, and never changes a system security setting. Client registrations are per user, written atomically after
 one backup (<file>.hoi4live.bak):
+
+On macOS with the native runtime a second server, hoi4-live-play (`hoi4-live mcp`), is registered beside it: the
+tools of a campaign started with `hoi4-live play` (docs/PLAY_FLOW.md).
 
     claude    ~/.claude.json (or $CLAUDE_CONFIG_DIR/.claude.json) mcpServers
     codex     $CODEX_HOME/config.toml or ~/.codex/config.toml, one managed block
@@ -76,6 +83,7 @@ import urllib.request
 import zipfile
 
 SERVER_ID = "hoi4-live"
+PLAY_ID = "hoi4-live-play"
 APP_DIR_NAME = "hoi4-live-tools"
 WINDOWS_LAUNCHER = "hoi4-live-tools.cmd"
 POSIX_LAUNCHER = "hoi4-live-tools"
@@ -91,13 +99,14 @@ ENTITLEMENT = "com.apple.security.cs.debugger"
 LINK_MARK = "rem hoi4-live-tools command link"
 MARK_BEGIN = "# >>> hoi4-live-tools (managed) >>>"
 MARK_END = "# <<< hoi4-live-tools (managed) <<<"
+PLAY_MARKS = ("# >>> hoi4-live-play (managed) >>>", "# <<< hoi4-live-play (managed) <<<")
 CLIENTS = ("claude", "codex", "cursor", "opencode")
 TOOL_TIMEOUT_SEC = 1800
 
 # What an install (and a release archive) contains, relative to the source folder.
 PAYLOAD_DIRS = ("hoi4_live", "skills")
 PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md",
-                "docs/OWNED_LINUX_LAUNCHER.md")
+                "docs/OWNED_LINUX_LAUNCHER.md", "docs/PLAY_FLOW.md")
 PAYLOAD_FILES = ("README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "config.json", "requirements.txt",
                  "pyproject.toml", "hoi4-live-tools.cmd", "hoi4-live-tools", "install.py")
 SKIP_NAMES = {"__pycache__", ".pytest_cache"}
@@ -699,7 +708,7 @@ def run_doctor(prefix, out):
         try:
             result = subprocess.run([sys.executable, "-m", "hoi4_live.doctor", "--prefix", prefix], env=env,
                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    timeout=300)
+                                    timeout=300, cwd=app)
         except (OSError, subprocess.TimeoutExpired) as exc:
             out.warn(f"the doctor could not run: {exc}")
             return None
@@ -726,9 +735,10 @@ def launcher_path(prefix):
     return os.path.join(prefix, "app", launcher_name())
 
 
-def is_ours(command):
+def is_ours(command, server_id=SERVER_ID):
     command = command[0] if isinstance(command, list) and command else command
-    return isinstance(command, str) and os.path.basename(command.replace("\\", "/")).lower() in LAUNCHERS
+    names = LAUNCHERS if server_id == SERVER_ID else (COMMAND, COMMAND + ".cmd")
+    return isinstance(command, str) and os.path.basename(command.replace("\\", "/")).lower() in names
 
 
 def atomic_write(path, text):
@@ -794,12 +804,12 @@ def detect_clients(home=None):
     return found
 
 
-def _json_entry(client, command):
+def _json_entry(client, command, args=()):
     if client == "opencode":
-        return {"type": "local", "command": [command], "enabled": True}
-    entry = {"command": command, "args": []}
+        return {"type": "local", "command": [command, *args], "enabled": True}
+    entry = {"command": command, "args": list(args)}
     if client == "claude":
-        entry = {"type": "stdio", "command": command, "args": [], "env": {}}
+        entry = {"type": "stdio", "command": command, "args": list(args), "env": {}}
     return entry
 
 
@@ -807,7 +817,7 @@ def _json_servers_key(client):
     return "mcp" if client == "opencode" else "mcpServers"
 
 
-def register_json(client, path, command):
+def register_json(client, path, command, server_id=SERVER_ID, args=()):
     key = _json_servers_key(client)
     data = read_json_object(path)
     servers = data.get(key)
@@ -815,17 +825,17 @@ def register_json(client, path, command):
         servers = data[key] = {}
     if not isinstance(servers, dict):
         raise ValueError(f"{key} in {path} is not an object")
-    wanted = _json_entry(client, command)
-    existing = servers.get(SERVER_ID)
+    wanted = _json_entry(client, command, args)
+    existing = servers.get(server_id)
     if existing is not None:
         current = existing.get("command") if isinstance(existing, dict) else None
-        if not is_ours(current):
+        if not is_ours(current, server_id):
             return {"client": client, "status": "conflict", "path": path,
-                    "detail": f"{SERVER_ID} is already registered for another program ({current}); left unchanged"}
+                    "detail": f"{server_id} is already registered for another program ({current}); left unchanged"}
         if existing == wanted:
             return {"client": client, "status": "unchanged", "path": path}
         wanted = {**existing, **wanted}
-    servers[SERVER_ID] = wanted
+    servers[server_id] = wanted
     atomic_write(path, dump_json(data))
     return {"client": client, "status": "updated" if existing is not None else "registered", "path": path}
 
@@ -834,38 +844,54 @@ def same_path(a, b):
     return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
 
 
-def unregister_json(client, path, launcher=None):
+def unregister_json(client, path, launcher=None, server_id=SERVER_ID):
     if not os.path.exists(path):
         return {"client": client, "status": "absent", "path": path}
     key = _json_servers_key(client)
     data = read_json_object(path)
     servers = data.get(key)
-    entry = servers.get(SERVER_ID) if isinstance(servers, dict) else None
+    entry = servers.get(server_id) if isinstance(servers, dict) else None
     if entry is None:
         return {"client": client, "status": "absent", "path": path}
     command = entry.get("command") if isinstance(entry, dict) else None
-    if not is_ours(command):
+    if not is_ours(command, server_id):
         return {"client": client, "status": "conflict", "path": path,
-                "detail": f"{SERVER_ID} belongs to another program ({command}); left unchanged"}
+                "detail": f"{server_id} belongs to another program ({command}); left unchanged"}
     first = command[0] if isinstance(command, list) and command else command
     if launcher and not same_path(first, launcher):
         return {"client": client, "status": "other_install", "path": path,
-                "detail": f"{SERVER_ID} starts another install ({first}); left unchanged"}
-    del servers[SERVER_ID]
+                "detail": f"{server_id} starts another install ({first}); left unchanged"}
+    del servers[server_id]
     atomic_write(path, dump_json(data))
     return {"client": client, "status": "removed", "path": path}
 
 
-def codex_block(command):
-    return "\n".join([MARK_BEGIN, f"[mcp_servers.{SERVER_ID}]", f"command = '{command}'", "args = []",
-                      "startup_timeout_sec = 30", f"tool_timeout_sec = {TOOL_TIMEOUT_SEC}", MARK_END]) + "\n"
+def _marks(server_id):
+    return (MARK_BEGIN, MARK_END) if server_id == SERVER_ID else PLAY_MARKS
 
 
-_BLOCK = re.compile(re.escape(MARK_BEGIN) + r".*?" + re.escape(MARK_END) + r"\r?\n?", re.S)
-_TABLE = re.compile(r"^\s*\[\s*mcp_servers\s*\.\s*(?:\"hoi4-live\"|'hoi4-live'|hoi4-live)\s*(?:\]|\.)", re.M)
+def codex_block(command, server_id=SERVER_ID, args=()):
+    begin, end = _marks(server_id)
+    listed = ", ".join(f"'{a}'" for a in args)
+    return "\n".join([begin, f"[mcp_servers.{server_id}]", f"command = '{command}'", f"args = [{listed}]",
+                      "startup_timeout_sec = 30", f"tool_timeout_sec = {TOOL_TIMEOUT_SEC}", end]) + "\n"
 
 
-def register_codex(path, command):
+def _block_re(server_id=SERVER_ID):
+    begin, end = _marks(server_id)
+    return re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\r?\n?", re.S)
+
+
+def _table_re(server_id=SERVER_ID):
+    name = re.escape(server_id)
+    return re.compile(r"^\s*\[\s*mcp_servers\s*\.\s*(?:\"%s\"|'%s'|%s)\s*(?:\]|\.)" % (name, name, name), re.M)
+
+
+_BLOCK = _block_re()
+_TABLE = _table_re()
+
+
+def register_codex(path, command, server_id=SERVER_ID, args=()):
     if "'" in command:
         return {"client": "codex", "status": "failed", "path": path,
                 "detail": "the install path contains a quote, which TOML literal strings cannot hold"}
@@ -873,34 +899,35 @@ def register_codex(path, command):
     if os.path.exists(path):
         with open(path, encoding="utf-8-sig") as f:
             text = f.read()
-    block = codex_block(command)
-    if _BLOCK.search(text):
-        updated = _BLOCK.sub(lambda _m: block, text, count=1)
+    block, managed = codex_block(command, server_id, args), _block_re(server_id)
+    if managed.search(text):
+        updated = managed.sub(lambda _m: block, text, count=1)
         if updated == text:
             return {"client": "codex", "status": "unchanged", "path": path}
         atomic_write(path, updated)
         return {"client": "codex", "status": "updated", "path": path}
-    if _TABLE.search(text):
+    if _table_re(server_id).search(text):
         return {"client": "codex", "status": "conflict", "path": path,
-                "detail": f"[mcp_servers.{SERVER_ID}] already exists outside the managed block; left unchanged"}
+                "detail": f"[mcp_servers.{server_id}] already exists outside the managed block; left unchanged"}
     separator = "" if not text or text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
     atomic_write(path, text + separator + block)
     return {"client": "codex", "status": "registered", "path": path}
 
 
-def unregister_codex(path, launcher=None):
+def unregister_codex(path, launcher=None, server_id=SERVER_ID):
     if not os.path.exists(path):
         return {"client": "codex", "status": "absent", "path": path}
     with open(path, encoding="utf-8-sig") as f:
         text = f.read()
-    block = _BLOCK.search(text)
+    managed = _block_re(server_id)
+    block = managed.search(text)
     if not block:
         return {"client": "codex", "status": "absent", "path": path}
     command = re.search(r"^command = '([^']*)'", block.group(0), re.M)
     if launcher and command and not same_path(command.group(1), launcher):
         return {"client": "codex", "status": "other_install", "path": path,
-                "detail": f"{SERVER_ID} starts another install ({command.group(1)}); left unchanged"}
-    updated = _BLOCK.sub("", text, count=1).rstrip("\n")
+                "detail": f"{server_id} starts another install ({command.group(1)}); left unchanged"}
+    updated = managed.sub("", text, count=1).rstrip("\n")
     atomic_write(path, updated + "\n" if updated else "")
     return {"client": "codex", "status": "removed", "path": path}
 
@@ -919,17 +946,39 @@ def register_clients(clients, prefix, home=None):
     return results
 
 
-def unregister_clients(clients, home=None, launcher=None):
+def unregister_clients(clients, home=None, launcher=None, server_id=SERVER_ID):
     """Remove the registrations of the clients; with `launcher`, only those that start that launcher."""
     files = client_files(home)
     results = []
     for client in clients:
         path = files[client]
         try:
-            results.append(unregister_codex(path, launcher) if client == "codex"
-                           else unregister_json(client, path, launcher))
+            results.append(unregister_codex(path, launcher, server_id) if client == "codex"
+                           else unregister_json(client, path, launcher, server_id))
         except (OSError, ValueError) as exc:
             results.append({"client": client, "status": "failed", "path": path, "detail": str(exc)})
+    return results
+
+
+def play_supported(prefix):
+    """The hoi4-live-play server is registered where `hoi4-live play` can start a native campaign: macOS with the
+    native runtime installed."""
+    return system() == "darwin" and os.path.isfile(native_binary(prefix))
+
+
+def register_play(clients, prefix, home=None):
+    """Register the hoi4-live-play server (`hoi4-live mcp`) with the clients."""
+    command = command_path(prefix)
+    files = client_files(home)
+    results = []
+    for client in clients:
+        path = files[client]
+        try:
+            result = (register_codex(path, command, PLAY_ID, ["mcp"]) if client == "codex"
+                      else register_json(client, path, command, PLAY_ID, ["mcp"]))
+        except (OSError, ValueError) as exc:
+            result = {"client": client, "status": "failed", "path": path, "detail": str(exc)}
+        results.append({**result, "server": PLAY_ID})
     return results
 
 
@@ -993,7 +1042,8 @@ def write_record(prefix, version, python, registrations, native=None, command=No
 
 def show_registrations(results, out):
     for r in results:
-        out.info(f"  {r['client']}: {r['status']} ({r['path']})" + (f" - {r['detail']}" if r.get("detail") else ""))
+        out.info(f"  {r['client']}" + (f" ({r['server']})" if r.get("server") else "") + f": {r['status']} "
+                 f"({r['path']})" + (f" - {r['detail']}" if r.get("detail") else ""))
 
 
 def cmd_install(args, out, from_release=False):
@@ -1039,6 +1089,9 @@ def cmd_install(args, out, from_release=False):
                 raise InstallError(f"installed to {prefix}, but the server did not start: {exc}", EXIT_UNVERIFIED)
         if clients:
             registrations = register_clients(clients, prefix, args.home)
+            if play_supported(prefix):
+                write_command(prefix)
+                registrations += register_play(clients, prefix, args.home)
             show_registrations(registrations, out)
         else:
             out.info(f"no client registration requested; register later with: {COMMAND} register")
@@ -1099,12 +1152,42 @@ def cmd_play(args, out):
         raise InstallError(f"no install with the play command at {prefix}; run: {COMMAND} update", EXIT_USAGE)
     argv = [sys.executable, "-m", "hoi4_live.firstrun", "--prefix", prefix]
     argv += ["--mode", args.mode] if args.mode else []
+    argv += ["--plan", os.path.abspath(args.plan)] if args.plan else []
+    argv += ["--launch"] if args.launch else []
+    argv += ["--wait", str(args.wait)] if args.wait else []
     argv += [part for part in [args.value] + list(args.more) if part]
+    return run_app_module(prefix, argv, "play")
+
+
+def run_app_module(prefix, argv, what, stdin=subprocess.DEVNULL):
+    """Run one of the installed program's modules with this Python; Ctrl+C reaches it and ends it."""
+    app = os.path.join(prefix, "app")
     env = dict(os.environ, PYTHONPATH=app, PYTHONIOENCODING="utf-8")
     try:
-        return subprocess.run(argv, env=env, stdin=subprocess.DEVNULL, timeout=600).returncode
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise InstallError(f"the play command could not run: {exc}")
+        # From the app folder: `python -m` puts the current folder first on the path, so a hoi4_live package in
+        # the folder the user (or the coding client) runs from would otherwise shadow the installed one.
+        return subprocess.run(argv, env=env, stdin=stdin, cwd=app).returncode
+    except KeyboardInterrupt:
+        return 130
+    except OSError as exc:
+        raise InstallError(f"the {what} command could not run: {exc}")
+
+
+def cmd_stop(args, out):
+    """End the running campaign: the supervisor writes the report and releases the game (which keeps running)."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    if not os.path.isfile(os.path.join(prefix, "app", "hoi4_live", "play", "start.py")):
+        raise InstallError(f"no install with the play command at {prefix}; run: {COMMAND} update", EXIT_USAGE)
+    code = ("import sys; from hoi4_live.play import start; "
+            "sys.exit(start.stop_active(sys.argv[1], sys.stdout))")
+    return run_app_module(prefix, [sys.executable, "-c", code, prefix], "stop")
+
+
+def cmd_mcp(args, out):
+    """The hoi4-live-play MCP server on this process's standard streams (what the clients start)."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    argv = [sys.executable, "-m", "hoi4_live.play.proxy", "--prefix", prefix]
+    return run_app_module(prefix, argv, "mcp", stdin=None)
 
 
 GAME_EXECUTABLES = ("hoi4.exe", "hoi4", os.path.join("hoi4.app", "Contents", "MacOS", "hoi4"))
@@ -1142,6 +1225,9 @@ def cmd_register(args, out):
         raise InstallError(f"HOI4 Live Tools is not installed at {prefix}; run: python install.py", EXIT_USAGE)
     clients = resolve_clients(args.register or args.clients, args.home)
     results = register_clients(clients, prefix, args.home)
+    if play_supported(prefix):
+        write_command(prefix)
+        results += register_play(clients, prefix, args.home)
     for r in results:
         out.info(f"{r['client']}: {r['status']} ({r['path']})" + (f" - {r['detail']}" if r.get("detail") else ""))
     record = read_record(prefix) or {}
@@ -1153,6 +1239,7 @@ def cmd_register(args, out):
 def cmd_unregister(args, out):
     clients = resolve_clients(args.register or args.clients or "all", args.home)
     results = unregister_clients(clients, args.home)
+    results += [{**r, "server": PLAY_ID} for r in unregister_clients(clients, args.home, server_id=PLAY_ID)]
     for r in results:
         out.info(f"{r['client']}: {r['status']} ({r['path']})" + (f" - {r['detail']}" if r.get("detail") else ""))
     return EXIT_REGISTRATION if registration_problems(results) else EXIT_OK
@@ -1172,6 +1259,7 @@ def cmd_uninstall(args, out):
     prefix = os.path.abspath(args.prefix or default_prefix())
     # Only the registrations of this install: another install's entry (another prefix) is left to that install.
     results = unregister_clients(list(CLIENTS), args.home, launcher_path(prefix))
+    results += unregister_clients(list(CLIENTS), args.home, command_path(prefix), PLAY_ID)
     for r in results:
         if r["status"] != "absent":
             out.info(f"{r['client']}: {r['status']}" + (f" - {r['detail']}" if r.get("detail") else ""))
@@ -1233,7 +1321,8 @@ def cmd_status(args, out):
     return EXIT_OK if installed else EXIT_FAILED
 
 
-COMMANDS = ("install", "update", "doctor", "play", "game-dir", "status", "register", "unregister", "uninstall")
+COMMANDS = ("install", "update", "doctor", "play", "stop", "mcp", "game-dir", "status", "register", "unregister",
+            "uninstall")
 
 
 def build_parser():
@@ -1244,6 +1333,9 @@ def build_parser():
                         help="game-dir: the folder the game is installed in; play: the country (tag or name)")
     parser.add_argument("more", nargs="*", help="play: the goal, in your words")
     parser.add_argument("--mode", choices=("fair", "meta"), default=None, help="play: the rule set")
+    parser.add_argument("--plan", default=None, help="play: a strategist plan folder instead of a shipped plan")
+    parser.add_argument("--launch", action="store_true", help="play: ask Steam to start the game")
+    parser.add_argument("--wait", type=int, default=None, help="play: minutes to wait for the game (default 15)")
     parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools on Windows, "
                                          "~/Library/Application Support/hoi4-live-tools on macOS, "
                                          "~/.local/share/hoi4-live-tools on Linux)")
@@ -1280,6 +1372,7 @@ def main(argv=None):
         args.command = "install"
     out = Output(args.quiet)
     handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "play": cmd_play,
+                "stop": cmd_stop, "mcp": cmd_mcp,
                 "game-dir": cmd_game_dir,
                 "register": cmd_register,
                 "unregister": cmd_unregister, "uninstall": cmd_uninstall, "status": cmd_status}

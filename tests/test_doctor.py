@@ -169,20 +169,43 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(doctor.check_display(facts("windows", display={"mode": None, "resolution": None,
                                                                          "gui_scale": None})), [])
 
-    def test_steam_matters_only_where_the_native_launcher_runs(self):
-        found = fixes(doctor.check_steam(facts("macos", steam_running=True)))
-        self.assertEqual(len(found), 1)
-        self.assertIn("quit Steam", found[0]["fix"])
-        self.assertEqual(found[0]["needs"], doctor.NATIVE)
-        self.assertEqual(doctor.check_steam(facts("macos"))[0]["status"], doctor.OK)
+    def test_the_doctor_says_what_play_does_on_each_system(self):
+        self.assertIn("attaches", doctor.play_summary(facts("macos")))
+        self.assertIn("Python server", doctor.play_summary(facts("macos", native={"installed": False})))
+        self.assertIn("no Windows adapter", doctor.play_summary(facts("windows")))
+        self.assertIn("cannot start", doctor.play_summary(facts("linux")))
+        self.assertIn("hoi4-live play on this system: attaches", doctor.render(facts("macos"), []))
+
+    def test_steam_is_how_the_user_starts_the_game(self):
+        items = doctor.check_steam(facts("macos", steam_running=True))
+        self.assertEqual([i["status"] for i in items], [doctor.NOTE])
+        self.assertIn("attaches", items[0]["title"])
+        self.assertEqual(fixes(doctor.check_steam(facts("macos", steam_running=False))), [])
         self.assertEqual(doctor.check_steam(facts("windows", steam_running=True)), [])
-        self.assertEqual(doctor.check_steam(facts("linux", steam_running=None)), [])
+        self.assertEqual(doctor.check_steam(facts("linux", steam_running=True)), [])
+
+    def test_native_display_profile_on_macos(self):
+        windowed = {"mode": "windowed", "resolution": (1920, 1080), "gui_scale": 1.0}
+        items = doctor.check_native_display(facts("macos", display=windowed))
+        self.assertEqual([i["status"] for i in items], [doctor.OK])
+        # Game settings are notes: hoi4-live play waits while the user sets them in the running game.
+        items = doctor.check_native_display(facts("macos", display={"mode": "fullscreen", "resolution": (2560, 1440),
+                                                                    "gui_scale": 1.25}))
+        self.assertEqual([i["status"] for i in items], [doctor.NOTE] * 3)
+        self.assertTrue(all(i["needs"] == doctor.NATIVE for i in items))
+        self.assertIn("Windowed", items[0]["fix"])
+        # A screen too small for the window must change before the game starts: a step.
+        found = fixes(doctor.check_native_display(facts("macos", display=windowed, screen=(1710, 1107))))
+        self.assertEqual(len(found), 1)
+        self.assertIn("More Space", found[0]["fix"])
+        self.assertEqual(doctor.check_native_display(facts("linux")), [])
+        self.assertEqual(doctor.check_native_display(facts("macos", native={"installed": False})), [])
 
     def test_mods_are_reported_per_runtime_and_never_block(self):
         self.assertEqual(doctor.check_mods(facts("macos"))[0]["status"], doctor.OK)
         items = doctor.check_mods(facts("macos", mods=3))
         self.assertEqual([i["needs"] for i in items], [doctor.SERVER, doctor.NATIVE])
-        self.assertIn("empty playset", items[1]["title"])
+        self.assertIn("mods included", items[1]["title"])
         self.assertEqual(fixes(items), [])
         self.assertEqual(doctor.check_mods(facts("macos", mods=None)), [])
 

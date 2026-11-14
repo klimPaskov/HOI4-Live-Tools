@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+`hoi4-live play COUNTRY "GOAL"` starts a native campaign on macOS from the install (docs/PLAY_FLOW.md).
+
+- It attaches to the game you started from Steam (or asks Steam with `--launch`), waits while you start or load the
+  campaign, and starts a supervisor in the background with the plan's executor on. It never starts the game binary
+  and drives no menus.
+- One instruction for the coding client: read the run's BRIEF.txt and follow it. The client plays through the new
+  `hoi4-live-play` MCP server the installer registers beside `hoi4-live` (the runtime's tools without lease tokens,
+  plus `hoi4_batch` and `hoi4_run`).
+- The supervisor refuses repeated successful actions, brings the game forward when another window took the focus,
+  pauses a running game after five minutes without an agent call (the only pause it makes), ends the run when the
+  game closes and writes `report.md`. `hoi4-live stop` ends a run from the terminal; the game keeps running.
+- Your settings, saves and mods are never written: they are recorded at the start and the report says whether
+  anything changed during the run.
+- `--plan FOLDER` plays a strategist plan; without a shipped plan the command explains the strategist step and what
+  it costs. The native runtime gains `--attach PID RUN` for a game the user started (macOS; Linux refuses it).
+- The doctor checks the native runtime's display profile (windowed 1920x1080, UI scale 1.0, a screen that holds
+  it), no longer asks to quit Steam, and ends with what `hoi4-live play` does on the system.
+- `scripts/live_checks/play_attach.py` is the live check of this flow for a machine with a running game.
+
 `hoi4-live doctor` checks everything a first run needs and prints the one step for each item that is not in place.
 
 - Checked on every system: the install itself, the game (found through the Steam libraries, with its version), the

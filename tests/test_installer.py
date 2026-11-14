@@ -112,6 +112,45 @@ class RegistrationTests(unittest.TestCase):
         self.assertEqual(install.register_codex(path, CMD)["status"], "registered")
         self.assertTrue(self.read(os.path.join("sub", "config.toml")).startswith(install.MARK_BEGIN))
 
+    def test_the_play_server_sits_beside_the_main_one_in_every_client(self):
+        command = os.path.join(self.tmp, "prefix", "hoi4-live")
+        prefix = os.path.dirname(command)
+        for client in install.CLIENTS:
+            if client != "codex":
+                install.register_json(client, install.client_files(self.tmp)[client], CMD)
+        install.register_codex(install.client_files(self.tmp)["codex"], CMD)
+        results = install.register_play(list(install.CLIENTS), prefix, home=self.tmp)
+        self.assertEqual({r["status"] for r in results}, {"registered"})
+        self.assertEqual({r["server"] for r in results}, {install.PLAY_ID})
+        claude = json.loads(self.read(".claude.json"))["mcpServers"]
+        self.assertEqual(claude["hoi4-live"]["command"], CMD)
+        self.assertEqual((claude["hoi4-live-play"]["command"], claude["hoi4-live-play"]["args"]), (command, ["mcp"]))
+        opencode = json.loads(self.read(os.path.join(".config", "opencode", "opencode.json")))["mcp"]
+        self.assertEqual(opencode["hoi4-live-play"]["command"], [command, "mcp"])
+        codex = self.read(os.path.join(".codex", "config.toml"))
+        self.assertIn("[mcp_servers.hoi4-live]", codex)
+        self.assertIn("[mcp_servers.hoi4-live-play]", codex)
+        self.assertIn("args = ['mcp']", codex)
+        self.assertEqual({r["status"] for r in install.register_play(list(install.CLIENTS), prefix, home=self.tmp)},
+                         {"unchanged"})
+        # Removing the play server leaves the main one, and the other way round.
+        removed = install.unregister_clients(list(install.CLIENTS), self.tmp, command, install.PLAY_ID)
+        self.assertEqual({r["status"] for r in removed}, {"removed"})
+        self.assertNotIn("hoi4-live-play", json.loads(self.read(".claude.json"))["mcpServers"])
+        self.assertIn("hoi4-live", json.loads(self.read(".claude.json"))["mcpServers"])
+        codex = self.read(os.path.join(".codex", "config.toml"))
+        self.assertNotIn("hoi4-live-play", codex)
+        self.assertIn("[mcp_servers.hoi4-live]", codex)
+
+    def test_the_play_name_held_by_another_program_is_left_alone(self):
+        with open(self.path("c.json"), "w", encoding="utf-8") as f:
+            json.dump({"mcpServers": {"hoi4-live-play": {"command": "node"}}}, f)
+        r = install.register_json("claude", self.path("c.json"), "/p/hoi4-live", install.PLAY_ID, ["mcp"])
+        self.assertEqual(r["status"], "conflict")
+        self.assertFalse(install.is_ours("/p/hoi4-live", install.SERVER_ID))
+        self.assertTrue(install.is_ours("/p/hoi4-live", install.PLAY_ID))
+        self.assertTrue(install.is_ours(r"C:\p\hoi4-live.cmd", install.PLAY_ID))
+
     def test_resolve_clients(self):
         self.assertEqual(install.resolve_clients("none"), [])
         self.assertEqual(install.resolve_clients("claude, codex"), ["claude", "codex"])
