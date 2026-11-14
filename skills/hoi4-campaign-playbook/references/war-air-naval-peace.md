@@ -229,6 +229,7 @@ balance/delete` shape fleets; `hoi4_fleet_admiral` assigns admirals.
 | Dominance by mission | Only patrol builds dominance; a strike force multiplies it (1000 strike-force dominance +60%, -5% per extra region); raiding lowers the enemy's; escort adds none; hold and training 0 |
 | Dominance speed | Gains 2% a day, decays 4% a day: about 50 days of patrol to full value |
 | Naval intel | Below 40% naval intel dominance is reduced, to half at 10% or less |
+| Reading it | The sea region window (click a sea region) shows the own, enemy and neutral dominance bars, the controlled marker and both sides' ships, planes and mines; naval intel is per country, the navy figure of that country's intel ledger (diplomacy view); plan atoms `naval_dominance:<region id>` and `naval_intel:<TAG>` (0..1) name what they show |
 | Dominance modifiers | Radar +5%, air base +2%, naval base +1% per level toward the region target |
 | Air superiority over the sea | Adds up to +100% to a fleet's effective ship count |
 | Convoy | Each division moved by sea and each supply shipment needs convoys; losses cut efficiency by 1.25x the loss |
@@ -658,6 +659,11 @@ Real gaps (no tool; use the workaround):
 - Planning % and entrenchment reads: count days since the order (+2% a day).
 - Army HQ deploy: none.
 - Sea-region dominance and naval intel read: patrol 50+ days per region before relying on control.
+  Plans can already gate an invasion on `naval_dominance:<region id> >= 0.6` and
+  `naval_intel:<TAG> >= 0.4` (region ids from map/strategicregions), but
+  hoi4_fleets and hoi4_wars report them as null today, so these atoms stay unknown and
+  the gated invasion waits; pair them in an `any` with a date for the 50-day
+  patrol.
 - Air superiority by region: `hoi4_air_region_probe` counts planes on both sides.
 - Dockyard repair share and ship refit: none.
 - Licence, lend-lease and volunteer dialogs: none.

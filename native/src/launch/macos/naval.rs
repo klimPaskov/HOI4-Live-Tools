@@ -295,9 +295,24 @@ fn fleets_json(fleets: &[Fleet], with_ships: bool, filter: Option<&str>) -> Valu
         "validated":{"fleet_task_force_ship_names":true,"hulls_and_variants":true,"port_locations":true,
             "strength":"matches hull max_strength at full health; damaged values unverified",
             "mission":"codes 0 hold, 1 patrol, 2 strike_force, 3 convoy_raiding, 4 convoy_escort, 7 training, 8 reserve, 9 invasion_support were set with the game's buttons and read back; 5/6 (mines) inferred","assigned_regions":"matches the fleet panel's Active in Regions and the region names","morale":false,"experience_points":false},
+        "sea_regions":null,"sea_regions_reason":SEA_REGIONS_NOT_MAPPED,
         "unavailable":{"admiral_detail":"skills and traits come from hoi4_fleet_admiral list:true","fuel":"not mapped","supply":"not mapped",
             "organisation_current":"not mapped (max_organisation matches the unit definition)"}})
 }
+
+/// Naval dominance per strategic sea region: what the region window shows
+/// (interface/naval_strategic_region_view.gui `navalregionview`: `dominance_flag`, the `progress`,
+/// `progress_enemy` and `neutral_progress` bars with `dominance_marker`, own and enemy ship, plane
+/// and mine counts). Dominance builds at NDefines.NNavy.DOMINANCE_DAILY_GAIN_FACTOR of its target a
+/// day and decays at DOMINANCE_DAILY_LOSS_FACTOR; a side controls the region at
+/// DOMINANCE_CONTROLLED_THRESHOLD_RATIO of the dominance against its enemies; naval intel against
+/// an enemy under NIntel.NAVAL_DOMINANCE_INTEL_LOW scales the dominance down (naval intel is per
+/// country: hoi4_wars wars[].own_naval_intel). Not located in memory yet: `sea_regions` is null
+/// with this reason until it is built and compared with the region window live (gap register
+/// navy.dominance_intel_read); rows will be {region_id, name, own_dominance 0..1}, the field the
+/// plan atom naval_dominance:<region> reads.
+const SEA_REGIONS_NOT_MAPPED: &str =
+    "not_mapped: naval dominance per sea region is not located in memory yet";
 
 /// `hoi4_fleets`: own fleets, task forces and (optionally) every ship.
 pub(super) fn fleets_tool(process: &dyn Process, args: &Map<String, Value>) -> Result<Value> {
@@ -422,7 +437,7 @@ fn convoys_json(counts: &ConvoyCounts, bases: &[NavalBase], lines: Vec<Value>) -
 }
 
 pub(super) fn fleets_schema() -> Value {
-    json!({"name":"hoi4_fleets","description":"Own navy read from game memory (no panel, no input, never pauses): fleets, task forces (location: port province, state and strategic region; ship count by type; summed strength and percent; mission code and name: hold, patrol, strike_force, convoy_raiding, convoy_escort, training, reserve, invasion_support; admiral is per fleet) and per fleet the admiral and the assigned sea regions (fleet area of operation) and, with ships:true, every ship (id, name, type, hull, design/variant, strength, max strength, max organisation, experience, morale). Filter by fleet or task-force name with `fleet`. Morale and experience fields are validated:false; fuel, supply and current organisation are not mapped.","inputSchema":{"type":"object","properties":{"ships":{"type":"boolean","default":false},"fleet":{"type":"string","maxLength":64}},"additionalProperties":false}})
+    json!({"name":"hoi4_fleets","description":"Own navy read from game memory (no panel, no input, never pauses): fleets, task forces (location: port province, state and strategic region; ship count by type; summed strength and percent; mission code and name: hold, patrol, strike_force, convoy_raiding, convoy_escort, training, reserve, invasion_support; admiral is per fleet) and per fleet the admiral and the assigned sea regions (fleet area of operation) and, with ships:true, every ship (id, name, type, hull, design/variant, strength, max strength, max organisation, experience, morale). Filter by fleet or task-force name with `fleet`. Morale and experience fields are validated:false; fuel, supply and current organisation are not mapped. sea_regions (naval dominance per sea region) is not yet built: always null with sea_regions_reason.","inputSchema":{"type":"object","properties":{"ships":{"type":"boolean","default":false},"fleet":{"type":"string","maxLength":64}},"additionalProperties":false}})
 }
 pub(super) fn convoys_schema() -> Value {
     json!({"name":"hoi4_convoys","description":"Own convoys read from game memory (no input, never pauses): convoys.total (in stock), in_use (trade, supply and transfers), free (total minus in use, the figure the top bar shows) and needed; own naval bases with level; the convoy production lines. Escorts, convoy routes and lost convoys are not mapped and are listed under unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})

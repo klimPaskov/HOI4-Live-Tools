@@ -5464,13 +5464,24 @@
     "war-air-naval-peace.md#17 NA23",
     "war-air-naval-peace.md#14(c) gaps: sea-region dominance"
    ],
-   "plan": [],
-   "tools": [],
-   "blocked": "No tool or predicate atom reads dominance or naval intel; the playbook workaround is 'patrol 50+ days'; hoi4_army_plan only answers plan_not_executable",
+   "plan": [
+    "invasions[].when",
+    "contingencies[].when",
+    "checkpoints[].must"
+   ],
+   "tools": [
+    "hoi4_fleets",
+    "hoi4_wars"
+   ],
+   "blocked": "hoi4_fleets reports sea_regions null (per-region dominance is not located in memory) and hoi4_wars reports wars[].own_naval_intel null (naval intel against each enemy); the predicate atoms naval_dominance:<region> and naval_intel:<TAG> read them and stay unknown, so an invasion gated on them waits",
    "payoff": "high",
    "why": "Invasion go/no-go and the 40% intel gate are blind without it",
    "closing": "both",
-   "owner": "Map per-region naval dominance and intel from memory into a read tool and a predicate atom for invasions[].when"
+   "owner": "offline done: atoms naval_dominance:<region> and naval_intel:<TAG> (plan_predicate.rs, x-atoms readable:false; validate.py checks region ids against the sea regions of map/strategicregions), null seam fields hoi4_fleets sea_regions and hoi4_wars wars[].own_naval_intel; live: locate the sea region view's own dominance share and the intel ledger's navy figure in memory, fill sea_regions[] {region_id, name, own_dominance} and own_naval_intel, flip x-atoms readable, then live-verify against the naval region window and the intel ledger",
+   "blocked_terms": [
+    "naval_dominance",
+    "naval_intel"
+   ]
   },
   {
    "id": "navy.strike_force",
