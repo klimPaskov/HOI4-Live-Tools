@@ -440,10 +440,10 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("occupation.default_law: no occupation law gentle", text)
         self.assertIn("occupation.mildest: military_governor_occupation is not on occupation.ladder", text)
         self.assertIn("peace.take[1]: 77 is not a state id", text)
-        self.assertIn("peace.take[2]: BBB is a tag; the executor takes state ids", text)
+        self.assertNotIn("peace.take[2]", text)  # a tag stands for its states
         self.assertIn("sea_transfer.routes[0].to_state: 66", text)
         self.assertIn("sea_transfer.ports: 88", text)
-        self.assertTrue(any("peace.puppet[0]: tag BBB is only noted" in w for w in rep.warnings))
+        self.assertFalse(any("peace.puppet[0]" in w for w in rep.warnings))
         self.assertTrue(any("garrison_template.template 'Nobody'" in w for w in rep.warnings))
 
     # ------------------------------------------------------------------ wave-2 executor keys

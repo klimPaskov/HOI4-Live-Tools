@@ -2209,7 +2209,7 @@
               "string"
             ]
           },
-          "description": "state ids by rank, taken one per action (hoi4_peace_take)"
+          "description": "state ids by rank, taken one per action (hoi4_peace_take); a country tag stands for every state it owns (hoi4_states), in the read's order"
         },
         "puppet": {
           "type": "array",
@@ -2219,7 +2219,7 @@
               "string"
             ]
           },
-          "description": "state ids to puppet (a tag is noted, not taken: the tool takes state ids)"
+          "description": "state ids to puppet, or a country tag: every state it owns is demanded with the puppet action, which puppets the whole country"
         },
         "liberate": {
           "type": "array",
@@ -2229,7 +2229,7 @@
               "string"
             ]
           },
-          "description": "state ids to release"
+          "description": "state ids to release, or a country tag (every state it owns)"
         },
         "max_cost": {
           "type": "number",

@@ -11,7 +11,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 
 ## Summary
 
-286 capabilities: missing from playbook 7, not executable 91, not plannable 21, unvalidated 85, ok 82.
+286 capabilities: missing from playbook 7, not executable 90, not plannable 21, unvalidated 86, ok 82.
 
 | Domain | missing from playbook | not executable | not plannable | unvalidated | ok | total |
 |---|---:|---:|---:|---:|---:|---:|
@@ -22,7 +22,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 | Events |  | 1 |  | 2 | 2 | 5 |
 | Diplomacy | 1 | 2 | 1 | 7 | 2 | 13 |
 | Factions | 1 | 5 |  | 4 |  | 10 |
-| Puppets and subjects |  | 2 |  | 5 | 1 | 8 |
+| Puppets and subjects |  | 1 |  | 6 | 1 | 8 |
 | Lend-lease and volunteers | 1 | 7 | 1 |  |  | 9 |
 | Peace conferences |  | 3 |  | 4 | 1 | 8 |
 | Occupation and resistance |  | 4 |  |  | 3 | 7 |
@@ -163,8 +163,8 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 
 | Capability | Playbook | Plannable | Executable | Verified live | Status | Payoff | Closing |
 |---|---|---|---|---|---|---|---|
-| Puppet a beaten enemy in the peace conference instead of taking every state (`puppets.puppet_in_peace`) | war-air-naval-peace.md#18 PC06, war-air-naval-peace.md#18 PC10, procedure.md#25. Peace aims | `peace.puppet` (executor) | `hoi4_peace_take`; refused: peace.puppet takes state ids only; a tag in puppet is noted, not taken | no | not executable | high: cheap control of land and manpower when points are short | live. Owner: live puppet:true demand in a conference |
 | Raise or lower a subject's autonomy tier (50 PP) to annex or integrate it (`puppets.autonomy_change`) | politics-diplomacy-espionage.md#12 DI16, politics-diplomacy-espionage.md#6. Diplomacy | none | none; refused: no diplomacy key for an autonomy change (diplomacy_keys.rs SPECS) | no | not executable | low: only for long puppet plans | both. Owner: autonomy action key in hoi4_diplomacy_act, then live |
+| Puppet a beaten enemy in the peace conference instead of taking every state (`puppets.puppet_in_peace`) | war-air-naval-peace.md#18 PC06, war-air-naval-peace.md#18 PC10, procedure.md#25. Peace aims | `peace.puppet` (executor) | `hoi4_peace_take` | no | unvalidated | high: cheap control of land and manpower when points are short | live. Owner: offline done: a country tag in peace.puppet (take, liberate) expands to the states it owns and is demanded state by state; live: puppet a whole country in a conference (bed C) and check the puppet exists afterwards |
 | Annex a puppet (300 PP) once its slots are no longer needed (`puppets.annex_subject`) | politics-diplomacy-espionage.md#6. Diplomacy, politics-diplomacy-espionage.md#11 PO06 | `diplomacy[].action` (executor) | `hoi4_diplomacy_act` | no | unvalidated | medium: full industry and manpower of the subject | live. Owner: live annex_subject (dialog=true; check it is a sendable dialog) |
 | Accept the collaboration-government event at 80% compliance (`puppets.collaboration_event`) | politics-diplomacy-espionage.md#14 OC06, procedure.md#23. Occupation | `event_rules[].event` (executor), `event_rules[].option_name` (executor) | `hoi4_event_choose` | no | unvalidated | medium: a puppet that passes 75% of its factories | live. Owner: include the event in plan templates; see it live |
 | Turn conquered land into compliant subjects by decision (GER_reichskommissariat_*) (`puppets.reichskommissariat_decisions`) | politics-diplomacy-espionage.md#5. Decisions worth taking (by year) | `decision_rules[].decision` (executor), `decision_rules[].target` (executor) | `hoi4_decision_take` | no | unvalidated | medium: garrison relief and resources for Germany after conquests | live. Owner: live take of one reichskommissariat decision (targeted path) |
