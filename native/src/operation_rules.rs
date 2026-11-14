@@ -76,7 +76,10 @@ fn costs(block: &[Entry]) -> (Vec<(String, f64)>, Option<(f64, f64)>) {
                     }
                 }
                 Val::Block(b) if e.key == "civilian_factories" => {
-                    factories = Some((b.number("amount").unwrap_or(0.0), b.number("days").unwrap_or(0.0)));
+                    factories = Some((
+                        b.number("amount").unwrap_or(0.0),
+                        b.number("days").unwrap_or(0.0),
+                    ));
                 }
                 Val::Block(_) => {}
             }
@@ -133,8 +136,11 @@ impl Catalog {
                 requirements: block(b, "requirements"),
             });
         }
-        self.operations
-            .sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
+        self.operations.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     pub(crate) fn add_phases(&mut self, entries: &[Entry]) {
@@ -142,7 +148,13 @@ impl Catalog {
             let Val::Block(b) = &e.val else { continue };
             let (equipment, factories) = costs(b);
             self.phases.retain(|(k, _)| *k != e.key);
-            self.phases.push((e.key.clone(), Phase { equipment, factories }));
+            self.phases.push((
+                e.key.clone(),
+                Phase {
+                    equipment,
+                    factories,
+                },
+            ));
         }
     }
 
@@ -182,11 +194,16 @@ impl Catalog {
 
     /// A rule of the ruling ideology group: true unless its `rules` say no.
     pub fn rule(&self, ideology: Option<&str>, rule: &str) -> Truth {
-        let Some(ideology) = ideology else { return Truth::Unknown };
+        let Some(ideology) = ideology else {
+            return Truth::Unknown;
+        };
         match self.ideology_rules.iter().find(|(k, _)| k == ideology) {
             None => Truth::Unknown,
             Some((_, rules)) => Truth::from_bool(
-                rules.iter().find(|(k, _)| k == rule).map_or(true, |(_, v)| *v),
+                rules
+                    .iter()
+                    .find(|(k, _)| k == rule)
+                    .map_or(true, |(_, v)| *v),
             ),
         }
     }
@@ -334,9 +351,15 @@ impl Judge<'_> {
             "always" => Truth::from_bool(yes == Some(true)),
             "FROM" => self.all(e.val.block(), Who::From),
             "ROOT" => self.all(e.val.block(), Who::Root),
-            "hidden_trigger" | "custom_trigger_tooltip" | "custom_override_tooltip" => {
-                self.all(&e.val.block().iter().filter(|x| x.key != "tooltip").cloned().collect::<Vec<_>>(), who)
-            }
+            "hidden_trigger" | "custom_trigger_tooltip" | "custom_override_tooltip" => self.all(
+                &e.val
+                    .block()
+                    .iter()
+                    .filter(|x| x.key != "tooltip")
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                who,
+            ),
             "tag" | "original_tag" => match scalar {
                 Some(t) => {
                     let me = self.tag("THIS", who);
@@ -351,13 +374,21 @@ impl Judge<'_> {
                 None => self.unknown(&e.key),
             },
             "has_war_with" => match (who, scalar) {
-                (Who::Root, Some(t)) if self.tag(t, who) == self.target => self.facts.at_war_with(self.target),
-                (Who::From, Some(t)) if self.tag(t, who) == self.facts.player() => self.facts.at_war_with(self.target),
+                (Who::Root, Some(t)) if self.tag(t, who) == self.target => {
+                    self.facts.at_war_with(self.target)
+                }
+                (Who::From, Some(t)) if self.tag(t, who) == self.facts.player() => {
+                    self.facts.at_war_with(self.target)
+                }
                 _ => self.unknown("has_war_with"),
             },
             "has_war" if who == Who::Root => {
                 let t = self.facts.at_war();
-                if yes == Some(false) { not(t) } else { t }
+                if yes == Some(false) {
+                    not(t)
+                } else {
+                    t
+                }
             }
             "has_government" if who == Who::Root => match (self.facts.ideology(), scalar) {
                 (Some(i), Some(g)) => Truth::from_bool(i == g),
@@ -374,7 +405,10 @@ impl Judge<'_> {
                 }
                 None => self.unknown("has_rule"),
             },
-            "has_dlc" => scalar.map_or_else(|| self.unknown("has_dlc"), |d| self.facts.dlc(d.trim_matches('"'))),
+            "has_dlc" => scalar.map_or_else(
+                || self.unknown("has_dlc"),
+                |d| self.facts.dlc(d.trim_matches('"')),
+            ),
             "is_ai" if who == Who::Root => Truth::from_bool(yes == Some(false)),
             "network_strength" if who == Who::Root => match target_value(e.val.block()) {
                 Some((t, op, limit)) => match self.facts.network(&self.tag(&t, who)) {
@@ -397,7 +431,10 @@ impl Judge<'_> {
                     _ => self.unknown("has_operation_token"),
                 }
             }
-            "num_of_operatives" if who == Who::Root => match (self.facts.operatives(), scalar.and_then(|v| v.parse::<f64>().ok())) {
+            "num_of_operatives" if who == Who::Root => match (
+                self.facts.operatives(),
+                scalar.and_then(|v| v.parse::<f64>().ok()),
+            ) {
                 (Some(n), Some(limit)) => Truth::from_bool(compare(n as f64, &e.op, limit)),
                 _ => self.unknown("num_of_operatives"),
             },
@@ -448,31 +485,63 @@ pub fn verdict(catalog: &Catalog, op: &Operation, target: &str, facts: &dyn Fact
     };
     let mut reasons = Vec::new();
     let target_ok = op.targets.is_empty() || op.targets.iter().any(|t| t == target);
-    let visible = and([Truth::from_bool(target_ok), judge.all(&op.visible, Who::Root)].into_iter());
+    let visible = and([
+        Truth::from_bool(target_ok),
+        judge.all(&op.visible, Who::Root),
+    ]
+    .into_iter());
     if !target_ok {
-        reasons.push(Reason { code: "not_a_target", detail: format!("{} only targets {}", op.key, op.targets.join(", ")) });
+        reasons.push(Reason {
+            code: "not_a_target",
+            detail: format!("{} only targets {}", op.key, op.targets.join(", ")),
+        });
     }
     let allowed = judge.all(&op.allowed, Who::Root);
     if allowed == Truth::False {
-        reasons.push(Reason { code: "not_allowed", detail: format!("{} is not allowed for {} (its allowed conditions fail)", op.key, facts.player()) });
+        reasons.push(Reason {
+            code: "not_allowed",
+            detail: format!(
+                "{} is not allowed for {} (its allowed conditions fail)",
+                op.key,
+                facts.player()
+            ),
+        });
     }
     let available = judge.all(&op.available, Who::Root);
     if available == Truth::False {
-        reasons.push(Reason { code: "unavailable", detail: format!("{} is not available against {target} now (its available conditions fail)", op.key) });
+        reasons.push(Reason {
+            code: "unavailable",
+            detail: format!(
+                "{} is not available against {target} now (its available conditions fail)",
+                op.key
+            ),
+        });
     }
     let requirements = judge.all(&op.requirements, Who::Root);
     if requirements == Truth::False {
-        reasons.push(Reason { code: "requirements_unmet", detail: format!("the requirements of {} fail against {target}", op.key) });
+        reasons.push(Reason {
+            code: "requirements_unmet",
+            detail: format!("the requirements of {} fail against {target}", op.key),
+        });
     }
     if visible == Truth::False && target_ok {
-        reasons.push(Reason { code: "not_visible", detail: format!("{} is not listed against {target} (its visible conditions fail)", op.key) });
+        reasons.push(Reason {
+            code: "not_visible",
+            detail: format!(
+                "{} is not listed against {target} (its visible conditions fail)",
+                op.key
+            ),
+        });
     }
     let strength = facts.network(target).unwrap_or(0.0);
     let network = Truth::from_bool(strength >= op.network_strength);
     if network == Truth::False {
         reasons.push(Reason {
             code: "network_too_weak",
-            detail: format!("network in {target} is {strength:.1}, {} needs {}", op.key, op.network_strength),
+            detail: format!(
+                "network in {target} is {strength:.1}, {} needs {}",
+                op.key, op.network_strength
+            ),
         });
     }
     let operatives = match facts.free_operatives() {
@@ -492,7 +561,10 @@ pub fn verdict(catalog: &Catalog, op: &Operation, target: &str, facts: &dyn Fact
             Some(have) if have >= *amount => {}
             Some(have) => waits_for.push(Reason {
                 code: "missing_equipment",
-                detail: format!("{key}: {have:.0} in stock, {} takes {amount} during its preparation", op.key),
+                detail: format!(
+                    "{key}: {have:.0} in stock, {} takes {amount} during its preparation",
+                    op.key
+                ),
             }),
             None => {}
         }
@@ -501,20 +573,34 @@ pub fn verdict(catalog: &Catalog, op: &Operation, target: &str, facts: &dyn Fact
     for t in &op.required_tokens {
         let held = facts.token(target, t);
         if held == Truth::False {
-            reasons.push(Reason { code: "missing_token", detail: format!("{} needs the {t} token against {target}", op.key) });
+            reasons.push(Reason {
+                code: "missing_token",
+                detail: format!("{} needs the {t} token against {target}", op.key),
+            });
         }
         if held == Truth::Unknown {
             judge.unknown(&format!("token {t}"));
         }
         tokens.push(held);
     }
-    let ready = and(
-        [visible, allowed, available, requirements, network, operatives]
-            .into_iter()
-            .chain(tokens),
-    );
+    let ready = and([
+        visible,
+        allowed,
+        available,
+        requirements,
+        network,
+        operatives,
+    ]
+    .into_iter()
+    .chain(tokens));
     let unknown_triggers = judge.unknown.into_inner();
-    Verdict { visible, ready, reasons, waits_for, unknown_triggers }
+    Verdict {
+        visible,
+        ready,
+        reasons,
+        waits_for,
+        unknown_triggers,
+    }
 }
 
 /// The operation's costs and requirements as listed by the tools.

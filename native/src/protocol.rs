@@ -72,7 +72,9 @@ impl crate::plan_run::Tools for Reads<'_> {
     }
 }
 /// The content folder holding the running game's focus files and the DLCs it has.
-pub(crate) fn focus_content(exe: &str) -> Result<(std::path::PathBuf, crate::focus_rules::live::Dlcs)> {
+pub(crate) fn focus_content(
+    exe: &str,
+) -> Result<(std::path::PathBuf, crate::focus_rules::live::Dlcs)> {
     use crate::focus_rules::live::Dlcs;
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
@@ -722,11 +724,18 @@ impl Server {
                 let target = match object.get("target") {
                     None => None,
                     Some(Value::String(t))
-                        if t.len() == 3 && t.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+                        if t.len() == 3
+                            && t.bytes()
+                                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
                     {
                         Some(t.clone())
                     }
-                    Some(_) => return Err(Error::new("invalid_arguments", "target must be a three-letter tag")),
+                    Some(_) => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "target must be a three-letter tag",
+                        ))
+                    }
                 };
                 let only: Vec<String> = match object.get("operations") {
                     None => Vec::new(),
@@ -734,40 +743,71 @@ impl Server {
                         .iter()
                         .map(|v| {
                             v.as_str()
-                                .filter(|k| !k.is_empty() && k.len() <= 128 && k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+                                .filter(|k| {
+                                    !k.is_empty()
+                                        && k.len() <= 128
+                                        && k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                                })
                                 .map(str::to_string)
                         })
                         .collect::<Option<_>>()
                         .ok_or_else(|| Error::new("invalid_arguments", "Invalid operation key"))?,
-                    Some(_) => return Err(Error::new("invalid_arguments", "operations must list up to 32 keys")),
+                    Some(_) => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "operations must list up to 32 keys",
+                        ))
+                    }
                 };
                 let include_hidden = match object.get("include_hidden") {
                     None => false,
                     Some(Value::Bool(b)) => *b,
-                    Some(_) => return Err(Error::new("invalid_arguments", "include_hidden must be boolean")),
+                    Some(_) => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "include_hidden must be boolean",
+                        ))
+                    }
                 };
                 let exe = self
                     .process()?
                     .identity()
                     .map(|i| i.exe.clone())
-                    .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?;
+                    .ok_or_else(|| {
+                        Error::new("map_data_unavailable", "Game identity unavailable")
+                    })?;
                 let (content, dlcs) = focus_content(&exe)?;
                 let catalog = crate::operation_rules::Catalog::load(&content);
                 if catalog.operations.is_empty() {
-                    return Err(Error::new("map_data_unavailable", "No operation files in the game content"));
+                    return Err(Error::new(
+                        "map_data_unavailable",
+                        "No operation files in the game content",
+                    ));
                 }
                 for key in &only {
                     if catalog.operation(key).is_none() {
-                        return Err(Error::new("unknown_operation", format!("No operation {key} in the game content")));
+                        return Err(Error::new(
+                            "unknown_operation",
+                            format!("No operation {key} in the game content"),
+                        ));
                     }
                 }
-                let tools = Reads { server: self, commands };
+                let tools = Reads {
+                    server: self,
+                    commands,
+                };
                 let live = crate::operation_rules::live::Live::read(&tools, Some(&dlcs))?;
                 let targets = match target {
                     Some(t) => vec![t],
                     None => live.network_targets(),
                 };
-                Ok(crate::operation_rules::live::report(&catalog, &live, &targets, &only, include_hidden))
+                Ok(crate::operation_rules::live::report(
+                    &catalog,
+                    &live,
+                    &targets,
+                    &only,
+                    include_hidden,
+                ))
             }
             "hoi4_focus_input_probe" => {
                 if !object.contains_key("focus_id")

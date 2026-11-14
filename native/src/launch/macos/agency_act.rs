@@ -20,7 +20,9 @@
 //! `operative_mission_icons_small|N` markers) arms the mission and a click on
 //! the map target (the Find view centres a state of the target) starts it.
 use super::{
-    diplomacy_state, intel_live, intelligence, journal::Outcome, loc, mgmt, panelkit as pk,
+    diplomacy_state, intel_live, intelligence,
+    journal::Outcome,
+    loc, mgmt, panelkit as pk,
     ui::{accept_command, clear_notices, find_state, read, settled, wait},
     ui_action::{self, refuse, Driven, Fail, Job},
     Guard, InputAuthority,
@@ -262,12 +264,18 @@ fn no(code: &'static str, message: impl Into<String>) -> Error {
 /// Refusals of `hoi4_agency_create` from memory, before any input.
 pub(super) fn create_check(a: &intel_live::Agency) -> Result<()> {
     if a.created {
-        return Err(no("agency_exists", "The intelligence agency already exists"));
+        return Err(no(
+            "agency_exists",
+            "The intelligence agency already exists",
+        ));
     }
     if a.creating {
         return Err(no(
             "agency_creation_in_progress",
-            format!("The agency is being created ({:.0} days done)", a.progress_days),
+            format!(
+                "The agency is being created ({:.0} days done)",
+                a.progress_days
+            ),
         ));
     }
     Ok(())
@@ -282,25 +290,47 @@ pub(super) fn upgrade_check(
     requires: &[String],
 ) -> Result<()> {
     if !a.created {
-        return Err(no("agency_not_created", "Create the intelligence agency first (hoi4_agency_create)"));
+        return Err(no(
+            "agency_not_created",
+            "Create the intelligence agency first (hoi4_agency_create)",
+        ));
     }
     if let Some(running) = &a.upgrading {
         return Err(no(
             "upgrade_in_progress",
-            format!("{running} is running ({:.0} days done); the agency runs one upgrade at a time", a.progress_days),
+            format!(
+                "{running} is running ({:.0} days done); the agency runs one upgrade at a time",
+                a.progress_days
+            ),
         ));
     }
     if let Some(key) = upgrade {
-        let have = a.upgrades.iter().find(|(k, _)| k == key).map_or(0, |(_, l)| *l);
+        let have = a
+            .upgrades
+            .iter()
+            .find(|(k, _)| k == key)
+            .map_or(0, |(_, l)| *l);
         if levels.is_some_and(|max| have as usize >= max) {
-            return Err(no("upgrade_maxed", format!("{key} is at its last level ({have})")));
+            return Err(no(
+                "upgrade_maxed",
+                format!("{key} is at its last level ({have})"),
+            ));
         }
-        let missing: Vec<&String> =
-            requires.iter().filter(|r| !a.upgrades.iter().any(|(k, l)| k == *r && *l > 0)).collect();
+        let missing: Vec<&String> = requires
+            .iter()
+            .filter(|r| !a.upgrades.iter().any(|(k, l)| k == *r && *l > 0))
+            .collect();
         if !missing.is_empty() {
             return Err(no(
                 "upgrade_locked",
-                format!("{key} needs {} first", missing.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", ")),
+                format!(
+                    "{key} needs {} first",
+                    missing
+                        .iter()
+                        .map(|m| m.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             ));
         }
     }
@@ -310,9 +340,16 @@ pub(super) fn upgrade_check(
 /// Refusals of `hoi4_operative_recruit` from memory: no agency, every slot filled, a new slot
 /// still waiting for its candidates (`wait_days` from the agency defines), a candidate beyond
 /// the offered ones.
-pub(super) fn recruit_check(a: &intel_live::Agency, candidate: usize, wait_days: i32) -> Result<()> {
+pub(super) fn recruit_check(
+    a: &intel_live::Agency,
+    candidate: usize,
+    wait_days: i32,
+) -> Result<()> {
     if !a.created {
-        return Err(no("agency_not_created", "Create the intelligence agency first (hoi4_agency_create)"));
+        return Err(no(
+            "agency_not_created",
+            "Create the intelligence agency first (hoi4_agency_create)",
+        ));
     }
     if a.operatives.len() as i32 >= a.slots {
         return Err(no(
@@ -334,7 +371,11 @@ pub(super) fn recruit_check(a: &intel_live::Agency, candidate: usize, wait_days:
     if candidate >= a.candidates.len() {
         return Err(no(
             "unknown_candidate",
-            format!("{} candidates are offered ({}), not position {candidate}", a.candidates.len(), a.candidates.join(", ")),
+            format!(
+                "{} candidates are offered ({}), not position {candidate}",
+                a.candidates.len(),
+                a.candidates.join(", ")
+            ),
         ));
     }
     Ok(())
@@ -343,16 +384,29 @@ pub(super) fn recruit_check(a: &intel_live::Agency, candidate: usize, wait_days:
 /// Refusals of `hoi4_operative_assign` from memory.
 pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan) -> Result<()> {
     if !a.created {
-        return Err(no("agency_not_created", "Create the intelligence agency first (hoi4_agency_create)"));
+        return Err(no(
+            "agency_not_created",
+            "Create the intelligence agency first (hoi4_agency_create)",
+        ));
     }
     let Some(o) = a.operatives.get(plan.operative) else {
         return Err(no(
             "operative_unknown",
-            format!("{} operatives are recruited (positions 0..), not position {}", a.operatives.len(), plan.operative),
+            format!(
+                "{} operatives are recruited (positions 0..), not position {}",
+                a.operatives.len(),
+                plan.operative
+            ),
         ));
     };
     if let Some(op) = &o.operation {
-        return Err(no("operative_busy", format!("{} works on {op}; it is free again when the operation ends", o.name)));
+        return Err(no(
+            "operative_busy",
+            format!(
+                "{} works on {op}; it is free again when the operation ends",
+                o.name
+            ),
+        ));
     }
     let same_target = match &plan.aim {
         Aim::State(s) => o.mission_state == Some(*s),
@@ -360,7 +414,10 @@ pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan) -> Result<
         Aim::Home => true,
     };
     if o.mission.as_deref() == Some(plan.mission) && same_target {
-        return Err(no("already_on_mission", format!("{} already runs {} there", o.name, plan.mission)));
+        return Err(no(
+            "already_on_mission",
+            format!("{} already runs {} there", o.name, plan.mission),
+        ));
     }
     Ok(())
 }
@@ -427,9 +484,7 @@ fn create(process: &dyn Process, keys: &dyn GameInput) -> Driven {
             Ok(g.creating || g.created)
         })
         .is_ok();
-        Ok(
-            json!({"creation_started": started, "picked_logo": picked_logo}),
-        )
+        Ok(json!({"creation_started": started, "picked_logo": picked_logo}))
     })();
     leave(process, keys);
     result
@@ -621,7 +676,12 @@ pub(super) fn recruit_refusal(slots: &[Slot]) -> Option<(&'static str, String)> 
 
 /// `want` is the candidate's name from memory (hoi4_intelligence `agency.candidates`); the row
 /// whose name text matches is clicked. The grid keeps recycled rows, so positions alone mislead.
-fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize, want: Option<&str>) -> Driven {
+fn recruit(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    index: usize,
+    want: Option<&str>,
+) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_agency(process, keys)?;
@@ -647,7 +707,9 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize, want: Opti
             pk::is_open(r, i, &pk::OPERATIVE_RECRUIT)
         })?;
         pause(300);
-        let candidates = |r: &Reader<'_>, i: u64| -> Result<Vec<(Option<String>, gui_tree::Rect)>> {
+        let candidates = |r: &Reader<'_>,
+                          i: u64|
+         -> Result<Vec<(Option<String>, gui_tree::Rect)>> {
             let root = pk::open_root(r, i, &pk::OPERATIVE_RECRUIT)?;
             let mut grids = Vec::new();
             pk::grids(r, i, root, 6, &mut grids)?;
@@ -665,7 +727,8 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize, want: Opti
                             if !gui_tree::visible(r, frame)? {
                                 continue;
                             }
-                            let name = pk::text(r, i, frame, "name", 2)?.map(|t| t.trim().to_string());
+                            let name =
+                                pk::text(r, i, frame, "name", 2)?.map(|t| t.trim().to_string());
                             // 1.19.4.1 rows: portrait_overlay_bg, title, name, skill, traits_grid
                             // (no button of their own; a click on the portrait picks the row).
                             let icon = match gui_tree::child(r, i, frame, "leader_icon")? {
@@ -702,7 +765,9 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize, want: Opti
             Ok(out)
         };
         let offered = settled(process, "operative candidates", candidates)?;
-        let named = offered.iter().any(|(n, _)| n.as_deref().is_some_and(|n| !n.is_empty()));
+        let named = offered
+            .iter()
+            .any(|(n, _)| n.as_deref().is_some_and(|n| !n.is_empty()));
         let pick = match (want, named) {
             (Some(w), true) => offered.iter().find(|(n, _)| n.as_deref() == Some(w)),
             _ => offered.get(index),
@@ -713,7 +778,11 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize, want: Opti
                 format!(
                     "{} is not among the shown candidates ({}); nothing was recruited",
                     want.unwrap_or_default(),
-                    offered.iter().filter_map(|(n, _)| n.clone()).collect::<Vec<_>>().join(", ")
+                    offered
+                        .iter()
+                        .filter_map(|(n, _)| n.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
             ));
         }
@@ -1133,7 +1202,9 @@ pub(super) fn call(
                     *wanted.borrow_mut() = a.candidates.get(index).cloned();
                     Ok(())
                 }),
-                dispatch: Box::new(|process, keys| recruit(process, keys, index, wanted.borrow().as_deref())),
+                dispatch: Box::new(|process, keys| {
+                    recruit(process, keys, index, wanted.borrow().as_deref())
+                }),
                 settle: Box::new(|process, _| {
                     let a = mem(process)?;
                     let had = *before.borrow();
@@ -1213,10 +1284,14 @@ pub(super) fn call(
                 settle: Box::new(|process, _| {
                     let a = mem(process)?;
                     let Some(o) = a.operatives.get(plan.operative) else {
-                        return Ok(Outcome::Diverged(json!({"tool":"operative_assign","operative_missing":plan.operative})));
+                        return Ok(Outcome::Diverged(
+                            json!({"tool":"operative_assign","operative_missing":plan.operative}),
+                        ));
                     };
                     let aimed = match &plan.aim {
-                        Aim::State(_) => o.mission_state.is_some() && o.mission_state == *chosen.borrow(),
+                        Aim::State(_) => {
+                            o.mission_state.is_some() && o.mission_state == *chosen.borrow()
+                        }
                         Aim::Country(t) => o.mission_target.as_deref() == Some(t.as_str()),
                         Aim::Home => true,
                     };
@@ -1402,7 +1477,12 @@ mod tests {
         assert_eq!(recruited(&[slot(true), slot(false), slot(true)]), 2);
     }
 
-    fn agency(created: bool, upgrading: Option<&str>, operatives: usize, slots: i32) -> intel_live::Agency {
+    fn agency(
+        created: bool,
+        upgrading: Option<&str>,
+        operatives: usize,
+        slots: i32,
+    ) -> intel_live::Agency {
         intel_live::Agency {
             created,
             upgrading: upgrading.map(str::to_string),
@@ -1432,37 +1512,99 @@ mod tests {
 
     #[test]
     fn memory_refuses_before_any_input() {
-        assert_eq!(code(create_check(&agency(true, None, 0, 1))), "agency_exists");
+        assert_eq!(
+            code(create_check(&agency(true, None, 0, 1))),
+            "agency_exists"
+        );
         let mut a = agency(false, None, 0, 0);
         a.creating = true;
         assert_eq!(code(create_check(&a)), "agency_creation_in_progress");
         assert_eq!(code(create_check(&agency(false, None, 0, 0))), "");
 
-        let up = |a: &intel_live::Agency, k, l, req: &[String]| code(upgrade_check(a, Some(k), l, req));
-        assert_eq!(up(&agency(false, None, 0, 0), "upgrade_x", None, &[]), "agency_not_created");
-        assert_eq!(up(&agency(true, Some("upgrade_y"), 0, 1), "upgrade_x", None, &[]), "upgrade_in_progress");
-        assert_eq!(up(&agency(true, None, 0, 1), "upgrade_training_centers", Some(1), &[]), "upgrade_maxed");
-        assert_eq!(up(&agency(true, None, 0, 1), "upgrade_x", Some(1), &["upgrade_z".into()]), "upgrade_locked");
-        assert_eq!(up(&agency(true, None, 0, 1), "upgrade_x", Some(1), &["upgrade_training_centers".into()]), "");
+        let up =
+            |a: &intel_live::Agency, k, l, req: &[String]| code(upgrade_check(a, Some(k), l, req));
+        assert_eq!(
+            up(&agency(false, None, 0, 0), "upgrade_x", None, &[]),
+            "agency_not_created"
+        );
+        assert_eq!(
+            up(
+                &agency(true, Some("upgrade_y"), 0, 1),
+                "upgrade_x",
+                None,
+                &[]
+            ),
+            "upgrade_in_progress"
+        );
+        assert_eq!(
+            up(
+                &agency(true, None, 0, 1),
+                "upgrade_training_centers",
+                Some(1),
+                &[]
+            ),
+            "upgrade_maxed"
+        );
+        assert_eq!(
+            up(
+                &agency(true, None, 0, 1),
+                "upgrade_x",
+                Some(1),
+                &["upgrade_z".into()]
+            ),
+            "upgrade_locked"
+        );
+        assert_eq!(
+            up(
+                &agency(true, None, 0, 1),
+                "upgrade_x",
+                Some(1),
+                &["upgrade_training_centers".into()]
+            ),
+            ""
+        );
 
-        assert_eq!(code(recruit_check(&agency(false, None, 0, 0), 0, 30)), "agency_not_created");
-        assert_eq!(code(recruit_check(&agency(true, None, 2, 2), 0, 30)), "no_free_operative_slot");
+        assert_eq!(
+            code(recruit_check(&agency(false, None, 0, 0), 0, 30)),
+            "agency_not_created"
+        );
+        assert_eq!(
+            code(recruit_check(&agency(true, None, 2, 2), 0, 30)),
+            "no_free_operative_slot"
+        );
         let mut a = agency(true, None, 1, 2);
         a.slot_wait_days = 3;
         let e = recruit_check(&a, 0, 30).unwrap_err();
-        assert_eq!((e.code.as_ref(), e.message.contains("in 27 days")), ("operative_slot_locked", true));
+        assert_eq!(
+            (e.code.as_ref(), e.message.contains("in 27 days")),
+            ("operative_slot_locked", true)
+        );
         a.candidates = vec!["A".into(), "B".into()];
         assert_eq!(code(recruit_check(&a, 2, 30)), "unknown_candidate");
         assert_eq!(code(recruit_check(&a, 1, 30)), "");
 
-        let plan = |operative, aim| AssignPlan { operative, mission: "build_intel_network", button: 1, aim };
+        let plan = |operative, aim| AssignPlan {
+            operative,
+            mission: "build_intel_network",
+            button: 1,
+            aim,
+        };
         let a = agency(true, None, 1, 2);
-        assert_eq!(code(assign_check(&a, &plan(1, Aim::State(842)))), "operative_unknown");
-        assert_eq!(code(assign_check(&a, &plan(0, Aim::State(842)))), "already_on_mission");
+        assert_eq!(
+            code(assign_check(&a, &plan(1, Aim::State(842)))),
+            "operative_unknown"
+        );
+        assert_eq!(
+            code(assign_check(&a, &plan(0, Aim::State(842)))),
+            "already_on_mission"
+        );
         assert_eq!(code(assign_check(&a, &plan(0, Aim::State(843)))), "");
         let mut busy = a.clone();
         busy.operatives[0].operation = Some("operation_collaboration_government".into());
-        assert_eq!(code(assign_check(&busy, &plan(0, Aim::State(843)))), "operative_busy");
+        assert_eq!(
+            code(assign_check(&busy, &plan(0, Aim::State(843)))),
+            "operative_busy"
+        );
     }
 
     #[test]

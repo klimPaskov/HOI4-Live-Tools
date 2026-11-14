@@ -4,7 +4,6 @@
 //! contract; research starts are driven by live GUI geometry.
 mod action_fence;
 mod agency_act;
-mod operation_act;
 mod air;
 mod airact;
 mod airread;
@@ -17,6 +16,7 @@ mod commanders;
 mod construction;
 mod construction_find;
 mod fair_facts;
+mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;

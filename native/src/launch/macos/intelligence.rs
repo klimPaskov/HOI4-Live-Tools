@@ -444,9 +444,15 @@ pub(super) fn merge_live(body: &mut Value, state: &LiveState) {
                 .collect();
             body["operatives"]["state_read"] = json!(true);
             body["operatives"]["recruited"] = json!(ops.len());
-            body["operatives"]["idle"] = json!(a.operatives.iter().filter(|o| intel_live::operative_json(0, o)["idle"] == json!(true)).count());
+            body["operatives"]["idle"] = json!(a
+                .operatives
+                .iter()
+                .filter(|o| intel_live::operative_json(0, o)["idle"] == json!(true))
+                .count());
             body["operatives"]["list"] = json!(ops);
-            body["operatives"].as_object_mut().map(|o| o.remove("reason"));
+            body["operatives"]
+                .as_object_mut()
+                .map(|o| o.remove("reason"));
         }
         Err(e) => {
             body["agency"]["live"] = unread(e);

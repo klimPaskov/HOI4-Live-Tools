@@ -20,16 +20,26 @@ pub struct Live<'d> {
 impl<'d> Live<'d> {
     pub fn read(tools: &dyn Tools, dlcs: Option<&'d Dlcs>) -> crate::error::Result<Self> {
         let intel = tools.call("hoi4_intelligence", &json!({}))?;
-        let player = intel["game_time"]["player"].as_str().unwrap_or_default().to_string();
+        let player = intel["game_time"]["player"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         let enemies = tools.call("hoi4_wars", &json!({})).ok().and_then(|w| {
-            w["wars"]["enemies"]
-                .as_array()
-                .map(|a| a.iter().filter_map(|t| t.as_str().map(str::to_string)).collect())
+            w["wars"]["enemies"].as_array().map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
         });
         let stock = tools.call("hoi4_stockpile", &json!({})).ok().and_then(|s| {
             s["equipment"].as_array().map(|rows| {
                 rows.iter()
-                    .filter_map(|r| Some((r["archetype"].as_str()?.to_string(), r["stockpile"].as_f64()?)))
+                    .filter_map(|r| {
+                        Some((
+                            r["archetype"].as_str()?.to_string(),
+                            r["stockpile"].as_f64()?,
+                        ))
+                    })
                     .collect()
             })
         });
@@ -43,7 +53,13 @@ impl<'d> Live<'d> {
         stock: Option<HashMap<String, f64>>,
         dlcs: Option<&'d Dlcs>,
     ) -> Self {
-        Live { player, intel, enemies, stock, dlcs }
+        Live {
+            player,
+            intel,
+            enemies,
+            stock,
+            dlcs,
+        }
     }
 
     fn network_row(&self, target: &str) -> Option<&Value> {
@@ -59,7 +75,12 @@ impl<'d> Live<'d> {
             .as_array()
             .map(|a| {
                 a.iter()
-                    .filter_map(|n| Some((n["target"].as_str()?.to_string(), n["strength"].as_f64().unwrap_or(0.0))))
+                    .filter_map(|n| {
+                        Some((
+                            n["target"].as_str()?.to_string(),
+                            n["strength"].as_f64().unwrap_or(0.0),
+                        ))
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -99,7 +120,11 @@ impl Facts for Live<'_> {
         if self.intel["intel_network"]["state_read"] != json!(true) {
             return None;
         }
-        Some(self.network_row(target).and_then(|n| n["strength"].as_f64()).unwrap_or(0.0))
+        Some(
+            self.network_row(target)
+                .and_then(|n| n["strength"].as_f64())
+                .unwrap_or(0.0),
+        )
     }
     fn collaboration(&self, target: &str) -> Option<f64> {
         let c = &self.intel["collaboration"];
@@ -119,11 +144,10 @@ impl Facts for Live<'_> {
         if t["state_read"] != json!(true) {
             return Truth::Unknown;
         }
-        Truth::from_bool(
-            t["held"]
-                .as_array()
-                .is_some_and(|a| a.iter().any(|r| r["target"] == json!(target) && r["token"] == json!(token))),
-        )
+        Truth::from_bool(t["held"].as_array().is_some_and(|a| {
+            a.iter()
+                .any(|r| r["target"] == json!(target) && r["token"] == json!(token))
+        }))
     }
     fn dlc(&self, name: &str) -> Truth {
         self.dlcs.map_or(Truth::Unknown, |d| d.has(name))
@@ -132,7 +156,9 @@ impl Facts for Live<'_> {
         if self.intel["operatives"]["state_read"] != json!(true) {
             return None;
         }
-        self.intel["operatives"]["recruited"].as_u64().map(|n| n as usize)
+        self.intel["operatives"]["recruited"]
+            .as_u64()
+            .map(|n| n as usize)
     }
     fn free_operatives(&self) -> Option<usize> {
         if self.intel["operatives"]["state_read"] != json!(true) {
@@ -141,19 +167,31 @@ impl Facts for Live<'_> {
         Some(
             self.intel["operatives"]["list"]
                 .as_array()
-                .map(|a| a.iter().filter(|o| o["available_for_operation"] == json!(true)).count())
+                .map(|a| {
+                    a.iter()
+                        .filter(|o| o["available_for_operation"] == json!(true))
+                        .count()
+                })
                 .unwrap_or(0),
         )
     }
     fn stockpile(&self, archetype: &str) -> Option<f64> {
-        self.stock.as_ref().map(|s| s.get(archetype).copied().unwrap_or(0.0))
+        self.stock
+            .as_ref()
+            .map(|s| s.get(archetype).copied().unwrap_or(0.0))
     }
 }
 
 /// `hoi4_operations`: every operation of the content against each target, with its costs and
 /// whether it can be prepared now. `only` narrows to some operation keys; hidden operations
 /// (their visible conditions certainly fail) are counted, and listed with `include_hidden`.
-pub fn report(catalog: &Catalog, live: &Live<'_>, targets: &[String], only: &[String], include_hidden: bool) -> Value {
+pub fn report(
+    catalog: &Catalog,
+    live: &Live<'_>,
+    targets: &[String],
+    only: &[String],
+    include_hidden: bool,
+) -> Value {
     let mut out = Vec::new();
     for target in targets {
         let mut rows = Vec::new();

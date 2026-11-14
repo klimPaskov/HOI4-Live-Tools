@@ -364,7 +364,11 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
                 for (n, hop) in hops.iter().enumerate() {
                     let of = if n == 0 { owner_class } else { &hops[n - 1].0 };
                     let at = fld(abi, &of.owner(), hop.1)?;
-                    w = if plausible(w) { r.u64(w + at).unwrap_or(0) } else { 0 };
+                    w = if plausible(w) {
+                        r.u64(w + at).unwrap_or(0)
+                    } else {
+                        0
+                    };
                 }
                 if plausible(w) && r.u64(w).ok() == Some(want) {
                     let root = r
@@ -428,14 +432,27 @@ const SLOT_PATHS: &[(&str, u64, &[u64], u64, bool)] = &[
 /// Hops are (class reached, field of the previous window) pairs.
 type Hops = &'static [(Class, u64)];
 const CHILD_WINDOWS: &[(Class, Class, Hops, u64)] = &[
-    (AGENCY_UPGRADES, AGENCY_VIEW, &[(AGENCY_UPGRADES, 0x4a8)], 0x50),
+    (
+        AGENCY_UPGRADES,
+        AGENCY_VIEW,
+        &[(AGENCY_UPGRADES, 0x4a8)],
+        0x50,
+    ),
     // The operation overview (Prepare on an operation row) at agency view +0x4a0, root +0x50;
     // its operative selection window at overview +0x1358, root +0x518 (live 14 Nov 2026).
-    (OPERATION_OVERVIEW, AGENCY_VIEW, &[(OPERATION_OVERVIEW, 0x4a0)], 0x50),
+    (
+        OPERATION_OVERVIEW,
+        AGENCY_VIEW,
+        &[(OPERATION_OVERVIEW, 0x4a0)],
+        0x50,
+    ),
     (
         OPERATIVE_FOR_OPERATION,
         AGENCY_VIEW,
-        &[(OPERATION_OVERVIEW, 0x4a0), (OPERATIVE_FOR_OPERATION, 0x1358)],
+        &[
+            (OPERATION_OVERVIEW, 0x4a0),
+            (OPERATIVE_FOR_OPERATION, 0x1358),
+        ],
         0x518,
     ),
     // Name and insignia window (the logo window Create Agency opens): Linux +0x340, root +0x50 (live
@@ -469,7 +486,11 @@ pub(super) fn child_object(r: &Reader<'_>, image: u64, class: &Class) -> Result<
             for (n, hop) in hops.iter().enumerate() {
                 let of = if n == 0 { owner_class } else { &hops[n - 1].0 };
                 let at = fld(abi, &of.owner(), hop.1)?;
-                w = if plausible(w) { r.u64(w + at).unwrap_or(0) } else { 0 };
+                w = if plausible(w) {
+                    r.u64(w + at).unwrap_or(0)
+                } else {
+                    0
+                };
             }
             if plausible(w) && r.u64(w).ok() == Some(want) {
                 return Ok(Some(w));

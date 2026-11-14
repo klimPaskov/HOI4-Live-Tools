@@ -75,7 +75,9 @@ fn open_agency(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
         return Ok(());
     }
     keys.press_shifted(KEY_W)?;
-    wait(process, "open intelligence agency view", |r, i| pk::is_open(r, i, &pk::AGENCY_VIEW))?;
+    wait(process, "open intelligence agency view", |r, i| {
+        pk::is_open(r, i, &pk::AGENCY_VIEW)
+    })?;
     pause(400);
     Ok(())
 }
@@ -178,7 +180,12 @@ fn slot_buttons(r: &Reader<'_>, i: u64) -> Result<Vec<Rect>> {
             // (operative_portrait_pos x=15, a 54 px wide portrait window) is centred 8 px to its
             // left at the same height (checked against the drawn slots, 14 Nov 2026).
             let o = pk::rect(r, i, b)?;
-            out.push(Rect { x: o.x - 8 - o.w / 2, y: o.y, w: o.w, h: o.h });
+            out.push(Rect {
+                x: o.x - 8 - o.w / 2,
+                y: o.y,
+                w: o.w,
+                h: o.h,
+            });
         }
     }
     Ok(out)
@@ -254,7 +261,10 @@ fn open_overview(process: &dyn Process, keys: &dyn GameInput, plan: &StartPlan) 
         // Scroll the list one wheel step down and look again; stop when nothing moves.
         let before: Vec<String> = visible.iter().map(|(n, _)| n.clone()).collect();
         let (_, clip) = read(process, grid)?;
-        let (cx, cy) = (f64::from(clip.x) + 120.0, f64::from(clip.y) + f64::from(clip.h) / 2.0);
+        let (cx, cy) = (
+            f64::from(clip.x) + 120.0,
+            f64::from(clip.y) + f64::from(clip.h) / 2.0,
+        );
         keys.scroll(pk::GAME, (cx, cy), -120)?;
         pause(250);
         let after: Vec<String> = read(process, rows)?.into_iter().map(|(n, _)| n).collect();
@@ -314,7 +324,11 @@ fn assign_operatives(process: &dyn Process, keys: &dyn GameInput, plan: &StartPl
                 "operative_not_offered",
                 format!(
                     "{name} is not in the game's list for this operation ({}); nothing was started",
-                    offered.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(", ")
+                    offered
+                        .iter()
+                        .map(|(n, _)| n.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
             ));
         };
@@ -381,7 +395,9 @@ pub(super) fn start(process: &dyn Process, keys: &dyn GameInput, plan: &StartPla
         })?;
         let _ = accept_command(process, keys);
         pause(400);
-        Ok(json!({"opened": opened, "operatives": picked, "auto_commence_clicked": plan.auto_commence}))
+        Ok(
+            json!({"opened": opened, "operatives": picked, "auto_commence_clicked": plan.auto_commence}),
+        )
     })();
     leave(process, keys);
     result
@@ -406,18 +422,27 @@ pub(super) fn pick_operatives(
                 let Some(o) = agency.operatives.get(*p) else {
                     return Err(Error::new(
                         "operative_unknown",
-                        format!("{} operatives are recruited, not position {p}", agency.operatives.len()),
+                        format!(
+                            "{} operatives are recruited, not position {p}",
+                            agency.operatives.len()
+                        ),
                     ));
                 };
                 if let Some(op) = &o.operation {
-                    return Err(Error::new("operative_busy", format!("{} works on {op}", o.name)));
+                    return Err(Error::new(
+                        "operative_busy",
+                        format!("{} works on {op}", o.name),
+                    ));
                 }
                 out.push(o.name.clone());
             }
             if out.len() < needed {
                 return Err(Error::new(
                     "not_enough_operatives",
-                    format!("The operation needs {needed} operatives; {} named", out.len()),
+                    format!(
+                        "The operation needs {needed} operatives; {} named",
+                        out.len()
+                    ),
                 ));
             }
             Ok(out.into_iter().take(needed).collect())
@@ -433,7 +458,11 @@ pub(super) fn pick_operatives(
                     ),
                 ));
             }
-            Ok(free.into_iter().take(needed).map(|(_, o)| o.name.clone()).collect())
+            Ok(free
+                .into_iter()
+                .take(needed)
+                .map(|(_, o)| o.name.clone())
+                .collect())
         }
     }
 }
@@ -456,7 +485,10 @@ fn mem(process: &dyn Process) -> Result<intel_live::Agency> {
 /// Operation definitions of the running game's content (the install with its mods).
 fn catalog(
     process: &dyn Process,
-) -> Result<(std::sync::Arc<crate::operation_rules::Catalog>, std::path::PathBuf)> {
+) -> Result<(
+    std::sync::Arc<crate::operation_rules::Catalog>,
+    std::path::PathBuf,
+)> {
     let exe = process
         .identity()
         .map(|i| i.exe.clone())
@@ -478,20 +510,39 @@ pub(super) fn call(
     let id = super::string(args, "request_id")?;
     let token = super::string(args, "lease_token")?;
     if name != "hoi4_operation_start" {
-        return Err(Error::new("capability_unavailable", "Unknown operation tool"));
+        return Err(Error::new(
+            "capability_unavailable",
+            "Unknown operation tool",
+        ));
     }
     super::allowed(
         args,
-        &["target", "operation", "operatives", "auto_commence", "request_id", "lease_token"],
+        &[
+            "target",
+            "operation",
+            "operatives",
+            "auto_commence",
+            "request_id",
+            "lease_token",
+        ],
     )?;
     let target = super::string(args, "target")?;
-    if target.len() != 3 || !target.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
-        return Err(Error::new("invalid_arguments", "target must be a three-letter tag"));
+    if target.len() != 3
+        || !target
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+    {
+        return Err(Error::new(
+            "invalid_arguments",
+            "target must be a three-letter tag",
+        ));
     }
     let operation = super::string(args, "operation")?;
     if operation.is_empty()
         || operation.len() > 128
-        || !operation.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        || !operation
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
     {
         return Err(Error::new("invalid_arguments", "Invalid operation key"));
     }
@@ -501,14 +552,26 @@ pub(super) fn call(
             list.iter()
                 .map(|v| v.as_u64().filter(|n| *n < 32).map(|n| n as usize))
                 .collect::<Option<_>>()
-                .ok_or_else(|| Error::new("invalid_arguments", "operatives lists positions 0..31"))?,
+                .ok_or_else(|| {
+                    Error::new("invalid_arguments", "operatives lists positions 0..31")
+                })?,
         ),
-        Some(_) => return Err(Error::new("invalid_arguments", "operatives lists up to 8 positions")),
+        Some(_) => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "operatives lists up to 8 positions",
+            ))
+        }
     };
     let auto_commence = match args.get("auto_commence") {
         None => true,
         Some(Value::Bool(b)) => *b,
-        Some(_) => return Err(Error::new("invalid_arguments", "auto_commence must be boolean")),
+        Some(_) => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "auto_commence must be boolean",
+            ))
+        }
     };
     let plan: RefCell<Option<StartPlan>> = RefCell::new(None);
     let before: RefCell<Option<usize>> = RefCell::new(None);
@@ -519,7 +582,10 @@ pub(super) fn call(
         plan: Box::new(|process| {
             let (catalog, content) = catalog(process)?;
             let def = catalog.operation(operation).ok_or_else(|| {
-                Error::new("unknown_operation", format!("No operation {operation} in the game content"))
+                Error::new(
+                    "unknown_operation",
+                    format!("No operation {operation} in the game content"),
+                )
             })?;
             if def.picks_location {
                 return Err(Error::new(
@@ -529,7 +595,10 @@ pub(super) fn call(
             }
             let a = mem(process)?;
             if !a.created {
-                return Err(Error::new("agency_not_created", "Create the intelligence agency first (hoi4_agency_create)"));
+                return Err(Error::new(
+                    "agency_not_created",
+                    "Create the intelligence agency first (hoi4_agency_create)",
+                ));
             }
             let needed = def.operatives.max(1);
             let operatives = pick_operatives(&a, positions.as_deref(), needed)?;
@@ -547,7 +616,9 @@ pub(super) fn call(
         }),
         dispatch: Box::new(|process, keys| {
             let held = plan.borrow();
-            let p = held.as_ref().ok_or_else(|| Error::new("action_uncertain", "Plan missing at dispatch"))?;
+            let p = held
+                .as_ref()
+                .ok_or_else(|| Error::new("action_uncertain", "Plan missing at dispatch"))?;
             start(process, keys, p)
         }),
         settle: Box::new(|process, seen| {
@@ -590,7 +661,9 @@ fn running(process: &dyn Process) -> Result<Vec<Value>> {
 pub(super) const TOOLS: [&str; 1] = ["hoi4_operation_start"];
 
 pub(super) fn tools() -> Vec<Value> {
-    vec![json!({"name":"hoi4_operation_start","description":"Prepare an intelligence operation against a target with ordinary input, as a player does: agency view (Shift+W), Operations tab, the operation's row (scrolled into view; one row per target with a network, the opened window's memory must name the asked operation and target), Prepare, one free operative per slot picked by name in the game's list, optionally Commence when ready, then the window's Prepare. The game then gathers the equipment and civilian factories and, with auto_commence (default true), commences on its own; the operation's phases then run for its days. Refusals before input: unknown_operation, operation_picks_location (the operation also picks a state or region in its window, e.g. coup, sabotage, coordinated strike: not built), agency_not_created, operative_unknown, operative_busy, not_enough_operatives (from memory and the content's files); from the windows before the first state-changing click: operation_unavailable (the game disables Prepare), operation_not_listed, operative_slots_unavailable, operative_not_offered, operative_pick_failed. Live-verified on 1.19.4 (collaboration government, ITA on ETH, at war). Use hoi4_operations first: it lists every missing piece with a code. Verified from memory: the operation appears among the agency's operations (hoi4_intelligence operations). operatives = recruited positions (hoi4_intelligence operatives.list order); default the first free ones.","inputSchema":{"type":"object","properties":{"target":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string","maxLength":128},"operatives":{"type":"array","items":{"type":"integer","minimum":0,"maximum":31},"maxItems":8},"auto_commence":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["target","operation","request_id","lease_token"],"additionalProperties":false}})]
+    vec![
+        json!({"name":"hoi4_operation_start","description":"Prepare an intelligence operation against a target with ordinary input, as a player does: agency view (Shift+W), Operations tab, the operation's row (scrolled into view; one row per target with a network, the opened window's memory must name the asked operation and target), Prepare, one free operative per slot picked by name in the game's list, optionally Commence when ready, then the window's Prepare. The game then gathers the equipment and civilian factories and, with auto_commence (default true), commences on its own; the operation's phases then run for its days. Refusals before input: unknown_operation, operation_picks_location (the operation also picks a state or region in its window, e.g. coup, sabotage, coordinated strike: not built), agency_not_created, operative_unknown, operative_busy, not_enough_operatives (from memory and the content's files); from the windows before the first state-changing click: operation_unavailable (the game disables Prepare), operation_not_listed, operative_slots_unavailable, operative_not_offered, operative_pick_failed. Live-verified on 1.19.4 (collaboration government, ITA on ETH, at war). Use hoi4_operations first: it lists every missing piece with a code. Verified from memory: the operation appears among the agency's operations (hoi4_intelligence operations). operatives = recruited positions (hoi4_intelligence operatives.list order); default the first free ones.","inputSchema":{"type":"object","properties":{"target":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string","maxLength":128},"operatives":{"type":"array","items":{"type":"integer","minimum":0,"maximum":31},"maxItems":8},"auto_commence":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["target","operation","request_id","lease_token"],"additionalProperties":false}}),
+    ]
 }
 
 #[cfg(test)]
@@ -623,11 +696,27 @@ mod tests {
 
     #[test]
     fn operatives_are_picked_from_the_free_ones() {
-        assert_eq!(pick_operatives(&agency(&[false, true, false]), None, 2).unwrap(), ["op0", "op2"]);
+        assert_eq!(
+            pick_operatives(&agency(&[false, true, false]), None, 2).unwrap(),
+            ["op0", "op2"]
+        );
         let e = pick_operatives(&agency(&[false, true]), None, 2).unwrap_err();
         assert_eq!(e.code, "not_enough_operatives");
-        assert_eq!(pick_operatives(&agency(&[false, true]), Some(&[1]), 1).unwrap_err().code, "operative_busy");
-        assert_eq!(pick_operatives(&agency(&[false]), Some(&[3]), 1).unwrap_err().code, "operative_unknown");
-        assert_eq!(pick_operatives(&agency(&[false, false]), Some(&[1, 0]), 2).unwrap(), ["op1", "op0"]);
+        assert_eq!(
+            pick_operatives(&agency(&[false, true]), Some(&[1]), 1)
+                .unwrap_err()
+                .code,
+            "operative_busy"
+        );
+        assert_eq!(
+            pick_operatives(&agency(&[false]), Some(&[3]), 1)
+                .unwrap_err()
+                .code,
+            "operative_unknown"
+        );
+        assert_eq!(
+            pick_operatives(&agency(&[false, false]), Some(&[1, 0]), 2).unwrap(),
+            ["op1", "op0"]
+        );
     }
 }

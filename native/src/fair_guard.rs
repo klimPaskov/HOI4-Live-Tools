@@ -339,7 +339,8 @@ fn breach(
         "hoi4_operative_assign" | "hoi4_operation_start" => {
             let op = format!("{} {}", text(args, "operation"), text(args, "mission"))
                 .to_ascii_lowercase();
-            let target = format!("{}{}", text(args, "country"), text(args, "target")).to_ascii_uppercase();
+            let target =
+                format!("{}{}", text(args, "country"), text(args, "target")).to_ascii_uppercase();
             (op.contains("collaboration")
                 && target == "SOV"
                 && (has(EURO_AXIS, me) || has(JAPAN_SIDE, me)))

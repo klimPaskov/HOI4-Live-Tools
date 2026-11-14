@@ -97,7 +97,10 @@ fn fixed(r: &Reader<'_>, address: u64) -> Result<f64> {
 fn entries(r: &Reader<'_>, address: u64, stride: u64, limit: usize) -> Result<Vec<u64>> {
     let (_, data, size) = r.array_header(address)?;
     if size > limit {
-        return Err(Error::new("invalid_array", "Implausible intelligence array"));
+        return Err(Error::new(
+            "invalid_array",
+            "Implausible intelligence array",
+        ));
     }
     if size > 0 && !mgmt::is_pointer(data) {
         return Err(Error::new("invalid_pointer", "Stale intelligence array"));
@@ -216,7 +219,12 @@ fn operative(r: &Reader<'_>, image: u64, leader: u64) -> Result<Operative> {
     let name = text(r, leader + at(r, &LEADER_CLASS, LEADER_NAME)?)?;
     let codename = text(r, leader + at(r, &LEADER_CLASS, LEADER_CODENAME)?)?;
     let mut nationalities = Vec::new();
-    for e in entries(r, leader + at(r, &LEADER_CLASS, LEADER_NATIONALITIES)?, 4, 16)? {
+    for e in entries(
+        r,
+        leader + at(r, &LEADER_CLASS, LEADER_NATIONALITIES)?,
+        4,
+        16,
+    )? {
         nationalities.push(states::tag_name(r, image, r.i32(e)?)?);
     }
     let holder = leader + at(r, &LEADER_CLASS, LEADER_MISSION)?;
@@ -227,7 +235,10 @@ fn operative(r: &Reader<'_>, image: u64, leader: u64) -> Result<Operative> {
         let kind = mgmt::type_name(r, mission_object)?;
         mission = mission_key(&kind);
         if mission.is_none() {
-            return Err(Error::new("invalid_type", format!("Unknown mission class {kind}")));
+            return Err(Error::new(
+                "invalid_type",
+                format!("Unknown mission class {kind}"),
+            ));
         }
         if mission.as_deref() != Some("no_mission") {
             let tag = r.i32(mission_object + MISSION_TARGET)?;
@@ -308,9 +319,17 @@ pub(super) fn agency(r: &Reader<'_>, image: u64, country: u64) -> Result<Agency>
 
 /// The own networks, one per target country.
 pub(super) fn networks(r: &Reader<'_>, image: u64, gs: u64, own_tag: i32) -> Result<Vec<Network>> {
-    let manager = object(r, r.u64(gs + at(r, &GS_CLASS, GS_OPERATIVES)?)?, MANAGER_TYPE)?;
+    let manager = object(
+        r,
+        r.u64(gs + at(r, &GS_CLASS, GS_OPERATIVES)?)?,
+        MANAGER_TYPE,
+    )?;
     let slot = r.array_entry(manager + MANAGER_BY_TAG, own_tag as usize, 8)?;
-    let strategic = object(r, u64::from_le_bytes(slot.try_into().unwrap()), STRATEGIC_TYPE)?;
+    let strategic = object(
+        r,
+        u64::from_le_bytes(slot.try_into().unwrap()),
+        STRATEGIC_TYPE,
+    )?;
     let mut out = Vec::new();
     for e in entries(r, strategic + STRATEGIC_NETWORKS, 8, LIMIT)? {
         let n = object(r, r.u64(e)?, NETWORK_TYPE)?;
@@ -357,7 +376,11 @@ const GROUP_KEY: u64 = 0x18;
 /// ruling `CPoliticalParty` `+0xd0`, its `CIdeologyGroup` `+0x18`, whose key is at `+0x18`
 /// (read live 14 November 2026: Italy 1936 `fascism`).
 pub(super) fn ruling_ideology(r: &Reader<'_>, country: u64) -> Result<String> {
-    let politics = object(r, r.u64(country + at(r, &COUNTRY, POLITICS)?)?, POLITICS_TYPE)?;
+    let politics = object(
+        r,
+        r.u64(country + at(r, &COUNTRY, POLITICS)?)?,
+        POLITICS_TYPE,
+    )?;
     let party = object(r, r.u64(politics + RULING_PARTY)?, PARTY_TYPE)?;
     let group = object(r, r.u64(party + PARTY_GROUP)?, GROUP_TYPE)?;
     let key = text(r, group + GROUP_KEY)?;
@@ -397,7 +420,11 @@ pub(super) fn agency_json(a: &Agency) -> Value {
 }
 
 pub(super) fn network_json(n: &Network) -> Value {
-    let mut states: Vec<(i32, f64)> = n.subs.iter().flat_map(|s| s.states.iter().copied()).collect();
+    let mut states: Vec<(i32, f64)> = n
+        .subs
+        .iter()
+        .flat_map(|s| s.states.iter().copied())
+        .collect();
     states.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     json!({
         "target": n.target,
@@ -449,7 +476,10 @@ pub(super) fn operations(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec
         let inst = mgmt::pointer(r, p)?;
         mgmt::expect_type(r, inst, INSTANCE_TYPE)?;
         if r.u64(inst + INSTANCE_OWNER)? != country {
-            return Err(Error::new("torn_read", "Operation owner changed during the read"));
+            return Err(Error::new(
+                "torn_read",
+                "Operation owner changed during the read",
+            ));
         }
         let op = mgmt::pointer(r, inst + INSTANCE_OPERATION)?;
         let key = mgmt::text(r, op + OPERATION_KEY, 128)?.unwrap_or_default();
@@ -501,8 +531,14 @@ pub(super) mod tests {
     #[test]
     fn mission_keys_follow_the_class_names() {
         for (class, key) in [
-            ("N18NOperativeMissions18CBuildIntelNetworkE", "build_intel_network"),
-            ("N18NOperativeMissions20CCounterIntelligenceE", "counter_intelligence"),
+            (
+                "N18NOperativeMissions18CBuildIntelNetworkE",
+                "build_intel_network",
+            ),
+            (
+                "N18NOperativeMissions20CCounterIntelligenceE",
+                "counter_intelligence",
+            ),
             ("N18NOperativeMissions10CNoMissionE", "no_mission"),
             ("N18NOperativeMissions11CPropagandaE", "propaganda"),
         ] {
@@ -516,8 +552,18 @@ pub(super) mod tests {
         let n = Network {
             target: "ETH".into(),
             subs: vec![
-                SubNetwork { strongest: 35.36, total: 102.96, target: 105.0, states: vec![(842, 35.36), (841, 33.8)] },
-                SubNetwork { strongest: 12.0, total: 12.0, target: 105.0, states: vec![(841, 12.0)] },
+                SubNetwork {
+                    strongest: 35.36,
+                    total: 102.96,
+                    target: 105.0,
+                    states: vec![(842, 35.36), (841, 33.8)],
+                },
+                SubNetwork {
+                    strongest: 12.0,
+                    total: 12.0,
+                    target: 105.0,
+                    states: vec![(841, 12.0)],
+                },
             ],
             operatives: vec![(4713, 842)],
         };
@@ -533,8 +579,22 @@ pub(super) mod tests {
     fn agency_read_joins_upgrades_operatives_and_candidates() {
         let m = Mem::default();
         m.alloc(0x40000, 0x5000);
-        let (country, ag, up, op, cand) = (0x100000u64, 0x110000u64, 0x120000u64, 0x130000u64, 0x140000u64);
-        for (a, n) in [(country, 0x1000), (ag, 0x200), (up, 0x100), (op, 0x1000), (cand, 0x1000), (0x150000, 0x100), (0x160000, 0x100)] {
+        let (country, ag, up, op, cand) = (
+            0x100000u64,
+            0x110000u64,
+            0x120000u64,
+            0x130000u64,
+            0x140000u64,
+        );
+        for (a, n) in [
+            (country, 0x1000),
+            (ag, 0x200),
+            (up, 0x100),
+            (op, 0x1000),
+            (cand, 0x1000),
+            (0x150000, 0x100),
+            (0x160000, 0x100),
+        ] {
             m.alloc(a, n);
         }
         m.q(country + AGENCY, ag);

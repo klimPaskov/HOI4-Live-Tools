@@ -112,7 +112,11 @@ fn ready_facts() -> F {
         network: Some(56.7),
         collab: Some(0.0),
         free: Some(2),
-        stock: [("support_equipment".to_string(), 300.0), ("infantry_equipment".to_string(), 5000.0)].into(),
+        stock: [
+            ("support_equipment".to_string(), 300.0),
+            ("infantry_equipment".to_string(), 5000.0),
+        ]
+        .into(),
     }
 }
 
@@ -125,8 +129,16 @@ fn definitions_and_phase_costs_come_from_the_files() {
     assert_eq!(op.equipment.len(), 2);
     assert_eq!(op.phases.len(), 2);
     let d = describe(&c, op);
-    assert_eq!(d["phase_choices"][1][0]["civilian_factories"]["days"], json!(30.0));
-    assert_eq!(c.operation("operation_coordinated_strike").unwrap().required_tokens, ["token_army"]);
+    assert_eq!(
+        d["phase_choices"][1][0]["civilian_factories"]["days"],
+        json!(30.0)
+    );
+    assert_eq!(
+        c.operation("operation_coordinated_strike")
+            .unwrap()
+            .required_tokens,
+        ["token_army"]
+    );
 }
 
 #[test]
@@ -179,7 +191,11 @@ fn war_tokens_targets_and_unread_triggers() {
     let v = verdict(&c, strike, "ETH", &ready_facts());
     assert_eq!(v.visible, Truth::False);
     let codes: Vec<_> = v.reasons.iter().map(|r| r.code).collect();
-    assert!(codes.contains(&"not_visible") && codes.contains(&"network_too_weak") && codes.contains(&"missing_token"));
+    assert!(
+        codes.contains(&"not_visible")
+            && codes.contains(&"network_too_weak")
+            && codes.contains(&"missing_token")
+    );
     let secret = c.operation("operation_secret").unwrap();
     let v = verdict(&c, secret, "ETH", &ready_facts());
     assert_eq!(v.reasons[0].code, "not_a_target");
@@ -191,6 +207,14 @@ fn war_tokens_targets_and_unread_triggers() {
 #[test]
 fn operations_that_pick_a_location_are_marked() {
     let c = catalog();
-    assert!(c.operation("operation_coordinated_strike").unwrap().picks_location);
-    assert!(!c.operation("operation_collaboration_government").unwrap().picks_location);
+    assert!(
+        c.operation("operation_coordinated_strike")
+            .unwrap()
+            .picks_location
+    );
+    assert!(
+        !c.operation("operation_collaboration_government")
+            .unwrap()
+            .picks_location
+    );
 }
