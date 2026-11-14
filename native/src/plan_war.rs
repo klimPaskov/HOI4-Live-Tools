@@ -1491,6 +1491,21 @@ mod tests {
     }
 
     #[test]
+    fn a_plan_stopped_by_a_rest_goes_back_to_the_planning_wait_not_into_a_stall() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let (mut state, now) = stalled(&w, &p);
+        // something else stopped the plan (a casualty rest): the read says it is not executing
+        w.executing.set(false);
+        assert_eq!(tick(&mut state, &w, &p, "l", now).unwrap(), Tick::Nothing);
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        assert!(
+            w.actions().iter().all(|(tool, _)| tool != "hoi4_army_move"),
+            "no direct move"
+        );
+    }
+
+    #[test]
     fn a_stall_brings_an_idle_army_beside_the_target_first() {
         let w = W::new();
         let p = plan(json!({"planning_wait": false, "reserve": []}));

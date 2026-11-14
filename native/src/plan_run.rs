@@ -3908,7 +3908,12 @@ fn war_step(
             state.war_cool.remove(&name);
         }
     }
-    for army in list(&roster, "armies") {
+    // The largest formation first: one order goes out per step, and the main effort must not
+    // wait behind the smaller ones (in roster order the strike army got its front a month
+    // after the two three-division groups, live 14 Nov 2026).
+    let mut driven: Vec<&Value> = list(&roster, "armies").iter().collect();
+    driven.sort_by_key(|a| std::cmp::Reverse(a["division_count"].as_u64().unwrap_or(0)));
+    for army in driven {
         let name = text(&army["army"]).to_string();
         if guards.contains_key(&name) {
             continue;
@@ -4325,6 +4330,23 @@ fn war_step(
         };
         let stall_now = stall * (1 << repeats.min(3));
         let stuck_inside = standing_in_target && now - since >= 2 * stall_now;
+        // A plan that was executing and stands stopped now, its lines still drawn (a rest for
+        // organisation, supply or casualties stopped it), is not a stall: nothing was attacking. It goes back before its
+        // execute order and through the planning wait, instead of into the stall's direct move
+        // (which broke the rest and sent tired divisions forward without a plan).
+        if stage >= 3
+            && army["plan_executing"] == json!(false)
+            && army["battle_plan_orders"].as_u64().unwrap_or(0) > 0
+            && !state.war_move.contains(&name)
+            && !direct
+            && !liberate
+        {
+            state.war_stage.insert(name.clone(), 2);
+            plan_war::replan(state, &name, target, now);
+            state.war_since.insert(name.clone(), (target, here, now));
+            state.war_cool.insert(name.clone(), now + cooldown);
+            continue;
+        }
         if ordered && (!standing_in_target || stuck_inside) && now - since >= stall_now {
             // Progress is ground taken, not only a new main state: an offensive that takes
             // provinces of its target is advancing, however long the state takes to fall.
