@@ -1,5 +1,7 @@
-//! Both ordinary action journals share one input quarantine. Settlement is
-//! read-only and remains confined to the journal that recorded the request.
+//! Both ordinary action journals share one input gate. Every request closes itself
+//! with a terminal receipt, so the gate only holds input while a request interrupted
+//! moments ago may still have input in flight (game journal, bounded) or while an open
+//! clock request could not be read back yet (settled by the next readable call).
 use super::journal::GameJournal;
 use crate::{
     actions::Journal,
@@ -51,7 +53,6 @@ pub(super) fn check_in(
 
 #[cfg(test)]
 mod tests {
-    use super::super::journal::Outcome;
     #[test]
     fn only_tools_that_can_send_input_are_quarantined() {
         let with: serde_json::Map<String, serde_json::Value> =
@@ -78,9 +79,25 @@ mod tests {
             player: "GER".into(),
         }
     }
-    struct LostClock;
+    /// A clock whose key never takes effect. `readable: false`: once the key is out the game
+    /// cannot be read at all.
+    struct LostClock {
+        readable: bool,
+        sent: bool,
+    }
+    impl LostClock {
+        fn new(readable: bool) -> Self {
+            Self {
+                readable,
+                sent: false,
+            }
+        }
+    }
     impl Backend for LostClock {
         fn observe(&mut self) -> Result<State> {
+            if self.sent && !self.readable {
+                return Err(Error::new("read_failed", "Game not readable"));
+            }
             Ok(State {
                 epoch: epoch(),
                 paused: true,
@@ -91,6 +108,7 @@ mod tests {
             Ok(())
         }
         fn dispatch(&mut self, _: &Action, _: &State) -> Result<()> {
+            self.sent = true;
             Err(Error::new("fixture_transport", "Possible input"))
         }
     }
@@ -103,20 +121,61 @@ mod tests {
         std::fs::create_dir(&p).unwrap();
         p
     }
+    fn interrupted(game_file: &std::path::Path, kind: &str, age_ms: u64) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let line = json!({
+            "version": 1, "id": "lost", "epoch": epoch(), "action": {"kind": kind},
+            "status": "Dispatching", "detail": null, "unix_ms": now - age_ms,
+        });
+        std::fs::write(game_file, format!("{line}\n")).unwrap();
+    }
     #[test]
-    fn unresolved_game_blocks_clock_and_unjournaled_ui_but_allows_own_settlement() {
-        let p = dir("game");
+    fn a_completed_uncertain_game_action_blocks_neither_clock_nor_game_input() {
+        let p = dir("closed");
         let clock = Journal::open(&p.join("clock")).unwrap();
         let mut game = GameJournal::open(&p.join("game")).unwrap();
-        let action = json!({"kind":"research_start"});
-        game.execute(
-            "lost",
-            &epoch(),
-            action.clone(),
-            &mut || Ok(Outcome::Unknown),
-            &mut || Ok(()),
-        )
-        .unwrap_err();
+        // w25: a focus action ran out of time and nothing could be read back.
+        let error = game
+            .execute(
+                "lost",
+                &epoch(),
+                json!({"kind":"focus_start"}),
+                &mut || {
+                    Err(Error::new(
+                        "action_deadline",
+                        "Original action deadline expired",
+                    ))
+                },
+                &mut || {
+                    Err(Error::new(
+                        "action_deadline",
+                        "Original action deadline expired",
+                    ))
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "action_unconfirmed");
+        for (is_clock, id, domain) in [
+            (true, None, "*"),
+            (false, None, "*"),
+            (false, Some("event-answer"), "*"),
+            (false, Some("next-focus"), "focus"),
+            (false, Some("army"), "army"),
+        ] {
+            check_in(&clock, &game, &epoch().game, is_clock, id, domain).unwrap();
+        }
+        drop((clock, game));
+        std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn an_interrupted_game_action_holds_input_only_while_its_input_may_be_in_flight() {
+        let p = dir("game");
+        let clock = Journal::open(&p.join("clock")).unwrap();
+        interrupted(&p.join("game"), "event_choose", 0);
+        let game = GameJournal::open(&p.join("game")).unwrap();
         for (is_clock, id) in [
             (true, None),
             (true, Some("lost")),
@@ -130,35 +189,35 @@ mod tests {
                 "action_uncertain"
             );
         }
+        // Its own request may always take the read-only settlement path.
         check(&clock, &game, &epoch().game, false, Some("lost")).unwrap();
-        game.execute(
-            "lost",
-            &epoch(),
-            action,
-            &mut || Ok(Outcome::Reached(json!({}))),
-            &mut || panic!("Settlement cannot dispatch"),
-        )
-        .unwrap();
-        check(&clock, &game, &epoch().game, true, Some("new-clock")).unwrap();
+        drop(game);
+        // Ten seconds later nothing is held any more.
+        interrupted(&p.join("game"), "event_choose", 10_000);
+        let game = GameJournal::open(&p.join("game")).unwrap();
+        for (is_clock, id) in [(true, None), (false, None), (false, Some("replacement"))] {
+            check(&clock, &game, &epoch().game, is_clock, id).unwrap();
+        }
         drop((clock, game));
         std::fs::remove_dir_all(p).unwrap();
     }
     #[test]
-    fn unresolved_clock_blocks_all_game_paths_and_reopen_retains_it() {
+    fn an_unreadable_clock_request_holds_game_input_until_one_fresh_read_settles_it() {
         let p = dir("clock");
         let mut clock = Journal::open(&p.join("clock")).unwrap();
         let game = GameJournal::open(&p.join("game")).unwrap();
+        // The key went out and the game could not be read afterwards.
         clock
             .execute(
                 "lost-clock",
                 &epoch(),
                 Action::SetPaused(false),
-                &mut LostClock,
+                &mut LostClock::new(false),
                 Duration::from_millis(1),
             )
             .unwrap_err();
         drop(clock);
-        let clock = Journal::open(&p.join("clock")).unwrap();
+        let mut clock = Journal::open(&p.join("clock")).unwrap();
         for id in [None, Some("lost-clock"), Some("new-game")] {
             assert_eq!(
                 check(&clock, &game, &epoch().game, false, id)
@@ -168,6 +227,41 @@ mod tests {
             );
         }
         check(&clock, &game, &epoch().game, true, Some("lost-clock")).unwrap();
+        // One fresh read (what the dispatcher does before the gate) closes it.
+        clock
+            .settle_open(&epoch(), &mut || {
+                Ok(State {
+                    epoch: epoch(),
+                    paused: true,
+                    speed: 1,
+                })
+            })
+            .unwrap();
+        for id in [None, Some("new-game")] {
+            check(&clock, &game, &epoch().game, false, id).unwrap();
+        }
+        drop((clock, game));
+        std::fs::remove_dir_all(p).unwrap();
+    }
+    #[test]
+    fn a_clock_key_without_effect_is_a_clean_failure_that_holds_nothing() {
+        let p = dir("clock-clean");
+        let mut clock = Journal::open(&p.join("clock")).unwrap();
+        let game = GameJournal::open(&p.join("game")).unwrap();
+        let error = clock
+            .execute(
+                "no-effect",
+                &epoch(),
+                Action::SetPaused(false),
+                &mut LostClock::new(true),
+                Duration::from_millis(1),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "fixture_transport");
+        assert!(error.message.contains("NotApplied"));
+        for id in [None, Some("new-game")] {
+            check(&clock, &game, &epoch().game, false, id).unwrap();
+        }
         drop((clock, game));
         std::fs::remove_dir_all(p).unwrap();
     }

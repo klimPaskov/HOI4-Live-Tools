@@ -46,7 +46,7 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, SearchQuery bounded text, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; bounded manual handoff passed Production008. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; SearchQuery requires an already focused empty field and explicit lowercase ASCII query; it verifies the exact text and selected canonical key. SearchText verifies exact text and complete bounded canonical matches without claiming the requested selection; SearchNext sends one Tab only when focus_id is the immediate next match, and verifies unchanged order and the expected selected key. All search stages preserve the active Focus and never press Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, SearchQuery bounded text, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; bounded manual handoff passed Production008. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; SearchQuery requires an already focused empty field and explicit lowercase ASCII query; it verifies the exact text and selected canonical key. SearchText verifies exact text and complete bounded canonical matches without claiming the requested selection; SearchNext sends one Tab only when focus_id is the immediate next match, and verifies unchanged order and the expected selected key. All search stages preserve the active Focus and never press Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. An attempt whose effect is not observed is closed (action_unconfirmed): never replayed and it blocks nothing; read the state again before a fresh request. No replay, coordinates, activation or engine calls.",
         "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","search_field","search_query","search_text","search_next","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"query":{"type":"string","minLength":1,"maxLength":48,"description":"Required for search_query, search_text and search_next: lowercase ASCII letters and spaces, no surrounding spaces"},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn observe_ui(
@@ -286,7 +286,6 @@ pub(super) fn execute_internal(
     }
     let execution = result
         .map_err(|error| stage::with_transport_cause(error, backend.last_transport.as_ref()))?;
-    service.journal.finish_before_deadline(&execution, until)?;
     let binding = crate::daily_focus_navigation::receipt_binding(
         &execution,
         backend.last_observed_binding.as_ref(),
@@ -796,7 +795,7 @@ impl stage::Backend for FocusBackend<'_> {
         candidate: &stage::Candidate,
         deadline: Instant,
     ) -> Result<()> {
-        let deadline = deadline.min(self.until);
+        // Read-only, bounded by the journal's observation end (not the action's deadline).
         if Instant::now() >= deadline {
             return Err(Error::new("focus_deadline", "Input-idle deadline ended"));
         }

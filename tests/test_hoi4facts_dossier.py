@@ -110,6 +110,37 @@ class WorldFacts(unittest.TestCase):
         self.assertEqual(v["thresholds"][1], {"limit": 0.5, "vp_needed": 8, "with": "BBB_demoralized"})
         self.assertEqual(v["base_limit"]["src"], "common/defines/00_defines.lua:8")
 
+    def test_low_war_support_lowers_the_surrender_limit(self):
+        # BBB starts at war support 0.2: war_support_bad_modifier (surrender_limit -0.3) counts for the
+        # gap below one half, 0.3/0.5 of it, and for all of it at zero
+        v = self.w.vp("BBB")
+        ws = v["war_support"]
+        self.assertEqual((ws["start"], ws["full_malus"], ws["split"]), (0.2, -0.3, 0.5))
+        self.assertEqual(ws["at_start"], {"war_support": 0.2, "malus": -0.18, "limit": 0.52, "vp_needed": 8})
+        self.assertEqual(ws["at_zero"], {"war_support": 0.0, "malus": -0.3, "limit": 0.4, "vp_needed": 6})
+        self.assertEqual(ws["applies"], "at_start")
+        self.assertEqual(ws["src"], "common/modifiers/00_static_modifiers.txt:5")
+        self.assertEqual(ws["start_src"], "history/countries/BBB - Beta.txt:7")
+        # the number a plan must reach stays the one without the modifier (war support can rise)
+        self.assertEqual((v["thresholds"][0]["limit"], v["thresholds"][0]["vp_needed"]), (0.7, 11))
+        # a war support read in the game picks the row that holds
+        at = self.w.vp("BBB", 0.4)["war_support"]
+        self.assertEqual(at["at"], {"war_support": 0.4, "malus": -0.06, "limit": 0.64, "vp_needed": 10})
+        self.assertEqual(at["applies"], "at")
+        self.assertEqual(self.w.vp("BBB", 0.6)["war_support"]["applies"], "limit")
+        # AAA has no set_war_support: the default one half, no modifier
+        self.assertEqual(self.w.vp("AAA")["war_support"]["at_start"]["malus"], 0)
+
+    def test_vp_command_prints_both_limits(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            facts.main(["vp", "BBB", "--game", GAME, "--tag", "AAA", "--war-support", "0.4"])
+        text = out.getvalue()
+        self.assertIn("war support 50% or more: limit 0.7 -> 11 VP", text)
+        self.assertIn("war support 20% (the start value): limit 0.52 -> 8 VP (modifier -0.18)", text)
+        self.assertIn("war support 40% (asked): limit 0.64 -> 10 VP (modifier -0.06)  <- applies", text)
+        self.assertIn("war support 0% (the floor): limit 0.4 -> 6 VP", text)
+
     def test_decisions_missions_goals(self):
         m = self.w.decisions("AAA", missions=True)
         self.assertEqual([x["id"] for x in m], ["AAA_conquer_mission"])
@@ -276,6 +307,60 @@ class Calculators(unittest.TestCase):
         r = calc.build_order(self.w, ["civ", "civ"], 15, 0, 0.0, "1936.1.1", slots=[[1, 1, 3]])
         self.assertEqual(r["rows"][0]["state"], 1)
         self.assertEqual(r["unfinished"][0]["blocked"], "no free slot")
+
+    def test_build_order_says_when_infrastructure_is_a_guess(self):
+        # no state and no --infra: level 0 is a guess, said in the result and on the row
+        r = calc.build_order(self.w, calc.parse_order("supply_node:1", self.w), 15, 0, 0.0, "1936.1.1")
+        self.assertEqual((r["rows"][0]["infra"], r["rows"][0]["infra_src"]), (0, "assumed"))
+        self.assertEqual(r["rows"][0]["date"], add_days("1936.1.1", 267))  # 20000 / 75
+        self.assertEqual(len(r["warnings"]), 1)
+        self.assertIn("infrastructure 0 assumed for 1 project(s) with no state (supply_node)", r["warnings"][0])
+        # an explicit level is no guess
+        r = calc.build_order(self.w, ["supply_node"], 15, 0, 0.0, "1936.1.1", infra=0)
+        self.assertEqual((r["warnings"], r["rows"][0]["infra_src"]), ([], "--infra"))
+
+    def test_build_order_takes_infrastructure_from_the_named_state(self):
+        # state 1 has infrastructure 3: 20000 / (75 x 1.6) = 167 days
+        items = calc.parse_order("supply_node:1#1", self.w)
+        self.assertEqual(items, [("supply_node", None, 1, 1)])
+        r = calc.build_order(self.w, items, 15, 0, 0.0, "1936.1.1")
+        self.assertEqual((r["rows"][0]["state"], r["rows"][0]["infra"], r["rows"][0]["infra_src"]), (1, 3, "state"))
+        self.assertEqual(r["rows"][0]["date"], add_days("1936.1.1", 167))
+        self.assertEqual(r["warnings"], [])
+        # an infrastructure level finished there first speeds up what follows: 6000 / (75 x 1.6) = 50 days,
+        # then 20000 / (75 x 1.8) = 149 days at level 4
+        r = calc.build_order(self.w, calc.parse_order("infrastructure:1#1,supply_node#1", self.w), 15, 0, 0.0, "1936.1.1")
+        self.assertEqual([(x["kind"], x["infra"], x["days"]) for x in r["rows"]],
+                         [("infrastructure", 3, 50), ("supply_node", 4, 149)])
+        # a factory in a named state takes one of its free slots (state 1 has 3)
+        r = calc.build_order(self.w, calc.parse_order("civ:4#1", self.w), 15, 0, 0.0, "1936.1.1", until="1936.1.2")
+        self.assertEqual([u.get("blocked") for u in r["unfinished"]], [None, None, None, "no free slot"])
+        with self.assertRaises(ValueError):
+            calc.build_order(self.w, calc.parse_order("civ:1#99", self.w), 15, 0, 0.0, "1936.1.1")
+
+    def test_build_order_ranked_states_do_not_place_a_port(self):
+        # the caller's own ranking gives the factories their states, but says nothing about where a
+        # building without a slot stands
+        slots = [[1, 3, 3]]
+        r = calc.build_order(self.w, ["civ", "naval_base"], 15, 0, 0.0, "1936.1.1", slots=slots, slots_named=False)
+        src = {x["kind"]: x["infra_src"] for x in r["rows"]}
+        self.assertEqual(src, {"civ": "state", "naval_base": "assumed"})
+        self.assertIn("naval_base take no building slot and no state was named", r["warnings"][0])
+        named = calc.build_order(self.w, ["civ", "naval_base"], 15, 0, 0.0, "1936.1.1", slots=slots)
+        self.assertEqual(named["warnings"], [])
+
+    def test_build_order_command_prints_the_warning(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            calc.main(["build-order", "--game", GAME, "--civ", "15", "--mil", "0", "--cg", "0", "--order", "supply_node:1"])
+        text = out.getvalue()
+        self.assertTrue(text.startswith("WARNING: infrastructure 0 assumed"), text[:200])
+        self.assertIn("infra 0 ASSUMED", text)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            calc.main(["build-order", "--game", GAME, "--civ", "15", "--mil", "0", "--cg", "0", "--order", "supply_node:1#1"])
+        self.assertNotIn("WARNING", out.getvalue())
+        self.assertIn("state 1 infra 3 ->", out.getvalue())
 
     def test_consumer_goods_from_laws(self):
         self.assertEqual(calc.consumer_goods(self.w, "AAA")[0], 0.25)

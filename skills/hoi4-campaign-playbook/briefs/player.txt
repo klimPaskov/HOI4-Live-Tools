@@ -53,8 +53,8 @@ READS (exact calls; no other arguments exist — never guess one):
     {CALL} hoi4_war_stats '{}'               losses
     Read a thing once per change, not every turn; the feed (step A) says what changed.
 
-ONE ACTION, ONE TRY: if an action returns action_uncertain, do not resend it; re-read the state after one
-game day and act only if the effect is still missing.
+ONE ACTION, ONE TRY: if an action returns action_unconfirmed (its effect was not observed; the request is
+closed and blocks nothing), do not resend it blindly: re-read the state and act only if the effect is missing.
 
 DON'T: re-read the same state every turn; order an army the executor is moving (the executor owns every
 army in the plan's army_layout, army_group and hold_targets, all research, focus, production, construction,

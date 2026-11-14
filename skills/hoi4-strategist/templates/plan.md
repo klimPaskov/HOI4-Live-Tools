@@ -46,9 +46,9 @@ Army groups (`army_group`): <name>: <name_hints> under <marshal>, else <marshal>
 
 ### 2.1 Political power and laws
 
-| Purchase | Cost | Condition | Date |
-|---|---|---|---|
-| <law or advisor> | <PP> [V ...] | <predicate or none> | <date> [D pp] |
+| Purchase | Category and slot | Cost | Condition | Date |
+|---|---|---|---|---|
+| <law or advisor> | <category> <slot index> [V politics-slots] | <PP> [V ...] | <predicate or none> | <date> [D pp] |
 
 ## 3. Research path
 

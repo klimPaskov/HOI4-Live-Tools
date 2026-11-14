@@ -238,7 +238,7 @@ fn durable_verified_replay_needs_no_new_query_or_input() {
 }
 
 #[test]
-fn partial_query_uncertainty_survives_reopen_and_cannot_be_settled_later() {
+fn partial_query_uncertainty_is_closed_and_cannot_be_settled_later() {
     let p = dir();
     let mut j = GameJournal::open(&p.join("game-actions.jsonl")).unwrap();
     let mut f = Fake::new(Failure::Before(1));
@@ -252,10 +252,10 @@ fn partial_query_uncertainty_survives_reopen_and_cannot_be_settled_later() {
         )
         .is_err());
     assert_eq!(f.posted.len(), 1);
-    assert!(j.blocked());
+    assert!(!j.blocked());
     drop(j);
     let j = GameJournal::open(&p.join("game-actions.jsonl")).unwrap();
-    assert!(j.blocked());
+    assert!(!j.blocked());
     assert!(j
         .strict_receipt("find64", &epoch(), &request().action())
         .is_err());
@@ -332,7 +332,7 @@ fn late_queue_change_during_final_find_never_produces_a_verified_receipt() {
         .is_err());
     assert_eq!(attempt.posted.len(), 3);
     assert_eq!(attempt.finished, 1);
-    assert!(journal.blocked());
+    assert!(!journal.blocked());
     assert!(journal
         .strict_receipt("find64", &epoch(), &request().action())
         .is_err());
@@ -341,11 +341,12 @@ fn late_queue_change_during_final_find_never_produces_a_verified_receipt() {
         .lines()
         .map(|s| serde_json::from_str(s).unwrap())
         .collect();
-    assert_eq!(rows.len(), 1);
+    assert_eq!(rows.len(), 2);
     assert_eq!(rows[0]["status"], "Dispatching");
+    assert_eq!(rows[1]["status"], "Unconfirmed");
     drop(journal);
     let journal = GameJournal::open(&p.join("game-actions.jsonl")).unwrap();
-    assert!(journal.blocked());
+    assert!(!journal.blocked());
     assert!(journal
         .strict_receipt("find64", &epoch(), &request().action())
         .is_err());

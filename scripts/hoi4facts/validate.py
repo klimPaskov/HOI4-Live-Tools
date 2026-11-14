@@ -427,7 +427,8 @@ def check_politics(game, plan, meta, rep):
     if picks and not isinstance(picks, list):
         rep.error("politics must be a list")
         return
-    ideas, chars, tokens = game.ideas(ctx_of(meta, game))
+    ctx = ctx_of(meta, game)
+    ideas, chars, tokens = game.ideas(ctx)
     seen = set()
     for i, p in enumerate(picks):
         if not isinstance(p, dict):
@@ -447,6 +448,11 @@ def check_politics(game, plan, meta, rep):
                 f"politics[{i}] {idea}: matches an advisor idea_token, not a character "
                 f"id; check hoi4_politics_options for the key the UI reports"
             )
+        # the slot index is the position of the slot kind in the category (common/idea_tags)
+        known = isinstance(idea, str) and (idea in ideas or idea in chars or idea in tokens)
+        problem = derive.politics_slot_problem(game, ctx, cat, slot, idea if known else None)
+        if problem:
+            rep.error(f"politics[{i}]: {problem}")
         if (cat, slot, idea) in seen:
             rep.error(f"politics[{i}]: duplicate pick")
         seen.add((cat, slot, idea))
@@ -458,6 +464,34 @@ def check_politics(game, plan, meta, rep):
     for (cat, slot), names in slots.items():
         if len(names) > 1:
             rep.warn(f"politics {cat}[{slot}]: sequence {' -> '.join(map(str, names))}")
+
+
+def check_politics_auto(game, plan, meta, rep):
+    """politics_auto.order entries: the slot index inside its category, every ranked idea of the slot's kind."""
+    auto = plan.get("politics_auto")
+    order = auto.get("order") if isinstance(auto, dict) else None
+    if not isinstance(order, list):
+        return
+    ctx = ctx_of(meta, game)
+    ideas, chars, tokens = game.ideas(ctx)
+    for i, e in enumerate(order):
+        if not isinstance(e, dict):
+            continue
+        cat, slot = e.get("category"), e.get("slot")
+        where = f"politics_auto.order[{i}]"
+        problem = derive.politics_slot_problem(game, ctx, cat, slot)
+        if problem:
+            rep.error(f"{where}: {problem}")
+            continue
+        for idea in e.get("ideas") or []:
+            if not isinstance(idea, str):
+                continue
+            if idea not in ideas and idea not in chars and idea not in tokens:
+                rep.error(f"{where}: unknown idea/character {idea}")
+                continue
+            problem = derive.politics_slot_problem(game, ctx, cat, slot, idea)
+            if problem:
+                rep.error(f"{where}: {problem}")
 
 
 def check_decisions(game, plan, rep):
@@ -1786,7 +1820,10 @@ def check_misc(plan, rep):
         rep.error("alarms must be an object")
     elif isinstance(al, dict):
         for k, v in al.items():
-            if not isinstance(v, (bool, int, float)) and v is not None:
+            if k in ("why", "note"):
+                if not isinstance(v, str):
+                    rep.error(f"alarms.{k}: must be text")
+            elif not isinstance(v, (bool, int, float)) and v is not None:
                 rep.error(f"alarms.{k}: must be a number, boolean or null")
     eo = plan.get("event_options", {})
     if eo and not isinstance(eo, dict):
@@ -1837,6 +1874,7 @@ def validate(plan, game, schema=None):
     check_production(game, plan, rep)
     check_construction(game, plan, rep, meta)
     check_politics(game, plan, meta, rep)
+    check_politics_auto(game, plan, meta, rep)
     check_decisions(game, plan, rep)
     check_training(game, plan, rep, meta)
     check_misc(plan, rep)

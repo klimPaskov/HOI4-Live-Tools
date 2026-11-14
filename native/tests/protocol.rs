@@ -216,6 +216,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_focus_selected_detail",
             "hoi4_technology_list",
             "hoi4_wait_for",
+            "hoi4_focus_available",
             "hoi4_observe",
             "hoi4_autopilot",
             "hoi4_wait_change",
@@ -230,6 +231,42 @@ fn stdio_is_json_and_notifications_have_no_reply() {
     );
     assert_eq!(replies[3]["result"]["isError"], true);
     assert_eq!(replies[4]["result"]["isError"], true);
+}
+
+#[test]
+fn focus_availability_checks_its_arguments_before_any_read() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    let call = |arguments: Value| {
+        let reply = server
+            .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_available","arguments":arguments}}))
+            .unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        let body: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        body["error"]["code"].as_str().unwrap().to_string()
+    };
+    for arguments in [
+        json!({}),
+        json!({"focuses": []}),
+        json!({"focuses": "GER_rhineland"}),
+        json!({"focuses": [1]}),
+        json!({"focuses": [""]}),
+        json!({"focuses": ["bad/key"]}),
+        json!({"focuses": ["a".repeat(129)]}),
+        json!({"focuses": vec!["A"; 33]}),
+        json!({"focuses": ["GER_rhineland"], "country": "OTHER"}),
+    ] {
+        assert_eq!(call(arguments.clone()), "invalid_arguments", "{arguments}");
+    }
+    // Well-formed, but no game is bound: a capability error, never a guess.
+    assert_eq!(
+        call(json!({"focuses": ["GER_rhineland"]})),
+        "capability_unavailable"
+    );
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 ## 1.4.2 - 2026-11-14
 
-Fixes for the four problems found on 1.19.4.2, and the first live run of the R-5 mod checks, which found and fixed more.
+Fixes for the four problems found on 1.19.4.2, the first live run of the R-5 mod checks (which found and fixed more), and the native and campaign changes merged since 1.4.1.
 
 ### Launch, shutdown and menu fixes (HOI4 1.19.4.2)
 
@@ -40,6 +40,111 @@ Run on 14 November 2026 against a scratch mod with events, decisions and a focus
 - Not confirmed: the raw-key decision row of the scratch mod was not flagged by the sweep, and the smoke test did not
   take that decision in one run (both OCR limits, issues #66 and #67); the `-error_title` dialog path of `hoi4_launch` is
   covered by tests only.
+
+### Native runtime and campaign tools (changes merged since 1.4.1)
+
+No action leaves a running game paused: one guard on the input binding covers every tool.
+
+- Cause of the pauses in the shakedown of 10 November (16 of 281 `hoi4_army_move` and 3 of 12 `hoi4_army_merge` calls):
+  an army order closes open top-bar panels with Escape first. The loop pressed Escape, slept 250 ms and read the panels
+  again; a panel left open by a focus or research action still read as open at that moment, so a second Escape went to
+  the free map and opened the game menu, which pauses the game and leaves it paused when closed. Each of the 19 calls
+  was the first army order after an action of another kind (16 after a focus or research action); the 218 army moves
+  that followed another army order never paused.
+- Escape is now pressed only for something that reads as open and never on a timer: the next Escape waits until what
+  was open has changed or the game menu has come up, and stops at the menu (`pause_guard::escape_close`; used for the
+  top-bar panels, the focus tree and every best-effort dismiss).
+- The pause guard moved from one tool path to the input binding itself (`pause_guard::Watched`): each Escape and each
+  Space of any tool, the executor or the daily worker is noted with the clock read just before it, and a change of the
+  pause state that follows the key is attributed to it. Each action reads the pause state before and after and puts the
+  starting state back when the change was its own, in both directions: a stray Space on a game still paused for setup
+  or by a host is put back to paused. A menu opened and closed inside one action is covered (the old guard needed to
+  see the menu), and so is a typed space that misses its text box.
+- A pause by the player or a multiplayer host stays: only a change right after one of our keys counts, and a pause
+  found later counts only while the game date still stands at the key. Deliberate clock keys (`hoi4_time`, a date stop)
+  go through `press_clock` and are never counted.
+- The `[action]` line on stderr gains `self_pause` and `restored`; a result whose action changed the pause state
+  carries `pause_guard {changed_by_own_input, paused_before, restored}` so a run report can count them.
+
+Whether a national focus can start is read from the game files, not tried in the game.
+
+- New read-only tool `hoi4_focus_available {focuses:[...]}`: for each focus `available`, `unavailable` or `unknown`,
+  decided without opening the focus tree. The rules are the focus files of the running game's content (the install with
+  the enabled mods layered over it): prerequisite groups, mutually exclusive focuses and the `available`, `bypass` and
+  `allow_branch` triggers, with scripted triggers expanded. They are judged against the state the server already reads
+  from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war
+  support, political power, manpower, factory counts, the faction, overlord and subjects, researched technologies, and
+  the install's DLCs. Any country, any mod: nothing is tied to a tag or to the base game.
+- `unavailable` is only said when it is certain and names the failing requirement in the game's own script words
+  (`needs has_war = no`). A trigger nothing reads (ideas, flags, the ruling ideology, variables, leaders, other
+  countries' affairs, `any_`/`all_` scopes) gives `unknown` with the triggers listed. `allow_branch` is judged by the
+  game when the tree is laid out, so only its static part (tag, DLC) can make a focus unavailable. A reading that may be
+  off by its rounding (the top bar shows whole percent) does not settle a comparison that close. A focus that any script
+  of the content names in `unlock_national_focus` is never called unavailable for a failing requirement: the script can
+  open it, and whether it did is not read.
+- The executor asks before it opens a focus: a listed focus that is certainly unavailable is never opened and is asked
+  about again after `skip_hours.focus_unavailable` (24 game hours); `focus_blocked` in the digest carries the reason.
+  Only an `unknown` focus is tried in the game, with the refusal back-off, and the back-off now also ends when a war
+  starts or ends (the conditions nothing reads mostly move with the wars). A server without the tool behaves as before.
+- 76 cases on a mod's focus tree (its own tags, states, DLC and scripted triggers) are kept as data in
+  `tests/fixtures/focus_availability_cases.json`, so any other reader of the focus files can be held to the same answers.
+- The script reader moved from the macOS lane to the crate root (`script.rs`) so every platform builds the focus rules,
+  and the mod layer now carries `events/` too (unlock effects live there).
+
+Every action ends in a terminal receipt; one uncertain action can no longer hold input.
+
+- After a dispatch the game journal re-observes the game for a bounded settlement window (3 s) and records what it sees:
+  `Verified`, `NotApplied`, `Diverged`, or the new `Unconfirmed` when the effect could not be proven either way. An
+  unconfirmed request answers `action_unconfirmed`, is closed, is never replayed and blocks nothing; the caller reads the
+  state again before a fresh request. Before, such a request stayed open and held its domain for three minutes (all
+  input, with no limit, in the first version).
+- Settlement reads pass the action fence after the action's own deadline or lease ended (input stays refused). An action
+  that ran out of time could not be read back at all, because its readback failed on the same expired deadline: the
+  commonest uncertain case could never settle.
+- The clock journal settles every pause and speed request from the readable clock state: `Verified` when the target
+  shows, `NotApplied` when it does not after the verification window. A request left open by an unreadable game or a
+  stopped server is settled by the next call that can read; before, it blocked every later input with no limit.
+- Only an action interrupted by a server stop still holds its own domain (and global input), for at most ten seconds;
+  the next action closes it as `Unconfirmed`.
+- The executor counts `action_unconfirmed` as an ordinary failed order (failure ledger and backoff) and re-plans from
+  fresh state on its next tick.
+
+The stage journals of the Linux lane end every attempt in a terminal receipt too.
+
+- The focus, research, construction and production stage journals keep observing after their one input, reading only,
+  until the stage's deadline or for a settlement window (3 s) after the dispatch, whichever ends later, and always write
+  a terminal record: `Verified`, `Diverged` (the active focus or the search order changed under a focus navigation
+  stage, or a research close changed what it must preserve) or `Unconfirmed`. A request closed without proof answers `action_unconfirmed`, is never replayed and
+  holds nothing; the caller reads the state again and a fresh request is decided by fresh state. Before, the intent stayed
+  open and every later clock, focus, research, construction and production request of that game answered
+  `action_uncertain` with no limit, also after a restart.
+- A result that shows after the deadline is `Verified`. The focus journal no longer writes a terminal quarantine marker
+  for it, and the read after the input is not refused on the expired deadline any more (the construction read was, so a
+  stage that ran out of time could never settle).
+- A read that fails once after the input decides nothing: the next complete state does. A state that stays unreadable for
+  a whole window, or a target that shows while input idle cannot be confirmed, closes the request as `Unconfirmed` with
+  its cause.
+- An ambiguous dispatch error (connection lost after a possible event) is decided by what the game shows instead of being
+  recorded as uncertain without a read.
+- Only an intent left open by a server that stopped in the middle of a stage still holds its game, for at most ten
+  seconds from the time it was written; the next request closes it as `Unconfirmed`. A journal that cannot be written
+  still refuses everything: that is a persistence failure, not an uncertain action.
+- Journals of older builds load unchanged: an open intent without a time is closed by the next request, a record written
+  as `Uncertain` reads as `Unconfirmed`, and a focus terminal quarantine marker is checked and then ignored.
+- A production step closed without proof can still be settled by a retry of the same id, by reading only, when its
+  original target shows.
+- The optional daily worker of the Linux lane keeps its own durable records above these journals. A final research
+  assignment that closes unconfirmed is planned again on a later day; its navigation, focus, production and mixed-panel
+  layers and the research transit journal still stop the worker on an unproven step.
+
+Focus starts cost less of the input lane.
+
+- A focus the game refuses as not available waits twice as long after each further refusal (10, 20, 40, 80 game days by
+  default) and one executor tick opens at most two refused focuses. A completed focus clears the waits. In one shakedown
+  three fallback focuses that could not start yet were opened about a hundred times, a quarter of the input lane.
+- `hoi4_focus_start` has 24 s for one start, enough for a cold tree and all twelve drags of its pan loop. With 12 s the
+  deadline ended at the tenth drag, so a focus far across the tree could never start.
+
 
 ## 1.4.1 - 2026-11-09
 

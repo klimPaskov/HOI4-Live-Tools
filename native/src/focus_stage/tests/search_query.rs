@@ -193,7 +193,7 @@ fn query_requires_empty_text_both_receivers_and_target_bound_candidate() {
     }
 }
 #[test]
-fn partial_query_wrong_selection_lost_receiver_and_changed_focus_quarantine() {
+fn partial_query_wrong_selection_lost_receiver_and_changed_focus_close_without_proof() {
     for field in 0..5 {
         let sc = Scratch::new();
         let mut j = Journal::open(&sc.path()).unwrap();
@@ -222,12 +222,20 @@ fn partial_query_wrong_selection_lost_receiver_and_changed_focus_quarantine() {
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
         assert_eq!(f.dispatches, 1);
         drop(j);
         let j = Journal::open(&sc.path()).unwrap();
-        assert!(j.blocks_game(&t.epoch.game));
+        assert!(!j.blocks_game(&t.epoch.game));
+        assert_eq!(
+            j.receipts["query"].status,
+            if field == 4 {
+                Status::Diverged
+            } else {
+                Status::Unconfirmed
+            }
+        );
     }
 }
 #[test]

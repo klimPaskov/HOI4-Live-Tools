@@ -1,0 +1,8 @@
+war_support_good_modifier = {
+	mobilization_speed = 0.30
+}
+
+war_support_bad_modifier = {
+	mobilization_speed = -0.500
+	surrender_limit = -0.3
+}

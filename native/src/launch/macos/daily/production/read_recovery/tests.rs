@@ -502,18 +502,18 @@ fn recovered_guard_never_repeats_cursor_movement_or_journal_dispatch() {
 }
 
 #[test]
-fn coherent_changed_allocation_or_fixed_control_after_torn_read_refuses_immediately() {
+fn coherent_changed_allocation_or_fixed_control_after_torn_read_closes_unconfirmed() {
     for mode in [Mode::AllocationChanged, Mode::ControlChanged] {
-        uncertain_dispatch_is_retained(mode, "production_state_changed", 2);
+        unproven_dispatch_is_closed(mode, "production_state_changed", 2);
     }
 }
 
 #[test]
-fn exhausted_guard_retains_unknown_delivery_and_original_cause_without_replay() {
-    uncertain_dispatch_is_retained(Mode::Exhaust, "torn_read", 4);
+fn exhausted_guard_closes_with_unknown_delivery_and_original_cause_without_replay() {
+    unproven_dispatch_is_closed(Mode::Exhaust, "torn_read", 4);
 }
 
-fn uncertain_dispatch_is_retained(mode: Mode, code: &str, samples: usize) {
+fn unproven_dispatch_is_closed(mode: Mode, code: &str, samples: usize) {
     let temp = Scratch::new();
     let target = Target::Factories(proof_tests::target(&proof_tests::snapshot()));
     let mut journal = step::Journal::open(&temp.journal()).unwrap();
@@ -532,7 +532,9 @@ fn uncertain_dispatch_is_retained(mode: Mode, code: &str, samples: usize) {
             Duration::from_secs(2),
         )
         .unwrap_err();
-    assert_eq!(error.code, "action_uncertain");
+    // The click never went down and the allocation never changed: the step closes without
+    // proof once its deadline has passed, with the dispatcher's own cause.
+    assert_eq!(error.code, "action_unconfirmed");
     assert!(error.message.contains(code));
     assert_eq!(
         journal.failure_evidence("step-1", &target, &error),
@@ -550,7 +552,7 @@ fn uncertain_dispatch_is_retained(mode: Mode, code: &str, samples: usize) {
     let saved = records(&temp.journal());
     assert_eq!(saved.len(), 2);
     assert_eq!(saved[0]["status"], "Intent");
-    assert_eq!(saved[1]["status"], "Uncertain");
+    assert_eq!(saved[1]["status"], "Unconfirmed");
     assert_eq!(saved[1]["delivery"], "Unknown");
     assert_eq!(saved[1]["cause"]["code"], code);
     let diagnostic = saved[1]["cause"]["message"].as_str().unwrap();
@@ -562,31 +564,46 @@ fn uncertain_dispatch_is_retained(mode: Mode, code: &str, samples: usize) {
     }
     drop(journal);
     let mut reopened = step::Journal::open(&temp.journal()).unwrap();
-    assert!(reopened.blocks_game(&target.epoch().game));
-    // Same-ID recovery is observation only; a new ID also cannot rescue input.
-    for id in ["step-1", "step-2"] {
-        let refusal = reopened
-            .execute(
-                id,
-                target.clone(),
-                TOKEN,
-                &authority,
-                &gate,
-                &Cleared(&target.epoch().game),
-                &mut backend,
-                Duration::from_secs(2),
-            )
-            .unwrap_err();
-        assert_eq!(refusal.code, "action_uncertain");
-        assert_eq!(
-            (
-                backend.dispatches,
-                backend.moves,
-                backend.downs,
-                backend.guard_samples
-            ),
-            (1, 1, 0, samples)
-        );
-    }
+    assert!(!reopened.blocks_game(&target.epoch().game));
+    // The closed id only reads on a retry: no input and, with the target still absent, no
+    // new record.
+    let refusal = reopened
+        .execute(
+            "step-1",
+            target.clone(),
+            TOKEN,
+            &authority,
+            &gate,
+            &Cleared(&target.epoch().game),
+            &mut backend,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+    assert_eq!(refusal.code, "action_unconfirmed");
+    assert_eq!(
+        (
+            backend.dispatches,
+            backend.moves,
+            backend.downs,
+            backend.guard_samples
+        ),
+        (1, 1, 0, samples)
+    );
     assert_eq!(records(&temp.journal()).len(), 2);
+    // A new id is accepted and gets its own attempt from fresh state.
+    let fresh = reopened
+        .execute(
+            "step-2",
+            target.clone(),
+            TOKEN,
+            &authority,
+            &gate,
+            &Cleared(&target.epoch().game),
+            &mut backend,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+    assert_eq!(fresh.code, "action_unconfirmed");
+    assert_eq!(backend.dispatches, 2);
+    assert_eq!(records(&temp.journal()).len(), 4);
 }

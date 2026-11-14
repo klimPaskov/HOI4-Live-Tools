@@ -1,19 +1,26 @@
 //! Durable receipts for ordinary game actions (research, Focus, ...). Intent is
 //! written and synced before the first input; a dispatch without a durable
-//! outcome is never replayed. Legacy version-1 adapters retain their read-only
-//! settlement contract. Strict version-2 intents never settle after an uncertain
-//! attempt: only that original attempt may certify delivery or positive no-input.
-//! An unresolved dispatch quarantines input for a bounded time (30 s for other domains and
-//! global input, 180 s for its own domain); it is never replayed.
+//! outcome is never replayed.
+//!
+//! Every intent ends in a terminal receipt before its call returns. After the
+//! dispatch the journal re-observes the game for a bounded settlement window
+//! (`SETTLE_WINDOW`), reading past the action's own deadline (the window is
+//! read-only: `settling_until`), and records what it sees: `Verified`,
+//! `NotApplied`, `Diverged`, or `Unconfirmed` when the effect could not be
+//! proven either way inside the window. An `Unconfirmed` request is closed: it
+//! is never replayed, it blocks nothing, and the caller is told to read the
+//! state again before sending a fresh request (each adapter's own preflight
+//! refuses a duplicate: already active, already researched, target reached).
+//! Only an intent left open by a server that stopped in the middle of an action
+//! still blocks input, and only for `ORPHAN_MS`; the next action closes it.
 //!
 //! Settlement rule: compare only what the action can change. The game runs at
 //! speed 3-5 while an action is journaled, so unrelated state (other research
-//! slots, production lines, armies, queues, date, resources) drifts. A `settle`
-//! closure that needs that state unchanged returns `Outcome::Unknown`, leaves a
-//! `Dispatching` intent open and freezes ALL Mac input. Each closure must read
-//! only the fields its action writes: `Reached` when the exact target effect is
-//! present, `Unchanged` only when every possible effect is provably absent,
-//! `Diverged` for a settled mismatch, `Unknown` for partial or foreign effects.
+//! slots, production lines, armies, queues, date, resources) drifts. Each
+//! `settle` closure must read only the fields its action writes: `Reached` when
+//! the exact target effect is present, `Unchanged` only when every possible
+//! effect is provably absent, `Diverged` for a settled mismatch, `Unknown` for
+//! partial or foreign effects (re-observed until the window ends).
 //! The pure rules live in `settle.rs` (and `research::settle`) with tests.
 use crate::{
     actions::Epoch,
@@ -23,19 +30,45 @@ use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    cell::Cell,
     collections::BTreeMap,
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 const LINE_LIMIT: usize = 16 << 10;
 const JOURNAL_LIMIT: u64 = 64 << 20;
-/// How long an unresolved intent blocks other domains (and global input such as events).
-const CROSS_DOMAIN_MS: u64 = 30_000;
-/// How long an unresolved intent blocks its own domain.
-const SAME_DOMAIN_MS: u64 = 180_000;
+/// How long one call keeps re-observing an action whose effect is not provable yet.
+const SETTLE_WINDOW: Duration = Duration::from_millis(3_000);
+const SETTLE_POLL: Duration = Duration::from_millis(100);
+/// How long an intent left open by a stopped server blocks its own domain and global input.
+/// After that the next action closes it as `Unconfirmed`.
+const ORPHAN_MS: u64 = 10_000;
+
+thread_local! {
+    /// End of the read-only settlement window running on this thread, if any.
+    static SETTLING: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+/// While the journal re-observes an action on this thread: the end of that window. The action
+/// fence lets memory reads through until then even though the action's own deadline (or lease)
+/// has ended, and still refuses every input. Without this an action that ran out of time could
+/// never be settled: its readback failed on the same expired deadline.
+pub(super) fn settling_until() -> Option<Instant> {
+    SETTLING.with(Cell::get)
+}
+pub(super) struct Settling(Option<Instant>);
+impl Settling {
+    pub(super) fn enter(until: Instant) -> Self {
+        Self(SETTLING.with(|s| s.replace(Some(until))))
+    }
+}
+impl Drop for Settling {
+    fn drop(&mut self) {
+        SETTLING.with(|s| s.set(self.0));
+    }
+}
 
 #[cfg(test)]
 #[path = "journal/strict_tests.rs"]
@@ -49,6 +82,9 @@ pub enum Status {
     /// Fully observed outcome that differs from the target (e.g. a line was
     /// added but its factory count could not be set). Settled, not uncertain.
     Diverged,
+    /// Input may have been sent and the settlement window ended without proof of the effect or
+    /// of its absence. Closed: never replayed, blocks nothing. The caller reads the state again.
+    Unconfirmed,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -69,7 +105,13 @@ pub enum Outcome {
     /// so no input could have acted on it: settles even an unresolved retry as NotApplied.
     TargetAbsent(Value),
     Diverged(Value),
+    /// Not provable yet: partial or foreign effects, or state still moving. Re-observed until
+    /// the settlement window ends.
     Unknown,
+    /// The adapter has nothing in the game to read for this action (its verdict comes only from
+    /// what its own dispatch saw): re-observing cannot change it, so the request closes as
+    /// `Unconfirmed` at once instead of holding the input lane for the whole window.
+    Unobservable,
 }
 
 /// A new strict adapter supplies a result from this attempt only. It must
@@ -87,6 +129,9 @@ pub struct GameJournal {
     poisoned: bool,
     /// Detail of the next intent record (set only inside `execute_baselined`).
     baseline: Option<Value>,
+    /// Settlement window and poll interval (shortened only by tests).
+    window: Duration,
+    poll: Duration,
 }
 fn now() -> u64 {
     SystemTime::now()
@@ -196,6 +241,18 @@ impl GameJournal {
             receipts,
             poisoned: false,
             baseline: None,
+            // Unit tests of every adapter run through this journal: keep their unknown
+            // outcomes fast.
+            window: if cfg!(test) {
+                Duration::from_millis(60)
+            } else {
+                SETTLE_WINDOW
+            },
+            poll: if cfg!(test) {
+                Duration::from_millis(5)
+            } else {
+                SETTLE_POLL
+            },
         })
     }
     fn append(&mut self, record: Receipt) -> Result<Receipt> {
@@ -228,30 +285,50 @@ impl GameJournal {
             .values()
             .find(|r| r.status == Status::Dispatching)
     }
-    /// An unresolved dispatch that blocks new input in `domain`: one in the same domain, or any
-    /// one whose domain is global (`*`), or any one at all when `domain` is global.
+    /// An open intent that blocks new input in `domain`: one in the same domain, or any one
+    /// whose domain is global (`*`), or any one at all when `domain` is global.
     ///
-    /// Unresolved intents expire as blockers, so one uncertain click can never freeze a live
-    /// game for the rest of a campaign (w25: one focus click blocked every event for months):
-    /// after `CROSS_DOMAIN_MS` it blocks only its own domain, after `SAME_DOMAIN_MS` nothing.
-    /// The record itself stays `Dispatching` (never replayed; its own request_id still settles
-    /// it); a later fresh request relies on the adapter's own preflight (already active,
-    /// already researched, event closed, target reached) to refuse a duplicate.
+    /// Every call closes its own intent before it returns, so an open one was left by a server
+    /// that stopped in the middle of an action. Its input may still be in flight, so it blocks
+    /// for `ORPHAN_MS`; after that it blocks nothing and the next action closes it as
+    /// `Unconfirmed` (`close_orphans`). One uncertain click can never freeze a live game (w25:
+    /// one focus click blocked every event for months).
     pub(super) fn unresolved_in(&self, domain: &str) -> Option<&Receipt> {
         self.unresolved_at(domain, now())
     }
     fn unresolved_at(&self, domain: &str, now_ms: u64) -> Option<&Receipt> {
         self.receipts.values().find(|r| {
-            r.status == Status::Dispatching && {
+            r.status == Status::Dispatching && now_ms.saturating_sub(r.unix_ms) < ORPHAN_MS && {
                 let theirs = domain_of(r.action["kind"].as_str().unwrap_or(""));
-                let age = now_ms.saturating_sub(r.unix_ms);
-                if theirs == domain && domain != "*" {
-                    age < SAME_DOMAIN_MS
-                } else {
-                    (domain == "*" || theirs == "*" || theirs == domain) && age < CROSS_DOMAIN_MS
-                }
+                theirs == domain || domain == "*" || theirs == "*"
             }
         })
+    }
+    /// Close every open intent older than `ORPHAN_MS`, except `keep` (the request being retried,
+    /// which settles itself). Nothing is read and nothing is sent: the record only says that
+    /// the outcome was never observed.
+    fn close_orphans(&mut self, keep: &str) -> Result<()> {
+        let now_ms = now();
+        let old: Vec<Receipt> = self
+            .receipts
+            .values()
+            .filter(|r| {
+                r.status == Status::Dispatching
+                    && r.id != keep
+                    && now_ms.saturating_sub(r.unix_ms) >= ORPHAN_MS
+            })
+            .cloned()
+            .collect();
+        for intent in old {
+            let age_ms = now_ms.saturating_sub(intent.unix_ms);
+            self.append(Receipt {
+                status: Status::Unconfirmed,
+                detail: serde_json::json!({"closed":"orphaned","age_ms":age_ms}),
+                unix_ms: now_ms,
+                ..intent
+            })?;
+        }
+        Ok(())
     }
     pub(super) fn blocked(&self) -> bool {
         self.poisoned || self.unresolved_in("*").is_some()
@@ -293,20 +370,22 @@ impl GameJournal {
             return match previous.status {
                 Status::Verified => Ok(Some(previous.clone())),
                 Status::NotApplied => Err(Error::new("input_not_queued", "Historical positive refusal; use a fresh request after repairing its cause")),
+                Status::Unconfirmed => Err(unconfirmed(previous, None)),
                 Status::Dispatching | Status::Diverged => Err(Error::new("action_uncertain", "Historical strict action remains unresolved; current UI cannot settle or replay it")),
             };
         }
         if self.unresolved_in("*").is_some() {
             return Err(Error::new(
                 "action_uncertain",
-                "Unresolved shared game input blocks a new strict action",
+                "An action interrupted moments ago may still have input in flight; new strict input waits a few seconds",
             ));
         }
         Ok(None)
     }
     /// Persist the original typed adapter's private binding/baseline before
-    /// invoking it once. Only its same-attempt verified readback can complete
-    /// this intent. Existing legacy adapters retain their separate contract.
+    /// invoking it once. Only its same-attempt verified readback can certify
+    /// this intent; an uncertain attempt is closed as `Unconfirmed` at once
+    /// (the current UI can neither settle nor replay it).
     pub(super) fn execute_strict(
         &mut self,
         id: &str,
@@ -315,6 +394,9 @@ impl GameJournal {
         before: Value,
         dispatch: &mut dyn FnMut() -> StrictOutcome,
     ) -> Result<Receipt> {
+        if !self.poisoned {
+            self.close_orphans(id)?;
+        }
         if let Some(receipt) = self.strict_receipt(id, epoch, &action)? {
             return Ok(receipt);
         }
@@ -349,16 +431,25 @@ impl GameJournal {
                 })?;
                 Err(error)
             }
-            StrictOutcome::Uncertain(error) => Err(Error::after_possible_input(
-                "Strict action outcome is uncertain; preserve original intent without replay",
-                error,
-            )),
+            StrictOutcome::Uncertain(error) => {
+                let closed = self
+                    .append(Receipt {
+                        status: Status::Unconfirmed,
+                        detail: serde_json::json!({"closed":"strict_uncertain","cause_code":error.code}),
+                        unix_ms: now(),
+                        ..intent
+                    })
+                    .map_err(|e| {
+                        Error::after_possible_input("Strict action receipt was not durable", e)
+                    })?;
+                Err(unconfirmed(&closed, Some(&error)))
+            }
         }
     }
     /// Run `dispatch` once under a durable intent record. `settle` reads fresh
     /// state and reports what the game shows about this action.
     /// Like `execute`, but the intent record stores `baseline` (the state read before any
-    /// input) and `settle` is always given that original baseline. A retry of an unresolved
+    /// input) and `settle` is always given that original baseline. A retry of an open
     /// request id can then settle fully (reached, unchanged or diverged) from the durable
     /// baseline instead of a fresh, post-dispatch re-read. Intents written without a baseline
     /// keep the strict "only a reached target settles a retry" rule.
@@ -380,12 +471,7 @@ impl GameJournal {
             {
                 if let Some(original) = previous.detail.get("baseline").cloned() {
                     let mut stored = || settle(&original);
-                    return self.settle(previous, &mut stored).map_err(|error| {
-                        Error::after_possible_input(
-                            "Previous dispatch remains unresolved; readback failed",
-                            error,
-                        )
-                    });
+                    return self.conclude(previous, &mut stored, None);
                 }
             }
             let mut legacy = || settle(&baseline);
@@ -409,9 +495,10 @@ impl GameJournal {
     }
     /// Like `execute`. `retry_unchanged` is only for adapters whose `Unchanged`
     /// verdict is a pure function of fresh game state (no before-snapshot): then
-    /// a retry of an unresolved request id may also settle as not applied.
-    /// Settlement reads are retried a bounded number of times on `torn_read`
-    /// (the game rewrites its memory while running); no input is ever re-sent.
+    /// a retry of an open request id may also settle as not applied.
+    /// Settlement re-reads for the bounded window (torn reads and read errors
+    /// included: the game rewrites its memory while running); no input is ever
+    /// re-sent.
     pub fn execute_with(
         &mut self,
         id: &str,
@@ -421,19 +508,6 @@ impl GameJournal {
         dispatch: &mut dyn FnMut() -> Result<()>,
         retry_unchanged: bool,
     ) -> Result<Receipt> {
-        let mut settle_torn = || {
-            let mut attempt = 0u64;
-            loop {
-                match settle() {
-                    Err(e) if e.code == "torn_read" && attempt < 8 => {
-                        attempt += 1;
-                        std::thread::sleep(std::time::Duration::from_millis(15 * attempt));
-                    }
-                    other => return other,
-                }
-            }
-        };
-        let settle: &mut dyn FnMut() -> Result<Outcome> = &mut settle_torn;
         if self.poisoned {
             return Err(Error::new(
                 "action_uncertain",
@@ -454,35 +528,32 @@ impl GameJournal {
                     "request_id is bound to a different action or epoch",
                 ));
             }
-            if previous.status != Status::Dispatching {
-                return Ok(previous);
+            match previous.status {
+                Status::Dispatching => {}
+                Status::Unconfirmed => return Err(unconfirmed(&previous, None)),
+                _ => return Ok(previous),
             }
-            // A missing target/UI during readback says nothing about whether
-            // the earlier dispatch sent input. Only a successful observation
-            // may settle it; read errors must leave the intent unresolved.
-            // These adapters reconstruct their before-state on each call.
-            // A later Unchanged/Diverged observation therefore cannot prove
-            // the original dispatch failed. Only a reached target can settle
-            // an unresolved retry until original baselines are durable.
+            // An intent left open by a stopped server. These adapters reconstruct their
+            // before-state on each call, so a later Unchanged/Diverged observation cannot
+            // prove the original dispatch failed: only a reached target (or a target proven
+            // absent) settles it, unless the adapter's Unchanged verdict needs no baseline.
+            // Anything else closes it as Unconfirmed when the window ends.
             let mut retry_settle = || match settle()? {
                 reached @ Outcome::Reached(_) => Ok(reached),
                 absent @ Outcome::TargetAbsent(_) => Ok(absent),
                 unchanged @ Outcome::Unchanged(_) if retry_unchanged => Ok(unchanged),
                 _ => Ok(Outcome::Unknown),
             };
-            return self.settle(previous, &mut retry_settle).map_err(|error| {
-                Error::after_possible_input(
-                    "Previous dispatch remains unresolved; readback failed",
-                    error,
-                )
-            });
+            return self.conclude(previous, &mut retry_settle, None);
         }
+        self.close_orphans(id)?;
         if let Some(open) = self.unresolved_in(domain_of(action["kind"].as_str().unwrap_or(""))) {
             return Err(Error::new(
                 "action_uncertain",
                 format!(
-                    "Unresolved dispatch {} blocks input in its domain; retry that request_id to settle it",
-                    open.id
+                    "Request {} was interrupted moments ago and its input may still be in flight; new input in its domain waits at most {} s",
+                    open.id,
+                    ORPHAN_MS / 1000
                 ),
             ));
         }
@@ -496,47 +567,90 @@ impl GameJournal {
             unix_ms: now(),
         })?;
         match dispatch() {
-            Ok(()) => self.settle(intent, settle).map_err(|error| {
-                Error::after_possible_input(
-                    "Input completed but readback remains unresolved",
-                    error,
-                )
-            }),
+            Ok(()) => self.conclude(intent, settle, None),
             Err(error) => {
-                // Settle from fresh state; an unprovable outcome stays quarantined.
-                let settled = self.settle(intent.clone(), settle);
-                match settled {
-                    Ok(receipt) if receipt.status == Status::Verified => Ok(receipt),
-                    Ok(_) => Err(error),
-                    Err(readback) => Err(Error::after_possible_input(
-                        "Dispatch outcome unresolved; preserve intent",
-                        Error::new(
-                            error.code,
-                            format!(
-                                "{}; readback_cause={}: {}",
-                                error.message, readback.code, readback.message,
-                            ),
-                        ),
-                    )),
+                // What the game shows decides: the effect is there (the dispatch only failed
+                // late), it is provably absent (the dispatch error is the answer), or neither
+                // could be read inside the window (closed as Unconfirmed).
+                let receipt = self.conclude(intent, settle, Some(&error))?;
+                match receipt.status {
+                    Status::Verified => Ok(receipt),
+                    _ => Err(error),
                 }
             }
         }
     }
+    /// Settle `intent` and turn an `Unconfirmed` close into its typed error.
+    fn conclude(
+        &mut self,
+        intent: Receipt,
+        settle: &mut dyn FnMut() -> Result<Outcome>,
+        cause: Option<&Error>,
+    ) -> Result<Receipt> {
+        let receipt = self.settle(intent, settle, cause).map_err(|error| {
+            Error::after_possible_input("Action receipt was not durable", error)
+        })?;
+        if receipt.status == Status::Unconfirmed {
+            return Err(unconfirmed(&receipt, cause));
+        }
+        Ok(receipt)
+    }
+    /// Re-observe until the game shows an outcome or the settlement window ends, then write the
+    /// terminal receipt. Reads inside the window pass the action fence even after the action's
+    /// own deadline. An outcome that stays unknown (or unreadable) closes the intent as
+    /// `Unconfirmed`. Only a persistence failure is an error.
     fn settle(
         &mut self,
         intent: Receipt,
         settle: &mut dyn FnMut() -> Result<Outcome>,
+        cause: Option<&Error>,
     ) -> Result<Receipt> {
-        let (status, detail) = match settle()? {
-            Outcome::Reached(v) => (Status::Verified, v),
-            Outcome::Unchanged(v) | Outcome::TargetAbsent(v) => (Status::NotApplied, v),
-            Outcome::Diverged(v) => (Status::Diverged, v),
-            Outcome::Unknown => {
-                return Err(Error::new(
-                    "action_uncertain",
-                    "Game state neither reached the target nor stayed unchanged",
-                ))
+        let started = Instant::now();
+        let end = started + self.window;
+        let mut polls = 0u32;
+        let mut last = String::new();
+        let outcome = {
+            let _reading = Settling::enter(end);
+            loop {
+                polls += 1;
+                match settle() {
+                    Ok(Outcome::Unknown) => {
+                        last = "state neither reached the target nor stayed unchanged".into();
+                    }
+                    Ok(Outcome::Unobservable) => {
+                        last = "the action's effect cannot be read back".into();
+                        break None;
+                    }
+                    Ok(outcome) => break Some(outcome),
+                    Err(error) => {
+                        last = bounded(&format!("{}: {}", error.code, error.message), 200);
+                        // A stopped session reads nothing more.
+                        if error.code == "session_closed" {
+                            break None;
+                        }
+                    }
+                }
+                let now = Instant::now();
+                if now >= end {
+                    break None;
+                }
+                std::thread::sleep(self.poll.min(end - now));
             }
+        };
+        let (status, detail) = match outcome {
+            Some(Outcome::Reached(v)) => (Status::Verified, v),
+            Some(Outcome::Unchanged(v) | Outcome::TargetAbsent(v)) => (Status::NotApplied, v),
+            Some(Outcome::Diverged(v)) => (Status::Diverged, v),
+            Some(Outcome::Unknown | Outcome::Unobservable) | None => (
+                Status::Unconfirmed,
+                serde_json::json!({
+                    "closed": "settlement_window",
+                    "window_ms": started.elapsed().as_millis() as u64,
+                    "polls": polls,
+                    "readback": last,
+                    "cause_code": cause.map(|c| c.code),
+                }),
+            ),
         };
         self.append(Receipt {
             status,
@@ -545,6 +659,38 @@ impl GameJournal {
             ..intent
         })
     }
+}
+/// One bounded line without control characters.
+fn bounded(text: &str, limit: usize) -> String {
+    let mut out = String::new();
+    for c in text.chars().filter(|c| !c.is_control()) {
+        if out.len() + c.len_utf8() > limit {
+            break;
+        }
+        out.push(c);
+    }
+    out
+}
+/// The typed error for a request closed as `Unconfirmed`: a clean failure, not a quarantine.
+fn unconfirmed(receipt: &Receipt, cause: Option<&Error>) -> Error {
+    let mut message = String::from(
+        "Input may have been sent but its effect was not observed; the request is closed, is \
+         never replayed and blocks nothing. Read the state again and send a fresh request only \
+         if the effect is absent",
+    );
+    if let Some(cause) = cause {
+        message.push_str(&bounded(
+            &format!("; cause={}: {}", cause.code, cause.message),
+            260,
+        ));
+    }
+    if let Some(readback) = receipt.detail["readback"]
+        .as_str()
+        .filter(|r| !r.is_empty())
+    {
+        message.push_str(&bounded(&format!("; readback={readback}"), 220));
+    }
+    Error::new("action_unconfirmed", message)
 }
 
 #[cfg(test)]
@@ -645,21 +791,24 @@ mod tests {
         let action = json!({"kind":"construction_add","state_id":64});
         {
             let mut j = journal(&dir);
-            // The dispatch "fails" after possible input and the readback is a torn/unknown read.
-            let err = j
+            // The intent record carries the baseline read before any input.
+            let mut seen = None;
+            let r = j
                 .execute_baselined(
-                    "c1",
+                    "c0",
                     &e,
                     action.clone(),
                     json!(1),
-                    &mut |_| Err(Error::new("read_failed", "torn")),
-                    &mut || Err(Error::new("input_readback_failed", "no change seen")),
+                    &mut |b| {
+                        seen = Some(b.clone());
+                        Ok(Outcome::Reached(json!(2)))
+                    },
+                    &mut || Ok(()),
                 )
-                .unwrap_err();
-            assert_eq!(err.code, "action_uncertain");
-            let intent = j.receipts.get("c1").unwrap();
-            assert_eq!(intent.status, Status::Dispatching);
-            assert_eq!(intent.detail, json!({"baseline":1}));
+                .unwrap();
+            assert_eq!((r.status, seen), (Status::Verified, Some(json!(1))));
+            // A server that stopped mid-action left this one open, baseline stored.
+            orphan(&mut j, "c1", &action, json!({"baseline":1}));
         }
         // Restarted server: the fresh baseline would be 2 (the queue grew), the stored one is 1.
         let mut j = journal(&dir);
@@ -690,14 +839,7 @@ mod tests {
         let e = epoch();
         let action = json!({"kind":"construction_add","state_id":7});
         let mut j = journal(&dir);
-        let _ = j.execute_baselined(
-            "c2",
-            &e,
-            action.clone(),
-            json!(3),
-            &mut |_| Err(Error::new("read_failed", "torn")),
-            &mut || Err(Error::new("input_readback_failed", "x")),
-        );
+        orphan(&mut j, "c2", &action, json!({"baseline":3}));
         let r = j
             .execute_baselined(
                 "c2",
@@ -716,13 +858,7 @@ mod tests {
         let e = epoch();
         let action = json!({"kind":"construction_add","state_id":9});
         let mut j = journal(&dir);
-        let _ = j.execute(
-            "c3",
-            &e,
-            action.clone(),
-            &mut || Err(Error::new("read_failed", "torn")),
-            &mut || Err(Error::new("input_readback_failed", "x")),
-        );
+        orphan(&mut j, "c3", &action, Value::Null);
         let err = j
             .execute_baselined(
                 "c3",
@@ -733,7 +869,31 @@ mod tests {
                 &mut || panic!("no dispatch"),
             )
             .unwrap_err();
-        assert_eq!(err.code, "action_uncertain");
+        assert_eq!(err.code, "action_unconfirmed");
+        assert_eq!(j.receipts["c3"].status, Status::Unconfirmed);
+    }
+    #[test]
+    fn a_baselined_dispatch_that_cannot_be_read_back_is_closed_with_its_cause() {
+        let dir = dir("baselined-unreadable");
+        let mut j = journal(&dir);
+        let err = j
+            .execute_baselined(
+                "c4",
+                &epoch(),
+                json!({"kind":"construction_add","state_id":64}),
+                json!(1),
+                &mut |_| Err(Error::new("read_failed", "torn")),
+                &mut || Err(Error::new("input_readback_failed", "no change seen")),
+            )
+            .unwrap_err();
+        assert_eq!(err.code, "action_unconfirmed");
+        assert!(err.message.contains("cause=input_readback_failed"));
+        assert!(err.message.contains("readback=read_failed"));
+        assert_eq!(j.receipts["c4"].status, Status::Unconfirmed);
+        assert_eq!(
+            j.receipts["c4"].detail["cause_code"],
+            "input_readback_failed"
+        );
     }
     #[test]
     fn positively_observed_unchanged_state_settles_a_refusal() {
@@ -795,52 +955,151 @@ mod tests {
         assert_eq!((again.status, sent), (Status::Verified, 1));
     }
     #[test]
-    fn unprovable_dispatch_quarantines_until_settled_by_its_own_id() {
-        let dir = dir("quarantine");
+    fn an_unprovable_dispatch_is_closed_unconfirmed_and_blocks_nothing() {
+        let dir = dir("unconfirmed");
         let mut j = journal(&dir);
-        let action = json!({"research":"radio","slot":1});
+        let action = json!({"kind":"research_start","research":"radio","slot":1});
+        let mut polls = 0;
         let err = j
             .execute(
                 "a2",
                 &epoch(),
                 action.clone(),
-                &mut || Ok(Outcome::Unknown),
+                &mut || {
+                    polls += 1;
+                    Ok(Outcome::Unknown)
+                },
                 &mut || Err(Error::new("input_readback_failed", "x")),
             )
             .unwrap_err();
-        assert_eq!(err.code, "action_uncertain");
-        assert!(err.message.contains("input_readback_failed"));
-        let blocked = j
+        assert_eq!(err.code, "action_unconfirmed");
+        assert!(err.message.contains("cause=input_readback_failed"));
+        // Re-observed more than once inside the window before giving up.
+        assert!(polls > 1, "polls={polls}");
+        assert_eq!(j.receipts["a2"].status, Status::Unconfirmed);
+        assert_eq!(j.receipts["a2"].detail["closed"], "settlement_window");
+        assert!(!j.blocked() && !j.blocked_for("research") && j.unresolved().is_none());
+        // The same domain takes new input at once.
+        let next = j
             .execute(
                 "a3",
                 &epoch(),
-                json!({}),
-                &mut || unreachable!(),
-                &mut || unreachable!(),
+                json!({"kind":"research_start","research":"radio","slot":1}),
+                &mut || Ok(Outcome::Reached(json!(1))),
+                &mut || Ok(()),
             )
-            .unwrap_err();
-        assert_eq!(blocked.code, "action_uncertain");
+            .unwrap();
+        assert_eq!(next.status, Status::Verified);
+        // The closed request stays closed across a restart: never observed or sent again.
         drop(j);
         let mut j = journal(&dir);
-        let settled = j
+        let again = j
             .execute(
                 "a2",
                 &epoch(),
                 action,
-                &mut || Ok(Outcome::Reached(json!({"research":"radio","slot":1}))),
-                &mut || unreachable!(),
+                &mut || panic!("closed"),
+                &mut || panic!("closed"),
+            )
+            .unwrap_err();
+        assert_eq!(again.code, "action_unconfirmed");
+    }
+    #[test]
+    fn an_effect_that_shows_late_inside_the_window_is_verified() {
+        let dir = dir("late-effect");
+        let mut j = journal(&dir);
+        // The action ran out of time (dispatch error) and the first readbacks fail or see
+        // nothing yet; the effect appears a moment later.
+        let mut reads = 0;
+        let r = j
+            .execute(
+                "late",
+                &epoch(),
+                json!({"kind":"focus_start","focus":"f"}),
+                &mut || {
+                    reads += 1;
+                    match reads {
+                        1 => Err(Error::new("torn_read", "day tick")),
+                        2 => Ok(Outcome::Unknown),
+                        _ => Ok(Outcome::Reached(json!({"active":"f"}))),
+                    }
+                },
+                &mut || {
+                    Err(Error::new(
+                        "action_deadline",
+                        "Original action deadline expired",
+                    ))
+                },
             )
             .unwrap();
-        assert_eq!(settled.status, Status::Verified);
-        assert!(j
+        assert_eq!((r.status, reads), (Status::Verified, 3));
+        // The opposite: a dispatch error whose effect is provably absent keeps its own code.
+        let e = j
             .execute(
-                "a3",
+                "absent",
                 &epoch(),
-                json!({}),
-                &mut || Ok(Outcome::Reached(json!(1))),
-                &mut || Ok(())
+                json!({"kind":"focus_start","focus":"g"}),
+                &mut || Ok(Outcome::Unchanged(json!({"active":null}))),
+                &mut || {
+                    Err(Error::new(
+                        "action_deadline",
+                        "Original action deadline expired",
+                    ))
+                },
             )
-            .is_ok());
+            .unwrap_err();
+        assert_eq!(e.code, "action_deadline");
+        assert_eq!(j.receipts["absent"].status, Status::NotApplied);
+        assert!(j.unresolved().is_none());
+    }
+    #[test]
+    fn an_unobservable_outcome_closes_at_once_without_polling() {
+        let dir = dir("unobservable");
+        let mut j = journal(&dir);
+        j.window = Duration::from_secs(30);
+        let started = Instant::now();
+        let mut polls = 0;
+        let err = j
+            .execute(
+                "u1",
+                &epoch(),
+                json!({"kind":"construction_order","line":1}),
+                &mut || {
+                    polls += 1;
+                    Ok(Outcome::Unobservable)
+                },
+                &mut || Err(Error::new("input_readback_failed", "x")),
+            )
+            .unwrap_err();
+        assert_eq!(err.code, "action_unconfirmed");
+        assert_eq!(polls, 1);
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(j.receipts["u1"].status, Status::Unconfirmed);
+        assert!(!j.blocked());
+    }
+    #[test]
+    fn settlement_reads_run_inside_the_read_only_window() {
+        let dir = dir("window-scope");
+        let mut j = journal(&dir);
+        assert!(settling_until().is_none());
+        let mut inside = (false, false);
+        j.execute(
+            "w",
+            &epoch(),
+            json!({"kind":"x"}),
+            &mut || {
+                inside.1 = settling_until().is_some();
+                Ok(Outcome::Reached(json!(1)))
+            },
+            &mut || {
+                inside.0 = settling_until().is_some();
+                Ok(())
+            },
+        )
+        .unwrap();
+        // The dispatch (input) never runs inside the window; the readback does.
+        assert_eq!(inside, (false, true));
+        assert!(settling_until().is_none());
     }
     #[test]
     fn a_restarted_server_replays_but_another_campaign_conflicts() {
@@ -904,7 +1163,7 @@ mod tests {
     }
 
     #[test]
-    fn lookup_errors_after_possible_input_never_clear_the_intent_even_after_restart() {
+    fn unreadable_outcomes_after_possible_input_close_as_unconfirmed_not_as_a_quarantine() {
         for code in [
             "invalid_target",
             "invalid_arguments",
@@ -913,7 +1172,7 @@ mod tests {
         ] {
             let dir = dir(code);
             let mut j = journal(&dir);
-            let action = json!({"army":"Army 1","target":42});
+            let action = json!({"kind":"army_move","army":"Army 1","target":42});
             let mut sent = 0;
             let error = j
                 .execute(
@@ -928,48 +1187,45 @@ mod tests {
                 )
                 .unwrap_err();
             assert_eq!(sent, 1);
-            assert_eq!(error.code, "action_uncertain");
+            assert_eq!(error.code, "action_unconfirmed");
             assert!(error.message.contains(code));
-            assert_eq!(j.receipts["partial"].status, Status::Dispatching);
+            assert_eq!(j.receipts["partial"].status, Status::Unconfirmed);
+            assert!(j.receipts["partial"].detail["readback"]
+                .as_str()
+                .unwrap()
+                .contains(code));
             drop(j);
             let mut j = journal(&dir);
+            // A retry of the closed id never dispatches and never claims an outcome.
             let error = j
                 .execute(
                     "partial",
                     &epoch(),
                     action.clone(),
-                    &mut || Err(Error::new(code, "target no longer observable")),
+                    &mut || panic!("A closed request is not observed again"),
                     &mut || panic!("Retry must never dispatch"),
                 )
                 .unwrap_err();
-            assert_eq!(error.code, "action_uncertain");
-            assert_eq!(j.receipts["partial"].status, Status::Dispatching);
-            let blocked = j
+            assert_eq!(error.code, "action_unconfirmed");
+            // A fresh request in the same domain is not blocked.
+            let fresh = j
                 .execute(
                     "new-id",
                     &epoch(),
-                    json!({}),
-                    &mut || panic!("Unresolved input blocks new observations"),
-                    &mut || panic!("Unresolved input blocks new input"),
-                )
-                .unwrap_err();
-            assert_eq!(blocked.code, "action_uncertain");
-            let settled = j
-                .execute(
-                    "partial",
-                    &epoch(),
                     action,
                     &mut || Ok(Outcome::Reached(json!({"target":42}))),
-                    &mut || panic!("Settlement is read-only"),
+                    &mut || {
+                        sent += 1;
+                        Ok(())
+                    },
                 )
                 .unwrap();
-            assert_eq!(settled.status, Status::Verified);
-            assert_eq!(sent, 1);
+            assert_eq!((fresh.status, sent), (Status::Verified, 2));
         }
     }
 
     #[test]
-    fn successful_dispatch_with_unavailable_readback_is_still_uncertain() {
+    fn successful_dispatch_with_unavailable_readback_is_closed_unconfirmed() {
         let dir = dir("readback-failed");
         let mut j = journal(&dir);
         let error = j
@@ -981,27 +1237,38 @@ mod tests {
                 &mut || Ok(()),
             )
             .unwrap_err();
-        assert_eq!(error.code, "action_uncertain");
+        assert_eq!(error.code, "action_unconfirmed");
         assert!(error.message.contains("invalid_target"));
-        assert_eq!(j.receipts["sent"].status, Status::Dispatching);
+        assert_eq!(j.receipts["sent"].status, Status::Unconfirmed);
+        assert!(!j.blocked());
     }
 
+    /// An intent left open by a stopped server (written here as a bare record).
+    pub(super) fn orphan(j: &mut GameJournal, id: &str, action: &Value, detail: Value) {
+        j.append(Receipt {
+            version: 1,
+            id: id.into(),
+            epoch: epoch(),
+            action: action.clone(),
+            status: Status::Dispatching,
+            detail,
+            unix_ms: now(),
+        })
+        .unwrap();
+    }
     #[test]
     fn a_retry_without_the_original_baseline_cannot_prove_nonapplication() {
-        let dir = dir("retry-baseline");
-        let mut j = journal(&dir);
-        let action = json!({"kind":"construct","state":64});
-        j.execute(
-            "lost",
-            &epoch(),
-            action.clone(),
-            &mut || Ok(Outcome::Unknown),
-            &mut || Ok(()),
-        )
-        .unwrap_err();
-        drop(j);
-        let mut j = journal(&dir);
         for diverged in [false, true] {
+            let dir = dir(if diverged {
+                "retry-diverged"
+            } else {
+                "retry-unchanged"
+            });
+            let mut j = journal(&dir);
+            let action = json!({"kind":"construct","state":64});
+            orphan(&mut j, "lost", &action, Value::Null);
+            drop(j);
+            let mut j = journal(&dir);
             let error = j
                 .execute(
                     "lost",
@@ -1017,19 +1284,28 @@ mod tests {
                     &mut || panic!("Retry must never dispatch"),
                 )
                 .unwrap_err();
-            assert_eq!(error.code, "action_uncertain");
-            assert_eq!(j.receipts["lost"].status, Status::Dispatching);
+            // Not provable either way: closed, never recorded as NotApplied or Diverged.
+            assert_eq!(error.code, "action_unconfirmed");
+            assert_eq!(j.receipts["lost"].status, Status::Unconfirmed);
         }
-        let error = j
+    }
+    #[test]
+    fn a_retried_orphan_settles_when_its_target_is_reached() {
+        let dir = dir("retry-reached");
+        let mut j = journal(&dir);
+        let action = json!({"kind":"research_start","research":"radio","slot":1});
+        orphan(&mut j, "o1", &action, Value::Null);
+        let settled = j
             .execute(
-                "replacement",
+                "o1",
                 &epoch(),
                 action,
-                &mut || panic!("Must not attempt a replacement"),
-                &mut || panic!("Must not dispatch a replacement"),
+                &mut || Ok(Outcome::Reached(json!({"research":"radio","slot":1}))),
+                &mut || unreachable!(),
             )
-            .unwrap_err();
-        assert_eq!(error.code, "action_uncertain");
+            .unwrap();
+        assert_eq!(settled.status, Status::Verified);
+        assert!(j.unresolved().is_none());
     }
 }
 
@@ -1061,30 +1337,68 @@ mod domain_tests {
     use super::tests::{dir, epoch, journal};
     use super::*;
     #[test]
-    fn an_unresolved_intent_stops_blocking_other_domains_then_its_own() {
-        let d = dir("expiry");
+    fn an_orphaned_intent_blocks_briefly_and_the_next_action_closes_it() {
+        let d = dir("orphan");
         let mut j = journal(&d);
         let t0 = now();
-        let intent = j
-            .append(Receipt {
-                version: 1,
-                id: "f1".into(),
-                epoch: epoch(),
-                action: serde_json::json!({"kind": "focus_start", "focus": "x"}),
-                status: Status::Dispatching,
-                detail: Value::Null,
-                unix_ms: t0,
-            })
-            .unwrap();
+        // A server stopped in the middle of a focus action: its intent is still open.
+        j.append(Receipt {
+            version: 1,
+            id: "f1".into(),
+            epoch: epoch(),
+            action: serde_json::json!({"kind": "focus_start", "focus": "x"}),
+            status: Status::Dispatching,
+            detail: Value::Null,
+            unix_ms: t0,
+        })
+        .unwrap();
         assert!(j.unresolved_at("*", t0 + 1_000).is_some());
         assert!(j.unresolved_at("focus", t0 + 1_000).is_some());
         assert!(j.unresolved_at("army", t0 + 1_000).is_none());
-        assert!(j.unresolved_at("*", t0 + CROSS_DOMAIN_MS).is_none());
-        assert!(j.unresolved_at("army", t0 + CROSS_DOMAIN_MS).is_none());
-        assert!(j.unresolved_at("focus", t0 + CROSS_DOMAIN_MS).is_some());
-        assert!(j.unresolved_at("focus", t0 + SAME_DOMAIN_MS).is_none());
-        // The intent itself is never rewritten: only its own request_id settles it.
-        assert_eq!(j.unresolved().map(|r| r.id.clone()), Some(intent.id));
+        assert!(j.unresolved_at("*", t0 + ORPHAN_MS).is_none());
+        assert!(j.unresolved_at("focus", t0 + ORPHAN_MS).is_none());
+        // While its input may still be in flight a new focus action waits (typed, bounded).
+        let early = j
+            .execute(
+                "f2",
+                &epoch(),
+                serde_json::json!({"kind": "focus_start", "focus": "y"}),
+                &mut || panic!("blocked before any read"),
+                &mut || panic!("blocked before any input"),
+            )
+            .unwrap_err();
+        assert_eq!(early.code, "action_uncertain");
+        assert!(early.message.contains("at most 10 s"));
+        // Old enough: the next action of any domain closes it and runs.
+        j.receipts.get_mut("f1").unwrap().unix_ms = t0 - ORPHAN_MS;
+        let next = j
+            .execute(
+                "f3",
+                &epoch(),
+                serde_json::json!({"kind": "focus_start", "focus": "y"}),
+                &mut || Ok(Outcome::Reached(serde_json::json!(1))),
+                &mut || Ok(()),
+            )
+            .unwrap();
+        assert_eq!(next.status, Status::Verified);
+        assert_eq!(j.receipts["f1"].status, Status::Unconfirmed);
+        assert_eq!(j.receipts["f1"].detail["closed"], "orphaned");
+        assert!(j.unresolved().is_none());
+        // Its own request id now answers with the closed receipt's typed error, without reads.
+        let closed = j
+            .execute(
+                "f1",
+                &epoch(),
+                serde_json::json!({"kind": "focus_start", "focus": "x"}),
+                &mut || panic!("a closed request is not observed again"),
+                &mut || panic!("a closed request is never replayed"),
+            )
+            .unwrap_err();
+        assert_eq!(closed.code, "action_unconfirmed");
+        // The closed record survives a restart as a valid transition.
+        drop(j);
+        let j = journal(&d);
+        assert_eq!(j.receipts["f1"].status, Status::Unconfirmed);
     }
     #[test]
     fn kinds_and_tools_map_to_the_same_domains() {

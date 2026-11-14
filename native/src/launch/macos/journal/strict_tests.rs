@@ -41,38 +41,38 @@ fn original_binding_is_durable_before_dispatch_and_verified_replay_is_historical
 }
 
 #[test]
-fn strict_uncertainty_survives_reopen_new_ids_and_legacy_reached_settlement() {
+fn strict_uncertainty_is_closed_at_once_and_never_settled_or_replayed() {
     let d = dir("strict-uncertain");
     let mut j = journal(&d);
+    let error = j
+        .execute_strict(
+            "lost",
+            &epoch(),
+            action(),
+            json!({"binding":123}),
+            &mut || StrictOutcome::Uncertain(Error::new("readback_failed", "Possible key event")),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, "action_unconfirmed");
+    assert!(error.message.contains("cause=readback_failed"));
+    assert_eq!(j.receipts["lost"].status, Status::Unconfirmed);
+    assert!(!j.blocked());
+    drop(j);
+    let mut j = journal(&d);
+    let bytes = std::fs::read(d.join("game-actions.jsonl")).unwrap();
+    // The closed id answers from its record: no dispatch, no settlement from the current UI.
     assert_eq!(
         j.execute_strict(
             "lost",
             &epoch(),
             action(),
-            json!({"binding":123}),
-            &mut || StrictOutcome::Uncertain(Error::new("readback_failed", "Possible key event"))
+            json!({"panel_open_now":true}),
+            &mut || panic!("A closed strict intent cannot dispatch or settle")
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
-    drop(j);
-    let mut j = journal(&d);
-    let bytes = std::fs::read(d.join("game-actions.jsonl")).unwrap();
-    for id in ["lost", "replacement"] {
-        assert_eq!(
-            j.execute_strict(
-                id,
-                &epoch(),
-                action(),
-                json!({"panel_open_now":true}),
-                &mut || panic!("Uncertain intent cannot dispatch or settle")
-            )
-            .unwrap_err()
-            .code,
-            "action_uncertain"
-        );
-    }
     assert_eq!(
         j.execute(
             "lost",
@@ -86,7 +86,17 @@ fn strict_uncertainty_survives_reopen_new_ids_and_legacy_reached_settlement() {
         "action_uncertain"
     );
     assert_eq!(std::fs::read(d.join("game-actions.jsonl")).unwrap(), bytes);
-    assert!(j.blocked());
+    // A fresh strict request is not blocked by it.
+    let fresh = j
+        .execute_strict(
+            "replacement",
+            &epoch(),
+            action(),
+            json!({"binding":124}),
+            &mut || StrictOutcome::Verified(json!({"done":true})),
+        )
+        .unwrap();
+    assert_eq!(fresh.status, Status::Verified);
     drop(j);
     std::fs::remove_dir_all(d).unwrap();
 }
@@ -147,22 +157,30 @@ fn strict_binding_conflicts_and_legacy_uncertainty_never_call_adapter() {
             "idempotency_conflict"
         );
     }
-    j.execute(
+    // A legacy intent left open by a stopped server may still have input in flight: a new
+    // strict action waits for it (bounded), then the orphan is closed and the action runs.
+    super::tests::orphan(
+        &mut j,
         "legacy",
-        &epoch(),
-        json!({"kind":"research_start"}),
-        &mut || Ok(Outcome::Unknown),
-        &mut || Ok(()),
-    )
-    .unwrap_err();
+        &json!({"kind":"event_choose"}),
+        Value::Null,
+    );
     assert_eq!(
         j.execute_strict("new", &epoch(), action(), Value::Null, &mut || panic!(
-            "Shared legacy uncertainty"
+            "An interrupted action may still have input in flight"
         ))
         .unwrap_err()
         .code,
         "action_uncertain"
     );
+    j.receipts.get_mut("legacy").unwrap().unix_ms -= ORPHAN_MS;
+    let ran = j
+        .execute_strict("new", &epoch(), action(), Value::Null, &mut || {
+            StrictOutcome::Verified(Value::Null)
+        })
+        .unwrap();
+    assert_eq!(ran.status, Status::Verified);
+    assert_eq!(j.receipts["legacy"].status, Status::Unconfirmed);
     drop(j);
     std::fs::remove_dir_all(d).unwrap();
 }
@@ -236,39 +254,20 @@ mod retry_settle_tests {
     use super::super::*;
     use serde_json::json;
 
-    fn open_intent(j: &mut GameJournal) {
-        let mut settle = || Ok(Outcome::Unknown);
-        let mut dispatch = || Err(Error::new("action_deadline", "late"));
-        assert!(j
-            .execute(
-                "a1",
-                &epoch(),
-                json!({"kind":"k"}),
-                &mut settle,
-                &mut dispatch
-            )
-            .is_err());
+    /// An intent left open by a server that stopped in the middle of the action.
+    fn open_intent(j: &mut GameJournal, id: &str, kind: &str) {
+        super::super::tests::orphan(j, id, &json!({"kind":kind}), Value::Null);
         assert!(j.unresolved().is_some());
     }
     #[test]
-    fn an_unresolved_army_order_blocks_army_input_but_not_research() {
+    fn an_interrupted_army_order_blocks_army_input_but_not_research() {
         let d = dir("domain-scope");
         let mut j = journal(&d);
-        let mut settle = || Ok(Outcome::Unknown);
-        let mut dispatch = || Err(Error::new("action_deadline", "late"));
-        assert!(j
-            .execute(
-                "a1",
-                &epoch(),
-                json!({"kind":"army_move"}),
-                &mut settle,
-                &mut dispatch
-            )
-            .is_err());
+        open_intent(&mut j, "a1", "army_move");
         assert!(j.blocked_for("army"));
         assert!(!j.blocked_for("research"));
         assert!(j.blocked_for("*"));
-        // a new army order is refused, a research start goes through
+        // a new army order waits, a research start goes through
         let mut ok_settle = || Ok(Outcome::Reached(json!({})));
         let mut ok_dispatch = || Ok(());
         assert!(j
@@ -293,28 +292,45 @@ mod retry_settle_tests {
             .is_ok());
     }
     #[test]
-    fn an_unresolved_event_answer_blocks_everything() {
+    fn an_interrupted_event_answer_blocks_everything_briefly() {
         let d = dir("domain-global");
         let mut j = journal(&d);
-        let mut settle = || Ok(Outcome::Unknown);
-        let mut dispatch = || Err(Error::new("action_deadline", "late"));
-        assert!(j
-            .execute(
-                "e1",
-                &epoch(),
-                json!({"kind":"event_choose"}),
-                &mut settle,
-                &mut dispatch
-            )
-            .is_err());
+        open_intent(&mut j, "e1", "event_choose");
         assert!(j.blocked_for("research"));
         assert!(j.blocked_for("army"));
+    }
+    #[test]
+    fn a_completed_call_never_leaves_an_open_intent_in_any_domain() {
+        let d = dir("domain-closed");
+        let mut j = journal(&d);
+        for (id, kind) in [
+            ("a1", "army_move"),
+            ("e1", "event_choose"),
+            ("f1", "focus_start"),
+        ] {
+            let mut settle = || Ok(Outcome::Unknown);
+            let mut dispatch = || Err(Error::new("action_deadline", "late"));
+            let error = j
+                .execute(
+                    id,
+                    &epoch(),
+                    json!({"kind":kind}),
+                    &mut settle,
+                    &mut dispatch,
+                )
+                .unwrap_err();
+            assert_eq!(error.code, "action_unconfirmed");
+            assert!(j.unresolved().is_none());
+            for domain in ["army", "focus", "research", "*"] {
+                assert!(!j.blocked_for(domain));
+            }
+        }
     }
     #[test]
     fn baseline_free_unchanged_settles_a_retry_and_unblocks_input() {
         let d = dir("retry-unchanged");
         let mut j = journal(&d);
-        open_intent(&mut j);
+        open_intent(&mut j, "a1", "k");
         let mut settle = || Ok(Outcome::Unchanged(json!({})));
         let mut dispatch = || panic!("a retry never re-sends input");
         let r = j
@@ -331,25 +347,27 @@ mod retry_settle_tests {
         assert!(j.unresolved().is_none());
     }
     #[test]
-    fn default_retry_still_refuses_unchanged() {
+    fn default_retry_still_refuses_unchanged_and_closes_unconfirmed() {
         let d = dir("retry-default");
         let mut j = journal(&d);
-        open_intent(&mut j);
+        open_intent(&mut j, "a1", "k");
         let mut settle = || Ok(Outcome::Unchanged(json!({})));
         let mut dispatch = || panic!("no input");
-        assert!(j
+        let error = j
             .execute(
                 "a1",
                 &epoch(),
                 json!({"kind":"k"}),
                 &mut settle,
-                &mut dispatch
+                &mut dispatch,
             )
-            .is_err());
-        assert!(j.unresolved().is_some());
+            .unwrap_err();
+        assert_eq!(error.code, "action_unconfirmed");
+        assert_eq!(j.receipts["a1"].status, Status::Unconfirmed);
+        assert!(j.unresolved().is_none());
     }
     #[test]
-    fn torn_reads_in_settlement_are_retried_but_other_errors_are_not() {
+    fn torn_reads_in_settlement_are_read_again_until_the_outcome_shows() {
         let d = dir("torn");
         let mut j = journal(&d);
         let mut calls = 0;

@@ -24,6 +24,8 @@ or the files, so a mod's content is read the same way.
                   air_base_levels, supply_hubs, coastal_provinces
     construction  building_costs(game), construction_constants (calc.py labels),
                   free_civilian_factories(game, ctx, tag, date), construction_days(game, building, civs, infra)
+    politics      politics_slots(game) {category: [slot kind by index]}, politics_slot_kinds, politics_places,
+                  politics_slot_problem(game, ctx, category, slot, key)
 
 The lint and the dossier builder share these; each result is memoised on the Game.
 """
@@ -286,11 +288,13 @@ def render(block, depth=0):
 
 def building_kinds(game):
     """Building keys by role, read from the building attributes (so a mod's buildings count):
-    factory (military_production / general_production / naval_production), infrastructure
+    factory (military_production / general_production / naval_production), military (military_production:
+    the factories of land and air equipment lines), naval (naval_production: the dockyards of naval lines),
+    infrastructure
     (infrastructure = yes), supply (supply_node = yes), railway (rail_way / railway)."""
 
     def load():
-        out = {"factory": set(), "military": set(), "infrastructure": set(), "supply": set(),
+        out = {"factory": set(), "military": set(), "naval": set(), "infrastructure": set(), "supply": set(),
                "railway": {"rail_way", "railway"}}
         for f in game.files("common/buildings"):
             for k, v in parse_file(f):
@@ -304,6 +308,8 @@ def building_kinds(game):
                             out["factory"].add(name)
                     if get1(body, "military_production") not in (None, "0"):
                         out["military"].add(name)
+                    if get1(body, "naval_production") not in (None, "0"):
+                        out["naval"].add(name)
                     if get1(body, "infrastructure") == "yes":
                         out["infrastructure"].add(name)
                     if get1(body, "supply_node") == "yes":
@@ -532,11 +538,56 @@ def research_slots(game, tag, ctx, date=DEFAULT_START, history_file=None):
     return n if n is not None else int(define(game, "BASE_RESEARCH_SLOTS", 2))
 
 
-def surrender(game, tag, ctx, date=DEFAULT_START):
+# War support below this share brings in war_support_bad_modifier in proportion to the gap (all of it
+# at zero), above it war_support_good_modifier; the split itself is not in the game files.
+WAR_SUPPORT_SPLIT = 0.5
+LOW_WAR_SUPPORT_MODIFIER = "war_support_bad_modifier"
+
+
+def static_modifiers(game):
+    """{name: {key: number}} of the static modifiers in common/modifiers (later files and mods override)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/modifiers"):
+            for name, body in parse_file(f):
+                if name and isinstance(body, list):
+                    out[name] = {k: _num(v) for k, v in body if k and _num(v) is not None}
+        return out
+
+    return game.cached("derive:staticmods", load)
+
+
+def start_war_support(game, tag, ctx, date=DEFAULT_START):
+    """War support the history gives `tag` at date (set_war_support), else DEFAULT_WAR_SUPPORT. The live
+    value moves with world tension, the war (attacker or defender), casualties, bombing and convoy losses."""
+    _, fx = history_effects_of(game, tag, Ctx(tag, ctx.dlcs) if ctx else None, date)
+    val = None
+    for k, v in fx:
+        if k == "set_war_support" and _num(v) is not None:
+            val = _num(v)
+    return val if val is not None else float(define(game, "DEFAULT_WAR_SUPPORT", 0.5))
+
+
+def low_war_support_malus(game, war_support):
+    """surrender_limit the game adds for low war support: the war_support_bad_modifier value scaled by how far
+    war support sits below WAR_SUPPORT_SPLIT (0 at or above it, the whole value at zero)."""
+    full = static_modifiers(game).get(LOW_WAR_SUPPORT_MODIFIER, {}).get("surrender_limit") or 0.0
+    gap = max(0.0, WAR_SUPPORT_SPLIT - max(0.0, float(war_support))) / WAR_SUPPORT_SPLIT
+    return full * gap
+
+
+def surrender(game, tag, ctx, date=DEFAULT_START, war_support=None):
     """Capitulation arithmetic of `tag` at date: {"total_vp", "base", "modifiers": [[idea, value]],
-    "limit", "vp_needed", "vp_needed_base"}. Total VP = the victory points of the states it owns;
-    limit = BASE_SURRENDER_LIMIT plus the surrender_limit of its starting ideas, floored at
-    MIN_SURRENDER_LIMIT. Ideas gained later (events, spirits added in war) are not counted."""
+    "limit", "vp_needed", "vp_needed_base", "war_support": {...}}. Total VP = the victory points of the
+    states it owns; limit = BASE_SURRENDER_LIMIT plus the surrender_limit of its starting ideas, floored at
+    MIN_SURRENDER_LIMIT. Ideas gained later (events, spirits added in war) are not counted.
+
+    `limit` and `vp_needed` hold while war support is WAR_SUPPORT_SPLIT or more: the most the country can
+    ask for, so the number a plan must reach. Low war support lowers the limit (low_war_support_malus), and
+    "war_support" gives the rows a planner compares: `start` (the history's war support), `at_start` and
+    `at_zero` ({"war_support", "malus", "limit", "vp_needed"}), `at` for the war_support argument when given,
+    and `applies`: which row holds at that war support (the argument, else the start value)."""
     ectx = Ctx(tag, ctx.dlcs) if ctx else None
     facts = game.state_facts(ectx, date)
     total = sum(sum(r["vps"].values()) for r in facts.values() if r["owner"] == tag)
@@ -548,10 +599,25 @@ def surrender(game, tag, ctx, date=DEFAULT_START):
         v = table.get(idea, {}).get("surrender_limit")
         if v:
             mods.append([idea, v])
-    limit = max(floor, base + sum(v for _, v in mods))
+    ideas_limit = base + sum(v for _, v in mods)
+    limit = max(floor, ideas_limit)
     need = lambda lim: int(math.ceil(total * lim - 1e-9))  # noqa: E731
+
+    def at(ws):
+        malus = low_war_support_malus(game, ws)
+        lim = max(floor, ideas_limit + malus)
+        return {"war_support": round(ws, 4), "malus": round(malus, 4), "limit": round(lim, 4), "vp_needed": need(lim)}
+
+    start_ws = start_war_support(game, tag, ctx, date)
+    full = static_modifiers(game).get(LOW_WAR_SUPPORT_MODIFIER, {}).get("surrender_limit") or 0.0
+    ws = {"start": round(start_ws, 4), "split": WAR_SUPPORT_SPLIT, "modifier": LOW_WAR_SUPPORT_MODIFIER,
+          "full_malus": full, "at_start": at(start_ws), "at_zero": at(0.0)}
+    if war_support is not None:
+        ws["at"] = at(float(war_support))
+    now = ws.get("at") or ws["at_start"]
+    ws["applies"] = "limit" if not now["malus"] else ("at" if "at" in ws else "at_start")
     return {"tag": tag, "total_vp": total, "base": base, "modifiers": mods, "limit": round(limit, 4),
-            "vp_needed": need(limit), "vp_needed_base": need(base)}
+            "vp_needed": need(limit), "vp_needed_base": need(base), "war_support": ws}
 
 
 # --------------------------------------------------------------------------- characters
@@ -1475,3 +1541,124 @@ def air_base_levels(game, ctx, date=DEFAULT_START):
         if lvl:
             out[sid] = lvl
     return out
+
+
+# --------------------------------------------------------------------------- politics slots
+
+def politics_slots(game):
+    """{category: [slot kind, ...]} for the idea categories of the politics screen, each list in the
+    order of the category's `slot` and `character_slot` lines in common/idea_tags. A slot's position in
+    that list is the slot index the politics tools take (hoi4_politics_options, hoi4_politics_choose,
+    the plan's politics and politics_auto.order entries). Categories that are hidden or kept off the
+    politics tab (the military spirits) are left out."""
+
+    def load():
+        out = {}
+        for f in game.files("common/idea_tags"):
+            for k, v in parse_file(f):
+                if k != "idea_categories" or not isinstance(v, list):
+                    continue
+                for cat, body in v:
+                    if not cat or not isinstance(body, list) or cat in out:
+                        continue
+                    if get1(body, "hidden") == "yes" or get1(body, "politics_tab") == "no":
+                        continue
+                    kinds = [s for key, s in body if key in ("slot", "character_slot") and isinstance(s, str)]
+                    if kinds:
+                        out[cat] = kinds
+        return out
+
+    return game.cached("derive:politicsslots", load)
+
+
+def politics_slot_kinds(game, ctx=None):
+    """{idea key, character id or advisor idea token: set(slot kinds)}: the slot kind an idea of
+    common/ideas sits under, and the `slot` of each advisor role of a character (roles whose
+    `instance` / `allowed` block is false for ctx are left out)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/ideas", recursive=True):
+            for k, v in parse_file(f):
+                if k != "ideas" or not isinstance(v, list):
+                    continue
+                for kind, body in v:
+                    if kind and isinstance(body, list):
+                        for name, idea in body:
+                            if name and isinstance(idea, list):
+                                out.setdefault(name, set()).add(kind)
+        for f in game.files("common/characters"):
+            for k, v in parse_file(f):
+                if k != "characters" or not isinstance(v, list):
+                    continue
+                for cid, body in v:
+                    if not cid or not isinstance(body, list):
+                        continue
+                    advs = list(get(body, "advisor"))
+                    for inst in get(body, "instance"):
+                        if isinstance(inst, list) and not (ctx and trigger(get1(inst, "allowed", []), ctx) is False):
+                            advs.extend(get(inst, "advisor"))
+                    for adv in advs:
+                        if not isinstance(adv, list) or (ctx and trigger(get1(adv, "allowed", []), ctx) is False):
+                            continue
+                        kind = get1(adv, "slot")
+                        if not isinstance(kind, str):
+                            continue
+                        out.setdefault(cid, set()).add(kind)
+                        tok = get1(adv, "idea_token")
+                        if isinstance(tok, str):
+                            out.setdefault(tok, set()).add(kind)
+        return out
+
+    key = "derive:politicskinds" if ctx is None else f"derive:politicskinds:{ctx.tag}:{sorted(ctx.dlcs)}"
+    return game.cached(key, load)
+
+
+def index_ranges(indices):
+    """"0, 3-5" for [0, 3, 4, 5]."""
+    out, run = [], []
+    for i in sorted(set(indices)):
+        if run and i == run[-1] + 1:
+            run.append(i)
+        else:
+            if run:
+                out.append(run)
+            run = [i]
+    if run:
+        out.append(run)
+    return ", ".join(str(r[0]) if len(r) == 1 else f"{r[0]}-{r[-1]}" for r in out)
+
+
+def politics_places(game, kind):
+    """[{"category", "slots": [index, ...]}] where a slot kind sits on the politics screen."""
+    return [{"category": cat, "slots": [i for i, k in enumerate(kinds) if k == kind]}
+            for cat, kinds in politics_slots(game).items() if kind in kinds]
+
+
+def politics_layout_text(game, category):
+    """"0 army_chief, 1 navy_chief, 2 air_chief, 3-5 high_command" for a category, "" when unknown."""
+    kinds = politics_slots(game).get(category) or []
+    return ", ".join(f"{index_ranges(i for i, k in enumerate(kinds) if k == kind)} {kind}"
+                     for kind in dict.fromkeys(kinds))
+
+
+def politics_slot_problem(game, ctx, category, slot, key=None):
+    """Why `key` (an idea, a character or an advisor token; None checks the index only) cannot be taken
+    in slot `slot` of `category`, or None when it fits or the files do not say (an unknown category, a
+    key with no slot kind, a game without idea categories)."""
+    kinds = politics_slots(game).get(category)
+    if not kinds or not isinstance(slot, int) or isinstance(slot, bool):
+        return None
+    layout = politics_layout_text(game, category)
+    if not 0 <= slot < len(kinds):
+        return f"slot {slot} is outside {category} (slots {layout})"
+    if key is None:
+        return None
+    mine = politics_slot_kinds(game, ctx).get(key)
+    if not mine or kinds[slot] in mine:
+        return None
+    places = [(kind, p) for kind in sorted(mine) for p in politics_places(game, kind)]
+    if not places:
+        return None
+    where = " or ".join(f"{p['category']} slot {index_ranges(p['slots'])} ({k})" for k, p in places)
+    return f"{key} fits {where}, not {category} slot {slot} ({kinds[slot]})"

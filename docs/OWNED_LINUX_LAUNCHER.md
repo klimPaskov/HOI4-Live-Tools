@@ -302,8 +302,10 @@ Send `hoi4_time` with `lease_token`, a stable `request_id`, and exactly one of
 `paused: true/false` or internal `speed: 0..4`. It uses Space or keypad minus/plus,
 checks focus and clear input state, refreshes its decision before queuing keys,
 and verifies memory state. It never moves the cursor. Failed preflight remains
-retryable. An uncertain dispatch quarantines new input, including a new request
-ID; losing a reply never causes automatic redispatch. Reusing a verified request
+retryable. Every clock request ends in a terminal receipt read from the pause and
+speed state (`Verified` or `NotApplied`); losing a reply never causes automatic
+redispatch, and a request the game could not be read for is settled by the next
+call that can read. Reusing a verified request
 ID returns its historical receipt, not a promise that state has stayed unchanged.
 
 The guard checks process identity, own country, game roots, persisted playthrough
@@ -358,10 +360,15 @@ lease and current state. Run 023 verified industry selection and a no-input
 completion, then quarantined an electronics switch that exceeded the five-second
 deadline. Do not retry an uncertain attempt.
 
-Intent is durable before possible input. Unknown delivery gets bounded canonical
-readback, never another event. Success also requires clear input state; uncertain
-attempts survive restart and block new tokens/stages and clock actions. Known
-local refusal leaves the plan unfinished and permits a fresh attempt token.
+Intent is durable before possible input. Any delivery gets bounded canonical
+readback, never another event, until the stage deadline or for three seconds
+after the input, whichever ends later. Success also requires clear input state.
+An attempt whose effect is not observed is closed with a terminal `Unconfirmed`
+receipt and answers `action_unconfirmed`: it is never replayed and blocks no
+token, stage or clock action; read the state again before a fresh attempt. Only
+an intent left open by a server that stopped mid-stage holds input, for at most
+ten seconds. Known local refusal leaves the plan unfinished and permits a fresh
+attempt token.
 Verified retries return explicitly historical receipts. This does not establish
 atomic frame/routing authority, confirmation-dialog support, daily automation
 or campaign acceptance.
@@ -380,8 +387,10 @@ Stages are `open_politics`, `close_politics`, `open_focus`, `view` and `start`. 
 most one ordinary event and verifies canonical own state. Exact Sprite,
 zero-angle Text and unmasked Frame branches are supported. Unsupported renderers,
 unsettled roots and incomplete local blocker observations refuse. Intent is
-persisted first; uncertain input blocks clock, research, focus and daily work.
-No new token can bypass that quarantine.
+persisted first and every attempt ends in a terminal receipt: an unobserved
+effect closes as `Unconfirmed` (`action_unconfirmed`), is never replayed and
+blocks no clock, research or focus request. The optional daily worker keeps its
+own records and still stops on an unproven navigation or Focus step.
 
 `close_politics` requires the requested focus to be active, settled Politics
 mode12, a hidden Focus root and zero complete own detail/Info blockers. It sends

@@ -47,6 +47,7 @@ import re
 from collections import defaultdict
 
 from . import derive
+from . import mapgraph
 from .defines import Defines
 from .script import (Block, Ctx, _sub, bare, date_tuple, get, get1, history_walk, line_of, op_of, parse_file, render,
                      run_effects, trigger)
@@ -54,6 +55,16 @@ from .script import (Block, Ctx, _sub, bare, date_tuple, get, get1, history_walk
 FAIR_LEVELS = ("public", "aggregate", "private")
 XP_EFFECTS = {"army_experience": "army", "air_experience": "air", "navy_experience": "navy"}
 XP_MODIFIERS = {"experience_gain_army": "army", "experience_gain_air": "air", "experience_gain_navy": "navy"}
+# The defines that feed each country experience pool, by full key: the same short names exist per branch
+# (NMilitary, NAir, NNavy), and the UNIT_EXPERIENCE_* defines move a unit's own veterancy, never the pool.
+XP_POOL_DEFINES = {
+    "army": {"combat_scale": "NMilitary.FIELD_EXPERIENCE_SCALE",
+             "combat_max_per_day": "NMilitary.FIELD_EXPERIENCE_MAX_PER_DAY",
+             "training_max_per_day": "NMilitary.TRAINING_MAX_DAILY_COUNTRY_EXP"},
+    "air": {"combat_scale": "NAir.FIELD_EXPERIENCE_SCALE", "combat_max_per_day": "NAir.FIELD_EXPERIENCE_MAX_PER_DAY"},
+    "navy": {"combat_scale": "NNavy.FIELD_EXPERIENCE_SCALE", "combat_max_per_day": "NNavy.FIELD_EXPERIENCE_MAX_PER_DAY",
+             "training_max_per_day": "NNavy.TRAINING_MAX_DAILY_COUNTRY_EXP"},
+}
 OCCUPATION_KEYS = {"start_resistance": "resistance_active", "set_resistance": "resistance",
                    "set_compliance": "compliance", "set_garrison_strength": "garrison"}
 # sub-unit fields reported by World.sub_units (the rest of a sub-unit block is presentation or AI)
@@ -666,6 +677,25 @@ class World:
 
         return self.cached("wars", load)
 
+    def start_global_flags(self):
+        """Global flags the country histories set at the start date (any country's history can set one)."""
+
+        def load():
+            out = set()
+            for p in self.game.files("history/countries"):
+                try:
+                    with open(p, encoding="utf-8-sig", errors="replace") as fh:
+                        if "set_global_flag" not in fh.read():
+                            continue
+                except OSError:
+                    continue
+                m = re.match(r"^([A-Z][A-Z0-9]{2})", os.path.basename(p))
+                if m:
+                    out.update(f["v"] for f in self.country(m.group(1))["global_flags"] if f.get("v"))
+            return out
+
+        return self.cached("start_global_flags", load)
+
     def at_war_with(self, tag=None):
         tag = tag or self.tag
         enemies = set()
@@ -675,6 +705,93 @@ class World:
             elif w["target"] == tag:
                 enemies.add(w["attacker"])
         return sorted(e for e in enemies if e)
+
+    # ------------------------------------------------------------ whose land a country may enter
+    def relations(self):
+        """Start relations from the country histories: {"factions": [set of tags], "subjects": {overlord:
+        set}, "access": {giver: set of tags it lets in}}."""
+
+        def load():
+            out = {"factions": [], "subjects": defaultdict(set), "access": defaultdict(set)}
+            words = ("add_to_faction", "create_faction", "give_military_access", "puppet", "set_autonomy")
+            for p in self.game.files("history/countries"):
+                try:
+                    with open(p, encoding="utf-8-sig", errors="replace") as fh:
+                        text = fh.read()
+                except OSError:
+                    continue
+                m = re.match(r"^([A-Z][A-Z0-9]{2})", os.path.basename(p))
+                if not m or not any(w in text for w in words):
+                    continue
+                tag = m.group(1)
+                c = self.country(tag)
+                members = {f["v"] for f in c["faction"] if f.get("kind") == "add_to_faction" and f.get("v")}
+                if members:
+                    out["factions"].append(members | {tag})
+                for s in c["subjects"]:
+                    if s.get("v") and s.get("kind") != "release_puppet":
+                        out["subjects"][tag].add(s["v"])
+                for a in c["access"]:
+                    if a.get("v"):
+                        out["access"][tag].add(a["v"])
+            return out
+
+        return self.cached("relations", load)
+
+    def land_access(self, tag=None, enemies=(), through=()):
+        """Whose land the land units of `tag` may enter at the start: {"own", "friends" (its faction, its
+        subjects and its overlord), "access" (countries that give it military access), "enemies" (at war at
+        the start, plus the `enemies` named), "through" (extra tags the caller vouches for), "tags": all of
+        them}. Every other country is neutral: the game lets no unit cross its border."""
+        tag = tag or self.tag
+        rel = self.relations()
+        friends = set()
+        for members in rel["factions"]:
+            if tag in members:
+                friends |= members
+        friends |= rel["subjects"].get(tag, set())
+        friends |= {o for o, subs in rel["subjects"].items() if tag in subs}
+        friends.discard(tag)
+        access = {giver for giver, tags in rel["access"].items() if tag in tags} - friends - {tag}
+        foes = (set(self.at_war_with(tag)) | {e for e in enemies if e}) - {tag}
+        extra = {t for t in through if t} - {tag}
+        return {"own": tag, "friends": sorted(friends), "access": sorted(access), "enemies": sorted(foes),
+                "through": sorted(extra), "tags": sorted({tag} | friends | access | foes | extra)}
+
+    def land_route(self, src, dst, tag=None, enemies=(), through=(), any_land=False, avoid_rivers=False):
+        """mapgraph.route kept to land `tag` may enter (land_access; provinces with no owner stay open), with
+        "access" (the tags used) and, when the cheapest open path crosses neutral land, "neutral": {tag:
+        [provinces]} of that path. `any_land` drops the limit. None when no such route exists; then
+        `land_route_blockers` says whose land the open path needs."""
+        g = self.graph()
+        if any_land:
+            r = mapgraph.route(g, src, dst, avoid_rivers=avoid_rivers)
+            if r is not None:
+                r["access"] = None
+            return r
+        acc = self.land_access(tag, enemies, through)
+        ok = set(acc["tags"])
+        own = self.owner_of_province
+        r = mapgraph.route(g, src, dst, avoid_rivers=avoid_rivers, allowed=lambda p: own(p) is None or own(p) in ok)
+        if r is None:
+            return None
+        r["access"] = acc
+        r["neutral"] = self.land_route_blockers(src, dst, tag, enemies, through, avoid_rivers)
+        return r
+
+    def land_route_blockers(self, src, dst, tag=None, enemies=(), through=(), avoid_rivers=False):
+        """{neutral tag: [provinces]} on the cheapest path that ignores borders ({} when that path is open to
+        `tag`, None when there is no land path at all)."""
+        ok = set(self.land_access(tag, enemies, through)["tags"])
+        r = mapgraph.route(self.graph(), src, dst, avoid_rivers=avoid_rivers)
+        if r is None:
+            return None
+        out = defaultdict(list)
+        for p in r["path"]:
+            o = self.owner_of_province(p)
+            if o is not None and o not in ok:
+                out[o].append(p)
+        return dict(out)
 
     # ------------------------------------------------------------ states
     def state_categories(self):
@@ -904,6 +1021,17 @@ class World:
 
         return self.cached("ideaslots", load)
 
+    def politics_slots(self):
+        """[{"category", "slots": [{"index", "kind", "character", "cost"}]}]: the politics screen's categories
+        and their slots in index order (derive.politics_slots); the index is the `slot` argument of
+        hoi4_politics_options / hoi4_politics_choose and of the plan's politics entries."""
+        info = self.idea_slots()
+        return [{"category": cat,
+                 "slots": [{"index": i, "kind": k, "character": bool(info.get(k, {}).get("character")),
+                            "cost": info.get(k, {}).get("cost")} for i, k in enumerate(kinds)],
+                 "layout": derive.politics_layout_text(self.game, cat)}
+                for cat, kinds in derive.politics_slots(self.game).items()]
+
     def idea_cost(self, idea):
         i = self.ideas().get(idea)
         if not i:
@@ -929,6 +1057,7 @@ class World:
         allowed = trigger(i["allowed"], ctx) if isinstance(i["allowed"], list) else True
         return {"id": idea, "name": self.name(idea), "category": i["category"], "law": i["law"],
                 "cost": self.idea_cost(idea), "removal_cost": i["removal_cost"],
+                "politics_slots": derive.politics_places(self.game, i["category"]),
                 "allowed": allowed,
                 "gates": gates(reduce_trigger(i["available"], ctx)) if isinstance(i["available"], list) else [],
                 "available": self.text(i["available"], 240, tag) if isinstance(i["available"], list) else None,
@@ -946,7 +1075,8 @@ class World:
             row = self.idea_row(iid, tag)
             if row["allowed"] is False:
                 continue
-            cat = out.setdefault(i["category"], {"current": None, "options": []})
+            cat = out.setdefault(i["category"], {"current": None, "options": [],
+                                                 "politics_slots": derive.politics_places(self.game, i["category"])})
             cat["options"].append(row)
             if iid in current:
                 cat["current"] = iid
@@ -1000,7 +1130,8 @@ class World:
                             if rk == "advisor":
                                 slot = get1(rv, "slot")
                                 cost = num(get1(rv, "cost"))
-                                r.update({"slot": slot, "idea_token": get1(rv, "idea_token"),
+                                r.update({"slot": slot, "politics_slots": derive.politics_places(self.game, slot),
+                                          "idea_token": get1(rv, "idea_token"),
                                           "cost": cost if cost is not None else
                                           self.idea_slots().get(slot, {}).get("cost")})
                                 av = get1(rv, "available")
@@ -1208,10 +1339,12 @@ class World:
         return None
 
     # ------------------------------------------------------------ victory points and surrender
-    def vp(self, tag=None):
+    def vp(self, tag=None, war_support=None):
         """VP list, total, capital, and the surrender threshold: NCountry.BASE_SURRENDER_LIMIT plus
         the surrender_limit modifiers of the tag's ideas (applied when held at the start, possible
-        otherwise), needed VP = ceil(limit x total)."""
+        otherwise), needed VP = ceil(limit x total). `war_support` rows give the limit under the
+        low-war-support modifier at the start war support, at zero and at the war_support argument,
+        and say which row holds (derive.surrender)."""
         tag = tag or self.tag
         states = self.states()
         rows = []
@@ -1235,8 +1368,12 @@ class World:
         mods.sort(key=lambda m: (not m["held_at_start"], m["idea"]))
         # the start threshold is derive.surrender's (shared with the lint); the possible modifiers and
         # the sources are added here
-        sur = derive.surrender(self.game, tag, self.ctx_for(tag), self.date)
+        sur = derive.surrender(self.game, tag, self.ctx_for(tag), self.date, war_support)
         start_limit = sur["limit"]
+        ws = dict(sur["war_support"])
+        ws["src"] = self._static_modifier_src(ws["modifier"])
+        hist = self.country(tag)["war_support"]
+        ws["start_src"] = hist["src"] if hist else "DEFAULT_WAR_SUPPORT"
 
         def need(limit):
             return int(math.ceil(round(limit * total, 6)))
@@ -1250,9 +1387,47 @@ class World:
         cap = self.country(tag)["capital"]
         return {"tag": tag, "provinces": rows, "total": total, "capital": cap["v"] if cap else None,
                 "base_limit": base_fact, "min_limit": mn_fact, "modifiers": mods, "thresholds": thresholds,
+                "war_support": ws,
                 "d": "vp_needed = ceil(limit x total VP of owned states at start); limit = BASE_SURRENDER_LIMIT "
-                     "+ surrender_limit of held ideas, floored at MIN_SURRENDER_LIMIT",
+                     "+ surrender_limit of held ideas, floored at MIN_SURRENDER_LIMIT; war support below "
+                     f"{derive.WAR_SUPPORT_SPLIT:g} adds the {ws['modifier']} surrender_limit in proportion to the "
+                     "gap (all of it at zero), so the limit moves with the live war support",
                 "fair": "public"}
+
+    def _static_modifier_src(self, name):
+        """file:line of a static modifier block in common/modifiers, or None."""
+        for p in reversed(list(self.game.files("common/modifiers"))):
+            items = parse_file(p)
+            for i, (k, v) in enumerate(items):
+                if k == name and isinstance(v, list):
+                    return self.src(p, line_of(items, i))
+        return None
+
+    @staticmethod
+    def surrender_lines(v):
+        """Text rows of the war-support part of vp(): the limit with and without the low-war-support
+        modifier, and which one holds."""
+        ws = v.get("war_support") or {}
+        if not ws.get("full_malus"):
+            return []
+        pct = lambda x: f"{x * 100:g}%"  # noqa: E731
+        mark = lambda key: "  <- applies" if ws["applies"] == key else ""  # noqa: E731
+        top = v["thresholds"][0]
+        out = [f"  war support: {pct(ws['start'])} at the start [{ws['start_src']}]; below {pct(ws['split'])} "
+               f"{ws['modifier']} adds surrender_limit {ws['full_malus']:g} x (gap below {pct(ws['split'])}) "
+               f"[{ws['src']}]",
+               f"    war support {pct(ws['split'])} or more: limit {top['limit']} -> {top['vp_needed']} VP "
+               f"(the most it can need: plan for this){mark('limit')}"]
+        rows = [("at_start", "the start value")] + ([("at", "asked")] if "at" in ws else []) + [("at_zero", "the floor")]
+        for key, label in rows:
+            r = ws[key]
+            if key == "at_start" and not r["malus"]:
+                continue
+            out.append(f"    war support {pct(r['war_support'])} ({label}): limit {r['limit']} -> {r['vp_needed']} VP "
+                       f"(modifier {r['malus']:+g}){mark(key)}")
+        out.append("    the live war support moves with world tension, the war, casualties, bombing and convoy "
+                   "losses: read it in the game and pass --war-support")
+        return out
 
     def _tag_ideas(self, tag):
         """Ideas that belong to a tag: key prefix TAG_, or defined in a file named after the country."""
@@ -1361,7 +1536,9 @@ class World:
     # ------------------------------------------------------------ experience and technology level
     def experience(self, tag=None):
         """Experience at the start per branch: history army/air/navy_experience (none set means 0 [?]),
-        the stored maximum (defines), daily gain and factors from the starting spirits."""
+        the stored maximum (defines), daily gain and factors from the starting spirits, and `gain`: the
+        defines that feed each country pool (XP_POOL_DEFINES: combat scale, the most combat XP a day,
+        the most training XP a day), read by their full key."""
         tag = tag or self.tag
         c = self.country(tag)
         start = {}
@@ -1385,7 +1562,16 @@ class World:
                     branch = next((x for x in ("army", "air", "navy") if x in a), "?")
                     mods.append({"idea": f["v"], "key": a, "branch": branch, "value": num(b),
                                  "daily": a in XP_MODIFIERS, "src": self.src(i["path"], i["line"])})
-        return {"tag": tag, "start": start, "max": caps, "spirits": mods}
+        gain = {}
+        for b, keys in XP_POOL_DEFINES.items():
+            rows = {}
+            for name, key in keys.items():
+                _, f = self.define(key)
+                if f:
+                    rows[name] = f
+            if rows:
+                gain[b] = rows
+        return {"tag": tag, "start": start, "max": caps, "spirits": mods, "gain": gain}
 
     def tech_level(self, tag):
         """Aggregate technology level at the start (FAIR aggregate, as the diplomacy view shows it):

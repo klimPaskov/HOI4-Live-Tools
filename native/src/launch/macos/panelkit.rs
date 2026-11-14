@@ -1542,17 +1542,17 @@ pub(super) fn open_panels(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
 }
 
 /// Close every open top-bar panel the way a player does (Escape closes the top one).
+///
+/// One Escape per panel that reads as open, the next only after the open panels changed: a
+/// panel still reads as open for a moment after the Escape that closed it, and an Escape on a
+/// timer then went to the free map and opened the game menu, which pauses the game (the army
+/// orders that followed a focus or research action in the shakedown of 10 November 2026).
 pub(super) fn close_panels(process: &dyn Process, keys: &dyn GameInput) -> Result<Vec<String>> {
     let first = read(process, open_panels)?;
-    for _ in 0..4 {
-        if read(process, open_panels)?.is_empty() {
-            break;
-        }
-        keys.press(crate::platform::game_input::Key::Escape)?;
-        std::thread::sleep(std::time::Duration::from_millis(250));
-    }
-    // An Escape with nothing left to close opens the game menu.
-    super::ui::close_menu(process, keys)?;
+    super::ui::escape_close(process, keys, 4, crate::pause_guard::ESCAPE_WAIT, |r, i| {
+        let open = open_panels(r, i)?;
+        Ok((!open.is_empty()).then_some(open))
+    })?;
     Ok(first)
 }
 
@@ -1579,12 +1579,10 @@ pub(super) fn close_focus_tree(process: &dyn Process, keys: &dyn GameInput) -> R
     if !read(process, focus_tree_open)? {
         return Ok(());
     }
-    for _ in 0..3 {
-        keys.press(crate::platform::game_input::Key::Escape)?;
-        std::thread::sleep(std::time::Duration::from_millis(250));
-        if !read(process, focus_tree_open)? {
-            break;
-        }
-    }
-    super::ui::close_menu(process, keys)
+    // The first Escape may only leave the search box, which nothing here can read: the next
+    // is pressed after a shorter wait than for a panel.
+    super::ui::escape_close(process, keys, 3, FOCUS_TREE_ESCAPE_WAIT, |r, i| {
+        Ok(focus_tree_open(r, i)?.then_some(()))
+    })
 }
+const FOCUS_TREE_ESCAPE_WAIT: std::time::Duration = std::time::Duration::from_millis(600);

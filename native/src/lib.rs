@@ -4,6 +4,7 @@ pub mod autopilot;
 pub mod calendar;
 pub mod error;
 pub mod fair_guard;
+pub mod focus_rules;
 #[cfg(any(target_os = "linux", test))]
 mod focus_ui_observation;
 pub mod framing;
@@ -16,6 +17,8 @@ pub mod input_lease;
 pub mod launch;
 pub mod memory;
 pub mod own_focus;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod pause_guard;
 pub mod plan_predicate;
 pub mod plan_run;
 pub mod platform;
@@ -24,6 +27,8 @@ pub mod recording;
 pub mod research;
 pub mod research_folders;
 pub mod research_ui;
+#[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+pub(crate) mod script;
 mod target_node;
 pub mod tech_tree;
 pub mod technology;
@@ -77,6 +82,8 @@ mod focus_ui_facts;
 mod focus_candidate_observation;
 
 pub mod focus_stage;
+
+mod stage_settle;
 
 #[doc(hidden)]
 pub mod politics_focus;

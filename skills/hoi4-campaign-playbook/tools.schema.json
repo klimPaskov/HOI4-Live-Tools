@@ -2415,6 +2415,30 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_focus_available": {
+   "description": "Read-only: whether own national focuses can be started now, decided without opening the focus tree. The rules come from the focus files of the running game's content (the install with the enabled mods layered over it): prerequisites, mutually exclusive focuses and the available, bypass and allow_branch triggers, with scripted triggers expanded. They are judged against the own state read from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war support, political power, manpower, factory counts, faction, overlord and subjects, researched technologies, and the install's DLCs. Each focus answers state available | unavailable | unknown: unavailable is certain and comes with why (the failing requirement in the game's own script words); unknown lists the triggers that cannot be read (ideas, flags, the ruling ideology, variables, leaders, other countries' affairs, any_/all_ scopes), and then only hoi4_focus_start can tell; bypass:true means taking the focus completes it at once without its reward. No input, no lease, never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focuses": {
+      "items": {
+       "maxLength": 128,
+       "minLength": 1,
+       "pattern": "^[A-Za-z0-9_-]+$",
+       "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "focuses"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_focus_completed": {
    "description": "Preview: fresh own completed-focus membership from the current Linux engine predicate, with active key and bounded sorted pages. Independent of open GUI; all members validated before paging. Completion cause, repeat counts, changed/shared trees and eligibility unavailable. Bounded Linux Rhineland completion verified; other Focus trees and full campaigns unverified. Pure reads; never pauses.",
    "inputSchema": {
@@ -2549,7 +2573,7 @@
    "source": "--list-tools"
   },
   "hoi4_focus_start": {
-   "description": "Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.",
+   "description": "Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3322,7 +3346,7 @@
    "source": "--list-tools"
   },
   "hoi4_politics_choose": {
-   "description": "Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.",
+   "description": "Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options (military_staff: 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command; research_production: 5 theorist); the idea must be one the slot offers, so use a slot of the idea's own kind.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3362,7 +3386,7 @@
    "source": "--list-tools"
   },
   "hoi4_politics_options": {
-   "description": "List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.",
+   "description": "List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (slots 0 tank, 1 naval, 2 aircraft and 3 materiel designer, 4 industrial concern, 5 theorist; with Arms Against Tyranny the designer slots hold Military Industrial Organizations: hoi4_mio_* tools) or military_staff (slots 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command). A slot index is the slot's position in its category, the order of the slot lines in the game's common/idea_tags (a mod can change it); an advisor is hired from a slot of its own kind, so a high command advisor needs slot 3, 4 or 5. Returns each idea key with the game's enabled state, the slot's current idea, and slots: every slot of the category with its index and what it holds now.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3699,7 +3723,7 @@
    "source": "--list-tools"
   },
   "hoi4_research_start": {
-   "description": "Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.",
+   "description": "Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3771,7 +3795,7 @@
    "source": "--list-tools"
   },
   "hoi4_special_project_assign": {
-   "description": "Put a scientist and/or a project into one own research facility with ordinary input: Research panel (W), Experimental Facilities tab, the facility card's scientist portrait and the roster row, then the facility icon, the project entry and Start. Give scientist (name as listed by hoi4_special_projects) and/or project (key, e.g. sp_air_radar); a project needs a scientist already in the facility or passed together. Verified from memory when the facility's own scientist and project slots hold them. Starting a project spends breakthrough points of its specialization. Refused before any input: facility_unknown, unknown_scientist (closest names), scientist_wrong_specialization, scientist_busy, unknown_project, project_wrong_specialization, project_busy, facility_has_project, scientist_required, already_assigned. Refused at the screen without starting: scientist_not_offered, project_not_offered, project_not_startable. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.",
+   "description": "Put a scientist and/or a project into one own research facility with ordinary input: Research panel (W), Experimental Facilities tab, the facility card's scientist portrait and the roster row, then the facility icon, the project entry and Start. Give scientist (name as listed by hoi4_special_projects) and/or project (key, e.g. sp_air_radar); a project needs a scientist already in the facility or passed together. Verified from memory when the facility's own scientist and project slots hold them. Starting a project spends breakthrough points of its specialization. Refused before any input: facility_unknown, unknown_scientist (closest names), scientist_wrong_specialization, scientist_busy, unknown_project, project_wrong_specialization, project_busy, facility_has_project, scientist_required, already_assigned. Refused at the screen without starting: scientist_not_offered, project_not_offered, project_not_startable. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

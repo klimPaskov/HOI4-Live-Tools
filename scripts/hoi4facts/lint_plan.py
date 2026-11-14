@@ -13,7 +13,11 @@ mods) through hoi4facts.Game and hoi4facts.derive; nothing is country specific.
 Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/references/lessons.jsonl):
   research.start_year      research_path tech with start_year after its block year
   research.idle            more than 25% of the slots' time to the horizon has nothing planned (an error,
-                           with or without a fallback: the fallback is a safety net, not the plan)
+                           with or without a fallback: the fallback is a safety net, not the plan); or any
+                           slot time is left unplanned (above 2%) while in-time techs the country can
+                           research are not listed (land, industry, electronics and support folders; naval
+                           and air ones when the plan has such a goal): an idle slot is only acceptable
+                           when nothing in-time remains
   research.throughput      (warning) a block's base research days do not fit the slots before the
                            next block year (research_cost x BASE_TECH_COST, no speed bonus)
   research.prerequisites   prerequisite not at the start or earlier in the path under either parent
@@ -23,6 +27,17 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   focus.exclusive          two mutually exclusive focuses in focus_path / focus_fallback
   focus.order              a focus planned before its prerequisites (timeline from the focus costs)
   focus.gates              (info) focuses with a runtime `available` gate, with the planned start
+  focus.available          a listed focus (focus_path, focus_fallback) that can never start before the plan
+                           horizon under the plan's own conditions: its `available` trigger, prerequisites
+                           or exclusions read from the game files against the plan's date, war state (the
+                           start wars until the planned capitulation), completed focuses and start flags
+  focus.idle               the focus slot has nothing it can start for more than 7 days (every listed
+                           focus is blocked then, e.g. the fallbacks all need peace while the plan is at
+                           war), or the lists run out more than 30 days before the horizon
+  focus.unconfirmed        (warning) the slot rests on a focus whose gate cannot be decided from the plan
+                           (ownership, control, variables) while no focus that is certainly available is
+                           listed for that time; or a listed focus waits for a prerequisite only the game
+                           completes by script
   construction.front       factory in a state within K province steps of an enemy-held province
   construction.infrastructure  factory in a state with infrastructure <= 2 and no infrastructure
                            queued before it there
@@ -33,7 +48,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            executor would move the start to the nearest node)
   construction.trigger_route  a province_controlled: trigger off every vp target route
   construction.hub         supply hub in a province or state an enemy still holds when it fires
-  production.factories     production lines need more military factories than the plan has
+  production.factories     production lines need more factories than the plan has, each pool on its own:
+                           land and air lines against the military factories, naval lines (ships, convoys)
+                           against the dockyards
   production.equipment     unknown equipment, or equipment no planned tech unlocks
   production.trucks        war.motorization set but no motorized (truck) line
   army.guards              own state bordering an enemy with no guard (layout guard role,
@@ -53,11 +70,16 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   army.marshal             (warning) two or more formations and no army_group over them (one field marshal per
                            theatre); (info) a group with no marshal: the executor picks the best free field marshal
   conquest.threshold       vp_targets below the enemy's surrender threshold (base limit plus its
-                           starting surrender_limit modifiers), when the goal is a capitulation
+                           starting surrender_limit modifiers), when the goal is a capitulation; the
+                           threshold is the one at war support 50% or more (low war support lowers it, and
+                           facts.surrender.war_support gives the lower numbers for earlier checkpoints)
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
                            fully-controlled state left out)
   conquest.adjacency       target (or the first province of its path) not next to own land or an
                            earlier target; path provinces not touching
+  conquest.neutral_land    a vp target or path province in the land of a country the plan neither fights nor
+                           is allied to at the start (no unit crosses a neutral border); warning when a plan
+                           predicate names that country gone, beaten or at war (the leg waits for it)
   conquest.rivers          (warning) more than 2 river crossings on one leg
   conquest.by_order        (warning) `by` dates going backwards for one army
   conquest.skipped_near    (warning) an enemy VP province next to own land or a planned target is never
@@ -74,7 +96,8 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            key:<plan key>[,...] | call[:<key>] | md:<plan.md section> | na:<reason>, a key
                            the plan lacks, or na: "missing ..." (a gap, not a reason)
   posture.shares           (warning) production factory shares of a force_posture phase more than 15
-                           points from the posture; error when a posture phase does not sum to 100
+                           points from the posture (start lines that only complete a unit in progress are
+                           left out); error when a posture phase does not sum to 100
   navy.required            a coastal country (an owned coastal province) without a navy key
   navy.overseas            an army state the capital cannot reach over own land, without a navy key,
                            a convoy plan (convoy production line or sea_transfer.convoys) and a port plan
@@ -82,6 +105,23 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   supply.port_convoys      the plan builds a port or relies on one (sea_transfer.ports, an overseas army)
                            but has no convoy item (convoy production line or manage.convoys_free);
                            sea supply needs SUPPLY_CONVOY_FACTOR convoys per supply
+  supply.convoy_size       the convoys the plan's sea supply and sea trade need, against the convoys the country
+                           starts with: divisions standing in states the capital cannot reach over own land
+                           (start OOB and army_layout) x the supply use of their templates (sub-unit
+                           supply_consumption) x SUPPLY_CONVOY_FACTOR, plus the planned imports (auto_import
+                           budget x 8 units a factory, trade deal amounts) x 0.1 convoy a unit; error when the
+                           need is above the start convoys or above sea_transfer.convoys; the sizing is always
+                           in facts.convoys (before range: CONVOY_RANGE_FACTOR x the route length is not modelled)
+  xp.unspent               (warning) a plan at war from the start that spends no army experience although the
+                           country pool can pay the cheapest land doctrine before the war ends: start + the
+                           focus_path rewards + FIELD_EXPERIENCE_MAX_PER_DAY x days at war (the NMilitary
+                           country-pool defines; UNIT_EXPERIENCE_* is a division's veterancy); facts.xp
+                           holds the floor and the ceiling
+  alarms.silenced          an alarm switched off (false or null in alarms, or in the alarms of a phase or
+                           contingency override) whose code the same object's `why` does not name with a
+                           reason: an alarm is a safety net, and one that seems noisy is a defect to report,
+                           not to silence. research_slot_empty and no_active_focus already stay quiet while
+                           the executor owns the slot (alarms.slot_empty_grace_days)
   supply.axis_reach        an axis state (war, war_by_phase, phase overrides) whose main province gets an estimated supply
                            flow below 1.0 from the best node held by then (start nodes, planned hubs and
                            ports, nodes of earlier axis states), from the NSupply defines, terrain, state
@@ -125,7 +165,10 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            wing, design, stockpile target, training guard, plan line or production_priority
                            prefix uses, and no remove entry (naval lines: when navy.posture is none; trucks
                            with war.motorization; convoys for overseas supply); and any line, start or plan,
-                           of a domain a force_posture phase gives 0% on that phase's date
+                           of a domain a force_posture phase gives 0% on that phase's date, except a start
+                           line that only completes its unit in progress (a remove entry waits for the
+                           finish date production.in_progress asks for): it is neither culled early nor
+                           counted in the posture shares
   production.day0          free military factories at the start (military factories minus the start lines,
                            plus those freed by start removals) not put on kept start lines by the day-0
                            production entries (they join a start line at its efficiency while paused)
@@ -188,9 +231,10 @@ from collections import Counter, defaultdict, deque
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from hoi4facts import calc as calcmod  # noqa: E402
-    from hoi4facts import content, derive, mapgraph, schema_check  # noqa: E402
+    from hoi4facts import content, derive, mapgraph, plan_gates, schema_check  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
+    from hoi4facts import research as researchmod  # noqa: E402
     from hoi4facts.validate import (Report, ctx_of, load_schema, parse_predicate, parse_when,  # noqa: E402
                                     predicate_dates, predicate_table, resolve_meta, start_of, start_oobs,
                                     start_tech_set, template_columns,
@@ -198,9 +242,10 @@ if __package__ in (None, ""):
     from hoi4facts.validate import _world as world_of  # noqa: E402
 else:
     from . import calc as calcmod
-    from . import content, derive, mapgraph, schema_check
+    from . import content, derive, mapgraph, plan_gates, schema_check
     from . import tech as techrule
     from .game import Game
+    from . import research as researchmod
     from .validate import (Report, ctx_of, load_schema, parse_predicate, parse_when, predicate_dates,
                            predicate_table, resolve_meta, start_of, start_oobs, start_tech_set, template_columns,
                            predicate_can_hold)
@@ -212,6 +257,8 @@ MAX_STRIKE = 24
 LOW_INFRA = 2
 MAX_RIVERS = 2
 POSTURE_POINTS = 15        # posture.shares: percentage points a production share may differ
+FOCUS_IDLE_DAYS = 7        # focus.idle: days the focus slot may stand empty between two focuses
+FOCUS_END_SLACK = 30       # focus.idle: days before the horizon the focus lists may run out
 HUB_COST = 15000           # construction.hub_cost: base_cost from which a building counts as a hub-sized job
 HUB_DAYS = 120             # construction.hub_cost: warning above this many days
 HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal province that could serve instead
@@ -235,19 +282,38 @@ PP_IDLE_DAYS = 60         # ... and idle this many days in a row warns
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
 WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
+             "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
-             "predicates.unreadable",
+             "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
              "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
              "peace.order", "construction.railway_node", "supply.axis_reach"}
+NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
                          r"|^(state_fully_controlled|controls_state):(\d+)$")
+
+
+# Sea trade: neither number is in the defines (the trade window shows both).
+TRADE_UNITS_PER_FACTORY = 8
+TRADE_CONVOYS_PER_UNIT = 0.1
+RESEARCH_IDLE_SLACK = 0.02  # research.idle: unplanned share of the slot time allowed while in-time techs remain
+
+
+def folder_family(folder):
+    """"naval" or "air" for a technology folder of that arm (naval_folder, mtgnavalfolder,
+    mtgnavalsupportfolder; air_techs_folder, bba_air_techs_folder), else None."""
+    f = (folder or "").lower()
+    if "naval" in f:
+        return "naval"
+    if re.search(r"(^|_)air(_|$)", f):
+        return "air"
+    return None
 
 
 def _atoms(pred):
@@ -316,6 +382,36 @@ class Lint:
                     out.add(m.group(2))
         out.discard(self.tag)
         return sorted(out)
+
+    def passable_tags(self):
+        """Tags whose land the plan's units may enter: own, friends, access givers and enemies (the start
+        wars plus the plan's); None without a tag."""
+        if not self.tag:
+            return None
+        if getattr(self, "_passable", None) is None:
+            self._passable = set(self.world.land_access(self.tag, self.enemies())["tags"])
+        return self._passable
+
+    def predicate_tags(self):
+        """Tags a predicate anywhere in the plan names as gone, beaten or at war (not_exists, capitulated,
+        at_war_with): land that opens later in the campaign."""
+        out = set()
+
+        def walk(node):
+            if isinstance(node, dict):
+                for v in node.values():
+                    walk(v)
+            elif isinstance(node, list):
+                for v in node:
+                    walk(v)
+            elif isinstance(node, str):
+                m = _PRED_TAG.match(node)
+                if m and m.group(1) in ("capitulated", "not_exists", "at_war_with"):
+                    out.add(m.group(2))
+
+        walk(self.plan)
+        out.discard(self.tag)
+        return out
 
     def start_control(self):
         return self.game.cached(f"lint:startctl:{self.tag}:{self.start}",
@@ -450,6 +546,15 @@ class Lint:
             idle = max(0.0, 1.0 - total / capacity)
             fallback = plan.get("research_fallback", True)
             self.facts["research"]["idle_share"] = round(idle, 3)
+            spare = self.unlisted_in_time_techs(derive.date_of(end_day - 1)[0]) if idle > RESEARCH_IDLE_SLACK else []
+            self.facts["research"]["unlisted_in_time"] = len(spare)
+            if RESEARCH_IDLE_SLACK < idle <= 0.25 and spare:
+                self.add("error", "research.idle", "research_path",
+                         f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
+                         f"nothing planned ({total:.0f} of {capacity} slot-days) while {len(spare)} in-time techs are "
+                         f"not listed (e.g. {', '.join(spare[:8])}): every slot stays busy while an in-time tech "
+                         f"remains (industry and production first, then the army's equipment and support, then "
+                         f"what later wars need); the campaign goes on after this war")
             if idle > 0.25:
                 # The fallback is a safety net, not the plan (user rule: every slot busy with proper,
                 # in-time techs, industry first): an unplanned quarter of the slots fails either way.
@@ -466,7 +571,7 @@ class Lint:
         for t in planned:
             f = (meta.get(t) or {}).get("folder") or ""
             for fam in ("naval", "air"):
-                if re.search(r"(^|_)" + fam + r"(_|$)", f):
+                if folder_family(f) == fam:
                     fams[fam].append(t)
         goals = self.domain_goals()
         for fam, ts in sorted(fams.items()):
@@ -541,6 +646,94 @@ class Lint:
             t += dur
             done.add(k)
         self.facts["focus"] = {"tree": tid, "timeline": timeline}
+        self.focus_slot(path, fallback, tree, fmeta, days_per)
+
+    def war_window(self):
+        """(first day at war or None, day the plan expects the war over or None, enemy tags) from the plan:
+        at war from the start when the history starts a war, until the last vp target date (else the goal
+        deadline); a country at peace at the start gives no dates (when its wars begin is not in the plan,
+        so war-dependent gates stay undecided)."""
+        start = derive.day(self.start)
+        at_start = set(self.world.at_war_with(self.tag)) if self.tag else set()
+        enemies = at_start | set(self.enemies())
+        if not at_start:
+            return None, None, enemies
+        ends = [derive.day(e["by"]) for e in self.targets() if e.get("by") and derive.day(e["by"]) is not None]
+        end = max(ends) if ends else (derive.day(self.goal["deadline"]) if self.goal.get("deadline") else None)
+        return start, end, enemies
+
+    def focus_slot(self, path, fallback, tree, fmeta, days_per):
+        """focus.available, focus.idle, focus.unconfirmed: the focus slot walked through the plan's own
+        conditions (plan_gates.focus_schedule)."""
+        if not self.tag or not tree:
+            return
+        start = derive.day(self.start)
+        ends = [d for d, _ in self.horizon()]
+        horizon = max(ends) if ends else start + 365
+        war_start, war_end, enemies = self.war_window()
+        flags = self.world.start_global_flags() | {f["v"] for f in self.world.country(self.tag)["flags"] if f.get("v")}
+        dlcs = self.ctx.dlcs if self.ctx else ()
+        own = set(derive.tag_states(self.game, self.ctx, self.tag, self.start))
+
+        def facts_at(day, done):
+            if war_start is not None:
+                war = war_end is None or day < war_end
+                # what the history sets at the start is taken to last while the starting war lasts
+                held = flags if war else set()
+            else:
+                # a country at peace at the start can be drawn into a war the plan does not date
+                war, held = None, (flags if day == start else set())
+            return plan_gates.Facts(self.tag, dlcs, derive.fmt(derive.date_of(day)), war,
+                                    enemies if war else (), done, held, own)
+
+        changes = [d for d in (war_start, war_end) if d is not None]
+        sched = plan_gates.focus_schedule(path, fallback, tree, fmeta, days_per, start, horizon, facts_at,
+                                          self.meta.get("completed_focuses", []), changes)
+        day = lambda d: derive.fmt(derive.date_of(int(d)))  # noqa: E731
+        self.facts["focus"]["schedule"] = [dict(r, start=day(r["start"]), end=day(r["end"])) for r in sched["rows"]]
+        self.facts["focus"]["idle"] = [dict(g, **{"from": day(g["from"]), "to": day(g["to"])}) for g in sched["idle"]]
+        for n in sched["never"]:
+            where = f"focus_{n['list']}"
+            self.add("error", "focus.available", where,
+                     f"{n['focus']} cannot start before the plan horizon {day(horizon)} under the plan's own "
+                     f"conditions ({n['why']}): take it out or list it where its gate holds")
+        for n in sched["waiting"]:
+            self.add("warning", "focus.unconfirmed", f"focus_{n['list']}",
+                     f"{n['focus']} waits for {' or '.join(n['on'])}, which only the game completes (by script, "
+                     f"e.g. when a war is won): the plan cannot tell when, so it is no cover for the focus slot "
+                     f"until then")
+        for g in sched["idle"]:
+            days = int(g["to"] - g["from"])
+            if g["exhausted"]:
+                if days > FOCUS_END_SLACK:
+                    self.add("error", "focus.idle", "focus_path",
+                             f"the focus lists run out on {day(g['from'])}, {days} days before the plan horizon "
+                             f"{day(horizon)}: list focuses to keep the slot busy until then")
+                continue
+            if days <= FOCUS_IDLE_DAYS:
+                continue
+            at_war = war_start is not None and (war_end is None or g["from"] < war_end)
+            why = "; ".join(f"{b['focus']}: {b['why']}" for b in g["blocked"][:6])
+            self.add("error", "focus.idle", "focus_fallback" if fallback else "focus_path",
+                     f"the focus slot is idle from {day(g['from'])} to {day(g['to'])} ({days} days"
+                     f"{', while at war' if at_war else ''}): no listed focus can start then ({why}); list focuses "
+                     f"whose prerequisites and `available` gate hold in that time")
+        certain = {r["focus"] for r in sched["rows"] if r["gate"] is True}
+        for r in sched["rows"]:
+            if r["gate"] is None and not self.certain_alternative(r, path, fallback, tree, fmeta, certain):
+                gate = derive.render(fmeta[r["focus"]]["available"])[:200]
+                self.add("warning", "focus.unconfirmed", f"focus_{r['from']}",
+                         f"from {day(r['start'])} the focus slot rests on {r['focus']}, whose gate the plan cannot "
+                         f"confirm ({gate}), and no focus without a gate is listed after it: when the gate is "
+                         f"closed in the game the slot idles; list one that is certainly available as a fallback")
+
+    @staticmethod
+    def certain_alternative(row, path, fallback, tree, fmeta, certain):
+        """A listed focus with no `available` gate that is scheduled after `row` starts (so the slot has
+        something to fall to when the uncertain gate is closed)."""
+        listed = path + fallback
+        later = listed[listed.index(row["focus"]) + 1:] if row["focus"] in listed else []
+        return any(k in tree and not (fmeta.get(k) or {}).get("available") for k in later)
 
     # ------------------------------------------------------------------ construction
     def construction_lists(self):
@@ -733,25 +926,35 @@ class Lint:
         kinds = derive.building_kinds(game)
         sb = derive.state_buildings(game, self.ctx, self.start)
         own = derive.tag_states(game, self.ctx, self.tag, self.start)
-        mils = sum(v for s in own for b, v in sb.get(s, {}).items() if b in kinds["military"])
-        planned = 0
-        for _, items in self.construction_lists()[:1]:
-            planned += sum(1 for e in items if e.get("building") in kinds["military"])
-        for e in self.list_of("construction"):
-            if e.get("building") in kinds["military"]:
-                planned += int(e.get("count", 1) or 1) * max(1, len(e.get("states") or []))
+        # two pools the game never mixes: military factories build land and air equipment, dockyards build
+        # naval equipment (ships and convoys)
+        pools = {"military": ("military factories", kinds["military"]), "dockyards": ("dockyards", kinds["naval"])}
+        have, planned = {}, {}
+        for pool, (_, buildings) in pools.items():
+            have[pool] = sum(v for s in own for b, v in sb.get(s, {}).items() if b in buildings)
+            planned[pool] = 0
+            for _, items in self.construction_lists()[:1]:
+                planned[pool] += sum(1 for e in items if e.get("building") in buildings)
+            for e in self.list_of("construction"):
+                if e.get("building") in buildings:
+                    planned[pool] += int(e.get("count", 1) or 1) * max(1, len(e.get("states") or []))
+        mils = have["military"]
         lines = self.list_of("production")
         start = derive.day(self.start)
         dates = sorted({start} | {derive.day(x["from"]) for x in lines if derive.day(x.get("from")) is not None})
         for d in dates:
-            n = sum(self.active_lines(d).values())
-            cap = mils if d == start else mils + planned
-            if n > cap:
-                extra = "" if d == start else f" plus {planned} planned"
-                self.add("error", "production.factories", "production",
-                         f"{n} factories allocated from {derive.fmt(derive.date_of(d))}, but {self.tag} has {mils} "
-                         f"military factories at the start{extra}")
-        self.facts["military_factories"] = {"start": mils, "planned": planned}
+            used = self.pool_lines(d)
+            for pool, (label, _) in pools.items():
+                n = sum(used[pool].values())
+                cap = have[pool] if d == start else have[pool] + planned[pool]
+                if n > cap:
+                    extra = "" if d == start else f" plus {planned[pool]} planned"
+                    what = ", ".join(f"{k} {v}" for k, v in sorted(used[pool].items()))
+                    self.add("error", "production.factories", "production",
+                             f"{n} {label} allocated from {derive.fmt(derive.date_of(d))} ({what}), but {self.tag} "
+                             f"has {have[pool]} {label} at the start{extra}")
+        self.facts["military_factories"] = {"start": mils, "planned": planned["military"]}
+        self.facts["dockyards"] = {"start": have["dockyards"], "planned": planned["dockyards"]}
         equip = game.equipment()
         unlocks = derive.equipment_unlocks(game)
         have = start_tech_set(game, self.meta)
@@ -1028,9 +1231,14 @@ class Lint:
             s["planned_vp"] = got
             if got < s["vp_needed"]:
                 mods = ", ".join(f"{n} {v:+g}" for n, v in s["modifiers"]) or "no starting modifier"
+                ws, low = s["war_support"], ""
+                if ws["at_zero"]["vp_needed"] < s["vp_needed"]:
+                    low = (f"; low war support lowers it (to {ws['at_start']['vp_needed']} at the start value "
+                           f"{ws['start'] * 100:g}%, {ws['at_zero']['vp_needed']} at 0%), but war support can rise "
+                           f"to {ws['split'] * 100:g}% during the war, so the plan must reach {s['vp_needed']}")
                 self.add("error", "conquest.threshold", "vp_targets",
                          f"targets hold {got:g} of {enemy}'s {s['total_vp']:g} VP; capitulation needs {s['vp_needed']} "
-                         f"(limit {s['limit']:g}: base {s['base']:g}, {mods})")
+                         f"(limit {s['limit']:g}: base {s['base']:g}, {mods}){low}")
         self.facts["surrender"] = surr
         if surr:
             # rows on another country's state count nothing towards the surrender (owner at the start)
@@ -1072,10 +1280,24 @@ class Lint:
                              f"state {sid} must be fully controlled; provinces {', '.join(map(str, left))} are on no target or path")
         graph = game.map_graph()
         last_by = {}
+        open_tags = self.passable_tags()
+        later = self.predicate_tags()
         for i, e, leg, problems in self.legs():
             where = f"vp_targets[{i}] {e['province']}"
             for msg in problems:
                 self.add("error", "conquest.adjacency", where, msg)
+            neutral = defaultdict(list)
+            for p in dict.fromkeys((leg or []) + self.captures(e)):
+                o = owners.get(pstate.get(p))
+                if open_tags is not None and o and o not in open_tags:
+                    neutral[o].append(p)
+            for o, ps in sorted(neutral.items()):
+                self.add("warning" if o in later else "error", "conquest.neutral_land", where,
+                         f"the leg crosses {o}'s land ({' '.join(map(str, ps))}), which {self.tag} neither fights "
+                         f"nor is allied to at the start: no unit crosses a neutral border"
+                         + (f"; a plan predicate names {o}, so the leg must wait for it" if o in later else
+                            f"; route around it (facts route keeps to open land), or name {o} in war.enemies or in "
+                            f"the predicate (not_exists:{o}, capitulated:{o}, at_war_with:{o}) that opens its land"))
             if leg and graph is not None:
                 try:
                     n = len(derive_crossings(graph, leg))
@@ -1216,6 +1438,52 @@ class Lint:
                 out[k] = out.get(k, 0) + x["factories"]
         return out
 
+    def factory_pool(self, eq):
+        """Which factories build an equipment: "dockyards" for naval equipment (ships, convoys), else
+        "military"."""
+        return "dockyards" if derive.equipment_domain(self.game, eq) == "navy" else "military"
+
+    def pool_lines(self, d):
+        """{"military": {equipment: factories}, "dockyards": {...}} of the plan lines in force on day d."""
+        out = {"military": {}, "dockyards": {}}
+        for eq, n in self.active_lines(d).items():
+            out[self.factory_pool(eq)][eq] = n
+        return out
+
+    def unlisted_in_time_techs(self, last_year):
+        """Techs the country could research by `last_year` without an ahead-of-time penalty that the plan does
+        not list: not owned at the start, start_year up to last_year, not excluded by a listed or owned
+        either-or tech, outside the naval and air folders unless the plan lists a tech of that folder.
+        Industry, production and construction folders first."""
+        if not self.tag:
+            return []
+        first = derive.as_tuple(self.start)[0]
+        planned = {t for e in self.plan.get("research_path") or [] if isinstance(e, dict) for t in e.get("techs") or []}
+        planned |= {t for t in self.plan.get("research_priority") or [] if isinstance(t, str)}
+        have = start_tech_set(self.game, self.meta)
+        rows = [r for block in researchmod.calendar(self.world, self.tag, self.start, (min(first, last_year), last_year))
+                for r in block["techs"]]
+        # techs of earlier years the country does not have yet count too
+        early = researchmod.calendar(self.world, self.tag, self.start, (1900, first - 1)) if first > 1900 else []
+        rows = [r for block in early for r in block["techs"]] + rows
+        known = researchmod.techs(self.world)
+        fams = {folder_family(((known.get(t) or {}).get("folders") or [""])[0]) for t in planned} - {None}
+        # an either-or tech whose rival is listed or owned is closed, and so is everything behind it
+        closed = {r["id"] for r in rows if any(x in planned or x in have for x in r.get("xor") or [])}
+        closed |= {x for t in planned | have for x in (known.get(t) or {}).get("xor") or []} - planned - have
+        out = []
+        for r in rows:
+            tid, folder = r["id"], r.get("folder") or ""
+            if tid in planned or tid in have or tid in closed:
+                continue
+            if closed & set(r.get("chain_any") or r.get("chain_all") or []):
+                continue
+            fam = folder_family(folder)
+            if fam and fam not in fams:
+                continue
+            out.append((0 if re.search(r"industry|production|construction", folder) else 1, folder, tid))
+        return [tid for _, _, tid in sorted(out)]
+
     def has_path(self, dotted):
         node = self.plan
         for part in dotted.split("."):
@@ -1277,6 +1545,9 @@ class Lint:
             return
         gstates = graph.get("states", {})
         start_ctl = set(self.start_control())
+        # supply runs over land the country may enter, never across a neutral border
+        open_tags, own = self.passable_tags(), self.world.owner_of_province
+        can_enter = (lambda p: own(p) is None or own(p) in open_tags) if open_tags is not None else None
         wars = [("war", self.war)] + [(f"war_by_phase.{k}", p) for k, p in
                                       sorted((self.plan.get("war_by_phase") or {}).items()) if isinstance(p, dict)]
         # a phase can carry its own axes in overrides.war; those advances need supply as much as the base ones
@@ -1304,7 +1575,7 @@ class Lint:
                     else:
                         near = derive.distances(game, [target], REACH_STEPS)
                         for d, q in sorted((d, q) for q, d in near.items() if q in held)[:REACH_SOURCES]:
-                            r = mapgraph.route(graph, q, target)
+                            r = mapgraph.route(graph, q, target, allowed=can_enter)
                             if not r:
                                 continue
                             kind = "hub" if held[q] == "planned" else held[q]
@@ -1485,7 +1756,8 @@ class Lint:
             if d is None:
                 self.add("info", "posture.shares", where, f"phase {name} has no enter date; shares not compared")
                 continue
-            lines = self.active_lines(d)
+            finishing = self.finishing_lines(d)
+            lines = {eq: n for eq, n in self.active_lines(d).items() if eq not in finishing}
             total = sum(lines.values())
             if not total:
                 continue
@@ -1493,7 +1765,8 @@ class Lint:
             for eq, n in lines.items():
                 got[domain(eq)] += 100.0 * n / total
             rows.append({"phase": name, "date": derive.fmt(derive.date_of(d)), "plan": want,
-                         "production": {k: round(v, 1) for k, v in got.items()}})
+                         "production": {k: round(v, 1) for k, v in got.items()},
+                         "finishing": {eq: derive.fmt(derive.date_of(f)) for eq, f in finishing.items()}})
             off = [f"{k} {got[k]:.0f}% vs {want[k]:g}%" for k in want if abs(got[k] - want[k]) > POSTURE_POINTS]
             if off:
                 self.add("warning", "posture.shares", where,
@@ -1545,6 +1818,191 @@ class Lint:
                  f"the plan {' and '.join(why)} but has no convoy item (a convoy production line or a "
                  f"manage.convoys_free threshold); sea supply needs {factor:g} convoys per supply "
                  f"(SUPPLY_CONVOY_FACTOR)")
+
+    def full_define(self, key, default):
+        """A define by its full key ("NCountry.SUPPLY_CONVOY_FACTOR"), mods included; default when the
+        files do not hold a number for it."""
+        v, _ = self.world.define(key)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else default
+
+    def division_supply(self, template):
+        """Daily supply use of one division of a start template (the sum of its sub-units'
+        supply_consumption, at least MIN_SUPPLY_CONSUMPTION), None when the template is unknown."""
+        t = self.start_templates().get(template)
+        if not t:
+            return None
+        units = self.world.sub_units()
+
+        def use(u):
+            return (units.get(u, {}).get("stats") or {}).get("supply_consumption") or 0.0
+
+        total = sum(n * use(u) for u, n in t["regiments"].items())
+        total += sum(use(u) for u in list(t["support"]) + list(t.get("regimental_support") or []))
+        return max(total, self.full_define("NMilitary.MIN_SUPPLY_CONSUMPTION", 0.0))
+
+    def sea_supply(self):
+        """[{"state", "divisions", "supply"}] of the states supplied by sea: the start divisions standing
+        there, raised to the army_layout count of the state (extra divisions at the mean use of the
+        entry's templates), and the divisions sea_transfer.routes bring."""
+        if not self.tag:
+            return []
+        start = defaultdict(list)
+        for d in self.world.oob(self.tag)["divisions"]:
+            if d.get("state") is not None:
+                start[d["state"]].append(self.division_supply(d["template"]) or 0.0)
+        over = derive.overseas_states(self.game, self.ctx, self.tag, set(start) | self.army_states(), self.start,
+                                      self.meta.get("history_file")) or set()
+        every = [x for uses in start.values() for x in uses if x]
+        mean_all = sum(every) / len(every) if every else 0.0
+
+        def mean(templates):
+            uses = [u for u in (self.division_supply(t) for t in templates or [] if isinstance(t, str)) if u]
+            return sum(uses) / len(uses) if uses else mean_all
+
+        extra = defaultdict(list)  # state: [(count, mean use)]
+        for e in self.list_of("army_layout"):
+            if isinstance(e.get("state"), int) and isinstance(e.get("count"), int):
+                extra[e["state"]].append((e["count"], mean(e.get("templates"))))
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        moved = defaultdict(float)
+        for r in st.get("routes") or []:
+            if isinstance(r, dict) and isinstance(r.get("to_state"), int) and isinstance(r.get("count"), int):
+                moved[r["to_state"]] += r["count"] * mean(r.get("templates"))
+        out = []
+        for sid in sorted(over | (set(moved) & over)):
+            uses = list(start.get(sid, []))
+            planned = sum(n for n, _ in extra.get(sid, []))
+            supply = sum(uses)
+            divisions = len(uses)
+            if planned > divisions:
+                layout_mean = sum(n * u for n, u in extra[sid]) / planned
+                supply += (planned - divisions) * layout_mean
+                divisions = planned
+            if moved.get(sid):
+                supply += moved[sid]
+            if divisions or moved.get(sid):
+                out.append({"state": sid, "divisions": divisions, "supply": round(supply, 2)})
+        return out
+
+    def sea_trade_units(self):
+        """(units the plan imports, [what was counted], [what could not be counted])."""
+        units, counted, unknown = 0.0, [], []
+        ai = self.plan.get("auto_import")
+        budget = ai.get("budget") if isinstance(ai, dict) else ai
+        on = ai.get("enabled", True) if isinstance(ai, dict) else ai not in (None, False)
+        if on and isinstance(budget, int) and not isinstance(budget, bool):
+            units += budget * TRADE_UNITS_PER_FACTORY
+            counted.append(f"auto_import budget {budget} factories x {TRADE_UNITS_PER_FACTORY} units")
+        elif on and ai is not None:
+            unknown.append("auto_import without a budget")
+        tr = self.plan.get("trade")
+        deals = tr.get("deals") if isinstance(tr, dict) else tr
+        for i, deal in enumerate(deals if isinstance(deals, list) else []):
+            if not isinstance(deal, dict):
+                continue
+            amount = deal.get("amount")
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool):
+                units += amount
+                counted.append(f"trade deal {deal.get('id', i)} {amount:g} {deal.get('resource', 'units')}")
+            else:
+                unknown.append(f"trade deal {deal.get('id', i)} amount {amount or 'needed'}")
+        return units, counted, unknown
+
+    def convoy_size(self):
+        if not self.tag:
+            return
+        rows = self.sea_supply()
+        units, counted, unknown = self.sea_trade_units()
+        if not rows and not units:
+            return
+        factor = self.full_define("NCountry.SUPPLY_CONVOY_FACTOR", None)
+        if factor is None:
+            return  # no such define in these game files: nothing to size with
+        range_factor = self.full_define("NCountry.CONVOY_RANGE_FACTOR", 1.0)
+        supply = sum(r["supply"] for r in rows)
+        for_supply, for_trade = supply * factor, units * TRADE_CONVOYS_PER_UNIT
+        need = math.ceil(for_supply + for_trade - 1e-9)
+        f = self.world.country(self.tag)["convoys"]
+        have = int(f["v"]) if f and isinstance(f["v"], (int, float)) else 0
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        stated = st.get("convoys") if isinstance(st.get("convoys"), int) and not isinstance(st.get("convoys"), bool) else None
+        self.facts["convoys"] = {
+            "start": have, "start_src": f["src"] if f else None, "need": need,
+            "sea_supply": {"states": rows, "supply": round(supply, 2), "convoys_per_supply": factor,
+                           "convoys": round(for_supply, 2)},
+            "sea_trade": {"units": round(units, 2), "convoys_per_unit": TRADE_CONVOYS_PER_UNIT,
+                          "convoys": round(for_trade, 2), "counted": counted, "not_counted": unknown},
+            "range_factor": range_factor, "free": have - need,
+            "d": "need = sea supply (divisions in states the capital cannot reach over own land x the supply use "
+                 "of their templates x SUPPLY_CONVOY_FACTOR) + sea trade (imported units x "
+                 f"{TRADE_CONVOYS_PER_UNIT:g}, not in the defines; every import counted as sea trade: an upper "
+                 "bound); before range: the game raises both with the route length (CONVOY_RANGE_FACTOR), which "
+                 "is not modelled, so keep a wide margin on long lanes"}
+        parts = []
+        if rows:
+            parts.append(f"sea supply {for_supply:.1f} ({supply:.1f} supply for "
+                         f"{sum(r['divisions'] for r in rows)} divisions in state(s) "
+                         f"{', '.join(str(r['state']) for r in rows)} x {factor:g} SUPPLY_CONVOY_FACTOR)")
+        if units:
+            parts.append(f"sea trade {for_trade:.1f} ({units:g} imported units x {TRADE_CONVOYS_PER_UNIT:g})")
+        text = " + ".join(parts)
+        if need > have:
+            self.add("error", "supply.convoy_size", "production",
+                     f"the plan needs about {need} convoys before range ({text}) and {self.tag} starts with {have}"
+                     f"{' [' + f['src'] + ']' if f else ' (no set_convoys in its history)'}: build convoys first "
+                     f"(a convoy production line sized to the gap), cut the imports, or move fewer divisions overseas")
+        if stated is not None and stated < need:
+            self.add("error", "supply.convoy_size", "sea_transfer.convoys",
+                     f"sea_transfer.convoys is {stated}, the plan's sea supply and trade need about {need} before "
+                     f"range ({text})")
+
+    def xp_unspent(self):
+        """A war banks army experience in the country pool; a plan that lists no army XP spend leaves it idle."""
+        if not self.tag:
+            return
+        first, last, _ = self.war_window()
+        ends = [d for d, _ in self.horizon()]
+        if first is None:
+            return
+        last = last if last is not None else (min(ends) if ends else None)
+        if last is None or last <= first:
+            return
+        w = self.world
+        xp = w.experience(self.tag)
+        gain = xp["gain"].get("army") or {}
+        if "combat_max_per_day" not in gain:
+            return
+        per_day = float(gain["combat_max_per_day"]["v"])
+        pool = float(xp["max"]["army"]["v"]) if "army" in xp["max"] else math.inf
+        path = {k for k in self.plan.get("focus_path") or [] if isinstance(k, str)}
+        focusmod = __import__((__package__ or "hoi4facts") + ".focus", fromlist=["xp_rewards"])
+        rewards = [(r["focus"], r["army"]) for r in focusmod.xp_rewards(w, self.tag)
+                   if r["focus"] in path and (r.get("army") or 0) > 0]
+        floor = min(pool, float(xp["start"]["army"]["v"]) + sum(n for _, n in rewards))
+        ceiling = min(pool, floor + per_day * (last - first))
+        d = self.game.doctrines(self.ctx) if self.ctx else {"grand": {}, "sub": {}}
+        costs = [g["xp_cost"] for g in d["grand"].values() if g.get("folder") == "land" and g.get("xp_cost")]
+        costs += [x["xp_cost"] for x in d["sub"].values() if x.get("xp_type") == "army" and x.get("xp_cost")]
+        cheapest = min(costs) if costs else None
+        self.facts["xp"] = {"army": {"floor": round(floor, 1), "ceiling": round(ceiling, 1), "war_days": last - first,
+                                     "combat_max_per_day": per_day, "combat_scale": gain.get("combat_scale", {}).get("v"),
+                                     "define": gain["combat_max_per_day"]["key"], "src": gain["combat_max_per_day"]["src"],
+                                     "focus_rewards": rewards, "cheapest_land_doctrine": cheapest}}
+        xb = self.plan.get("xp_budget") if isinstance(self.plan.get("xp_budget"), dict) else {}
+        spends = bool(xb.get("army"))
+        spends |= any(e.get("folder") == "land" for e in self.list_of("doctrines"))
+        spends |= any(isinstance(t.get("xp"), (int, float)) and t["xp"] > 0 for t in self.list_of("templates"))
+        spends |= any(e.get("kind") == "tank" for e in self.list_of("designs"))
+        if spends or cheapest is None or ceiling < cheapest:
+            return
+        self.add("warning", "xp.unspent", "doctrines",
+                 f"the plan spends no army experience, and the war can bank up to {ceiling:.0f} by "
+                 f"{'.'.join(map(str, derive.date_of(last)))} (floor {floor:.0f} from the start and the focus_path "
+                 f"rewards, plus at most {per_day:g} a day in combat over {last - first} days: "
+                 f"{gain['combat_max_per_day']['key']} [{gain['combat_max_per_day']['src']}], the country pool; "
+                 f"UNIT_EXPERIENCE_* is a division's veterancy); the cheapest land doctrine costs {cheapest:g}: add a "
+                 f"doctrines entry with its xp (the executor adopts it when the pool has it) or another army XP "
+                 f"spend; `calc xp` dates the pool")
 
     def hub_cost(self):
         game = self.game
@@ -1784,6 +2242,40 @@ class Lint:
         self.facts["manage"] = {k: (m[k] if k in m else v.get("default")) for k, v in spec.items()
                                 if "default" in v and k not in ("why", "note")}
 
+    def alarm_blocks(self):
+        """[(label, alarms object)]: the base alarms and those of phase and contingency overrides."""
+        out = [("alarms", self.plan.get("alarms"))]
+        for key in ("phases", "contingencies"):
+            for j, p in enumerate(self.list_of(key)):
+                then = p.get("then") if isinstance(p.get("then"), dict) else {}
+                for label, ov in ((f"{key}[{j}].overrides", p.get("overrides")),
+                                  (f"{key}[{j}].then.overrides", then.get("overrides"))):
+                    if isinstance(ov, dict):
+                        out.append((f"{label}.alarms", ov.get("alarms")))
+        return [(label, a) for label, a in out if isinstance(a, dict)]
+
+    def alarms_silenced(self):
+        """An alarm switched off needs its reason next to it: `why` of the same alarms object names the code."""
+        for label, block in self.alarm_blocks():
+            why = block.get("why") if isinstance(block.get("why"), str) else ""
+            words = set(re.findall(r"[A-Za-z0-9_]+", why))
+            # a reason is more than the bare code: something has to be said about it
+            said = len(words - set(block)) >= 3
+            for code, v in block.items():
+                if code in ("why", "note") or not (v is False or v is None):
+                    continue
+                if code in words and said:
+                    continue
+                extra = ""
+                if code in ("research_slot_empty", "no_active_focus"):
+                    extra = ("; this alarm already waits while the plan's lists own the slot (a slot the executor "
+                             "fills next is not reported, a list that ran out raises the plan-exhausted alarm), so "
+                             "an empty slot it reports is one nobody is filling")
+                self.add("error", "alarms.silenced", f"{label}.{code}",
+                         f"{code} is switched off and {label}.why "
+                         f"{'does not name it' if why else 'is missing'}: keep the alarm (delete the key), or name "
+                         f"{code} in {label}.why with the reason it must stay quiet{extra}")
+
     def unreadable(self):
         """Strategy predicates that can never hold while their atoms are unreadable (always unknown)."""
         table = self.table
@@ -1981,6 +2473,21 @@ class Lint:
                              f"switched line keeps ({key}); start {ny} on new factories and keep {eq} until its gear "
                              f"covers the need")
 
+    def finishing_lines(self, d):
+        """{equipment: finish day} of the start lines that on day d only complete a unit in progress: the
+        game would finish the unit first (unit_finish) and the plan removes the line afterwards, as
+        production.in_progress asks. Such a line is no choice of the posture: the cull rule leaves it
+        alone until the unit is done and posture.shares does not count it."""
+        removed = self.removal_days()
+        out = {}
+        for eq in sorted({r["type"] for r in self.start_lines()}):
+            if eq not in removed or any(f is None or f <= d for _, f in removed[eq]):
+                continue  # kept for good, or gone by d
+            fin = self.unit_finish(eq)
+            if fin and d < fin[0]:
+                out[eq] = fin[0]
+        return out
+
     def production_cull(self):
         """Start lines the plan never uses and does not remove; lines of a domain the force posture gives 0%."""
         g = self.game
@@ -2035,9 +2542,10 @@ class Lint:
             d = start if ph.get("phase") == "base" else days.get(str(ph.get("phase")))
             if not zero or d is None:
                 continue
-            live = dict(self.active_lines(d))
+            finishing = self.finishing_lines(d)
+            live = {eq: n for eq, n in self.active_lines(d).items() if eq not in finishing}
             for eq, rs in by_eq.items():
-                if not any(f is None or f <= d for _, f in removed.get(eq, [])):
+                if eq not in finishing and not any(f is None or f <= d for _, f in removed.get(eq, [])):
                     live[eq] = live.get(eq, 0) + sum(int(r.get("factories") or 0) for r in rs)
             for dom in zero:
                 hit = sorted(eq for eq, n in live.items() if n and (derive.equipment_domain(g, eq) or "land") == dom)
@@ -2625,7 +3133,7 @@ class Lint:
                 if c in known or not info["year"] or info["year"] > year or m.get("gated") or (m.get("xor") or set()) & known \
                         or f not in folders or techrule.missing(info, known, "any"):
                     continue
-                if any(re.search(r"(^|_)" + d + r"(_|$)", f) and not goals[d] for d in ("naval", "air")):
+                if any(folder_family(f) == d and not goals[d] for d in ("naval", "air")):
                     continue
                 idle.append(c)
             if idle:
@@ -2829,7 +3337,8 @@ class Lint:
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
-                 self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.alarms_silenced,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus
                  # timeline)

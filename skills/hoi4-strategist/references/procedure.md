@@ -48,10 +48,11 @@ write them in the shapes below (the schema descriptions and `native/src/plan_mil
 | `F focus-timeline <TAG> --date D <ids...>` | start and end dates, blocked, exclusive, runtime gates |
 | `F tech <id>` / `F research-calendar <TAG> --date D --years Y1-Y2` / `F research-timeline RUN/plan.json` | eligibility, cost, days; startable techs by year; finish dates of the plan's path |
 | `F state <id>` / `F states <TAG>` | slots, infrastructure, buildings (naval base, air base), resources, VP, cores, neighbours |
-| `F province <id>` / `F route <from> <to> [--avoid-rivers]` | terrain, river edges, port, hub, railway / cheapest path with crossings |
-| `F vp <TAG>` | VP list, total, surrender threshold with modifiers, capital, mandatory-control rules |
+| `F province <id>` / `F route <from> <to> [--avoid-rivers] [--enemy TAG] [--through TAG]` | terrain, river edges, port, hub, railway / cheapest path with crossings over land the country may enter (own, allied, at war with; `--enemy` for a war the plan declares, `--through` for land annexed or opened by then), with the neutral land a shorter path would need |
+| `F vp <TAG> [--war-support S]` | VP list, total, surrender threshold with modifiers, the lower thresholds under low war support (at the start value, at S, at zero) and which one holds, capital, mandatory-control rules |
 | `F oob <TAG>` / `F characters <TAG> [--role general\|marshal\|admiral\|advisor\|leader]` | templates, divisions per state, wings, fleets / commanders and advisors with traits |
 | `F laws <TAG>` / `F idea <id>` / `F decisions <TAG>` / `F missions <TAG>` | costs, gates (`needs has_war_support > ...`), conditions, timers |
+| `F politics-slots` | the politics categories and the index of every slot (laws, designers, theorist, political advisors, the three chiefs, high command): the `slot` of every `politics` entry |
 | `F hooks <TAG>` / `F event <id>` | scenario reference graph (conditions in full) / event options with name, loc text, trigger, effects, and every caller: where it fires, the receiving scope, delay, conditions |
 | `F effect <name>` | a scripted effect's (or trigger's) full body with source, and where it is called |
 | `F resources <TAG>` | per-resource balance at the start: owned states, trade-law export share, start lines |
@@ -113,7 +114,13 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
    (an enemy with no planes needs no fighters beyond what CAS escort needs; an overseas theatre needs
    convoys before anything else).
 2. Name the arms the goal does not need and why; their research and doctrine folders stay out.
-3. Every start line, wing and fleet the posture does not use is marked for removal in item 8 (PR08, L18).
+3. Every start line, wing and fleet the posture does not use is marked for removal in item 8 (PR08, L18). A
+   start ship or expensive item past the game's own finish threshold is finished first: its remove entry
+   carries the finish date as `from`, and until then the line counts neither against a 0% share nor in
+   the posture shares, so the posture states what the plan chooses to build, not what it inherits.
+4. Military factories and dockyards are two pools: a naval line (ships, convoys) in `production` takes
+   dockyards and no military factory, and the lint counts each pool on its own. Free dockyards get a line
+   (convoys when the theatre is overseas) like free military factories do.
 Resolution: executor `production` (factories per line, `from`), `production_priority`,
 `phases[].overrides.production_priority`, `research_fallback_exclude`, `doctrines` folders; plan.md §12.
 Check: lint `production.factories`, `research.folders`; rubric row 12.
@@ -135,9 +142,17 @@ Resolution: executor `doctrines` (`id`, `folder`, `grand_doctrine` or `track` + 
 ### 5. XP budget
 Read: `research-doctrines-projects.md` §2.3. Facts: starting experience (dossier §1; until available
 `F grep army_experience --folder history/countries` and the XP rewards of the planned focuses),
-`F defines MAX_ARMY_EXPERIENCE` (pool cap per branch), `F defines TRAINING_MAX_DAILY_COUNTRY_EXP`.
-1. Forecast XP per branch (army, air, navy) by month: start + focus rewards + training/exercise + combat
-   estimate [H]. No pool above the cap: spend before it fills.
+`F defines MAX_ARMY_EXPERIENCE` (pool cap per branch), the pool gain line of dossier §1 (combat scale, most
+combat XP a day, most training XP a day, each by its full define key).
+1. Forecast XP per branch (army, air, navy) by month with `calc xp --branch <b> --until <date> --reward
+   <date>:<xp>:<focus> --war <from>:<to> [--combat-per-day <xp>] --cost <price>`: floor = start + dated
+   rewards + training, ceiling = floor + the most combat XP a day over the days at war, the estimate with
+   your daily combat figure [H]; it prints the day each price is first affordable. The country pool has
+   its own defines per branch (`NMilitary.FIELD_EXPERIENCE_SCALE` and `FIELD_EXPERIENCE_MAX_PER_DAY` for
+   the army, the same names under `NAir` and `NNavy`); `UNIT_EXPERIENCE_PER_COMBAT_HOUR` and
+   `UNIT_EXPERIENCE_PER_TRAINING_DAY` are a unit's own veterancy and never feed the pool. A plan at war
+   lists an army XP spend (a `doctrines` entry waits for its `xp`, so it needs no certain date): lint
+   `xp.unspent`. No pool above the cap: spend before it fills.
 2. Order every spend per branch with its month: doctrines (item 4), template edits (item 6), designs
    (item 7), officer-corps spirits. No month spends more than the forecast; keep the reserve for
    designs that the playbook names.
@@ -267,7 +282,10 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 5. Every construction item states its cost in points (`base_cost`, table in `economy-build-orders.md`
    §1.1; `F grep base_cost --folder common/buildings`) and its estimated finish date from
    `C build-order` (5 points per civilian factory per day, at most 15 factories per project,
-   × (1 + 0.2 × infrastructure), law and focus speed modifiers as `--bonus`).
+   × (1 + 0.2 × infrastructure), law and focus speed modifiers as `--bonus`). Name the state of every
+   item that is not a factory from the ranking (`naval_base:1@1#<state>`, `supply_node:1#<state>`,
+   `infrastructure:1#<state>`): the calculator takes that state's infrastructure, and a date printed
+   under `WARNING` or with `ASSUMED` rests on a guessed level and may not go into the plan.
 6. Supply construction on the attack axis is item 19: railways first, then a port where no supply
    reaches the shore, trucks, and a hub only after the cost and time check there. Idle-factory check: no date where civilian factories have no queued project
    (`construction` filler list).
@@ -302,8 +320,16 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
    year triples it, and ordinary bonuses do not reduce it (only ahead-of-time bonuses do; `F tech <id>` shows
    the days) (RE01). Order: industry (production, construction, industry folder: the concentrated/dispersed
    line, machine tools, construction), then the equipment the planned templates use, then what the war plan
-   needs. Never cut an industry tech because "it does not help this war". Lint `research.idle` fails a
-   plan with more than 25% of slot-time unplanned, with or without a fallback.
+   needs. Never cut an industry tech because "it does not help this war". **Every slot stays busy to the
+   horizon:** the campaign goes on after this war, so a tech no current template uses (support companies,
+   the next weapons, armour, electronics) still earns its slot when the alternative is an empty one; a tech
+   taken out of the list is replaced by another in-time tech, never by idle time, and
+   `alarms.research_slot_empty` stays on: while the plan lists research the executor owns the slots, so
+   the alarm waits `alarms.slot_empty_grace_days` (default 2) for the executor to fill a slot and leaves
+   a list that ran out to `research_slot_idle_plan_exhausted`; what it still reports is a slot nobody is
+   filling. Lint `research.idle` fails a plan with more than 25% of slot-time
+   unplanned, with or without a fallback, and one with any unplanned slot-time (above 2%) while in-time
+   techs remain unlisted; it names them.
 5. `research_fallback` false, or restricted with `research_fallback_prefixes` to the same families; it is
    a safety net, not the plan. No naval or air folder techs unless item 3 needs them.
 6. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or
@@ -325,13 +351,21 @@ Read: the country section of `economy-build-orders.md` §10 when it exists; doss
 1. `focus_path` in order: no exclusive pair; each focus after its prerequisites; every runtime
    `available` gate true in the phase that reaches it. Copy dates into plan.md §6 as
    `[D focus-timeline]`. `focus_fallback` for a blocked focus.
+   **The focus slot never idles:** the two lists together keep it busy from the start to the horizon
+   under the plan's own conditions. A focus that waits for something (peace, a flag, land not yet held)
+   has focuses that can start meanwhile listed after it, and the fallback list holds focuses whose
+   prerequisites are done by then and whose `available` gate holds in the state the plan is in when the
+   path runs out (at war when the war is still on). A focus the game only completes by script
+   (`available` `always = no`) is listed nowhere. Read each gate with `F focus <id>`; lint
+   `focus.available`, `focus.idle` and `focus.unconfirmed` walk the slot day by day and name every
+   blocked focus with the line that blocks it.
 2. Balance of power, when the tag has one at the start date or a planned focus creates one: the side
    the plan wants, the range edges that matter, and the focuses and decisions that move it; consistent
    with the focus path. Not applicable: `F bop <TAG>` (until available `F grep <TAG> --folder common/bop`)
    finds no balance for the tag and no planned focus sets one.
 Resolution: executor `focus_path`, `focus_fallback`; player `decision_rules` (BoP decisions with `when`;
 atom `bop:<id>`); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.order`,
-`focus.gates`; rubric row 3.
+`focus.gates`, `focus.available`, `focus.idle`, `focus.unconfirmed`; rubric row 3.
 
 ## E. Politics
 
@@ -341,7 +375,10 @@ the projected balance never sits above about 100 PP with no planned buy for more
 what they leave unspent (default: chief of army, economy law, trade law). Name the political advisors that fit
 the plan (PP, stability, war support or production traits from `F characters <TAG> --role advisor`) in
 `politics_auto.order`, since the executor cannot read an advisor's trait from its token; list in
-`politics_auto.never` the ideas the plan must not take.
+`politics_auto.never` the ideas the plan must not take. Every `politics` and `politics_auto.order` entry carries
+the exact `category` and `slot`: the index is the slot's position in its category (`F politics-slots`), and a
+law or advisor is taken from a slot of its own kind (`F laws` and `F characters --role advisor` print it, e.g.
+`hire: military_staff slot 3-5`).
 
 ### 13. Gated laws
 Read: `economy-build-orders.md` §5; `politics-diplomacy-espionage.md` "Economy, trade and conscription
@@ -373,8 +410,9 @@ their exits), `F defines BASE_STABILITY_WAR_FACTOR`, `F idea <spirit>`, `F decis
    defensive one adds it (`politics-diplomacy-espionage.md` §2 "Drivers").
 2. Stability floor (50% unless the plan argues otherwise) and what happens below it.
 3. **Stability and war support at or above 50%:** both are multipliers (stability above 50% up to +20%
-   factory output, below it down to -50%; war support below 50% lowers the surrender limit 30% and cuts
-   command power gain 95%) (PO16, PO17). Name the source that holds each above 50%.
+   factory output, below it down to -50%; war support below 50% lowers the surrender limit by up to 30
+   points and cuts command power gain by up to 95%, both in proportion to the gap and in full at zero)
+   (PO16, PO17). Name the source that holds each above 50%.
 4. **War-support routes** for democracies and neutrals short of a 25% or 50% gate: an attaché to the Spanish
    Civil War or the Sino-Japanese War after improving relations to 20 (`diplomacy` `improve_relations`, then
    `send_attache`), war propaganda, focuses (PO19, PO21). Improve Worker Conditions when stability is under
@@ -385,12 +423,14 @@ pending; plan.md §16. Check: rubric row 9.
 ### 15. Advisors and high command
 Read: `politics-diplomacy-espionage.md` §4. Facts: `F characters <TAG> --role advisor`, dossier §7.
 1. Political advisors, theorists (item 4), designers (items 7-9), army, navy and air chiefs and high
-   command, in buy order with cost and the date from `C pp`; each with the slot and the reason.
+   command, in buy order with cost and the date from `C pp`; each with its `category` and `slot` index and the
+   reason. The chief of army, navy and air force and the high command each have their own slots (in the base
+   game `military_staff` 0, 1, 2 and 3-5): a plan that only fills slot 0 leaves the high command empty.
 2. The chief of army among the first three hires of a land power; each advisor passes the payback test
    (cost / daily gain under half the horizon); officer-corps spirits bought before the hires they discount
    (PO07, PO08, PO10).
-Resolution: executor `politics`; the remaining hires in buy order in `politics_auto.order`. Check: lint
-`politics.pp_budget`; rubric row 10.
+Resolution: executor `politics`; the remaining hires in buy order in `politics_auto.order`. Check: validate_plan
+(each entry's slot index holds the idea's slot kind); lint `politics.pp_budget`; rubric row 10.
 
 ## F. Army organisation and manpower
 
@@ -452,7 +492,11 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
 `generic-playbook.md` §4. Facts: `F vp <ENEMY>`, `F route <from> <to> [--avoid-rivers]`,
 `F province <id>`, `F weather <region>`, `F terrain-width <theatre>`.
 1. VP order: targets by value and adjacency until cumulative VP ≥ threshold with and without modifiers;
-   every mandatory control state. `by` dates from distance, terrain and river counts (`[D route]`),
+   every mandatory control state. The threshold to reach is the one at war support 50% or more; the
+   `F vp` rows for low war support are the earliest the enemy can fall (a checkpoint and the
+   `goal_reached` alarm, never the plan's end point). No leg, path or supply line crosses a neutral country's land (no unit
+   crosses a neutral border; lint `conquest.neutral_land`): take the `F route` path, and plan a leg over
+   land that opens later (an annexation, a new war) only behind the predicate that opens it. `by` dates from distance, terrain and river counts (`[D route]`),
    non-decreasing per army; more than 2 river crossings on a leg is a warning to answer.
 2. Weather and season: no offensive planned into mud, snow or extreme cold on the axis (from
    `F weather <region>`); the season named per phase.
@@ -508,12 +552,15 @@ cost in points, its estimated finish date (`C build-order`) and the source:
    initial supply flow 3.3 against a hub's 2.8, but reach falls off faster inland). Conditions: the
    province is coastal and owned or controlled; free convoys cover 0.25 per supply point
    (`SUPPLY_CONVOY_FACTOR`); the sea route is not blocked by enemy navy or air. `F ports <TAG>` and
-   `F province <id>` (coastal, port).
+   `F province <id>` (coastal, port). Size the convoys: lint `supply.convoy_size` adds the supply use
+   of every division standing overseas times `SUPPLY_CONVOY_FACTOR` and the planned imports, compares
+   the sum with the start convoys and prints it under `facts.convoys` (before range: a long lane needs
+   more); cite those numbers in plan.md.
 3. **Motorisation and trucks**: `war.motorization` per army and a truck line from day 1, with the truck
    stock it needs (item 8): the cheap way to carry supply beyond the railhead.
 4. **A supply hub** (`supply_node`, 20000 points: about 190-270 days with 15 civilian factories at
    infrastructure 2 to 0, longer under a construction-speed malus) only when
-   `C build-order --order supply_node:1` shows it finishes before the date it is needed and no port or
+   `C build-order --order supply_node:1#<state>` shows it finishes before the date it is needed and no port or
    railway can serve the same provinces. Never on day 1 of a short war; only where the game can build
    it when the trigger fires (no enemy-held province in the state).
 5. Overseas theatres: naval base level and throughput at each landing port, convoys (item 8) and
@@ -720,7 +767,7 @@ the rule is a brief line (read, threshold, call) when the player must act.
 
 | Rule | Default threshold | Key today |
 |---|---|---|
-| Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`) | `alarms` |
+| Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`); an alarm is never switched off to stop noise: one set to false needs `alarms.why` naming it with the reason (lint `alarms.silenced`), and a noisy alarm goes into the tool-gap list | `alarms` |
 | Game alert row (`hoi4_alerts {}`) | any named alert → its fix; officer corps, MIO, admiral alerts wake the player | `manage` |
 | Armies and generals | few formations (≤ 3 per marshal, ≥ 3 divisions, ≤ 24), small roles are tasks inside them, a general on every army | `armies`, `army_layout` |
 | Rest and resume | rest below 30% of the army's highest organisation seen, resume at 80% and 70% supply; at most 20 days (not while supply is under 35%). These are the executor defaults; absolute `rest_below` / `resume_above` replace the shares | `war.rest_below_pct`, `war.resume_above_pct`, `war.supply_resume`, `war.rest_max_days` |

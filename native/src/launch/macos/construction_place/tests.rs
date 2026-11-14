@@ -263,7 +263,7 @@ fn real_journal_intent_precedes_transport_and_verified_replay_is_historical() {
     std::fs::remove_dir_all(d).unwrap();
 }
 #[test]
-fn possible_input_failures_quarantine_after_reopen_and_block_every_new_id() {
+fn possible_input_failures_close_the_request_and_are_never_settled_or_replayed() {
     for (effect, fail) in [
         (Effect::Increment, 2),
         (Effect::Pending, 0),
@@ -280,19 +280,24 @@ fn possible_input_failures_quarantine_after_reopen_and_block_every_new_id() {
                 dispatch(&mut a)
             })
             .is_err());
-        assert!(j.blocked());
+        assert!(!j.blocked());
         assert_eq!(a.clicks, 1);
         drop(j);
         let bytes = std::fs::read(&path).unwrap();
-        assert_eq!(String::from_utf8(bytes.clone()).unwrap().lines().count(), 1);
+        assert_eq!(String::from_utf8(bytes.clone()).unwrap().lines().count(), 2);
         let mut j = GameJournal::open(&path).unwrap();
-        for id in [request().id, "fresh-id"] {
-            assert!(j
-                .execute_strict(id, &e, request().action(), json!({}), &mut || panic!(
-                    "no old settlement/new action"
-                ))
-                .is_err());
-        }
+        assert_eq!(
+            j.execute_strict(
+                request().id,
+                &e,
+                request().action(),
+                json!({}),
+                &mut || panic!("no old settlement")
+            )
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
         assert_eq!(bytes, std::fs::read(&path).unwrap());
         drop(j);
         std::fs::remove_dir_all(d).unwrap();

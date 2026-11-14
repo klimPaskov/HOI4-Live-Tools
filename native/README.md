@@ -619,6 +619,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
 | `hoi4_focus_completed` | Preview: own engine completion-membership IDs and active key without opening GUI; bounded sorted pages; actual Rhineland membership verified in run052 |
+| `hoi4_focus_available` | Whether listed own focuses can be started now, without opening the tree: the focus files of the running content (install plus enabled mods) judged against the own state read from memory; `available`, `unavailable` (certain, with the failing requirement) or `unknown` (a trigger nothing reads); read-only |
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics; paused Sprite closure and the later capacity refusal recorded |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |
@@ -686,11 +687,14 @@ blockers. An unmapped auxiliary manager object refuses input. Held keys/modifier
 before any pointer bytes are sent. One ordinary click is followed by canonical
 own-line readback and an idle-input check; the game is never paused by the action.
 
-An uncertain result blocks clock, research, Focus, construction and daily input.
-The same request ID can only settle by observing its original target on its
-original line or panel; it never sends another click or adopts a new baseline. Historical
-success is marked historical, not fresh state. The journal preserves uncertainty
-when reopened, but supervisor restart/adoption of a surviving game is unsupported.
+A step whose effect is not observed is closed with a terminal `Unconfirmed` record
+(`action_unconfirmed`): it is never replayed and blocks no clock, research, Focus,
+construction or production request. The same request ID can only settle by observing
+its original target on its original line or panel; it never sends another click or
+adopts a new baseline. Historical success is marked historical, not fresh state. The
+closed record survives a reopen; the daily worker's own production progress still
+waits for that settlement. Supervisor restart/adoption of a surviving game is
+unsupported.
 Production004 passed the bounded ordinary production gate on `df474ca`: one panel
 opening, 10→11→10 requested infantry-equipment factories, historical replays and
 new-ID no-ops. Final state had 10 requested and active factories. Opening took

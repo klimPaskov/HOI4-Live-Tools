@@ -139,6 +139,15 @@ class SyntheticMap(unittest.TestCase):
         self.assertEqual(r["cost"], 2.0 + 1.0 + 3.0)
         self.assertIsNone(mg.route(self.g, 1, 5))  # sea is not a land destination
 
+    def test_route_keeps_out_of_closed_provinces(self):
+        # 4 is the dry way from 1 to 2; closed (a neutral's land), the route takes 3, and with both closed
+        # there is none
+        self.assertEqual(mg.route(self.g, 1, 2, avoid_rivers=True)["path"], [1, 4, 2])
+        self.assertEqual(mg.route(self.g, 1, 2, avoid_rivers=True, allowed=lambda p: p != 4)["path"], [1, 3, 2])
+        self.assertIsNone(mg.route(self.g, 1, 2, allowed=lambda p: p not in (3, 4)))
+        # the start is never closed to the mover standing on it
+        self.assertEqual(mg.route(self.g, 1, 2, allowed=lambda p: p != 1)["steps"], 2)
+
     def test_cache_hit(self):
         files = [f for f in os.listdir(self.cache) if f.endswith(".json.gz")]
         self.assertEqual(len(files), 1)

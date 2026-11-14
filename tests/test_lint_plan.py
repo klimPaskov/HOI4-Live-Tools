@@ -67,7 +67,8 @@ PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
-                  "move_commitment", "action_receipts", "construction_give_up", "supply_relief"}
+                  "move_commitment", "action_receipts", "construction_give_up", "supply_relief",
+                  "focus_availability"}
 
 
 class Lessons(unittest.TestCase):
@@ -171,6 +172,9 @@ class HandPlans(unittest.TestCase):
             ("army.formations", "army_layout[6] 'Afar guard'"),
             # 6-8 wide colonial and irregular divisions fill the highland battles at 0.86-0.92, width 14 at 0.99
             ("army.width_terrain", "army_layout"),
+            # the Dessie and Addis Ababa legs take the Afar road, Aussa's land at the start
+            ("conquest.neutral_land", "vp_targets[7] 5097"),
+            ("conquest.neutral_land", "vp_targets[8] 5010"),
             # the four railways start at plain provinces, not at a hub, port or the capital (sk2 shakedown)
             ("construction.railway_node", "construction_plan[2] cp04_rail_way_842"),
             ("construction.railway_node", "construction_plan[4] cp07_rail_way_271"),
@@ -192,6 +196,8 @@ class HandPlans(unittest.TestCase):
             ("supply.port_convoys", "production"),
             # the highland states lie past what the Eritrean hub and the Somali ports reach
             ("supply.axis_reach", "war_by_phase.P2_tigray.axes[0] state 271"),
+            # Dessie by the highland road: supply does not cross Aussa either
+            ("supply.axis_reach", "war_by_phase.P2_tigray.axes[0] state 843"),
             ("supply.axis_reach", "war_by_phase.P2_tigray.axes[1] state 835"),
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[0] state 840"),
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 836"),
@@ -599,6 +605,39 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertIn("safety net", f["message"])
         self.assertFalse(self.hits(self.ita, "research.idle", None, "research_path"))
 
+    def test_any_idle_slot_time_fails_while_in_time_techs_remain(self):
+        # a plan that leaves under a quarter of the slot time empty still wastes it when the country has
+        # in-time techs it does not list
+        base = lint_plan.lint(self.ita, self.game)["facts"]["research"]
+        self.assertLessEqual(base["idle_share"], lint_plan.RESEARCH_IDLE_SLACK)
+        plan = copy.deepcopy(self.ita)
+        first = plan["research_path"][0]
+        for n in range(len(first["techs"]) - 1, 1, -1):
+            first["techs"] = first["techs"][:n]
+            facts = lint_plan.lint(plan, self.game)["facts"]["research"]
+            if facts["idle_share"] > lint_plan.RESEARCH_IDLE_SLACK:
+                break
+        self.assertLess(facts["idle_share"], 0.25)
+        self.assertGreater(facts["unlisted_in_time"], 0)
+        f = self.assertHit(plan, "research.idle", "error", "research_path")
+        self.assertIn("in-time techs are not listed", f["message"])
+        lt = lint_plan.Lint(plan, self.game)
+        spare = lt.unlisted_in_time_techs(1936)
+        self.assertIn("interwar_antitank", spare)
+        listed = {t for b in plan["research_path"] for t in b["techs"]} | set(plan.get("research_priority") or [])
+        self.assertFalse(listed & set(spare))
+        # the industry branch not taken stays closed, with what stands behind it
+        self.assertFalse([t for t in lt.unlisted_in_time_techs(1937) if t.startswith("dispersed_industry")])
+        # no naval tech is offered to a plan that lists none (Man the Guns folder names included)
+        folders = {t: (lint_plan.researchmod.techs(lt.world)[t]["folders"] or [""])[0] for t in spare}
+        self.assertFalse([t for t, f in folders.items() if lint_plan.folder_family(f) == "naval"])
+
+    def test_folder_family(self):
+        fam = lint_plan.folder_family
+        self.assertEqual([fam(f) for f in ("naval_folder", "mtgnavalfolder", "mtgnavalsupportfolder")], ["naval"] * 3)
+        self.assertEqual([fam(f) for f in ("air_techs_folder", "bba_air_techs_folder")], ["air", "air"])
+        self.assertEqual([fam(f) for f in ("industry_folder", "infantry_folder", "nsb_armour_folder", "")], [None] * 4)
+
     # -------------------------------------------------------------- conquest.skipped_near
     def test_near_vp_province_left_untaken_warns(self):
         plan = copy.deepcopy(self.ita)
@@ -606,6 +645,30 @@ class CoverageBuildRules(unittest.TestCase):
         f = self.assertHit(plan, "conquest.skipped_near", "warning", "province 1984")
         self.assertIn("never targeted", f["message"])
         self.assertFalse(self.hits(self.ita, "conquest.skipped_near", None, "province 1984"))
+
+    # -------------------------------------------------------------- production.factories: two pools
+    def test_dockyard_lines_count_against_dockyards(self):
+        base = lint_plan.lint(self.ita, self.game)
+        mils, docks = base["facts"]["military_factories"]["start"], base["facts"]["dockyards"]["start"]
+        self.assertEqual(mils, 20)
+        self.assertGreater(docks, 7)
+        self.assertNoHit(self.ita, "production.factories")
+        # a convoy line on 7 dockyards takes no military factory
+        plan = copy.deepcopy(self.ita)
+        plan["production"].append({"equipment": "convoy_1", "factories": 7})
+        self.assertNoHit(plan, "production.factories")
+        lt = lint_plan.Lint(plan, self.game)
+        self.assertEqual(lt.pool_lines(derive.day("1936.1.1"))["dockyards"], {"convoy_1": 7})
+        # more dockyards than the country has is its own finding
+        plan["production"][-1]["factories"] = docks + 1
+        f = self.assertHit(plan, "production.factories", "error", "dockyards allocated")
+        self.assertIn(f"has {docks} dockyards at the start", f["message"])
+        self.assertNotIn("military factories", f["message"])
+        # and land lines are still held to the military factories
+        over = copy.deepcopy(self.ita)
+        over["production"].append({"equipment": "infantry_equipment_1", "factories": mils + 1})
+        f = self.assertHit(over, "production.factories", "error", "military factories allocated")
+        self.assertIn(f"has {mils} military factories at the start", f["message"])
 
     # -------------------------------------------------------------- production remove / replace
     def test_production_remove(self):
@@ -717,6 +780,38 @@ class TacticsRules(unittest.TestCase):
         # a coastal navy keeps the dockyard lines
         plan["navy"] = {"posture": "coastal", "reason": "escort"}
         self.assertNoHit(plan, "production.cull", text="start line ship_hull")
+
+    def test_unfinished_start_units_are_finished_then_culled(self):
+        # a land-only posture with every start naval line removed when its unit in progress is done:
+        # production.in_progress asks for exactly these dates, so the cull rule must not ask for earlier ones
+        plan = self.plan(navy={"posture": "none", "reason": "no naval enemy"})
+        plan["force_posture"] = {"reason": "land war", "phases": [{"phase": "base", "land": 100, "air": 0, "navy": 0}]}
+        lt = lint_plan.Lint(plan, self.game)
+        start = derive.day("1936.1.1")
+        naval = sorted({r["type"] for r in lt.start_lines() if derive.equipment_domain(self.game, r["type"]) == "navy"})
+        waits = {}
+        for eq in naval:
+            fin = lt.unit_finish(eq)
+            waits[eq] = fin[0] if fin else start
+            plan["production"].append({"equipment": eq, "remove": True, "from": derive.fmt(derive.date_of(waits[eq]))})
+        self.assertTrue(any(d > start for d in waits.values()))  # Italy starts with hulls past 10%
+        lt = lint_plan.Lint(plan, self.game)
+        self.assertEqual(lt.finishing_lines(start), {eq: d for eq, d in waits.items() if d > start})
+        self.assertNoHit(plan, "production.in_progress", "error")
+        self.assertNoHit(plan, "production.cull", text="gives navy 0%")
+        self.assertNoHit(plan, "production.cull", text="start line ship_hull")
+        # the same lines kept past their unit are naval production the posture rules out: a phase after the
+        # last finish date still finds them
+        last = max(waits.values())
+        late = copy.deepcopy(plan)
+        for x in late["production"]:
+            if x.get("remove") and x["equipment"] in naval:
+                x["from"] = derive.fmt(derive.date_of(last + 400))
+        late["phases"] = [{"id": "after", "enter": f"date>={derive.fmt(derive.date_of(last + 30))}"}]
+        late["force_posture"]["phases"].append({"phase": "after", "land": 100, "air": 0, "navy": 0})
+        f = self.assertHit(late, "production.cull", "error", "phase after gives navy 0%")
+        self.assertIn("ship_hull", f["message"])
+        self.assertNoHit(late, "production.cull", text="phase base gives navy 0%")
 
     def test_day0(self):
         f = self.assertHit(self.ita, "production.day0", "error", "production")

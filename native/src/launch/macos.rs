@@ -86,7 +86,6 @@ mod research;
 mod research_extras;
 mod resources;
 mod screenmap;
-mod script;
 mod settle;
 mod special_project_rules;
 mod special_projects;
@@ -114,6 +113,7 @@ use crate::{
         Process,
     },
     protocol::Commands,
+    script,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -276,6 +276,8 @@ pub struct MacClock {
     directory: std::path::PathBuf,
     daily: daily::Controller,
     keys: Arc<dyn GameInput>,
+    /// The pause watch on `keys`; every input lane brackets its actions with it.
+    pause: Arc<crate::pause_guard::Watch>,
     state: Arc<Mutex<Control>>,
     process: Arc<dyn Process + Send + Sync>,
 }
@@ -296,6 +298,12 @@ impl MacClock {
     ) -> Result<Self> {
         let config: Config = serde_json::from_slice(&std::fs::read(directory.join("input.json"))?)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
+        // Every key of every tool, the executor and the daily worker goes through the watch.
+        let pause = Arc::new(crate::pause_guard::Watch::for_process(process.clone()));
+        let keys: Arc<dyn GameInput> = Arc::new(crate::pause_guard::Watched::new(
+            Box::new(keys),
+            pause.clone(),
+        ));
         let qualification_clock_origin = Instant::now();
         let wall = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -366,6 +374,7 @@ impl MacClock {
             daily,
             directory: directory.to_path_buf(),
             keys,
+            pause,
             process,
             state: Arc::new(Mutex::new(Control {
                 authority: InputAuthority::new(config.controller, epoch.clone())?,
@@ -412,7 +421,7 @@ impl ClockBackend<'_> {
         };
         // An open focus tree's search box would take the key as text.
         let _ = panelkit::close_focus_tree(self.process, self.keys);
-        self.keys.press(key)?;
+        self.keys.press_clock(key)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
             let now = self.guard.observe(self.process)?;
@@ -627,6 +636,22 @@ impl MacClock {
 
 /// Every macOS tool descriptor (name, description, input schema); no session needed, so the
 /// catalogue can be listed offline (`hoi4-live-native --list-tools`).
+/// Where the running game's files are: the install, the content folder the readers use (the
+/// install, or the install with the enabled mods layered over it), and the DLCs the user
+/// folder switches off (None when its `dlc_load.json` cannot be read).
+pub(crate) struct GameContent {
+    pub install: std::path::PathBuf,
+    pub content: std::path::PathBuf,
+    pub disabled_dlcs: Option<Vec<String>>,
+}
+pub(crate) fn game_content(exe: &str) -> Result<GameContent> {
+    let install = mapdata::install_dir(exe)?;
+    Ok(GameContent {
+        content: modlayer::content_dir(&install, exe).unwrap_or_else(|| install.clone()),
+        disabled_dlcs: modlayer::disabled_dlcs(exe),
+        install,
+    })
+}
 pub fn mac_tool_list() -> Vec<Value> {
     vec![
         country_status::tool(),
@@ -678,13 +703,13 @@ pub fn mac_tool_list() -> Vec<Value> {
             {"properties":{"op":{"const":"renew"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","lease_token"],"additionalProperties":false},
             {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
             {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
-        json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... Province buildings (supply_node = supply hub, naval_base, bunker, coastal_bunker) are clicked on a province: pass province_id, or the tool tries the state's provinces nearest the centre in turn until the game accepts one (a supply hub needs a province the game allows, usually on a railway). Railways (rail_way) are not supported.","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":99999},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_politics_choose","description":"Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"idea":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["category","slot","idea","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (slots 0 tank, 1 naval, 2 aircraft and 3 materiel designer, 4 industrial concern, 5 theorist; with Arms Against Tyranny the designer slots hold Military Industrial Organizations: hoi4_mio_* tools) or military_staff (slots 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command). A slot index is the slot's position in its category, the order of the slot lines in the game's common/idea_tags (a mod can change it); an advisor is hired from a slot of its own kind, so a high command advisor needs slot 3, 4 or 5. Returns each idea key with the game's enabled state, the slot's current idea, and slots: every slot of the category with its index and what it holds now.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_politics_choose","description":"Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options (military_staff: 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command; research_production: 5 theorist); the idea must be one the slot offers, so use a slot of the idea's own kind.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"idea":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["category","slot","idea","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_decisions_list","description":"Open the decisions panel and list offered decisions (key, enabled by the game, whether a timer for it is running). Changes nothing.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_decision_take","description":"Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables. A targeted decision has one row per target: pass `target` (part of the row title as hoi4_decisions_list shows it, e.g. the target country's name) to pick that row.","inputSchema":{"type":"object","properties":{"decision":{"type":"string","maxLength":128},"target":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["decision","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
@@ -965,14 +990,15 @@ impl MacClock {
                     .unwrap_or(false)
             });
         // Real campaigns never pause: an action (not the clock tool, not the peace screens) that
-        // leaves the game newly paused is undone with the game's own pause key (Ethiopia run 11:
-        // the game stood paused for 100 s after a plan-runner tick with a focus and a front).
+        // changes the pause state through its own input gets the starting state put back (see
+        // pause_guard; Ethiopia run 11: the game stood paused for 100 s after a plan-runner
+        // tick with a focus and a front).
         let guard_pause = !journaled
             && arguments.get("request_id").is_some()
             && name != "hoi4_time"
             && !name.starts_with("hoi4_peace")
             && process.identity() == self.process.identity();
-        let was_paused = if guard_pause { self.paused_now() } else { None };
+        let scope = guard_pause.then(|| self.pause.begin());
         let menus_before = ui::menus_closed();
         let started = std::time::Instant::now();
         // A direct player order on an army takes it from the executor's war rules for a while.
@@ -1009,38 +1035,44 @@ impl MacClock {
         {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
-        // One context line per action for the run report: which actions leave the game paused
-        // (w24: pauses coincided with army creation and disbanding; cause unknown).
-        if guard_pause {
-            let after = self.paused_now();
-            eprintln!(
-                "[action] {}",
-                json!({"unix_ms": std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(0),
-                    "tool": name,
-                    "request_id": arguments.get("request_id"),
-                    "ms": started.elapsed().as_millis() as u64,
-                    "ok": result.is_ok(),
-                    "error": result.as_ref().err().map(|e| e.code),
-                    "paused_before": was_paused,
-                    "paused_after": after,
-                    "executor": crate::autopilot::autopilot().in_step()})
-            );
+        let Some(scope) = scope else {
+            return result;
+        };
+        let verdict = end_pause_scope(self.process.as_ref(), &*self.keys, scope, menus_before);
+        // One context line per action for the run report: which actions changed the pause
+        // state, whether the change was our own input and whether it was put back.
+        eprintln!(
+            "[action] {}",
+            json!({"unix_ms": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0),
+                "tool": name,
+                "request_id": arguments.get("request_id"),
+                "ms": started.elapsed().as_millis() as u64,
+                "ok": result.is_ok(),
+                "error": result.as_ref().err().map(|e| e.code),
+                "paused_before": verdict.before,
+                "paused_after": verdict.after,
+                "self_pause": verdict.ours,
+                "restored": verdict.restored,
+                "executor": crate::autopilot::autopilot().in_step()})
+        );
+        if !verdict.ours {
+            return result;
         }
-        if was_paused == Some(false) {
-            // Undo only a pause our own input caused: the game menu (a stray Escape) pauses the
-            // game and closing it leaves it paused (w11). A pause without the menu came from the
-            // player or a multiplayer host and stays (live 8 Nov 2026: a pause given while an
-            // executor step ran was undone).
-            let menu = ui::menu_shown(self.process.as_ref());
-            let _ = ui::close_menu(self.process.as_ref(), &*self.keys);
-            if (menu || ui::menus_closed() != menus_before) && self.paused_now() == Some(true) {
-                let _ = self.keys.press(Key::Pause);
+        // The caller sees it too: a pause of ours is a defect to count even when undone.
+        result.map(|mut value| {
+            if let Some(object) = value.as_object_mut() {
+                object.insert(
+                    "pause_guard".into(),
+                    json!({"changed_by_own_input": true,
+                        "paused_before": verdict.before,
+                        "restored": verdict.restored}),
+                );
             }
-        }
-        result
+            value
+        })
     }
     /// Role bindings the executor keeps (plan_state.json `layout` next to plan.json) and the
     /// role names of the plan (`army_layout`); empty without a plan.
@@ -1094,14 +1126,6 @@ impl MacClock {
     /// mode with the diplomacy panel open and every army order failed until both were cleared
     /// by hand (Ethiopia run 10). F1 is the game's own political map-mode key.
     /// The game's paused flag, read like the clock tool reads it (None when unreadable).
-    fn paused_now(&self) -> Option<bool> {
-        let mut control = self.state.lock().ok()?;
-        control
-            .guard
-            .observe(self.process.as_ref())
-            .ok()
-            .map(|s| s.paused)
-    }
     fn army_screen_ready(&self, process: &dyn Process, name: &str, leased: bool) -> Result<()> {
         // Input (panel closing, F1) only for actions: a lease-free read such as
         // hoi4_army_assign_plan runs on the read lane, beside an action, and must send nothing.
@@ -1116,6 +1140,30 @@ impl MacClock {
         std::thread::sleep(std::time::Duration::from_millis(150));
         Ok(())
     }
+}
+/// Close one action's pause bracket for any input lane. The game menu is closed first (an
+/// Escape with nothing left to close opens it; it pauses the game and closing it leaves the
+/// game paused), then a pause state our own input changed is put back with the game's own
+/// pause key. A pause by the player or a multiplayer host stays.
+pub(super) fn end_pause_scope(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    scope: crate::pause_guard::Scope<'_>,
+    menus_before: u64,
+) -> crate::pause_guard::Verdict {
+    // A key sent as the action's last input has had its effect before the menu is looked for.
+    scope.settle();
+    let menu = ui::menu_shown(process);
+    let _ = ui::close_menu(process, keys);
+    scope.end(menu || ui::menus_closed() != menus_before, &mut |attempt| {
+        // An open focus tree's search box would take the pause key as text.
+        let _ = panelkit::close_focus_tree(process, keys);
+        if attempt > 0 {
+            // The first key changed nothing: a text box of an open panel may hold the keyboard.
+            let _ = panelkit::close_panels(process, keys);
+        }
+        keys.press_clock(Key::Pause)
+    })
 }
 /// Army names are checked before anything is journaled: a typo used to become an uncertain
 /// dispatch that blocked every later action (seen live: "Army 1 1 ").
@@ -1580,6 +1628,13 @@ impl MacClock {
         }
         let mut state = crate::daily_worker::input_state(&self.state, || self.daily.input_check())?;
         if input_gate::applies(name, args) {
+            if state.journal.blocks_game(&state.guard.epoch.game) {
+                // A clock request left open (the game was unreadable when it ran, or a server
+                // stopped mid-key) settles from one fresh read before it can block anything.
+                let Control { guard, journal, .. } = &mut *state;
+                let epoch = guard.epoch.clone();
+                let _ = journal.settle_open(&epoch, &mut || guard.observe(process));
+            }
             input_gate::check_in(
                 &state.journal,
                 &state.actions,
@@ -3200,7 +3255,8 @@ impl MacClock {
                     (None, true) => {
                         journal::Outcome::Unchanged(json!({"note": "refused before any click"}))
                     }
-                    (None, false) => journal::Outcome::Unknown,
+                    // Only this dispatch's own result says what happened to the order.
+                    (None, false) => journal::Outcome::Unobservable,
                 })
             };
             let keys = &self.keys;
@@ -5623,9 +5679,10 @@ impl MacClock {
             let before = politics::current(process, category, index)?;
             if !choosing {
                 self.keys.preflight()?;
+                let slots = politics::slots(process, category)?;
                 let options = politics::list(process, &self.keys, category, index)?;
                 return Ok(
-                    json!({"category":category,"slot":index,"current":before,"options":options}),
+                    json!({"category":category,"slot":index,"current":before,"options":options,"slots":slots}),
                 );
             }
             let idea = string(args, "idea")?;
@@ -5764,9 +5821,11 @@ impl MacClock {
                 expected: &expected,
                 authority,
                 token,
-                // A cold focus tree needs ~3 s before the pan stage (live: 5 s expired mid-pan,
-                // leaving an unsettleable Dispatching intent); fixed up front, never extended later.
-                until: (Instant::now() + Duration::from_secs(12)).min(lease_end),
+                // Fixed up front, never extended later. The budget covers what the action is
+                // built to do: a cold tree needs ~3 s before the pan stage and the pan loop may
+                // take its full twelve drags at about 1.2 s each (live: 12 s expired at the tenth
+                // drag of a node that was still coming closer, so far nodes could never start).
+                until: (Instant::now() + focus::START_BUDGET).min(lease_end),
                 stop: None,
             };
             let check_input = || fence.input_check();

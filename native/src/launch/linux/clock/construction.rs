@@ -46,7 +46,7 @@ impl Service {
 }
 pub(super) fn tool() -> Value {
     json!({"name":"hoi4_construction_attempt",
-        "description":"Preview: ensure the own construction panel is open, select one canonical ordinary building type, or use the game's own map Find view (find_open presses its f shortcut, find_query types an own state ID, find_activate presses Return to centre the camera on the verified first state row), or place: with the building selected and the camera centred on the own state, one left click at the client centre to reach the requested total queued amount of that building in that state. Already-matching state is a no-op. At most one ordinary input per durable request, verified by own canonical readback. Requires the owned profile and exclusive lease. Unknown outcomes block all input; never replay uncertain requests. The server derives every key and point itself; no caller coordinates or engine calls. Run086 accepted the Find stages and Run091 accepted place for a state building live; provincial placement is not yet live-tested.",
+        "description":"Preview: ensure the own construction panel is open, select one canonical ordinary building type, or use the game's own map Find view (find_open presses its f shortcut, find_query types an own state ID, find_activate presses Return to centre the camera on the verified first state row), or place: with the building selected and the camera centred on the own state, one left click at the client centre to reach the requested total queued amount of that building in that state. Already-matching state is a no-op. At most one ordinary input per durable request, verified by own canonical readback. Requires the owned profile and exclusive lease. A request whose effect is not observed is closed (action_unconfirmed): never replayed and it blocks nothing; read the state again before a fresh request. The server derives every key and point itself; no caller coordinates or engine calls. Run086 accepted the Find stages and Run091 accepted place for a state building live; provincial placement is not yet live-tested.",
         "inputSchema":{"type":"object","properties":{
             "stage":{"enum":["ensure_open","select_building","find_open","find_query","find_activate","place"]},
             "amount":{"type":"integer","minimum":1,"maximum":1000},
@@ -357,20 +357,12 @@ fn check_scope(expected: &observation::Scope, actual: &observation::Scope) -> Re
 }
 impl stage::Backend for ConstructionBackend<'_> {
     type Scope = observation::Scope;
+    /// The read after possible input. It sends nothing, and the journal bounds how long it
+    /// keeps observing (to the action's deadline or its settlement window, whichever ends
+    /// later), so it is not fenced by the action's own deadline: a read refused on an expired
+    /// deadline could never settle the action that ran out of time.
     fn observe(&mut self, target: &stage::Target) -> Result<stage::Observation<Self::Scope>> {
-        if Instant::now() >= self.until {
-            return Err(Error::new(
-                "construction_deadline",
-                "Original construction deadline ended",
-            ));
-        }
         let (_, state) = observed(self.process, self.guard, target)?;
-        if Instant::now() >= self.until {
-            return Err(Error::new(
-                "construction_deadline",
-                "Original construction observation deadline ended",
-            ));
-        }
         Ok(state)
     }
     fn observe_before_input(
@@ -566,7 +558,7 @@ impl stage::Backend for ConstructionBackend<'_> {
         original: &stage::Candidate<Self::Scope>,
         deadline: Instant,
     ) -> Result<()> {
-        let deadline = deadline.min(self.until);
+        // Read-only, bounded by the journal's observation end (not the action's deadline).
         match &original.input {
             stage::Input::Point(point) => {
                 let _probe = self.controls.prepare_left_click_until(

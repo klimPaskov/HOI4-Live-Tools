@@ -44,6 +44,13 @@ class ItalyEthiopia1936(unittest.TestCase):
         self.assertEqual(mod["value"], -0.15)
         self.assertEqual([(t["limit"], t["vp_needed"]) for t in vp["thresholds"]], [(0.8, 26), (0.65, 21)])
         self.assertIn("limit 0.8 -> 26 VP", self.md)
+        # Ethiopia starts at war support 30%: the low-war-support modifier brings the limit to 0.68
+        # there and to 0.5 (16 VP) at zero
+        ws = vp["war_support"]
+        self.assertEqual((ws["start"], ws["full_malus"]), (0.3, -0.3))
+        self.assertEqual((ws["at_start"]["limit"], ws["at_start"]["vp_needed"]), (0.68, 22))
+        self.assertEqual((ws["at_zero"]["limit"], ws["at_zero"]["vp_needed"]), (0.5, 16))
+        self.assertIn("war support 0% (the floor): limit 0.5 -> 16 VP", self.md)
 
     def test_four_east_african_hubs(self):
         th = self.d["theatres"][0]

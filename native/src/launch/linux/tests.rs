@@ -483,13 +483,15 @@ fn reconnects_and_failed_clients_preserve_one_owned_child() {
     let binary = std::env::var_os("HOI4_NATIVE_FIXTURE_BINARY")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            std::env::current_exe()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("hoi4-live-native")
+            // Where Cargo puts a test executable under target/<profile>/ depends on its
+            // version (deps/ before, build/<package>/<hash>/out/ since 1.100): take the
+            // CLI from the nearest directory above that holds it.
+            let test = std::env::current_exe().unwrap();
+            test.ancestors()
+                .skip(1)
+                .map(|directory| directory.join("hoi4-live-native"))
+                .find(|candidate| candidate.is_file())
+                .unwrap_or_else(|| test.with_file_name("hoi4-live-native"))
         });
     assert!(
         binary.is_file(),
