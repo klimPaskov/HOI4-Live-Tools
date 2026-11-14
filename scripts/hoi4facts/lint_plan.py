@@ -23,6 +23,17 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   focus.exclusive          two mutually exclusive focuses in focus_path / focus_fallback
   focus.order              a focus planned before its prerequisites (timeline from the focus costs)
   focus.gates              (info) focuses with a runtime `available` gate, with the planned start
+  focus.available          a listed focus (focus_path, focus_fallback) that can never start before the plan
+                           horizon under the plan's own conditions: its `available` trigger, prerequisites
+                           or exclusions read from the game files against the plan's date, war state (the
+                           start wars until the planned capitulation), completed focuses and start flags
+  focus.idle               the focus slot has nothing it can start for more than 7 days (every listed
+                           focus is blocked then, e.g. the fallbacks all need peace while the plan is at
+                           war), or the lists run out more than 30 days before the horizon
+  focus.unconfirmed        (warning) the slot rests on a focus whose gate cannot be decided from the plan
+                           (ownership, control, variables) while no focus that is certainly available is
+                           listed for that time; or a listed focus waits for a prerequisite only the game
+                           completes by script
   construction.front       factory in a state within K province steps of an enemy-held province
   construction.infrastructure  factory in a state with infrastructure <= 2 and no infrastructure
                            queued before it there
@@ -192,7 +203,7 @@ from collections import Counter, defaultdict, deque
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from hoi4facts import calc as calcmod  # noqa: E402
-    from hoi4facts import content, derive, mapgraph, schema_check  # noqa: E402
+    from hoi4facts import content, derive, mapgraph, plan_gates, schema_check  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
     from hoi4facts.validate import (Report, ctx_of, load_schema, parse_predicate, parse_when,  # noqa: E402
@@ -202,7 +213,7 @@ if __package__ in (None, ""):
     from hoi4facts.validate import _world as world_of  # noqa: E402
 else:
     from . import calc as calcmod
-    from . import content, derive, mapgraph, schema_check
+    from . import content, derive, mapgraph, plan_gates, schema_check
     from . import tech as techrule
     from .game import Game
     from .validate import (Report, ctx_of, load_schema, parse_predicate, parse_when, predicate_dates,
@@ -216,6 +227,8 @@ MAX_STRIKE = 24
 LOW_INFRA = 2
 MAX_RIVERS = 2
 POSTURE_POINTS = 15        # posture.shares: percentage points a production share may differ
+FOCUS_IDLE_DAYS = 7        # focus.idle: days the focus slot may stand empty between two focuses
+FOCUS_END_SLACK = 30       # focus.idle: days before the horizon the focus lists may run out
 HUB_COST = 15000           # construction.hub_cost: base_cost from which a building counts as a hub-sized job
 HUB_DAYS = 120             # construction.hub_cost: warning above this many days
 HUB_STEPS = 3              # construction.hub_cost: steps to a hub or coastal province that could serve instead
@@ -248,6 +261,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
              "peace.order", "construction.railway_node", "supply.axis_reach"}
+NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -545,6 +559,94 @@ class Lint:
             t += dur
             done.add(k)
         self.facts["focus"] = {"tree": tid, "timeline": timeline}
+        self.focus_slot(path, fallback, tree, fmeta, days_per)
+
+    def war_window(self):
+        """(first day at war or None, day the plan expects the war over or None, enemy tags) from the plan:
+        at war from the start when the history starts a war, until the last vp target date (else the goal
+        deadline); a country at peace at the start gives no dates (when its wars begin is not in the plan,
+        so war-dependent gates stay undecided)."""
+        start = derive.day(self.start)
+        at_start = set(self.world.at_war_with(self.tag)) if self.tag else set()
+        enemies = at_start | set(self.enemies())
+        if not at_start:
+            return None, None, enemies
+        ends = [derive.day(e["by"]) for e in self.targets() if e.get("by") and derive.day(e["by"]) is not None]
+        end = max(ends) if ends else (derive.day(self.goal["deadline"]) if self.goal.get("deadline") else None)
+        return start, end, enemies
+
+    def focus_slot(self, path, fallback, tree, fmeta, days_per):
+        """focus.available, focus.idle, focus.unconfirmed: the focus slot walked through the plan's own
+        conditions (plan_gates.focus_schedule)."""
+        if not self.tag or not tree:
+            return
+        start = derive.day(self.start)
+        ends = [d for d, _ in self.horizon()]
+        horizon = max(ends) if ends else start + 365
+        war_start, war_end, enemies = self.war_window()
+        flags = self.world.start_global_flags() | {f["v"] for f in self.world.country(self.tag)["flags"] if f.get("v")}
+        dlcs = self.ctx.dlcs if self.ctx else ()
+        own = set(derive.tag_states(self.game, self.ctx, self.tag, self.start))
+
+        def facts_at(day, done):
+            if war_start is not None:
+                war = war_end is None or day < war_end
+                # what the history sets at the start is taken to last while the starting war lasts
+                held = flags if war else set()
+            else:
+                # a country at peace at the start can be drawn into a war the plan does not date
+                war, held = None, (flags if day == start else set())
+            return plan_gates.Facts(self.tag, dlcs, derive.fmt(derive.date_of(day)), war,
+                                    enemies if war else (), done, held, own)
+
+        changes = [d for d in (war_start, war_end) if d is not None]
+        sched = plan_gates.focus_schedule(path, fallback, tree, fmeta, days_per, start, horizon, facts_at,
+                                          self.meta.get("completed_focuses", []), changes)
+        day = lambda d: derive.fmt(derive.date_of(int(d)))  # noqa: E731
+        self.facts["focus"]["schedule"] = [dict(r, start=day(r["start"]), end=day(r["end"])) for r in sched["rows"]]
+        self.facts["focus"]["idle"] = [dict(g, **{"from": day(g["from"]), "to": day(g["to"])}) for g in sched["idle"]]
+        for n in sched["never"]:
+            where = f"focus_{n['list']}"
+            self.add("error", "focus.available", where,
+                     f"{n['focus']} cannot start before the plan horizon {day(horizon)} under the plan's own "
+                     f"conditions ({n['why']}): take it out or list it where its gate holds")
+        for n in sched["waiting"]:
+            self.add("warning", "focus.unconfirmed", f"focus_{n['list']}",
+                     f"{n['focus']} waits for {' or '.join(n['on'])}, which only the game completes (by script, "
+                     f"e.g. when a war is won): the plan cannot tell when, so it is no cover for the focus slot "
+                     f"until then")
+        for g in sched["idle"]:
+            days = int(g["to"] - g["from"])
+            if g["exhausted"]:
+                if days > FOCUS_END_SLACK:
+                    self.add("error", "focus.idle", "focus_path",
+                             f"the focus lists run out on {day(g['from'])}, {days} days before the plan horizon "
+                             f"{day(horizon)}: list focuses to keep the slot busy until then")
+                continue
+            if days <= FOCUS_IDLE_DAYS:
+                continue
+            at_war = war_start is not None and (war_end is None or g["from"] < war_end)
+            why = "; ".join(f"{b['focus']}: {b['why']}" for b in g["blocked"][:6])
+            self.add("error", "focus.idle", "focus_fallback" if fallback else "focus_path",
+                     f"the focus slot is idle from {day(g['from'])} to {day(g['to'])} ({days} days"
+                     f"{', while at war' if at_war else ''}): no listed focus can start then ({why}); list focuses "
+                     f"whose prerequisites and `available` gate hold in that time")
+        certain = {r["focus"] for r in sched["rows"] if r["gate"] is True}
+        for r in sched["rows"]:
+            if r["gate"] is None and not self.certain_alternative(r, path, fallback, tree, fmeta, certain):
+                gate = derive.render(fmeta[r["focus"]]["available"])[:200]
+                self.add("warning", "focus.unconfirmed", f"focus_{r['from']}",
+                         f"from {day(r['start'])} the focus slot rests on {r['focus']}, whose gate the plan cannot "
+                         f"confirm ({gate}), and no focus without a gate is listed after it: when the gate is "
+                         f"closed in the game the slot idles; list one that is certainly available as a fallback")
+
+    @staticmethod
+    def certain_alternative(row, path, fallback, tree, fmeta, certain):
+        """A listed focus with no `available` gate that is scheduled after `row` starts (so the slot has
+        something to fall to when the uncertain gate is closed)."""
+        listed = path + fallback
+        later = listed[listed.index(row["focus"]) + 1:] if row["focus"] in listed else []
+        return any(k in tree and not (fmeta.get(k) or {}).get("available") for k in later)
 
     # ------------------------------------------------------------------ construction
     def construction_lists(self):
