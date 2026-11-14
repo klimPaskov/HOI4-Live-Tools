@@ -62,6 +62,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            fully-controlled state left out)
   conquest.adjacency       target (or the first province of its path) not next to own land or an
                            earlier target; path provinces not touching
+  conquest.neutral_land    a vp target or path province in the land of a country the plan neither fights nor
+                           is allied to at the start (no unit crosses a neutral border); warning when a plan
+                           predicate names that country gone, beaten or at war (the leg waits for it)
   conquest.rivers          (warning) more than 2 river crossings on one leg
   conquest.by_order        (warning) `by` dates going backwards for one army
   conquest.skipped_near    (warning) an enemy VP province next to own land or a planned target is never
@@ -241,7 +244,7 @@ WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at 
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
-             "predicates.unreadable",
+             "predicates.unreadable", "conquest.neutral_land",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
@@ -320,6 +323,36 @@ class Lint:
                     out.add(m.group(2))
         out.discard(self.tag)
         return sorted(out)
+
+    def passable_tags(self):
+        """Tags whose land the plan's units may enter: own, friends, access givers and enemies (the start
+        wars plus the plan's); None without a tag."""
+        if not self.tag:
+            return None
+        if getattr(self, "_passable", None) is None:
+            self._passable = set(self.world.land_access(self.tag, self.enemies())["tags"])
+        return self._passable
+
+    def predicate_tags(self):
+        """Tags a predicate anywhere in the plan names as gone, beaten or at war (not_exists, capitulated,
+        at_war_with): land that opens later in the campaign."""
+        out = set()
+
+        def walk(node):
+            if isinstance(node, dict):
+                for v in node.values():
+                    walk(v)
+            elif isinstance(node, list):
+                for v in node:
+                    walk(v)
+            elif isinstance(node, str):
+                m = _PRED_TAG.match(node)
+                if m and m.group(1) in ("capitulated", "not_exists", "at_war_with"):
+                    out.add(m.group(2))
+
+        walk(self.plan)
+        out.discard(self.tag)
+        return out
 
     def start_control(self):
         return self.game.cached(f"lint:startctl:{self.tag}:{self.start}",
@@ -1091,10 +1124,24 @@ class Lint:
                              f"state {sid} must be fully controlled; provinces {', '.join(map(str, left))} are on no target or path")
         graph = game.map_graph()
         last_by = {}
+        open_tags = self.passable_tags()
+        later = self.predicate_tags()
         for i, e, leg, problems in self.legs():
             where = f"vp_targets[{i}] {e['province']}"
             for msg in problems:
                 self.add("error", "conquest.adjacency", where, msg)
+            neutral = defaultdict(list)
+            for p in dict.fromkeys((leg or []) + self.captures(e)):
+                o = owners.get(pstate.get(p))
+                if open_tags is not None and o and o not in open_tags:
+                    neutral[o].append(p)
+            for o, ps in sorted(neutral.items()):
+                self.add("warning" if o in later else "error", "conquest.neutral_land", where,
+                         f"the leg crosses {o}'s land ({' '.join(map(str, ps))}), which {self.tag} neither fights "
+                         f"nor is allied to at the start: no unit crosses a neutral border"
+                         + (f"; a plan predicate names {o}, so the leg must wait for it" if o in later else
+                            f"; route around it (facts route keeps to open land), or name {o} in war.enemies or in "
+                            f"the predicate (not_exists:{o}, capitulated:{o}, at_war_with:{o}) that opens its land"))
             if leg and graph is not None:
                 try:
                     n = len(derive_crossings(graph, leg))
@@ -1308,6 +1355,9 @@ class Lint:
             return
         gstates = graph.get("states", {})
         start_ctl = set(self.start_control())
+        # supply runs over land the country may enter, never across a neutral border
+        open_tags, own = self.passable_tags(), self.world.owner_of_province
+        can_enter = (lambda p: own(p) is None or own(p) in open_tags) if open_tags is not None else None
         wars = [("war", self.war)] + [(f"war_by_phase.{k}", p) for k, p in
                                       sorted((self.plan.get("war_by_phase") or {}).items()) if isinstance(p, dict)]
         # a phase can carry its own axes in overrides.war; those advances need supply as much as the base ones
@@ -1335,7 +1385,7 @@ class Lint:
                     else:
                         near = derive.distances(game, [target], REACH_STEPS)
                         for d, q in sorted((d, q) for q, d in near.items() if q in held)[:REACH_SOURCES]:
-                            r = mapgraph.route(graph, q, target)
+                            r = mapgraph.route(graph, q, target, allowed=can_enter)
                             if not r:
                                 continue
                             kind = "hub" if held[q] == "planned" else held[q]
