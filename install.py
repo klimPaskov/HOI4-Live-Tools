@@ -606,8 +606,7 @@ def write_command(prefix):
         text = ("@echo off\r\nrem HOI4 Live Tools command, written by install.py: doctor, update, uninstall, status\r\n"
                 "setlocal\r\nset \"HOI4_LIVE_COMMAND=1\"\r\n"
                 f"set \"PY={sys.executable}\"\r\nif not exist \"%PY%\" set \"PY=python\"\r\n"
-                # One line: after an uninstall this file is gone and nothing more may be read from it.
-                f"\"%PY%\" \"{script}\" --prefix \"{prefix}\" %* & exit /b\r\n")
+                f"\"%PY%\" \"{script}\" --prefix \"{prefix}\" %*\r\n")
     else:
         def quote(value):
             return "'" + value.replace("'", "'\\''") + "'"
@@ -663,7 +662,7 @@ def link_command(prefix, home=None):
             os.remove(link)
         if system() == "win32":
             with open(link, "w", encoding="utf-8", newline="") as f:
-                f.write(f"@echo off\r\n{LINK_MARK}\r\n\"{command_path(prefix)}\" %* & exit /b\r\n")
+                f.write(f"@echo off\r\n{LINK_MARK}\r\n\"{command_path(prefix)}\" %*\r\n")
         else:
             os.symlink(command_path(prefix), link)
     except OSError as exc:
@@ -1097,6 +1096,16 @@ def cmd_unregister(args, out):
     return EXIT_REGISTRATION if registration_problems(results) else EXIT_OK
 
 
+def remove_after_exit(path, folder):
+    """Windows: delete the running command file, then its folder when empty, a moment after this process ends."""
+    line = f'cmd /c "ping -n 3 127.0.0.1 >nul & del /q "{path}" & rmdir "{folder}""'
+    try:
+        subprocess.Popen(line, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=0x00000008 | 0x00000200, close_fds=True)   # detached, own process group
+    except OSError:
+        pass
+
+
 def cmd_uninstall(args, out):
     prefix = os.path.abspath(args.prefix or default_prefix())
     results = unregister_clients(list(CLIENTS), args.home)
@@ -1108,17 +1117,24 @@ def cmd_uninstall(args, out):
         out.info(f"removed {link}")
     for name in ("app", "app.new", "app.old", "venv", "native", "native.new", "native.old"):
         shutil.rmtree(os.path.join(prefix, name), ignore_errors=True)
+    # On Windows the command file that started this uninstall is still being read by the command prompt.
+    running = COMMAND + ".cmd" if system() == "win32" and os.environ.get("HOI4_LIVE_COMMAND") else None
     for name in ("install.json", COMMAND, COMMAND + ".cmd") + (("config.json",) if args.purge else ()):
+        if name == running:
+            continue
         try:
             os.remove(os.path.join(prefix, name))
         except OSError:
             pass
     if args.purge:
         shutil.rmtree(os.path.join(prefix, "artifacts"), ignore_errors=True)
-    try:
-        os.rmdir(prefix)
-    except OSError:
-        pass
+    if running:
+        remove_after_exit(os.path.join(prefix, running), prefix)
+    else:
+        try:
+            os.rmdir(prefix)
+        except OSError:
+            pass
     left = [name for name in ("app", "venv", "native") if os.path.exists(os.path.join(prefix, name))]
     if left:
         out.warn(f"could not remove {', '.join(left)} in {prefix}; close the programs that use them and retry")

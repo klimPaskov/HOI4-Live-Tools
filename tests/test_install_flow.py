@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
 import zipfile
 from unittest import mock
@@ -292,7 +293,6 @@ class CommandTests(Sandbox):
         self.assertIn(sys.executable, text)
         if os.name == "nt":
             self.assertTrue(path.endswith("hoi4-live.cmd"))
-            self.assertTrue(text.rstrip().endswith("& exit /b"))
         else:
             self.assertTrue(os.access(path, os.X_OK))
 
@@ -473,6 +473,12 @@ class StandaloneTests(Sandbox):
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertFalse(os.path.exists(os.path.join(self.prefix, "app")))
+        # Windows removes the command file that was running a moment after it ends.
+        for _ in range(100):
+            if not os.path.exists(command):
+                break
+            time.sleep(0.1)
+        self.assertFalse(os.path.exists(command))
 
     def one_liner(self):
         if os.name == "nt":
