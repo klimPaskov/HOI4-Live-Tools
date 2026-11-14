@@ -1884,6 +1884,81 @@
       "x-owner": "executor",
       "description": "hold posts (plan_military.rs, W1-15): while `when` holds and until `until` holds, the army's post is the most forward listed province the player controls; it moves there (hoi4_army_move with province_id) and follows as the corridor grows. It replaces the guard post army_layout gave that army"
     },
+    "defense_lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "army": {
+            "type": "string",
+            "minLength": 1,
+            "description": "army name or army_layout name_hint"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fallback",
+              "area_defense"
+            ],
+            "description": "fallback: a fallback line drawn through `states` that the army mans and digs in on (battle-plan toolbar, key C); area_defense: the army spreads over `states` and covers what `settings` names (key V)"
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/state_id"
+            },
+            "minItems": 1,
+            "description": "own state ids the line runs through or the area covers"
+          },
+          "settings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "victory_points",
+                "ports",
+                "coastlines",
+                "airbases",
+                "borders",
+                "forts",
+                "rail",
+                "facility"
+              ]
+            },
+            "uniqueItems": true,
+            "description": "area_defense only: the toggles of the order's settings window to switch on (none: the game's default)"
+          },
+          "when": {
+            "$ref": "#/definitions/predicate"
+          },
+          "until": {
+            "$ref": "#/definitions/predicate",
+            "description": "the order is deleted once this holds"
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "army",
+          "kind",
+          "states"
+        ]
+      },
+      "x-owner": "executor",
+      "x-executor-planned": "gap register orders.defensive_lines",
+      "description": "defensive orders (plan_seams.rs): once `when` holds and the army exists, a fallback line or area defence order for it (battle-plan toolbar), deleted once `until` holds. The tools for those orders are not built yet: the executor sends nothing and the digest (`seams`) says what waits; list the army in war.reserve (lint orders.defense_reserve) so the war step does not drive it"
+    },
     "retake_rules": {
       "type": "array",
       "items": {

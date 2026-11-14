@@ -753,6 +753,20 @@ class TacticsRules(unittest.TestCase):
         plan.update(copy.deepcopy(changes))
         return plan
 
+    def test_defense_lines_need_the_army_out_of_the_war_step(self):
+        line = {"id": "v", "army": "Armata del Nord", "kind": "fallback", "states": [842]}
+        plan = self.plan(defense_lines=[line])
+        plan.setdefault("war", {})["reserve"] = []
+        self.assertHit(plan, "orders.defense_reserve", "warning", "not in war.reserve")
+        plan["war"]["reserve"] = ["Armata del Nord"]
+        self.assertNoHit(plan, "orders.defense_reserve")
+        plan["defense_lines"][0]["settings"] = ["ports"]
+        self.assertHit(plan, "orders.defense_reserve", "warning", "ignores them")
+        plan["defense_lines"][0]["kind"] = "area_defense"
+        self.assertNoHit(plan, "orders.defense_reserve")
+        # the plan key relies on a lever no tool carries yet: the gap shows in the lint
+        self.assertTrue(self.hits(plan, "gap.blocked", "warning", "defense_lines"))
+
     # -------------------------------------------------------------- capitulation aim and vp selection
     SK_TARGETS = [  # the 1114e pass-2 strategist list: every target in the order the plan took them, 26 VP
         (13238, 842), (13237, 842), (12812, 835), (2072, 842), (5097, 843), (1984, 841), (7980, 835), (5010, 271),

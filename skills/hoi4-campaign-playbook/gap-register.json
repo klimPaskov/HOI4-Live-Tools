@@ -4649,13 +4649,20 @@
     "war-air-naval-peace.md#OP32",
     "war-air-naval-peace.md#4. Defensive lines and reserves"
    ],
-   "plan": [],
+   "plan": [
+    "defense_lines",
+    "defense_lines[].kind",
+    "defense_lines[].states",
+    "defense_lines[].settings",
+    "defense_lines[].until"
+   ],
    "tools": [],
    "payoff": "high",
    "why": "Poland and China survive only on fallback lines; area defence lets one general hold 72 divisions",
    "closing": "both",
-   "owner": "build fallback-line and area-defence orders (battle-plan toolbar) plus delete-orders; plan keys for them",
-   "priority": 8
+   "owner": "offline done: plan key defense_lines (executor, plan_seams.rs: when/until, army by name or layout role, digest says what waits), lint orders.defense_reserve, tests; live: build hoi4_army_fallback {army,states}, hoi4_army_area_defense {army,states,settings?}, hoi4_army_orders_delete {army,order} with receipts (battleplantools.gui btn_order_draw_fallback / btn_area_defense + battleplantools_area_defense_config_window / btn_order_delete), add them to RECEIPT_TOOLS, live-verify on Poland 1939",
+   "priority": 8,
+   "blocked": "no tool draws a fallback line, gives an area defence order or deletes an order: defense_lines is read by the executor (plan_seams.rs), which sends nothing until hoi4_army_fallback, hoi4_army_area_defense and hoi4_army_orders_delete are built"
   },
   {
    "id": "orders.spearhead_exec_mode",
