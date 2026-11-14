@@ -87,9 +87,13 @@ def start_path(system, facts, items):
 def client_prompt(plan, goal, run, app):
     """The one instruction to give the coding client that has the hoi4-live tools."""
     guide = plan["guide"] or plan["path"]
+    year = str(plan["start"] or "1936")[:4]
     return (f"Play Hearts of Iron IV as {plan['name']} ({plan['tag']}) with the hoi4-live tools. Goal: {goal}. "
-            f"Start the game with hoi4_launch {{\"prepare_dlc\": true}}, then hoi4_new_game for the 1936 start as "
-            f"{plan['name']}. Rules: {plan['mode'].upper()} mode of the campaign playbook at "
+            f"Start the game with hoi4_launch {{\"prepare_dlc\": true}}. If {plan['name']} is one of the countries "
+            f"the Select Country screen lists by name, start it with hoi4_new_game {{\"bookmark\": \"{year}\", "
+            f"\"country\": \"<its name as that screen shows it>\"}}; otherwise open the {year} scenario's Select "
+            f"Country screen with hoi4_screen and hoi4_click, click {plan['name']} on the map, check that the panel "
+            f"names it, then Select Country and START. Rules: {plan['mode'].upper()} mode of the campaign playbook at "
             f"{os.path.join(app, PLAYBOOK, 'SKILL.md')}: Normal difficulty, historical AI, no console, no save "
             f"editing, no reloads. Follow the plan notes at {guide}; the run folder is {run}. Keep the game running "
             "while you act and stop at " + str(plan["stop"] or "the goal") + " or when the goal is reached.")

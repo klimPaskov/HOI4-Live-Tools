@@ -72,7 +72,9 @@ class PlayTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(run, "plan.json")))
         with open(os.path.join(run, "prompt.txt"), encoding="utf-8") as f:
             prompt = f.read()
-        for word in ("Italy (ITA)", "conquer Ethiopia before 1937", "hoi4_launch", "hoi4_new_game", "FAIR", run):
+        # A country the Select Country screen does not list by name is clicked on the map: no name list is assumed.
+        for word in ("Italy (ITA)", "conquer Ethiopia before 1937", "hoi4_launch", "hoi4_new_game", "FAIR", run,
+                     '"bookmark": "1936"', "click Italy on the map"):
             self.assertIn(word, prompt)
         self.assertIn(prompt.strip(), text)
         self.assertIn("no Windows adapter yet", text)
