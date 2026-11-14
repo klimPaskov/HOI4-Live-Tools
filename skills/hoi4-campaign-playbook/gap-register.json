@@ -1278,11 +1278,10 @@
    "tools": [
     "hoi4_peace_take"
    ],
-   "blocked": "peace.puppet takes state ids only; a tag in puppet is noted, not taken",
    "payoff": "high",
    "why": "cheap control of land and manpower when points are short",
    "closing": "live",
-   "owner": "live puppet:true demand in a conference"
+   "owner": "offline done: a country tag in peace.puppet (take, liberate) expands to the states it owns and is demanded state by state; live: puppet a whole country in a conference (bed C) and check the puppet exists afterwards"
   },
   {
    "id": "puppets.puppet_war_goal",

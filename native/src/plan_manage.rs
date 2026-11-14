@@ -53,8 +53,11 @@
 //!                    other lists), hoi4_peace_submit when the round's points are spent, hoi4_peace_exit
 //!                    when nothing is left (or after 5 idle ticks with states still wanted, or after
 //!                    `max_rounds`). Without `peace` the runner stops as before and wakes the player;
-//!                    20 idle ticks, or an order the ledger refuses, stop and wake too. A tag in
-//!                    `puppet` is noted (the tool takes state ids)
+//!                    20 idle ticks, or an order the ledger refuses, stop and wake too. A country
+//!                    tag in any list stands for the states it owns (hoi4_states {query: TAG}), in
+//!                    the read's order, after the ids listed before it: the conference demands
+//!                    state by state, and a puppet demand on all of a country's states puppets the
+//!                    whole country. A state already wanted by an earlier list keeps that kind
 //!   auto_import      {"budget":N,"enabled"?:true} (or N, or true): every 7 game days a resource deficit
 //!                    on a line (hoi4_production_shortages; lines matching production_priority when it
 //!                    is set; else hoi4_resources shortages) turns automatic importing on with the
@@ -180,6 +183,26 @@ struct Conference {
 /// Ticks of waiting with states still wanted before the runner exits the conference; four
 /// times as many with nothing usable at all stop the runner and wake the player.
 const PEACE_PATIENCE: u32 = 5;
+
+/// The states `tag` owns (hoi4_states {query: tag}), None when unreadable or not a tag.
+fn tag_states(tools: &dyn Tools, tag: &str) -> Option<Vec<i64>> {
+    let tag = tag.trim();
+    if tag.len() != 3
+        || !tag
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+    {
+        return None;
+    }
+    let read = tools.call("hoi4_states", &json!({"query": tag})).ok()?;
+    let rows = read["states"].as_array()?;
+    Some(
+        rows.iter()
+            .filter(|r| r["owner"].as_str() == Some(tag))
+            .filter_map(|r| r["state_id"].as_i64())
+            .collect(),
+    )
+}
 
 fn peace_wait(state: &mut State, plan: &Value, now: GameHour, why: &str) -> Tick {
     let conf = state.manage.peace.get_or_insert_with(Conference::default);
@@ -1112,22 +1135,32 @@ pub(super) fn peace(
         ("liberate", "liberate"),
     ] {
         for v in list(p, key) {
-            match v.as_i64() {
-                Some(id) if !wanted.iter().any(|w| w.0 == id) => wanted.push((id, kind)),
-                Some(_) => {}
-                None => tags.push(format!("{key} {}", text(v))),
+            // A country tag stands for every state it owns: the conference demands state by
+            // state (a puppet demand on all of a country's states puppets the whole country).
+            let ids = match (v.as_i64(), v.as_str()) {
+                (Some(id), _) => vec![id],
+                (None, Some(tag)) => match tag_states(tools, tag) {
+                    Some(ids) if !ids.is_empty() => ids,
+                    Some(_) => {
+                        tags.push(format!("{key} {tag}: owns no state"));
+                        vec![]
+                    }
+                    None => {
+                        tags.push(format!("{key} {tag}: its states are unreadable"));
+                        vec![]
+                    }
+                },
+                _ => vec![],
+            };
+            for id in ids {
+                if !wanted.iter().any(|w| w.0 == id) {
+                    wanted.push((id, kind));
+                }
             }
         }
     }
     if !tags.is_empty() {
-        note(
-            state,
-            "peace",
-            format!(
-                "not taken (hoi4_peace_take takes state ids): {}",
-                tags.join(", ")
-            ),
-        );
+        note(state, "peace", format!("not demanded: {}", tags.join(", ")));
     }
     let conf = state.manage.peace.get_or_insert_with(Conference::default);
     if conf.exited {
@@ -3294,6 +3327,33 @@ mod tests {
     }
 
     #[test]
+    fn a_country_tag_in_the_peace_lists_stands_for_its_states() {
+        let tools = fake(vec![
+            ("hoi4_events", json!({"peace_conference_open": true})),
+            ("hoi4_peace_options", peace_read(true, true, 50.0)),
+            (
+                "hoi4_states",
+                json!({"states": [{"state_id": 271, "owner": "ETH"}, {"state_id": 274, "owner": "ETH"},
+                                  {"state_id": 550, "owner": "ITA", "controller": "ETH"}]}),
+            ),
+        ]);
+        let plan = json!({"peace": {"take": [271], "puppet": ["ETH"]}});
+        let mut state = State::default();
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Acted("peace puppet state 274: true Verified".into())
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[0].1["states"], json!([271]));
+        assert!(sent[0].1.get("puppet").is_none());
+        assert_eq!(sent[1].1["states"], json!([274]));
+        assert_eq!(sent[1].1["puppet"], true);
+        // a state ETH controls but does not own is not ETH's to give
+        assert!(!sent.iter().any(|a| a.1["states"] == json!([550])));
+    }
+
+    #[test]
     fn the_peace_step_takes_by_rank_submits_and_exits() {
         let tools = fake(vec![
             ("hoi4_events", json!({"peace_conference_open": true})),
@@ -3338,7 +3398,11 @@ mod tests {
         let sent: Vec<String> = actions(&tools).into_iter().map(|a| a.0).collect();
         assert_eq!(sent.iter().filter(|t| *t == "hoi4_peace_take").count(), 4);
         assert_eq!(actions(&tools)[4].1["puppet"], true);
-        assert!(state.manage.notes["peace"].contains("puppet ETH"));
+        assert!(
+            state.manage.notes["peace"].contains("puppet ETH"),
+            "{}",
+            state.manage.notes["peace"]
+        );
         // the conference is over: the next tick that reaches the manage step forgets it
         tools
             .replies

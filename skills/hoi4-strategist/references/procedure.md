@@ -762,7 +762,8 @@ Read: `war-air-naval-peace.md` §9; `generic-playbook.md` §5. Facts: `F vp <ENE
    last (PC01-PC06, PC11, DI13).
 Resolution: player `peace` (`take`, `puppet`; the brief carries `hoi4_peace_take {states, puppet,
 release, max_cost}`, `hoi4_peace_submit {}`, `hoi4_peace_exit {}`); `event_rules`; plan.md §23. Every
-enemy in `war.enemies` has a peace entry. Check: rubric row 15.
+enemy in `war.enemies` has a peace entry. A country tag in `take`, `puppet` or `liberate` stands for every
+state it owns (`"puppet": ["ETH"]` puppets the whole country). Check: rubric row 15.
 
 ## I. Events, contingencies, continuous management, FAIR
 

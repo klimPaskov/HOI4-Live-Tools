@@ -1439,11 +1439,7 @@ def check_coverage_keys(game, plan, meta, rep):
                 elif isinstance(s, str):
                     if tags and s not in tags:
                         rep.error(f"peace.{key}[{j}]: {s!r} is neither a state id nor a country tag")
-                    elif key == "take":
-                        rep.error(f"peace.take[{j}]: {s} is a tag; the executor takes state ids")
-                    else:
-                        rep.warn(f"peace.{key}[{j}]: tag {s} is only noted (hoi4_peace_take takes state ids); "
-                                 f"list the states")
+                    # a tag stands for every state it owns when the conference opens (plan_manage.rs)
     st = plan.get("sea_transfer")
     if isinstance(st, dict):
         for j, r in enumerate(st.get("routes") or []):
