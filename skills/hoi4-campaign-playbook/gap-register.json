@@ -3045,18 +3045,20 @@
     "procedure.md#9. MIOs"
    ],
    "plan": [
-    "mio[].traits"
+    "mio",
+    "mio[].organisation",
+    "mio[].organization",
+    "mio[].traits",
+    "mio[].when"
    ],
    "tools": [
     "hoi4_mio_trait",
     "hoi4_mios"
    ],
-   "blocked": "the executor sends the policy before the traits and a refused policy holds them: sk2 (10 Nov) never queued a trait after 33 organization_not_offered",
-   "verified": "LIVE_VERIFICATION_1_19_4.md: 6 Nov, 10 DLC (traits queued, verified by reopening the detail window, b722b01)",
    "payoff": "medium",
    "why": "about six traits by the war on the main lines",
-   "closing": "offline",
-   "owner": "offline: queue traits whatever the policy answers (plan_affairs mio step)"
+   "closing": "live",
+   "owner": "live: queue traits for an organisation whose policy is refused (LIVE-QUEUE Q37)"
   },
   {
    "id": "mio.policy",
@@ -4554,15 +4556,17 @@
     "war-air-naval-peace.md#OP20",
     "procedure.md#18. Operations"
    ],
-   "plan": [],
+   "plan": [
+    "war.fill_floor"
+   ],
    "tools": [
     "hoi4_supply",
     "hoi4_army_plan"
    ],
    "payoff": "high",
    "why": "sk9/sk10 kept attacking at fill 0.08-0.3 and lost men",
-   "closing": "offline",
-   "owner": "offline: the war step holds a new offensive while the attacking army's equipment fill is under a plan floor (war.fill_floor)",
+   "closing": "live",
+   "owner": "live: an army under the floor gets no attack order and resumes once refilled (LIVE-QUEUE Q36)",
    "priority": 3
   },
   {
