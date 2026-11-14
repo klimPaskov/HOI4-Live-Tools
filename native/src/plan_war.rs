@@ -11,7 +11,8 @@
 //! order; [`captured`] starts a bound when the army's target falls; [`relocation`] and
 //! [`second_direction`] are the stall response before the direct move; [`pocket_risk`] decides
 //! `pocket_fall_back`; `disband_step` keeps only divisions [`home_land`] reaches; `run` adds
-//! [`digest`] as `war`.
+//! [`digest`] as `war`. The way to a victory-point target (a plan `path`, leg by leg) is
+//! plan_route.rs.
 //!
 //! Plan keys (all under `war`, all optional; percentages may be written 0.5 or 50):
 //!   planning_wait      false: execute an offensive the tick after its line is drawn (the old
@@ -149,6 +150,16 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 
 fn note(state: &mut State, key: &str, line: impl Into<String>) {
     state.war_rules.notes.insert(key.to_string(), line.into());
+}
+
+/// Set a status line of the run result's `war` block, or clear it with None (plan_route.rs).
+pub(super) fn set_note(state: &mut State, key: &str, line: Option<String>) {
+    match line {
+        Some(line) => note(state, key, line),
+        None => {
+            state.war_rules.notes.remove(key);
+        }
+    }
 }
 
 /// A share: 0.3 or 30 (percent) both mean 0.3.

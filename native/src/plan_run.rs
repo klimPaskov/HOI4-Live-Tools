@@ -167,7 +167,11 @@
 //!                          overseas (the capital must reach the division over own-controlled land) nor
 //!                          in an army at encirclement risk (plan_war.rs)
 //!                          "vp_targets" name the state of an army's battle plan (direct province moves
-//!                          only with "direct_moves": true); every move passes the commitment rule
+//!                          only with "direct_moves": true); an entry's "path" (waypoint provinces) is
+//!                          followed leg by leg: the next waypoint not held is the target, from the held
+//!                          waypoint before it, the next leg only once the army is supplied again; a
+//!                          path through land the country may not enter falls back to the executor's own
+//!                          routing (plan_route.rs); every move passes the commitment rule
 //!                          ("move_commit_days":3, "move_budget":3, "move_window_days":10, see `MoveRules`)
 //!   armies                 {"max":24,"min_for_general":1,"generals":["Name",..],"max_per_group":3,
 //!                          "min_divisions":3,"concentrate":true} keep every division in an army of at most
@@ -256,6 +260,10 @@ mod plan_affairs;
 /// the stall's second direction, the bound pause, the disband land-route guard).
 #[path = "plan_war.rs"]
 mod plan_war;
+
+/// Victory-point routes (a `vp_targets` path followed leg by leg, the pace between legs).
+#[path = "plan_route.rs"]
+mod plan_route;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -431,6 +439,8 @@ pub struct State {
     affairs: plan_affairs::Memory,
     /// War-step rules (plan_war.rs): planning, peaks, bounds, the stall response.
     war_rules: plan_war::Memory,
+    /// Victory-point routes: where each waypoint lies, legs taken, jump-off moves (plan_route.rs).
+    routes: plan_route::Memory,
     /// Army moves: the commitment rule, the budget and each move's reason.
     moves: Moves,
     /// divisions disbanded by the `disband` stage
@@ -582,6 +592,7 @@ impl Default for State {
             military: Default::default(),
             affairs: Default::default(),
             war_rules: Default::default(),
+            routes: Default::default(),
             moves: Moves::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
@@ -662,6 +673,7 @@ fn move_reason(tag: &str) -> &'static str {
         "wg" => "guard post",
         "im" => "naval invasion staging",
         "wd" | "w2" => "second direction",
+        "wj" => "route jump-off",
         _ => "other",
     }
 }
@@ -791,6 +803,7 @@ impl State {
         }
         plan_military::army_renamed(&mut self.military, old, new);
         plan_war::army_renamed(&mut self.war_rules, old, new);
+        plan_route::army_renamed(&mut self.routes, old, new);
     }
     /// One action with a fresh id; an uncertain dispatch is settled by
     /// retrying its own id once. If readback remains uncertain, stop the
@@ -3762,12 +3775,28 @@ fn war_step(
         // province: the battle plan (front, offensive, execute) goes there and stays committed
         // until the province is held. Direct province moves had replaced every offensive of the
         // strike armies (Italy 1936: only fronts and moves were ever sent, no offensive).
+        // An entry with a `path` is followed leg by leg (plan_route.rs): the state and province
+        // here are then the next waypoint's, not the far target's.
         let direct_mode = cfg["direct_moves"] == json!(true);
-        let vp_state: Option<i32> = if direct_mode || hold_only {
+        let vp: Option<Vp> = if hold_only {
             None
         } else {
-            vp_choice(state, tools, plan, &roster, &name, &me, &mut vp_rows)
-                .map(|(st, _)| st as i32)
+            vp_choice(
+                state,
+                tools,
+                plan,
+                &roster,
+                army,
+                &me,
+                &enemies,
+                &mut vp_rows,
+                now,
+            )
+        };
+        let vp_state: Option<i32> = if direct_mode {
+            None
+        } else {
+            vp.as_ref().map(|v| v.state as i32)
         };
         let mut target = state.war_assign.get(&name).copied().filter(|t| {
             (open(*t) || vp_state == Some(*t)) && !behind(*t) && (!hold_only || own(*t))
@@ -3893,6 +3922,28 @@ fn war_step(
                 return Ok(Some(line));
             }
         }
+        let own_target = targets.iter().any(|t| t.0 == target && t.1);
+        // The leg of a plan path this army follows now (never while it retakes own land).
+        let leg: Option<(i64, plan_route::Leg)> = vp
+            .as_ref()
+            .filter(|v| !own_target && (direct_mode || v.state as i32 == target))
+            .and_then(|v| v.leg.clone().map(|leg| (v.target, leg)));
+        // A leg starts at the held waypoint before its objective: the army goes there first.
+        if let Some((goal, leg)) = &leg {
+            match plan_route::stage(
+                state, tools, lease, &name, *goal, leg, here, executing, stall, now,
+            )? {
+                plan_route::Stage::Ready => {}
+                plan_route::Stage::Wait => {
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    continue;
+                }
+                plan_route::Stage::Acted(line) => {
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    return Ok(Some(line));
+                }
+            }
+        }
         // A move round to another side of the target (the stall's second direction) runs.
         match plan_war::relocation(state, tools, lease, &name, target, here, stall, now)? {
             plan_war::Relocate::No => {}
@@ -3905,7 +3956,6 @@ fn war_step(
                 return Ok(Some(line));
             }
         }
-        let own_target = targets.iter().any(|t| t.0 == target && t.1);
         // Low supply is acted on, not only waited out: a railway to the nearest node and more
         // trucks first, then a report for a decision (plan_war.rs supply_relief).
         if let Some((_, supply)) = org {
@@ -4006,6 +4056,32 @@ fn war_step(
                 continue;
             }
         }
+        // The pace of a plan path: after a waypoint falls the next leg waits for supply.
+        if let Some((goal, leg)) = &leg {
+            let supply = org.map(|o| o.1);
+            if let Some(why) =
+                plan_route::pace(state, plan, &name, *goal, leg, supply, &limits, now)
+            {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                if executing {
+                    let (ok, said) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_army_plan",
+                        json!({"army": name, "execute": false}),
+                        "wr",
+                    )?;
+                    if ok {
+                        // the execute order is given again when the pace lets the leg start
+                        state.war_stage.insert(name.clone(), 2);
+                    }
+                    return Ok(Some(format!(
+                        "war route {name}: plan stopped at the waypoint it took ({why}): {ok} {said}"
+                    )));
+                }
+                continue;
+            }
+        }
         // After a captured hub, port or railway a direct-move army holds its next advance.
         if direct && !own_target {
             let mean = org.map(|o| o.1);
@@ -4020,8 +4096,7 @@ fn war_step(
         // a direct move. Without direct moves the province's state is the battle plan's target
         // (chosen above), and the offensive takes the province.
         if !own_target && direct {
-            if let Some((st, p)) = vp_choice(state, tools, plan, &roster, &name, &me, &mut vp_rows)
-            {
+            if let Some((st, p)) = vp.as_ref().map(|v| (v.state, v.province)) {
                 let on_way = state
                     .war_province
                     .get(&name)
@@ -4063,7 +4138,9 @@ fn war_step(
         if ordered && (!standing_in_target || stuck_inside) && now - since >= stall_now {
             // The first stall on a target brings a second direction (plan_war.rs): an idle army
             // beside the target, else this army goes round; the next stall is the direct move.
-            if !standing_in_target && !liberate && !state.war_move.contains(&name) {
+            // An army on a plan path keeps its route: its stall goes to the direct move.
+            if !standing_in_target && !liberate && !state.war_move.contains(&name) && leg.is_none()
+            {
                 let flanks: HashSet<String> = list(&roster, "armies")
                     .iter()
                     .filter(|a| {
@@ -4089,13 +4166,12 @@ fn war_step(
                     return Ok(Some(line));
                 }
             }
-            let (ok, why) = state.act(
-                tools,
-                lease,
-                "hoi4_army_move",
-                json!({"army": name, "state_id": target}),
-                "wm",
-            )?;
+            // On a plan path the direct move goes to the leg's waypoint, not the state's centre.
+            let mut stalled = json!({"army": name, "state_id": target});
+            if let Some((_, leg)) = leg.as_ref().filter(|(_, l)| l.state as i32 == target) {
+                stalled["province_id"] = json!(leg.province);
+            }
+            let (ok, why) = state.act(tools, lease, "hoi4_army_move", stalled, "wm")?;
             state.war_move.insert(name.clone());
             state.war_since.insert(name.clone(), (target, here, now));
             state
@@ -4264,55 +4340,117 @@ fn war_step(
     Ok(None)
 }
 
-/// The army's next `vp_targets` province not yet held (state, province): the first entry in plan
-/// order that names this army (its army_layout role or its name), or no army.
+/// Where an army goes for its next victory point.
+struct Vp {
+    /// the state and province to take now: the next waypoint of a followed path, else the target
+    state: i64,
+    province: i64,
+    /// the victory-point province itself
+    target: i64,
+    /// the leg of the plan's path, when one is followed
+    leg: Option<plan_route::Leg>,
+}
+
+/// The army's next `vp_targets` province not yet held: the first entry in plan order that names
+/// this army (its army_layout role or its name), or no army. An entry with a `path` is followed
+/// waypoint by waypoint (plan_route.rs); without one, or when the path is closed, the entry's own
+/// state and province are the target and the war step routes on its own.
+#[allow(clippy::too_many_arguments)]
 fn vp_choice(
-    state: &State,
+    state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
     roster: &Value,
-    name: &str,
+    army: &Value,
     me: &str,
+    enemies: &HashSet<String>,
     vp_rows: &mut HashMap<i64, Value>,
-) -> Option<(i64, i64)> {
+    now: GameHour,
+) -> Option<Vp> {
+    let name = text(&army["army"]);
     let vp = plan["vp_targets"].as_array()?;
     let names: Vec<String> = list(roster, "armies")
         .iter()
         .map(|a| text(&a["army"]).to_string())
         .collect();
-    let by_layout = |t: &Value| state.layout.get(text(&t["army"])).cloned();
-    let mine_now = |t: &Value| {
-        by_layout(t).is_some_and(|a| a == name)
-            || (by_layout(t).is_none() && text(&t["army"]).contains(name))
-    };
-    let unowned = |t: &Value| {
-        by_layout(t).is_none_or(|a| a.is_empty())
-            && !names.iter().any(|n| text(&t["army"]).contains(n.as_str()))
-    };
-    for t in vp {
-        if !(mine_now(t) || unowned(t)) {
-            continue;
-        }
-        let (Some(p), Some(st)) = (t["province"].as_i64(), t["state"].as_i64()) else {
-            continue;
+    let chosen = {
+        let by_layout = |t: &Value| state.layout.get(text(&t["army"])).cloned();
+        let mine_now = |t: &Value| {
+            by_layout(t).is_some_and(|a| a == name)
+                || (by_layout(t).is_none() && text(&t["army"]).contains(name))
         };
-        let row = vp_rows
-            .entry(st)
-            .or_insert_with(|| {
-                tools
-                    .call("hoi4_states", &json!({"query": st.to_string()}))
-                    .map(|v| list(&v, "states").first().cloned().unwrap_or_default())
-                    .unwrap_or_default()
-            })
-            .clone();
-        let held = list(&row, "provinces")
-            .iter()
-            .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
-        if !held {
-            return Some((st, p));
+        let unowned = |t: &Value| {
+            by_layout(t).is_none_or(|a| a.is_empty())
+                && !names.iter().any(|n| text(&t["army"]).contains(n.as_str()))
+        };
+        let mut chosen = None;
+        for t in vp {
+            if !(mine_now(t) || unowned(t)) {
+                continue;
+            }
+            let (Some(p), Some(st)) = (t["province"].as_i64(), t["state"].as_i64()) else {
+                continue;
+            };
+            let row = plan_route::state_row(tools, vp_rows, st);
+            let held = list(&row, "provinces")
+                .iter()
+                .any(|r| r["province"].as_i64() == Some(p) && text(&r["controller"]) == me);
+            if !held {
+                chosen = Some((t, st, p));
+                break;
+            }
         }
+        chosen
+    };
+    let (t, st, p) = chosen?;
+    // States searched for the path's waypoints: the target's, the army's, the theatre, then the
+    // own and enemy states nearest the target.
+    let mut candidates: Vec<i64> = vec![st];
+    candidates.extend(army["main_state"].as_i64());
+    candidates.extend(
+        list(&plan["war"], "theatre")
+            .iter()
+            .filter_map(Value::as_i64),
+    );
+    if let Some((tx, tz)) = state.centers.get(&(st as i32)).copied() {
+        let mut near: Vec<(i64, f64)> = state
+            .centers
+            .iter()
+            .map(|(id, (x, z))| (i64::from(*id), (x - tx).powi(2) + (z - tz).powi(2)))
+            .collect();
+        near.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+        candidates.extend(near.into_iter().map(|(id, _)| id));
     }
-    None
+    let mut seen = HashSet::new();
+    candidates.retain(|id| seen.insert(*id));
+    let leg = match plan_route::choose(
+        state,
+        tools,
+        vp_rows,
+        name,
+        t,
+        me,
+        enemies,
+        &candidates,
+        now,
+    ) {
+        plan_route::Routing::Path(leg) => Some(leg),
+        plan_route::Routing::Own(_) => None,
+    };
+    Some(match leg {
+        Some(leg) => Vp {
+            state: leg.state,
+            province: leg.province,
+            target: p,
+            leg: Some(leg),
+        },
+        None => Vp {
+            state: st,
+            province: p,
+            target: p,
+            leg: None,
+        },
+    })
 }
 
 /// A pocket forming: much of the land around the army is held by others. Fall back to the nearest

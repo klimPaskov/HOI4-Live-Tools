@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+The executor follows the route a plan gives to a victory-point target, and no plan key is left without a reader.
+
+- Cause: `vp_targets[].path` was accepted by the plan schema as a player key ("executor support later") and used by the
+  lint for its supply and river estimates, while the executor read only `province`, `state` and `army` and picked its
+  own way to the target's state. A plan could describe a supplied route the armies never took.
+- A target's `path` is now followed leg by leg (`native/src/plan_route.rs`): the first waypoint not held is the next
+  objective (its state for battle plans, the province itself with `war.direct_moves`), the army first goes to the held
+  waypoint before it and draws its front from there, a stall sends the direct move to the waypoint, and after each
+  captured waypoint the next leg waits until supply is back at `war.supply_resume` (at most `war.rest_max_days` above
+  `war.supply_hold`; an executing plan is stopped for the wait).
+- A waypoint held by a country the player is not at war with, or one in no state read around the target, closes the
+  path, as does a jump-off the army cannot reach: the executor then routes on its own as before. The run result's `war`
+  notes say which is in use and why (`route:<army>`, `pace:<army>`).
+- New reconcile `scripts/hoi4facts/plan_keys.py check`, run in CI: every key path of the plan schema has one reader,
+  the executor (found in the sources), the planning tools (`x-owner: lint`) or people (`text`); a player key inside an
+  executor-owned key needs its planned build item. It found and re-marked 22 keys nothing in the executor reads.
+- Lint rule `schema.lint_keys` lists the keys a plan sets that the executor does not act on, and warns when
+  `vp_targets` `order` differs from the list order the executor follows.
+
 No action leaves a running game paused: one guard on the input binding covers every tool.
 
 - Cause of the pauses in the shakedown of 10 November (16 of 281 `hoi4_army_move` and 3 of 12 `hoi4_army_merge` calls):
