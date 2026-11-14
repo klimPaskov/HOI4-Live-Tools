@@ -188,7 +188,9 @@ fn defense_lines_step(
                 state.skip(now, "dl", &id, 2 * DAY);
             }
             note(state, &key, format!("{kind} of {army} deleted: {ok} {why}"));
-            acted = Some(format!("defense line {id}: delete {kind} of {army}: {ok} {why}"));
+            acted = Some(format!(
+                "defense line {id}: delete {kind} of {army}: {ok} {why}"
+            ));
             break;
         }
         if until_holds(state, tools, &entry["until"], now) {
@@ -340,7 +342,8 @@ mod tests {
         );
         let line = &state.seams.notes["defense_lines:coast"];
         assert!(
-            line.contains("hoi4_army_area_defense") && line.contains("\"settings\":[\"ports\",\"victory_points\"]"),
+            line.contains("hoi4_army_area_defense")
+                && line.contains("\"settings\":[\"ports\",\"victory_points\"]"),
             "{line}"
         );
         assert!(digest(&state).is_some());
