@@ -76,7 +76,9 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn(("government", 3), [(e["category"], e["slot"]) for e in order[1:]])
         pr = menus.production(PLAN, snap(), None, None, h["production"])
         ops = pr["default"]["ops"]
-        self.assertEqual(ops[0]["item"]["equipment"], "artillery_equipment_1")
+        # the new line takes its factories from the largest line of a family that is not short
+        self.assertEqual(ops[0]["value"], [{"equipment": "infantry_equipment_1", "factories": 7},
+                                           dict(ops[0]["value"][1], equipment="artillery_equipment_1", factories=3)])
         self.assertEqual(ops[1]["value"][0], "artillery_equipment")
         c = menus.construction(PLAN, snap(), None, None)
         self.assertEqual(c["default"]["ops"], [{"op": "set", "key": "construction_fallback_any_own_state",
@@ -191,6 +193,29 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.run_dir, "plans", "plan.v1.json")))
         with open(os.path.join(self.run_dir, "planner", "journal.jsonl")) as f:
             self.assertEqual(json.loads(f.readline())["version"], 2)
+
+    def test_one_failing_domain_does_not_hold_back_the_others(self):
+        def runner(argv):
+            with open(argv[3]) as f:
+                plan = json.load(f)
+            if "validate_plan.py" in argv[2]:
+                return 0, "0 error(s)"
+            bad = any(p.get("ideas") is None for p in plan["politics_auto"]["order"])
+            return 0, json.dumps({"findings": [{"severity": "error", "rule": "politics.budget"}] if bad else []})
+        s = snap()
+        h = hz.estimate(PLAN, s)
+        u = self.updater()
+        u.tools = gates.ToolGates("/nowhere", runner=runner)
+        entry = u.run(low_triggers("research", "politics", "production"), s, h)
+        self.assertEqual(entry["applied"], "default", entry)
+        self.assertEqual(entry["proposals"][-1]["dropped"], ["politics"])
+        plan, _ = store.PlanStore(self.run_dir).read()
+        self.assertTrue(any(e.get("equipment") == "artillery_equipment_1" for e in plan["production"]))
+        self.assertEqual(len(plan["politics_auto"]["order"]), 1)
+        # the failing pick is withheld for a while; the menu still lists it for a model or the player's agent
+        m = menus.build(plan, s, hz.estimate(plan, s), low_triggers("politics"), None, u.ledger)
+        self.assertIsNone(m["politics"]["default"])
+        self.assertIn("failed the gates", m["politics"]["default_withheld"])
 
     def test_model_patch_wins_when_it_passes_and_default_when_it_does_not(self):
         s = snap()
