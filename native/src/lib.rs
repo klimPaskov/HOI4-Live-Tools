@@ -2,6 +2,7 @@ pub mod actions;
 pub mod alarms;
 pub mod autopilot;
 pub mod calendar;
+pub mod doctor;
 pub mod error;
 pub mod fair_guard;
 pub mod focus_rules;

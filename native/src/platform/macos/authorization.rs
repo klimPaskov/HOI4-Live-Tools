@@ -129,6 +129,87 @@ fn query_right(right: &CStr, authorize: impl FnOnce(&Rights, u32) -> i32) -> i32
     authorize(&rights, QUERY_FLAGS)
 }
 
+/// Facts for the doctor report. Read-only: two no-UI right queries, the
+/// binary's own entitlement and quarantine mark, the user's group list and
+/// the Developer mode status.
+pub(super) fn memory_access_facts() -> crate::doctor::MacFacts {
+    let exe = std::env::current_exe().ok();
+    let quarantined = exe
+        .as_deref()
+        .and_then(|path| std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).ok())
+        .is_some_and(|path| {
+            // SAFETY: both names are live C strings; a null buffer of size 0
+            // only asks whether the attribute exists.
+            unsafe {
+                libc::getxattr(
+                    path.as_ptr(),
+                    c"com.apple.quarantine".as_ptr(),
+                    std::ptr::null_mut(),
+                    0,
+                    0,
+                    0,
+                ) >= 0
+            }
+        });
+    let developer_mode = std::process::Command::new("/usr/sbin/DevToolsSecurity")
+        .arg("-status")
+        .output()
+        .ok()
+        .and_then(|output| {
+            let text = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            if text.contains("enabled") {
+                Some(true)
+            } else if text.contains("disabled") {
+                Some(false)
+            } else {
+                None
+            }
+        });
+    crate::doctor::MacFacts {
+        entitlements_beside: exe
+            .as_deref()
+            .and_then(|path| path.parent())
+            .is_some_and(|folder| folder.join("debugger.entitlements").is_file()),
+        exe: exe.map_or_else(
+            || "hoi4-live-native".to_owned(),
+            |path| path.display().to_string(),
+        ),
+        entitled: System.holds_debugger_entitlement(),
+        quarantined,
+        developer_mode,
+        in_developer_group: in_group(c"_developer"),
+        debug_right: System.query(TASK_PORT_DEBUG),
+        plain_right: System.query(TASK_PORT),
+    }
+}
+
+/// Whether the current user is a member of `group` in the user directory.
+fn in_group(group: &CStr) -> Option<bool> {
+    // SAFETY: the returned records are read at once, before any other call
+    // that could reuse libc's static buffers; every pointer is null-checked.
+    unsafe {
+        let wanted = libc::getgrnam(group.as_ptr());
+        if wanted.is_null() {
+            return None;
+        }
+        let wanted = (*wanted).gr_gid;
+        let user = libc::getpwuid(libc::getuid());
+        if user.is_null() {
+            return None;
+        }
+        let mut groups = [0i32; 256];
+        let mut count = groups.len() as i32;
+        libc::getgrouplist(
+            (*user).pw_name,
+            (*user).pw_gid as i32,
+            groups.as_mut_ptr(),
+            &mut count,
+        );
+        let count = usize::try_from(count).ok()?.min(groups.len());
+        Some(groups[..count].iter().any(|gid| *gid as u32 == wanted))
+    }
+}
+
 /// Ask about the one right macOS will evaluate for this binary. Returns the
 /// right's name when it is held without interaction.
 fn preflight(policy: &impl Policy) -> Result<&'static str> {
