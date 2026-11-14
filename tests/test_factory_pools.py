@@ -24,7 +24,8 @@ EQUIPMENT = """equipments = {
 	infantry_equipment_1 = { archetype = infantry_equipment }
 	convoy = { is_archetype = yes type = convoy }
 	convoy_1 = { archetype = convoy }
-	ship_hull_light = { is_archetype = yes type = screen_ship interface_category = interface_category_screen_ships }
+	ship_hull_light = { is_archetype = yes type = screen_ship interface_category = interface_category_screen_ships
+		build_cost_ic = 1000 }
 	ship_hull_light_1 = { archetype = ship_hull_light }
 	fighter_equipment = { is_archetype = yes type = fighter interface_category = interface_category_air }
 	fighter_equipment_1 = { archetype = fighter_equipment }
@@ -75,6 +76,39 @@ class FactoryPools(unittest.TestCase):
         self.assertEqual(day0["dockyards"], {"convoy_1": 7})
         later = lt.pool_lines(derive.day("1936.6.1"))
         self.assertEqual(later["dockyards"], {"convoy_1": 7, "ship_hull_light_1": 3})
+
+
+class UnfinishedStartUnits(FactoryPools):
+    """A start line whose unit the game itself would finish first, removed afterwards, only completes that
+    unit: no posture choice, so the cull and posture rules leave it alone until then."""
+
+    def lint(self, production):
+        lt = super().lint(production)
+        # a destroyer 45% built on 5 dockyards: 550 points left at 5 x 2 a day, 55 days
+        lt.start_lines = lambda: [{"type": "ship_hull_light_1", "factories": 5, "progress": 0.45, "version": "D"},
+                                  {"type": "convoy_1", "factories": 2, "progress": 0.0, "version": None}]
+        return lt
+
+    def test_finishing_until_the_unit_is_done(self):
+        start = derive.day("1936.1.1")
+        done = derive.fmt(derive.date_of(start + 55))
+        lt = self.lint([{"equipment": "ship_hull_light_1", "remove": True, "from": done},
+                        {"equipment": "convoy_1", "remove": True, "from": done}])
+        self.assertEqual(lt.unit_finish("ship_hull_light_1")[0], start + 55)
+        # the destroyer line is finishing; the convoy line has nothing in progress the game would keep
+        self.assertEqual(lt.finishing_lines(start), {"ship_hull_light_1": start + 55})
+        self.assertEqual(lt.finishing_lines(start + 54), {"ship_hull_light_1": start + 55})
+        self.assertEqual(lt.finishing_lines(start + 55), {})
+
+    def test_a_kept_or_removed_line_is_not_finishing(self):
+        start = derive.day("1936.1.1")
+        self.assertEqual(self.lint([]).finishing_lines(start), {})  # no remove entry: the line is kept
+        gone = self.lint([{"equipment": "ship_hull_light_1", "remove": True}])
+        self.assertEqual(gone.finishing_lines(start), {})  # removed at once: production.in_progress reports it
+        # removed long after the unit: finishing only until the unit is done
+        late = self.lint([{"equipment": "ship_hull_light_1", "remove": True, "from": "1937.6.1"}])
+        self.assertEqual(late.finishing_lines(start + 10), {"ship_hull_light_1": start + 55})
+        self.assertEqual(late.finishing_lines(start + 100), {})
 
 
 if __name__ == "__main__":

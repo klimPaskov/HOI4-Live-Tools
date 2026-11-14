@@ -92,7 +92,8 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            key:<plan key>[,...] | call[:<key>] | md:<plan.md section> | na:<reason>, a key
                            the plan lacks, or na: "missing ..." (a gap, not a reason)
   posture.shares           (warning) production factory shares of a force_posture phase more than 15
-                           points from the posture; error when a posture phase does not sum to 100
+                           points from the posture (start lines that only complete a unit in progress are
+                           left out); error when a posture phase does not sum to 100
   navy.required            a coastal country (an owned coastal province) without a navy key
   navy.overseas            an army state the capital cannot reach over own land, without a navy key,
                            a convoy plan (convoy production line or sea_transfer.convoys) and a port plan
@@ -143,7 +144,10 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            wing, design, stockpile target, training guard, plan line or production_priority
                            prefix uses, and no remove entry (naval lines: when navy.posture is none; trucks
                            with war.motorization; convoys for overseas supply); and any line, start or plan,
-                           of a domain a force_posture phase gives 0% on that phase's date
+                           of a domain a force_posture phase gives 0% on that phase's date, except a start
+                           line that only completes its unit in progress (a remove entry waits for the
+                           finish date production.in_progress asks for): it is neither culled early nor
+                           counted in the posture shares
   production.day0          free military factories at the start (military factories minus the start lines,
                            plus those freed by start removals) not put on kept start lines by the day-0
                            production entries (they join a start line at its efficiency while paused)
@@ -1668,7 +1672,8 @@ class Lint:
             if d is None:
                 self.add("info", "posture.shares", where, f"phase {name} has no enter date; shares not compared")
                 continue
-            lines = self.active_lines(d)
+            finishing = self.finishing_lines(d)
+            lines = {eq: n for eq, n in self.active_lines(d).items() if eq not in finishing}
             total = sum(lines.values())
             if not total:
                 continue
@@ -1676,7 +1681,8 @@ class Lint:
             for eq, n in lines.items():
                 got[domain(eq)] += 100.0 * n / total
             rows.append({"phase": name, "date": derive.fmt(derive.date_of(d)), "plan": want,
-                         "production": {k: round(v, 1) for k, v in got.items()}})
+                         "production": {k: round(v, 1) for k, v in got.items()},
+                         "finishing": {eq: derive.fmt(derive.date_of(f)) for eq, f in finishing.items()}})
             off = [f"{k} {got[k]:.0f}% vs {want[k]:g}%" for k in want if abs(got[k] - want[k]) > POSTURE_POINTS]
             if off:
                 self.add("warning", "posture.shares", where,
@@ -2164,6 +2170,21 @@ class Lint:
                              f"switched line keeps ({key}); start {ny} on new factories and keep {eq} until its gear "
                              f"covers the need")
 
+    def finishing_lines(self, d):
+        """{equipment: finish day} of the start lines that on day d only complete a unit in progress: the
+        game would finish the unit first (unit_finish) and the plan removes the line afterwards, as
+        production.in_progress asks. Such a line is no choice of the posture: the cull rule leaves it
+        alone until the unit is done and posture.shares does not count it."""
+        removed = self.removal_days()
+        out = {}
+        for eq in sorted({r["type"] for r in self.start_lines()}):
+            if eq not in removed or any(f is None or f <= d for _, f in removed[eq]):
+                continue  # kept for good, or gone by d
+            fin = self.unit_finish(eq)
+            if fin and d < fin[0]:
+                out[eq] = fin[0]
+        return out
+
     def production_cull(self):
         """Start lines the plan never uses and does not remove; lines of a domain the force posture gives 0%."""
         g = self.game
@@ -2218,9 +2239,10 @@ class Lint:
             d = start if ph.get("phase") == "base" else days.get(str(ph.get("phase")))
             if not zero or d is None:
                 continue
-            live = dict(self.active_lines(d))
+            finishing = self.finishing_lines(d)
+            live = {eq: n for eq, n in self.active_lines(d).items() if eq not in finishing}
             for eq, rs in by_eq.items():
-                if not any(f is None or f <= d for _, f in removed.get(eq, [])):
+                if eq not in finishing and not any(f is None or f <= d for _, f in removed.get(eq, [])):
                     live[eq] = live.get(eq, 0) + sum(int(r.get("factories") or 0) for r in rs)
             for dom in zero:
                 hit = sorted(eq for eq, n in live.items() if n and (derive.equipment_domain(g, eq) or "land") == dom)
