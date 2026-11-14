@@ -96,7 +96,8 @@ TOOL_TIMEOUT_SEC = 1800
 
 # What an install (and a release archive) contains, relative to the source folder.
 PAYLOAD_DIRS = ("hoi4_live", "skills")
-PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md")
+PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md",
+                "docs/OWNED_LINUX_LAUNCHER.md")
 PAYLOAD_FILES = ("README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "config.json", "requirements.txt",
                  "pyproject.toml", "hoi4-live-tools.cmd", "hoi4-live-tools", "install.py")
 SKIP_NAMES = {"__pycache__", ".pytest_cache"}

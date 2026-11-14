@@ -276,7 +276,7 @@ password. What each system needs, once:
   `kernel.yama.ptrace_scope` value of 1 (or 0) allows. If an administrator set it
   to 2, `sudo sysctl kernel.yama.ptrace_scope=1` is needed; at 3 the setting must
   be changed in the system configuration and the computer restarted.
-- **Windows**: use the [Windows package](#quick-start-windows-release) (the Python
+- **Windows**: use the [Windows package](#install-check-play) (the Python
   server); the native runtime's Windows adapter is unfinished and refuses to
   attach. Run the game and your coding client as the same Windows user, both
   without "Run as administrator". Nothing else is needed.
@@ -306,7 +306,7 @@ runner), the refusals reached for the rest, and the fixes the Linux build needed
 conferences and the operative tools were not reached on Linux. The older Linux-only GUI
 diagnostics written for 1.19.3 refuse on 1.19.4.1.
 
-## Quick start: macOS (Python server)
+## Manual install: macOS (Python server)
 
 You need a Mac with HOI4 from Steam and Python 3.9 or newer (Apple's command-line tools
 Python or python.org). FFmpeg is optional.
