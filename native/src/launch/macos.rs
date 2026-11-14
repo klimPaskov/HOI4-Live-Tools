@@ -1294,21 +1294,47 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
 /// tools Shift+click past it today. Choosing one is not built yet, so the argument is accepted by
 /// the schema and refused before any input (`not_yet_built`); plan_run::UNBUILT_ARGS keeps the
 /// executor from sending it until the chooser is driven and verified live.
-fn refuse_unbuilt_organization(tool: &str, args: &serde_json::Map<String, Value>) -> Result<()> {
-    match args.get("organization") {
-        None => Ok(()),
-        Some(Value::String(org)) if !org.trim().is_empty() => Err(Error::new(
+///
+/// `state` on hoi4_occupation_law: the law of one occupied state instead of the default law. The
+/// Occupied Territories view lists each state (`occupied_territory_state_entry`, with its own
+/// `select_law_button` and `selected_law`) and the state view has the same button
+/// (countrystateview.gui `law_and_template_container`); the tool drives the default-law button
+/// only today, so the argument is refused the same way (gap register occupation.per_state_law).
+///
+/// `regimental_support` on hoi4_template_create / hoi4_template_edit: the regimental support row
+/// of the Division Designer (divisiondesignerview.gui `regiment_support_grid` under
+/// `regimental_support_header_label`), one company per regiment column up to
+/// NDefines.NMilitary.MAX_REGIMENTAL_SUPPORT_WIDTH, a column taking one only with
+/// REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions, at REGIMENTAL_SUPPORT_SLOT_COST_MULTIPLIER of
+/// a support slot's cost; a company whose common/units entry says `regimental = no` cannot go
+/// there. The tools fill the battalion grid and the division support column only, so the
+/// argument is refused (gap register templates.regimental_support).
+///
+/// `replace` on hoi4_doctrine_adopt: swapping the folder's grand doctrine or a track's chosen
+/// subdoctrine for another (the officer corps view's slot, picked again while filled). The tool
+/// adopts into empty slots only and refuses a filled one before input (grand_doctrine_set,
+/// track_occupied), so the argument is refused (gap register doctrines.replace_doctrine).
+pub(super) fn refuse_unbuilt_args(tool: &str, args: &serde_json::Map<String, Value>) -> Result<()> {
+    for (t, arg) in crate::plan_run::UNBUILT_ARGS {
+        if *t != tool {
+            continue;
+        }
+        let Some(value) = args.get(*arg) else {
+            continue;
+        };
+        let what = match *arg {
+            "organization" => "choosing the military-industrial organisation (the line gets none)",
+            "state" => "setting the law of one state (only the default law is set)",
+            "regimental_support" => "filling the regimental support row (the template gets none)",
+            "replace" => "replacing a chosen doctrine (an occupied slot is refused)",
+            _ => "this argument",
+        };
+        return Err(Error::new(
             "not_yet_built",
-            format!(
-                "{tool}: choosing the military-industrial organisation ({org}) is not built yet; \
-                 send the call without `organization` (the line gets no organisation)"
-            ),
-        )),
-        Some(_) => Err(Error::new(
-            "invalid_arguments",
-            "organization must be an organisation script key",
-        )),
+            format!("{tool}: `{arg}` ({value}) is not built yet: {what}; send the call without it"),
+        ));
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1344,11 +1370,11 @@ mod receipt_tools {
             );
             assert!(t["description"].as_str().unwrap().contains("not yet built"));
             let mut args = serde_json::Map::new();
-            args.insert((*arg).to_string(), "ITA_beretta_organization".into());
-            let e = super::refuse_unbuilt_organization(tool, &args).unwrap_err();
+            args.insert((*arg).to_string(), "x".into());
+            let e = super::refuse_unbuilt_args(tool, &args).unwrap_err();
             assert_eq!(e.code, "not_yet_built");
+            assert!(super::refuse_unbuilt_args(tool, &serde_json::Map::new()).is_ok());
         }
-        assert!(super::refuse_unbuilt_organization("t", &serde_json::Map::new()).is_ok());
     }
 }
 /// Tools that move the map camera; the camera is zoomed back out after them (army tools
@@ -2293,7 +2319,7 @@ impl MacClock {
                         "lease_token",
                     ],
                 )?;
-                refuse_unbuilt_organization(name, args)?;
+                refuse_unbuilt_args(name, args)?;
             }
             let design = design_arg(
                 process,
@@ -2569,6 +2595,7 @@ impl MacClock {
                         "name",
                         "regiments",
                         "support",
+                        "regimental_support",
                         "priority",
                         "request_id",
                         "lease_token",
@@ -2580,6 +2607,7 @@ impl MacClock {
                         "template",
                         "regiments",
                         "support",
+                        "regimental_support",
                         "priority",
                         "new_name",
                         "allow_in_use",
@@ -2590,6 +2618,7 @@ impl MacClock {
                 "rename" => allowed(args, &["template", "new_name", "request_id", "lease_token"])?,
                 _ => allowed(args, &["template", "request_id", "lease_token"])?,
             }
+            refuse_unbuilt_args(name, args)?;
             let existing = if kind == "create" {
                 None
             } else {
@@ -2893,7 +2922,7 @@ impl MacClock {
                         "lease_token",
                     ],
                 )?;
-                refuse_unbuilt_organization(name, args)?;
+                refuse_unbuilt_args(name, args)?;
             } else {
                 allowed(
                     args,
@@ -4681,7 +4710,11 @@ impl MacClock {
             return stateslots::read_states(process, &self.keys, &ids);
         }
         if name == "hoi4_occupation_law" {
-            allowed(args, &["law", "via_state", "request_id", "lease_token"])?;
+            allowed(
+                args,
+                &["law", "via_state", "state", "request_id", "lease_token"],
+            )?;
+            refuse_unbuilt_args(name, args)?;
             let law = string(args, "law")?;
             if law.is_empty()
                 || law.len() > 96

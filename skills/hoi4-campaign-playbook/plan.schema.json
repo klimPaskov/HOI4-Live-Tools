@@ -1135,6 +1135,11 @@
             "minimum": 0,
             "x-owner": "executor"
           },
+          "replace": {
+            "type": "boolean",
+            "x-owner": "executor",
+            "description": "true: swap what already fills the slot (the folder's grand doctrine, or the track's subdoctrine) for this one. Not sent yet: swapping is not built (hoi4_doctrine_adopt refuses `replace` with not_yet_built), so the executor adopts into an empty slot only and says so (gap register doctrines.replace_doctrine)"
+          },
           "why": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
@@ -2379,8 +2384,7 @@
             }
           },
           "additionalProperties": false,
-          "x-executor-planned": "W1-7",
-          "description": "state id -> law; noted, not applied (hoi4_occupation_law sets the default law only)"
+          "description": "state id -> law: the law of that one occupied state, set once while the player occupies it (hoi4_occupation_law {law, state}). Not sent yet: setting one state's law is not built (the tool refuses `state` with not_yet_built), so the executor notes it (gap register occupation.per_state_law)"
         },
         "why": {
           "type": "string",
@@ -2498,7 +2502,7 @@
             "items": {
               "type": "string"
             },
-            "description": "1.19 regimental support row, one per column; a column needs 3 battalions; the executor skips it with a note (no tool fills the row)"
+            "description": "1.19 regimental support row, one company per column (a column takes one only with 3 battalions; a common/units entry with regimental = no cannot go there). Not sent yet: filling the row is not built (hoi4_template_create/edit refuse `regimental_support` with not_yet_built), so the executor makes the template without it and says so (gap register templates.regimental_support)"
           },
           "role": {
             "type": "string",

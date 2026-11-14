@@ -32,7 +32,9 @@
 //!                    army experience needed first (default for a create: 5 per battalion, 10 per
 //!                    company, 25 per extra column, the tool's costs), read from hoi4_doctrines; an
 //!                    entry short of XP waits and blocks the ones after it. `regimental_support`
-//!                    (the 1.19 row) is accepted and skipped with a note: no tool fills that row yet.
+//!                    (the 1.19 row, one company per column) is sent as the tools' argument of that
+//!                    name once plan_run::UNBUILT_ARGS stops holding it back; until then it is
+//!                    skipped with a note (gap register templates.regimental_support).
 //!                    `role` "strike" / "assault" / "armour" / "mobile" puts the template on elite
 //!                    reinforcement priority once a war with a `war.enemies` tag runs, "garrison" on
 //!                    reserve (hoi4_template_edit priority only; no battalion changes), and the
@@ -46,8 +48,11 @@
 //!                    `ladder` (default: the laws hoi4_occupation lists as shown to the player, from the
 //!                    game files, by the resistance target they set, mild to harsh), and every state at
 //!                    compliance >= 40 with resistance < 25 one step milder, at most once per
-//!                    `change_days`, through hoi4_occupation_law. `per_state` is noted, not applied
-//!                    (the tool sets the default law only); a garrison template action does not exist
+//!                    `change_days`, through hoi4_occupation_law. `per_state` {state id: law} sets
+//!                    the law of one occupied state once (hoi4_occupation_law {law, state}); that
+//!                    argument is held back in plan_run::UNBUILT_ARGS until the per-state law button
+//!                    is driven, and the note says so (gap register occupation.per_state_law); a
+//!                    garrison template action does not exist
 //!   peace            {"take":[state ids by rank],"puppet"?:[state ids],"liberate"?:[state ids],
 //!                    "max_cost"?,"max_rounds":10} when the conference opens: hoi4_peace_options, then
 //!                    one state per action through hoi4_peace_take (puppet:true / release:true for the
@@ -871,8 +876,9 @@ fn templates_step(
             continue;
         }
         let mut extra: Vec<String> = Vec::new();
-        if !entry["regimental_support"].is_null() || !entry["regimental"].is_null() {
-            extra.push("regimental support row skipped (no tool fills it yet)".into());
+        let mut regimental = strings(entry, "regimental_support");
+        if regimental.is_empty() {
+            regimental = strings(entry, "regimental");
         }
         if let (Some(b), None) = (base, edit) {
             extra.push(format!("base {b} not found, created new"));
@@ -943,6 +949,17 @@ fn templates_step(
         } else {
             "hoi4_template_create"
         };
+        if !regimental.is_empty() {
+            if super::arg_built(tool, "regimental_support") {
+                args.insert("regimental_support".into(), json!(regimental));
+            } else {
+                extra.push(
+                    "regimental support row skipped: filling it is not built yet \
+                     (gap register templates.regimental_support)"
+                        .into(),
+                );
+            }
+        }
         let (ok, why) = state.act(tools, lease, tool, Value::Object(args), "tp")?;
         if ok || why.contains("nothing_to_change") || why.contains("name_taken") {
             state.done.insert(key, now);
@@ -1002,8 +1019,21 @@ fn occupation_step(
         return Ok(None);
     };
     let mut extra: Vec<&str> = vec!["garrison template: no action exists yet"];
-    if !occ["per_state"].is_null() {
-        extra.push("per_state not applied (hoi4_occupation_law sets the default law only)");
+    // the law of single states: {state id: law}, each set once while the state is occupied
+    let per_state: Vec<(i64, String)> = occ["per_state"]
+        .as_object()
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| Some((k.parse().ok()?, v.as_str()?.to_string())))
+                .collect()
+        })
+        .unwrap_or_default();
+    let per_state_built = super::arg_built("hoi4_occupation_law", "state");
+    if !per_state.is_empty() && !per_state_built {
+        extra.push(
+            "per_state not applied: setting one state's law is not built yet \
+             (hoi4_occupation_law state; gap register occupation.per_state_law)",
+        );
     }
     let current = read["player_occupation_law"]["key"]
         .as_str()
@@ -1069,6 +1099,39 @@ fn occupation_step(
                 );
                 return Ok(Some(format!("occupation default law {law}: {ok} {why}")));
             }
+        }
+    }
+    if per_state_built {
+        let held = |id: i64| {
+            states.iter().any(|s| {
+                s["state_id"].as_i64() == Some(id) && text(&s["role"]) == "occupied_by_player"
+            })
+        };
+        for (id, law) in &per_state {
+            let key = format!("occ:state:{id}:{law}");
+            if state.done.contains_key(&key) || state.skipped(now, "occstate", &key) || !held(*id) {
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_occupation_law",
+                json!({"law": law, "state": id, "via_state": id}),
+                "ol",
+            )?;
+            if ok {
+                state.done.insert(key, now);
+            } else {
+                state.skip(now, "occstate", &key, 7 * DAY);
+            }
+            note(
+                state,
+                "occupation",
+                format!("state {id} law {law}: {ok}; {tail}"),
+            );
+            return Ok(Some(format!(
+                "occupation law of state {id} {law}: {ok} {why}"
+            )));
         }
     }
     let harsher_at = occ["harsher_at_resistance"].as_f64().unwrap_or(50.0);
@@ -3678,7 +3741,13 @@ mod tests {
             ])
         );
         assert_eq!(sent[0].1["priority"], "elite");
-        assert!(state.manage.notes["templates"].contains("regimental support row skipped"));
+        let line = &state.manage.notes["templates"];
+        assert!(
+            line.contains("regimental support row skipped")
+                && line.contains("templates.regimental_support"),
+            "{line}"
+        );
+        assert!(sent[0].1.get("regimental_support").is_none());
         // once per id, and the done-memory survives a restart through plan_state.json
         assert_eq!(
             step(&mut state, &tools, &plan, "l", START + 9 * DAY).unwrap(),
@@ -3799,7 +3868,14 @@ mod tests {
             272,
             "via the most resisting state"
         );
-        assert!(state.manage.notes["occupation"].contains("per_state not applied"));
+        let line = &state.manage.notes["occupation"];
+        assert!(
+            line.contains("per_state not applied") && line.contains("occupation.per_state_law"),
+            "{line}"
+        );
+        assert!(actions(&tools)
+            .iter()
+            .all(|(_, a)| a.get("state").is_none()));
         // checked every 7 game days; resistance 60 moves one step harsher after change_days
         tools.replies.borrow_mut().insert(
             "hoi4_occupation".into(),

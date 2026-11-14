@@ -118,7 +118,7 @@ class PlanSchemaCoverage(unittest.TestCase):
         self.assertEqual(set(meta) >= {"version", "parent", "dossier_hash", "models", "created", "lint_summary"}, True)
         doc = props["doctrines"]["items"]
         self.assertEqual(set(doc["properties"]) - {"why", "note"},
-                         {"id", "folder", "grand_doctrine", "track", "subdoctrine", "xp"})
+                         {"id", "folder", "grand_doctrine", "track", "subdoctrine", "xp", "replace"})
 
     def test_done_memory_lists_have_a_required_id(self):
         for k in ("construction_plan", "politics", "doctrines", "decision_rules"):
@@ -388,11 +388,11 @@ class CoverageKeys(unittest.TestCase):
             self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
         for key, item in (("xp_budget", "W1-6"), ("sea_transfer", "W1-14"),
-                          ("garrison_template", "W1-7"), ("occupation.per_state", "W1-7"),
+                          ("garrison_template", "W1-7"),
                           ("manage.fuel_floor", "W3-10")):
             self.assertEqual(planned.get(key), item, key)
         for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "stockpile_targets",
-                    "manage.air_superiority",
+                    "manage.air_superiority", "occupation.per_state",
                     "manage.casualty_ratio", "manage.casualty_days"):
             self.assertNotIn(key, planned)  # the step landed: no planned mark, the placeholder names are gone
 

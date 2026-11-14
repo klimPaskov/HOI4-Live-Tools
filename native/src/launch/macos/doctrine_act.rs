@@ -602,7 +602,11 @@ pub(super) fn call(
     authority: &InputAuthority,
     actions: &mut super::journal::GameJournal,
 ) -> Result<Value> {
-    super::allowed(args, &["doctrine", "track", "request_id", "lease_token"])?;
+    super::allowed(
+        args,
+        &["doctrine", "track", "replace", "request_id", "lease_token"],
+    )?;
+    super::refuse_unbuilt_args("hoi4_doctrine_adopt", args)?;
     let doctrine = super::string(args, "doctrine")?;
     if doctrine.is_empty()
         || doctrine.len() > 96
@@ -671,7 +675,7 @@ pub(super) fn call(
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_doctrine_adopt","description":"Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_doctrine_adopt","description":"Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace` (swap the grand doctrine or the track's subdoctrine already chosen, instead of the refusals grand_doctrine_set and track_occupied) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
 }
 
 #[cfg(test)]
