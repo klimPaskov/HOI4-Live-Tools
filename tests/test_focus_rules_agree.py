@@ -4,7 +4,7 @@
 tests/fixtures/focus_availability_cases.json holds the runtime's answers on a mod's focus tree (the native
 tests hold the runtime to them). Here the plan-side reader judges the same focuses in the same states:
 it may leave a gate undecided that the runtime decides, or the other way round, but where both decide
-they must agree. Skipped while the plan-side reader is not in the tree."""
+they must agree."""
 
 import json
 import os
@@ -14,12 +14,8 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
+from hoi4facts import plan_gates  # noqa: E402
 from hoi4facts.script import get, get1, parse  # noqa: E402
-
-try:
-    from hoi4facts import plan_gates  # noqa: E402
-except ImportError:  # the plan-side reader arrives with the focus slot lint
-    plan_gates = None
 
 FIXTURES = os.path.join(ROOT, "tests", "fixtures")
 
@@ -46,7 +42,6 @@ def focuses_of(block, key):
     return [{x for a, x in group if a == "focus"} for group in get(block, key) if isinstance(group, list)]
 
 
-@unittest.skipIf(plan_gates is None, "hoi4facts/plan_gates.py is not in this tree")
 class PlanSideAgreesWithRuntime(unittest.TestCase):
     def plan_side(self, block, state):
         """available / unavailable / unknown as the plan-side reader sees the focus in `state`."""
