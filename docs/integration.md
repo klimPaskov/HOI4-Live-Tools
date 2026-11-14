@@ -10,12 +10,19 @@ How HOI4 Live Tools is installed, registered and used by the other two projects 
 ## The installer contract
 
 `install.py` in the release archive is the only thing the other projects run. It needs Python 3.9 or newer on
-Windows and network access to PyPI for the first install.
+Windows, macOS or Linux and network access to PyPI for the first install.
 
 ```
 python install.py [install] [--prefix DIR] [--register auto|all|none|claude,codex,cursor,opencode] [--quiet] [--json]
-python install.py status | register | unregister | uninstall [--purge]
+                  [--native auto|skip|ARCHIVE] [--no-link] [--version X.Y.Z]
+python install.py update | doctor | status | register | unregister | uninstall [--purge]
 ```
+
+Since the release after 1.4.2 an install also writes, by default: `native\` (the native runtime for macOS on Apple
+silicon and Linux x86_64, downloaded from the same release and checked against `SHA256SUMS.txt`; exit code 5 when
+that fails), the `hoi4-live` command in the prefix, and a link to it in `~/.local/bin` or
+`%LOCALAPPDATA%\Microsoft\WindowsApps` when that folder is on the PATH. A caller that declares its writes passes
+`--native skip --no-link` to keep the earlier behaviour: everything inside the prefix, no download besides PyPI.
 
 - **Layout** (`%LOCALAPPDATA%\hoi4-live-tools` unless `--prefix` or `HOI4_LIVE_PREFIX`): `app\` (the program;
   `app\hoi4-live-tools.cmd` is what clients start), `venv\` (numpy, Pillow, opencv-python-headless), `config.json`
@@ -32,10 +39,12 @@ python install.py status | register | unregister | uninstall [--purge]
   exists. An existing `hoi4-live` entry that points at another launcher of this program is updated; one that belongs
   to another program is a conflict and is left untouched.
 - **Exit codes**: 0 done; 1 install failed; 2 usage or unsupported platform; 3 installed but the server did not
-  verify; 4 installed and verified but a client registration failed or conflicts.
+  verify; 4 installed and verified but a client registration failed or conflicts; 5 installed but the native
+  runtime could not be installed.
 - **Never touched**: the game, `settings.txt`, `dlc_load.json` (only `hoi4_telemetry` edits the playset, with a
   backup), saves.
-- **Uninstall** removes `app\`, `venv\`, `install.json` and the registrations it wrote; `--purge` also removes
+- **Uninstall** removes `app\`, `venv\`, `native\`, the command and its link, `install.json` and the
+  registrations it wrote; `--purge` also removes
   `config.json` and `artifacts\`.
 
 ## HOI4 Mod Setup

@@ -66,16 +66,29 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # The one-line installers fetch install.py from the release and check it against SHA256SUMS.txt.
+      - name: Installer files
+        run: cp install.py install.sh install.ps1 dist/
       - name: SHA256SUMS
         working-directory: dist
         run: |
-          sha256sum hoi4-live-tools-*.zip hoi4-live-native-*.tar.gz > SHA256SUMS.txt
+          sha256sum hoi4-live-tools-*.zip hoi4-live-native-*.tar.gz install.py install.sh install.ps1 > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      - name: The one-line installer installs this release from the built files
+        run: |
+          HOI4_LIVE_RELEASE_BASE="$PWD/dist" sh dist/install.sh --prefix "$RUNNER_TEMP/prefix" --home "$RUNNER_TEMP/home" \
+            --register none --skip-selftest
+          "$RUNNER_TEMP/prefix/hoi4-live" status
+          "$RUNNER_TEMP/prefix/native/hoi4-live-native" --doctor || true
+          "$RUNNER_TEMP/prefix/hoi4-live" uninstall --home "$RUNNER_TEMP/home"
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
             dist/hoi4-live-tools-*.zip
             dist/hoi4-live-native-*.tar.gz
+            dist/install.py
+            dist/install.sh
+            dist/install.ps1
             dist/SHA256SUMS.txt
       - name: Release notes from the changelog
         run: |
@@ -94,4 +107,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md \
-            dist/hoi4-live-tools-*.zip dist/hoi4-live-native-*.tar.gz dist/SHA256SUMS.txt
+            dist/hoi4-live-tools-*.zip dist/hoi4-live-native-*.tar.gz dist/SHA256SUMS.txt \
+            dist/install.py dist/install.sh dist/install.ps1
