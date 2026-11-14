@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/klimPaskov/HOI4-Live-Tools/skills/hoi4-campaign-playbook/plan.schema.json",
   "title": "HOI4 Live Tools campaign plan",
-  "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief). x-executor-planned names the build item (coverage audit section 6, W1-n / W2-n) whose executor step takes a player key over; the owner flips to executor when that step lands (x-planned-owner is the older marker). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
+  "description": "plan.json for the standing-plan executor (native/src/plan_run.rs) and the player. Every top-level key carries x-owner: executor (the executor reads it today) or player (the player acts on it from the brief). Inside an executor-owned key every key has one reader too: executor (inherited when unmarked), lint (only the planning tools read it: it shapes estimates, the executor does not act on it), text (for people; why and note are text unmarked) or, with x-executor-planned, a key whose executor step is still to come. scripts/hoi4facts/plan_keys.py check fails when a key has no reader. x-executor-planned names the build item (coverage audit section 6, W1-n / W2-n) whose executor step takes a player key over; the owner flips to executor when that step lands (x-planned-owner is the older marker). Unknown top-level keys are errors except _-prefixed ones. tests/test_plan_schema.py keeps this file in step with plan_run.rs.",
   "type": "object",
   "properties": {
     "_meta": {
@@ -22,13 +22,15 @@
             "integer",
             "null"
           ],
-          "minimum": 1
+          "minimum": 1,
+          "x-owner": "text"
         },
         "dossier_hash": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "x-owner": "text"
         },
         "models": {
           "type": "object",
@@ -75,10 +77,12 @@
             "required": [
               "model"
             ]
-          }
+          },
+          "x-owner": "text"
         },
         "created": {
-          "type": "string"
+          "type": "string",
+          "x-owner": "text"
         },
         "lint_summary": {
           "type": [
@@ -94,7 +98,8 @@
               "type": "integer",
               "minimum": 0
             }
-          }
+          },
+          "x-owner": "text"
         },
         "source": {
           "type": "string",
@@ -102,14 +107,16 @@
             "hand",
             "strategist"
           ],
-          "description": "who wrote the plan: hand plans get the coverage-build lint rules as warnings (lint_plan.py --hand does the same)"
+          "description": "who wrote the plan: hand plans get the coverage-build lint rules as warnings (lint_plan.py --hand does the same)",
+          "x-owner": "lint"
         },
         "review": {
           "type": [
             "object",
             "null"
           ],
-          "description": "critic verdict recorded at freeze (strategize.py)"
+          "description": "critic verdict recorded at freeze (strategize.py)",
+          "x-owner": "text"
         }
       },
       "additionalProperties": false,
@@ -579,7 +586,8 @@
               },
               "why": {
                 "type": "string",
-                "description": "the reason logged with each pick in the digest"
+                "description": "the reason logged with each pick in the digest",
+                "x-owner": "executor"
               },
               "note": {
                 "type": "string",
@@ -1114,18 +1122,21 @@
       "properties": {
         "summary": {
           "type": "string",
-          "description": "Free text for people and the player; never read by the executor."
+          "description": "Free text for people and the player; never read by the executor.",
+          "x-owner": "text"
         },
         "reading": {
           "type": "string",
-          "description": "Free text for people and the player; never read by the executor."
+          "description": "Free text for people and the player; never read by the executor.",
+          "x-owner": "text"
         },
         "alternatives": {
           "type": "array",
           "items": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
-          }
+          },
+          "x-owner": "text"
         },
         "predicates": {
           "type": "array",
@@ -1144,7 +1155,8 @@
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "x-owner": "text"
         }
       },
       "additionalProperties": false,
@@ -1282,7 +1294,8 @@
           },
           "summary": {
             "type": "string",
-            "description": "Free text for people and the player; never read by the executor."
+            "description": "Free text for people and the player; never read by the executor.",
+            "x-owner": "text"
           },
           "why": {
             "type": "string",
@@ -1565,7 +1578,8 @@
             "description": "Free text for people and the player; never read by the executor."
           },
           "call": {
-            "$ref": "#/definitions/call"
+            "$ref": "#/definitions/call",
+            "x-owner": "text"
           },
           "why": {
             "type": "string",
@@ -2971,7 +2985,7 @@
         "decryption_target": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9]{2}$",
-          "x-owner": "player",
+          "x-owner": "text",
           "description": "not read by the executor (no decryption tool)"
         },
         "why": {
@@ -3164,7 +3178,7 @@
           },
           "line": {
             "type": "string",
-            "x-owner": "player",
+            "x-owner": "text",
             "description": "production line equipment the MIO serves; not read (no tool assigns a line's MIO)"
           },
           "why": {
@@ -4194,35 +4208,37 @@
           },
           "order": {
             "type": "integer",
-            "x-owner": "player"
+            "x-owner": "lint",
+            "description": "position in the planned sequence: the lint orders its estimates by it, the executor takes the targets in list order, so write the list in this order"
           },
           "name": {
             "type": "string",
-            "x-owner": "player"
+            "x-owner": "text"
           },
           "vp": {
             "type": "integer",
             "minimum": 0,
-            "x-owner": "player"
+            "x-owner": "lint",
+            "description": "victory points of the province, checked against the state history; the surrender estimate counts them"
           },
           "by": {
             "$ref": "#/definitions/date",
-            "x-owner": "player",
-            "description": "planned date; feeds checkpoints"
+            "x-owner": "lint",
+            "description": "planned date: the lint places captures and construction triggers by it; the executor has no date per target (use checkpoints for a date that must hold)"
           },
           "path": {
             "$ref": "#/definitions/province_ids",
-            "x-owner": "player",
-            "description": "waypoint provinces (executor support later)"
+            "x-owner": "executor",
+            "description": "waypoint provinces in order from own land to the target (the target last or left out), each touching the next. The executor follows it leg by leg: the first waypoint it does not hold is the next objective, attacked from the held waypoint before it, and the next leg starts only once the army's supply is back at war.supply_resume (at most war.rest_max_days above war.supply_hold). A waypoint held by a country it is not at war with closes the path: the executor then routes on its own and says so in the run result's war notes (route:<army>). Without a path the executor routes on its own"
           },
           "from": {
             "$ref": "#/definitions/province_ids",
-            "x-owner": "player",
-            "description": "provinces to attack from"
+            "x-owner": "lint",
+            "description": "provinces the attack is expected to start from; the lint counts them as part of the route, the executor starts a leg from the held waypoint before it (see path)"
           },
           "mission": {
             "type": "string",
-            "x-owner": "player"
+            "x-owner": "text"
           },
           "why": {
             "type": "string",
@@ -4332,7 +4348,7 @@
           },
           "priority": {
             "type": "string",
-            "x-owner": "player",
+            "x-owner": "text",
             "description": "not read by the executor"
           },
           "why": {

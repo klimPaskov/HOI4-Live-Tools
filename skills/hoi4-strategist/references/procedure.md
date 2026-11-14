@@ -458,7 +458,15 @@ dossier §9.
    is only a general is promoted by the tool for command power; one who also commands a layout army is
    skipped (`F characters <TAG> --role marshal`).
 3a. Offensives are battle plans: front, offensive line, planning, execute. `vp_targets` name the state the
-   offensive goes for; direct province moves only with `war.direct_moves` or as the stall response. An
+   offensive goes for; direct province moves only with `war.direct_moves` or as the stall response. A
+   target's `path` (the `F route` provinces from own land to the target, each touching the next) is the
+   route the executor takes: the first waypoint not held is the next objective, attacked from the held
+   waypoint before it (the army goes there first), and after each captured waypoint the next leg waits
+   until the army's supply is back at `war.supply_resume` (at most `war.rest_max_days` above
+   `war.supply_hold`). A waypoint held by a country the plan is not at war with closes the path and the
+   executor routes on its own (run result `war` note `route:<army>`), so give the path that is open when
+   the target comes up, and a contingency with the other path where an annexation or a declaration opens
+   one. Without a `path` the executor picks its own way to the target's state. An
    army keeps a move for `war.move_commit_days` (3) and gets at most `war.move_budget` (3) moves in
    `war.move_window_days` (10); every move costs organisation.
 4. Planned trait assignments and command-power use (15 CP per trait, 20 per preferred tactic): no tool

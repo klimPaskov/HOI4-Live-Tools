@@ -90,6 +90,10 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   events.options           event_rules option names / event_options indexes that the event lacks
   schema.keys              schema errors (unknown keys, except _-prefixed)
   schema.player_call       player-owned items without a `call` (the tool call they stand for)
+  schema.lint_keys         keys the plan sets inside executor-owned keys that the executor does not act on
+                           (info: lint keys shape these estimates only, planned keys have no executor step
+                           yet; plan_keys.py); a warning when vp_targets `order` differs from the list order
+                           the executor follows
 
 Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   coverage.checklist       no top-level _coverage, a checklist id c1..c29 missing, a value that is not
@@ -231,7 +235,7 @@ from collections import Counter, defaultdict, deque
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from hoi4facts import calc as calcmod  # noqa: E402
-    from hoi4facts import content, derive, mapgraph, plan_gates, schema_check  # noqa: E402
+    from hoi4facts import content, derive, mapgraph, plan_gates, plan_keys, schema_check  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
     from hoi4facts import research as researchmod  # noqa: E402
@@ -242,7 +246,7 @@ if __package__ in (None, ""):
     from hoi4facts.validate import _world as world_of  # noqa: E402
 else:
     from . import calc as calcmod
-    from . import content, derive, mapgraph, plan_gates, schema_check
+    from . import content, derive, mapgraph, plan_gates, plan_keys, schema_check
     from . import tech as techrule
     from .game import Game
     from . import research as researchmod
@@ -1412,6 +1416,22 @@ class Lint:
                 self.add("error", "schema.player_call", key,
                          f"{len(missing)} of {len(items)} player items have no call (the tool call they stand for): "
                          f"indexes {', '.join(map(str, missing))}")
+
+        # Keys the plan sets that the executor does not act on: the plan must not read as if it did.
+        unread = plan_keys.unread_in(self.plan, self.schema)
+        for kind, paths in sorted(unread.items()):
+            what = ("only the planning tools read them (they shape the estimates above; the executor does not "
+                    "act on them)" if kind == "lint" else
+                    "no executor step reads them yet: the player acts on them from the brief, or they do nothing")
+            self.add("info", "schema.lint_keys", kind, f"{len(paths)} key(s) the executor does not act on: "
+                     f"{', '.join(paths)}: {what}")
+        t = self.list_of("vp_targets")
+        if t and all(isinstance(e.get("order"), int) for e in t):
+            listed = [e["order"] for e in t]
+            if listed != sorted(listed):
+                self.add("warning", "schema.lint_keys", "vp_targets",
+                         "`order` differs from the list order: the executor takes the targets in list order, the "
+                         "estimates here follow `order`; write the list in the planned order")
 
     # ------------------------------------------------------------------ coverage-build helpers
     @property
