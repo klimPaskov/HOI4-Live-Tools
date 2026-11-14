@@ -5,6 +5,7 @@
 | Setting up a campaign, FAIR vs META, banned and META-only tricks | rules-and-modes.md |
 | META run: every known exploit in one line (how, effect, works/unclear/patched on 1.19.4) | exploits.md |
 | Every tactic in one line, with the section that explains it | tactics.md |
+| Which levers a plan can ask for, a tool carries out and a live run has verified; what is blocked and who closes it | ../gap-register.json (page: docs/GAP_REGISTER.md) |
 | First years of a nation (GER, ITA, JAP, SOV, ENG, USA, FRA, POL, HUN, ROM, CHI, SWE, ETH, MAN, YUG, BRA, MEX) | nation-openers.md |
 | Declaring daily standing plans, what wakes the model | operating-loop.md |
 | What to build first, laws, consumer goods, resources, PP | economy-build-orders.md |

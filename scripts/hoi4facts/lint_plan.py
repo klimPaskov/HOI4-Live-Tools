@@ -103,7 +103,10 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            within the run left unused with no why; a used one without start, cost or effect_vp; a
                            used operation without the agency, its operatives and a network on the enemy in the
                            intelligence key; a used lever no tool carries without tool_gap (facts.capitulation_levers)
-  conquest.tool_gap        (warning) a used lever no tool carries yet (LEVER_TOOL_GAPS): report it in RUN/tool-gaps.md
+  conquest.tool_gap        (warning) a used lever no tool carries yet (LEVER_TOOL_GAPS, from the gap register's
+                           not-executable rows): report it in RUN/tool-gaps.md
+  gap.blocked              (warning, lint_gaps.py) a plan key that relies on a lever the gap register lists as not
+                           executable: report it in RUN/tool-gaps.md and plan a workaround the tools carry
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
                            fully-controlled state left out)
   conquest.adjacency       target (or the first province of its path) not next to own land or an
@@ -312,8 +315,13 @@ VP_SUPPLY_COST = 4.0       # conquest.vp_selection: cost per point of estimated 
 VP_DOMINANCE = 0.75        # conquest.vp_selection: an option worth as much at this share of the cost or less wins
 # A lever the plan needs but no tool carries: the lint names the gap (conquest.tool_gap) instead of the plan
 # dropping the lever. Remove a row when its tool is live-verified.
-LEVER_TOOL_GAPS = {"operation": "hoi4_operative_assign refuses operations (playbook politics-diplomacy-espionage "
-                                "section (c) Gaps); the operations tool is being built"}
+# The register's not-executable rows with a lever_kind are the source (gap_register.lever_tool_gaps); a row
+# leaves when its tool carries the lever.
+try:
+    from . import gap_register as _gap_register
+except ImportError:
+    from hoi4facts import gap_register as _gap_register  # noqa: E402
+LEVER_TOOL_GAPS = _gap_register.lever_tool_gaps()
 REACH_OK = 1.0             # supply.axis_reach: estimated flow below which the axis state is short of supply
 MATURE_DAYS = 30          # production.mature_switch: a line this old (or a start line) is mature
 SWITCH_MATCH_DAYS = 14    # production.mature_switch: a remove and an add this close are one switch
@@ -3978,6 +3986,7 @@ class Lint:
             step()
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
         __import__((__package__ or "hoi4facts") + ".lint_horizons", fromlist=["check"]).check(self)  # plan.horizons
+        __import__((__package__ or "hoi4facts") + ".lint_gaps", fromlist=["check"]).check(self)  # gap.blocked
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self
