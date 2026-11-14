@@ -141,7 +141,9 @@ def check_permissions(facts):
                                  where.format(pane="Screen & System Audio Recording"), SERVER))
         if ax is not None or capture is not None:
             out.append(item(NOTE, "macOS grants these permissions per app: the answers above are for the app "
-                                  "this command ran in; the app that starts the server needs them too"))
+                                  "this command ran in. The native runtime's input comes from the app you run "
+                                  "`hoi4-live play` in; the Python server's from the app that starts your coding "
+                                  "client"))
     elif system == "windows":
         out.append(item(NOTE, "input: run the game and your coding client as the same Windows user, both without "
                               "\"Run as administrator\"; Windows blocks input into a game that runs elevated",
@@ -183,14 +185,29 @@ def check_display(facts):
     return out
 
 
+def check_native_display(facts):
+    """The native runtime's input profile: windowed 1920x1080 at UI scale 1.0 on a screen that holds it (macOS)."""
+    if facts["system"] != "macos" or not facts["native"]["installed"]:
+        return []
+    from .play import game
+    out = []
+    for title, step in game.display_steps(facts.get("display") or {}, None, "macos"):
+        out.append(item(NOTE, title + "; hoi4-live play waits while you set it", step, NATIVE))
+    screen = facts.get("screen")
+    for title, step in game.display_steps({}, screen, "macos"):
+        out.append(item(FIX, title, step, NATIVE))
+    if screen and not out:
+        out.append(item(OK, "display: the game's settings and this screen fit the native runtime (windowed "
+                            "1920x1080, UI scale 1.0)", needs=NATIVE))
+    return out
+
+
 def check_steam(facts):
     running = facts.get("steam_running")
-    if running is None or not facts["native"]["installed"]:
+    if running is None or not facts["native"]["installed"] or facts["system"] != "macos":
         return []
-    if running:
-        return [item(FIX, "Steam is running; the native launcher starts the game directly and refuses while Steam "
-                          "is open", "quit Steam (Steam menu > Quit Steam) before a native game run", NATIVE)]
-    return [item(OK, "Steam is closed (the native launcher needs it closed)", needs=NATIVE)]
+    return [item(NOTE, "start the game from Steam as usual; hoi4-live play attaches to it (hoi4-live play --launch "
+                       "asks Steam to start it)", needs=NATIVE)]
 
 
 def check_mods(facts):
@@ -204,8 +221,8 @@ def check_mods(facts):
         out.append(item(NOTE, f"mods: {mods} enabled in your playset; the Python server starts the game with them",
                         needs=SERVER))
     if facts["native"]["installed"]:
-        out.append(item(NOTE, f"mods: {mods} enabled in your playset; a native game run starts with an empty "
-                              "playset, so they are not loaded there", needs=NATIVE))
+        out.append(item(NOTE, f"mods: {mods} enabled in your playset; the native runtime plays the game you start, "
+                              "mods included. The shipped plans are written for the base game", needs=NATIVE))
     return out
 
 
@@ -239,8 +256,8 @@ def check_selftest(facts):
     return out
 
 
-CHECKS = (check_install, check_game, check_build, check_memory, check_permissions, check_display, check_steam,
-          check_mods, check_selftest)
+CHECKS = (check_install, check_game, check_build, check_memory, check_permissions, check_display,
+          check_native_display, check_steam, check_mods, check_selftest)
 
 
 def evaluate(facts):
@@ -267,6 +284,19 @@ def ready(facts, items):
     return all(steps == 0 for _label, steps, _why in runtimes(facts, items) if steps is not None)
 
 
+def play_summary(facts):
+    """What `hoi4-live play` does on this system today, in one line (docs/PLAY_FLOW.md)."""
+    system, native = facts["system"], facts["native"]
+    if system == "macos" and native.get("expected") and native.get("installed"):
+        return ("attaches to the game you start from Steam and runs the campaign on the native runtime, with the "
+                "plan's executor and a supervisor; your coding client plays through the hoi4-live-play tools")
+    if system == "linux":
+        return ("cannot start a campaign here yet: the Linux runtime plays only games its own launcher started under "
+                "its own X display (docs/OWNED_LINUX_LAUNCHER.md)")
+    return ("hands the campaign to your coding client through the Python server"
+            + (" (the native runtime has no Windows adapter yet)" if system == "windows" else ""))
+
+
 def render(facts, items):
     names = {"macos": "macOS", "windows": "Windows", "linux": "Linux"}
     lines = [f"HOI4 Live Tools {facts['version']} doctor ({names.get(facts['system'], facts['system'])})", ""]
@@ -283,6 +313,7 @@ def render(facts, items):
             lines.append(f"{label}: {steps} step{'s' if steps != 1 else ''} to do (marked [fix] above)")
         else:
             lines.append(f"{label}: ready")
+    lines.append(f"hoi4-live play on this system: {play_summary(facts)}.")
     lines.append("The doctor only reads; every step above is yours to run.")
     return "\n".join(lines) + "\n"
 
@@ -437,6 +468,7 @@ def gather(prefix):
     cfg = config.load(os.path.join(prefix, "config.json") if os.path.isfile(os.path.join(prefix, "config.json"))
                       else None)
     facts["game"] = read_game(cfg.game_dir, cfg.game_exe if cfg.game_dir else None)
+    facts["user_dir"] = cfg.user_dir
     facts["display"] = read_display(cfg.user_dir)
     facts["mods"] = read_mods(cfg.user_dir)
     facts["steam_running"] = steam_running(system)
@@ -463,7 +495,8 @@ def main(argv=None):
     facts = gather(os.path.abspath(args.prefix))
     items = evaluate(facts)
     if args.json:
-        print(json.dumps({"ready": ready(facts, items), "items": items, "facts": facts}, indent=2))
+        print(json.dumps({"ready": ready(facts, items), "items": items, "play": play_summary(facts), "facts": facts},
+                         indent=2))
     else:
         sys.stdout.write(render(facts, items))
     return 0 if ready(facts, items) else 1

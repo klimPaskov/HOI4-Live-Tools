@@ -39,9 +39,10 @@ that game; it does not start, restart or configure it.
 - **Launching through Steam** is opt-in: `--launch` hands `steam://rungameid/394360` to the system (Steam starts
   the game as it always does). Nothing launches the game binary directly, and nothing is launched without the flag.
 - **No menus.** Menu navigation by screen position is not part of the product. The user starts or loads the
-  campaign; `play` waits until the runtime reads a loaded campaign of the right country, then hands over. The
-  native runtime refuses a campaign of another country (`invalid_input_binding`), and `play` says which one it
-  found.
+  campaign; `play` waits (up to 30 minutes) until the runtime reads a loaded campaign of the right country, then
+  hands over. While it waits it prints each new reason with its step: still in the menus, another country loaded
+  (the runtime refuses it with `invalid_input_binding`), the wrong window mode, the game behind another window
+  (it brings the game forward itself).
 
 What the native runtime needs from the game, and how it is checked without fixed screen coordinates:
 
@@ -116,7 +117,8 @@ What each piece needs per system:
 | Supervisor and `hoi4-live-play` proxy | yes | yes (stdlib, same code) | yes (named pipe; same code) |
 | `play` today | attaches and hands over | prints what is missing | hands the campaign to the Python server |
 
-The doctor prints the same table's row for the system it runs on.
+The doctor ends with one line saying what `hoi4-live play` does on the system it runs on; the README has the
+same table.
 
 ## Live checks
 

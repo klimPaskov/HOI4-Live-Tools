@@ -516,6 +516,32 @@ class InstalledCommandTests(Sandbox):
         self.assertIn("The doctor only reads", text)
 
 
+    def test_play_stop_and_mcp_run_the_installed_program_from_its_own_folder(self):
+        self.publish(native=False)
+        self.assertEqual(self.run_main("update", *self.ARGS)[0], install.EXIT_OK)
+        app = os.path.join(self.prefix, "app")
+        seen = []
+
+        def run(argv, **kwargs):
+            seen.append((argv, kwargs))
+            return subprocess.CompletedProcess(argv, 0)
+        with mock.patch.object(install.subprocess, "run", side_effect=run):
+            self.run_main("play", "ITA", "conquer", "Ethiopia", "--launch", "--wait", "3", "--plan", self.tmp)
+            self.run_main("stop")
+            self.run_main("mcp")
+        play, stop, mcp = seen
+        self.assertEqual(play[0][1:3], ["-m", "hoi4_live.firstrun"])
+        for flag in ("--launch", "--wait", "3", "--plan", os.path.abspath(self.tmp), "ITA", "conquer", "Ethiopia"):
+            self.assertIn(flag, play[0])
+        self.assertIn("stop_active", stop[0][2])
+        self.assertEqual(mcp[0][1:3], ["-m", "hoi4_live.play.proxy"])
+        self.assertIsNone(mcp[1]["stdin"])                              # the client's stdio reaches the proxy
+        for _argv, kwargs in seen:
+            # A hoi4_live package in the folder the command runs from must not shadow the installed one.
+            self.assertEqual(kwargs["cwd"], app)
+            self.assertEqual(kwargs["env"]["PYTHONPATH"], app)
+
+
 class StandaloneTests(Sandbox):
     """install.py on its own, and the one-line installers, against a release folder."""
 

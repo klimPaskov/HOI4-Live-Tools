@@ -4,13 +4,15 @@
 It takes a country and a goal and does, in order, what a fresh install needs before an agent can play:
 
     1. the doctor: anything to fix for the runtime that will play stops here, with its step
-    2. the plan: a shipped reviewed plan when one matches the country (and mode), copied into a new run folder
-    3. the start: what this system's installed runtime can start today, as one instruction for the coding client,
-       or the exact piece that is still missing on this system
+    2. the plan: a shipped reviewed plan when one matches the country (and mode), or a strategist plan (--plan)
+    3. the start: on macOS with the native runtime, attach to the game the user started, start the supervisor
+       (hoi4_live.play) and print the one instruction for the coding client; elsewhere what this system's
+       installed runtime can start today, or the exact piece that is still missing (docs/PLAY_FLOW.md)
 
-Nothing here starts a game or sends input; it reads, writes one run folder under the install and prints. Standard
-library only. Exit codes: 0 handed to the coding client, 1 the doctor has steps to do, 2 usage or no plan for the
-country, 3 this system has no start path yet.
+It never starts the game binary: the user starts the game from Steam (--launch asks Steam to). It sends no input
+itself and changes no file outside the run folder. Standard library only. Exit codes: 0 handed to the coding
+client, 1 the doctor has steps to do, 2 usage or no plan for the country, 3 this system has no start path yet,
+4 no game or the run did not start, 5 a campaign is already running.
 """
 
 import argparse
@@ -22,6 +24,7 @@ import shutil
 import sys
 
 from . import doctor
+from .play import start as native_start
 
 EXIT_OK, EXIT_DOCTOR, EXIT_USAGE, EXIT_NO_START = 0, 1, 2, 3
 PLAYBOOK = os.path.join("skills", "hoi4-campaign-playbook")
@@ -67,21 +70,27 @@ def find_plan(plans, country, mode=None):
 
 
 def start_path(system, facts, items):
-    """What the installed product can start on this system today: {"runtime", "ready", "can_start", "missing"}."""
+    """What the installed product can start on this system today:
+    {"runtime", "ready", "can_start", "native", "missing"}."""
     states = {label: steps for label, steps, _why in doctor.runtimes(facts, items)}
+    if system == "macos" and facts["native"].get("expected") and facts["native"].get("installed"):
+        return {"runtime": "native runtime", "ready": states.get("native runtime") == 0, "can_start": True,
+                "native": True, "missing": None}
     if system == "linux":
         return {"runtime": "native runtime", "ready": states.get("native runtime") == 0, "can_start": False,
-                "missing": "On Linux nothing starts a campaign from the install yet. The native launcher "
-                           "(hoi4-live-native --serve) needs an X11 display of its own and a private settings file, "
-                           "and nothing drives the menus to the chosen country: docs/OWNED_LINUX_LAUNCHER.md."}
-    note = ("The shipped plan is written for the native runtime's executor. Nothing in the install starts a game "
-            "for that runtime on macOS yet, so the coding client plays through the Python server with the plan's "
-            "notes as its guide; the Python server has had no accepted live campaign on macOS."
+                "native": False,
+                "missing": "On Linux the native runtime cannot attach to a game you start yet: it holds only games "
+                           "its owned launcher (hoi4-live-native --serve) started under an X11 display of its own, "
+                           "and its input is bound to that display (docs/OWNED_LINUX_LAUNCHER.md). Nothing starts a "
+                           "campaign from the install there yet."}
+    note = ("This Mac has no native runtime (it needs Apple silicon), so the coding client plays through the "
+            "Python server with the plan's notes as its guide; the Python server has had no accepted live campaign "
+            "on macOS."
             if system == "macos" else
             "The shipped plan is written for the native runtime's executor, which has no Windows adapter yet, so "
             "the coding client plays through the Python server with the plan's notes as its guide.")
     return {"runtime": "Python server", "ready": states.get("Python server") == 0, "can_start": True,
-            "missing": note}
+            "native": False, "missing": note}
 
 
 def client_prompt(plan, goal, run, app):
@@ -114,21 +123,59 @@ def prepare_run(prefix, plan, goal, now=None):
     return run
 
 
-def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout, now=None):
+STRATEGIST_NOTE = (
+    "A plan for another country, start or mod is written by the strategist, a step of its own: it researches the "
+    "game files with a strong model for a long time (typically 20 to 60 minutes, and a model bill to match), then a "
+    "second model reviews the plan. It runs from the repository: python scripts/strategist/strategize.py --run "
+    "<folder> --tag <TAG> --goal \"<goal>\" (skills/hoi4-strategist explains it). Then: hoi4-live play <TAG> "
+    "\"<goal>\" --plan <folder>.")
+
+
+def plan_from_folder(folder):
+    """A strategist plan folder (plan.json, run_spec.json, plan.brief.md, plan.md) as a plan entry, or None."""
+    folder = os.path.abspath(folder)
+    try:
+        with open(os.path.join(folder, "run_spec.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        with open(os.path.join(folder, "plan.json"), encoding="utf-8") as f:
+            json.load(f)
+    except (OSError, ValueError):
+        return None
+    tag = str(spec.get("tag") or "").upper()
+    if not re.fullmatch(r"[A-Z0-9]{3}", tag):
+        return None
+    brief, guide = os.path.join(folder, "plan.brief.md"), os.path.join(folder, "plan.md")
+    return {"id": os.path.basename(folder), "tag": tag, "name": spec.get("country") or tag,
+            "mode": str(spec.get("mode") or "fair").lower(), "start": spec.get("date"),
+            "stop": spec.get("horizon"), "path": os.path.join(folder, "plan.json"),
+            "brief": brief if os.path.isfile(brief) else None, "guide": guide if os.path.isfile(guide) else None}
+
+
+def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout, now=None, plan_folder=None,
+         launch=False, wait_minutes=15, minutes=180, start_native=native_start.start_native):
     app = os.path.join(prefix, "app")
     plans = shipped_plans(app)
-    plan = find_plan(plans, country, mode)
+    if plan_folder:
+        plan = plan_from_folder(plan_folder)
+        if not plan:
+            out.write(f"{plan_folder} is not a strategist plan folder (plan.json and run_spec.json with a tag).\n")
+            return EXIT_USAGE
+        if country.strip().upper() != plan["tag"] and country.strip().lower() != plan["name"].lower():
+            out.write(f"The plan in {plan_folder} is for {plan['tag']}, not {country}.\n")
+            return EXIT_USAGE
+    else:
+        plan = find_plan(plans, country, mode)
     if not plan:
         out.write(f"No shipped plan for \"{country}\"" + (f" in {mode.upper()} mode" if mode else "") + ".\n"
                   f"Campaigns with a reviewed plan: {campaigns(plans) or 'none found in this install'}.\n"
-                  "A plan for another country is written by the strategist (skills/hoi4-strategist in the app "
-                  "folder), which runs from the repository and is not part of the installed command yet.\n")
+                  + STRATEGIST_NOTE + "\n")
         return EXIT_USAGE
     facts = gather(prefix)
     items = doctor.evaluate(facts)
     path = start_path(facts["system"], facts, items)
     out.write(f"Campaign: {plan['name']} ({plan['tag']}), {plan['mode'].upper()}, {plan['start']} to {plan['stop']}\n"
-              f"Goal: {goal}\nPlan: shipped reviewed plan {plan['id']}\n")
+              f"Goal: {goal}\nPlan: " + ("strategist plan " if plan_folder else "shipped reviewed plan ")
+              + f"{plan['id']}\n")
     if not path["ready"]:
         key = doctor.NATIVE if path["runtime"] == "native runtime" else doctor.SERVER
         out.write(f"\nThe {path['runtime']} is not ready. Do these steps, then run the command again:\n")
@@ -140,6 +187,12 @@ def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout,
     if not path["can_start"]:
         out.write(f"\n{path['missing']}\n")
         return EXIT_NO_START
+    if path.get("native"):
+        template = os.path.join(app, PLAYBOOK, "briefs", "player.txt")
+        with open(template, encoding="utf-8") as f:
+            text = f.read()
+        return start_native(prefix, plan, goal, facts, out, text, launch=launch, wait_minutes=wait_minutes,
+                            minutes=minutes, now=now)
     run = prepare_run(prefix, plan, goal, now)
     prompt = client_prompt(plan, goal, run, app)
     with open(os.path.join(run, "prompt.txt"), "w", encoding="utf-8", newline="\n") as f:
@@ -154,6 +207,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="hoi4-live play", description=__doc__.split("\n\n")[0])
     parser.add_argument("--prefix", required=True, help="the install folder")
     parser.add_argument("--mode", choices=("fair", "meta"), help="the rule set (default: the plan's, FAIR first)")
+    parser.add_argument("--plan", help="a strategist plan folder instead of a shipped plan")
+    parser.add_argument("--launch", action="store_true", help="ask Steam to start the game (macOS)")
+    parser.add_argument("--wait", type=int, default=15, help="minutes to wait for the game (default 15)")
+    parser.add_argument("--minutes", type=int, default=180, help="the agent's time limit in the brief")
     parser.add_argument("country", nargs="?", help="a country tag or name, for example ITA or Italy")
     parser.add_argument("goal", nargs="*", help="what the campaign should achieve, in your words")
     args = parser.parse_args(argv)
@@ -163,7 +220,8 @@ def main(argv=None):
                          "Ethiopia before 1937\"\n"
                          f"Campaigns with a reviewed plan: {campaigns(shipped_plans(os.path.join(prefix, 'app')))}\n")
         return EXIT_USAGE
-    return play(prefix, args.country, " ".join(args.goal), args.mode)
+    return play(prefix, args.country, " ".join(args.goal), args.mode, plan_folder=args.plan, launch=args.launch,
+                wait_minutes=args.wait, minutes=args.minutes)
 
 
 if __name__ == "__main__":
