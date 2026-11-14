@@ -518,6 +518,60 @@ mod tests {
         );
     }
 
+    /// The live failure, end to end: an action whose deadline ended while it was still sending
+    /// input is read back through the same fence and settled, instead of staying open.
+    #[test]
+    fn an_action_that_ran_out_of_time_is_settled_through_its_own_expired_fence() {
+        use super::super::journal::{GameJournal, Outcome, Status};
+        let epoch = epoch_fixture();
+        let expected = context();
+        let process = Probe::new(&epoch);
+        let (authority, token) = leased_authority(&epoch);
+        let fence = Fence {
+            process: &process,
+            epoch: &epoch,
+            expected: &expected,
+            authority: &authority,
+            token: &token,
+            until: Instant::now(),
+            stop: None,
+        };
+        let dir = std::env::temp_dir().join(format!("hoi4-fence-settle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir(&dir).unwrap();
+        let mut journal = GameJournal::open(&dir.join("game-actions.jsonl")).unwrap();
+        for (id, started) in [("ran-out", false), ("started-late", true)] {
+            let mut settle = || {
+                // Every adapter's readback reads the game through its fence.
+                fence.read(0x10000, 8)?;
+                Ok(if started {
+                    Outcome::Reached(serde_json::json!({"active": "focus"}))
+                } else {
+                    Outcome::Unchanged(serde_json::json!({"active": null}))
+                })
+            };
+            // The dispatch fails on the expired deadline, as it did mid-pan.
+            let mut dispatch = || fence.read(0x10000, 8).map(|_| ());
+            let result = journal.execute_with(
+                id,
+                &epoch,
+                serde_json::json!({"kind": "focus_start", "focus": id}),
+                &mut settle,
+                &mut dispatch,
+                true,
+            );
+            if started {
+                assert_eq!(result.unwrap().status, Status::Verified);
+            } else {
+                // A clean failure with the action's own cause, not an open intent.
+                assert_eq!(result.unwrap_err().code, "action_deadline");
+            }
+            assert!(!journal.blocked() && !journal.blocked_for("focus"));
+        }
+        drop(journal);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn batch_validates_every_request_before_reads_and_stops_between_payloads() {
         let epoch = epoch_fixture();
