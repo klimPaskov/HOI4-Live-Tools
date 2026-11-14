@@ -105,6 +105,18 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   supply.port_convoys      the plan builds a port or relies on one (sea_transfer.ports, an overseas army)
                            but has no convoy item (convoy production line or manage.convoys_free);
                            sea supply needs SUPPLY_CONVOY_FACTOR convoys per supply
+  supply.convoy_size       the convoys the plan's sea supply and sea trade need, against the convoys the country
+                           starts with: divisions standing in states the capital cannot reach over own land
+                           (start OOB and army_layout) x the supply use of their templates (sub-unit
+                           supply_consumption) x SUPPLY_CONVOY_FACTOR, plus the planned imports (auto_import
+                           budget x 8 units a factory, trade deal amounts) x 0.1 convoy a unit; error when the
+                           need is above the start convoys or above sea_transfer.convoys; the sizing is always
+                           in facts.convoys (before range: CONVOY_RANGE_FACTOR x the route length is not modelled)
+  xp.unspent               (warning) a plan at war from the start that spends no army experience although the
+                           country pool can pay the cheapest land doctrine before the war ends: start + the
+                           focus_path rewards + FIELD_EXPERIENCE_MAX_PER_DAY x days at war (the NMilitary
+                           country-pool defines; UNIT_EXPERIENCE_* is a division's veterancy); facts.xp
+                           holds the floor and the ceiling
   supply.axis_reach        an axis state (war, war_by_phase, phase overrides) whose main province gets an estimated supply
                            flow below 1.0 from the best node held by then (start nodes, planned hubs and
                            ports, nodes of earlier axis states), from the NSupply defines, terrain, state
@@ -265,6 +277,7 @@ PP_IDLE_DAYS = 60         # ... and idle this many days in a row warns
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
 WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
+             "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.remove",
              "predicates.unreadable", "conquest.neutral_land",
@@ -281,6 +294,9 @@ _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([
                          r"|^(state_fully_controlled|controls_state):(\d+)$")
 
 
+# Sea trade: neither number is in the defines (the trade window shows both).
+TRADE_UNITS_PER_FACTORY = 8
+TRADE_CONVOYS_PER_UNIT = 0.1
 RESEARCH_IDLE_SLACK = 0.02  # research.idle: unplanned share of the slot time allowed while in-time techs remain
 
 
@@ -1798,6 +1814,191 @@ class Lint:
                  f"manage.convoys_free threshold); sea supply needs {factor:g} convoys per supply "
                  f"(SUPPLY_CONVOY_FACTOR)")
 
+    def full_define(self, key, default):
+        """A define by its full key ("NCountry.SUPPLY_CONVOY_FACTOR"), mods included; default when the
+        files do not hold a number for it."""
+        v, _ = self.world.define(key)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else default
+
+    def division_supply(self, template):
+        """Daily supply use of one division of a start template (the sum of its sub-units'
+        supply_consumption, at least MIN_SUPPLY_CONSUMPTION), None when the template is unknown."""
+        t = self.start_templates().get(template)
+        if not t:
+            return None
+        units = self.world.sub_units()
+
+        def use(u):
+            return (units.get(u, {}).get("stats") or {}).get("supply_consumption") or 0.0
+
+        total = sum(n * use(u) for u, n in t["regiments"].items())
+        total += sum(use(u) for u in list(t["support"]) + list(t.get("regimental_support") or []))
+        return max(total, self.full_define("NMilitary.MIN_SUPPLY_CONSUMPTION", 0.0))
+
+    def sea_supply(self):
+        """[{"state", "divisions", "supply"}] of the states supplied by sea: the start divisions standing
+        there, raised to the army_layout count of the state (extra divisions at the mean use of the
+        entry's templates), and the divisions sea_transfer.routes bring."""
+        if not self.tag:
+            return []
+        start = defaultdict(list)
+        for d in self.world.oob(self.tag)["divisions"]:
+            if d.get("state") is not None:
+                start[d["state"]].append(self.division_supply(d["template"]) or 0.0)
+        over = derive.overseas_states(self.game, self.ctx, self.tag, set(start) | self.army_states(), self.start,
+                                      self.meta.get("history_file")) or set()
+        every = [x for uses in start.values() for x in uses if x]
+        mean_all = sum(every) / len(every) if every else 0.0
+
+        def mean(templates):
+            uses = [u for u in (self.division_supply(t) for t in templates or [] if isinstance(t, str)) if u]
+            return sum(uses) / len(uses) if uses else mean_all
+
+        extra = defaultdict(list)  # state: [(count, mean use)]
+        for e in self.list_of("army_layout"):
+            if isinstance(e.get("state"), int) and isinstance(e.get("count"), int):
+                extra[e["state"]].append((e["count"], mean(e.get("templates"))))
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        moved = defaultdict(float)
+        for r in st.get("routes") or []:
+            if isinstance(r, dict) and isinstance(r.get("to_state"), int) and isinstance(r.get("count"), int):
+                moved[r["to_state"]] += r["count"] * mean(r.get("templates"))
+        out = []
+        for sid in sorted(over | (set(moved) & over)):
+            uses = list(start.get(sid, []))
+            planned = sum(n for n, _ in extra.get(sid, []))
+            supply = sum(uses)
+            divisions = len(uses)
+            if planned > divisions:
+                layout_mean = sum(n * u for n, u in extra[sid]) / planned
+                supply += (planned - divisions) * layout_mean
+                divisions = planned
+            if moved.get(sid):
+                supply += moved[sid]
+            if divisions or moved.get(sid):
+                out.append({"state": sid, "divisions": divisions, "supply": round(supply, 2)})
+        return out
+
+    def sea_trade_units(self):
+        """(units the plan imports, [what was counted], [what could not be counted])."""
+        units, counted, unknown = 0.0, [], []
+        ai = self.plan.get("auto_import")
+        budget = ai.get("budget") if isinstance(ai, dict) else ai
+        on = ai.get("enabled", True) if isinstance(ai, dict) else ai not in (None, False)
+        if on and isinstance(budget, int) and not isinstance(budget, bool):
+            units += budget * TRADE_UNITS_PER_FACTORY
+            counted.append(f"auto_import budget {budget} factories x {TRADE_UNITS_PER_FACTORY} units")
+        elif on and ai is not None:
+            unknown.append("auto_import without a budget")
+        tr = self.plan.get("trade")
+        deals = tr.get("deals") if isinstance(tr, dict) else tr
+        for i, deal in enumerate(deals if isinstance(deals, list) else []):
+            if not isinstance(deal, dict):
+                continue
+            amount = deal.get("amount")
+            if isinstance(amount, (int, float)) and not isinstance(amount, bool):
+                units += amount
+                counted.append(f"trade deal {deal.get('id', i)} {amount:g} {deal.get('resource', 'units')}")
+            else:
+                unknown.append(f"trade deal {deal.get('id', i)} amount {amount or 'needed'}")
+        return units, counted, unknown
+
+    def convoy_size(self):
+        if not self.tag:
+            return
+        rows = self.sea_supply()
+        units, counted, unknown = self.sea_trade_units()
+        if not rows and not units:
+            return
+        factor = self.full_define("NCountry.SUPPLY_CONVOY_FACTOR", None)
+        if factor is None:
+            return  # no such define in these game files: nothing to size with
+        range_factor = self.full_define("NCountry.CONVOY_RANGE_FACTOR", 1.0)
+        supply = sum(r["supply"] for r in rows)
+        for_supply, for_trade = supply * factor, units * TRADE_CONVOYS_PER_UNIT
+        need = math.ceil(for_supply + for_trade - 1e-9)
+        f = self.world.country(self.tag)["convoys"]
+        have = int(f["v"]) if f and isinstance(f["v"], (int, float)) else 0
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        stated = st.get("convoys") if isinstance(st.get("convoys"), int) and not isinstance(st.get("convoys"), bool) else None
+        self.facts["convoys"] = {
+            "start": have, "start_src": f["src"] if f else None, "need": need,
+            "sea_supply": {"states": rows, "supply": round(supply, 2), "convoys_per_supply": factor,
+                           "convoys": round(for_supply, 2)},
+            "sea_trade": {"units": round(units, 2), "convoys_per_unit": TRADE_CONVOYS_PER_UNIT,
+                          "convoys": round(for_trade, 2), "counted": counted, "not_counted": unknown},
+            "range_factor": range_factor, "free": have - need,
+            "d": "need = sea supply (divisions in states the capital cannot reach over own land x the supply use "
+                 "of their templates x SUPPLY_CONVOY_FACTOR) + sea trade (imported units x "
+                 f"{TRADE_CONVOYS_PER_UNIT:g}, not in the defines; every import counted as sea trade: an upper "
+                 "bound); before range: the game raises both with the route length (CONVOY_RANGE_FACTOR), which "
+                 "is not modelled, so keep a wide margin on long lanes"}
+        parts = []
+        if rows:
+            parts.append(f"sea supply {for_supply:.1f} ({supply:.1f} supply for "
+                         f"{sum(r['divisions'] for r in rows)} divisions in state(s) "
+                         f"{', '.join(str(r['state']) for r in rows)} x {factor:g} SUPPLY_CONVOY_FACTOR)")
+        if units:
+            parts.append(f"sea trade {for_trade:.1f} ({units:g} imported units x {TRADE_CONVOYS_PER_UNIT:g})")
+        text = " + ".join(parts)
+        if need > have:
+            self.add("error", "supply.convoy_size", "production",
+                     f"the plan needs about {need} convoys before range ({text}) and {self.tag} starts with {have}"
+                     f"{' [' + f['src'] + ']' if f else ' (no set_convoys in its history)'}: build convoys first "
+                     f"(a convoy production line sized to the gap), cut the imports, or move fewer divisions overseas")
+        if stated is not None and stated < need:
+            self.add("error", "supply.convoy_size", "sea_transfer.convoys",
+                     f"sea_transfer.convoys is {stated}, the plan's sea supply and trade need about {need} before "
+                     f"range ({text})")
+
+    def xp_unspent(self):
+        """A war banks army experience in the country pool; a plan that lists no army XP spend leaves it idle."""
+        if not self.tag:
+            return
+        first, last, _ = self.war_window()
+        ends = [d for d, _ in self.horizon()]
+        if first is None:
+            return
+        last = last if last is not None else (min(ends) if ends else None)
+        if last is None or last <= first:
+            return
+        w = self.world
+        xp = w.experience(self.tag)
+        gain = xp["gain"].get("army") or {}
+        if "combat_max_per_day" not in gain:
+            return
+        per_day = float(gain["combat_max_per_day"]["v"])
+        pool = float(xp["max"]["army"]["v"]) if "army" in xp["max"] else math.inf
+        path = {k for k in self.plan.get("focus_path") or [] if isinstance(k, str)}
+        focusmod = __import__((__package__ or "hoi4facts") + ".focus", fromlist=["xp_rewards"])
+        rewards = [(r["focus"], r["army"]) for r in focusmod.xp_rewards(w, self.tag)
+                   if r["focus"] in path and (r.get("army") or 0) > 0]
+        floor = min(pool, float(xp["start"]["army"]["v"]) + sum(n for _, n in rewards))
+        ceiling = min(pool, floor + per_day * (last - first))
+        d = self.game.doctrines(self.ctx) if self.ctx else {"grand": {}, "sub": {}}
+        costs = [g["xp_cost"] for g in d["grand"].values() if g.get("folder") == "land" and g.get("xp_cost")]
+        costs += [x["xp_cost"] for x in d["sub"].values() if x.get("xp_type") == "army" and x.get("xp_cost")]
+        cheapest = min(costs) if costs else None
+        self.facts["xp"] = {"army": {"floor": round(floor, 1), "ceiling": round(ceiling, 1), "war_days": last - first,
+                                     "combat_max_per_day": per_day, "combat_scale": gain.get("combat_scale", {}).get("v"),
+                                     "define": gain["combat_max_per_day"]["key"], "src": gain["combat_max_per_day"]["src"],
+                                     "focus_rewards": rewards, "cheapest_land_doctrine": cheapest}}
+        xb = self.plan.get("xp_budget") if isinstance(self.plan.get("xp_budget"), dict) else {}
+        spends = bool(xb.get("army"))
+        spends |= any(e.get("folder") == "land" for e in self.list_of("doctrines"))
+        spends |= any(isinstance(t.get("xp"), (int, float)) and t["xp"] > 0 for t in self.list_of("templates"))
+        spends |= any(e.get("kind") == "tank" for e in self.list_of("designs"))
+        if spends or cheapest is None or ceiling < cheapest:
+            return
+        self.add("warning", "xp.unspent", "doctrines",
+                 f"the plan spends no army experience, and the war can bank up to {ceiling:.0f} by "
+                 f"{'.'.join(map(str, derive.date_of(last)))} (floor {floor:.0f} from the start and the focus_path "
+                 f"rewards, plus at most {per_day:g} a day in combat over {last - first} days: "
+                 f"{gain['combat_max_per_day']['key']} [{gain['combat_max_per_day']['src']}], the country pool; "
+                 f"UNIT_EXPERIENCE_* is a division's veterancy); the cheapest land doctrine costs {cheapest:g}: add a "
+                 f"doctrines entry with its xp (the executor adopts it when the pool has it) or another army XP "
+                 f"spend; `calc xp` dates the pool")
+
     def hub_cost(self):
         game = self.game
         costs = derive.building_costs(game)
@@ -3097,7 +3298,7 @@ class Lint:
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
-                 self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus
                  # timeline)
