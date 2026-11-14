@@ -74,7 +74,14 @@ class ClaudeCode(Adapter):
             return {}
         usage = result.get("modelUsage") or {}
         out = {"session_id": result.get("session_id"), "cost_usd": result.get("total_cost_usd"),
-               "is_error": result.get("is_error")}
+               "is_error": result.get("is_error"), "duration_ms": result.get("duration_ms"),
+               "num_turns": result.get("num_turns")}
+        totals = {}
+        for row in usage.values():
+            for key in ("inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens"):
+                totals[key] = totals.get(key, 0) + int((row or {}).get(key) or 0)
+        if totals:
+            out["usage"] = totals
         if usage:
             ranked = sorted(usage.items(), key=lambda kv: -(kv[1] or {}).get("outputTokens", 0))
             out["resolved_model"] = ranked[0][0]
