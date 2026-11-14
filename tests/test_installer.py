@@ -113,8 +113,8 @@ class RegistrationTests(unittest.TestCase):
         self.assertTrue(self.read(os.path.join("sub", "config.toml")).startswith(install.MARK_BEGIN))
 
     def test_the_play_server_sits_beside_the_main_one_in_every_client(self):
-        command = os.path.join(self.tmp, "prefix", "hoi4-live")
-        prefix = os.path.dirname(command)
+        prefix = os.path.join(self.tmp, "prefix")
+        command = install.command_path(prefix)
         for client in install.CLIENTS:
             if client != "codex":
                 install.register_json(client, install.client_files(self.tmp)[client], CMD)
