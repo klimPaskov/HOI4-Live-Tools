@@ -277,6 +277,60 @@ class Calculators(unittest.TestCase):
         self.assertEqual(r["rows"][0]["state"], 1)
         self.assertEqual(r["unfinished"][0]["blocked"], "no free slot")
 
+    def test_build_order_says_when_infrastructure_is_a_guess(self):
+        # no state and no --infra: level 0 is a guess, said in the result and on the row
+        r = calc.build_order(self.w, calc.parse_order("supply_node:1", self.w), 15, 0, 0.0, "1936.1.1")
+        self.assertEqual((r["rows"][0]["infra"], r["rows"][0]["infra_src"]), (0, "assumed"))
+        self.assertEqual(r["rows"][0]["date"], add_days("1936.1.1", 267))  # 20000 / 75
+        self.assertEqual(len(r["warnings"]), 1)
+        self.assertIn("infrastructure 0 assumed for 1 project(s) with no state (supply_node)", r["warnings"][0])
+        # an explicit level is no guess
+        r = calc.build_order(self.w, ["supply_node"], 15, 0, 0.0, "1936.1.1", infra=0)
+        self.assertEqual((r["warnings"], r["rows"][0]["infra_src"]), ([], "--infra"))
+
+    def test_build_order_takes_infrastructure_from_the_named_state(self):
+        # state 1 has infrastructure 3: 20000 / (75 x 1.6) = 167 days
+        items = calc.parse_order("supply_node:1#1", self.w)
+        self.assertEqual(items, [("supply_node", None, 1, 1)])
+        r = calc.build_order(self.w, items, 15, 0, 0.0, "1936.1.1")
+        self.assertEqual((r["rows"][0]["state"], r["rows"][0]["infra"], r["rows"][0]["infra_src"]), (1, 3, "state"))
+        self.assertEqual(r["rows"][0]["date"], add_days("1936.1.1", 167))
+        self.assertEqual(r["warnings"], [])
+        # an infrastructure level finished there first speeds up what follows: 6000 / (75 x 1.6) = 50 days,
+        # then 20000 / (75 x 1.8) = 149 days at level 4
+        r = calc.build_order(self.w, calc.parse_order("infrastructure:1#1,supply_node#1", self.w), 15, 0, 0.0, "1936.1.1")
+        self.assertEqual([(x["kind"], x["infra"], x["days"]) for x in r["rows"]],
+                         [("infrastructure", 3, 50), ("supply_node", 4, 149)])
+        # a factory in a named state takes one of its free slots (state 1 has 3)
+        r = calc.build_order(self.w, calc.parse_order("civ:4#1", self.w), 15, 0, 0.0, "1936.1.1", until="1936.1.2")
+        self.assertEqual([u.get("blocked") for u in r["unfinished"]], [None, None, None, "no free slot"])
+        with self.assertRaises(ValueError):
+            calc.build_order(self.w, calc.parse_order("civ:1#99", self.w), 15, 0, 0.0, "1936.1.1")
+
+    def test_build_order_ranked_states_do_not_place_a_port(self):
+        # the caller's own ranking gives the factories their states, but says nothing about where a
+        # building without a slot stands
+        slots = [[1, 3, 3]]
+        r = calc.build_order(self.w, ["civ", "naval_base"], 15, 0, 0.0, "1936.1.1", slots=slots, slots_named=False)
+        src = {x["kind"]: x["infra_src"] for x in r["rows"]}
+        self.assertEqual(src, {"civ": "state", "naval_base": "assumed"})
+        self.assertIn("naval_base take no building slot and no state was named", r["warnings"][0])
+        named = calc.build_order(self.w, ["civ", "naval_base"], 15, 0, 0.0, "1936.1.1", slots=slots)
+        self.assertEqual(named["warnings"], [])
+
+    def test_build_order_command_prints_the_warning(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            calc.main(["build-order", "--game", GAME, "--civ", "15", "--mil", "0", "--cg", "0", "--order", "supply_node:1"])
+        text = out.getvalue()
+        self.assertTrue(text.startswith("WARNING: infrastructure 0 assumed"), text[:200])
+        self.assertIn("infra 0 ASSUMED", text)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            calc.main(["build-order", "--game", GAME, "--civ", "15", "--mil", "0", "--cg", "0", "--order", "supply_node:1#1"])
+        self.assertNotIn("WARNING", out.getvalue())
+        self.assertIn("state 1 infra 3 ->", out.getvalue())
+
     def test_consumer_goods_from_laws(self):
         self.assertEqual(calc.consumer_goods(self.w, "AAA")[0], 0.25)
 

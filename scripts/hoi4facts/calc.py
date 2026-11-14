@@ -4,7 +4,10 @@
     calc.py build-order [--tag T --date D] [--civ N --mil N] [--cg 0.25] --order civ:10,mil:5,infrastructure:2
                         [--until D] [--infra L | --states 161,162] [--bonus 0.1]
                         (any building: naval_base:2@1 = two levels on a level-1 port, rail_way:1x12 = one
-                        level on 12 provinces, supply_node:1; each row prints its cost and days)
+                        level on 12 provinces, supply_node:1; #STATE puts an item in a state and takes that
+                        state's infrastructure, e.g. supply_node:1#550; each row prints its cost, days and
+                        the infrastructure it was built at, and a project whose infrastructure had to be
+                        guessed is listed under WARNING)
     calc.py equipment   (--tag T --template NAME | --regiments infantry=6,artillery=1 --support engineer)
                         [--regimental field_guns] [--divisions N] [--year Y]
                         (equipment, manpower, IC, width, divisions per terrain width, designer problems)
@@ -85,10 +88,11 @@ def consumer_goods(w, tag):
 
 
 def parse_order(text, w=None):
-    """"civ:10,mil:5,naval_base:2@1,rail_way:1x12" -> build items. KIND:N is N buildings or N levels;
-    @L starts a levelled building (one with per_level_extra_cost, e.g. naval_base, rail_way) at level L
-    (default 0); xP multiplies the cost by P provinces (a railway line). Plain kinds stay strings; levelled
-    items are (kind, level already built, provinces)."""
+    """"civ:10,mil:5,naval_base:2@1,rail_way:1x12,supply_node:1#550" -> build items. KIND:N is N buildings or
+    N levels; @L starts a levelled building (one with per_level_extra_cost, e.g. naval_base, rail_way) at
+    level L (default 0); xP multiplies the cost by P provinces (a railway line); #S builds in state S, at
+    that state's infrastructure. Plain kinds stay strings; other items are (kind, level already built or
+    None, provinces) with the state as a fourth member when one is named."""
     out = []
     btypes = w.building_types() if w is not None else {}
     for part in (text or "").split(","):
@@ -96,28 +100,31 @@ def parse_order(text, w=None):
         if not part:
             continue
         kind, _, rest = part.partition(":")
+        kind, _, tail = kind.partition("#")  # "supply_node#550" (no count) reads as one building
         kind = kind.strip()
-        m = re.match(r"^(\d*)(?:@(\d+))?(?:x(\d+))?$", rest.strip())
+        m = re.match(r"^(\d*)(?:@(\d+))?(?:x(\d+))?(?:#(\d+))?$", rest.strip() + ("#" + tail if tail else ""))
         if not m:
-            raise ValueError(f"bad order item {part!r} (KIND:N[@LEVEL][xPROVINCES])")
+            raise ValueError(f"bad order item {part!r} (KIND:N[@LEVEL][xPROVINCES][#STATE])")
         n = int(m.group(1) or 1)
         start = m.group(2)
         provs = int(m.group(3) or 1)
+        state = int(m.group(4)) if m.group(4) else None
         b = KIND.get(kind, kind)
         levelled = (btypes.get(b) or {}).get("per_level_cost") is not None
-        if start is None and not levelled and provs == 1:
+        if start is None and not levelled and provs == 1 and state is None:
             out += [kind] * n
             continue
         lvl = int(start or 0)
         for i in range(n):
-            out.append((kind, lvl + i if levelled or start is not None else None, provs))
+            item = (kind, lvl + i if levelled or start is not None else None, provs)
+            out.append(item + (state,) if state is not None else item)
     return out
 
 
 def item_cost(w, item, costs=None):
     """(building, cost, level after the build or None, provinces) of a build item (see parse_order):
     base_cost + per_level_extra_cost x levels already built, times provinces (common/buildings)."""
-    kind, level, provs = (item, None, 1) if isinstance(item, str) else item
+    kind, level, provs = (item, None, 1) if isinstance(item, str) else item[:3]
     b = KIND.get(kind, kind)
     bt = w.building_types().get(b) or {}
     base = (costs or {}).get(b) if (costs or {}).get(b) is not None else bt.get("cost")
@@ -128,52 +135,100 @@ def item_cost(w, item, costs=None):
     return b, base * provs, (level + 1 if level is not None else None), provs
 
 
-def build_order(w, order, civ, mil, cg, start, until=None, slots=None, infra=None, bonus=0.0, costs=None):
-    """Simulate construction day by day. `order` is a list of kinds ("civ", "mil", "infra", ...),
-    `slots` a list of [state, free slots, infrastructure] taken in order (None: one state with
-    unlimited slots and `infra`). Each project gets at most the project cap of the free civs.
-    Returns {"rows": [...], "end": {...}, "constants": {...}}."""
+def build_order(w, order, civ, mil, cg, start, until=None, slots=None, infra=None, bonus=0.0, costs=None,
+                slots_named=True):
+    """Simulate construction day by day. `order` is a list of build items (parse_order: plain kinds, or
+    tuples that may name a state), `slots` a list of [state, free slots, infrastructure] taken in order
+    (None: one state with unlimited slots and `infra`); `slots_named` False says the caller ranked the
+    states itself (the user named none). Each project gets at most the project cap of the free civs.
+
+    Infrastructure of a project, in this order: the state its item names; the state whose slot it takes; the
+    first state of `slots` for a building that takes no slot (a guess when the states were not named);
+    `infra`; else 0, a guess. An infrastructure level finished in a state speeds up the projects after it
+    there. Every guess is listed in "warnings" and marks its rows `infra_src` "assumed".
+    Returns {"rows": [...], "end": {...}, "warnings": [...], "constants": {...}}."""
     k = constants(w)
     cap = k["project_cap"]["v"]
     btypes = w.building_types()
+    kinds = derive.building_kinds(w.game)
     costs = costs or {}
     queue = []
     slots = [list(s) for s in slots] if slots else None
+    levels = {s[0]: s[2] for s in slots or []}  # state -> infrastructure now (raised by finished levels)
+    free = {s[0]: s[1] for s in slots or []}
+    guessed = []
     for i, item in enumerate(order):
         b, cost, level, provs = item_cost(w, item, costs)
         kind = item if isinstance(item, str) else item[0]
-        state, lvl = None, infra if infra is not None else 0
+        named = item[3] if not isinstance(item, str) and len(item) > 3 else None
+        state, lvl, src = None, infra if infra is not None else 0, "--infra" if infra is not None else "assumed"
         extra = {"level": level} if level is not None else {}
         if provs > 1:
             extra["provinces"] = provs
-        if slots and (btypes.get(b) or {}).get("shares_slots"):
-            pick = next((s for s in slots if s[1] > 0), None)
+        shares = bool((btypes.get(b) or {}).get("shares_slots"))
+        blocked = None
+        if named is not None:
+            row = w.states().get(named)
+            if row is None:
+                raise ValueError(f"unknown state {named} in order item {kind}#{named}")
+            if named not in levels:
+                levels[named] = row["infrastructure"]
+                free[named] = row["free_slots"] or 0
+            state, src = named, "state"
+            if shares:
+                if free[named] > 0:
+                    free[named] -= 1
+                else:
+                    blocked = "no free slot"
+        elif slots and shares:
+            pick = next((s for s in slots if free[s[0]] > 0), None)
             if pick is None:
-                queue.append(dict(extra, kind=kind, building=b, cost=cost, state=None, infra=lvl,
-                                  progress=0.0, blocked="no free slot"))
-                continue
-            pick[1] -= 1
-            state, lvl = pick[0], pick[2]
+                blocked = "no free slot"
+            else:
+                free[pick[0]] -= 1
+                state, src = pick[0], "state"
         elif slots:
-            state, lvl = slots[0][0], slots[0][2]
-        queue.append(dict(extra, kind=kind, building=b, cost=cost, state=state, infra=lvl, progress=0.0))
+            state, src = slots[0][0], "state" if slots_named else "assumed"
+        q = dict(extra, kind=kind, building=b, cost=cost, state=state, infra=lvl, infra_src=src, progress=0.0)
+        if blocked:
+            q["blocked"] = blocked
+        elif src == "assumed":
+            guessed.append(q)
+        queue.append(q)
+    warnings = []
+    if guessed:
+        nowhere = [q["kind"] for q in guessed if q["state"] is None]
+        ranked = [q for q in guessed if q["state"] is not None]
+        step = f"each infrastructure level adds {INFRA_STEP * 100:g}% construction speed"
+        if nowhere:
+            warnings.append(f"infrastructure 0 assumed for {len(nowhere)} project(s) with no state "
+                            f"({', '.join(sorted(set(nowhere)))}): {step}, so the dates are the latest possible; "
+                            f"name the state (KIND:N#STATE or --states) or pass --infra")
+        if ranked:
+            warnings.append(f"{', '.join(sorted({q['kind'] for q in ranked}))} take no building slot and no state was "
+                            f"named: the infrastructure of state {ranked[0]['state']} (the first of the ranking, "
+                            f"level {levels[ranked[0]['state']]}) was used, which is not where they are built; name "
+                            f"the state (KIND:N#STATE)")
+    infra_max = (btypes.get("infrastructure") or {}).get("state_max")
     today = day_number(start)
     stop = day_number(until) if until else today + 365 * 10
     rows = []
     civs, mils = civ, mil
     while queue and today < stop:
         total = civs + mils
-        free = max(0, civs - int(math.ceil(cg * total)))
-        active = [q for q in queue if not q.get("blocked")][: max(1, int(math.ceil(free / cap))) if free else 0]
-        left = free
+        free_civs = max(0, civs - int(math.ceil(cg * total)))
+        active = [q for q in queue if not q.get("blocked")][: max(1, int(math.ceil(free_civs / cap))) if free_civs else 0]
+        left = free_civs
         done = []
         for q in active:
             n = min(cap, left)
             left -= n
             if n <= 0:
                 break
-            speed = n * CP_PER_CIV * (1 + INFRA_STEP * q["infra"]) * (1 + bonus)
+            lvl = levels[q["state"]] if q["state"] in levels else q["infra"]
+            speed = n * CP_PER_CIV * (1 + INFRA_STEP * lvl) * (1 + bonus)
             q.setdefault("begin", today)
+            q.setdefault("infra_begin", lvl)
             q["progress"] += speed
             if q["progress"] >= q["cost"]:
                 done.append(q)
@@ -184,9 +239,11 @@ def build_order(w, order, civ, mil, cg, start, until=None, slots=None, infra=Non
                 civs += 1
             elif q["building"] == "arms_factory":
                 mils += 1
+            elif q["building"] in kinds["infrastructure"] and q["state"] in levels:
+                levels[q["state"]] = min(levels[q["state"]] + 1, infra_max or levels[q["state"]] + 1)
             row = {"date": _fmt(today), "kind": q["kind"], "state": q["state"], "civ": civs, "mil": mils,
                    "free_civs": max(0, civs - int(math.ceil(cg * (civs + mils)))), "cost": q["cost"],
-                   "days": today - q["begin"]}
+                   "days": today - q["begin"], "infra": q["infra_begin"], "infra_src": q["infra_src"]}
             for key in ("level", "provinces"):
                 if key in q:
                     row[key] = q[key]
@@ -196,11 +253,12 @@ def build_order(w, order, civ, mil, cg, start, until=None, slots=None, infra=Non
     return {"rows": rows, "end": {"date": _fmt(today), "civ": civs, "mil": mils},
             "unfinished": [{"kind": q["kind"], "progress": round(q["progress"]), "cost": q["cost"],
                             **({"blocked": q["blocked"]} if q.get("blocked") else {})} for q in queue],
-            "constants": k, "consumer_goods": cg,
+            "warnings": warnings, "constants": k, "consumer_goods": cg,
             "d": "daily: free civs = civs - ceil(cg x (civs + mils)); each project <= cap civs; progress = civs x "
                  "cp_per_civ x (1 + infra_step x infrastructure) x (1 + bonus); a finished civ joins the next day; "
                  "cost = base_cost + per_level_extra_cost x levels already built, x provinces (common/buildings [?]); "
-                 "days = first day of progress to the finish"}
+                 "days = first day of progress to the finish; infrastructure = the named or slot state's level "
+                 "(a level finished there counts for later projects), else --infra"}
 
 
 def _fmt(n):
@@ -469,11 +527,13 @@ def main(argv=None):
     b.add_argument("--mil", type=int)
     b.add_argument("--cg", type=float, help="consumer goods share (default: the tag's laws)")
     b.add_argument("--order", required=True,
-                   help="civ:10,mil:5,infra:2,naval_base:2@1,supply_node:1,rail_way:1x12 (kinds: civ mil dock infra "
-                        "or any building of common/buildings; @L = levels already built, xP = provinces)")
+                   help="civ:10,mil:5,infra:2,naval_base:2@1,supply_node:1#550,rail_way:1x12 (kinds: civ mil dock "
+                        "infra or any building of common/buildings; @L = levels already built, xP = provinces, "
+                        "#S = built in state S at its infrastructure)")
     b.add_argument("--until")
-    b.add_argument("--infra", type=int, help="infrastructure of every project (no state slots)")
-    b.add_argument("--states", help="state ids in build order (default with --tag: the dossier ranking)")
+    b.add_argument("--infra", type=int, help="infrastructure of every project without a state (no state slots)")
+    b.add_argument("--states", help="state ids in build order (default with --tag: the dossier ranking); a "
+                                    "building that takes no slot goes to the first one unless its item names a state")
     b.add_argument("--bonus", type=float, default=0.0, help="construction speed bonus, 0.1 = +10%%")
     e = sub.add_parser("equipment")
     _common(e)
@@ -510,7 +570,7 @@ def main(argv=None):
             print(json.dumps({"error": "give --civ and --mil, or --tag"}))
             return 1
         cg, cg_src = (args.cg, ["--cg"]) if args.cg is not None else (consumer_goods(w, tag) if tag else (0.0, []))
-        slots = None
+        slots, named = None, True
         if args.states:
             st = w.states()
             slots = [[int(s), st[int(s)]["free_slots"] or 0, st[int(s)]["infrastructure"]] for s in args.states.split(",")]
@@ -518,21 +578,29 @@ def main(argv=None):
             from hoi4facts import dossier as dossiermod
             slots = [[r["id"], r["free_slots"] or 0, r["infrastructure"]] for r in dossiermod.state_rows(w, tag)
                      if r["core"]]
-        r = build_order(w, parse_order(args.order, w), civ, mil, cg, start, args.until, slots,
-                        args.infra if args.infra is not None else 0, args.bonus)
+            named = False
+        try:
+            r = build_order(w, parse_order(args.order, w), civ, mil, cg, start, args.until, slots, args.infra,
+                            args.bonus, slots_named=named)
+        except ValueError as e:
+            print(json.dumps({"error": str(e)}))
+            return 1
         r["consumer_goods_src"] = cg_src
         r["start"] = {"date": start, "civ": civ, "mil": mil}
         if args.json:
             print(json.dumps(r, indent=1))
             return 0
+        for msg in r["warnings"]:
+            print(f"WARNING: {msg}")
         print(f"start {start}: {civ} civ, {mil} mil, consumer goods {cg} ({', '.join(cg_src) or 'none'})")
         for k, v in r["constants"].items():
             print(f"  {k} = {v['v']} [{v['src']}]")
         for row in r["rows"]:
             what = row["kind"] + (f" L{row['level']}" if row.get("level") else "") + \
                 (f" x{row['provinces']} prov" if row.get("provinces") else "")
-            print(f"{row['date']:>10} {what:<14} cost {row['cost']:g} in {row['days']}d state {row['state']} -> "
-                  f"civ {row['civ']} mil {row['mil']} (free civs {row['free_civs']})")
+            infra_txt = f"infra {row['infra']}" + (" ASSUMED" if row["infra_src"] == "assumed" else "")
+            print(f"{row['date']:>10} {what:<14} cost {row['cost']:g} in {row['days']}d state {row['state']} "
+                  f"{infra_txt} -> civ {row['civ']} mil {row['mil']} (free civs {row['free_civs']})")
         for u in r["unfinished"]:
             print(f"unfinished {u}")
         print(f"end {r['end']['date']}: civ {r['end']['civ']} mil {r['end']['mil']}. {r['d']}")
