@@ -1,15 +1,12 @@
 //! Intelligence agency actions with ordinary input: `hoi4_agency_create`,
 //! `hoi4_agency_upgrade`, `hoi4_operative_recruit`, `hoi4_operative_assign`.
-//! UNVALIDATED: written from `interface/countryintelligenceagencyview.gui`,
-//! `operativeleader.gui` and the shortcut table of `topbar.gui`; no live run
-//! has located these windows yet.
+//! Live-verified on macOS 1.19.4.1 (Italy 1936, November 2026).
 //!
-//! Nothing about the agency (created flag, upgrade levels, operative roster)
-//! is mapped in game memory (`hoi4_intelligence` reports `state_read:false`),
-//! so every refusal that needs that state comes from the window itself after
-//! it is opened (before any state-changing click), and every success is read
-//! back from the window too. That evidence is recorded in the receipt's
-//! `observed` and marked `verification: "gui_only"`.
+//! The agency (created flag, upgrades, candidates, operatives, missions) is
+//! read from game memory (`intel_live`). Every refusal that needs that state
+//! is decided from a fresh memory read before any input, and every success is
+//! read back from memory (`verification: "memory"`). Windows are only used to
+//! carry the clicks.
 //!
 //! Route: Shift+W opens the agency view (`intel_agency_button`). Creation:
 //! `creation_button`, the name/logo window's `create_button`. Upgrades: the
@@ -23,7 +20,9 @@
 //! `operative_mission_icons_small|N` markers) arms the mission and a click on
 //! the map target (the Find view centres a state of the target) starts it.
 use super::{
-    diplomacy_state, intelligence, loc, mgmt, panelkit as pk,
+    diplomacy_state, intel_live, intelligence,
+    journal::Outcome,
+    loc, mgmt, panelkit as pk,
     ui::{accept_command, clear_notices, find_state, read, settled, wait},
     ui_action::{self, refuse, Driven, Fail, Job},
     Guard, InputAuthority,
@@ -250,6 +249,189 @@ fn live_branches(process: &dyn Process) -> Result<intelligence::Live> {
     })
 }
 
+/// The agency as memory holds it (created, upgrades, operatives, slots).
+fn mem(process: &dyn Process) -> Result<intel_live::Agency> {
+    read(process, |r, i| {
+        let own = mgmt::own(r, i)?;
+        intel_live::agency(r, i, own.country)
+    })
+}
+
+fn no(code: &'static str, message: impl Into<String>) -> Error {
+    Error::new(code, message)
+}
+
+/// Refusals of `hoi4_agency_create` from memory, before any input.
+pub(super) fn create_check(a: &intel_live::Agency) -> Result<()> {
+    if a.created {
+        return Err(no(
+            "agency_exists",
+            "The intelligence agency already exists",
+        ));
+    }
+    if a.creating {
+        return Err(no(
+            "agency_creation_in_progress",
+            format!(
+                "The agency is being created ({:.0} days done)",
+                a.progress_days
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Refusals of `hoi4_agency_upgrade` from memory: the agency, the running upgrade, a maxed
+/// upgrade and missing prerequisite upgrades (levels and prerequisites from the scripts).
+pub(super) fn upgrade_check(
+    a: &intel_live::Agency,
+    upgrade: Option<&str>,
+    levels: Option<usize>,
+    requires: &[String],
+) -> Result<()> {
+    if !a.created {
+        return Err(no(
+            "agency_not_created",
+            "Create the intelligence agency first (hoi4_agency_create)",
+        ));
+    }
+    if let Some(running) = &a.upgrading {
+        return Err(no(
+            "upgrade_in_progress",
+            format!(
+                "{running} is running ({:.0} days done); the agency runs one upgrade at a time",
+                a.progress_days
+            ),
+        ));
+    }
+    if let Some(key) = upgrade {
+        let have = a
+            .upgrades
+            .iter()
+            .find(|(k, _)| k == key)
+            .map_or(0, |(_, l)| *l);
+        if levels.is_some_and(|max| have as usize >= max) {
+            return Err(no(
+                "upgrade_maxed",
+                format!("{key} is at its last level ({have})"),
+            ));
+        }
+        let missing: Vec<&String> = requires
+            .iter()
+            .filter(|r| !a.upgrades.iter().any(|(k, l)| k == *r && *l > 0))
+            .collect();
+        if !missing.is_empty() {
+            return Err(no(
+                "upgrade_locked",
+                format!(
+                    "{key} needs {} first",
+                    missing
+                        .iter()
+                        .map(|m| m.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Refusals of `hoi4_operative_recruit` from memory: no agency, every slot filled, a new slot
+/// still waiting for its candidates (`wait_days` from the agency defines), a candidate beyond
+/// the offered ones.
+pub(super) fn recruit_check(
+    a: &intel_live::Agency,
+    candidate: usize,
+    wait_days: i32,
+) -> Result<()> {
+    if !a.created {
+        return Err(no(
+            "agency_not_created",
+            "Create the intelligence agency first (hoi4_agency_create)",
+        ));
+    }
+    if a.operatives.len() as i32 >= a.slots {
+        return Err(no(
+            "no_free_operative_slot",
+            format!(
+                "{} of {} operative slots are filled; five agency upgrades open one more, some advisors, spirits and the spymaster others",
+                a.operatives.len(),
+                a.slots
+            ),
+        ));
+    }
+    if a.candidates.is_empty() {
+        let left = (wait_days - a.slot_wait_days).max(0);
+        return Err(no(
+            "operative_slot_locked",
+            format!("The new operative slot offers candidates in {left} days (waited {} of {wait_days})", a.slot_wait_days),
+        ));
+    }
+    if candidate >= a.candidates.len() {
+        return Err(no(
+            "unknown_candidate",
+            format!(
+                "{} candidates are offered ({}), not position {candidate}",
+                a.candidates.len(),
+                a.candidates.join(", ")
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Refusals of `hoi4_operative_assign` from memory.
+pub(super) fn assign_check(a: &intel_live::Agency, plan: &AssignPlan) -> Result<()> {
+    if !a.created {
+        return Err(no(
+            "agency_not_created",
+            "Create the intelligence agency first (hoi4_agency_create)",
+        ));
+    }
+    let Some(o) = a.operatives.get(plan.operative) else {
+        return Err(no(
+            "operative_unknown",
+            format!(
+                "{} operatives are recruited (positions 0..), not position {}",
+                a.operatives.len(),
+                plan.operative
+            ),
+        ));
+    };
+    if let Some(op) = &o.operation {
+        return Err(no(
+            "operative_busy",
+            format!(
+                "{} works on {op}; it is free again when the operation ends",
+                o.name
+            ),
+        ));
+    }
+    let same_target = match &plan.aim {
+        Aim::State(s) => o.mission_state == Some(*s),
+        Aim::Country(t) => o.mission_target.as_deref() == Some(t.as_str()),
+        Aim::Home => true,
+    };
+    if o.mission.as_deref() == Some(plan.mission) && same_target {
+        return Err(no(
+            "already_on_mission",
+            format!("{} already runs {} there", o.name, plan.mission),
+        ));
+    }
+    Ok(())
+}
+
+/// Settle rule shared by the agency actions: memory after the input against what the action
+/// must have changed.
+fn memory_outcome(detail: Value, reached: bool) -> Outcome {
+    if reached {
+        Outcome::Reached(detail)
+    } else {
+        Outcome::Unchanged(detail)
+    }
+}
+
 // ---------------------------------------------------------------- creation
 
 fn create(process: &dyn Process, keys: &dyn GameInput) -> Driven {
@@ -302,9 +484,7 @@ fn create(process: &dyn Process, keys: &dyn GameInput) -> Driven {
             Ok(g.creating || g.created)
         })
         .is_ok();
-        Ok(
-            json!({"creation_started": started, "picked_logo": picked_logo, "verification": "gui_only"}),
-        )
+        Ok(json!({"creation_started": started, "picked_logo": picked_logo}))
     })();
     leave(process, keys);
     result
@@ -444,7 +624,6 @@ fn upgrade(process: &dyn Process, keys: &dyn GameInput, names: &Names) -> Driven
             "progress_text": after.upgrading,
             "matches_requested": matches,
             "confirmation_accepted": confirmed,
-            "verification": "gui_only",
         }))
     })();
     leave(process, keys);
@@ -495,7 +674,14 @@ pub(super) fn recruit_refusal(slots: &[Slot]) -> Option<(&'static str, String)> 
     None
 }
 
-fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven {
+/// `want` is the candidate's name from memory (hoi4_intelligence `agency.candidates`); the row
+/// whose name text matches is clicked. The grid keeps recycled rows, so positions alone mislead.
+fn recruit(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    index: usize,
+    want: Option<&str>,
+) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_agency(process, keys)?;
@@ -521,7 +707,9 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
             pk::is_open(r, i, &pk::OPERATIVE_RECRUIT)
         })?;
         pause(300);
-        let candidates = |r: &Reader<'_>, i: u64| -> Result<Vec<gui_tree::Rect>> {
+        let candidates = |r: &Reader<'_>,
+                          i: u64|
+         -> Result<Vec<(Option<String>, gui_tree::Rect)>> {
             let root = pk::open_root(r, i, &pk::OPERATIVE_RECRUIT)?;
             let mut grids = Vec::new();
             pk::grids(r, i, root, 6, &mut grids)?;
@@ -532,11 +720,15 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
                     if let Some(grid) = gui_tree::child(r, i, inner, "leaders_grid")? {
                         let items = super::navalui::grid_items(r, grid)?;
                         for item in items.into_iter().take(64) {
-                            let Some(frame) =
-                                gui_tree::container(r, super::navalui::item_window(r, item)?, i)?
-                            else {
+                            let window = super::navalui::item_window(r, item)?;
+                            let Some(frame) = gui_tree::container(r, window, i)? else {
                                 continue;
                             };
+                            if !gui_tree::visible(r, frame)? {
+                                continue;
+                            }
+                            let name =
+                                pk::text(r, i, frame, "name", 2)?.map(|t| t.trim().to_string());
                             // 1.19.4.1 rows: portrait_overlay_bg, title, name, skill, traits_grid
                             // (no button of their own; a click on the portrait picks the row).
                             let icon = match gui_tree::child(r, i, frame, "leader_icon")? {
@@ -545,7 +737,7 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
                             };
                             if let Some(icon) = icon {
                                 if let Ok(rect) = gui_tree::rect_unclipped(r, i, icon, pk::GAME) {
-                                    out.push(rect);
+                                    out.push((name, rect));
                                 }
                             }
                         }
@@ -565,7 +757,7 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
                     };
                     if let Some(button) = button {
                         if let Ok(rect) = pk::rect(r, i, button) {
-                            out.push(rect);
+                            out.push((None, rect));
                         }
                     }
                 }
@@ -573,7 +765,28 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
             Ok(out)
         };
         let offered = settled(process, "operative candidates", candidates)?;
-        let Some(rect) = offered.get(index) else {
+        let named = offered
+            .iter()
+            .any(|(n, _)| n.as_deref().is_some_and(|n| !n.is_empty()));
+        let pick = match (want, named) {
+            (Some(w), true) => offered.iter().find(|(n, _)| n.as_deref() == Some(w)),
+            _ => offered.get(index),
+        };
+        if pick.is_none() && want.is_some() && named {
+            return Err(refuse(
+                "candidate_not_shown",
+                format!(
+                    "{} is not among the shown candidates ({}); nothing was recruited",
+                    want.unwrap_or_default(),
+                    offered
+                        .iter()
+                        .filter_map(|(n, _)| n.clone())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+        let Some((_, rect)) = pick else {
             return Err(refuse(
                 "unknown_candidate",
                 format!(
@@ -596,8 +809,8 @@ fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven 
         Ok(json!({
             "recruit_started": started,
             "candidates_offered": offered.len(),
+            "clicked": pick.and_then(|(n, _)| n.clone()),
             "confirmation_accepted": confirmed,
-            "verification": "gui_only",
         }))
     })();
     leave(process, keys);
@@ -838,7 +1051,6 @@ fn assign(
             "replaced_running_mission": was_on_mission,
             "mission": plan.mission,
             "confirmation_accepted": confirmed,
-            "verification": "gui_only",
         }))
     })();
     leave(process, keys);
@@ -864,17 +1076,14 @@ pub(super) fn call(
             let job = Job {
                 kind: "agency_create",
                 action: json!({"kind":"agency_create"}),
-                plan: Box::new(|process| {
-                    // The agency object must exist; whether it was created is
-                    // only on screen, so the window refuses after it opens.
-                    live_branches(process).map(|_| ())
-                }),
+                plan: Box::new(|process| create_check(&mem(process)?)),
                 dispatch: Box::new(|process, keys| create(process, keys)),
-                settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(
-                        seen,
-                        "creation_started",
-                        json!({"tool":"agency_create"}),
+                settle: Box::new(|process, _| {
+                    let a = mem(process)?;
+                    Ok(memory_outcome(
+                        json!({"tool":"agency_create","creating":a.creating,"created":a.created,
+                               "progress_days":a.progress_days,"verification":"memory"}),
+                        a.creating || a.created,
                     ))
                 }),
             };
@@ -909,6 +1118,19 @@ pub(super) fn call(
                     let live = live_branches(process)?;
                     plan_upgrade(&live, branch, upgrade_key)?;
                     let dir = mgmt::game_dir(process)?;
+                    let def = upgrade_key.and_then(|u| {
+                        intelligence::catalog(&dir)
+                            .upgrades
+                            .iter()
+                            .find(|(_, d)| d.key == u)
+                            .map(|(_, d)| (d.levels, d.requires.clone()))
+                    });
+                    upgrade_check(
+                        &mem(process)?,
+                        upgrade_key,
+                        def.as_ref().map(|d| d.0).filter(|l| *l > 0),
+                        def.as_ref().map_or(&[][..], |d| &d.1[..]),
+                    )?;
                     let mut keys_wanted = vec![branch];
                     keys_wanted.extend(upgrade_key);
                     let names_map = loc::lookup(&dir, &keys_wanted);
@@ -937,11 +1159,17 @@ pub(super) fn call(
                     })?;
                     upgrade(process, keys, n)
                 }),
-                settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(
-                        seen,
-                        "upgrade_started",
-                        json!({"tool":"agency_upgrade","branch":branch,"upgrade":upgrade_key}),
+                settle: Box::new(|process, _| {
+                    let a = mem(process)?;
+                    let running = a.upgrading.clone();
+                    let reached = match upgrade_key {
+                        Some(u) => running.as_deref() == Some(u),
+                        None => running.is_some(),
+                    };
+                    Ok(memory_outcome(
+                        json!({"tool":"agency_upgrade","branch":branch,"upgrade":upgrade_key,
+                               "running":running,"verification":"memory"}),
+                        reached,
                     ))
                 }),
             };
@@ -957,17 +1185,40 @@ pub(super) fn call(
                     .ok_or_else(|| Error::new("invalid_arguments", "candidate must be 0..31"))?
                     as usize,
             };
+            let before: RefCell<Option<usize>> = RefCell::new(None);
+            let wanted: RefCell<Option<String>> = RefCell::new(None);
             let job = Job {
                 kind: "operative_recruit",
                 action: json!({"kind":"operative_recruit","candidate":index}),
-                plan: Box::new(|_| Ok(())),
-                dispatch: Box::new(|process, keys| recruit(process, keys, index)),
-                settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(
-                        seen,
-                        "recruit_started",
-                        json!({"tool":"operative_recruit"}),
-                    ))
+                plan: Box::new(|process| {
+                    let a = mem(process)?;
+                    let wait = intelligence::catalog(&mgmt::game_dir(process)?)
+                        .defines
+                        .iter()
+                        .find(|(n, _)| *n == "AGENCY_OPERATIVE_RECRUITMENT_TIME")
+                        .map_or(30, |(_, v)| v.round() as i32);
+                    recruit_check(&a, index, wait)?;
+                    *before.borrow_mut() = Some(a.operatives.len());
+                    *wanted.borrow_mut() = a.candidates.get(index).cloned();
+                    Ok(())
+                }),
+                dispatch: Box::new(|process, keys| {
+                    recruit(process, keys, index, wanted.borrow().as_deref())
+                }),
+                settle: Box::new(|process, _| {
+                    let a = mem(process)?;
+                    let had = *before.borrow();
+                    let newest = a.operatives.last().map(|o| json!({"name":o.name,"codename":o.codename,"nationalities":o.nationalities}));
+                    let asked = wanted.borrow().clone();
+                    let grew = had.is_some_and(|n| a.operatives.len() > n);
+                    let who = a.operatives.last().map(|o| o.name.clone());
+                    let detail = json!({"tool":"operative_recruit","recruited":a.operatives.len(),"before":had,
+                               "asked":asked,"operative":newest,"verification":"memory"});
+                    // A different candidate than the one asked for is a divergence, not success.
+                    if grew && asked.is_some() && who != asked {
+                        return Ok(Outcome::Diverged(detail));
+                    }
+                    Ok(memory_outcome(detail, grew))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
@@ -1020,6 +1271,7 @@ pub(super) fn call(
                 kind: "operative_assign",
                 action: json!({"kind":"operative_assign","operative":operative,"mission":mission,"state_id":state_id,"country":country}),
                 plan: Box::new(|process| {
+                    assign_check(&mem(process)?, &plan)?;
                     if let Aim::Country(tag) = &plan.aim {
                         *chosen.borrow_mut() = Some(target_state(process, tag)?);
                     }
@@ -1029,11 +1281,24 @@ pub(super) fn call(
                     Ok(())
                 }),
                 dispatch: Box::new(|process, keys| assign(process, keys, &plan, *chosen.borrow())),
-                settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(
-                        seen,
-                        "on_mission",
-                        json!({"tool":"operative_assign","mission":plan.mission}),
+                settle: Box::new(|process, _| {
+                    let a = mem(process)?;
+                    let Some(o) = a.operatives.get(plan.operative) else {
+                        return Ok(Outcome::Diverged(
+                            json!({"tool":"operative_assign","operative_missing":plan.operative}),
+                        ));
+                    };
+                    let aimed = match &plan.aim {
+                        Aim::State(_) => {
+                            o.mission_state.is_some() && o.mission_state == *chosen.borrow()
+                        }
+                        Aim::Country(t) => o.mission_target.as_deref() == Some(t.as_str()),
+                        Aim::Home => true,
+                    };
+                    Ok(memory_outcome(
+                        json!({"tool":"operative_assign","operative":o.name,"mission":o.mission,
+                               "target":o.mission_target,"state_id":o.mission_state,"verification":"memory"}),
+                        o.mission.as_deref() == Some(plan.mission) && aimed,
                     ))
                 }),
             };
@@ -1052,10 +1317,10 @@ pub(super) const TOOLS: [&str; 4] = [
 
 pub(super) fn tools() -> Vec<Value> {
     vec![
-        json!({"name":"hoi4_agency_create","description":"UNVALIDATED (no live test yet): create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Whether the agency exists is only on screen, so the refusals come from the opened window before the click: agency_exists, agency_creation_in_progress, agency_creation_unavailable (the game disables the button). Verified from the window only (the creation progress bar appears): verification gui_only, results carry validated:false. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_agency_upgrade","description":"Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals: branch_unknown, upgrade_unknown (before input, from the loaded database); agency_not_created, upgrade_in_progress, upgrade_unavailable (lists the branch's entries with their enabled state), found from the windows before the click. Verified from the agency view's upgrade progress bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_operative_recruit","description":"UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, the candidate at position `candidate` (0-based, default 0) of the recruitment window (names and traits are not readable, so the choice is by position). Typed refusals found from the windows before the click: agency_not_created, operative_bar_unavailable, no_free_operative_slot, unknown_candidate. Verified from the bar and the recruitment progress bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"candidate":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_operative_assign","description":"UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` (operation overview) are not built and refuse with mission_not_built / operation_not_built. Typed refusals: invalid_arguments, target_required, country_has_no_states, unknown_country (before input); agency_not_created, operative_bar_unavailable, operative_unknown, operative_busy, mission_unavailable (the game disables the button) from the windows before the first state-changing click. Verified from the operative's on-mission marker on the bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"operative":{"type":"integer","minimum":0,"maximum":31},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"country":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["operative","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_agency_create","description":"Create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Refusals from a fresh memory read before any input: agency_exists, agency_creation_in_progress; agency_creation_unavailable when the game disables the button. Verified by memory (creating or created). Live-verified on 1.19.4. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_agency_upgrade","description":"Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_operative_recruit","description":"Recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, then the candidate `candidate` (0-based index into hoi4_intelligence's candidate list, default 0), picked in the recruitment window by its name. Typed refusals before input, from memory: agency_not_created, no_free_operative_slot, operative_slot_locked (says in how many days candidates are offered: AGENCY_OPERATIVE_RECRUITMENT_TIME counts from creation), unknown_candidate; candidate_not_shown and operative_bar_unavailable from the window. Verified by memory: Reached when the operative count grew, Diverged when someone else was recruited. Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"candidate":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_operative_assign","description":"Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"operative":{"type":"integer","minimum":0,"maximum":31},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"country":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["operative","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
@@ -1212,15 +1477,142 @@ mod tests {
         assert_eq!(recruited(&[slot(true), slot(false), slot(true)]), 2);
     }
 
+    fn agency(
+        created: bool,
+        upgrading: Option<&str>,
+        operatives: usize,
+        slots: i32,
+    ) -> intel_live::Agency {
+        intel_live::Agency {
+            created,
+            upgrading: upgrading.map(str::to_string),
+            upgrades: vec![("upgrade_training_centers".into(), 1)],
+            operatives: (0..operatives)
+                .map(|n| intel_live::Operative {
+                    name: format!("op{n}"),
+                    codename: String::new(),
+                    nationalities: vec![],
+                    mission: Some("build_intel_network".into()),
+                    mission_target: Some("ETH".into()),
+                    mission_state: Some(842),
+                    address: 0,
+                    id: n as i32,
+                    operation: None,
+                    operation_id: None,
+                })
+                .collect(),
+            slots,
+            ..Default::default()
+        }
+    }
+
+    fn code(r: Result<()>) -> String {
+        r.err().map(|e| e.code.to_string()).unwrap_or_default()
+    }
+
+    #[test]
+    fn memory_refuses_before_any_input() {
+        assert_eq!(
+            code(create_check(&agency(true, None, 0, 1))),
+            "agency_exists"
+        );
+        let mut a = agency(false, None, 0, 0);
+        a.creating = true;
+        assert_eq!(code(create_check(&a)), "agency_creation_in_progress");
+        assert_eq!(code(create_check(&agency(false, None, 0, 0))), "");
+
+        let up =
+            |a: &intel_live::Agency, k, l, req: &[String]| code(upgrade_check(a, Some(k), l, req));
+        assert_eq!(
+            up(&agency(false, None, 0, 0), "upgrade_x", None, &[]),
+            "agency_not_created"
+        );
+        assert_eq!(
+            up(
+                &agency(true, Some("upgrade_y"), 0, 1),
+                "upgrade_x",
+                None,
+                &[]
+            ),
+            "upgrade_in_progress"
+        );
+        assert_eq!(
+            up(
+                &agency(true, None, 0, 1),
+                "upgrade_training_centers",
+                Some(1),
+                &[]
+            ),
+            "upgrade_maxed"
+        );
+        assert_eq!(
+            up(
+                &agency(true, None, 0, 1),
+                "upgrade_x",
+                Some(1),
+                &["upgrade_z".into()]
+            ),
+            "upgrade_locked"
+        );
+        assert_eq!(
+            up(
+                &agency(true, None, 0, 1),
+                "upgrade_x",
+                Some(1),
+                &["upgrade_training_centers".into()]
+            ),
+            ""
+        );
+
+        assert_eq!(
+            code(recruit_check(&agency(false, None, 0, 0), 0, 30)),
+            "agency_not_created"
+        );
+        assert_eq!(
+            code(recruit_check(&agency(true, None, 2, 2), 0, 30)),
+            "no_free_operative_slot"
+        );
+        let mut a = agency(true, None, 1, 2);
+        a.slot_wait_days = 3;
+        let e = recruit_check(&a, 0, 30).unwrap_err();
+        assert_eq!(
+            (e.code, e.message.contains("in 27 days")),
+            ("operative_slot_locked", true)
+        );
+        a.candidates = vec!["A".into(), "B".into()];
+        assert_eq!(code(recruit_check(&a, 2, 30)), "unknown_candidate");
+        assert_eq!(code(recruit_check(&a, 1, 30)), "");
+
+        let plan = |operative, aim| AssignPlan {
+            operative,
+            mission: "build_intel_network",
+            button: 1,
+            aim,
+        };
+        let a = agency(true, None, 1, 2);
+        assert_eq!(
+            code(assign_check(&a, &plan(1, Aim::State(842)))),
+            "operative_unknown"
+        );
+        assert_eq!(
+            code(assign_check(&a, &plan(0, Aim::State(842)))),
+            "already_on_mission"
+        );
+        assert_eq!(code(assign_check(&a, &plan(0, Aim::State(843)))), "");
+        let mut busy = a.clone();
+        busy.operatives[0].operation = Some("operation_collaboration_government".into());
+        assert_eq!(
+            code(assign_check(&busy, &plan(0, Aim::State(843)))),
+            "operative_busy"
+        );
+    }
+
     #[test]
     fn descriptors_mark_validation_and_are_lease_gated() {
         for t in tools() {
             let d = t["description"].as_str().unwrap();
-            // Validated live tools drop the marker (agency_upgrade, 1 November 2026).
-            assert_eq!(
-                d.starts_with("UNVALIDATED (no live test yet):"),
-                t["name"] != "hoi4_agency_upgrade"
-            );
+            // All four were live-verified (November 2026).
+            assert!(!d.starts_with("UNVALIDATED"));
             assert!(t["inputSchema"]["required"]
                 .as_array()
                 .unwrap()

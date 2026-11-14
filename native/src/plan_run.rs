@@ -344,6 +344,7 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_mio_trait",
     "hoi4_naval_invasion",
     "hoi4_occupation_law",
+    "hoi4_operation_start",
     "hoi4_operative_assign",
     "hoi4_operative_recruit",
     "hoi4_peace_exit",

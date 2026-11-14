@@ -16,6 +16,7 @@ mod commanders;
 mod construction;
 mod construction_find;
 mod fair_facts;
+mod operation_act;
 mod railway;
 // Internal prospective click opener; no tool/configuration registration.
 mod construction_find_open;
@@ -56,6 +57,7 @@ mod trade;
 pub(crate) use focus::input_probe as focus_input_probe;
 mod economy_detail;
 mod input_gate;
+mod intel_live;
 mod intelligence;
 mod invasion;
 mod journal;
@@ -783,6 +785,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(std::iter::once(invasion::tool()))
     .chain(faction::tools())
     .chain(agency_act::tools())
+    .chain(operation_act::tools())
     .chain(mio_act::tools())
     .collect()
 }
@@ -903,6 +906,7 @@ impl Commands for MacClock {
                     | "hoi4_agency_upgrade"
                     | "hoi4_operative_recruit"
                     | "hoi4_operative_assign"
+                    | "hoi4_operation_start"
                     | "hoi4_army_group_create"
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
@@ -1684,6 +1688,9 @@ impl MacClock {
         }
         if agency_act::TOOLS.contains(&name) {
             return agency_act::call(name, args, process, &self.keys, guard, authority, actions);
+        }
+        if operation_act::TOOLS.contains(&name) {
+            return operation_act::call(name, args, process, &self.keys, guard, authority, actions);
         }
         if name == "hoi4_doctrine_adopt" {
             return doctrine_act::call(args, process, &self.keys, guard, authority, actions);

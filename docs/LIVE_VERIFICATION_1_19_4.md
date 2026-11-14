@@ -99,7 +99,7 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 | `hoi4_mio_design_team` | A | never (`UNVALIDATED`) | AAT, an organisation slot in the politics view, PP | P2 |
 | `hoi4_mio_policy` | A | never (`UNVALIDATED`); 6 Nov round notes: the policy rows are a smooth listbox the tool cannot reach, and blind clicks are refused because of the 180-day lock [?] | AAT, organisation, 25 PP (playbook: "Policies cost 25 PP") | P2 |
 | `hoi4_mio_trait` | A | 6 Nov, 10 DLC: traits queue, verified by reopening the detail window (b722b01); descriptor still `UNVALIDATED` | AAT, an organisation with a trait point | P1 |
-| `hoi4_intelligence` | R | 1 Nov, 10 DLC (agency existence, levels and operatives `state_read:false`) | any | P2 |
+| `hoi4_intelligence` | R | 14 Nov op1 (ITA): agency, upgrades, candidates, operatives with missions, ETH network per state and the running operation read from memory | any | P2 |
 
 #### Politics, decisions, diplomacy, war planning
 
@@ -213,10 +213,11 @@ holds the 126 player and plumbing tools, table 1b the 25 diagnostic, staged-prim
 
 | Tool | A/R | Last live verification | Game state needed to verify | P |
 |---|---|---|---|---|
-| `hoi4_agency_create` | A | 6 Nov, round w12: creation verified live (946dca4); descriptor still `UNVALIDATED` | LaR, no agency, 5 civilian factories for 30 days | P2 |
-| `hoi4_agency_upgrade` | A | 1-2 Nov, 10 DLC: upgrade_army_department started | agency created, no upgrade running | P2 |
-| `hoi4_operative_recruit` | A | 6 Nov, round w13: fixed live (565fcc9): candidates from the leaders grid, the recruiting bar read; descriptor still `UNVALIDATED` | agency, free operative slot | P3 |
-| `hoi4_operative_assign` | A | 6 Nov, round w13: fixed live (565fcc9): switches an operative already on a mission; `operation` and `boost_ideology` refuse by design; descriptor still `UNVALIDATED` | recruited operative, target country | P3 |
+| `hoi4_agency_create` | A | 6 Nov, round w12: creation verified live (946dca4); 14 Nov op1 (ITA): created again, `agency_exists` refused from memory | LaR, no agency, 5 civilian factories for 30 days | P2 |
+| `hoi4_agency_upgrade` | A | 1-2 Nov, 10 DLC: upgrade_army_department started; 14 Nov op1 (ITA): upgrade_economy_civilian Verified by memory, `upgrade_maxed` refused | agency created, no upgrade running | P2 |
+| `hoi4_operative_recruit` | A | 6 Nov, round w13: fixed live (565fcc9); 14 Nov op1 (ITA): Verified by memory, `operative_slot_locked` refused with the days left; the pick by candidate name not re-run live | agency, free operative slot | P3 |
+| `hoi4_operative_assign` | A | 6 Nov, round w13: fixed live (565fcc9); 14 Nov op1 (ITA): build_intel_network state 842 Verified, `already_on_mission` refused from memory; `operation` and `boost_ideology` refuse by design | recruited operative, target country | P3 |
+| `hoi4_operation_start` | A | 14 Nov op1 (ITA on ETH, at war): collaboration government prepared, both operatives picked by name, auto commence on; completion not yet seen | agency, 2 free operatives, network 50 in the target | P2 |
 
 #### Peace conference
 
@@ -348,7 +349,7 @@ limits and `HOI4_1_19_4_UPDATE.md`.
 | Division template change and upgrade of existing divisions, reinforcement priority, training cancel | `templates-equipment-production.md` 9(c) items 3 and 7 | all three | P2 |
 | Special project reward choices | `PLAYBOOK_TOOL_GAPS.md` 3.11: "Reward choices ... are not driven"; the game picks the default after a timeout | all three | P2 |
 | Theatre creation and theatre commanders | `PLAYBOOK_TOOL_GAPS.md` 3.7: "Theatres: none" | Germany vs USSR | P2 |
-| Intelligence network values, operations (steal tech, infiltrate), boost ideology mission | `hoi4_intelligence` `state_read:false`; `hoi4_operative_assign` refuses `operation_not_built`, `mission_not_built` | Germany | P3 |
+| Operations that pick a state or region (coup, coordinated strike, sabotage), boost ideology mission, an operation's phase, progress and collaboration value | `hoi4_operation_start` refuses `operation_picks_location`; `hoi4_operative_assign` refuses `mission_not_built`; phase and collaboration not mapped | Germany | P3 |
 | Per-wing air aggressiveness, day/night, reinforcement preference | `LIVE_VALIDATION_QUEUE.md` "Not built": no memory field found | all | P3 |
 | Paradrop and air landings | `poland-meta.md`: "Airborne VP/port seizure ... candidate"; `PLAYBOOK_TOOL_GAPS.md` 6c: paradrop "not driven" | Poland (optional) | P3 |
 | Subject management (autonomy, release, annex subject) | `politics-diplomacy-espionage.md` (c): "only through `hoi4_diplomacy` actions ... not specifically supported" | Poland (Lithuania union) | P3 |

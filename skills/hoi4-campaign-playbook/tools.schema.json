@@ -2,7 +2,7 @@
  "_generated_by": "scripts/hoi4facts/tool_schemas.py build",
  "tools": {
   "hoi4_agency_create": {
-   "description": "UNVALIDATED (no live test yet): create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Whether the agency exists is only on screen, so the refusals come from the opened window before the click: agency_exists, agency_creation_in_progress, agency_creation_unavailable (the game disables the button). Verified from the window only (the creation progress bar appears): verification gui_only, results carry validated:false. Creation takes civilian factories for the define's number of days.",
+   "description": "Create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Refusals from a fresh memory read before any input: agency_exists, agency_creation_in_progress; agency_creation_unavailable when the game disables the button. Verified by memory (creating or created). Live-verified on 1.19.4. Creation takes civilian factories for the define's number of days.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -22,7 +22,7 @@
    "source": "--list-tools"
   },
   "hoi4_agency_upgrade": {
-   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals: branch_unknown, upgrade_unknown (before input, from the loaded database); agency_not_created, upgrade_in_progress, upgrade_unavailable (lists the branch's entries with their enabled state), found from the windows before the click. Verified from the agency view's upgrade progress bar only (verification gui_only). Results carry validated:false.",
+   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2724,7 +2724,7 @@
    "source": "--list-tools"
   },
   "hoi4_intelligence": {
-   "description": "Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Whether the agency is created, upgrade levels and progress, the operative roster and the intel network values are NOT mapped on this build state and are reported as state_read:false rather than guessed.",
+   "description": "Own intelligence agency, read-only (no input, no lease, never pauses). Returns the agency name (validated live: Abwehr for Germany), the 5 upgrade branches with their upgrades from the loaded database joined with the install's scripts (levels, factory use during progress, prerequisite upgrades, per-level modifiers), the operative mission keys, the agency defines (creation/upgrade days and factories) and, with include_operations:true, the operations catalogue (operatives, network strength, days, risk). Live state from game memory (macOS 1.19.4.1): agency created/creating, upgrade levels and the running upgrade, operative slots, offered candidates, the recruited operatives with their mission, target and operation, intel network strength per target and state, and operations_running (operation, target, operatives at work, auto commence). A part that cannot be read on this build is reported as state_read:false with the error rather than guessed.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3104,8 +3104,79 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_operation_start": {
+   "description": "Prepare an intelligence operation against a target with ordinary input, as a player does: agency view (Shift+W), Operations tab, the operation's row (scrolled into view; one row per target with a network, the opened window's memory must name the asked operation and target), Prepare, one free operative per slot picked by name in the game's list, optionally Commence when ready, then the window's Prepare. The game then gathers the equipment and civilian factories and, with auto_commence (default true), commences on its own; the operation's phases then run for its days. Refusals before input: unknown_operation, operation_picks_location (the operation also picks a state or region in its window, e.g. coup, sabotage, coordinated strike: not built), agency_not_created, operative_unknown, operative_busy, not_enough_operatives (from memory and the content's files); from the windows before the first state-changing click: operation_unavailable (the game disables Prepare), operation_not_listed, operative_slots_unavailable, operative_not_offered, operative_pick_failed. Live-verified on 1.19.4 (collaboration government, ITA on ETH, at war). Use hoi4_operations first: it lists every missing piece with a code. Verified from memory: the operation appears among the agency's operations (hoi4_intelligence operations). operatives = recruited positions (hoi4_intelligence operatives.list order); default the first free ones.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "auto_commence": {
+      "type": "boolean"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "operation": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "operatives": {
+      "items": {
+       "maximum": 31,
+       "minimum": 0,
+       "type": "integer"
+      },
+      "maxItems": 8,
+      "type": "array"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "target": {
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+     }
+    },
+    "required": [
+     "target",
+     "operation",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_operations": {
+   "description": "Read-only: intelligence operations against a target and whether each can be prepared now, decided without opening the agency. Definitions come from the running game's content (common/operations and common/operation_phases with mods layered): days, network strength, operatives, equipment and civilian factories, required and awarded tokens, allowed targets and the phase choices with their extra costs. Each operation is judged against the own state read from memory (network strength in the target = its strongest covered state, recruited operatives not on an operation, collaboration, ruling ideology and its rules, wars, the equipment stockpile, the install's DLCs): verdict.visible and verdict.ready are true | false | unknown; false lists every failing piece with a code (network_too_weak, not_enough_operatives, missing_token, not_allowed, unavailable, requirements_unmet, not_visible, not_a_target); waits_for lists equipment the stockpile lacks now (missing_equipment: Prepare still works and the preparation takes it as it arrives, so it delays the commencement); unknown names the triggers the server cannot read (flags, focuses, national coverage, other countries' affairs). target = a tag (default: every country with an own network); operations = keys to judge; include_hidden lists operations whose visible conditions fail. No input, no lease, never pauses.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "include_hidden": {
+      "type": "boolean"
+     },
+     "operations": {
+      "items": {
+       "maxLength": 128,
+       "minLength": 1,
+       "pattern": "^[A-Za-z0-9_]+$",
+       "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+     },
+     "target": {
+      "maxLength": 3,
+      "minLength": 3,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_operative_assign": {
-   "description": "UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` (operation overview) are not built and refuse with mission_not_built / operation_not_built. Typed refusals: invalid_arguments, target_required, country_has_no_states, unknown_country (before input); agency_not_created, operative_bar_unavailable, operative_unknown, operative_busy, mission_unavailable (the game disables the button) from the windows before the first state-changing click. Verified from the operative's on-mission marker on the bar only (verification gui_only). Results carry validated:false.",
+   "description": "Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3147,7 +3218,7 @@
    "source": "--list-tools"
   },
   "hoi4_operative_recruit": {
-   "description": "UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, the candidate at position `candidate` (0-based, default 0) of the recruitment window (names and traits are not readable, so the choice is by position). Typed refusals found from the windows before the click: agency_not_created, operative_bar_unavailable, no_free_operative_slot, unknown_candidate. Verified from the bar and the recruitment progress bar only (verification gui_only). Results carry validated:false.",
+   "description": "Recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, then the candidate `candidate` (0-based index into hoi4_intelligence's candidate list, default 0), picked in the recruitment window by its name. Typed refusals before input, from memory: agency_not_created, no_free_operative_slot, operative_slot_locked (says in how many days candidates are offered: AGENCY_OPERATIVE_RECRUITMENT_TIME counts from creation), unknown_candidate; candidate_not_shown and operative_bar_unavailable from the window. Verified by memory: Reached when the operative count grew, Diverged when someone else was recruited. Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

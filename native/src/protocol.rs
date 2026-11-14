@@ -72,7 +72,9 @@ impl crate::plan_run::Tools for Reads<'_> {
     }
 }
 /// The content folder holding the running game's focus files and the DLCs it has.
-fn focus_content(exe: &str) -> Result<(std::path::PathBuf, crate::focus_rules::live::Dlcs)> {
+pub(crate) fn focus_content(
+    exe: &str,
+) -> Result<(std::path::PathBuf, crate::focus_rules::live::Dlcs)> {
     use crate::focus_rules::live::Dlcs;
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
@@ -129,6 +131,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     if let Some(list) = value["tools"].as_array_mut() {
+        list.push(json!({"name":"hoi4_operations","description":"Read-only: intelligence operations against a target and whether each can be prepared now, decided without opening the agency. Definitions come from the running game's content (common/operations and common/operation_phases with mods layered): days, network strength, operatives, equipment and civilian factories, required and awarded tokens, allowed targets and the phase choices with their extra costs. Each operation is judged against the own state read from memory (network strength in the target = its strongest covered state, recruited operatives not on an operation, collaboration, ruling ideology and its rules, wars, the equipment stockpile, the install's DLCs): verdict.visible and verdict.ready are true | false | unknown; false lists every failing piece with a code (network_too_weak, not_enough_operatives, missing_token, not_allowed, unavailable, requirements_unmet, not_visible, not_a_target); waits_for lists equipment the stockpile lacks now (missing_equipment: Prepare still works and the preparation takes it as it arrives, so it delays the commencement); unknown names the triggers the server cannot read (flags, focuses, national coverage, other countries' affairs). target = a tag (default: every country with an own network); operations = keys to judge; include_hidden lists operations whose visible conditions fail. No input, no lease, never pauses.","inputSchema":{"type":"object","properties":{"target":{"type":"string","minLength":3,"maxLength":3},"operations":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"maxItems":32},"include_hidden":{"type":"boolean"}},"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
         list.push(json!({"name":"hoi4_focus_available","description":"Read-only: whether own national focuses can be started now, decided without opening the focus tree. The rules come from the focus files of the running game's content (the install with the enabled mods layered over it): prerequisites, mutually exclusive focuses and the available, bypass and allow_branch triggers, with scripted triggers expanded. They are judged against the own state read from memory: completed focuses, the loaded tree's keys, wars, the date, state owners and controllers, stability, war support, political power, manpower, factory counts, faction, overlord and subjects, researched technologies, and the install's DLCs. Each focus answers state available | unavailable | unknown: unavailable is certain and comes with why (the failing requirement in the game's own script words); unknown lists the triggers that cannot be read (ideas, flags, the ruling ideology, variables, leaders, other countries' affairs, any_/all_ scopes), and then only hoi4_focus_start can tell; bypass:true means taking the focus completes it at once without its reward. No input, no lease, never pauses.","inputSchema":{"type":"object","properties":{"focuses":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_-]+$"},"minItems":1,"maxItems":32}},"required":["focuses"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
         list.push(json!({"name":"hoi4_observe","description":"What changed since your last look, from the server's watcher (it samples your own situation a few times a second): typed changes with a sequence number (event_opened, own_state_lost, war_started, army_moved, army_organisation_low, army_supply_low, army_plan_stopped, army_gone, alert_raised, research_slot_idle, focus_finished, peace_conference_opened ...; urgent ones marked) plus a short brief of now. Pass `since` = the `seq` of your previous reply; 0 gives the brief and the current seq. Optional kinds filter, urgent_only, limit. Pure read; answers at once even while an action runs.","inputSchema":{"type":"object","properties":{"since":{"type":"integer","minimum":0},"kinds":{"type":"array","items":{"type":"string"},"maxItems":32},"urgent_only":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200}},"additionalProperties":false}}));
         list.push(json!({"name":"hoi4_autopilot","description":"Turn the resident executor on or off: while on, the server runs one standing-plan step (the same rules as hoi4_plan_run) whenever no request of yours is waiting, so routine play (events, research, focus, construction, production, armies, war rules) goes on between your turns without blocking you; your requests always go first. What it did appears in hoi4_observe as autopilot_action. An army you order yourself (any hoi4_army_* action) is left to you by its war rules for war.player_claim_seconds (default 300); release:[names] hands armies back at once. {enabled:false} stops it; {} returns its status.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"interval_ms":{"type":"integer","minimum":250,"maximum":10000},"release":{"type":"array","items":{"type":"string"},"maxItems":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}));
@@ -706,6 +709,104 @@ impl Server {
                 let facts = crate::focus_rules::live::Live::new(&mut ctx, Some(&dlcs));
                 Ok(crate::focus_rules::live::report(
                     &catalog, &facts, &focuses, wars,
+                ))
+            }
+            "hoi4_operations" => {
+                if object
+                    .keys()
+                    .any(|k| !matches!(k.as_str(), "target" | "operations" | "include_hidden"))
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "hoi4_operations takes target, operations and include_hidden",
+                    ));
+                }
+                let target = match object.get("target") {
+                    None => None,
+                    Some(Value::String(t))
+                        if t.len() == 3
+                            && t.bytes()
+                                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+                    {
+                        Some(t.clone())
+                    }
+                    Some(_) => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "target must be a three-letter tag",
+                        ))
+                    }
+                };
+                let only: Vec<String> = match object.get("operations") {
+                    None => Vec::new(),
+                    Some(Value::Array(list)) if list.len() <= 32 => list
+                        .iter()
+                        .map(|v| {
+                            v.as_str()
+                                .filter(|k| {
+                                    !k.is_empty()
+                                        && k.len() <= 128
+                                        && k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                                })
+                                .map(str::to_string)
+                        })
+                        .collect::<Option<_>>()
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid operation key"))?,
+                    Some(_) => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "operations must list up to 32 keys",
+                        ))
+                    }
+                };
+                let include_hidden = match object.get("include_hidden") {
+                    None => false,
+                    Some(Value::Bool(b)) => *b,
+                    Some(_) => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "include_hidden must be boolean",
+                        ))
+                    }
+                };
+                let exe = self
+                    .process()?
+                    .identity()
+                    .map(|i| i.exe.clone())
+                    .ok_or_else(|| {
+                        Error::new("map_data_unavailable", "Game identity unavailable")
+                    })?;
+                let (content, dlcs) = focus_content(&exe)?;
+                let catalog = crate::operation_rules::Catalog::load(&content);
+                if catalog.operations.is_empty() {
+                    return Err(Error::new(
+                        "map_data_unavailable",
+                        "No operation files in the game content",
+                    ));
+                }
+                for key in &only {
+                    if catalog.operation(key).is_none() {
+                        return Err(Error::new(
+                            "unknown_operation",
+                            format!("No operation {key} in the game content"),
+                        ));
+                    }
+                }
+                let tools = Reads {
+                    server: self,
+                    commands,
+                };
+                let live = crate::operation_rules::live::Live::read(&tools, Some(&dlcs))?;
+                let targets = match target {
+                    Some(t) => vec![t],
+                    None => live.network_targets(),
+                };
+                Ok(crate::operation_rules::live::report(
+                    &catalog,
+                    &live,
+                    &targets,
+                    &only,
+                    include_hidden,
                 ))
             }
             "hoi4_focus_input_probe" => {
