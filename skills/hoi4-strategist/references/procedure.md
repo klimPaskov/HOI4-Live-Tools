@@ -142,9 +142,17 @@ Resolution: executor `doctrines` (`id`, `folder`, `grand_doctrine` or `track` + 
 ### 5. XP budget
 Read: `research-doctrines-projects.md` §2.3. Facts: starting experience (dossier §1; until available
 `F grep army_experience --folder history/countries` and the XP rewards of the planned focuses),
-`F defines MAX_ARMY_EXPERIENCE` (pool cap per branch), `F defines TRAINING_MAX_DAILY_COUNTRY_EXP`.
-1. Forecast XP per branch (army, air, navy) by month: start + focus rewards + training/exercise + combat
-   estimate [H]. No pool above the cap: spend before it fills.
+`F defines MAX_ARMY_EXPERIENCE` (pool cap per branch), the pool gain line of dossier §1 (combat scale, most
+combat XP a day, most training XP a day, each by its full define key).
+1. Forecast XP per branch (army, air, navy) by month with `calc xp --branch <b> --until <date> --reward
+   <date>:<xp>:<focus> --war <from>:<to> [--combat-per-day <xp>] --cost <price>`: floor = start + dated
+   rewards + training, ceiling = floor + the most combat XP a day over the days at war, the estimate with
+   your daily combat figure [H]; it prints the day each price is first affordable. The country pool has
+   its own defines per branch (`NMilitary.FIELD_EXPERIENCE_SCALE` and `FIELD_EXPERIENCE_MAX_PER_DAY` for
+   the army, the same names under `NAir` and `NNavy`); `UNIT_EXPERIENCE_PER_COMBAT_HOUR` and
+   `UNIT_EXPERIENCE_PER_TRAINING_DAY` are a unit's own veterancy and never feed the pool. A plan at war
+   lists an army XP spend (a `doctrines` entry waits for its `xp`, so it needs no certain date): lint
+   `xp.unspent`. No pool above the cap: spend before it fills.
 2. Order every spend per branch with its month: doctrines (item 4), template edits (item 6), designs
    (item 7), officer-corps spirits. No month spends more than the forecast; keep the reserve for
    designs that the playbook names.
@@ -541,7 +549,10 @@ cost in points, its estimated finish date (`C build-order`) and the source:
    initial supply flow 3.3 against a hub's 2.8, but reach falls off faster inland). Conditions: the
    province is coastal and owned or controlled; free convoys cover 0.25 per supply point
    (`SUPPLY_CONVOY_FACTOR`); the sea route is not blocked by enemy navy or air. `F ports <TAG>` and
-   `F province <id>` (coastal, port).
+   `F province <id>` (coastal, port). Size the convoys: lint `supply.convoy_size` adds the supply use
+   of every division standing overseas times `SUPPLY_CONVOY_FACTOR` and the planned imports, compares
+   the sum with the start convoys and prints it under `facts.convoys` (before range: a long lane needs
+   more); cite those numbers in plan.md.
 3. **Motorisation and trucks**: `war.motorization` per army and a truck line from day 1, with the truck
    stock it needs (item 8): the cheap way to carry supply beyond the railhead.
 4. **A supply hub** (`supply_node`, 20000 points: about 190-270 days with 15 civilian factories at

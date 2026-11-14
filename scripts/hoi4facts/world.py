@@ -55,6 +55,16 @@ from .script import (Block, Ctx, _sub, bare, date_tuple, get, get1, history_walk
 FAIR_LEVELS = ("public", "aggregate", "private")
 XP_EFFECTS = {"army_experience": "army", "air_experience": "air", "navy_experience": "navy"}
 XP_MODIFIERS = {"experience_gain_army": "army", "experience_gain_air": "air", "experience_gain_navy": "navy"}
+# The defines that feed each country experience pool, by full key: the same short names exist per branch
+# (NMilitary, NAir, NNavy), and the UNIT_EXPERIENCE_* defines move a unit's own veterancy, never the pool.
+XP_POOL_DEFINES = {
+    "army": {"combat_scale": "NMilitary.FIELD_EXPERIENCE_SCALE",
+             "combat_max_per_day": "NMilitary.FIELD_EXPERIENCE_MAX_PER_DAY",
+             "training_max_per_day": "NMilitary.TRAINING_MAX_DAILY_COUNTRY_EXP"},
+    "air": {"combat_scale": "NAir.FIELD_EXPERIENCE_SCALE", "combat_max_per_day": "NAir.FIELD_EXPERIENCE_MAX_PER_DAY"},
+    "navy": {"combat_scale": "NNavy.FIELD_EXPERIENCE_SCALE", "combat_max_per_day": "NNavy.FIELD_EXPERIENCE_MAX_PER_DAY",
+             "training_max_per_day": "NNavy.TRAINING_MAX_DAILY_COUNTRY_EXP"},
+}
 OCCUPATION_KEYS = {"start_resistance": "resistance_active", "set_resistance": "resistance",
                    "set_compliance": "compliance", "set_garrison_strength": "garrison"}
 # sub-unit fields reported by World.sub_units (the rest of a sub-unit block is presentation or AI)
@@ -1526,7 +1536,9 @@ class World:
     # ------------------------------------------------------------ experience and technology level
     def experience(self, tag=None):
         """Experience at the start per branch: history army/air/navy_experience (none set means 0 [?]),
-        the stored maximum (defines), daily gain and factors from the starting spirits."""
+        the stored maximum (defines), daily gain and factors from the starting spirits, and `gain`: the
+        defines that feed each country pool (XP_POOL_DEFINES: combat scale, the most combat XP a day,
+        the most training XP a day), read by their full key."""
         tag = tag or self.tag
         c = self.country(tag)
         start = {}
@@ -1550,7 +1562,16 @@ class World:
                     branch = next((x for x in ("army", "air", "navy") if x in a), "?")
                     mods.append({"idea": f["v"], "key": a, "branch": branch, "value": num(b),
                                  "daily": a in XP_MODIFIERS, "src": self.src(i["path"], i["line"])})
-        return {"tag": tag, "start": start, "max": caps, "spirits": mods}
+        gain = {}
+        for b, keys in XP_POOL_DEFINES.items():
+            rows = {}
+            for name, key in keys.items():
+                _, f = self.define(key)
+                if f:
+                    rows[name] = f
+            if rows:
+                gain[b] = rows
+        return {"tag": tag, "start": start, "max": caps, "spirits": mods, "gain": gain}
 
     def tech_level(self, tag):
         """Aggregate technology level at the start (FAIR aggregate, as the diplomacy view shows it):

@@ -267,7 +267,8 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
                 xp["decisions"].append(dict(got, decision=dd["id"], src=w.src(dd["path"], dd["line"])))
     xp["d"] = ("start = history army/air/navy_experience up to the start; spirits = experience_gain_* modifiers of the "
                "start ideas (daily when the key has no _factor); focus/decision rewards = army/air/navy_experience in "
-               "the completion reward / complete_effect, every branch counted (upper bound)")
+               "the completion reward / complete_effect, every branch counted (upper bound); gain = the defines that "
+               "feed each country pool, by full key (combat scale, most combat XP a day, most training XP a day)")
     d["country"]["experience"] = xp
 
     # 2 own states, ranked for factories
@@ -595,6 +596,9 @@ def _md_xp(xp, s):
           + (f"; cap {cap.get('v')} each [{cap.get('src')}]" if cap else ""))
     if xp["spirits"]:
         s.add("  - spirits: " + "; ".join(f"{m['idea']} {m['key']} {m['value']:g}" for m in xp["spirits"][:4]))
+    for b, rows in (xp.get("gain") or {}).items():
+        s.add(f"  - {b} pool gain: " + "; ".join(f"{name} {_v(f):g} [{f['key']} {f['src']}]" for name, f in rows.items())
+              + (" (the country pool; UNIT_EXPERIENCE_* is a unit's veterancy; forecast: `calc xp`)" if b == "army" else ""))
     for b in ("army", "air", "navy"):
         fs = [f for f in xp["focuses"] if (f.get(b) or 0) > 0]
         ds = [x for x in xp["decisions"] if (x.get(b) or 0) > 0]  # negative values are XP costs

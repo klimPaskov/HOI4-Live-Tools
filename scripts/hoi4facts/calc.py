@@ -15,6 +15,12 @@
                         [--difficulty normal] [--cost PP_PER_DAY] [--no-focus | --focus-until D]
                         --until D [--buy 1936.2.1:150:free_trade ...]
                         (net income: a running focus costs its political_power_cost, 1 a day in vanilla)
+    calc.py xp          [--tag T --date D] [--branch army|air|navy] --until D [--start-xp N]
+                        [--reward 1936.3.12:25:army_primacy ...] [--war 1936.1.1:1936.12.22 ...]
+                        [--training-days N] [--combat-per-day XP] [--cost 100 ...]
+                        (the country experience pool month by month: floor = start + dated rewards + daily
+                        spirits + training, ceiling = floor + the most combat XP a day x days at war, and
+                        the estimate with --combat-per-day; the day each --cost is first affordable)
 
 Every constant is read from the effective game files where it exists (common/defines, common/buildings,
 common/units, common/ideas) and printed with its source. Constants the files do not hold are labelled
@@ -485,6 +491,71 @@ def pp(w, start_pp, gain, factor, start, until, buys, stability=None, difficulty
             "not_bought": [{"planned": _fmt(d), "cost": c, "buy": l} for d, c, l in pending], "d": PP_METHOD}
 
 
+XP_METHOD = ("country experience pool (not a unit's veterancy: the UNIT_EXPERIENCE_* defines never feed it); "
+             "floor = start + dated rewards + daily experience_gain spirits + training days x training_max_per_day; "
+             "ceiling = floor + combat_max_per_day x days at war; estimate = floor + min(combat_max_per_day, "
+             "the given combat XP a day) x days at war (the daily combat gain is the planner's assumption: the "
+             "game scales the losses of the country's battles by combat_scale, up to combat_max_per_day); every "
+             "line stops at the pool cap; defines read by full key (NMilitary / NAir / NNavy), mods included")
+
+
+def xp(w, branch, start, until, tag=None, start_xp=None, rewards=(), war=(), training_days=0, combat_per_day=None,
+       costs=()):
+    """Forecast of one country experience pool (army, air or navy) from start to until.
+
+    rewards: [(date, xp, label)] (focus, decision or event rewards); war: [(from date, to date)] the days the
+    country fights; training_days: days of exercises from the start; combat_per_day: the assumed combat XP a
+    day at war (capped by the define), None for no estimate line; costs: XP prices whose first affordable day
+    is reported for the floor, the estimate and the ceiling. Raises ValueError for an unknown branch or when
+    the game files hold no combat define for it."""
+    tag = tag or w.tag
+    info = w.experience(tag)
+    if branch not in info["start"]:
+        raise ValueError(f"branch {branch!r}: give army, air or navy")
+    gain = info["gain"].get(branch) or {}
+    if "combat_max_per_day" not in gain:
+        raise ValueError(f"the defines hold no FIELD_EXPERIENCE_MAX_PER_DAY for the {branch} pool")
+    cap_day = float(gain["combat_max_per_day"]["v"])
+    train_day = float(gain["training_max_per_day"]["v"]) if "training_max_per_day" in gain else 0.0
+    pool_cap = float(info["max"][branch]["v"]) if branch in info["max"] else math.inf
+    spirits = sum(m["value"] for m in info["spirits"] if m["branch"] == branch and m["daily"])
+    base = float(info["start"][branch]["v"] if start_xp is None else start_xp)
+    today, stop = day_number(start), day_number(until)
+    first = today
+    wars = [(day_number(a), day_number(b)) for a, b in war]
+    pending = sorted(((day_number(d), float(n), label) for d, n, label in rewards), key=lambda r: r[0])
+    est_day = None if combat_per_day is None else min(cap_day, max(0.0, float(combat_per_day)))
+    lines = {"floor": base, "ceiling": base}
+    if est_day is not None:
+        lines["estimate"] = base
+    reach = {float(c): {k: None for k in lines} for c in costs}
+    rows, war_days = [], 0
+    while today <= stop:
+        got = 0.0
+        while pending and pending[0][0] <= today:
+            got += pending.pop(0)[1]
+        if today > first:
+            got += spirits + (train_day if today - first <= training_days else 0.0)
+        fighting = today > first and any(a < today <= b for a, b in wars)
+        war_days += fighting
+        for k in lines:
+            extra = (cap_day if k == "ceiling" else est_day if k == "estimate" else 0.0) if fighting else 0.0
+            lines[k] = min(pool_cap, lines[k] + got + extra)
+            for c, hit in reach.items():
+                if hit[k] is None and lines[k] >= c:
+                    hit[k] = _fmt(today)
+        y, m, d = (int(x) for x in _fmt(today + 1).split(".")[:3])
+        if d == 1 or today == stop:
+            rows.append(dict({"date": _fmt(today)}, **{k: round(v, 1) for k, v in lines.items()}))
+        today += 1
+    return {"tag": tag, "branch": branch, "start": {"date": start, "xp": base, "src": info["start"][branch].get("src")},
+            "defines": gain, "cap": info["max"].get(branch), "daily_spirits": spirits, "training_days": training_days,
+            "war_days": war_days, "combat_per_day": est_day, "rows": rows,
+            "end": dict({"date": _fmt(stop)}, **{k: round(v, 1) for k, v in lines.items()}),
+            "reach": [dict({"cost": c}, **hit) for c, hit in sorted(reach.items())],
+            "not_counted": [{"date": _fmt(d), "xp": n, "reward": label} for d, n, label in pending], "d": XP_METHOD}
+
+
 def pp_modifiers(w, tag):
     """(flat gain, factor) from the tag's starting ideas (political_power_gain, political_power_factor)."""
     mods = derive.idea_modifiers(w.game)
@@ -555,10 +626,52 @@ def main(argv=None):
     q.add_argument("--cost", type=float, help="daily PP costs (default: starting ideas' political_power_cost)")
     q.add_argument("--no-focus", action="store_true", help="no national focus runs (no focus cost)")
     q.add_argument("--focus-until", help="date the last planned focus ends (focus cost until then)")
+    x = sub.add_parser("xp")
+    _common(x)
+    x.add_argument("--branch", default="army", choices=("army", "air", "navy"))
+    x.add_argument("--until", required=True)
+    x.add_argument("--start-xp", type=float, help="XP at the start (default: the history's, else 0)")
+    x.add_argument("--reward", action="append", default=[], help="DATE:XP[:LABEL] (repeat): focus, decision, event")
+    x.add_argument("--war", action="append", default=[], help="FROM:TO dates at war (repeat)")
+    x.add_argument("--training-days", type=int, default=0, help="days of exercises from the start")
+    x.add_argument("--combat-per-day", type=float, help="assumed combat XP a day at war (capped by the define)")
+    x.add_argument("--cost", action="append", type=float, default=[], help="XP price to date (repeat)")
     args = ap.parse_args(argv)
     w = factsmod.world(args, args.tag)
     tag = w.tag
     start = w.date
+
+    if args.cmd == "xp":
+        try:
+            rewards = []
+            for item in args.reward:
+                d, n, label = (item.split(":", 2) + [""])[:3]
+                rewards.append((d, float(n), label or f"+{n}"))
+            wars = [tuple(item.split(":", 1)) for item in args.war]
+            if any(len(pair) != 2 for pair in wars):
+                raise ValueError("--war wants FROM:TO")
+            r = xp(w, args.branch, start, args.until, tag, args.start_xp, rewards, wars, args.training_days,
+                   args.combat_per_day, args.cost)
+        except ValueError as e:
+            print(json.dumps({"error": str(e)}))
+            return 1
+        if args.json:
+            print(json.dumps(r, indent=1))
+            return 0
+        print(f"{r['tag'] or '-'} {r['branch']} XP from {r['start']['xp']:g} at {start}; "
+              + "; ".join(f"{name} {f['v']:g} [{f['key']} {f['src']}]" for name, f in r["defines"].items())
+              + (f"; cap {r['cap']['v']:g} [{r['cap']['src']}]" if r["cap"] else ""))
+        names = [k for k in ("floor", "estimate", "ceiling") if k in r["end"]]
+        print(f"{'date':>10} " + " ".join(f"{k:>8}" for k in names))
+        for row in r["rows"]:
+            print(f"{row['date']:>10} " + " ".join(f"{row[k]:>8g}" for k in names))
+        for hit in r["reach"]:
+            print(f"{hit['cost']:g} XP reached: " + ", ".join(f"{k} {hit[k] or 'not by ' + r['end']['date']}"
+                                                              for k in names))
+        for nc in r["not_counted"]:
+            print(f"NOT COUNTED (after {r['end']['date']}): {nc}")
+        print(f"{r['war_days']} days at war. {r['d']}")
+        return 0
 
     if args.cmd == "build-order":
         civ, mil = args.civ, args.mil
