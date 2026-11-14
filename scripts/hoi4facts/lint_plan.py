@@ -1402,7 +1402,12 @@ class Lint:
         return best
 
     def mode(self):
-        return __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["mode_of"]).mode_of(self.plan)
+        """"fair" or "meta", read as the FAIR checks read it (no mode, or anything but meta, is fair)."""
+        for key in ("_validator", "_meta", "run_spec", "_run_spec"):
+            v = self.plan.get(key)
+            if isinstance(v, dict) and isinstance(v.get("mode"), str) and v["mode"].strip():
+                return "meta" if v["mode"].strip().lower() == "meta" else "fair"
+        return "fair"
 
     def can_enter(self):
         open_tags, own = self.passable_tags(), self.world.owner_of_province
