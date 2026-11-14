@@ -22,18 +22,18 @@ What is installed where a build exists for the computer:
     native runtime   macOS on Apple silicon and Linux x86_64: hoi4-live-native, the memory-reading runtime;
                      on macOS its signature and debugger entitlement are verified, and it is signed when missing
 
-Layout of an install (default prefix %LOCALAPPDATA%\hoi4-live-tools on Windows,
+Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools on Windows,
 ~/Library/Application Support/hoi4-live-tools on macOS, ~/.local/share/hoi4-live-tools on Linux):
 
     hoi4-live      the command: doctor, update, uninstall, status (hoi4-live.cmd on Windows)
-    app\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
-    native\         hoi4-live-native and its entitlements file
-    venv\           the private Python environment with the dependencies
+    app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
+    native\\         hoi4-live-native and its entitlements file
+    venv\\           the private Python environment with the dependencies
     config.json    optional user settings (the launcher passes it as HOI4_LIVE_CONFIG when it exists)
-    artifacts\     screenshots, scenario reports, the server log, journals, state caches
+    artifacts\\     screenshots, scenario reports, the server log, journals, state caches
     install.json   version, paths, registrations and links of this install
 
-Upgrading replaces app\ and native\ and keeps venv\ (dependencies are re-resolved), config.json, artifacts\ and
+Upgrading replaces app\\ and native\\ and keeps venv\\ (dependencies are re-resolved), config.json, artifacts\\ and
 the client registrations (the path does not change). The installer never touches the game, its settings or its
 playset, and never changes a system security setting. Client registrations are per user, written atomically after
 one backup (<file>.hoi4live.bak):
@@ -43,7 +43,7 @@ one backup (<file>.hoi4live.bak):
     cursor    ~/.cursor/mcp.json
     opencode  ~/.config/opencode/opencode.json
 
-When a folder of the user's PATH is available (~/.local/bin, or %LOCALAPPDATA%\Microsoft\WindowsApps) the command
+When a folder of the user's PATH is available (~/.local/bin, or %LOCALAPPDATA%\\Microsoft\\WindowsApps) the command
 is linked there as `hoi4-live`; uninstall removes the link. HOI4_LIVE_RELEASE_BASE names another release location:
 an https address shaped like the GitHub releases page, or a local folder holding the release files.
 

@@ -188,6 +188,17 @@ class ReleaseTests(Sandbox):
             self.assertEqual(caught.exception.code, install.EXIT_NATIVE)
 
 
+class SourceTests(unittest.TestCase):
+    def test_install_py_compiles_without_a_warning_on_every_python(self):
+        # A fresh copy is compiled by the user's Python; a warning there would land in the command's output.
+        import warnings
+        with open(os.path.join(helpers.ROOT, "install.py"), encoding="utf-8") as f:
+            source = f.read()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            compile(source, "install.py", "exec")
+
+
 class NativeTargetTests(unittest.TestCase):
     def test_each_computer_gets_its_build_or_a_reason(self):
         self.assertEqual(install.native_target("darwin", "arm64"), ("macos-arm64", None))
