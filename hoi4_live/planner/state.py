@@ -15,6 +15,7 @@ replay); `snapshot()` returns the compact state:
     civ_idle           idle civilian factories
     wars               enemy tags at war with the player
     controllers        {state id: controller tag}
+    vp                 {state id: {"owner", "name", "provinces": [{"province", "vp", "controller"}]}} (hoi4_states)
     armies             {army: {divisions, planning, fill}}
     shortages          {equipment family: {"day", "days_of_cover"}} from the feed's stockpile_low
     fill_low           {army: {"day", "fill"}} from the feed's equipment_fill_low
@@ -79,6 +80,7 @@ class StateBuilder:
         self.wars = set()
         self.wars_known = False
         self.controllers = {}
+        self.vp = {}
         self.armies = {}
         self.shortages = {}
         self.fill_low = {}
@@ -169,6 +171,11 @@ class StateBuilder:
             sid, ctl = row.get("state_id"), row.get("controller")
             if isinstance(sid, int) and isinstance(ctl, str):
                 self.controllers[sid] = ctl
+            vps = row.get("victory_points")
+            if isinstance(sid, int) and isinstance(vps, list):
+                self.vp[sid] = {"owner": row.get("owner"), "name": row.get("name"),
+                                "provinces": [{"province": v.get("province"), "vp": v.get("victory_points"),
+                                               "controller": v.get("controller")} for v in vps if isinstance(v, dict)]}
 
     def _armies(self, body, args):
         out = {}
@@ -271,6 +278,7 @@ class StateBuilder:
             "pp": self.pp, "pp_gain": self.pp_gain, "civ_idle": self.civ_idle,
             "wars": sorted(self.wars), "wars_known": self.wars_known,
             "controllers": {str(k): v for k, v in sorted(self.controllers.items())},
+            "vp": {str(k): v for k, v in sorted(self.vp.items())},
             "armies": self.armies, "shortages": self.shortages, "fill_low": self.fill_low,
             "signals": dict(self.signals), "phase": self.phase, "lines": dict(self.lines),
         }
