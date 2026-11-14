@@ -55,6 +55,15 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            against the dockyards
   production.equipment     unknown equipment, or equipment no planned tech unlocks
   production.trucks        war.motorization set but no motorized (truck) line
+  production.balance       an equipment family the start divisions need (sub-unit `need` x the OOB templates)
+                           that no line builds while the divisions start short of it (start_equipment_factor,
+                           less the history stockpile), the theatre's divisions lose it at war or
+                           stockpile_targets names it; or planned output (factories x BASE_FACTORY_SPEED_MIL x
+                           efficiency / build cost: start lines at their efficiency, new ones climbing from
+                           the start efficiency to the cap over 180 days) that leaves the family short at the
+                           goal deadline or horizon, or covers the start shortfall and the losses (5% a month
+                           of the theatre divisions' equipment assumed) only more than 120 days into the war
+                           (warning from 90 days); facts.equipment_balance has the numbers
   army.guards              own state bordering an enemy with no guard (layout guard role,
                            war.guard_states or war.guards); warning: a hold_targets post outside the guard
                            states of the layout guard it moves (that border loses the guard while the hold runs)
@@ -287,6 +296,13 @@ PP_IDLE = 100             # politics.pp_budget: political power above this with 
 PP_IDLE_DAYS = 60         # ... and idle this many days in a row warns
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
 WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
+# production.balance: share of the theatre divisions' equipment lost a month at war (combat and attrition; an
+# assumption, stated in facts.equipment_balance), days a new line or new factories take to climb from the start
+# efficiency to the cap, and days into the war after which a family still short warns
+EQUIPMENT_LOSS_SHARE = 0.05
+EFFICIENCY_RAMP_DAYS = 180
+BALANCE_DAYS = 90
+BALANCE_ERROR_DAYS = 120
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
              "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
@@ -297,7 +313,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
              "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
-             "peace.order", "construction.railway_node", "supply.axis_reach"}
+             "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
@@ -2501,6 +2517,164 @@ class Lint:
                              f"switched line keeps ({key}); start {ny} on new factories and keep {eq} until its gear "
                              f"covers the need")
 
+    def line_output(self, d):
+        """{equipment: units a day} of the military lines in force on day d: factories x
+        BASE_FACTORY_SPEED_MIL x efficiency / the variant's build_cost_ic. A start line runs at its history
+        efficiency (capped at BASE_FACTORY_MAX_EFFICIENCY_FACTOR), and factories the plan puts on it on day 0
+        join at that efficiency; a new line, or factories added later, start at
+        BASE_FACTORY_START_EFFICIENCY_FACTOR and climb linearly to the cap over EFFICIENCY_RAMP_DAYS. No
+        output modifiers (industry techs, resource shortages): the estimate leans low on purpose."""
+        g = self.game
+        start = derive.day(self.start)
+        speed = self.define("BASE_FACTORY_SPEED_MIL", 3.5)
+        base = self.define("BASE_FACTORY_START_EFFICIENCY_FACTOR", 10)
+        cap = self.define("BASE_FACTORY_MAX_EFFICIENCY_FACTOR", 50)
+        rows = derive.equipment_rows(g)
+        removed = self.removal_days()
+        start_lines = defaultdict(lambda: [0, 0.0])
+        for r in self.start_lines():
+            if (derive.equipment_domain(g, r["type"]) or "land") == "navy":
+                continue
+            gone = any(f is None or f <= d for _, f in removed.get(r["type"], []))
+            if gone:
+                continue
+            n = int(r.get("factories") or 0)
+            e = min(cap, float(r.get("efficiency") or base))
+            row = start_lines[r["type"]]
+            row[1] = (row[1] * row[0] + e * n) / (row[0] + n) if row[0] + n else e
+            row[0] += n
+        first_day = {}
+        for x in self.list_of("production"):
+            eq = x.get("equipment")
+            if isinstance(eq, str) and isinstance(x.get("factories"), int) and not x.get("remove") \
+                    and "replace" not in x:
+                first_day[eq] = min(first_day.get(eq, d), derive.day(x.get("from")) or start)
+        planned = self.active_lines(d)
+        out = {}
+        for eq in set(planned) | set(start_lines):
+            if self.factory_pool(eq) != "military":
+                continue
+            cost = (rows.get(eq) or {}).get("cost")
+            if not cost:
+                continue
+            have, eff0 = start_lines.get(eq, (0, base))
+            n = planned.get(eq, have)
+            begin = first_day.get(eq, start)
+            old = min(n, have) if eq in start_lines else 0
+            joined = n - old if eq in start_lines and begin <= start else 0
+            fresh = n - old - joined
+            ramp = min(cap, base + (cap - base) * max(0, d - begin) / EFFICIENCY_RAMP_DAYS)
+            ic = speed * ((old + joined) * eff0 + fresh * ramp) / 100.0
+            if ic > 0:
+                out[eq] = ic / cost
+        return out
+
+    def production_balance(self):
+        """production.balance: for every equipment family the start divisions need, the planned output
+        against the start shortfall (each division's start_equipment_factor, less the history stockpile)
+        and the losses of the theatre's divisions at war (EQUIPMENT_LOSS_SHARE of their equipment a month),
+        day by day to the goal deadline or the horizon."""
+        if not self.tag:
+            return
+        g, w = self.game, self.world
+        oob = w.oob(self.tag)
+        units = w.sub_units()
+
+        def need_of(t):
+            need = Counter()
+            for u, n in t["regiments"].items():
+                for eq, a in ((units.get(u) or {}).get("need") or {}).items():
+                    need[eq] += a * n
+            for u in list(t["support"]) + list(t.get("regimental_support") or []):
+                for eq, a in ((units.get(u) or {}).get("need") or {}).items():
+                    need[eq] += a
+            return need
+
+        needs = {name: need_of(t) for name, t in oob["templates"].items()}
+        theatre = set(self.theatre_states()) | set(_ints((self.plan.get("armies") or {}).get("states")
+                                                         if isinstance(self.plan.get("armies"), dict) else []))
+        theatre |= {e["state"] for e in self.list_of("army_layout") if isinstance(e.get("state"), int)}
+        full, short, front, divs = Counter(), Counter(), Counter(), Counter()
+        for dv in oob["divisions"]:
+            need = needs.get(dv["template"]) or {}
+            fill = dv.get("start_equipment_factor", 1.0)
+            at_front = dv.get("state") in theatre
+            for eq, a in need.items():
+                full[eq] += a
+                short[eq] += a * max(0.0, 1.0 - fill)
+                if at_front:
+                    front[eq] += a
+                    divs[eq] += 1
+        for s in w.country(self.tag).get("stockpile") or []:
+            fam = derive.equipment_family(g, s.get("v"))
+            if fam in short:
+                short[fam] -= s.get("amount") or 0
+        start = derive.day(self.start)
+        ends = [d for d, _ in self.horizon()]
+        end = min(ends) if ends else start + 365
+        first, last, _ = self.war_window()
+        if first is None and self.enemies():
+            dates = [derive.day(e["by"]) for e in self.targets() if e.get("by") and derive.day(e["by"]) is not None]
+            first = max(start, min(dates) - 60) if dates else None
+            last = max(dates) if dates else None
+        war_to = min(end, last if last is not None else end)
+        targets = self.plan.get("stockpile_targets") if isinstance(self.plan.get("stockpile_targets"), dict) else {}
+        rows, cache = {}, {}
+        for fam in sorted(f for f in full if full[f] > 0):
+            loss = front[fam] * EQUIPMENT_LOSS_SHARE / 30.0
+            balance = -max(0.0, short[fam])
+            made = lost = 0.0
+            covered = start if balance >= 0 else None
+            worst = balance
+            for d in range(start, end + 1):
+                if d not in cache:
+                    cache[d] = self.line_output(d)
+                out = sum(v for eq, v in cache[d].items() if derive.equipment_family(g, eq) == fam)
+                at_war = first is not None and first <= d <= war_to
+                made += out
+                lost += loss if at_war else 0.0
+                balance += out - (loss if at_war else 0.0)
+                worst = min(worst, balance)
+                if covered is None and balance >= 0:
+                    covered = d
+                elif balance < 0:
+                    covered = None
+            row = {"divisions_need": round(full[fam]), "start_shortfall": round(max(0.0, short[fam])),
+                   "front_need": round(front[fam]), "front_divisions": divs[fam],
+                   "loss_per_month": round(loss * 30, 1), "made": round(made), "lost": round(lost),
+                   "end_balance": round(balance), "covered": derive.fmt(derive.date_of(covered)) if covered else None}
+            rows[fam] = row
+            war_days = (war_to - first) if first is not None else 0
+            if made <= 0 and (row["start_shortfall"] > 0 or (front[fam] and war_days > 0) or fam in targets):
+                why = []
+                if row["start_shortfall"]:
+                    why.append(f"the start divisions are {row['start_shortfall']} short")
+                if front[fam] and war_days > 0:
+                    why.append(f"the {divs[fam]} theatre divisions that need it ({row['front_need']} in their "
+                               f"templates) lose about {row['loss_per_month']:g} a month at war "
+                               f"({EQUIPMENT_LOSS_SHARE:.0%} a month assumed)")
+                if fam in targets:
+                    why.append(f"stockpile_targets asks for {targets[fam]} days of it")
+                self.add("error", "production.balance", "production",
+                         f"no production line builds {fam}, yet " + "; ".join(why) + ": every loss is permanent "
+                         f"and the divisions fight under-equipped; give it a line from day 0 sized to the losses "
+                         f"(or change the templates that use it)")
+            elif balance < 0:
+                self.add("error", "production.balance", "production",
+                         f"{fam}: the planned lines make about {row['made']} by "
+                         f"{derive.fmt(derive.date_of(end))} against a start shortfall of {row['start_shortfall']} "
+                         f"and about {row['lost']} lost at war ({EQUIPMENT_LOSS_SHARE:.0%} a month of the "
+                         f"{divs[fam]} theatre divisions' {row['front_need']}): {-row['end_balance']} short at the "
+                         f"end; add factories to its line or start it earlier")
+            elif first is not None and covered is not None and covered - first > BALANCE_DAYS:
+                self.add("error" if covered - first > BALANCE_ERROR_DAYS else "warning", "production.balance",
+                         "production",
+                         f"{fam}: the planned lines cover the start shortfall and the losses only from "
+                         f"{row['covered']}, {covered - first} days into the war: the armies fight under-equipped "
+                         f"until then; add factories to its line from day 0")
+        self.facts["equipment_balance"] = {"loss_share_per_month": EQUIPMENT_LOSS_SHARE,
+                                           "efficiency_ramp_days": EFFICIENCY_RAMP_DAYS, "families": rows}
+
     def finishing_lines(self, d):
         """{equipment: finish day} of the start lines that on day d only complete a unit in progress: the
         game would finish the unit first (unit_finish) and the plan removes the line afterwards, as
@@ -3371,7 +3545,8 @@ class Lint:
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus
                  # timeline)
                  self.production_mature_switch, self.production_cull, self.production_day0,
-                 self.production_in_progress, self.production_naval_cap, self.army_width_terrain,
+                 self.production_in_progress, self.production_naval_cap, self.production_balance,
+                 self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.politics_pp_budget,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order]

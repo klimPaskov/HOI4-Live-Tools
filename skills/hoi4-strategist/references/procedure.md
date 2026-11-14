@@ -214,7 +214,12 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
 `supply-logistics-deployment.md` §6. Facts: `C equipment` (templates × divisions × reinforcement),
 `C build-order` (military factories by date), `F tech <id>` (unlocks), `F ports <TAG>` (convoy need).
 1. Lines by phase, sized to cover templates × divisions plus attrition; sum ≤ military factories at that
-   date; equipment unlocked by then.
+   date; equipment unlocked by then. **Every equipment family a fielded template needs has a line** (the
+   artillery company of an infantry template included), sized so that the start shortfall (each division's
+   `start_equipment_factor`) and the losses at war are covered within the first months of the war: lint
+   `production.balance` prints the balance per family in `facts.equipment_balance` (start shortfall, theatre
+   need, losses a month, output, the date the family is covered). A stockpile target for equipment no line
+   builds is a contradiction, not a policy.
 2. Removals and replacements of starting lines (obsolete equipment): `production[].remove` / `replace`
    when the schema has them (W1-9); until then a player `hoi4_production_set {line, equipment,
    factories}`; 0 factories empties or removes the line (removal is not live-verified yet).
@@ -242,8 +247,8 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
     declaration (PR28, CP01); spare trucks 1.5x, trains 1.2x, convoys 0.25 per sea supply (PR29).
 Resolution: executor `production`, `production_priority`, `production_min_idle`, `training`; player
 `training_rules`; `stockpile_targets`; plan.md §5. Check: lint `production.factories`,
-`production.equipment`, `production.trucks`, `production.day0`, `production.cull`, `production.mature_switch`;
-rubric row 6.
+`production.equipment`, `production.trucks`, `production.day0`, `production.cull`, `production.mature_switch`,
+`production.balance`; rubric row 6.
 
 ### 9. MIOs
 Read: `research-doctrines-projects.md` §6.1; `politics-diplomacy-espionage.md` "Designers and MIOs".

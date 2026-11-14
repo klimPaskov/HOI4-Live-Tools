@@ -187,6 +187,9 @@ class HandPlans(unittest.TestCase):
             ("peace.enemies", "peace"),
             ("politics.law_gates", "politics[0] war_economy"),  # war support > 0.5 gate, no `when`
             ("politics.pp_budget", "politics"),  # PP above 100 with no planned buy from late August
+            # infantry and support lines too small for the start shortfall plus a year of losses at war
+            ("production.balance", "production"),
+            ("production.balance", "production"),
             # the L3/35 line: no army_layout template has light tanks and Divisione Celere is disbanded
             ("production.cull", "start line light_tank_chassis_1"),
             # 10 free factories, 9 go to start lines on day 0, the new artillery line draws from the same pool
@@ -251,6 +254,7 @@ class HandPlans(unittest.TestCase):
             ("peace.enemies", "peace"),
             ("politics.law_gates", "politics[0] partial_economic_mobilisation"),
             ("politics.pp_budget", "politics"),  # PP idle after the one planned law
+            ("production.balance", "production"),  # infantry: a few factories against 21 divisions at war
             ("research.throughput", "research_path[0]"),
             ("research.throughput", "research_path[1]"),
             # the Italian coast is far from Addis Ababa over the highlands
@@ -748,6 +752,43 @@ class TacticsRules(unittest.TestCase):
         return plan
 
     # -------------------------------------------------------------- production
+    def test_equipment_balance(self):
+        # the shakedown plan: rifles, support and trucks, no artillery line, a 30-day artillery stockpile target
+        plan = self.plan(production=[
+            {"equipment": "infantry_equipment_1", "factories": 10},
+            {"equipment": "support_equipment_1", "factories": 3},
+            {"equipment": "motorized_equipment_1", "factories": 7}],
+            stockpile_targets={"artillery_equipment": 30})
+        plan["armies"]["states"] = [550, 559, 844, 908]  # the East African armies, as the strategist plan had them
+        f = self.assertHit(plan, "production.balance", "error", "no production line builds artillery_equipment")
+        self.assertIn("stockpile_targets asks for 30 days", f["message"])
+        self.assertIn("a month at war", f["message"])
+        out = lint_plan.lint(plan, self.game)
+        art = out["facts"]["equipment_balance"]["families"]["artillery_equipment"]
+        self.assertEqual(art["made"], 0)
+        self.assertGreater(art["front_divisions"], 0)
+        # the rifles cover the start shortfall and the losses only in the second half of the year
+        self.assertHit(plan, "production.balance", "error", "infantry_equipment: the planned lines")
+        # the corrected plan: an artillery line from day 0 and trucks moved to the rifle and support lines
+        plan["production"] = [{"equipment": "infantry_equipment_1", "factories": 13},
+                              {"equipment": "support_equipment_1", "factories": 3},
+                              {"equipment": "artillery_equipment_1", "factories": 2},
+                              {"equipment": "motorized_equipment_1", "factories": 2}]
+        self.assertNoHit(plan, "production.balance", "error")
+        out = lint_plan.lint(plan, self.game)
+        self.assertGreater(out["facts"]["equipment_balance"]["families"]["artillery_equipment"]["end_balance"], 0)
+
+    def test_line_output_ramps_new_lines(self):
+        plan = self.plan(production=[{"equipment": "infantry_equipment_1", "factories": 10},
+                                     {"equipment": "artillery_equipment_1", "factories": 2}])
+        lint = lint_plan.Lint(plan, self.game)
+        start = derive.day(lint.start)
+        day0, later = lint.line_output(start), lint.line_output(start + 180)
+        # the start rifle line (and the factories joining it on day 0) run at the line's efficiency at once
+        self.assertAlmostEqual(day0["infantry_equipment_1"], later["infantry_equipment_1"])
+        # a new line starts at the base efficiency and climbs to the cap
+        self.assertAlmostEqual(later["artillery_equipment_1"] / day0["artillery_equipment_1"], 5.0, places=3)
+
     def test_mature_switch(self):
         plan = self.plan()
         plan["production"].append({"equipment": "infantry_equipment_1", "replace": "infantry_equipment_2",
