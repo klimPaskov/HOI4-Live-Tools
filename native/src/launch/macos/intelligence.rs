@@ -25,7 +25,7 @@
 //! (`NOperativeMissions::*`), the operation list from the install's
 //! `operations` scripts.
 use super::{
-    mgmt,
+    intel_live, mgmt,
     script::{self, Block, Entry, Val},
     ui::read,
 };
@@ -361,16 +361,19 @@ pub(super) fn intelligence(process: &dyn Process, include_operations: bool) -> R
         .as_deref()
         .map(catalog)
         .unwrap_or_else(|| std::sync::Arc::new(Catalog::default()));
-    let (live, context, stamp, build_id) = read(process, |r, image| {
+    let (live, state, context, stamp, build_id) = read(process, |r, image| {
         let live = snapshot(r, image)?;
+        let state = live_state(r, image)?;
         Ok((
             live,
+            state,
             mgmt::clock(r, image)?,
             mgmt::stamp(started, r),
             game::layout(r).build_id,
         ))
     })?;
     let mut body = assemble(&live, &cat, include_operations);
+    merge_live(&mut body, &state);
     let object = body.as_object_mut().expect("object");
     object.insert("source".into(), json!("native own intelligence read"));
     object.insert("build_id".into(), json!(build_id));
@@ -381,6 +384,70 @@ pub(super) fn intelligence(process: &dyn Process, include_operations: bool) -> R
     object.insert("observation_paused_game".into(), json!(false));
     object.insert("input_authorized".into(), json!(false));
     Ok(body)
+}
+
+/// Agency, operatives and networks from memory. A part that does not read is reported with its
+/// error code instead of failing the whole read; a torn read is retried by the caller.
+pub(super) struct LiveState {
+    pub agency: std::result::Result<intel_live::Agency, Error>,
+    pub networks: std::result::Result<Vec<intel_live::Network>, Error>,
+}
+
+pub(super) fn live_state(r: &Reader<'_>, image: u64) -> Result<LiveState> {
+    let own = mgmt::own(r, image)?;
+    let tag = r.i32(own.country + at(r, &COUNTRY, 8)?)?;
+    let keep = |e: Error| if e.code == "torn_read" { Err(e) } else { Ok(e) };
+    let agency = match intel_live::agency(r, image, own.country) {
+        Ok(a) => Ok(a),
+        Err(e) => Err(keep(e)?),
+    };
+    let networks = match intel_live::networks(r, image, own.gs, tag) {
+        Ok(n) => Ok(n),
+        Err(e) => Err(keep(e)?),
+    };
+    Ok(LiveState { agency, networks })
+}
+
+fn unread(e: &Error) -> Value {
+    json!({"state_read": false, "error": e.code, "message": e.message})
+}
+
+pub(super) fn merge_live(body: &mut Value, state: &LiveState) {
+    match &state.agency {
+        Ok(a) => {
+            let mut agency = intel_live::agency_json(a);
+            agency["name"] = body["agency"]["name"].clone();
+            agency["name_validated"] = json!(true);
+            agency["state_read"] = json!(true);
+            body["agency"] = agency;
+            body["upgrades"]["levels_and_progress_read"] = json!(true);
+            let ops: Vec<Value> = a
+                .operatives
+                .iter()
+                .enumerate()
+                .map(|(i, o)| intel_live::operative_json(i, o))
+                .collect();
+            body["operatives"]["state_read"] = json!(true);
+            body["operatives"]["recruited"] = json!(ops.len());
+            body["operatives"]["free"] = json!(a.operatives.iter().filter(|o| intel_live::operative_json(0, o)["free"] == json!(true)).count());
+            body["operatives"]["list"] = json!(ops);
+            body["operatives"].as_object_mut().map(|o| o.remove("reason"));
+        }
+        Err(e) => {
+            body["agency"]["live"] = unread(e);
+            body["operatives"]["live"] = unread(e);
+        }
+    }
+    match &state.networks {
+        Ok(n) => {
+            body["intel_network"] = json!({
+                "state_read": true,
+                "networks": n.iter().map(intel_live::network_json).collect::<Vec<_>>(),
+                "strength_rule": "a network's strength is its strongest covered state; operations compare it with their network_strength",
+            });
+        }
+        Err(e) => body["intel_network"] = unread(e),
+    }
 }
 
 pub(super) fn tool() -> Value {

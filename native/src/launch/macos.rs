@@ -56,6 +56,7 @@ mod trade;
 pub(crate) use focus::input_probe as focus_input_probe;
 mod economy_detail;
 mod input_gate;
+mod intel_live;
 mod intelligence;
 mod invasion;
 mod journal;
