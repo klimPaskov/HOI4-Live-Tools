@@ -51,8 +51,20 @@ class Budget:
                 "limits": dict(self.limits)}
 
 
+# A cached prompt read costs about a tenth of a fresh input token; the ceiling counts it that way, so a launcher
+# that re-reads its own system prompt every turn does not use up the hour on three calls.
+CACHE_READ_WEIGHT = 0.1
+
+
 def tokens_of(usage):
-    """Total tokens of a launcher's usage record (input, output and cache), 0 when unknown."""
+    """Tokens of a launcher's usage record for the ceiling: input, output and cache writes in full, cache reads
+    at CACHE_READ_WEIGHT; 0 when unknown."""
     if not isinstance(usage, dict):
         return 0
-    return int(sum(v for k, v in usage.items() if isinstance(v, (int, float)) and k.endswith("okens")))
+    total = 0.0
+    for k, v in usage.items():
+        if not isinstance(v, (int, float)) or not k.endswith("okens"):
+            continue
+        low = k.lower().replace("_", "")
+        total += v * (CACHE_READ_WEIGHT if "cacheread" in low else 1.0)
+    return int(round(total))

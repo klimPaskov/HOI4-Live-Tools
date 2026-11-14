@@ -273,7 +273,8 @@ class BudgetTests(unittest.TestCase):
         b.record(10, 10, escalated=True)
         self.assertFalse(b.allow(escalated=True)[0])
         self.assertEqual(b.summary()["model_calls"], 3)
-        self.assertEqual(budget.tokens_of({"inputTokens": 5, "outputTokens": 7, "cacheReadInputTokens": 3}), 15)
+        self.assertEqual(budget.tokens_of({"inputTokens": 5, "outputTokens": 7, "cacheReadInputTokens": 30,
+                                           "cache_creation_input_tokens": 10}), 25)
 
 
 if __name__ == "__main__":
