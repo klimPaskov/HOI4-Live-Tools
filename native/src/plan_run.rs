@@ -3513,6 +3513,8 @@ fn extras_step(
 
 /// Game hours between two stages of one army's war order.
 const WAR_STAGE_PAUSE: GameHour = 2;
+/// Game hours after a direct move before an army with its lines drawn returns to its plan.
+const MOVE_SETTLES: GameHour = 3 * DAY;
 /// Times a stalled offensive is stopped and planned again on one target before the second
 /// direction and the direct move.
 const REPLANS: u32 = 2;
@@ -4339,13 +4341,23 @@ fn war_step(
         // organisation, supply or casualties stopped it), is not a stall: nothing was attacking. It goes back before its
         // execute order and through the planning wait, instead of into the stall's direct move
         // (which broke the rest and sent tired divisions forward without a plan).
-        if stage >= 3
+        //
+        // The same holds after a direct move (a stall's last resort, or a rest resumed as a
+        // move): once the move is a few days old and the army stands with its front and its
+        // offensive line drawn, it returns to its plan. Left in move mode it waited for the
+        // next stall move, each twice as late as the last, with full planning bonus and no
+        // execute order (live 14 Nov 2026: three armies stood so from June to December).
+        let lines = army["battle_plan_orders"].as_u64().unwrap_or(0);
+        let moved_long_ago =
+            state.war_move.contains(&name) && lines >= 2 && now - since >= MOVE_SETTLES;
+        if (stage >= 3 || moved_long_ago)
             && army["plan_executing"] == json!(false)
-            && army["battle_plan_orders"].as_u64().unwrap_or(0) > 0
-            && !state.war_move.contains(&name)
+            && lines > 0
+            && (!state.war_move.contains(&name) || moved_long_ago)
             && !direct
             && !liberate
         {
+            state.war_move.remove(&name);
             state.war_stage.insert(name.clone(), 2);
             plan_war::replan(state, &name, target, now);
             state.war_since.insert(name.clone(), (target, here, now));

@@ -1538,6 +1538,23 @@ mod tests {
     }
 
     #[test]
+    fn an_army_left_in_move_mode_with_its_lines_drawn_returns_to_its_plan() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let (mut state, now) = stalled(&w, &p);
+        // a direct move was its last order; the plan is not executing, both lines stand
+        state.war_move.insert("Army 1".into());
+        w.executing.set(false);
+        assert_eq!(tick(&mut state, &w, &p, "l", now).unwrap(), Tick::Nothing);
+        assert!(!state.war_move.contains("Army 1"));
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        // planning is at the wanted level: the execute order follows
+        w.planning.set(Some(0.3));
+        let step = acted(tick(&mut state, &w, &p, "l", now + 2).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+    }
+
+    #[test]
     fn a_stall_brings_an_idle_army_beside_the_target_first() {
         let w = W::new();
         let p = plan(json!({"planning_wait": false, "reserve": []}));
