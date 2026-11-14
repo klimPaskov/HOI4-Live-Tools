@@ -111,6 +111,9 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
       idle:   [{"from", "to", "blocked": [{"focus", "why"}], "exhausted": bool}] stretches with nothing to
               start (exhausted: every listed focus is done)
       never:  [{"focus", "why", "list"}] listed focuses that never start before the horizon
+      waiting: [{"focus", "why", "list", "on"}] listed focuses that did not start because a prerequisite is a
+              focus only the game completes (its own gate is `always = no`: a script finishes it, e.g. on a
+              victory), directly or through another waiting focus; when that happens is not in the plan
     """
     done = set(done)
     listed = [(k, "path") for k in path] + [(k, "fallback") for k in fallback]
@@ -162,6 +165,32 @@ def focus_schedule(path, fallback, tree, meta, days_per, start, horizon, facts_a
         idle.append({"from": t, "to": nxt, "exhausted": not left,
                      "blocked": [{"focus": k, "why": last_why.get(k, "")} for k in left]})
         t = nxt
-    never = [{"focus": k, "list": src, "why": last_why.get(k, "nothing before it finishes in time")}
-             for k, src in listed if k not in done and k in last_why]
-    return {"rows": rows, "idle": idle, "never": never}
+    stuck = {k: src for k, src in listed if k not in done and k in last_why}
+    waiting = {}
+    grew = True
+    while grew:  # a focus behind a scripted one waits too
+        grew = False
+        for k in stuck:
+            if k in waiting or k not in tree:
+                continue
+            for block in tree[k]["prereq"]:
+                if block & done:
+                    continue
+                on = sorted(p for p in block if scripted(p, meta) or p in waiting)
+                if on:
+                    waiting[k] = on
+                    grew = True
+                    break
+    never = [{"focus": k, "list": src, "why": last_why[k]} for k, src in stuck.items() if k not in waiting]
+    wait = [{"focus": k, "list": stuck[k], "why": last_why[k], "on": on} for k, on in waiting.items()]
+    return {"rows": rows, "idle": idle, "never": never, "waiting": wait}
+
+
+def scripted(focus, meta):
+    """A focus the player can never start: its `available` gate is closed by `always = no` whatever the
+    plan's facts are, so only a script completes it."""
+    gate = (meta.get(focus) or {}).get("available")
+    if not gate:
+        return False
+    open_facts = Facts("", (), None)
+    return evaluate(gate, open_facts) is False and all("always" in line for line in blocking(gate, open_facts))

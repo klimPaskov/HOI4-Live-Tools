@@ -120,6 +120,20 @@ class FocusSlot(unittest.TestCase):
         self.assertIsNone(s["rows"][0]["gate"])
         self.assertTrue(s["idle"][0]["exhausted"])  # the list ran out on day 70
 
+    def test_focus_behind_a_scripted_one_waits(self):
+        # after_win needs `scripted`, which only the game completes; later needs after_win
+        tree = copy.deepcopy(TREE)
+        tree["after_win"] = {"prereq": [{"scripted", "peace_1"}], "exclusive": set()}
+        tree["later"] = {"prereq": [{"after_win"}], "exclusive": set()}
+        meta = dict(META, after_win={"available": None, "cost": 5.0}, later={"available": None, "cost": 5.0})
+        self.assertTrue(plan_gates.scripted("scripted", meta))
+        self.assertFalse(plan_gates.scripted("peace_1", meta))
+        s = plan_gates.focus_schedule(["open_a"], ["after_win", "later"], tree, meta, 7.0, 0, 100, at_war_until)
+        self.assertEqual(s["never"], [])  # not an error: the game may complete the prerequisite
+        self.assertEqual([(w["focus"], w["on"]) for w in s["waiting"]],
+                         [("after_win", ["scripted"]), ("later", ["after_win"])])
+        self.assertEqual(s["idle"][0]["from"], 35.0)  # and they are no cover for the slot meanwhile
+
     def test_prerequisites_and_exclusions(self):
         tree = copy.deepcopy(TREE)
         tree["open_b"]["exclusive"] = {"open_a"}

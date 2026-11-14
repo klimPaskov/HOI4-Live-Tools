@@ -32,7 +32,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            war), or the lists run out more than 30 days before the horizon
   focus.unconfirmed        (warning) the slot rests on a focus whose gate cannot be decided from the plan
                            (ownership, control, variables) while no focus that is certainly available is
-                           listed for that time
+                           listed for that time; or a listed focus waits for a prerequisite only the game
+                           completes by script
   construction.front       factory in a state within K province steps of an enemy-held province
   construction.infrastructure  factory in a state with infrastructure <= 2 and no infrastructure
                            queued before it there
@@ -605,6 +606,11 @@ class Lint:
             self.add("error", "focus.available", where,
                      f"{n['focus']} cannot start before the plan horizon {day(horizon)} under the plan's own "
                      f"conditions ({n['why']}): take it out or list it where its gate holds")
+        for n in sched["waiting"]:
+            self.add("warning", "focus.unconfirmed", f"focus_{n['list']}",
+                     f"{n['focus']} waits for {' or '.join(n['on'])}, which only the game completes (by script, "
+                     f"e.g. when a war is won): the plan cannot tell when, so it is no cover for the focus slot "
+                     f"until then")
         for g in sched["idle"]:
             days = int(g["to"] - g["from"])
             if g["exhausted"]:
