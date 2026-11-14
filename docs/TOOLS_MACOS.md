@@ -75,6 +75,8 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_war_goal_targets` (R): Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy.
 - `hoi4_wars` (R): Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files.
 
+Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the slot's position in its category, the order of the slot lines in the game's `common/idea_tags`. Base game: `government` 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors; `research_production` 0 tank, 1 naval, 2 aircraft and 3 materiel designer (Military Industrial Organizations with Arms Against Tyranny: `hoi4_mio_*`), 4 industrial concern, 5 theorist; `military_staff` 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command. An advisor is hired from a slot of its own kind. `hoi4_politics_options` returns `slots`, every slot of the category with its index and holder; offline, `scripts/hoi4facts/facts.py politics-slots` prints the layout of the installed game and mods.
+
 ## Army, templates, designs, supply
 
 - `hoi4_armies` (R): Own armies (name, division ids, threat:

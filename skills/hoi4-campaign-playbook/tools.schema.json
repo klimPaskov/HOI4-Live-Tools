@@ -3346,7 +3346,7 @@
    "source": "--list-tools"
   },
   "hoi4_politics_choose": {
-   "description": "Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.",
+   "description": "Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options (military_staff: 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command; research_production: 5 theorist); the idea must be one the slot offers, so use a slot of the idea's own kind.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3386,7 +3386,7 @@
    "source": "--list-tools"
   },
   "hoi4_politics_options": {
-   "description": "List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.",
+   "description": "List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (slots 0 tank, 1 naval, 2 aircraft and 3 materiel designer, 4 industrial concern, 5 theorist; with Arms Against Tyranny the designer slots hold Military Industrial Organizations: hoi4_mio_* tools) or military_staff (slots 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command). A slot index is the slot's position in its category, the order of the slot lines in the game's common/idea_tags (a mod can change it); an advisor is hired from a slot of its own kind, so a high command advisor needs slot 3, 4 or 5. Returns each idea key with the game's enabled state, the slot's current idea, and slots: every slot of the category with its index and what it holds now.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

@@ -52,6 +52,7 @@ write them in the shapes below (the schema descriptions and `native/src/plan_mil
 | `F vp <TAG> [--war-support S]` | VP list, total, surrender threshold with modifiers, the lower thresholds under low war support (at the start value, at S, at zero) and which one holds, capital, mandatory-control rules |
 | `F oob <TAG>` / `F characters <TAG> [--role general\|marshal\|admiral\|advisor\|leader]` | templates, divisions per state, wings, fleets / commanders and advisors with traits |
 | `F laws <TAG>` / `F idea <id>` / `F decisions <TAG>` / `F missions <TAG>` | costs, gates (`needs has_war_support > ...`), conditions, timers |
+| `F politics-slots` | the politics categories and the index of every slot (laws, designers, theorist, political advisors, the three chiefs, high command): the `slot` of every `politics` entry |
 | `F hooks <TAG>` / `F event <id>` | scenario reference graph (conditions in full) / event options with name, loc text, trigger, effects, and every caller: where it fires, the receiving scope, delay, conditions |
 | `F effect <name>` | a scripted effect's (or trigger's) full body with source, and where it is called |
 | `F resources <TAG>` | per-resource balance at the start: owned states, trade-law export share, start lines |
@@ -363,7 +364,10 @@ the projected balance never sits above about 100 PP with no planned buy for more
 what they leave unspent (default: chief of army, economy law, trade law). Name the political advisors that fit
 the plan (PP, stability, war support or production traits from `F characters <TAG> --role advisor`) in
 `politics_auto.order`, since the executor cannot read an advisor's trait from its token; list in
-`politics_auto.never` the ideas the plan must not take.
+`politics_auto.never` the ideas the plan must not take. Every `politics` and `politics_auto.order` entry carries
+the exact `category` and `slot`: the index is the slot's position in its category (`F politics-slots`), and a
+law or advisor is taken from a slot of its own kind (`F laws` and `F characters --role advisor` print it, e.g.
+`hire: military_staff slot 3-5`).
 
 ### 13. Gated laws
 Read: `economy-build-orders.md` §5; `politics-diplomacy-espionage.md` "Economy, trade and conscription
@@ -408,12 +412,14 @@ pending; plan.md §16. Check: rubric row 9.
 ### 15. Advisors and high command
 Read: `politics-diplomacy-espionage.md` §4. Facts: `F characters <TAG> --role advisor`, dossier §7.
 1. Political advisors, theorists (item 4), designers (items 7-9), army, navy and air chiefs and high
-   command, in buy order with cost and the date from `C pp`; each with the slot and the reason.
+   command, in buy order with cost and the date from `C pp`; each with its `category` and `slot` index and the
+   reason. The chief of army, navy and air force and the high command each have their own slots (in the base
+   game `military_staff` 0, 1, 2 and 3-5): a plan that only fills slot 0 leaves the high command empty.
 2. The chief of army among the first three hires of a land power; each advisor passes the payback test
    (cost / daily gain under half the horizon); officer-corps spirits bought before the hires they discount
    (PO07, PO08, PO10).
-Resolution: executor `politics`; the remaining hires in buy order in `politics_auto.order`. Check: lint
-`politics.pp_budget`; rubric row 10.
+Resolution: executor `politics`; the remaining hires in buy order in `politics_auto.order`. Check: validate_plan
+(each entry's slot index holds the idea's slot kind); lint `politics.pp_budget`; rubric row 10.
 
 ## F. Army organisation and manpower
 

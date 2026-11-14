@@ -24,6 +24,8 @@ or the files, so a mod's content is read the same way.
                   air_base_levels, supply_hubs, coastal_provinces
     construction  building_costs(game), construction_constants (calc.py labels),
                   free_civilian_factories(game, ctx, tag, date), construction_days(game, building, civs, infra)
+    politics      politics_slots(game) {category: [slot kind by index]}, politics_slot_kinds, politics_places,
+                  politics_slot_problem(game, ctx, category, slot, key)
 
 The lint and the dossier builder share these; each result is memoised on the Game.
 """
@@ -1539,3 +1541,124 @@ def air_base_levels(game, ctx, date=DEFAULT_START):
         if lvl:
             out[sid] = lvl
     return out
+
+
+# --------------------------------------------------------------------------- politics slots
+
+def politics_slots(game):
+    """{category: [slot kind, ...]} for the idea categories of the politics screen, each list in the
+    order of the category's `slot` and `character_slot` lines in common/idea_tags. A slot's position in
+    that list is the slot index the politics tools take (hoi4_politics_options, hoi4_politics_choose,
+    the plan's politics and politics_auto.order entries). Categories that are hidden or kept off the
+    politics tab (the military spirits) are left out."""
+
+    def load():
+        out = {}
+        for f in game.files("common/idea_tags"):
+            for k, v in parse_file(f):
+                if k != "idea_categories" or not isinstance(v, list):
+                    continue
+                for cat, body in v:
+                    if not cat or not isinstance(body, list) or cat in out:
+                        continue
+                    if get1(body, "hidden") == "yes" or get1(body, "politics_tab") == "no":
+                        continue
+                    kinds = [s for key, s in body if key in ("slot", "character_slot") and isinstance(s, str)]
+                    if kinds:
+                        out[cat] = kinds
+        return out
+
+    return game.cached("derive:politicsslots", load)
+
+
+def politics_slot_kinds(game, ctx=None):
+    """{idea key, character id or advisor idea token: set(slot kinds)}: the slot kind an idea of
+    common/ideas sits under, and the `slot` of each advisor role of a character (roles whose
+    `instance` / `allowed` block is false for ctx are left out)."""
+
+    def load():
+        out = {}
+        for f in game.files("common/ideas", recursive=True):
+            for k, v in parse_file(f):
+                if k != "ideas" or not isinstance(v, list):
+                    continue
+                for kind, body in v:
+                    if kind and isinstance(body, list):
+                        for name, idea in body:
+                            if name and isinstance(idea, list):
+                                out.setdefault(name, set()).add(kind)
+        for f in game.files("common/characters"):
+            for k, v in parse_file(f):
+                if k != "characters" or not isinstance(v, list):
+                    continue
+                for cid, body in v:
+                    if not cid or not isinstance(body, list):
+                        continue
+                    advs = list(get(body, "advisor"))
+                    for inst in get(body, "instance"):
+                        if isinstance(inst, list) and not (ctx and trigger(get1(inst, "allowed", []), ctx) is False):
+                            advs.extend(get(inst, "advisor"))
+                    for adv in advs:
+                        if not isinstance(adv, list) or (ctx and trigger(get1(adv, "allowed", []), ctx) is False):
+                            continue
+                        kind = get1(adv, "slot")
+                        if not isinstance(kind, str):
+                            continue
+                        out.setdefault(cid, set()).add(kind)
+                        tok = get1(adv, "idea_token")
+                        if isinstance(tok, str):
+                            out.setdefault(tok, set()).add(kind)
+        return out
+
+    key = "derive:politicskinds" if ctx is None else f"derive:politicskinds:{ctx.tag}:{sorted(ctx.dlcs)}"
+    return game.cached(key, load)
+
+
+def index_ranges(indices):
+    """"0, 3-5" for [0, 3, 4, 5]."""
+    out, run = [], []
+    for i in sorted(set(indices)):
+        if run and i == run[-1] + 1:
+            run.append(i)
+        else:
+            if run:
+                out.append(run)
+            run = [i]
+    if run:
+        out.append(run)
+    return ", ".join(str(r[0]) if len(r) == 1 else f"{r[0]}-{r[-1]}" for r in out)
+
+
+def politics_places(game, kind):
+    """[{"category", "slots": [index, ...]}] where a slot kind sits on the politics screen."""
+    return [{"category": cat, "slots": [i for i, k in enumerate(kinds) if k == kind]}
+            for cat, kinds in politics_slots(game).items() if kind in kinds]
+
+
+def politics_layout_text(game, category):
+    """"0 army_chief, 1 navy_chief, 2 air_chief, 3-5 high_command" for a category, "" when unknown."""
+    kinds = politics_slots(game).get(category) or []
+    return ", ".join(f"{index_ranges(i for i, k in enumerate(kinds) if k == kind)} {kind}"
+                     for kind in dict.fromkeys(kinds))
+
+
+def politics_slot_problem(game, ctx, category, slot, key=None):
+    """Why `key` (an idea, a character or an advisor token; None checks the index only) cannot be taken
+    in slot `slot` of `category`, or None when it fits or the files do not say (an unknown category, a
+    key with no slot kind, a game without idea categories)."""
+    kinds = politics_slots(game).get(category)
+    if not kinds or not isinstance(slot, int) or isinstance(slot, bool):
+        return None
+    layout = politics_layout_text(game, category)
+    if not 0 <= slot < len(kinds):
+        return f"slot {slot} is outside {category} (slots {layout})"
+    if key is None:
+        return None
+    mine = politics_slot_kinds(game, ctx).get(key)
+    if not mine or kinds[slot] in mine:
+        return None
+    places = [(kind, p) for kind in sorted(mine) for p in politics_places(game, kind)]
+    if not places:
+        return None
+    where = " or ".join(f"{p['category']} slot {index_ranges(p['slots'])} ({k})" for k, p in places)
+    return f"{key} fits {where}, not {category} slot {slot} ({kinds[slot]})"

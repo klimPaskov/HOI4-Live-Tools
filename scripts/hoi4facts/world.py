@@ -1011,6 +1011,17 @@ class World:
 
         return self.cached("ideaslots", load)
 
+    def politics_slots(self):
+        """[{"category", "slots": [{"index", "kind", "character", "cost"}]}]: the politics screen's categories
+        and their slots in index order (derive.politics_slots); the index is the `slot` argument of
+        hoi4_politics_options / hoi4_politics_choose and of the plan's politics entries."""
+        info = self.idea_slots()
+        return [{"category": cat,
+                 "slots": [{"index": i, "kind": k, "character": bool(info.get(k, {}).get("character")),
+                            "cost": info.get(k, {}).get("cost")} for i, k in enumerate(kinds)],
+                 "layout": derive.politics_layout_text(self.game, cat)}
+                for cat, kinds in derive.politics_slots(self.game).items()]
+
     def idea_cost(self, idea):
         i = self.ideas().get(idea)
         if not i:
@@ -1036,6 +1047,7 @@ class World:
         allowed = trigger(i["allowed"], ctx) if isinstance(i["allowed"], list) else True
         return {"id": idea, "name": self.name(idea), "category": i["category"], "law": i["law"],
                 "cost": self.idea_cost(idea), "removal_cost": i["removal_cost"],
+                "politics_slots": derive.politics_places(self.game, i["category"]),
                 "allowed": allowed,
                 "gates": gates(reduce_trigger(i["available"], ctx)) if isinstance(i["available"], list) else [],
                 "available": self.text(i["available"], 240, tag) if isinstance(i["available"], list) else None,
@@ -1053,7 +1065,8 @@ class World:
             row = self.idea_row(iid, tag)
             if row["allowed"] is False:
                 continue
-            cat = out.setdefault(i["category"], {"current": None, "options": []})
+            cat = out.setdefault(i["category"], {"current": None, "options": [],
+                                                 "politics_slots": derive.politics_places(self.game, i["category"])})
             cat["options"].append(row)
             if iid in current:
                 cat["current"] = iid
@@ -1107,7 +1120,8 @@ class World:
                             if rk == "advisor":
                                 slot = get1(rv, "slot")
                                 cost = num(get1(rv, "cost"))
-                                r.update({"slot": slot, "idea_token": get1(rv, "idea_token"),
+                                r.update({"slot": slot, "politics_slots": derive.politics_places(self.game, slot),
+                                          "idea_token": get1(rv, "idea_token"),
                                           "cost": cost if cost is not None else
                                           self.idea_slots().get(slot, {}).get("cost")})
                                 av = get1(rv, "available")

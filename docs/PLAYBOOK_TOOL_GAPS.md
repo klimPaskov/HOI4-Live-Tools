@@ -299,7 +299,7 @@ Ordinary UI routes (game 1920x1080; coordinates come from the live GUI tree, nev
 | Field | Content |
 | --- | --- |
 | Exists? | `hoi4_politics_options` RA, `hoi4_politics_choose` A. |
-| Quality / known defects | `politics_options` lists ideas per slot with game-enabled state and the slot's current idea; categories `government` (slots 0 mobilization, 1 trade, 2 economy, 3-5 political advisors), `research_production` (designers), `military_staff`. 16 option calls, 9 chooses, 2 `input_readback_failed` ("idea taken: expected game change not observed"). m006: a stuck Fn flag stopped politics for 7 months. Refuses ideas the game disables. No cost (PP) or availability reason, no advisor traits, no hire/fire for specific advisors beyond slot, no cancel of an idea (unverified), no country leader or national-unity/party popularity read. |
+| Quality / known defects | `politics_options` lists ideas per slot with game-enabled state and the slot's current idea; categories `government` (slots 0 mobilization, 1 trade, 2 economy, 3-5 political advisors), `research_production` (0-3 designers, 4 industrial concern, 5 theorist), `military_staff` (0-2 chiefs of army, navy, air force, 3-5 high command); the result's `slots` lists every slot of the category with its index and holder. 16 option calls, 9 chooses, 2 `input_readback_failed` ("idea taken: expected game change not observed"). m006: a stuck Fn flag stopped politics for 7 months. Refuses ideas the game disables. No cost (PP) or availability reason, no advisor traits, no hire/fire for specific advisors beyond slot, no cancel of an idea (unverified), no country leader or national-unity/party popularity read. |
 | What the playbook needs | Cost and effects of each idea, PP budget, stability/war support impact, advisor traits, timing (conscription step-ups). |
 | Proposed tool design | Extend `politics_options` with `cost_pp`, `traits`, `modifiers`, `disabled_reason`; add `party_popularity` and `stability` to the overview. Receipt remains the slot idea readback. |
 | Effort | S-M (hover tooltips are OCR-able; names come from the game files for modifiers). |
@@ -1341,12 +1341,15 @@ province of a country the goal does not capitulate, and lint reports such rows; 
 in full; `facts.py event` lists every caller with the receiving scope, delay and conditions; `facts.py effect`
 prints scripted effect bodies and callers; `facts.py grep` has `-C N`, a substring fallback and, in FAIR, leaves
 out `common/ai_*`; `facts.py resources <TAG>` gives the per-resource balance at the start. The Italo-Ethiopian
-reference no longer lists the enemy's per-division start positions or AI front choices.
+reference no longer lists the enemy's per-division start positions or AI front choices. The advisor slot index
+is read from the files: a slot's index is its position among the slot lines of its category in
+`common/idea_tags` (`facts.py politics-slots`; `facts.py characters` and `laws` print each advisor's and law's
+category and index), `validate_plan.py` rejects a `politics` or `politics_auto.order` entry whose idea does not
+fit its slot, and `hoi4_politics_options` returns every slot of the category with its index and holder.
 
 Still open:
 
 | Gap | What is missing | Where it would go |
 | --- | --- | --- |
-| Advisor slot index | `politics` needs `category` and `slot` for `hoi4_politics_choose`; the files give the advisor's slot type (`army_chief`) but the index is the in-game panel position, which only the live game shows | a read of the politics panel (slot index per slot type) or a `hoi4_politics_choose` that takes the slot type; until then reconcile confirms the index |
 | Supply consumption | nothing prints supply needed per division or per convoy, so sea-supply sizing stays a judgement | `calc.py supply`: template supply use from the sub-unit stats and the supply defines, convoys per route from the naval supply defines |
 | Resource modifiers | `facts.py resources` counts state history resources and the trade-law export share; extraction techs, `local_resources_factor`, occupation and design module resources are left out | resource modifiers from the start techs and ideas; module resources once designs are resolved |

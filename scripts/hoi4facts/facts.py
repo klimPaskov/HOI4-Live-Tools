@@ -14,6 +14,8 @@
     facts.py vp <TAG>            facts.py oob <TAG>
     facts.py characters <TAG> [--role general|marshal|admiral|advisor|leader]
     facts.py laws <TAG>          facts.py idea <id>
+    facts.py politics-slots      politics categories and their slot indexes (laws, designers, advisors, chiefs,
+                                 high command): the `slot` of the politics tools and of plan politics entries
     facts.py decisions <TAG>     facts.py missions <TAG>
     facts.py hooks <TAG>         facts.py event <id>   (options, and who fires it: caller, scope, delay)
     facts.py effect <name>       scripted effect (or trigger) body with source, and its callers
@@ -590,6 +592,12 @@ def cmd_oob(args):
     return emit(args, data, text)
 
 
+def places_text(places):
+    """"military_staff slot 3-5" for derive.politics_places rows, "" when the kind has no politics slot."""
+    from hoi4facts import derive
+    return " or ".join(f"{p['category']} slot {derive.index_ranges(p['slots'])}" for p in places or [])
+
+
 def cmd_characters(args):
     w = world(args, args.TAG)
     rows = w.characters(args.TAG, args.role)
@@ -603,11 +611,14 @@ def cmd_characters(args):
                 for k in ("skill", "attack", "defense", "planning", "logistics", "slot", "cost", "ideology"):
                     if r.get(k) is not None:
                         bits.append(f"{k} {r[k]}")
+                    if k == "slot" and r.get("politics_slots"):
+                        bits.append(f"(hire: {places_text(r['politics_slots'])})")
                 if r.get("traits"):
                     bits.append("traits " + ",".join(r["traits"]))
                 roles.append(" ".join(bits))
             out.append(f"{'*' if c['recruited'] else ' '}{c['id']} \"{c['name']}\": " + "; ".join(roles) + f" [{c['src']}]")
-        out.append("(* recruited at start)")
+        out.append("(* recruited at start; hire: the category and slot index for hoi4_politics_choose and "
+                   "the plan's politics entries)")
         return out
 
     return emit(args, rows, text)
@@ -620,7 +631,8 @@ def cmd_laws(args):
     def text(x):
         out = []
         for cat, row in sorted(x.items()):
-            out.append(f"{cat} (now {row['current']})")
+            at = places_text(row.get("politics_slots"))
+            out.append(f"{cat} (now {row['current']})" + (f" [{at}]" if at else ""))
             for o in row["options"]:
                 g = gate_text(o.get("gates") or [])
                 out.append(f"  {'*' if o['id'] == row['current'] else ' '}{o['id']} \"{o['name']}\" {o['cost']}PP"
@@ -634,6 +646,26 @@ def cmd_laws(args):
     return emit(args, laws, text)
 
 
+def cmd_politics_slots(args):
+    w = world(args)
+    rows = w.politics_slots()
+
+    def text(rs):
+        out = []
+        for c in rs:
+            out.append(f"{c['category']}: slots {c['layout']}")
+            for s in c["slots"]:
+                out.append(f"  {s['index']} {s['kind']} ({'advisor' if s['character'] else 'idea'}"
+                           + (f", {s['cost']:g} PP unless the idea states its own cost" if s["cost"] is not None else "")
+                           + ")")
+        out.append("The index is the `slot` of hoi4_politics_options / hoi4_politics_choose and of the plan's politics "
+                   "and politics_auto.order entries (the order of the slot lines in common/idea_tags). An advisor is "
+                   "hired from a slot of its own kind (facts.py characters TAG --role advisor shows each one's).")
+        return out
+
+    return emit(args, rows, text)
+
+
 def cmd_idea(args):
     w = world(args)
     row = w.idea_row(args.id)
@@ -645,6 +677,7 @@ def cmd_idea(args):
             row["exits"] = exits
     return emit(args, row, lambda r: [f"{r['id']} \"{r['name']}\" category {r['category']} cost {r['cost']} "
                                       f"law {r['law']} [{r['src']}]"] +
+                ([f"politics: {places_text(r['politics_slots'])}"] if r.get("politics_slots") else []) +
                 [f"{k}: {r[k]}" for k in ("allowed", "available", "modifier", "exits") if r.get(k) not in (None, True)])
 
 
@@ -1549,6 +1582,7 @@ def parser():
     p.add_argument("--role", choices=("general", "marshal", "admiral", "advisor", "leader"))
     add("laws", cmd_laws, "TAG")
     add("idea", cmd_idea, "id")
+    add("politics-slots", cmd_politics_slots)
     p = add("decisions", cmd_decisions, "TAG")
     p.add_argument("--all", action="store_true", help="also generic decisions that do not name the tag")
     p.add_argument("--never", action="store_true", help="only never-take decisions")
