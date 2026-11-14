@@ -2344,6 +2344,10 @@ fn layout_step(
             )?;
             if ok {
                 state.layout_fails.remove(&format!("create:{home}"));
+            } else if held_back(&why) {
+                // the ledger did not send it: no try was made, so none is counted
+                state.skip(now, "layoutcreate", &home.to_string(), DAY);
+                continue;
             } else {
                 state.skip(now, "layoutcreate", &home.to_string(), 2 * DAY);
                 if layout_failed(state, &format!("create:{home}")) {
@@ -2418,6 +2422,11 @@ fn layout_step(
             json!({"army": parent, "divisions": pick}),
             "la",
         )?;
+        if !ok && held_back(&why) {
+            // the ledger did not send it: no try was made, so none is counted
+            state.skip(now, "layoutentry", &hint, DAY);
+            continue;
+        }
         if !ok {
             // Only this role waits: the other roles go on (one failing detach skipped the whole
             // layout and fed the retry storm, shakedown 10 Nov 2026).
@@ -2511,6 +2520,11 @@ fn layout_allows(state: &State, plan: &Value, army: &str, id: i32) -> bool {
 
 /// Failures a layout item may have before it is given up.
 const LAYOUT_TRIES: u32 = 3;
+
+/// The answer of `State::act` when the failure ledger held the order back: nothing was sent.
+fn held_back(why: &str) -> bool {
+    why.starts_with("skipped:")
+}
 
 /// Count one failure of layout item `key`; true when it reached LAYOUT_TRIES (and is reset).
 fn layout_failed(state: &mut State, key: &str) -> bool {

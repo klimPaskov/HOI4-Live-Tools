@@ -1092,6 +1092,53 @@ fn selected_divisions(r: &Reader<'_>, image: u64) -> Result<Option<Vec<String>>>
     }
     Ok((out.len() as u64 == count).then_some(out))
 }
+/// A selection left by the last order keeps its panels over the map: the unit list at the top
+/// left and the battle-plan bar across the bottom of the map area, where the lower corner of a
+/// box (or a click on a low counter) lands on the bar and selects nothing (14 Nov 2026: every
+/// army made after the first one in a session failed this way). Escape clears a selection; it is
+/// pressed only while something is selected, since with nothing selected it opens the menu.
+pub(super) fn clear_selection(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    if read(process, selection_size).unwrap_or(0) == 0 {
+        return Ok(());
+    }
+    keys.press_code(crate::platform::game_input::vk::ESCAPE)?;
+    let pressed = std::time::Instant::now();
+    while pressed.elapsed() < std::time::Duration::from_millis(600) {
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        if read(process, selection_size).unwrap_or(0) == 0 {
+            break;
+        }
+    }
+    super::ui::trace("selection cleared", pressed);
+    Ok(())
+}
+
+/// The type of every selected object: its vtable, relative to the image (own divisions carry
+/// one known value; anything else names what a selection took instead: a fleet, an air wing).
+pub(super) fn selection_types(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let count = selection_size(r, image)?;
+    let mut node = r.u64(idler + u.selection_size - 0x10)?;
+    let mut out = Vec::new();
+    for _ in 0..count.min(16) {
+        if node == 0 {
+            break;
+        }
+        let object = r.u64(node)?;
+        if object == 0 {
+            break;
+        }
+        let vtable = r.u64(object)?.wrapping_sub(image);
+        out.push(if vtable == u.division_vtable {
+            "division".to_string()
+        } else {
+            format!("{vtable:#x}")
+        });
+        node = r.u64(node + 0x10)?;
+    }
+    Ok(out)
+}
 /// Every selected object is an own division that belongs to no army.
 fn selection_unassigned_only(r: &Reader<'_>, image: u64) -> Result<bool> {
     let Some(ids) = selected_divisions(r, image)? else {

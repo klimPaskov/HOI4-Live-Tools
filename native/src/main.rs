@@ -352,7 +352,13 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
     // raised once per reason, so each arrives once.
     for alarm in body["alarms"].as_array().into_iter().flatten() {
         if alarm["code"] == serde_json::json!("wake_player") {
-            feed().note("wake_player", true, alarm.clone());
+            // A wake about a standing game alert repeats what the alert changes already say;
+            // it is listed but does not interrupt the player. The others are single items the
+            // executor hands over.
+            let standing = alarm["reason"]
+                .as_str()
+                .is_some_and(|r| r.starts_with("alert:"));
+            feed().note("wake_player", !standing, alarm.clone());
         }
     }
     let succeeded = actions.iter().filter(|a| !a.contains(": false")).count();

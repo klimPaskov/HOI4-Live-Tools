@@ -427,6 +427,7 @@ pub(super) fn select(
             .collect()
     };
     let t0 = std::time::Instant::now();
+    super::clear_selection(process, keys)?;
     let (mut stacks, mut height) = project(process, &positions, &want, &ok)?;
     // The camera already shows every wanted stack at counter height: no camera movement at all.
     let on_screen = |stacks: &[Stack]| {
@@ -552,8 +553,9 @@ pub(super) fn select(
                 "selection_mismatch",
                 format!(
                     "The selection in state {state} holds something other than own divisions \
-                     (size {}); the army card was not clicked.",
-                    super::read(process, selection_size).unwrap_or(0)
+                     (size {}, object types {:?}, after {how}); the army card was not clicked.",
+                    super::read(process, selection_size).unwrap_or(0),
+                    super::read(process, super::selection_types).unwrap_or_default()
                 ),
             ));
         };

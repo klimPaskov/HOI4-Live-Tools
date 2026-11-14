@@ -1021,6 +1021,17 @@ impl MacClock {
         {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
+        // An action that is not an army order starts with nothing selected: a selection left
+        // by the last army order keeps the unit list and the battle-plan bar over the map and
+        // the panels, and map clicks then land on them or become orders.
+        if !army_tool
+            && !journaled
+            && name != "hoi4_time"
+            && arguments.get("lease_token").is_some()
+            && process.identity() == self.process.identity()
+        {
+            let _ = armies::clear_selection(self.process.as_ref(), &*self.keys);
+        }
         let result = (if journaled {
             Ok(())
         } else {
