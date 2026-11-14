@@ -2413,7 +2413,9 @@ fn intel_networks(
             }
         };
         state.skip(now, "intel", &key, days * DAY);
-        return Ok(Some(format!("intelligence network {target} operative {i}: {ok} {why}")));
+        return Ok(Some(format!(
+            "intelligence network {target} operative {i}: {ok} {why}"
+        )));
     }
     Ok(None)
 }
@@ -2467,10 +2469,15 @@ fn intel_operations(
             continue;
         }
         let judged = tools
-            .call("hoi4_operations", &json!({"target": target, "operations": [operation]}))
+            .call(
+                "hoi4_operations",
+                &json!({"target": target, "operations": [operation]}),
+            )
             .ok();
         let row = judged.as_ref().map(|j| &j["targets"][0]);
-        if let (Some(goal), Some(have)) = (collab_goal, row.and_then(|r| r["collaboration"].as_f64())) {
+        if let (Some(goal), Some(have)) =
+            (collab_goal, row.and_then(|r| r["collaboration"].as_f64()))
+        {
             if have >= goal {
                 continue;
             }
@@ -2478,9 +2485,19 @@ fn intel_operations(
         let verdict = row.map(|r| &r["operations"][0]["verdict"]);
         if verdict.is_some_and(|v| v["ready"] == json!("false")) {
             let v = verdict.unwrap();
-            let codes: Vec<&str> = list(v, "reasons").iter().map(|r| text(&r["code"])).collect();
-            let days = if codes.iter().any(|c| matches!(*c, "not_allowed" | "not_a_target")) {
-                note(state, "intelligence", format!("{operation} {target}: {codes:?} (game rules)"));
+            let codes: Vec<&str> = list(v, "reasons")
+                .iter()
+                .map(|r| text(&r["code"]))
+                .collect();
+            let days = if codes
+                .iter()
+                .any(|c| matches!(*c, "not_allowed" | "not_a_target"))
+            {
+                note(
+                    state,
+                    "intelligence",
+                    format!("{operation} {target}: {codes:?} (game rules)"),
+                );
                 90
             } else if codes.contains(&"unavailable") {
                 30
@@ -2507,7 +2524,11 @@ fn intel_operations(
             let days = match code(&why) {
                 "not_enough_operatives" | "operative_busy" | "operation_unavailable" => 7,
                 "unknown_operation" | "operation_not_listed" | "display_name_unknown" => {
-                    note(state, "intelligence", format!("{operation} {target}: {why}"));
+                    note(
+                        state,
+                        "intelligence",
+                        format!("{operation} {target}: {why}"),
+                    );
                     90
                 }
                 _ => 5,
