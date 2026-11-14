@@ -1,6 +1,12 @@
 //! Durable ordinary-action transactions. A dispatch whose result is unknown is
 //! never replayed, including after a server crash. No native call implementation
 //! or arbitrary command surface is provided here.
+//!
+//! The clock's state (paused, speed) is fully readable, so every clock request
+//! ends in a terminal receipt: `Verified` when fresh state shows the target,
+//! `NotApplied` when it does not once the verification window has passed. A
+//! request stays open only while the game cannot be read at all; the next call
+//! that can read settles it (`settle_open`). Nothing blocks input for good.
 use crate::{
     error::{Error, Result},
     platform::Identity,
@@ -17,6 +23,8 @@ use std::{
 
 const JOURNAL_LIMIT: u64 = 64 << 20;
 const LINE_LIMIT: usize = 16 << 10;
+/// Observation window after a transport that already reported failure.
+const DISPATCH_FAILED_WINDOW: Duration = Duration::from_millis(1_000);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -61,7 +69,7 @@ impl Action {
 pub enum Status {
     Dispatching,
     Verified,
-    /// A retried uncertain dispatch whose target fresh state does not show;
+    /// A dispatch whose target fresh state does not show after the verification window;
     /// settled by reading only, never by sending the key again.
     NotApplied,
 }
@@ -90,6 +98,11 @@ pub struct Journal {
     poisoned: bool,
 }
 impl Journal {
+    /// `blocks_game` for the integration tests of this crate.
+    #[doc(hidden)]
+    pub fn blocks_game_for_test(&self, epoch: &Epoch) -> bool {
+        self.blocks_game(&epoch.game)
+    }
     pub(crate) fn blocks_game(&self, game: &Identity) -> bool {
         self.poisoned
             || self
@@ -278,46 +291,33 @@ impl Journal {
                     "Request ID is already bound to a different action or epoch",
                 ));
             }
-            return match previous.status {
-                Status::Verified | Status::NotApplied => Ok(previous.clone()),
-                Status::Dispatching => {
-                    // Settle from fresh state without sending anything again.
-                    let mut settled = previous.clone();
-                    let current = backend.observe().map_err(|error| {
+            if previous.status == Status::Dispatching {
+                // An open request (the game could not be read when it ran, or the server
+                // stopped): settle it from fresh state without sending anything again.
+                self.settle_open(epoch, &mut || backend.observe())
+                    .map_err(|error| {
                         Error::after_possible_input("Clock settlement readback failed", error)
                     })?;
-                    check_state(epoch, &current).map_err(|error| {
-                        Error::after_possible_input("Clock settlement ownership changed", error)
-                    })?;
-                    // The game (or player) may have changed the clock again
-                    // since delivery. A missing target does not prove that the
-                    // original key was never applied.
-                    if !settled.action.reached(&current) {
-                        return Err(Error::new(
-                            "action_uncertain",
-                            "Clock target is not observed; original dispatch remains unresolved",
-                        ));
-                    }
-                    settled.status = Status::Verified;
-                    settled.observed = current;
-                    settled.epoch = epoch.clone();
-                    self.append(settled).map_err(|error| {
-                        Error::after_possible_input(
-                            "Clock settlement could not be committed",
-                            error,
-                        )
-                    })
-                }
-            };
+            }
+            return self.receipts.get(id).cloned().ok_or_else(|| {
+                Error::new(
+                    "journal_failed",
+                    "Clock receipt disappeared during settlement",
+                )
+            });
         }
-        // An uncertain command blocks new IDs too; otherwise callers could
-        // bypass the replay guard by inventing another request ID.
-        if self.blocks_game(&epoch.game) {
-            return Err(Error::new(
-                "action_uncertain",
-                "Owned process has an unresolved dispatch; input remains quarantined",
-            ));
-        }
+        // An open request of this game is settled from fresh state before anything new is
+        // sent. Only an unreadable game keeps it open (and then nothing can be verified
+        // anyway); it can never block input for good.
+        self.settle_open(epoch, &mut || backend.observe())
+            .map_err(|error| {
+                Error::new(
+                    "action_uncertain",
+                    format!(
+                        "An earlier clock request is still open and the game could not be read to settle it: {error}"
+                    ),
+                )
+            })?;
         let before = backend.observe()?;
         check_state(epoch, &before)?;
         backend.preflight(&action, &before)?;
@@ -352,36 +352,119 @@ impl Journal {
             ));
         }
         let mut record = self.append(record)?;
-        backend
-            .dispatch(&record.action, &record.observed)
-            .map_err(|e| Error::new("action_uncertain", e.to_string()))?;
+        let dispatched = backend.dispatch(&record.action, &record.observed);
+        // Whatever the transport reported, fresh state decides. A transport that already gave
+        // up (it waits for the change itself) gets a short window; a completed one the full
+        // verification timeout.
+        let window = match &dispatched {
+            Ok(()) => timeout,
+            Err(_) => timeout.min(DISPATCH_FAILED_WINDOW),
+        };
         let start = Instant::now();
+        let mut seen: Option<State> = None;
+        let mut unreadable: Option<Error> = None;
         loop {
-            let current = backend
-                .observe()
-                .map_err(|e| Error::new("action_uncertain", e.to_string()))?;
-            check_state(epoch, &current)
-                .map_err(|e| Error::new("action_uncertain", e.to_string()))?;
-            if record.action.reached(&current) {
-                record.status = Status::Verified;
-                record.observed = current;
-                return self.append(record).map_err(|e| {
-                    Error::new(
-                        "action_uncertain",
-                        format!("Target observed but verification receipt was not committed: {e}"),
-                    )
-                });
+            match backend.observe().and_then(|current| {
+                check_state(epoch, &current)?;
+                Ok(current)
+            }) {
+                Ok(current) => {
+                    if record.action.reached(&current) {
+                        record.status = Status::Verified;
+                        record.observed = current;
+                        return self.append(record).map_err(|e| {
+                            Error::new(
+                                "action_uncertain",
+                                format!(
+                                    "Target observed but verification receipt was not committed: {e}"
+                                ),
+                            )
+                        });
+                    }
+                    seen = Some(current);
+                }
+                Err(error) => unreadable = Some(error),
             }
-            if start.elapsed() >= timeout {
-                return Err(Error::new(
-                    "action_uncertain",
-                    "Target not observed before deadline; no automatic retry",
-                ));
+            if start.elapsed() >= window {
+                break;
             }
             std::thread::sleep(
-                Duration::from_millis(20).min(timeout.saturating_sub(start.elapsed())),
+                Duration::from_millis(20).min(window.saturating_sub(start.elapsed())),
             );
         }
+        let Some(current) = seen else {
+            // Never read once after the dispatch: the request stays open and the next call
+            // that can read the game settles it. It blocks nothing by itself.
+            let cause = unreadable
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "no observation".into());
+            return Err(Error::new(
+                "action_uncertain",
+                format!(
+                    "Clock could not be read after the key; the request settles on the next readable call: {cause}"
+                ),
+            ));
+        };
+        // Read, and the target is not there: a clean failure, closed for good.
+        record.status = Status::NotApplied;
+        record.observed = current;
+        let receipt = self.append(record).map_err(|e| {
+            Error::new(
+                "action_uncertain",
+                format!("Clock outcome observed but its receipt was not committed: {e}"),
+            )
+        })?;
+        match dispatched {
+            Ok(()) => Ok(receipt),
+            Err(error) => Err(Error::new(
+                error.code,
+                format!(
+                    "{}; the clock did not reach the target and the request is closed as NotApplied",
+                    error.message
+                ),
+            )),
+        }
+    }
+    /// Settle every open request of `epoch`'s game from one fresh observation: `Verified`
+    /// when the state shows its target, `NotApplied` otherwise. Reads only. An error means the
+    /// game could not be read (or is not this campaign) and the requests stay open.
+    pub(crate) fn settle_open(
+        &mut self,
+        epoch: &Epoch,
+        observe: &mut dyn FnMut() -> Result<State>,
+    ) -> Result<()> {
+        if self.poisoned {
+            return Err(Error::new("journal_failed", "Journal requires recovery"));
+        }
+        let open: Vec<Receipt> = self
+            .receipts
+            .values()
+            .filter(|r| r.status == Status::Dispatching && r.epoch.game == epoch.game)
+            .cloned()
+            .collect();
+        if open.is_empty() {
+            return Ok(());
+        }
+        let current = observe()?;
+        check_state(epoch, &current)?;
+        for mut record in open {
+            if same_campaign(&record.epoch, epoch) {
+                record.status = if record.action.reached(&current) {
+                    Status::Verified
+                } else {
+                    Status::NotApplied
+                };
+                record.epoch = epoch.clone();
+                record.observed = current.clone();
+            } else {
+                // Another campaign of the same process: this campaign's clock says nothing
+                // about it and its key is long since handled. Closed with its own
+                // pre-dispatch observation (which does not show the target).
+                record.status = Status::NotApplied;
+            }
+            self.append(record)?;
+        }
+        Ok(())
     }
 }
 fn validate_id(id: &str) -> Result<()> {

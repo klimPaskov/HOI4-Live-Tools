@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+Every action ends in a terminal receipt; one uncertain action can no longer hold input.
+
+- After a dispatch the game journal re-observes the game for a bounded settlement window (3 s) and records what it sees:
+  `Verified`, `NotApplied`, `Diverged`, or the new `Unconfirmed` when the effect could not be proven either way. An
+  unconfirmed request answers `action_unconfirmed`, is closed, is never replayed and blocks nothing; the caller reads the
+  state again before a fresh request. Before, such a request stayed open and held its domain for three minutes (all
+  input, with no limit, in the first version).
+- Settlement reads pass the action fence after the action's own deadline or lease ended (input stays refused). An action
+  that ran out of time could not be read back at all, because its readback failed on the same expired deadline: the
+  commonest uncertain case could never settle.
+- The clock journal settles every pause and speed request from the readable clock state: `Verified` when the target
+  shows, `NotApplied` when it does not after the verification window. A request left open by an unreadable game or a
+  stopped server is settled by the next call that can read; before, it blocked every later input with no limit.
+- Only an action interrupted by a server stop still holds its own domain (and global input), for at most ten seconds;
+  the next action closes it as `Unconfirmed`.
+- The executor counts `action_unconfirmed` as an ordinary failed order (failure ledger and backoff) and re-plans from
+  fresh state on its next tick.
+
 Four launch and menu fixes found on 1.19.4.2 (9 November 2026).
 
 - `hoi4_launch` stops at once when the owned game process exits or the game opens its fatal-error dialog (the helper

@@ -386,7 +386,6 @@ pub struct State {
     done: HashMap<String, GameHour>,
     seen: HashMap<String, GameHour>,
     seq: u64,
-    sent: HashMap<String, (String, Value)>,
     war_assign: HashMap<String, i32>,
     war_stage: HashMap<String, u8>,
     war_cool: HashMap<String, GameHour>,
@@ -539,7 +538,6 @@ impl Default for State {
             done: HashMap::new(),
             seen: HashMap::new(),
             seq: 0,
-            sent: HashMap::new(),
             war_assign: HashMap::new(),
             war_stage: HashMap::new(),
             war_cool: HashMap::new(),
@@ -817,8 +815,6 @@ impl State {
             );
             object.insert("lease_token".into(), json!(lease));
         }
-        let id = args["request_id"].as_str().unwrap_or("").to_string();
-        self.sent.insert(id, (name.to_string(), args.clone()));
         let result = self.dispatch(tools, name, &args);
         self.last_ok = Some(matches!(&result, Ok((true, _))));
         match &result {
@@ -881,26 +877,11 @@ impl State {
     }
     fn dispatch(&mut self, tools: &dyn Tools, name: &str, args: &Value) -> Result<(bool, String)> {
         let args = args.clone();
-        let mut result = tools.call(name, &args);
-        if matches!(&result, Err(e) if e.code == "action_uncertain") {
-            // Another dispatch of this run is unresolved and blocks input: settle
-            // it by retrying its own request id, then send this one again.
-            let blocker = match &result {
-                Err(e) => e
-                    .message
-                    .split("Unresolved dispatch ")
-                    .nth(1)
-                    .and_then(|rest| rest.split_whitespace().next())
-                    .map(String::from),
-                _ => None,
-            };
-            if let Some((blocked_name, blocked_args)) =
-                blocker.and_then(|b| self.sent.get(&b).cloned())
-            {
-                let _ = tools.call(&blocked_name, &blocked_args);
-            }
-            result = tools.call(name, &args);
-        }
+        // Every request ends in a terminal receipt. `action_unconfirmed` (effect not observed,
+        // request closed) is an ordinary failure for the ledger: the next tick reads the state
+        // again and re-plans. `action_uncertain` only remains for an action interrupted by a
+        // server stop moments ago (at most ten seconds) and ends this step.
+        let result = tools.call(name, &args);
         match result {
             Err(e) if e.code == "action_uncertain" => Err(e),
             Err(e) if self.stop_on_failure => Err(e),
@@ -5075,10 +5056,7 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
         Ok((true, _)) => "paused".into(),
         Ok((false, why)) => format!("pause refused ({why}); not retried"),
         Err(e) if e.code == "action_uncertain" => {
-            format!(
-                "pause uncertain ({}); not retried, settle by hand",
-                e.message
-            )
+            format!("pause uncertain ({}); not retried", e.message)
         }
         Err(e) => format!("pause failed ({}: {}); not retried", e.code, e.message),
     }
@@ -5710,7 +5688,7 @@ mod tests {
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([uncertain(), uncertain()].into()),
+            replies: RefCell::new([uncertain()].into()),
         };
         let mut state = State::default();
         let error = tick(
@@ -5723,8 +5701,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.code, "action_uncertain");
         let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1], "Only the same request may be settled");
+        assert_eq!(calls.len(), 1, "an interrupted action is never resent");
         assert_eq!(calls[0].1["technology"], "radio");
         assert!(!names(&reads).contains(&"hoi4_technology_list".into()));
         assert!(
@@ -5734,16 +5711,21 @@ mod tests {
     }
 
     #[test]
-    fn same_request_settled_as_verified_completes_normally() {
+    fn an_unconfirmed_action_is_an_ordinary_failure_for_the_ledger_and_is_not_resent() {
         let reads = fake(vec![]);
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
             replies: RefCell::new(
-                [uncertain(), Ok(json!({"receipt":{"status":"Verified"}}))].into(),
+                [Err(Error::new(
+                    "action_unconfirmed",
+                    "Input may have been sent but its effect was not observed; the request is closed",
+                ))]
+                .into(),
             ),
         };
-        let result = State::default()
+        let mut state = State::default();
+        let (ok, why) = state
             .act(
                 &tools,
                 "l",
@@ -5752,10 +5734,11 @@ mod tests {
                 "rs",
             )
             .unwrap();
-        assert_eq!(result, (true, "Verified".into()));
-        let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1]);
+        assert!(!ok);
+        assert!(why.starts_with("action_unconfirmed"), "{why}");
+        assert_eq!(tools.actions.borrow().len(), 1);
+        // Counted like any failed order, so repeats back off.
+        assert_eq!(state.failures.values().map(Vec::len).sum::<usize>(), 1);
     }
 
     #[test]
@@ -8604,14 +8587,13 @@ mod tests {
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([uncertain(), uncertain()].into()),
+            replies: RefCell::new([uncertain()].into()),
         };
         let mut state = State::default();
         let error = tick(&mut state, &tools, &war_plan(), "l", START).unwrap_err();
         assert_eq!(error.code, "action_uncertain");
         let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1]);
+        assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, "hoi4_army_front");
         assert!(state.war_stage.is_empty());
         assert!(state.war_cool.is_empty());
@@ -8824,12 +8806,12 @@ mod tests {
     }
 
     #[test]
-    fn an_uncertain_pause_settles_its_own_id_once_then_reports_without_retrying() {
+    fn an_uncertain_pause_is_reported_once_without_retrying() {
         let reads = fake(vec![]);
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([uncertain(), uncertain()].into()),
+            replies: RefCell::new([uncertain()].into()),
         };
         let mut state = State::default();
         let step = tick(&mut state, &tools, &date_plan(), "l", target()).unwrap();
@@ -8841,12 +8823,7 @@ mod tests {
             tick(&mut state, &tools, &date_plan(), "l", target() + 1).unwrap(),
             Tick::DateStop(_)
         ));
-        let calls = tools.actions.borrow();
-        assert_eq!(calls.len(), 2);
-        assert_eq!(
-            calls[0], calls[1],
-            "only the same request id may be settled"
-        );
+        assert_eq!(tools.actions.borrow().len(), 1);
     }
 
     #[test]
