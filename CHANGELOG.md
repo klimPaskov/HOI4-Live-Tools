@@ -15,6 +15,15 @@
 - `hoi4-live game-dir "<folder>"` records where the game is when the Steam library search does not find it.
 - An install now ends with this doctor.
 
+`hoi4-live play COUNTRY "GOAL"` is the front door of a first campaign.
+
+- It runs the doctor for the runtime that will play and stops with the steps when something is to fix, picks the
+  shipped reviewed plan for the country (by tag or name; FAIR first, `--mode` to choose), copies it into a new run
+  folder under the install and prints the one instruction to give the coding client.
+- It says plainly what the install cannot start yet: a native game on macOS (the coding client plays through the
+  Python server instead), anything on Linux, and a country without a shipped plan.
+- README: the first screen is install, check, play, per system, with what each system gets today.
+
 One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (Windows) find Python, download
 `install.py` from the release, check it against `SHA256SUMS.txt` and run it.
 

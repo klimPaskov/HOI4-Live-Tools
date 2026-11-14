@@ -6,6 +6,7 @@
     python install.py install --register none
     python install.py update [--version X.Y.Z]      fetch a release and install it over the current one
     python install.py doctor                check what a first run needs and print the fix for each failed item
+    python install.py play COUNTRY "GOAL"   the first campaign: checks, the plan, and what starts on this system
     python install.py game-dir FOLDER       record where the game is, when the Steam library search misses it
     python install.py status
     python install.py register [--clients ...]      (re)write the client registrations only
@@ -26,7 +27,7 @@ What is installed where a build exists for the computer:
 Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools on Windows,
 ~/Library/Application Support/hoi4-live-tools on macOS, ~/.local/share/hoi4-live-tools on Linux):
 
-    hoi4-live      the command: doctor, update, uninstall, status, game-dir (hoi4-live.cmd on Windows)
+    hoi4-live      the command: doctor, play, update, uninstall, status, game-dir (hoi4-live.cmd on Windows)
     app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
     native\\         hoi4-live-native and its entitlements file
     venv\\           the private Python environment with the dependencies
@@ -1071,6 +1072,22 @@ def cmd_doctor(args, out):
     return EXIT_OK if ready else EXIT_FAILED
 
 
+def cmd_play(args, out):
+    """The first campaign: the installed program's own front door (hoi4_live.firstrun)."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    app = os.path.join(prefix, "app")
+    if not os.path.isfile(os.path.join(app, "hoi4_live", "firstrun.py")):
+        raise InstallError(f"no install with the play command at {prefix}; run: {COMMAND} update", EXIT_USAGE)
+    argv = [sys.executable, "-m", "hoi4_live.firstrun", "--prefix", prefix]
+    argv += ["--mode", args.mode] if args.mode else []
+    argv += [part for part in [args.value] + list(args.more) if part]
+    env = dict(os.environ, PYTHONPATH=app, PYTHONIOENCODING="utf-8")
+    try:
+        return subprocess.run(argv, env=env, stdin=subprocess.DEVNULL, timeout=600).returncode
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise InstallError(f"the play command could not run: {exc}")
+
+
 GAME_EXECUTABLES = ("hoi4.exe", "hoi4", os.path.join("hoi4.app", "Contents", "MacOS", "hoi4"))
 
 
@@ -1196,14 +1213,17 @@ def cmd_status(args, out):
     return EXIT_OK if installed else EXIT_FAILED
 
 
-COMMANDS = ("install", "update", "doctor", "game-dir", "status", "register", "unregister", "uninstall")
+COMMANDS = ("install", "update", "doctor", "play", "game-dir", "status", "register", "unregister", "uninstall")
 
 
 def build_parser():
     parser = argparse.ArgumentParser(prog=COMMAND if os.environ.get("HOI4_LIVE_COMMAND") else "install.py",
                                      description=__doc__.split("\n\n")[0])
     parser.add_argument("command", nargs="?", default=None, choices=COMMANDS)
-    parser.add_argument("value", nargs="?", default=None, help="game-dir: the folder the game is installed in")
+    parser.add_argument("value", nargs="?", default=None,
+                        help="game-dir: the folder the game is installed in; play: the country (tag or name)")
+    parser.add_argument("more", nargs="*", help="play: the goal, in your words")
+    parser.add_argument("--mode", choices=("fair", "meta"), default=None, help="play: the rule set")
     parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools on Windows, "
                                          "~/Library/Application Support/hoi4-live-tools on macOS, "
                                          "~/.local/share/hoi4-live-tools on Linux)")
@@ -1239,7 +1259,8 @@ def main(argv=None):
             return EXIT_USAGE
         args.command = "install"
     out = Output(args.quiet)
-    handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "game-dir": cmd_game_dir,
+    handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "play": cmd_play,
+                "game-dir": cmd_game_dir,
                 "register": cmd_register,
                 "unregister": cmd_unregister, "uninstall": cmd_uninstall, "status": cmd_status}
     try:
