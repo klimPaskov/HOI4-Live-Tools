@@ -113,6 +113,8 @@ Step up when idle manpower is below about 3 months of planned divisions; Service
 
 Advisors are named characters hired by idea token: `hoi4_politics_options` lists a slot's tokens with their enabled state, `hoi4_politics_choose` hires. Cost when none is given: 150 PP political, 50 military. Hiring is gated by focus, flag or government. Pre-1.19 generic advisor lists no longer exist.
 
+Each advisor is hired from a slot of its own kind, addressed by `category` and `slot` index (the slot's position in the category). Base game: `government` 0 conscription law, 1 trade law, 2 economy law, 3-5 political advisors; `research_production` 0-3 designers (Military Industrial Organizations with Arms Against Tyranny), 4 industrial concern, 5 theorist; `military_staff` 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command. A mod can reorder them: `hoi4_politics_options` returns every slot of the category with its index, and `facts.py politics-slots` prints the layout from the files.
+
 ### Role priority
 1. **Chief of army** (0.2/0.3/0.4 army XP a day by tier): one of the first three hires of any land power.
 2. **Political slot: PP or stability** (Silent Workhorse; Popular Figurehead when stability is short).
@@ -316,7 +318,7 @@ Specific events:
 | Domain | Tools | Plan key |
 |---|---|---|
 | PP, stability, war support, world tension | `hoi4_country_status`, `hoi4_economy` (exact PP) | `alarms` |
-| Laws, advisors, designers | `hoi4_politics_options` (slot ideas with enabled state), `hoi4_politics_choose` | `politics` |
+| Laws, advisors, designers | `hoi4_politics_options` (slot ideas with enabled state, every slot of the category with its index), `hoi4_politics_choose` | `politics` |
 | Decisions | `hoi4_decisions_list`, `hoi4_decision_take` (`target` for targeted rows) | `decision_rules`, `decisions` |
 | Focuses | `hoi4_focus_list`, `hoi4_focus_start`, `hoi4_focus_completed` | `focus_path` |
 | Events | `hoi4_events` (full text and options), `hoi4_event_choose` | `event_rules`, `auto_events` |

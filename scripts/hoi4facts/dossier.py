@@ -346,6 +346,7 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
         for r in ch["roles"]:
             if r["role"] == "advisor":
                 advisors.append({"id": ch["id"], "name": ch["name"], "slot": r.get("slot"), "cost": r.get("cost"),
+                                 "politics_slots": r.get("politics_slots") or [],
                                  "traits": r.get("traits", []), "available": r.get("available"),
                                  "idea_token": r.get("idea_token"), "src": ch["src"]})
     decs = [x for x in w.decisions(tag, missions=False) if x.get("specific")]
@@ -359,6 +360,7 @@ def build_world(w, enemies=None, dlc_src="given", horizon_days=None):
             b = dict(b, movers=b["movers"][:30])
             bops.append(b)
     d["politics"] = {"laws": w.laws(tag), "advisors": advisors, "decisions": decs,
+                     "slots": w.politics_slots(),
                      "missions": w.decisions(tag, missions=True), "bop": bops, "fair": "public"}
 
     # 8 OOB and commanders
@@ -842,6 +844,11 @@ def _md_politics(d, s):
     s.add("(* = at start; (gates) = numeric and named `available` conditions; full text: `facts laws`, "
           "`facts idea <id>`)")
     s.add("")
+    if p.get("slots"):
+        s.add("Politics slot indexes (the `slot` of hoi4_politics_choose and of plan politics entries; an advisor "
+              "or law goes in a slot of its own kind): "
+              + "; ".join(f"{c['category']} {c['layout']}" for c in p["slots"]),
+              "politics slots", "facts politics-slots")
     s.add("Advisors (slot cost traits; available):")
     for a in p["advisors"]:
         s.add(f"- {a['idea_token'] or a['id']} \"{a['name']}\" {a['slot']} {a['cost'] if a['cost'] is not None else '?'}PP "

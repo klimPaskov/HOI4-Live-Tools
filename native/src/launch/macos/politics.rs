@@ -222,9 +222,10 @@ fn slot(
             .ok_or_else(|| Error::new("invalid_gui", "Category window required"))?;
         let slots = gui_tree::child(r, image, frame, "ideas_grid")?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Slot grid not found"))?;
-        let item = *items(r, slots)?
+        let grid = items(r, slots)?;
+        let item = *grid
             .get(slot)
-            .ok_or_else(|| Error::new("invalid_arguments", "Slot outside this category"))?;
+            .ok_or_else(|| Error::new("invalid_arguments", outside(category, slot, grid.len())))?;
         if r.u64(item)? == image + u.advisor_slot_vtable {
             let current = character_key(r, r.u64(item + u.advisor_character)?)?;
             return Ok((current, r.u64(item + u.advisor_button)?, Kind::Advisor));
@@ -369,18 +370,77 @@ pub(super) fn current(
     read(process, |r, i| Ok(slot(r, i, category, index)?.0))
 }
 
+/// Most slots a category has (the tools take slot 0..7).
+const MAX_SLOTS: usize = 8;
+
+/// The refusal for a slot index past the end of a category: how many slots it has and how
+/// they are numbered, so the caller can pick the right one without reading the source.
+fn outside(category: &str, slot: usize, count: usize) -> String {
+    let range = match count {
+        0 => "it has no slots".to_string(),
+        1 => "it has 1 slot: 0".to_string(),
+        n => format!("it has {n} slots: 0..{}", n - 1),
+    };
+    format!(
+        "Slot {slot} is outside {category} ({range}). A slot index is the slot's position in \
+         its category, the order of the slot lines in the game's common/idea_tags; \
+         hoi4_politics_options lists every slot of the category with its index"
+    )
+}
+
+/// What `at(index)` says about a slot that exists: Some(current idea), or None for a slot that
+/// takes no idea now (a Military Industrial Organization, a locked slot). Err ends the walk:
+/// `invalid_arguments` is the end of the category, anything else a failed read.
+fn holds(at: Result<Option<String>>) -> Result<Option<String>> {
+    match at {
+        Err(e) if e.code == "use_mio_tools" || e.code == "invalid_target" => Ok(None),
+        other => other,
+    }
+}
+
+/// The first slot whose current idea is `idea`. A slot that takes no idea is passed over, so a
+/// category that mixes Military Industrial Organizations with advisors is searched to its end.
+fn find_holder(
+    idea: &str,
+    mut at: impl FnMut(usize) -> Result<Option<String>>,
+) -> Result<Option<usize>> {
+    for index in 0..MAX_SLOTS {
+        match holds(at(index)) {
+            Ok(current) if current.as_deref() == Some(idea) => return Ok(Some(index)),
+            Ok(_) => {}
+            Err(e) if e.code == "invalid_arguments" => break,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(None)
+}
+
+/// Every slot of a category in index order with what it holds: `current` (an idea or advisor
+/// key, null when vacant) or `unavailable` (why the slot takes no idea). Never fails: a slot
+/// that cannot be read is listed with the error code.
+fn describe_slots(mut at: impl FnMut(usize) -> Result<Option<String>>) -> Value {
+    let mut out = Vec::new();
+    for index in 0..MAX_SLOTS {
+        match at(index) {
+            Ok(current) => out.push(json!({"slot":index,"current":current})),
+            Err(e) if e.code == "invalid_arguments" => break,
+            Err(e) => out.push(json!({"slot":index,"current":null,"unavailable":e.code})),
+        }
+    }
+    json!(out)
+}
+
 /// The slot of `category` that holds `idea`, if any (advisors land in the first free slot).
 pub(super) fn holder(process: &dyn Process, category: &str, idea: &str) -> Result<Option<usize>> {
     read(process, |r, i| {
-        for index in 0..8 {
-            match slot(r, i, category, index) {
-                Ok((current, _, _)) if current.as_deref() == Some(idea) => return Ok(Some(index)),
-                Ok(_) => {}
-                Err(e) if e.code == "invalid_arguments" => break,
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(None)
+        find_holder(idea, |index| Ok(slot(r, i, category, index)?.0))
+    })
+}
+
+/// Every slot of `category` with its index and current holder (memory only, no input).
+pub(super) fn slots(process: &dyn Process, category: &str) -> Result<Value> {
+    read(process, |r, i| {
+        Ok(describe_slots(|index| Ok(slot(r, i, category, index)?.0)))
     })
 }
 
@@ -460,19 +520,103 @@ pub(super) fn choose(
         if slot(r, i, category, index)?.0.as_deref() == Some(idea) {
             return Ok(true);
         }
-        for other in 0..8 {
-            match slot(r, i, category, other) {
-                Ok((current, _, _)) if current.as_deref() == Some(idea) => return Ok(true),
-                Ok(_) => {}
-                Err(e) if e.code == "invalid_arguments" => break,
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(false)
+        Ok(find_holder(idea, |other| Ok(slot(r, i, category, other)?.0))?.is_some())
     };
     // A confirmation appears only for some picks: stop waiting for it once the idea shows.
     super::ui::accept_command_until(process, keys, taken)?;
     wait(process, "idea taken", taken)?;
     dismiss(process, keys, |r, i| Ok(!window_open(r, i)?));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A category as the walk sees it: one result per slot, then the end of the category.
+    fn category(rows: Vec<Result<Option<String>>>) -> impl FnMut(usize) -> Result<Option<String>> {
+        let mut rows: Vec<Option<Result<Option<String>>>> = rows.into_iter().map(Some).collect();
+        move |index| match rows.get_mut(index).and_then(Option::take) {
+            Some(row) => row,
+            None => Err(Error::new(
+                "invalid_arguments",
+                "Slot outside this category",
+            )),
+        }
+    }
+
+    fn idea(key: &str) -> Result<Option<String>> {
+        Ok(Some(key.to_string()))
+    }
+
+    #[test]
+    fn a_slot_past_the_end_says_how_many_slots_the_category_has() {
+        let text = outside("military_staff", 6, 6);
+        assert!(text.starts_with("Slot 6 is outside military_staff (it has 6 slots: 0..5)"));
+        assert!(text.contains("common/idea_tags"));
+        assert!(text.contains("hoi4_politics_options"));
+        assert!(outside("x", 1, 1).contains("it has 1 slot: 0"));
+        assert!(outside("x", 0, 0).contains("it has no slots"));
+    }
+
+    #[test]
+    fn the_holder_is_found_in_a_high_command_slot() {
+        let staff = category(vec![
+            idea("chief"),
+            Ok(None),
+            Ok(None),
+            Ok(None),
+            idea("logistics"),
+        ]);
+        assert_eq!(find_holder("logistics", staff).unwrap(), Some(4));
+        let staff = category(vec![idea("chief"), Ok(None)]);
+        assert_eq!(find_holder("logistics", staff).unwrap(), None);
+    }
+
+    #[test]
+    fn slots_that_take_no_idea_do_not_stop_the_search() {
+        // Research and production with Arms Against Tyranny: organisations first, the theorist last.
+        let rows = || {
+            category(vec![
+                Err(Error::new("use_mio_tools", "organisation")),
+                Err(Error::new("use_mio_tools", "organisation")),
+                Err(Error::new(
+                    "invalid_target",
+                    "This slot is not available yet",
+                )),
+                idea("theorist"),
+            ])
+        };
+        assert_eq!(find_holder("theorist", rows()).unwrap(), Some(3));
+        assert_eq!(find_holder("other", rows()).unwrap(), None);
+    }
+
+    #[test]
+    fn a_failed_read_still_fails_the_search() {
+        let broken = category(vec![
+            idea("a"),
+            Err(Error::new("invalid_gui", "unreadable")),
+        ]);
+        assert_eq!(find_holder("b", broken).unwrap_err().code, "invalid_gui");
+    }
+
+    #[test]
+    fn every_slot_is_listed_with_its_index() {
+        let staff = category(vec![
+            idea("chief"),
+            Ok(None),
+            Err(Error::new("use_mio_tools", "organisation")),
+            idea("logistics"),
+        ]);
+        assert_eq!(
+            describe_slots(staff),
+            json!([
+                {"slot":0,"current":"chief"},
+                {"slot":1,"current":null},
+                {"slot":2,"current":null,"unavailable":"use_mio_tools"},
+                {"slot":3,"current":"logistics"}
+            ])
+        );
+        assert_eq!(describe_slots(category(vec![])), json!([]));
+    }
 }

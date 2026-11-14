@@ -23,6 +23,9 @@ Checks (errors unless marked warning):
     no duplicates inside a list.
   * politics: category/slot shape and that the idea is a known idea (laws, designers
     from common/ideas) or a known character id / idea_token (advisors).
+    The slot index is inside the category and holds the idea's kind (the order of the
+    slot lines in common/idea_tags: a high_command advisor goes in a high_command slot);
+    the same for politics_auto.order entries and their ranked ideas.
   * decisions: every key exists in common/decisions.
   * event options: shape only.
   * schema: the whole plan against skills/hoi4-campaign-playbook/plan.schema.json

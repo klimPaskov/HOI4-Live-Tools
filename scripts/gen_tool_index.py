@@ -40,6 +40,18 @@ domains = [
     ("Army, templates, designs, supply", r"arm(y|ies)|army|template|design|train|deploy|commander|supply|division"),
     ("Navy and air", r"fleet|naval|convoy|air|navy"),
 ]
+# Facts a whole group of tools shares and no single first sentence carries; printed under the group.
+notes = {
+    "Politics, decisions, diplomacy, wars": (
+        "Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the slot's position in its "
+        "category, the order of the slot lines in the game's `common/idea_tags`. Base game: `government` 0 "
+        "mobilization law, 1 trade law, 2 economy law, 3-5 political advisors; `research_production` 0 tank, 1 naval, "
+        "2 aircraft and 3 materiel designer (Military Industrial Organizations with Arms Against Tyranny: "
+        "`hoi4_mio_*`), 4 industrial concern, 5 theorist; `military_staff` 0 chief of army, 1 chief of navy, 2 chief "
+        "of air force, 3-5 high command. An advisor is hired from a slot of its own kind. `hoi4_politics_options` "
+        "returns `slots`, every slot of the category with its index and holder; offline, "
+        "`scripts/hoi4facts/facts.py politics-slots` prints the layout of the installed game and mods."),
+}
 def domain(n):
     for title, rx in domains:
         if re.search(rx, n):
@@ -67,4 +79,6 @@ for title, _ in domains + [("Other", "")]:
         first = first[:260]
         out.append(f"- `{n}` ({'A' if a else 'R'}): {first}")
     out.append("")
+    if title in notes:
+        out += [notes[title], ""]
 print("\n".join(out))

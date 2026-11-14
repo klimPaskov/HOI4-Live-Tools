@@ -473,7 +473,8 @@
               "integer",
               "string"
             ],
-            "x-owner": "executor"
+            "x-owner": "executor",
+            "description": "slot index in the category: the position of the idea's slot kind among the category's slot lines in common/idea_tags (base game: government 0 conscription law, 1 trade law, 2 economy law, 3-5 political advisors; research_production 0-3 designers, 4 industrial concern, 5 theorist; military_staff 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command); facts.py politics-slots prints it"
           },
           "idea": {
             "type": "string",
@@ -552,7 +553,8 @@
               "slot": {
                 "type": "integer",
                 "minimum": 0,
-                "maximum": 7
+                "maximum": 7,
+                "description": "slot index in the category, numbered as in politics[].slot (military_staff: 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command)"
               },
               "ideas": {
                 "type": "array",

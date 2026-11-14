@@ -1,3 +1,7 @@
 idea_categories = { economy = { cost = 150 } country = { cost = 0 }
-	academy_spirit = { type = army_spirit cost = 20 removal_cost = -1 slot = academy_spirit }
-	navy_spirit = { type = navy_spirit cost = 35 removal_cost = -1 slot = navy_spirit } }
+	academy_spirit = { type = army_spirit cost = 20 removal_cost = -1 politics_tab = no slot = academy_spirit }
+	navy_spirit = { type = navy_spirit cost = 35 removal_cost = -1 politics_tab = no slot = navy_spirit }
+	government = { slot = mobilization_laws slot = trade_laws slot = economy
+		character_slot = political_advisor character_slot = political_advisor character_slot = political_advisor cost = 150 }
+	military_staff = { character_slot = army_chief character_slot = navy_chief character_slot = air_chief
+		character_slot = high_command character_slot = high_command character_slot = high_command cost = 150 } }
