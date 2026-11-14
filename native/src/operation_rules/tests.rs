@@ -28,6 +28,7 @@ operation_coordinated_strike = {
         NOT = { has_war_with = FROM }
     }
     required_tokens = { token_army }
+    target_type = strategic_region
 }
 operation_secret = {
     days = 10
@@ -185,4 +186,11 @@ fn war_tokens_targets_and_unread_triggers() {
     let v = verdict(&c, secret, "ENG", &ready_facts());
     assert_eq!(v.visible, Truth::Unknown);
     assert_eq!(v.unknown_triggers, ["has_country_flag"]);
+}
+
+#[test]
+fn operations_that_pick_a_location_are_marked() {
+    let c = catalog();
+    assert!(c.operation("operation_coordinated_strike").unwrap().picks_location);
+    assert!(!c.operation("operation_collaboration_government").unwrap().picks_location);
 }

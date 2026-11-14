@@ -142,14 +142,15 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 
 ## Other
 
-- `hoi4_agency_create` (A): UNVALIDATED (no live test yet): create the intelligence agency with ordinary input:
+- `hoi4_agency_create` (A): Create the intelligence agency with ordinary input:
 - `hoi4_agency_upgrade` (A): Start an agency upgrade:
 - `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
 - `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
-- `hoi4_operative_assign` (A): UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
-- `hoi4_operative_recruit` (A): UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar:
+- `hoi4_operation_start` (A): Prepare an intelligence operation against a target with ordinary input, as a player does:
+- `hoi4_operative_assign` (A): Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
+- `hoi4_operative_recruit` (A): Recruit an operative into a free slot of the operative bar:
 - `hoi4_peace_exit` (A): Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation);
 - `hoi4_peace_options` (R): Read the open peace conference from its window:
 - `hoi4_peace_status` (R): Read-only:

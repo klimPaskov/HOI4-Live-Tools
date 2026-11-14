@@ -40,6 +40,9 @@ pub struct Operation {
     pub targets: Vec<String>,
     /// Phase groups: the game draws one phase of each group.
     pub phases: Vec<Vec<String>>,
+    /// The operation also picks a state or a strategic region in its window
+    /// (`selection_target`, `selection_target_state`, `target_type`).
+    pub picks_location: bool,
     visible: Vec<Entry>,
     allowed: Vec<Entry>,
     available: Vec<Entry>,
@@ -121,6 +124,9 @@ impl Catalog {
                 awarded_tokens: b.words("awarded_tokens"),
                 targets,
                 phases,
+                picks_location: ["selection_target", "selection_target_state", "target_type"]
+                    .iter()
+                    .any(|k| b.find_val(k).is_some()),
                 visible: block(b, "visible"),
                 allowed: block(b, "allowed"),
                 available: block(b, "available"),
@@ -524,6 +530,7 @@ pub fn describe(catalog: &Catalog, op: &Operation) -> Value {
         "required_tokens": op.required_tokens,
         "awarded_tokens": op.awarded_tokens,
         "targets": op.targets,
+        "picks_location": op.picks_location,
         "phase_choices": catalog.phase_costs(op),
     })
 }
