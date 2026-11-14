@@ -778,7 +778,6 @@
           "organization": {
             "type": "string",
             "minLength": 1,
-            "x-executor-planned": "gap register mio.line_manufacturer",
             "description": "military-industrial organisation (script key, facts.py mio <TAG>) the new line is made with: its traits apply to the line and its funds grow from it. Not sent yet: the executor adds the line without it (hoi4_production_add refuses the argument with not_yet_built until the organisation chooser is built) and says so; validate_plan checks the organisation is the player's and makes this equipment"
           },
           "organisation": {
