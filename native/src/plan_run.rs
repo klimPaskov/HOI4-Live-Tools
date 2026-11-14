@@ -297,6 +297,23 @@ const STILL_HOURS_PER_SECOND: u64 = 8;
 /// The longest skip timer that also runs on wall time while the game clock stands still.
 const STILL_RETRY: GameHour = 3 * DAY;
 
+/// Arguments a RECEIPT_TOOLS tool lists in its schema but refuses before any input with
+/// `not_yet_built` (the live build has not delivered them). The executor never sends one while it
+/// is listed: the step acts without it and says so (the plan's wish is kept for the day the
+/// argument lands). The live build removes the entry together with the handler's refusal; a test
+/// in launch/macos.rs checks every entry is in the served schema and refused.
+pub const UNBUILT_ARGS: &[(&str, &str)] = &[
+    // the military-industrial organisation of a new or switched line (gap register
+    // mio.line_manufacturer): the organisation chooser is skipped with Shift+click today
+    ("hoi4_production_add", "organization"),
+    ("hoi4_design_set_production", "organization"),
+];
+
+/// Whether the executor may send `arg` to `tool` (not held back in UNBUILT_ARGS).
+pub fn arg_built(tool: &str, arg: &str) -> bool {
+    !UNBUILT_ARGS.iter().any(|(t, a)| *t == tool && *a == arg)
+}
+
 /// Every game action the executor may send through `State::act`. Each one answers every
 /// success and every refusal after possible input with a terminal receipt
 /// (`receipt.status` Verified / NotApplied / Diverged), and a repeated request_id only settles.
@@ -1979,13 +1996,24 @@ fn production_step(
             state.done.insert(format!("prod:{equipment}"), now);
             continue;
         }
-        let (ok, why) = state.act(
-            tools,
-            lease,
-            "hoi4_production_add",
-            json!({"equipment": equipment, "factories": line["factories"].as_u64().unwrap_or(5)}),
-            "pr",
-        )?;
+        let mut args =
+            json!({"equipment": equipment, "factories": line["factories"].as_u64().unwrap_or(5)});
+        // The organisation the line is made with (MIO traits apply to it, its funds grow from
+        // it). Sent only once the tool can choose it; until then the line is added without one
+        // and the receipt line says so.
+        let org = line_organisation(line);
+        let mut held = String::new();
+        if let Some(org) = &org {
+            if arg_built("hoi4_production_add", "organization") {
+                args["organization"] = json!(org);
+            } else {
+                held = format!(
+                    " (organisation {org} not set: choosing it is not built yet, gap register \
+                     mio.line_manufacturer)"
+                );
+            }
+        }
+        let (ok, why) = state.act(tools, lease, "hoi4_production_add", args, "pr")?;
         if ok {
             state.done.insert(format!("prod:{equipment}"), now);
             // the line's age for the mature-line guard (plan_affairs.rs): only lines the
@@ -1994,9 +2022,19 @@ fn production_step(
         } else {
             state.skip(now, "prod", &equipment, 14 * DAY);
         }
-        return Ok(Some(format!("production {equipment}: {ok} {why}")));
+        return Ok(Some(format!("production {equipment}: {ok} {why}{held}")));
     }
     Ok(None)
+}
+
+/// The organisation a `production` entry names for its line (`organization`, or `organisation`).
+fn line_organisation(line: &Value) -> Option<String> {
+    ["organization", "organisation"]
+        .iter()
+        .filter_map(|k| line[*k].as_str())
+        .map(str::trim)
+        .find(|o| !o.is_empty())
+        .map(str::to_string)
 }
 
 /// The war-first block: layout, war executive, triggered build order, armies, early disbands.
@@ -6317,6 +6355,36 @@ mod tests {
             calls: RefCell::new(Vec::new()),
             replies: replies.into_iter().collect(),
         }
+    }
+    #[test]
+    fn a_line_organisation_is_held_back_until_the_chooser_is_built() {
+        let f = fake(vec![("hoi4_production_lines", json!({"lines": []}))]);
+        let plan = json!({"production": [{"equipment": "infantry_equipment", "factories": 4,
+            "organization": "ITA_beretta_organization"}]});
+        let mut state = State::default();
+        let out = production_step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        let sent: Vec<Value> = f
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_production_add" && a.get("request_id").is_some())
+            .map(|(_, a)| a.clone())
+            .collect();
+        assert_eq!(sent.len(), 1);
+        // not built: the line is added without the organisation, and the receipt line says so
+        assert!(!arg_built("hoi4_production_add", "organization"));
+        assert!(sent[0].get("organization").is_none(), "{}", sent[0]);
+        assert!(
+            out.contains("organisation ITA_beretta_organization not set")
+                && out.contains("mio.line_manufacturer"),
+            "{out}"
+        );
+        assert!(state.done.contains_key("prod:infantry_equipment"));
+        assert_eq!(
+            line_organisation(&json!({"organisation": " X "})).as_deref(),
+            Some("X")
+        );
+        assert_eq!(line_organisation(&json!({"organization": ""})), None);
     }
     /// Tool names called; the cheap available-techs query is labelled apart from the catalogue
     /// walk (only the walk is what the priority-only tests forbid).

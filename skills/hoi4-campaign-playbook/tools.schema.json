@@ -1585,7 +1585,7 @@
    "source": "--list-tools"
   },
   "hoi4_design_set_production": {
-   "description": "Change which design an existing own production line builds: click the line's equipment picture, then the wanted design in the selection list (ordinary UI, same category). The game warns that progress of the line is lost; pass accept_progress_loss: true to confirm. `line` is the line index as hoi4_production_lines numbers it (0-based) or its handle; `design` a design id or name. Refused before input: line_unknown, design_unknown, design_wrong_type (a line only switches inside its equipment family as the game lists it), already_building, progress_loss_unconfirmed. Verified when the design's production_lines contain the line handle.",
+   "description": "Change which design an existing own production line builds: click the line's equipment picture, then the wanted design in the selection list (ordinary UI, same category). The game warns that progress of the line is lost; pass accept_progress_loss: true to confirm. `line` is the line index as hoi4_production_lines numbers it (0-based) or its handle; `design` a design id or name. Refused before input: line_unknown, design_unknown, design_wrong_type (a line only switches inside its equipment family as the game lists it), already_building, progress_loss_unconfirmed. Verified when the design's production_lines contain the line handle. `organization` (the military-industrial organisation to make the line with) is not yet built: refused with not_yet_built before any input.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1610,6 +1610,10 @@
      "line": {
       "minimum": 0,
       "type": "integer"
+     },
+     "organization": {
+      "maxLength": 128,
+      "type": "string"
      },
      "request_id": {
       "type": "string"
@@ -3496,7 +3500,7 @@
    "source": "--list-tools"
   },
   "hoi4_production_add": {
-   "description": "Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.",
+   "description": "Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options. The line gets no military-industrial organisation (the design is Shift+clicked past the organisation chooser); `organization` (the organisation's script key, as hoi4_mios lists it) is not yet built: it is refused with not_yet_built before any input.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3522,6 +3526,10 @@
       "type": "integer"
      },
      "lease_token": {
+      "type": "string"
+     },
+     "organization": {
+      "maxLength": 128,
       "type": "string"
      },
      "request_id": {

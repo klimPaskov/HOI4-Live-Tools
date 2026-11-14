@@ -737,7 +737,7 @@ pub fn mac_tool_list() -> Vec<Value> {
             {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
         json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options. The line gets no military-industrial organisation (the design is Shift+clicked past the organisation chooser); `organization` (the organisation's script key, as hoi4_mios lists it) is not yet built: it is refused with not_yet_built before any input.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"organization":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... Province buildings (supply_node = supply hub, naval_base, bunker, coastal_bunker) are clicked on a province: pass province_id, or the tool tries the state's provinces nearest the centre in turn until the game accepts one (a supply hub needs a province the game allows, usually on a railway). Railways (rail_way) are not supported.","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":99999},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (slots 0 tank, 1 naval, 2 aircraft and 3 materiel designer, 4 industrial concern, 5 theorist; with Arms Against Tyranny the designer slots hold Military Industrial Organizations: hoi4_mio_* tools) or military_staff (slots 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command). A slot index is the slot's position in its category, the order of the slot lines in the game's common/idea_tags (a mod can change it); an advisor is hired from a slot of its own kind, so a high command advisor needs slot 3, 4 or 5. Returns each idea key with the game's enabled state, the slot's current idea, and slots: every slot of the category with its index and what it holds now.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
@@ -1286,6 +1286,31 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
         ),
     ))
 }
+/// `organization` on hoi4_production_add and hoi4_design_set_production: the organisation the
+/// line is made with. With Arms Against Tyranny a plain click on a design opens the organisation
+/// chooser (interface/military_industrial_organization/industrial_organization_list.gui:
+/// `industrial_organisation_list_window` at `position_default`, rows `industrial_organisation_list_item`
+/// in `organisation_list`, each with `name`, `task_capacity` and its `background_button`), and the
+/// tools Shift+click past it today. Choosing one is not built yet, so the argument is accepted by
+/// the schema and refused before any input (`not_yet_built`); plan_run::UNBUILT_ARGS keeps the
+/// executor from sending it until the chooser is driven and verified live.
+fn refuse_unbuilt_organization(tool: &str, args: &serde_json::Map<String, Value>) -> Result<()> {
+    match args.get("organization") {
+        None => Ok(()),
+        Some(Value::String(org)) if !org.trim().is_empty() => Err(Error::new(
+            "not_yet_built",
+            format!(
+                "{tool}: choosing the military-industrial organisation ({org}) is not built yet; \
+                 send the call without `organization` (the line gets no organisation)"
+            ),
+        )),
+        Some(_) => Err(Error::new(
+            "invalid_arguments",
+            "organization must be an organisation script key",
+        )),
+    }
+}
+
 #[cfg(test)]
 mod receipt_tools {
     /// Every tool the executor may send (plan_run::RECEIPT_TOOLS) is served here, so the list
@@ -1301,6 +1326,29 @@ mod receipt_tools {
             .filter(|n| !served.iter().any(|s| s == **n))
             .collect();
         assert!(missing.is_empty(), "not served: {missing:?}");
+    }
+
+    /// Every argument the executor holds back as not built is in the served tool's schema and
+    /// refused before input.
+    #[test]
+    fn every_unbuilt_argument_is_in_the_schema_and_refused() {
+        let tools = super::mac_tool_list();
+        for (tool, arg) in crate::plan_run::UNBUILT_ARGS {
+            let t = tools
+                .iter()
+                .find(|t| t["name"] == *tool)
+                .unwrap_or_else(|| panic!("{tool} not served"));
+            assert!(
+                t["inputSchema"]["properties"].get(*arg).is_some(),
+                "{tool} schema lacks {arg}"
+            );
+            assert!(t["description"].as_str().unwrap().contains("not yet built"));
+            let args = serde_json::json!({ *arg: "ITA_beretta_organization" });
+            let e = super::refuse_unbuilt_organization(tool, args.as_object().unwrap())
+                .unwrap_err();
+            assert_eq!(e.code, "not_yet_built");
+        }
+        assert!(super::refuse_unbuilt_organization("t", &serde_json::Map::new()).is_ok());
     }
 }
 /// Tools that move the map camera; the camera is zoomed back out after them (army tools
@@ -2240,10 +2288,12 @@ impl MacClock {
                         "line",
                         "design",
                         "accept_progress_loss",
+                        "organization",
                         "request_id",
                         "lease_token",
                     ],
                 )?;
+                refuse_unbuilt_organization(name, args)?;
             }
             let design = design_arg(
                 process,
@@ -2838,10 +2888,12 @@ impl MacClock {
                         "equipment",
                         "factories",
                         "design",
+                        "organization",
                         "request_id",
                         "lease_token",
                     ],
                 )?;
+                refuse_unbuilt_organization(name, args)?;
             } else {
                 allowed(
                     args,

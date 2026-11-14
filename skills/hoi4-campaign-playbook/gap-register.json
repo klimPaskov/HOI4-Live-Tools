@@ -3050,13 +3050,18 @@
     "economy-build-orders.md#9 Advisors, designers, MIOs",
     "research-doctrines-projects.md#10 Tactics (RE13, RE15)"
    ],
-   "plan": [],
-   "tools": [],
-   "blocked": "hoi4_production_add Shift+clicks past the AAT MIO chooser, so new lines get no organisation; no tool sets one (mio[].line is text)",
+   "plan": [
+    "production[].organization"
+   ],
+   "tools": [
+    "hoi4_production_add",
+    "hoi4_design_set_production"
+   ],
+   "blocked": "hoi4_production_add Shift+clicks past the organisation chooser, so new lines get no organisation; the `organization` argument of hoi4_production_add and hoi4_design_set_production is refused with not_yet_built before input, and the executor holds it back (plan_run::UNBUILT_ARGS) and adds the line without it",
    "payoff": "high",
    "why": "MIO efficiency-cap and cost traits are the largest production modifiers; funds come from lines",
    "closing": "both",
-   "owner": "MIO chooser on production_add/design_set_production (organisation argument) and a plan key",
+   "owner": "offline done: production[].organization (executor, sent once built), UNBUILT_ARGS seam, the argument in both tool schemas refused not_yet_built, validate_plan checks (organisation allowed, equipment_type covers the line, task capacity), tests; live: drive the organisation chooser (industrial_organisation_list_window, organisation_list rows) on a plain click, read the line's organisation back in hoi4_production_lines, remove the UNBUILT_ARGS entries, verify on Germany 1936",
    "priority": 9
   },
   {

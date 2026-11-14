@@ -1474,6 +1474,35 @@ def _world(game, meta):
     return game.cached(key, lambda: World(game, meta.get("tag", ""), start_of(meta), dlcs, "fair"))
 
 
+def mio_line_terms(game, equipment):
+    """The words an organisation's equipment_type may use for a line of `equipment`: the key, its archetype,
+    the archetype's unit types (`type`, e.g. infantry, armor) and every group of common/equipment_groups that
+    lists one of those (mio_cat_eq_*), read from the game files so mods count."""
+    from .script import bare, get1, parse_file
+
+    def load():
+        types, groups = {}, {}
+        for f in game.files("common/units/equipment"):
+            for k, v in parse_file(f):
+                if k == "equipments" and isinstance(v, list):
+                    for name, body in v:
+                        if name and isinstance(body, list):
+                            t = get1(body, "type")
+                            types[name] = set(bare(t)) if isinstance(t, list) else ({t} if isinstance(t, str) else set())
+        for f in game.files("common/equipment_groups"):
+            for name, body in parse_file(f):
+                if name and isinstance(body, list):
+                    groups[name] = set(bare(get1(body, "equipment_type", [])))
+        return types, groups
+
+    types, groups = game.cached("validate:mio_terms", load)
+    arch = derive.equipment_archetypes(game).get(equipment, equipment)
+    terms = {equipment, arch} | types.get(arch, set()) | types.get(equipment, set())
+    for _ in range(3):  # groups may name groups
+        terms |= {g for g, members in groups.items() if members & terms}
+    return terms
+
+
 def _dicts(v):
     return [(i, x) for i, x in enumerate(v) if isinstance(x, dict)] if isinstance(v, list) else []
 
@@ -1743,6 +1772,36 @@ def check_affairs_keys(game, plan, meta, rep):
         if isinstance(d, str) and d not in known:
             rep.warn(f"production[{i}].design {d!r} is no designs[] id or name and no start variant; it must be a "
                      f"design name as hoi4_designs lists it")
+    # production[].organization: the organisation the line is made with must be the player's and make it
+    lined = defaultdict(list)
+    for i, x in _dicts(plan.get("production")):
+        org = x.get("organization", x.get("organisation"))
+        if not isinstance(org, str) or not org.strip() or x.get("remove") is True:
+            continue
+        n += 1
+        label = f"production[{i}].organization {org}"
+        orgs = world().mio_organisations()
+        if not orgs:
+            continue
+        if org not in orgs:
+            rep.error(f"{label}: no organisation {org} in common/military_industrial_organization/organizations")
+            continue
+        mine = {r["id"]: r for r in world().mio(tag)["organisations"]}
+        if org not in mine:
+            rep.error(f"{label}: {org} is not allowed for {tag} (its allowed block)")
+            continue
+        eq = x.get("equipment")
+        makes = set(mine[org].get("equipment_type") or [])
+        if isinstance(eq, str) and makes and not makes & mio_line_terms(game, eq):
+            rep.error(f"{label}: {org} makes {', '.join(sorted(makes))}, not {eq} (its equipment_type); the game "
+                      f"does not offer it for this line")
+        lined[org].append(i)
+    for org, idx in lined.items():
+        row = {r["id"]: r for r in world().mio(tag)["organisations"]}.get(org) or {}
+        cap = row.get("task_capacity")
+        if isinstance(cap, (int, float)) and len(idx) > cap:
+            rep.warn(f"production: {len(idx)} lines name {org}, its task capacity is {cap:g}; the lines past it get "
+                     f"no organisation")
 
     dip = _dicts(plan.get("diplomacy"))
     for i, e in dip:
