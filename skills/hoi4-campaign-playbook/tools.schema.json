@@ -1998,7 +1998,7 @@
    "source": "--list-tools"
   },
   "hoi4_events": {
-   "description": "Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone.",
+   "description": "Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed. Each event comes with its full text read from game memory (no screenshot): title, description (markup removed), the leader for leader/operative layouts, and every option text, so the event can be judged from the report alone. option_keys gives, per shown option, the name the event script uses for it (for example my_event.1.b; null when it cannot be told from the event files and the localisation), so a rule or a guide that names an option by its script name finds the right one even when an option is hidden.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
@@ -2136,7 +2136,7 @@
    "source": "--list-tools"
   },
   "hoi4_fleet_assign": {
-   "description": "UNVALIDATED (no live test yet): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "description": "Live-verified (31 Oct 2026 on 1.19.4): Move one own task force into another own fleet: select the task force, then RIGHT-click the receiving fleet's card (route right_click, the army cards' convention) or drag the entry onto the card (route drag); a reassign confirmation is accepted. Verified by the task force being in the receiving fleet. Adds refusal target_is_reserve. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2255,7 +2255,7 @@
    "source": "--list-tools"
   },
   "hoi4_fleet_merge": {
-   "description": "UNVALIDATED (no live test yet): Merge all task forces of one own fleet into a single task force: Strategic Navy map mode (F2), the fleet's card, no task force selected, the fleet panel toolbar's Merge button (btn_merge, 'Merge the selected task forces'). Verified by the fleet holding exactly one task force with the same ships. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "description": "Live-verified (31 Oct 2026 on 1.19.4; task forces in different ports are split off by the game): Merge all task forces of one own fleet into a single task force: Strategic Navy map mode (F2), the fleet's card, no task force selected, the fleet panel toolbar's Merge button (btn_merge, 'Merge the selected task forces'). Verified by the fleet holding exactly one task force with the same ships. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2348,7 +2348,7 @@
    "source": "--list-tools"
   },
   "hoi4_fleet_reserve": {
-   "description": "UNVALIDATED (no live test yet): Send one own task force to the reserve fleet with the toolbar's set-as-reserve button (btn_exclude); a confirmation dialog is accepted. Verified by the task force being in the reserve fleet. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "description": "Live-verified (31 Oct 2026 on 1.19.4): Send one own task force to the reserve fleet with the toolbar's set-as-reserve button (btn_exclude); a confirmation dialog is accepted. Verified by the task force being in the reserve fleet. Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2373,7 +2373,7 @@
    "source": "--list-tools"
   },
   "hoi4_fleet_split": {
-   "description": "UNVALIDATED (no live test yet): Split one own task force in half: fleet card, the entry's Select, toolbar 'Split the selected task force in half' (btn_split_in_half). Verified by the fleet gaining one task force with the same ships. Adds refusal task_force_too_small (fewer than two ships). Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
+   "description": "Live-verified (31 Oct 2026 on 1.19.4; delete and progress-loss dialogs accepted 6 Nov): Split one own task force in half: fleet card, the entry's Select, toolbar 'Split the selected task force in half' (btn_split_in_half). Verified by the fleet gaining one task force with the same ships. Adds refusal task_force_too_small (fewer than two ships). Typed refusals before input: fleet_unknown / task_force_unknown / task_force_ambiguous, nothing_to_change, reserve_fleet; while driving button_disabled (the game greys the button), input_readback_failed (the fleet list did not change; nothing is repeated). Result has validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2834,7 +2834,7 @@
    "source": "--list-tools"
   },
   "hoi4_mio_trait": {
-   "description": "UNVALIDATED (no live test yet): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
+   "description": "Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3290,7 +3290,7 @@
    "source": "--list-tools"
   },
   "hoi4_plan": {
-   "description": "Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.",
+   "description": "Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key); {op:request_revision, reason} asks for a revised plan (written to the change feed as revision_requested; the plan in force stays until plan_revised). hoi4_plan_run carries it out.",
    "inputSchema": {
     "oneOf": [
      {
@@ -3317,6 +3317,23 @@
       "required": [
        "op",
        "plan"
+      ]
+     },
+     {
+      "additionalProperties": false,
+      "properties": {
+       "op": {
+        "const": "request_revision"
+       },
+       "reason": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+       }
+      },
+      "required": [
+       "op",
+       "reason"
       ]
      }
     ],

@@ -561,13 +561,32 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
 }
 
 // ---- tool list ------------------------------------------------------------------------------------
+/// The tools a live run has verified on 1.19.4 (docs/LIVE_VERIFICATION_1_19_4.md); every other one keeps the
+/// UNVALIDATED prefix. The gap register (scripts/hoi4facts/gap_register.py check) fails when a register row
+/// records a live run while the descriptor still says UNVALIDATED.
+const LIVE: &[(&str, &str)] = &[
+    (
+        "hoi4_fleet_merge",
+        "31 Oct 2026 on 1.19.4; task forces in different ports are split off by the game",
+    ),
+    (
+        "hoi4_fleet_split",
+        "31 Oct 2026 on 1.19.4; delete and progress-loss dialogs accepted 6 Nov",
+    ),
+    ("hoi4_fleet_reserve", "31 Oct 2026 on 1.19.4"),
+    ("hoi4_fleet_assign", "31 Oct 2026 on 1.19.4"),
+];
 fn schema(name: &str, description: &str, props: Value, required: &[&str]) -> Value {
     let mut properties = props.as_object().cloned().unwrap_or_default();
     properties.insert("request_id".into(), json!({"type":"string"}));
     properties.insert("lease_token".into(), json!({"type":"string"}));
     let mut required: Vec<&str> = required.to_vec();
     required.extend(["request_id", "lease_token"]);
-    json!({"name":name,"description":format!("{}{}", kit::UNVALIDATED, description),
+    let prefix = match LIVE.iter().find(|(tool, _)| *tool == name) {
+        Some((_, record)) => format!("Live-verified ({record}): "),
+        None => kit::UNVALIDATED.to_string(),
+    };
+    json!({"name":name,"description":format!("{prefix}{description}"),
         "inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false}})
 }
 pub(super) fn tools() -> Vec<Value> {
@@ -844,10 +863,15 @@ mod tests {
         assert_eq!(list.len(), TOOLS.len());
         for (entry, name) in list.iter().zip(TOOLS) {
             assert_eq!(entry["name"], name);
-            assert!(entry["description"]
-                .as_str()
-                .unwrap()
-                .starts_with("UNVALIDATED (no live test yet): "));
+            let description = entry["description"].as_str().unwrap();
+            if LIVE.iter().any(|(tool, _)| *tool == name) {
+                assert!(description.starts_with("Live-verified ("), "{name}");
+            } else {
+                assert!(
+                    description.starts_with("UNVALIDATED (no live test yet): "),
+                    "{name}"
+                );
+            }
             let required = entry["inputSchema"]["required"].as_array().unwrap();
             assert!(
                 required.iter().any(|v| v == "request_id")

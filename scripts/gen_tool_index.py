@@ -23,10 +23,16 @@ UNVALIDATED = "UNVALIDATED (no live test yet) - "
 constants = {"TOOL": "hoi4_naval_invasion", "INCOMING": "hoi4_diplomacy_incoming"}
 pat_schema = re.compile(r'schema\(\s*"(hoi4_[a-z0-9_]+)"\s*,\s*&format!\(\s*"((?:[^"\\]|\\.)*)"', re.S)
 pat_format = re.compile(r'"name"\s*:\s*(?:"(hoi4_[a-z0-9_]+)"|(TOOL|INCOMING))\s*,\s*"description"\s*:\s*format!\(\s*"\{\}((?:[^"\\]|\\.)*)"', re.S)
+# A module's `const LIVE: &[(&str, &str)]` names the tools a live run verified; schema() gives them that prefix.
+pat_live = re.compile(r'const LIVE: &\[\(&str, &str\)\] = &\[(.*?)\];', re.S)
 for f in files:
     text = f.read_text(errors="replace")
+    live = {}
+    for block in pat_live.findall(text):
+        live.update(re.findall(r'\(\s*"(hoi4_[a-z0-9_]+)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)', block))
     for m in pat_schema.finditer(text):
-        tools.setdefault(m.group(1), (UNVALIDATED + m.group(2), True, f.name))
+        prefix = f"Live-verified ({live[m.group(1)]}): " if m.group(1) in live else UNVALIDATED
+        tools.setdefault(m.group(1), (prefix + m.group(2), True, f.name))
     for m in pat_format.finditer(text):
         name = m.group(1) or constants[m.group(2)]
         # The read form of hoi4_diplomacy_incoming needs no lease; every other one is an action.
@@ -75,6 +81,8 @@ for title, _ in domains + [("Other", "")]:
         prefix = ""
         if body.startswith(tag):
             prefix, body = tag + " ", body[len(tag):].strip()
+        elif body.startswith("Live-verified (") and "): " in body:
+            prefix, body = "Live-verified: ", body.split("): ", 1)[1].strip()
         first = prefix + re.split(r'(?<=[.;:])\s', body, maxsplit=1)[0]
         first = first[:260]
         out.append(f"- `{n}` ({'A' if a else 'R'}): {first}")
