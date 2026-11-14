@@ -55,7 +55,11 @@ function Install-Hoi4LiveTools {
             $parts = $line -split '\s+'
             if ($parts.Count -eq 2 -and $parts[1].TrimStart('*') -eq 'install.py') { $expected = $parts[0].ToLower() }
         }
-        $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $tmp 'install.py')).Hash.ToLower()
+        # .NET directly: Get-FileHash is a script function that an inherited PSModulePath can hide.
+        $sha = [Security.Cryptography.SHA256]::Create()
+        $stream = [IO.File]::OpenRead((Join-Path $tmp 'install.py'))
+        try { $actual = ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLower() }
+        finally { $stream.Dispose(); $sha.Dispose() }
         if (-not $expected -or $expected -ne $actual) {
             Write-Host 'error: install.py does not match its checksum in SHA256SUMS.txt; nothing was installed.'
             $global:LASTEXITCODE = 1
