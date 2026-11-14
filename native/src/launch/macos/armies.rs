@@ -2202,6 +2202,9 @@ fn front_point_province(
             da.total_cmp(&db)
         }))
 }
+/// Arrow-key taps the front's border point may take to reach the middle of the map area.
+const FRONT_PAN_TAPS: usize = 8;
+
 pub(super) fn front(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -2231,7 +2234,7 @@ pub(super) fn front(
         .flatten()
         .or_else(|| front_point_province(process, army, state).ok().flatten());
     // The Find view is only needed when the border point is not already in the usable area.
-    let visible = super::screenmap::aim_height_ok(process)
+    let visible = super::screenmap::front_height_ok(process)
         && near.is_some_and(|(x, z)| {
             read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
                 .ok()
@@ -2265,6 +2268,44 @@ pub(super) fn front(
                 break;
             }
         }
+    }
+    // The Find view centres the target state, and the border the army stands on can run along
+    // the edge of the usable area, where the battle-plan bar, the army cards and the tooltip
+    // cover its highlight while another border's highlight (a neutral neighbour's) is in full
+    // view (live 14 Nov 2026: fronts toward Hararghe from Somaliland failed two times in
+    // three). The arrow keys bring the border point into the middle of the map area.
+    if let Some((x, z)) = near {
+        use crate::platform::game_input::vk;
+        let (x0, x1, y0, y1) = (640.0, 1280.0, 260.0, 640.0);
+        let (mx, my) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        for _ in 0..FRONT_PAN_TAPS {
+            let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))?
+            else {
+                break;
+            };
+            if (x0..x1).contains(&sx) && (y0..y1).contains(&sy) {
+                break;
+            }
+            let (dx, dy) = ((sx - mx) / (x1 - x0), (sy - my) / (y1 - y0));
+            let key = if dx.abs() >= dy.abs() {
+                if dx < 0.0 {
+                    vk::LEFT
+                } else {
+                    vk::RIGHT
+                }
+            } else if dy < 0.0 {
+                vk::UP
+            } else {
+                vk::DOWN
+            };
+            keys.press_code(key)?;
+            std::thread::sleep(std::time::Duration::from_millis(160));
+            super::screenmap::wait_camera_still(process, 600);
+        }
+        super::ui::trace_text(&format!(
+            "front: border point on screen at {:?}",
+            read(process, |r, i| super::screenmap::to_screen(r, i, x, z))?
+        ));
     }
     // The fronts this army can take are highlighted only in front-line
     // drawing, in a colour that varies by army and lighting; compare one

@@ -85,6 +85,16 @@ pub(super) const AIM_MAX: f64 = 760.0;
 pub(super) fn aim_height_ok(process: &dyn crate::platform::Process) -> bool {
     super::ui::read(process, camera_height).is_ok_and(|h| h <= AIM_MAX)
 }
+/// Highest camera at which a front line is aimed where the camera stands. The highlighted
+/// fronts are drawn up to AIM_MAX, but from the strategic height (where every action that is
+/// not an army order leaves the camera) a state's border is a few dozen pixels long and its
+/// dashed highlight was not found: the first front order after any other action failed (live
+/// 14 Nov 2026). Above this height the Find view brings the camera in.
+pub(super) const FRONT_AIM_MAX: f64 = 260.0;
+/// Whether the camera is low enough to pick a highlighted front where it is.
+pub(super) fn front_height_ok(process: &dyn crate::platform::Process) -> bool {
+    super::ui::read(process, camera_height).is_ok_and(|h| h <= FRONT_AIM_MAX)
+}
 /// Zoomed in closer than this, the camera is brought back out after a map action.
 const CLOSE: f64 = 500.0;
 /// Strategic view height (the game starts at 800; 50 is fully in, 3000 fully out).

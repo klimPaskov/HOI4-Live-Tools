@@ -3859,6 +3859,11 @@ fn war_step(
         state
             .war_cool
             .insert(name.clone(), now + if ok { cooldown * 2 } else { cooldown });
+        // An order the ledger holds back was not sent: the other armies still get theirs (a
+        // held guard front kept every driven army without orders for three game weeks).
+        if held_back(&why) {
+            continue;
+        }
         return Ok(Some(format!(
             "war {label} {name} -> state {post}: {ok} {why}"
         )));
@@ -4540,6 +4545,11 @@ fn war_step(
         };
         let one_province = args.get("province_id").is_some();
         let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
+        if !ok && held_back(&why) {
+            // not sent: this army waits, the next one gets its order
+            state.war_cool.insert(name.clone(), now + cooldown);
+            continue;
+        }
         if ok {
             state.war_stage.insert(name.clone(), next_stage);
             state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
