@@ -5018,7 +5018,11 @@
     "supply-logistics-deployment.md#LO17",
     "war-air-naval-peace.md#OP10"
    ],
-   "plan": [],
+   "plan": [
+    "manage.overdrawn_floor",
+    "manage.overdrawn_share",
+    "manage.overdrawn_rest_days"
+   ],
    "tools": [
     "hoi4_supply",
     "hoi4_army_detach",
@@ -5028,7 +5032,7 @@
    "payoff": "high",
    "why": "overdrawn areas give armour no fuel (10% stats, 40% speed)",
    "closing": "both",
-   "owner": "offline: a standing rule that spreads or pulls back divisions from an overdrawn province"
+   "owner": "live: on an overdrawn stack (hoi4_supply overdrawn_provinces under the floor) the executor detaches the weakest divisions and moves them to a province with room; supply recovers for the rest. Lint supply.overdrawn"
   },
   {
    "id": "supply.throughput_attrition_read",
@@ -5154,16 +5158,20 @@
     "war-air-naval-peace.md#16 AI07",
     "generic-playbook.md#4. War execution (Air)"
    ],
-   "plan": [],
+   "plan": [
+    "air_plan[].follow_region",
+    "air_plan[].base_region",
+    "air_plan[].base_state"
+   ],
    "tools": [
     "hoi4_air_rebase",
     "hoi4_air"
    ],
-   "verified": "LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy planes; BBA wings never listed)",
    "payoff": "medium",
    "why": "Out-of-range wings fly nothing; range is the most common air failure",
-   "closing": "offline",
-   "owner": "offline: an executor rule (plan key) that rebases a wing to the nearest own air base in range of its mission region as the front moves"
+   "closing": "live",
+   "owner": "live: a follow_region wing rebases into the new mission region after switch_when (then_region) or a phase override moves it; lint air.deploy",
+   "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy planes; BBA wings never listed)"
   },
   {
    "id": "air.deploy_new_wings",
@@ -5173,16 +5181,18 @@
     "war-air-naval-peace.md#5.3 Range, bases, efficiency",
     "procedure.md#20. Air plan item 1"
    ],
-   "plan": [],
+   "plan": [
+    "air_plan[].deploy"
+   ],
    "tools": [
     "hoi4_air_wing_create",
     "hoi4_air"
    ],
-   "verified": "LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy reserve only; BBA reserve planes never)",
    "payoff": "high",
    "why": "An air build-up (15-25 fighter factories) is wasted if reserve planes never become wings",
-   "closing": "both",
-   "owner": "offline: a plan key and executor step that turns reserve planes into wings (hoi4_air_wing_create) at the planned base; then a live run"
+   "closing": "live",
+   "owner": "live: an air_plan entry with deploy founds a wing from BBA reserve planes (the tool was live on legacy reserve only) and gives it the entry's mission; lint air.deploy",
+   "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy reserve only; BBA reserve planes never)"
   },
   {
    "id": "air.wing_shaping",
@@ -5203,7 +5213,8 @@
    "payoff": "low",
    "why": "Efficiency tuning; wings work at default size",
    "closing": "live",
-   "owner": "Live merge on 1.19.4 with BBA wings; no plan key needed (player use)"
+   "owner": "Live merge on 1.19.4 with BBA wings; no plan key needed (player use)",
+   "plan_na": "wing size is planned through air_plan deploy (hoi4_air_wing_create, up to 100 a wing); splitting, merging or disbanding a fielded wing is a judgement on aces, region stacks and obsolete planes the player makes from hoi4_air, never a standing order"
   },
   {
    "id": "air.logistics_strike",
@@ -5791,7 +5802,12 @@
     "war-air-naval-peace.md#17 NA11",
     "war-air-naval-peace.md#17 NA29"
    ],
-   "plan": [],
+   "plan": [
+    "navy.fleets[].task_forces",
+    "navy.fleets[].merge",
+    "navy.fleets[].task_force_max",
+    "navy.reserve"
+   ],
    "tools": [
     "hoi4_fleet_create",
     "hoi4_fleet_split",
@@ -5799,11 +5815,11 @@
     "hoi4_fleet_assign",
     "hoi4_fleet_reserve"
    ],
-   "verified": "LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (create, split, merge, assign, reserve)",
    "payoff": "medium",
    "why": "Start fleets are mixed; raiders and screens need the right task-force shape",
-   "closing": "offline",
-   "owner": "offline: a navy plan key for task-force shape (split, merge, assign) the executor applies with the fleet tools"
+   "closing": "live",
+   "owner": "live: the executor's shaping orders (assign, merge, split, reserve) on a start navy; tools live-verified 31 Oct, the executor step not yet. Lint navy.shape. A new fleet from a task force (hoi4_fleet_create) stays player use: the game names it, so no plan key can name it first",
+   "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (create, split, merge, assign, reserve)"
   },
   {
    "id": "navy.task_force_settings",
@@ -5951,7 +5967,8 @@
    "payoff": "low",
    "why": "Convenience over split and merge; deleting hulls is rarely right",
    "closing": "both",
-   "owner": "live: validate both tools on a throwaway task force; offline: a plan key if ever needed"
+   "owner": "live: validate both tools on a throwaway task force; offline: a plan key if ever needed",
+   "plan_na": "task-force shape is planned explicitly (navy.fleets[].task_forces, merge, task_force_max, navy.reserve); the game's automatic rebalance would undo it, and destroying ships is never a standing order (navy.reserve keeps old hulls)"
   }
  ]
 }

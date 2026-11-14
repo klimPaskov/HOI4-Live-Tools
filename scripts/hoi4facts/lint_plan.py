@@ -144,6 +144,9 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   navy.overseas            an army state the capital cannot reach over own land, without a navy key,
                            a convoy plan (convoy production line or sea_transfer.convoys) and a port plan
                            (sea_transfer.ports or a port building queued there)
+  navy.shape               navy.fleets[] with merge and task_force_max together (a merge undone by splits, every
+                           week); a task force planned into two fleets (navy.fleets[].task_forces), or planned into a
+                           fleet and into navy.reserve (the executor would move it back and forth)
   supply.port_convoys      the plan builds a port or relies on one (sea_transfer.ports, an overseas army)
                            but has no convoy item (convoy production line or manage.convoys_free);
                            sea supply needs SUPPLY_CONVOY_FACTOR convoys per supply
@@ -176,6 +179,10 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            finding names the port alternative when an own coastal province is 3 steps away
   air.base_capacity        (warning) air_plan planes on a base above its capacity (level at the start plus
                            queued levels, x AIRBASE_CAPACITY_MULT)
+  air.deploy               an air_plan entry with `deploy` and no `airframe` (the reserve is matched by airframe),
+                           or with no base to found the wing at (base_state, base_region or follow_region); an
+                           entry with `follow_region` and no `region`; (warning) a deploy base_state without an
+                           air base at the start or queued (the planes wait in reserve until one exists)
   templates.equipment     a template unit or its equipment unlocked by no tech at the start or in the
                            research plan (warning when the tech comes after the template's date)
   templates.xp             a template with xp and no xp_budget.army spend ref template:<id>
@@ -210,6 +217,9 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            another designs item still puts on a line; (warning) an item whose design no line builds
                            (no `production` on it, no production[].design naming it): the decommission waits for
                            a line for good
+  supply.overdrawn         (warning) manage.overdrawn_floor below the supply where attrition starts
+                           (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION): an overdrawn stack is thinned only after attrition
+                           already bites; or the overdrawn rule switched off in a plan at war with no why naming it
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: var, mission_days, surrender_progress,
@@ -368,12 +378,12 @@ EQUIPMENT_LOSS_SHARE = 0.05
 EFFICIENCY_RAMP_DAYS = 180
 BALANCE_DAYS = 90
 BALANCE_ERROR_DAYS = 120
-NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
+NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "navy.shape", "supply.port_convoys",
              "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "diplomacy.incoming", "occupation.required", "occupation.law_shown", "peace.enemies",
              "manage.thresholds", "production.replace",
-             "designs.decommission",
+             "designs.decommission", "air.deploy", "supply.overdrawn",
              "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
@@ -2200,6 +2210,33 @@ class Lint:
                      f"armies stand in states {', '.join(map(str, sorted(over)))}, which {self.tag}'s capital cannot "
                      f"reach over its own land (supply and reinforcements go by sea); missing: {'; '.join(missing)}")
 
+    def navy_shape(self):
+        """navy.shape: task-force shaping orders that would undo each other."""
+        nv = self.plan.get("navy") if isinstance(self.plan.get("navy"), dict) else {}
+        home = {}
+        for i, f in enumerate(nv.get("fleets") or []):
+            if not isinstance(f, dict):
+                continue
+            where = f"navy.fleets[{i}]"
+            if f.get("merge") is True and f.get("task_force_max") is not None:
+                self.add("error", "navy.shape", where,
+                         "merge and task_force_max together: the merged task force is split again and merged the next "
+                         "week; keep one of them")
+            for tf in f.get("task_forces") or []:
+                if not isinstance(tf, str):
+                    continue
+                key = tf.strip().lower()
+                if key in home and home[key][1] != f.get("fleet"):
+                    self.add("error", "navy.shape", f"{where}.task_forces",
+                             f"task force {tf!r} is planned into {home[key][1]!r} ({home[key][0]}) too: the executor "
+                             f"would move it between the two fleets")
+                home.setdefault(key, (where, f.get("fleet")))
+        for tf in nv.get("reserve") or []:
+            if isinstance(tf, str) and tf.strip().lower() in home:
+                where, fleet = home[tf.strip().lower()]
+                self.add("error", "navy.shape", "navy.reserve",
+                         f"task force {tf!r} is planned into the reserve and into fleet {fleet!r} ({where})")
+
     def port_convoys(self):
         ports = {b for b, r in derive.building_costs(self.game).items() if r["port"]}
         built = sorted({s for _, b, s in self.queued() if b in ports})
@@ -2506,6 +2543,36 @@ class Lint:
                          f"{n} planes based in state {sid}, whose air bases (level {levels.get(sid, 0)} at the start plus "
                          f"{queued[sid]} queued) hold {lvl * mult:g} (AIRBASE_CAPACITY_MULT {mult:g} per level)")
 
+    def air_deploy(self):
+        """air.deploy: what the executor needs to turn reserve planes into wings and to follow a region."""
+        levels = None
+        for i, e in enumerate(self.list_of("air_plan")):
+            if not isinstance(e, dict):
+                continue
+            where = f"air_plan[{i}]"
+            if e.get("follow_region") is True and e.get("region") in (None, "") and e.get("then_region") in (None, ""):
+                self.add("error", "air.deploy", where, "follow_region with no region: the wing has no region to be based in")
+            deploy = e.get("deploy")
+            if not (deploy is True or isinstance(deploy, dict)):
+                continue
+            if not isinstance(e.get("airframe"), str) or not e["airframe"]:
+                self.add("error", "air.deploy", where,
+                         "deploy needs `airframe`: the reserve planes are matched by their equipment type (a `wing` name "
+                         "names one wing, not planes in reserve)")
+            sid = e.get("base_state")
+            if sid is None and e.get("base_region") in (None, "") and e.get("follow_region") is not True:
+                self.add("error", "air.deploy", where,
+                         "deploy with no base: give base_state, base_region or follow_region (where the new wing is founded)")
+            if isinstance(sid, int):
+                if levels is None:
+                    levels = derive.air_base_levels(self.game, self.ctx, self.start)
+                    kinds = derive.air_base_buildings(self.game)
+                    queued = {s for _, b, s in self.queued() if b in kinds}
+                if not levels.get(sid) and sid not in queued:
+                    self.add("warning", "air.deploy", where,
+                             f"deploy base_state {sid} has no air base at the start and none is queued: the planes wait in "
+                             f"reserve until one exists")
+
     def templates(self):
         temps = self.list_of("templates")
         if not temps:
@@ -2721,6 +2788,24 @@ class Lint:
                          f"{name} is not run by the executor yet ({node['x-executor-planned']}); the player watches it")
         self.facts["manage"] = {k: (m[k] if k in m else v.get("default")) for k, v in spec.items()
                                 if "default" in v and k not in ("why", "note")}
+
+    def supply_overdrawn(self):
+        """supply.overdrawn: the rule that thins overdrawn stacks acts before attrition, and is not silenced."""
+        m = self.plan.get("manage")
+        if not isinstance(m, dict):
+            return
+        attrition = self.define("SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION", 0.35)
+        raw = m.get("overdrawn_floor")
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and self.share(raw) < attrition:
+            self.add("warning", "supply.overdrawn", "manage.overdrawn_floor",
+                     f"overdrawn_floor {raw:g}: an overdrawn stack is thinned only below {self.share(raw):.0%} supply, "
+                     f"under the {attrition:.0%} where attrition starts (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION)")
+        off = m.get("off") if isinstance(m.get("off"), list) else []
+        why = m.get("why") if isinstance(m.get("why"), str) else ""
+        if "overdrawn" in off and self.war and "overdrawn" not in why:
+            self.add("warning", "supply.overdrawn", "manage.off",
+                     "the overdrawn rule is off in a plan at war and manage.why does not say why: divisions stacked in "
+                     "an overdrawn province all starve alike")
 
     def alarm_blocks(self):
         """[(label, alarms object)]: the base alarms and those of phase and contingency overrides."""
@@ -4169,8 +4254,8 @@ class Lint:
     # ------------------------------------------------------------------
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
-                 self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
-                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.incoming, self.occupation, self.peace, self.manage,
+                 self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
+                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.air_deploy, self.templates, self.laws, self.incoming, self.occupation, self.peace, self.manage, self.supply_overdrawn,
                  self.alarms_silenced,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus

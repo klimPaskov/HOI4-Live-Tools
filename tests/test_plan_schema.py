@@ -409,13 +409,15 @@ class CoverageKeys(unittest.TestCase):
         m = self.props["manage"]["properties"]
         self.assertEqual(set(m["off"]["items"]["enum"]), {"alerts", "ledger", "manpower", "stability",
                                                           "equipment_fill", "resources", "stockpile", "trucks",
-                                                          "casualties", "air_superiority"})
+                                                          "casualties", "air_superiority", "overdrawn"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
                 # plan_military.rs: casualty ratio (rule 28) and air superiority (rule 27)
                 "casualty_ratio_max": 2.0, "casualty_window_days": 14, "casualty_min_losses": 1000,
                 "casualty_rest_days": 7, "enemy_air_superiority": 0.6, "air_hold_days": 10,
+                # plan_manage.rs: overdrawn provinces (supply.split_overdrawn)
+                "overdrawn_floor": 35, "overdrawn_share": 0.5, "overdrawn_rest_days": 10,
                 # executor rules that act with or without `manage` (production, templates, invasions)
                 "rebalance_step": 3, "day0_production": True, "war_priority": True, "war_civs": False,
                 "mature_line_days": 30, "mature_line_efficiency": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
