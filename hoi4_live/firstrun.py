@@ -152,7 +152,8 @@ def plan_from_folder(folder):
 
 
 def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout, now=None, plan_folder=None,
-         launch=False, wait_minutes=15, minutes=180, start_native=native_start.start_native):
+         launch=False, wait_minutes=15, minutes=180, start_native=native_start.start_native,
+         idle_pause_minutes=native_start.IDLE_PAUSE_MINUTES):
     app = os.path.join(prefix, "app")
     plans = shipped_plans(app)
     if plan_folder:
@@ -192,7 +193,7 @@ def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout,
         with open(template, encoding="utf-8") as f:
             text = f.read()
         return start_native(prefix, plan, goal, facts, out, text, launch=launch, wait_minutes=wait_minutes,
-                            minutes=minutes, now=now)
+                            minutes=minutes, now=now, idle_pause_minutes=idle_pause_minutes)
     run = prepare_run(prefix, plan, goal, now)
     prompt = client_prompt(plan, goal, run, app)
     with open(os.path.join(run, "prompt.txt"), "w", encoding="utf-8", newline="\n") as f:
@@ -211,6 +212,11 @@ def main(argv=None):
     parser.add_argument("--launch", action="store_true", help="ask Steam to start the game (macOS)")
     parser.add_argument("--wait", type=int, default=15, help="minutes to wait for the game (default 15)")
     parser.add_argument("--minutes", type=int, default=180, help="the agent's time limit in the brief")
+    parser.add_argument("--idle-pause", type=int, default=native_start.IDLE_PAUSE_MINUTES, metavar="MINUTES",
+                        help="pause the game only after this many minutes without any call from the agent "
+                             "(default %d; 0 never pauses). The game is never paused otherwise; the run's "
+                             "settings.json holds it and can be changed during the run"
+                             % native_start.IDLE_PAUSE_MINUTES)
     parser.add_argument("country", nargs="?", help="a country tag or name, for example ITA or Italy")
     parser.add_argument("goal", nargs="*", help="what the campaign should achieve, in your words")
     args = parser.parse_args(argv)
@@ -221,7 +227,7 @@ def main(argv=None):
                          f"Campaigns with a reviewed plan: {campaigns(shipped_plans(os.path.join(prefix, 'app')))}\n")
         return EXIT_USAGE
     return play(prefix, args.country, " ".join(args.goal), args.mode, plan_folder=args.plan, launch=args.launch,
-                wait_minutes=args.wait, minutes=args.minutes)
+                wait_minutes=args.wait, minutes=args.minutes, idle_pause_minutes=max(0, args.idle_pause))
 
 
 if __name__ == "__main__":

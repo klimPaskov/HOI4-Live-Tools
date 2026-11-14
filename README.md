@@ -90,8 +90,10 @@ On a Mac with the native runtime:
    and the game keeps running.
 
 The command never edits your game settings, saves or mods: it records them at the start and the report says if
-anything changed during the run. If no call comes from the agent for five minutes, the supervisor pauses the game;
-when the game closes, the run ends by itself. How it works: [docs/PLAY_FLOW.md](docs/PLAY_FLOW.md).
+anything changed during the run. The game keeps running while the agent plays; it is paused only when you or the
+agent ask, or after a long silence: with no call from the agent for 15 minutes (`--idle-pause MINUTES` changes
+it, `0` switches it off) the supervisor pauses the game, after a wake at half that time, and the agent's next call
+lifts the pause. When the game closes, the run ends by itself. How it works: [docs/PLAY_FLOW.md](docs/PLAY_FLOW.md).
 
 `hoi4-live update` installs the newest release. `hoi4-live uninstall` removes the program, the native runtime, the
 command and the client registrations.

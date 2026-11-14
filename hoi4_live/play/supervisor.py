@@ -9,8 +9,12 @@ closes or the run is stopped:
     each call   add the lease token and a request id where the tool takes them; refuse an identical action that
                 succeeded within DUPLICATE_WINDOW seconds with its earlier result (`already_done`); bring the
                 game to the front once when input found another window in front; log the call without tokens
-    watchdog    no player call for IDLE_PAUSE seconds: executor off and a running game paused (the only pause the
-                product makes); the next player call switches the executor back on
+    idle guard  a real campaign never pauses itself: the game keeps running between player calls. Only after a
+                long silence (no player call for the run's idle_pause_minutes, default 15; 0 switches it off) is the
+                player taken for dead: at half that time a wake_player change is raised and recorded, at the full
+                time the executor goes off and a running game is paused, with the time and reason recorded for the
+                report. The next player call lifts that pause (executor on, the game running again); any player
+                call resets the timer. A pause the player or the user asks for is theirs and never lifted here.
     health      the game or the runtime gone: stop
     stop        executor off, lease released, runtime closed, report.md written, the active-run pointer removed;
                 the game itself is never closed
@@ -32,7 +36,7 @@ import time
 from . import game, report, runs
 from .native import Native
 
-IDLE_PAUSE = 300
+IDLE_PAUSE_MINUTES = runs.IDLE_PAUSE_MINUTES
 DUPLICATE_WINDOW = 45
 RENEW_EVERY = 300
 LEASE_SECONDS = 900
@@ -73,7 +77,7 @@ EXTRA_TOOLS = [
                    "items": {"type": "array", "minItems": 1, "maxItems": 2}},
          "full": {"type": "boolean"}}, "required": ["calls"], "additionalProperties": False}},
     {"name": "hoi4_run",
-     "description": "The campaign run. {\"op\":\"status\"}: run folder, game date, executor, watchdog. "
+     "description": "The campaign run. {\"op\":\"status\"}: run folder, game date, executor, idle pause. "
                     "{\"op\":\"stop\"}: end the run once when you are done: executor off, input released, "
                     "report.md written in the run folder; the game keeps running.",
      "inputSchema": {"type": "object", "properties": {"op": {"type": "string", "enum": ["status", "stop"]}},
@@ -146,11 +150,12 @@ def shrink(value, budget):
 
 class Supervisor:
     def __init__(self, run, prefix, start_native, clock=time.time, sleep=time.sleep, front=None,
-                 idle_pause=IDLE_PAUSE, duplicate_window=DUPLICATE_WINDOW, campaign_wait=CAMPAIGN_WAIT,
+                 idle_pause=None, duplicate_window=DUPLICATE_WINDOW, campaign_wait=CAMPAIGN_WAIT,
                  retry_every=RETRY_EVERY):
         self.run, self.prefix = run, prefix
         self.start_native, self.clock, self.sleep, self.front = start_native, clock, sleep, front
-        self.idle_pause, self.duplicate_window = idle_pause, duplicate_window
+        # Seconds; None reads the run's settings file (and follows a change made to it during the run).
+        self.idle_pause_override, self.duplicate_window = idle_pause, duplicate_window
         self.campaign_wait, self.retry_every = campaign_wait, retry_every
         self.request = runs.read_json(os.path.join(run, "request.json")) or {}
         self.session = runs.read_json(os.path.join(run, "session.json")) or {}
@@ -165,8 +170,12 @@ class Supervisor:
         self.last_player = self.started
         self.last_renew = self.started
         self.last_health = self.started
-        self.watchdog_paused = False
-        self.counts = {"calls": 0, "already_done": 0, "watchdog_pauses": 0, "front": 0, "executor_stops": 0}
+        self.idle_paused = False
+        self.idle_paused_game = False
+        self.idle_woken = False
+        self.pending_wake = None
+        self.counts = {"calls": 0, "already_done": 0, "idle_wakes": 0, "idle_pauses": 0, "pause_requests": 0,
+                       "front": 0, "executor_stops": 0}
         self.feed_seq = 0
         self.state = "starting"
         self.end_reason = None
@@ -187,7 +196,8 @@ class Supervisor:
             self.state = state
         data = {"state": self.state, "message": message, "run": self.run, "pid": os.getpid(),
                 "updated": self.clock(), "tag": self.request.get("tag"), "executor": self.state == "ready"
-                and not self.watchdog_paused, "watchdog_paused": self.watchdog_paused,
+                and not self.idle_paused, "idle_paused": self.idle_paused, "idle_woken": self.idle_woken,
+                "idle_pause_minutes": self.idle_minutes(),
                 "end_reason": self.end_reason, **extra}
         runs.write_json(os.path.join(self.run, "status.json"), data)
         return data
@@ -296,9 +306,7 @@ class Supervisor:
         args = dict(args or {})
         began = self.clock()
         if source == "player":
-            self.last_player = began
-            if self.watchdog_paused:
-                self.resume_after_watchdog()
+            self.player_call(name, args, began)
         if name == "hoi4_batch":
             out = self.batch(args)
         elif name == "hoi4_run":
@@ -308,9 +316,14 @@ class Supervisor:
         else:
             out = self.forward(name, args)
         self.counts["calls"] += 1
+        if source == "player":
+            self.last_player = max(self.last_player, self.clock())      # a long call is not silence
         self._record_call(name, args, out, round((self.clock() - began) * 1000), source)
         with self.lock:
             notes, self.notes = self.notes, []
+            wake, self.pending_wake = self.pending_wake, None
+        if wake:
+            out = self.deliver_wake(out, wake)
         if notes:
             body = out["body"] if isinstance(out["body"], dict) else {"result": out["body"]}
             out = {"isError": out["isError"], "body": {**body, "supervisor_notes": notes}}
@@ -384,22 +397,78 @@ class Supervisor:
         err, overview = self.native.call("hoi4_overview", {}) if self.native else (True, {})
         return {"run": self.run, "state": self.state, "tag": self.request.get("tag"),
                 "goal": self.request.get("goal"), "date": None if err else (overview.get("date") or {}).get("text"),
-                "paused": None if err else overview.get("paused"), "executor_on": not self.watchdog_paused,
-                "watchdog_paused": self.watchdog_paused, "minutes": round((self.clock() - self.started) / 60, 1),
+                "paused": None if err else overview.get("paused"), "executor_on": not self.idle_paused,
+                "idle_paused": self.idle_paused, "idle_pause_minutes": self.idle_minutes(),
+                "minutes": round((self.clock() - self.started) / 60, 1),
                 **self.counts}
 
     # ------------------------------------------------------------------------------------------ background
-    def resume_after_watchdog(self):
+    def idle_minutes(self):
+        """The idle pause in minutes, or None when it is switched off."""
+        seconds = self.idle_limit()
+        return None if seconds is None else round(seconds / 60.0, 2)
+
+    def idle_limit(self):
+        """Seconds without a player call before the idle pause, or None when it is switched off. The run's
+        settings file is read each time, so the user can change it during a run."""
+        if self.idle_pause_override is not None:
+            return self.idle_pause_override if self.idle_pause_override > 0 else None
+        return runs.idle_pause_seconds(self.run, IDLE_PAUSE_MINUTES)
+
+    def player_call(self, name, args, now):
+        """A player call: the idle timer starts again; an idle pause is lifted; an explicit pause is recorded."""
+        self.last_player = now
+        self.idle_woken = False
+        calls = [(name, args)]
+        if name == "hoi4_batch" and isinstance(args.get("calls"), list):
+            calls = [(c[0], c[1] if len(c) > 1 and isinstance(c[1], dict) else {})
+                     for c in args["calls"] if isinstance(c, list) and c]
+        asks_pause = any(n == "hoi4_time" and isinstance(a, dict) and a.get("paused") is True for n, a in calls)
+        if asks_pause:
+            self.counts["pause_requests"] += 1
+            self.event("pause_requested", source="player")
+        if self.idle_paused:
+            self.lift_idle_pause(keep_paused=asks_pause)
+
+    def lift_idle_pause(self, keep_paused=False):
         err, body = self.native_call("hoi4_autopilot", {"enabled": True, "interval_ms": 1000})
-        self.watchdog_paused = False
-        self.event("watchdog_resume", executor=not err)
-        self.note("the executor is on again after the watchdog pause"
+        resumed = False
+        if self.idle_paused_game and not keep_paused:
+            perr, _ = self.native_call("hoi4_time", {"paused": False})
+            resumed = not perr
+        self.idle_paused = self.idle_paused_game = False
+        self.event("idle_resume", executor=not err, game_resumed=resumed)
+        self.note("your call lifted the idle pause: the executor is on again"
                   + ("" if not err else " (it refused: %s)" % error_code(body))
-                  + "; unpause with hoi4_time {\"paused\":false,\"speed\":3} if the game is paused")
+                  + (" and the game runs again" if resumed else ""))
         self.status()
 
+    def deliver_wake(self, out, wake):
+        """The idle wake as a feed change (wake_player, what the brief already reacts to) on a feed reply."""
+        body = out["body"] if isinstance(out["body"], dict) else {"result": out["body"]}
+        if isinstance(body.get("changes"), list):
+            body = {**body, "changes": body["changes"] + [{"kind": "wake_player", "urgent": True, "detail": wake}]}
+        notes = list(body.get("supervisor_notes") or []) + [wake["message"]]
+        return {"isError": out["isError"], "body": {**body, "supervisor_notes": notes}}
+
     def watchdog(self, now):
-        if self.watchdog_paused or now - self.last_player <= self.idle_pause:
+        """The idle guard (see the module docstring). True when it paused on this tick."""
+        limit = self.idle_limit()
+        if limit is None or self.idle_paused:
+            return False
+        idle = now - self.last_player
+        if not self.idle_woken and idle >= limit / 2.0:
+            self.idle_woken = True
+            self.counts["idle_wakes"] += 1
+            wake = {"code": "wake_player", "rule": "supervisor", "reason": "idle",
+                    "message": "no call from you for %d minutes: the game keeps running; the supervisor pauses it "
+                               "after %d minutes without a call" % (idle // 60, round(limit / 60.0)),
+                    "evidence": {"idle_seconds": round(idle), "idle_pause_seconds": round(limit)}}
+            with self.lock:
+                self.pending_wake = wake
+            self.event("idle_wake", idle=round(idle), limit=round(limit))
+            self.status()
+        if idle < limit:
             return False
         self.native_call("hoi4_autopilot", {"enabled": False})
         err, overview = self.native.call("hoi4_overview", {})
@@ -407,11 +476,14 @@ class Supervisor:
         if not err and overview.get("paused") is False:
             perr, _ = self.native_call("hoi4_time", {"paused": True})
             paused = not perr
-        self.watchdog_paused = True
-        self.counts["watchdog_pauses"] += 1
-        self.event("watchdog_pause", idle=round(now - self.last_player), game_paused=paused)
-        self.note("no call from you for %d minutes: the supervisor turned the executor off%s"
-                  % ((now - self.last_player) // 60, " and paused the game" if paused else ""))
+        date = None if err else (overview.get("date") or {}).get("text")
+        self.idle_paused, self.idle_paused_game = True, paused
+        self.counts["idle_pauses"] += 1
+        reason = "no player call for %d minutes (idle pause at %d minutes)" % (idle // 60, round(limit / 60.0))
+        self.event("idle_pause", idle=round(idle), limit=round(limit), game_paused=paused, date=date,
+                   at=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now)), reason=reason)
+        self.note("%s: the supervisor turned the executor off%s; your next call lifts the pause"
+                  % (reason, " and paused the game" if paused else ""))
         self.status()
         return True
 
@@ -442,7 +514,7 @@ class Supervisor:
         if not err and isinstance(feed, dict):
             self.feed_seq = feed.get("seq", self.feed_seq)
             for change in feed.get("changes") or []:
-                if change.get("kind") == "autopilot_stopped" and not self.watchdog_paused:
+                if change.get("kind") == "autopilot_stopped" and not self.idle_paused:
                     self.counts["executor_stops"] += 1
                     self.event("executor_stopped", detail=change.get("detail"))
                     self.note("the executor stopped (%s); the plan's routine work waits until it is on again "
@@ -559,7 +631,9 @@ def main(argv=None):
     parser.add_argument("--prefix", required=True)
     parser.add_argument("--run", required=True)
     parser.add_argument("--native", required=True)
-    parser.add_argument("--idle-pause", type=int, default=int(os.environ.get("HOI4_LIVE_IDLE_PAUSE", IDLE_PAUSE)))
+    # Seconds, for live checks only; a run's own setting is idle_pause_minutes in its settings.json.
+    override = os.environ.get("HOI4_LIVE_IDLE_PAUSE")
+    parser.add_argument("--idle-pause", type=int, default=int(override) if override else None)
     args = parser.parse_args(argv)
     run = os.path.abspath(args.run)
     native_args = [args.native, "--session", os.path.join(run, "session.json"), "--mac-input", run]

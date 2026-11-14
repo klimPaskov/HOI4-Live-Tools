@@ -3,7 +3,7 @@
     runs        the run folder: private files, the active-run pointer, the brief, the user-file check
     game        find the user's game process, ask Steam to start it, the display the runtime needs
     native      one native runtime process spoken to over JSON-RPC on its standard streams
-    supervisor  the background owner of a run: lease, executor, duplicate guard, watchdog, clean stop
+    supervisor  the background owner of a run: lease, executor, duplicate guard, idle guard, clean stop
     proxy       the `hoi4-live-play` MCP server the coding client starts; forwards to the supervisor
     report      the end-of-run report
     start       the macOS start path of `hoi4-live play`

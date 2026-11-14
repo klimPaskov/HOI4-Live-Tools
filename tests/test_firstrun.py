@@ -107,7 +107,10 @@ class PlayTests(unittest.TestCase):
         self.assertEqual((plan["tag"], goal), ("ITA", "conquer Ethiopia"))
         self.assertIn("{PLAN_BRIEF}", template)
         self.assertEqual((options["launch"], options["wait_minutes"]), (True, 3))
+        self.assertEqual(options["idle_pause_minutes"], 15)
         self.assertIn("native start", text)
+        self.play("ITA", "conquer Ethiopia", facts("macos"), idle_pause_minutes=0)
+        self.assertEqual(self.started[0][3]["idle_pause_minutes"], 0)
 
     def test_a_strategist_folder_is_played_instead_of_a_shipped_plan(self):
         folder = os.path.join(self.prefix, "strat")

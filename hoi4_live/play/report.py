@@ -3,7 +3,7 @@
     calls.jsonl         every call the supervisor answered (no tokens)
     game-actions.jsonl  the native runtime's action journal: one terminal receipt per action
     native.stderr       the runtime's [action] lines (self_pause, restored)
-    supervisor.log      starts, waits, watchdog pauses, executor stops, the end
+    supervisor.log      starts, waits, idle wakes and pauses, pause requests, executor stops, the end
 """
 
 import collections
@@ -52,6 +52,32 @@ def self_pauses(run):
     return paused, restored
 
 
+def idle_pauses(events):
+    """One line per idle pause: when, the game date, why, and when the next player call lifted it."""
+    lines, paused = [], None
+    for e in events:
+        if e.get("event") == "idle_pause":
+            paused = e
+        elif e.get("event") == "idle_resume" and paused:
+            lines.append(_idle_line(paused, e))
+            paused = None
+    if paused:
+        lines.append(_idle_line(paused, None))
+    return lines
+
+
+def _idle_line(pause, resume):
+    if resume is None:
+        lifted = "still paused when the run ended"
+    else:
+        lifted = "lifted %.1f minutes later by the next player call%s" % (
+            (resume.get("t", 0) - pause.get("t", 0)) / 60.0,
+            " (the game was running again)" if resume.get("game_resumed") else "")
+    return "- %s (game date %s): %s; %s; %s" % (
+        pause.get("at") or "?", pause.get("date") or "?", pause.get("reason") or "no player call",
+        "the game was paused" if pause.get("game_paused") else "the game was already paused", lifted)
+
+
 def build(run, reason, counts, final, started, ended):
     request = runs.read_json(os.path.join(run, "request.json")) or {}
     calls = _jsonl(os.path.join(run, "calls.jsonl"))
@@ -75,7 +101,9 @@ def build(run, reason, counts, final, started, ended):
         "- Player calls: %d (%d distinct tools)" % (sum(tools.values()), len(tools)),
         "- Identical actions refused as already done: %d" % counts.get("already_done", 0),
         "- Game brought to the front before an action: %d" % counts.get("front", 0),
-        "- Watchdog pauses (no player call for five minutes): %d" % counts.get("watchdog_pauses", 0),
+        "- Idle wakes raised (half the idle pause without a player call): %d" % counts.get("idle_wakes", 0),
+        "- Idle pauses (the idle pause reached without a player call): %d" % counts.get("idle_pauses", 0),
+        "- Pauses the player asked for: %d" % counts.get("pause_requests", 0),
         "- Executor stops reported by the runtime: %d" % counts.get("executor_stops", 0),
         "- Self-pauses recorded by the runtime: %d (%d restored at once)" % (paused, restored),
     ]
@@ -83,6 +111,9 @@ def build(run, reason, counts, final, started, ended):
         lines.append("- Most used: " + ", ".join("%s %d" % kv for kv in tools.most_common(8)))
     if failed:
         lines.append("- Errors by code: " + ", ".join("%s %d" % kv for kv in failed.most_common(8)))
+    paused_lines = idle_pauses(events)
+    if paused_lines:
+        lines += ["", "## Idle pauses", ""] + paused_lines
     lines += ["", "## Action receipts", ""]
     if got:
         lines += ["- %s: %d" % (name, got.get(name, 0)) for name in RECEIPTS]
