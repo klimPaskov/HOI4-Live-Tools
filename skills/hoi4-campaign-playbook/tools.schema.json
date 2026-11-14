@@ -2962,7 +2962,7 @@
    "source": "--list-tools"
   },
   "hoi4_naval_production_options": {
-   "description": "Read-only (memory, no input): the ship and convoy designs the Production panel can build (not decommissioned) with their equipment keys and existing lines, and the own naval production lines with their line index and dockyard count. Use the equipment key and optional design id with hoi4_production_add; ship and convoy lines are added through the Production panel's naval category.",
+   "description": "Read-only (memory, no input): the ship and convoy designs the Production panel can build (not decommissioned) with their equipment keys and existing lines, and the own naval production lines with their line index and dockyard count; each design and line says whether it builds convoys (`convoy`). Use the equipment key and optional design id with hoi4_production_add; ship and convoy lines are added through the Production panel's naval category.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},

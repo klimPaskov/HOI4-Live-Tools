@@ -222,6 +222,13 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   supply.overdrawn         (warning) manage.overdrawn_floor below the supply where attrition starts
                            (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION): an overdrawn stack is thinned only after attrition
                            already bites; or the overdrawn rule switched off in a plan at war with no why naming it
+  manage.convoys           the plan relies on sea supply (a port it builds or relies on, an overseas army), no
+                           production line builds convoys and the convoy rule cannot build any: the rule is in
+                           manage.off or manage.convoys_free is 0, or the country has no dockyard at the start and
+                           builds none (the rule only puts idle dockyards on convoys)
+  manage.fuel              (warning) manage.fuel_floor below the game's FUEL_PENALTY_START_RATIO (the armies fight
+                           with the out-of-fuel penalty before the rule reacts); a fuel_floor the plan sets while
+                           auto_import allows no import (the rule can only wake the player)
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: var, mission_days, surrender_progress,
@@ -399,7 +406,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
              "politics.law_gates", "diplomacy.incoming", "occupation.required", "occupation.law_shown", "peace.enemies",
              "manage.thresholds", "production.replace",
-             "designs.decommission", "air.deploy", "supply.overdrawn",
+             "designs.decommission", "air.deploy", "supply.overdrawn", "manage.convoys", "manage.fuel",
              "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
@@ -2832,6 +2839,52 @@ class Lint:
                      "the overdrawn rule is off in a plan at war and manage.why does not say why: divisions stacked in "
                      "an overdrawn province all starve alike")
 
+    def manage_convoys(self):
+        """manage.convoys: sea supply with no convoy line rests on the convoy rule, which only puts idle dockyards on
+        convoys: it must be on, with a share above 0, and the country must have a dockyard."""
+        m = self.plan.get("manage")
+        if not isinstance(m, dict) or self.convoy_item():
+            return
+        ports = {b for b, r in derive.building_costs(self.game).items() if r["port"]}
+        st = self.plan.get("sea_transfer") if isinstance(self.plan.get("sea_transfer"), dict) else {}
+        if not ({s for _, b, s in self.queued() if b in ports} or _ints(st.get("ports")) or self.overseas()):
+            return
+        off = m.get("off") if isinstance(m.get("off"), list) else []
+        share = m.get("convoys_free", 0.1)
+        if "convoys" in off or share == 0:
+            why = "convoys is in manage.off" if "convoys" in off else "manage.convoys_free is 0"
+            self.add("error", "manage.convoys", "manage",
+                     f"the plan supplies by sea with no convoy production line and {why}: nothing builds convoys")
+            return
+        docks = self.facts.get("dockyards") or {}
+        if docks and not docks.get("start") and not docks.get("planned"):
+            self.add("error", "manage.convoys", "manage.convoys_free",
+                     f"the plan supplies by sea with no convoy production line, and {self.tag} has no dockyard at the "
+                     f"start and builds none: the convoy rule only puts idle dockyards on convoys, so it can only wake "
+                     f"the player (trade for convoys, or build a dockyard)")
+
+    def manage_fuel(self):
+        """manage.fuel: the fuel floor against the game's penalty ratio, and a floor with no import allowed."""
+        m = self.plan.get("manage")
+        if not isinstance(m, dict) or "fuel" in (m.get("off") if isinstance(m.get("off"), list) else []):
+            return
+        floor = m.get("fuel_floor")
+        if not isinstance(floor, (int, float)) or isinstance(floor, bool):
+            return
+        floor = floor / 100.0 if floor > 1 else floor
+        penalty = derive.define(self.game, "FUEL_PENALTY_START_RATIO", None)
+        if isinstance(penalty, (int, float)) and floor < penalty:
+            self.add("warning", "manage.fuel", "manage.fuel_floor",
+                     f"fuel_floor {floor:g} is below the game's FUEL_PENALTY_START_RATIO {penalty:g}: the armies fight "
+                     f"with the out-of-fuel penalty before the rule imports oil")
+        auto = self.plan.get("auto_import")
+        allowed = auto is True or (isinstance(auto, int) and not isinstance(auto, bool)) or (
+            isinstance(auto, dict) and auto.get("enabled") is not False)
+        if not allowed:
+            self.add("warning", "manage.fuel", "manage.fuel_floor",
+                     "fuel_floor is set but auto_import allows no import: below the floor the rule can only wake the "
+                     "player (set auto_import, or plan oil trade and refineries)")
+
     def alarm_blocks(self):
         """[(label, alarms object)]: the base alarms and those of phase and contingency overrides."""
         out = [("alarms", self.plan.get("alarms"))]
@@ -4379,6 +4432,7 @@ class Lint:
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
                  self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.air_deploy, self.templates, self.laws, self.incoming, self.occupation, self.peace, self.manage, self.supply_overdrawn,
+                 self.manage_convoys, self.manage_fuel,
                  self.alarms_silenced,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus

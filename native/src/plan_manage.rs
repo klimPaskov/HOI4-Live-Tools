@@ -69,7 +69,9 @@
 //!                    is set; else hoi4_resources shortages) turns automatic importing on with the
 //!                    budget through hoi4_auto_import, once per budget; a deficit that outlasts
 //!                    `manage.deficit_wake_days` (14) with it on, or any deficit without auto_import
-//!                    (or enabled:false), wakes the player
+//!                    (or enabled:false), wakes the player. With a `budget`, a civilian factory count
+//!                    that moved by `budget_step` (2) since the last check re-reads the view and
+//!                    sends the budget again when the game has cut it (EC27, every 7 game days)
 //!   air_plan         [{"wing"?|"airframe"+"version"?,"region","mission","base_state"?|"base_region"?,
 //!                    "when"?,"switch_when"?,"then_region"?,"then_mission"?|"fallback_mission"?}] every 3
 //!                    game days from hoi4_air: each matching wing (exact `wing`, else every wing of that
@@ -107,7 +109,13 @@
 //!                    only when the plan has it, the resource rule also with `auto_import`, the alerts
 //!                    and the ledger always):
 //!                    "off":["alerts","ledger","manpower","stability","equipment_fill","resources",
-//!                    "stockpile","trucks","overdrawn"] switches rules off; "wake_repeat_days":7 one wake per reason;
+//!                    "stockpile","trucks","overdrawn","convoys","fuel"] switches rules off;
+//!                    "convoys_free":0.1 free convoys (hoi4_convoys) below that share of the stock, or a
+//!                    need above the stock, put idle dockyards on the convoy line (or a new line of
+//!                    the newest convoy design), every 3 game days; no idle dockyard wakes the player;
+//!                    "fuel_floor":0.25 fuel below that share of the capacity (hoi4_resources) turns
+//!                    auto-import on, once a game day; no auto_import, or fuel still low after
+//!                    "deficit_wake_days", wakes the player; "wake_repeat_days":7 one wake per reason;
 //!                    "alerts_ignore":[alert names]; "alert_persist_days":14;
 //!                    "manpower_months":2 free manpower below that many months of losses (hoi4_war_stats)
 //!                    takes the next enabled law of "conscription_laws" in government slot 0 (the next
@@ -188,6 +196,12 @@ pub(super) struct Memory {
     pp_reads: HashMap<String, SlotRead>,
     /// `politics_auto`: per category, when its seats were last listed and the vacant ones.
     pp_vacant: HashMap<String, (GameHour, Vec<i64>)>,
+    /// Since when the fuel stock has been below `manage.fuel_floor`.
+    fuel_low_since: Option<GameHour>,
+    /// Since when free convoys have been below `manage.convoys_free` of the stock.
+    convoys_low_since: Option<GameHour>,
+    /// Civilian factories (hoi4_economy) at the last auto-import budget check.
+    import_civs: Option<i64>,
     /// Divisions pulled out of overdrawn provinces: their new army and where it goes.
     spread: Vec<Spread>,
 }
@@ -379,6 +393,15 @@ pub fn step(
         return Ok(Some(done));
     }
     if let Some(done) = resources_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = import_budget_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = fuel_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = convoy_rule(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
     if let Some(done) = air_plan_step(state, tools, plan, lease, now)? {
@@ -1465,13 +1488,7 @@ fn resources_step(
     let since = *state.manage.deficit_since.get_or_insert(now);
     let deficit = short.iter().cloned().collect::<Vec<_>>().join("/");
     let evidence = json!({"short_of": short, "lines": lines, "since_hour": since});
-    let cfg = &plan["auto_import"];
-    let (allowed, budget) = match cfg {
-        Value::Bool(on) => (*on, None),
-        Value::Number(n) => (true, n.as_i64()),
-        Value::Object(_) => (cfg["enabled"] != json!(false), cfg["budget"].as_i64()),
-        _ => (false, None),
-    };
+    let (allowed, budget) = import_cfg(plan);
     if !allowed {
         note(
             state,
@@ -1490,16 +1507,7 @@ fn resources_step(
         return Ok(None);
     }
     let shown = budget.map_or_else(|| "the game's".to_string(), |b| b.to_string());
-    let key = format!("imp:on:{shown}");
-    if !state.done.contains_key(&key) {
-        let mut args = json!({"enabled": true});
-        if let Some(b) = budget {
-            args["budget"] = json!(b);
-        }
-        let (ok, why) = state.act(tools, lease, "hoi4_auto_import", args, "ai")?;
-        if ok {
-            state.done.insert(key, now);
-        }
+    if let Some((ok, why)) = import_on(state, tools, plan, lease, now)? {
         note(
             state,
             "resources",
@@ -1533,6 +1541,404 @@ fn resources_step(
         );
     }
     Ok(None)
+}
+
+/// The plan's auto-import: (allowed, budget). `auto_import` true, a budget number, or an object
+/// {budget?, enabled?}; anything else (absent, false, enabled:false) allows no import.
+fn import_cfg(plan: &Value) -> (bool, Option<i64>) {
+    let cfg = &plan["auto_import"];
+    match cfg {
+        Value::Bool(on) => (*on, None),
+        Value::Number(n) => (true, n.as_i64()),
+        Value::Object(_) => (cfg["enabled"] != json!(false), cfg["budget"].as_i64()),
+        _ => (false, None),
+    }
+}
+
+/// Turn automatic importing on with the plan's budget, once per budget (done-memory
+/// `imp:on:<budget>`, shared by every rule that needs imports). None when it was done already.
+fn import_on(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<(bool, String)>> {
+    let (_, budget) = import_cfg(plan);
+    let shown = budget.map_or_else(|| "the game's".to_string(), |b| b.to_string());
+    let key = format!("imp:on:{shown}");
+    if state.done.contains_key(&key) {
+        return Ok(None);
+    }
+    let mut args = json!({"enabled": true});
+    if let Some(b) = budget {
+        args["budget"] = json!(b);
+    }
+    let (ok, why) = state.act(tools, lease, "hoi4_auto_import", args, "ai")?;
+    if ok {
+        state.done.insert(key, now);
+    }
+    Ok(Some((ok, why)))
+}
+
+/// EC27: the game lowers the automatic-import budget when usable civilian factories fall and never
+/// raises it again, so a budget cut by bombing or a lost state silently stops covering deficits.
+/// While the plan's auto-import has a `budget`, every 7 game days: when the civilian factory count
+/// (hoi4_economy) has moved by `auto_import.budget_step` (2) or more since the last check (the first
+/// check always reads), hoi4_auto_import is read, and a budget below the plan's (no more than the
+/// factories the view says are available, never less than the budget it holds) is sent again.
+fn import_budget_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let (allowed, budget) = import_cfg(plan);
+    let Some(want) = budget.filter(|_| allowed) else {
+        return Ok(None);
+    };
+    if off(plan, "resources") || state.skipped(now, "mimpb", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mimpb", "x", 7 * DAY);
+    let Some(civs) = tools
+        .call("hoi4_economy", &json!({}))
+        .ok()
+        .and_then(|e| e["factory_trigger_count"]["civilian"].as_i64())
+    else {
+        note(
+            state,
+            "import_budget",
+            "unknown: hoi4_economy gave no civilian factory count",
+        );
+        return Ok(None);
+    };
+    let step = plan["auto_import"]["budget_step"]
+        .as_i64()
+        .filter(|n| *n > 0)
+        .unwrap_or(2);
+    if let Some(last) = state.manage.import_civs {
+        if (civs - last).abs() < step {
+            note(
+                state,
+                "import_budget",
+                format!("{civs} civilian factories ({last} at the last check, step {step}): budget not re-read"),
+            );
+            return Ok(None);
+        }
+    }
+    let Ok(read) = tools.call("hoi4_auto_import", &json!({"lease_token": lease})) else {
+        note(
+            state,
+            "import_budget",
+            "unknown: hoi4_auto_import unreadable",
+        );
+        return Ok(None);
+    };
+    state.manage.import_civs = Some(civs);
+    let auto = &read["auto_import"];
+    if auto["enabled"] != json!(true) {
+        note(
+            state,
+            "import_budget",
+            "automatic importing is off: no budget to keep (the resources rule turns it on on a deficit)",
+        );
+        return Ok(None);
+    }
+    let Some(have) = auto["budget_factories"].as_i64() else {
+        note(
+            state,
+            "import_budget",
+            "unknown: hoi4_auto_import gave no budget",
+        );
+        return Ok(None);
+    };
+    let wanted = auto["available_factories"]
+        .as_i64()
+        .map_or(want, |available| want.min(available.max(have)));
+    if have >= wanted {
+        note(
+            state,
+            "import_budget",
+            format!("budget {have} of the plan's {want} ({civs} civilian factories)"),
+        );
+        return Ok(None);
+    }
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_auto_import",
+        json!({"budget": wanted}),
+        "ab",
+    )?;
+    note(
+        state,
+        "import_budget",
+        format!("budget {have} -> {wanted} (plan {want}, {civs} civilian factories): {ok}"),
+    );
+    Ok(Some(format!(
+        "auto_import budget {have} -> {wanted}: {ok} {why}"
+    )))
+}
+
+/// Rule 26 / W3-10: fuel below `manage.fuel_floor` (0.25 of the capacity, the game's
+/// FUEL_PENALTY_START_RATIO by default) turns automatic importing on (oil covers fuel), once a
+/// game day from hoi4_resources fuel.ratio. A plan that allows no auto_import wakes the player at
+/// once; with imports on, fuel still below the floor after `manage.deficit_wake_days` (14) wakes
+/// the player (training missions, refineries and trade are judgement).
+fn fuel_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let m = &plan["manage"];
+    if !m.is_object() || off(plan, "fuel") || state.skipped(now, "mfuel", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mfuel", "x", DAY);
+    let floor = fraction(&m["fuel_floor"], 0.25);
+    let Some(ratio) = tools
+        .call("hoi4_resources", &json!({}))
+        .ok()
+        .and_then(|r| r["fuel"]["ratio"].as_f64())
+    else {
+        note(state, "fuel", "unknown: hoi4_resources gave no fuel ratio");
+        return Ok(None);
+    };
+    let shown = round3(ratio);
+    if ratio >= floor {
+        state.manage.fuel_low_since = None;
+        note(
+            state,
+            "fuel",
+            format!("{shown} of capacity (floor {floor})"),
+        );
+        return Ok(None);
+    }
+    let since = *state.manage.fuel_low_since.get_or_insert(now);
+    let evidence = json!({"fuel_ratio": shown, "floor": floor, "since_hour": since});
+    if !import_cfg(plan).0 {
+        note(
+            state,
+            "fuel",
+            format!("{shown} below {floor}; auto_import not allowed by the plan: player woken"),
+        );
+        wake(
+            state,
+            plan,
+            now,
+            26,
+            "fuel_low",
+            format!("fuel is at {shown} of capacity, below the floor {floor}, and the plan allows no auto_import: import oil, cut training missions or build refineries"),
+            evidence,
+        );
+        return Ok(None);
+    }
+    if let Some((ok, why)) = import_on(state, tools, plan, lease, now)? {
+        note(
+            state,
+            "fuel",
+            format!("{shown} below {floor}: auto-import on (oil covers fuel): {ok}"),
+        );
+        return Ok(Some(format!(
+            "fuel {shown} below {floor}: auto_import on: {ok} {why}"
+        )));
+    }
+    let days = plan["manage"]["deficit_wake_days"]
+        .as_i64()
+        .filter(|d| *d > 0)
+        .unwrap_or(14);
+    note(
+        state,
+        "fuel",
+        format!(
+            "{shown} below {floor} for {} days, auto-import on",
+            (now - since) / DAY
+        ),
+    );
+    if now - since >= days * DAY {
+        wake(
+            state,
+            plan,
+            now,
+            26,
+            "fuel_low",
+            format!("fuel has stayed below {floor} of capacity for {} game days with auto-import on: cut training missions, build refineries or trade for oil", (now - since) / DAY),
+            evidence,
+        );
+    }
+    Ok(None)
+}
+
+/// Rule 20 / W1-14: free convoys (hoi4_convoys) below `manage.convoys_free` (0.1) of the stock (or
+/// of what the game needs, when it needs more than the stock), or a need above the stock, put idle
+/// dockyards on convoys every 3 game days: `manage.rebalance_step` (3) more on the convoy line with
+/// the fewest dockyards, else a new line of the newest buildable convoy design. Which equipment is
+/// a convoy comes from hoi4_naval_production_options (`convoy` of its designs and lines); idle
+/// dockyards are hoi4_economy's naval factories minus the naval lines' requests. With no idle
+/// dockyard (taking one from a warship line is a decision), no convoy design, or a shortage that
+/// outlasts `manage.deficit_wake_days`, the player is woken.
+fn convoy_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let m = &plan["manage"];
+    if !m.is_object() || off(plan, "convoys") || state.skipped(now, "mconvoy", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mconvoy", "x", 3 * DAY);
+    let share = fraction(&m["convoys_free"], 0.1);
+    let read = tools.call("hoi4_convoys", &json!({})).ok();
+    let counts = read.as_ref().map(|r| &r["convoys"]);
+    let (Some(total), Some(free)) = (
+        counts.and_then(|c| c["total"].as_f64()),
+        counts.and_then(|c| c["free"].as_f64()),
+    ) else {
+        note(
+            state,
+            "convoys",
+            "unknown: hoi4_convoys gave no convoy counts",
+        );
+        return Ok(None);
+    };
+    let needed = counts.and_then(|c| c["needed"].as_f64()).unwrap_or(0.0);
+    let floor = (share * total.max(needed)).ceil();
+    if free >= floor && needed <= total {
+        state.manage.convoys_low_since = None;
+        note(
+            state,
+            "convoys",
+            format!("{free} free of {total} (floor {floor}, needed {needed})"),
+        );
+        return Ok(None);
+    }
+    let since = *state.manage.convoys_low_since.get_or_insert(now);
+    let mut evidence = json!({"free": free, "total": total, "needed": needed, "share": share,
+        "floor": floor, "since_hour": since});
+    let low = format!("{free} free of {total} (floor {floor}, needed {needed})");
+    let wake_days = m["deficit_wake_days"]
+        .as_i64()
+        .filter(|d| *d > 0)
+        .unwrap_or(14);
+    if now - since >= wake_days * DAY {
+        wake(
+            state,
+            plan,
+            now,
+            20,
+            "convoys_low",
+            format!("convoys have been short for {} game days: {low}; escorts, routes or more dockyards are a decision", (now - since) / DAY),
+            evidence.clone(),
+        );
+    }
+    let Ok(options) = tools.call("hoi4_naval_production_options", &json!({})) else {
+        note(
+            state,
+            "convoys",
+            format!("{low}; hoi4_naval_production_options unreadable"),
+        );
+        return Ok(None);
+    };
+    let Some(dockyards) = tools
+        .call("hoi4_economy", &json!({}))
+        .ok()
+        .and_then(|e| e["factory_trigger_count"]["naval"].as_i64())
+    else {
+        note(
+            state,
+            "convoys",
+            format!("{low}; hoi4_economy gave no dockyard count"),
+        );
+        return Ok(None);
+    };
+    let lines = list(&options, "naval_lines");
+    let used: i64 = lines
+        .iter()
+        .filter_map(|l| l["requested_factories"].as_i64())
+        .sum();
+    let idle = dockyards - used;
+    evidence["idle_dockyards"] = json!(idle);
+    if idle <= 0 {
+        note(
+            state,
+            "convoys",
+            format!("{low}; no idle dockyard ({dockyards} all on lines): player woken"),
+        );
+        wake(
+            state,
+            plan,
+            now,
+            20,
+            "convoys_low",
+            format!("convoys are short ({low}) and every dockyard is on a line: which line gives way to convoys is a decision"),
+            evidence,
+        );
+        return Ok(None);
+    }
+    let step = m["rebalance_step"].as_i64().filter(|n| *n > 0).unwrap_or(3);
+    let give = idle.min(step);
+    let line = lines
+        .iter()
+        .filter(|l| l["convoy"] == json!(true) && l["line_index"].is_i64())
+        .min_by_key(|l| l["requested_factories"].as_i64().unwrap_or(0));
+    let (ok, why, what) = if let Some(l) = line {
+        let equipment = text(&l["equipment"]).to_string();
+        let has = l["requested_factories"].as_i64().unwrap_or(0);
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_production_set",
+            json!({"line": l["line_index"], "equipment": equipment, "factories": has + give}),
+            "cv",
+        )?;
+        (ok, why, format!("{equipment} line {has}+{give}"))
+    } else {
+        let design = list(&options, "designs")
+            .iter()
+            .filter(|d| d["convoy"] == json!(true) && !text(&d["equipment"]).is_empty())
+            .max_by_key(|d| d["design_id"].as_i64().unwrap_or(0));
+        let Some(design) = design else {
+            note(
+                state,
+                "convoys",
+                format!("{low}; no buildable convoy design: player woken"),
+            );
+            wake(
+                state,
+                plan,
+                now,
+                20,
+                "convoys_low",
+                format!(
+                    "convoys are short ({low}) and the Production panel offers no convoy design"
+                ),
+                evidence,
+            );
+            return Ok(None);
+        };
+        let equipment = text(&design["equipment"]).to_string();
+        let mut args = json!({"equipment": equipment, "factories": give});
+        if design["design_id"].is_i64() {
+            args["design"] = design["design_id"].clone();
+        }
+        let (ok, why) = state.act(tools, lease, "hoi4_production_add", args, "cv")?;
+        (ok, why, format!("new {equipment} line with {give}"))
+    };
+    if !ok {
+        state.skip(now, "mconvoy", "x", 7 * DAY);
+    }
+    note(
+        state,
+        "convoys",
+        format!("{low}: {what} ({idle} idle dockyards): {ok}"),
+    );
+    Ok(Some(format!("convoys {low}: {what}: {ok} {why}")))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4144,6 +4550,255 @@ mod tests {
             json!(["chromium", "steel"])
         );
         assert_eq!(actions(&tools).len(), 1);
+    }
+
+    fn set_reply(tools: &Fake, tool: &str, v: Value) {
+        tools.replies.borrow_mut().insert(tool.to_string(), v);
+    }
+
+    #[test]
+    fn short_convoys_take_idle_dockyards_onto_the_convoy_line_or_a_new_one() {
+        let options = json!({
+            "designs": [
+                {"design_id": 7, "equipment": "convoy_1", "convoy": true},
+                {"design_id": 31, "equipment": "convoy_2", "convoy": true},
+                {"design_id": 40, "equipment": "ship_hull_light_2", "convoy": false}],
+            "naval_lines": [
+                {"line_index": 3, "equipment": "ship_hull_light_2", "convoy": false, "requested_factories": 6},
+                {"line_index": 5, "equipment": "convoy_1", "convoy": true, "requested_factories": 2}]});
+        let tools = fake(vec![
+            (
+                "hoi4_convoys",
+                json!({"convoys": {"total": 200, "in_use": 195, "free": 5, "needed": 150}}),
+            ),
+            ("hoi4_naval_production_options", options.clone()),
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"naval": 12}}),
+            ),
+        ]);
+        let plan = json!({"manage": {"convoys_free": 0.1}});
+        let mut state = State::default();
+        let out = convoy_rule(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains("convoy_1 line 2+3"));
+        let acts = actions(&tools);
+        assert_eq!(acts[0].0, "hoi4_production_set");
+        assert_eq!(acts[0].1["line"], 5);
+        assert_eq!(acts[0].1["equipment"], "convoy_1");
+        assert_eq!(acts[0].1["factories"], 5); // 12 dockyards - 8 on lines = 4 idle, step 3
+                                               // every 3 game days
+        assert_eq!(
+            convoy_rule(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        // no convoy line: a new line of the newest convoy design, never a warship
+        let mut no_line = options.clone();
+        no_line["naval_lines"] = json!([{"line_index": 3, "equipment": "ship_hull_light_2",
+            "convoy": false, "requested_factories": 10}]);
+        set_reply(&tools, "hoi4_naval_production_options", no_line);
+        let mut state = State::default();
+        convoy_rule(&mut state, &tools, &plan, "l", START).unwrap();
+        let acts = actions(&tools);
+        assert_eq!(acts[1].0, "hoi4_production_add");
+        assert_eq!(acts[1].1["equipment"], "convoy_2");
+        assert_eq!(acts[1].1["design"], 31);
+        assert_eq!(acts[1].1["factories"], 2);
+        // every dockyard on a line: the player decides which line gives way
+        let mut full = options.clone();
+        full["naval_lines"][0]["requested_factories"] = json!(10);
+        set_reply(&tools, "hoi4_naval_production_options", full);
+        let mut state = State::default();
+        assert_eq!(
+            convoy_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let alarms = wakes(&mut state);
+        assert_eq!(alarms[0]["reason"], "convoys_low");
+        assert_eq!(alarms[0]["rule"], 20);
+        assert_eq!(actions(&tools).len(), 2);
+        assert!(state.manage.notes["convoys"].contains("no idle dockyard"));
+        // enough free convoys: nothing, with the reason in the digest
+        set_reply(
+            &tools,
+            "hoi4_convoys",
+            json!({"convoys": {"total": 200, "in_use": 100, "free": 100, "needed": 100}}),
+        );
+        let mut state = State::default();
+        assert_eq!(
+            convoy_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["convoys"].starts_with("100 free of 200"));
+        // switched off
+        let mut state = State::default();
+        let plan = json!({"manage": {"off": ["convoys"]}});
+        assert_eq!(
+            convoy_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(reads(&tools, "hoi4_convoys"), 4);
+    }
+
+    #[test]
+    fn a_need_above_the_stock_is_a_shortage_even_with_free_convoys() {
+        let tools = fake(vec![
+            (
+                "hoi4_convoys",
+                json!({"convoys": {"total": 50, "in_use": 20, "free": 30, "needed": 80}}),
+            ),
+            (
+                "hoi4_naval_production_options",
+                json!({"designs": [{"design_id": 2, "equipment": "convoy_1", "convoy": true}],
+                    "naval_lines": []}),
+            ),
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"naval": 5}}),
+            ),
+        ]);
+        let mut state = State::default();
+        let plan = json!({"manage": {}});
+        assert!(convoy_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_some());
+        assert_eq!(actions(&tools)[0].1["factories"], 3);
+    }
+
+    #[test]
+    fn low_fuel_turns_auto_import_on_once_and_wakes_when_it_stays_low() {
+        let tools = fake(vec![(
+            "hoi4_resources",
+            json!({"fuel": {"stock": 1000.0, "capacity": 10000.0, "ratio": 0.1}}),
+        )]);
+        let plan = json!({"manage": {}, "auto_import": {"budget": 4}});
+        let mut state = State::default();
+        let out = fuel_rule(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains("auto_import on"));
+        let acts = actions(&tools);
+        assert_eq!(acts[0].0, "hoi4_auto_import");
+        assert_eq!(acts[0].1["enabled"], true);
+        assert_eq!(acts[0].1["budget"], 4);
+        assert!(state.done.contains_key("imp:on:4"));
+        // once a game day; imports on already; after 14 days still low the player is woken
+        assert_eq!(
+            fuel_rule(&mut state, &tools, &plan, "l", START + 2).unwrap(),
+            None
+        );
+        assert_eq!(reads(&tools, "hoi4_resources"), 1);
+        assert_eq!(
+            fuel_rule(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert!(wakes(&mut state).is_empty());
+        assert_eq!(
+            fuel_rule(&mut state, &tools, &plan, "l", START + 14 * DAY).unwrap(),
+            None
+        );
+        let alarms = wakes(&mut state);
+        assert_eq!(alarms[0]["reason"], "fuel_low");
+        assert_eq!(alarms[0]["rule"], 26);
+        assert_eq!(actions(&tools).len(), 1);
+        // the resources rule's import counts: no second import action
+        let mut state = State::default();
+        state.done.insert("imp:on:4".into(), START);
+        assert_eq!(
+            fuel_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["fuel"].contains("auto-import on"));
+        // no auto_import: wake at once, never import
+        let mut state = State::default();
+        let plan = json!({"manage": {"fuel_floor": 25}});
+        assert_eq!(
+            fuel_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(wakes(&mut state)[0]["reason"], "fuel_low");
+        assert_eq!(actions(&tools).len(), 1);
+        // above the floor: nothing, the ratio in the digest
+        set_reply(&tools, "hoi4_resources", json!({"fuel": {"ratio": 0.6}}));
+        let mut state = State::default();
+        assert_eq!(
+            fuel_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(wakes(&mut state).is_empty());
+        assert_eq!(state.manage.notes["fuel"], "0.6 of capacity (floor 0.25)");
+    }
+
+    #[test]
+    fn a_cut_import_budget_is_sent_again_when_civilian_factories_move() {
+        let tools = fake(vec![
+            (
+                "hoi4_economy",
+                json!({"factory_trigger_count": {"civilian": 30}}),
+            ),
+            (
+                "hoi4_auto_import",
+                json!({"auto_import": {"enabled": true, "budget_factories": 4, "available_factories": 20}}),
+            ),
+        ]);
+        let plan = json!({"auto_import": {"budget": 10}});
+        let mut state = State::default();
+        let out = import_budget_rule(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains("budget 4 -> 10"));
+        let acts = actions(&tools);
+        assert_eq!(acts[0].0, "hoi4_auto_import");
+        assert_eq!(
+            acts[0].1,
+            json!({"budget": 10, "request_id": acts[0].1["request_id"],
+            "lease_token": "l"})
+        );
+        // weekly, and only when the civilian count moved by budget_step (2)
+        set_reply(
+            &tools,
+            "hoi4_economy",
+            json!({"factory_trigger_count": {"civilian": 31}}),
+        );
+        assert_eq!(
+            import_budget_rule(&mut state, &tools, &plan, "l", START + 7 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(reads(&tools, "hoi4_auto_import"), 2); // one read, one action
+        assert!(state.manage.notes["import_budget"].contains("budget not re-read"));
+        // fewer factories available than the plan's budget: no more than they allow
+        set_reply(
+            &tools,
+            "hoi4_economy",
+            json!({"factory_trigger_count": {"civilian": 25}}),
+        );
+        set_reply(
+            &tools,
+            "hoi4_auto_import",
+            json!({"auto_import": {"enabled": true, "budget_factories": 4, "available_factories": 6}}),
+        );
+        import_budget_rule(&mut state, &tools, &plan, "l", START + 14 * DAY).unwrap();
+        assert_eq!(actions(&tools)[1].1["budget"], 6);
+        // auto-import off, or a plan without a budget: no budget action
+        set_reply(
+            &tools,
+            "hoi4_auto_import",
+            json!({"auto_import": {"enabled": false, "budget_factories": 0}}),
+        );
+        let mut state = State::default();
+        assert_eq!(
+            import_budget_rule(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["import_budget"].contains("is off"));
+        let mut state = State::default();
+        assert_eq!(
+            import_budget_rule(
+                &mut state,
+                &tools,
+                &json!({"auto_import": true}),
+                "l",
+                START
+            )
+            .unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 2);
     }
 
     fn air_read() -> Value {

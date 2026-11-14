@@ -2313,14 +2313,18 @@
    "playbook": [
     "economy-build-orders.md#15 Tactics (EC27)"
    ],
-   "plan": [],
+   "plan": [
+    "auto_import.budget",
+    "auto_import.budget_step"
+   ],
    "tools": [
-    "hoi4_auto_import"
+    "hoi4_auto_import",
+    "hoi4_economy"
    ],
    "payoff": "medium",
    "why": "a shrunken budget silently stops covering deficits mid-war",
-   "closing": "offline",
-   "owner": "offline: re-send the auto-import budget when the usable civilian factories change by more than a step"
+   "closing": "live",
+   "owner": "live: plan_manage.rs import_budget_rule re-sends auto_import.budget when the civilian factory count moved by auto_import.budget_step and the game cut the budget; validate on a run that loses civilian factories"
   },
   {
    "id": "trade.manual_purchase",
@@ -5084,13 +5088,12 @@
    ],
    "tools": [
     "hoi4_resources",
-    "hoi4_country_status",
     "hoi4_auto_import"
    ],
    "payoff": "medium",
    "why": "out-of-fuel armour fights at 10% and moves at 40%",
-   "closing": "offline",
-   "owner": "offline: W3-10, the manage rule for manage.fuel_floor (stop exercises, import oil)"
+   "closing": "live",
+   "owner": "live: the manage fuel rule (plan_manage.rs fuel_rule, lint manage.fuel) turns auto-import on below manage.fuel_floor and wakes the player when fuel stays low; validate that auto-import raises the fuel stock (oil covers fuel)"
   },
   {
    "id": "air.superiority_over_front",
@@ -5707,14 +5710,16 @@
    ],
    "tools": [
     "hoi4_convoys",
+    "hoi4_naval_production_options",
+    "hoi4_economy",
     "hoi4_production_add",
-    "hoi4_naval_production_options"
+    "hoi4_production_set"
    ],
-   "verified": "hoi4_convoys LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC; convoy_1 line via executor production: live day log 14 Nov (sk6, sk9 production_add Verified)",
+   "evidence": "tools only, not the convoy rule: hoi4_convoys LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC; convoy_1 line via executor production: live day log 14 Nov (sk6, sk9 production_add Verified)",
    "payoff": "high",
    "why": "Overseas supply, trade and transfers all draw on convoys",
-   "closing": "offline",
-   "owner": "offline: W1-14, the manage rule that adds a convoy line when free convoys fall below the plan's share (manage.convoys_free is read by nobody yet)"
+   "closing": "live",
+   "owner": "live: the manage convoy rule (plan_manage.rs convoy_rule, lint manage.convoys) puts idle dockyards on the convoy line or a new convoy line when free convoys fall below manage.convoys_free; validate it once and the convoy flag of hoi4_naval_production_options"
   },
   {
    "id": "navy.ship_production",

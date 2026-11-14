@@ -371,6 +371,12 @@ fn naval_bases(r: &Reader<'_>, image: u64) -> Result<Vec<NavalBase>> {
         })
         .collect())
 }
+/// Whether an equipment key is a convoy (the game's convoy equipment and its variants): the one
+/// classification `hoi4_convoys` (its convoy lines) and `hoi4_naval_production_options` (a design's
+/// `convoy` flag) share, so a caller never needs the key itself.
+pub(super) fn is_convoy_key(key: &str) -> bool {
+    key.starts_with("convoy")
+}
 /// `hoi4_convoys`: convoy count, naval bases, convoy production lines.
 pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> Result<Value> {
     if !args.is_empty() {
@@ -384,7 +390,7 @@ pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> 
     })?;
     let convoy_lines: Vec<Value> = lines
         .iter()
-        .filter(|l| l.key.as_deref().is_some_and(|k| k.starts_with("convoy")))
+        .filter(|l| l.key.as_deref().is_some_and(is_convoy_key))
         .map(
             |l| json!({"line_handle":l.handle,"equipment":l.key,"requested_factories":l.requested}),
         )
@@ -392,7 +398,7 @@ pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> 
     let mut v = convoys_json(&counts, &bases, convoy_lines);
     v["naval_lines_other"] = json!(lines
         .iter()
-        .filter(|l| l.naval && !l.key.as_deref().is_some_and(|k| k.starts_with("convoy")))
+        .filter(|l| l.naval && !l.key.as_deref().is_some_and(is_convoy_key))
         .count());
     Ok(v)
 }
