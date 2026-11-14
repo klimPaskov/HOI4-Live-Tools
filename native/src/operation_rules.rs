@@ -64,7 +64,10 @@ pub struct Catalog {
     pub ideology_rules: Vec<(String, Vec<(String, bool)>)>,
 }
 
-fn costs(block: &[Entry]) -> (Vec<(String, f64)>, Option<(f64, f64)>) {
+/// Equipment keys with amounts, and (civilian factories, days).
+type Costs = (Vec<(String, f64)>, Option<(f64, f64)>);
+
+fn costs(block: &[Entry]) -> Costs {
     let mut equipment = Vec::new();
     let mut factories = None;
     if let Some(Val::Block(items)) = block.find_val("equipment") {
@@ -203,7 +206,7 @@ impl Catalog {
                 rules
                     .iter()
                     .find(|(k, _)| k == rule)
-                    .map_or(true, |(_, v)| *v),
+                    .is_none_or(|(_, v)| *v),
             ),
         }
     }

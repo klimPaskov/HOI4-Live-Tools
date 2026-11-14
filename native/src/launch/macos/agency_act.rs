@@ -1576,7 +1576,7 @@ mod tests {
         a.slot_wait_days = 3;
         let e = recruit_check(&a, 0, 30).unwrap_err();
         assert_eq!(
-            (e.code.as_ref(), e.message.contains("in 27 days")),
+            (e.code, e.message.contains("in 27 days")),
             ("operative_slot_locked", true)
         );
         a.candidates = vec!["A".into(), "B".into()];

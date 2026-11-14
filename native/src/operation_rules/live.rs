@@ -197,7 +197,7 @@ pub fn report(
         let mut rows = Vec::new();
         let mut hidden = 0;
         for op in &catalog.operations {
-            if !only.is_empty() && !only.iter().any(|k| *k == op.key) {
+            if !only.is_empty() && !only.contains(&op.key) {
                 continue;
             }
             let v = verdict(catalog, op, target, live);
