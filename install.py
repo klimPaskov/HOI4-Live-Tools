@@ -6,6 +6,7 @@
     python install.py install --register none
     python install.py update [--version X.Y.Z]      fetch a release and install it over the current one
     python install.py doctor                check what a first run needs and print the fix for each failed item
+    python install.py game-dir FOLDER       record where the game is, when the Steam library search misses it
     python install.py status
     python install.py register [--clients ...]      (re)write the client registrations only
     python install.py unregister
@@ -25,7 +26,7 @@ What is installed where a build exists for the computer:
 Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools on Windows,
 ~/Library/Application Support/hoi4-live-tools on macOS, ~/.local/share/hoi4-live-tools on Linux):
 
-    hoi4-live      the command: doctor, update, uninstall, status (hoi4-live.cmd on Windows)
+    hoi4-live      the command: doctor, update, uninstall, status, game-dir (hoi4-live.cmd on Windows)
     app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
     native\\         hoi4-live-native and its entitlements file
     venv\\           the private Python environment with the dependencies
@@ -1070,6 +1071,31 @@ def cmd_doctor(args, out):
     return EXIT_OK if ready else EXIT_FAILED
 
 
+GAME_EXECUTABLES = ("hoi4.exe", "hoi4", os.path.join("hoi4.app", "Contents", "MacOS", "hoi4"))
+
+
+def cmd_game_dir(args, out):
+    """Record where the game is installed, for a copy the Steam library search does not find."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    if not os.path.isdir(os.path.join(prefix, "app")):
+        raise InstallError(f"HOI4 Live Tools is not installed at {prefix}; run the install command first", EXIT_USAGE)
+    if not args.value:
+        raise InstallError(f"name the game's folder: {COMMAND} game-dir \"<folder>\"", EXIT_USAGE)
+    folder = os.path.abspath(os.path.expanduser(args.value))
+    if not any(os.path.isfile(os.path.join(folder, name)) for name in GAME_EXECUTABLES):
+        raise InstallError(f"{folder} does not hold the game (no hoi4 executable in it); name the folder called "
+                           "\"Hearts of Iron IV\"", EXIT_USAGE)
+    path = os.path.join(prefix, "config.json")
+    try:
+        data = read_json_object(path)
+    except (OSError, ValueError) as exc:
+        raise InstallError(f"{path} cannot be read ({exc}); nothing was changed")
+    data["game_dir"] = folder
+    atomic_write(path, dump_json(data))
+    out.info(f"game folder set to {folder}")
+    return EXIT_OK
+
+
 def cmd_register(args, out):
     check_platform()
     prefix = os.path.abspath(args.prefix or default_prefix())
@@ -1170,13 +1196,14 @@ def cmd_status(args, out):
     return EXIT_OK if installed else EXIT_FAILED
 
 
-COMMANDS = ("install", "update", "doctor", "status", "register", "unregister", "uninstall")
+COMMANDS = ("install", "update", "doctor", "game-dir", "status", "register", "unregister", "uninstall")
 
 
 def build_parser():
     parser = argparse.ArgumentParser(prog=COMMAND if os.environ.get("HOI4_LIVE_COMMAND") else "install.py",
                                      description=__doc__.split("\n\n")[0])
     parser.add_argument("command", nargs="?", default=None, choices=COMMANDS)
+    parser.add_argument("value", nargs="?", default=None, help="game-dir: the folder the game is installed in")
     parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools on Windows, "
                                          "~/Library/Application Support/hoi4-live-tools on macOS, "
                                          "~/.local/share/hoi4-live-tools on Linux)")
@@ -1212,7 +1239,8 @@ def main(argv=None):
             return EXIT_USAGE
         args.command = "install"
     out = Output(args.quiet)
-    handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "register": cmd_register,
+    handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "game-dir": cmd_game_dir,
+                "register": cmd_register,
                 "unregister": cmd_unregister, "uninstall": cmd_uninstall, "status": cmd_status}
     try:
         return handlers[args.command](args, out)

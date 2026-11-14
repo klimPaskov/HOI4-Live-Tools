@@ -446,6 +446,42 @@ class FlowTests(Sandbox):
         self.assertIn("memory access is ready", text)
 
 
+class InstalledCommandTests(Sandbox):
+    ARGS = ("--skip-dependencies", "--skip-verify", "--skip-selftest", "--register", "none", "--native", "skip")
+
+    def test_game_dir_records_the_folder_and_refuses_one_without_the_game(self):
+        code, text = self.run_main("game-dir", self.tmp)
+        self.assertEqual(code, install.EXIT_USAGE)
+        self.assertIn("not installed", text)
+        self.publish(native=False)
+        self.assertEqual(self.run_main("update", *self.ARGS)[0], install.EXIT_OK)
+        code, text = self.run_main("game-dir")
+        self.assertEqual(code, install.EXIT_USAGE)
+        code, text = self.run_main("game-dir", os.path.join(self.tmp, "nothing"))
+        self.assertEqual(code, install.EXIT_USAGE)
+        self.assertIn("does not hold the game", text)
+        game = os.path.join(self.tmp, "Hearts of Iron IV")
+        os.makedirs(game)
+        with open(os.path.join(game, "hoi4.exe"), "w", encoding="utf-8"):
+            pass
+        code, text = self.run_main("game-dir", game)
+        self.assertEqual(code, install.EXIT_OK, text)
+        with open(os.path.join(self.prefix, "config.json"), encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["game_dir"], game)
+
+    def test_doctor_of_an_install_is_the_programs_own_and_lists_the_steps(self):
+        self.publish(native=False)
+        self.assertEqual(self.run_main("update", *self.ARGS)[0], install.EXIT_OK)
+        with mock.patch.dict(os.environ, {"HOI4_LIVE_GAME_DIR": os.path.join(self.tmp, "no-game"),
+                                          "HOI4_LIVE_USER_DIR": os.path.join(self.tmp, "no-user")}):
+            code, text = self.run_main("doctor")
+        self.assertEqual(code, install.EXIT_FAILED, text)
+        self.assertIn("doctor (", text)
+        self.assertIn("hoi4-live game-dir", text)
+        self.assertIn("hoi4-live update", text)
+        self.assertIn("The doctor only reads", text)
+
+
 class StandaloneTests(Sandbox):
     """install.py on its own, and the one-line installers, against a release folder."""
 

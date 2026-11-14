@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+`hoi4-live doctor` checks everything a first run needs and prints the one step for each item that is not in place.
+
+- Checked on every system: the install itself, the game (found through the Steam libraries, with its version), the
+  game build against the builds the native runtime reads, memory access (the native runtime's own check), the
+  game's display mode, UI scaling and resolution, Steam where the native launcher needs it closed, enabled mods,
+  and the Python server's environment check. macOS adds the Accessibility and screen recording permissions and the
+  screen size; Windows and Linux say what input needs there.
+- Each item is ok, fix (with its step) or note, and belongs to the Python server, the native runtime or both. The
+  report ends with one line per runtime; the exit code is 0 when every runtime installed here has nothing to fix.
+- The doctor only reads. It changes no setting, asks for no password, starts no game and touches no game process.
+- `hoi4-live game-dir "<folder>"` records where the game is when the Steam library search does not find it.
+- An install now ends with this doctor.
+
 One install command per system. `install.sh` (macOS, Linux) and `install.ps1` (Windows) find Python, download
 `install.py` from the release, check it against `SHA256SUMS.txt` and run it.
 
