@@ -10,6 +10,7 @@
 //! |----------------------------|---------|-----------------------------------------------------|
 //! | `research_slot_empty`      | true    | any research slot has no technology                 |
 //! | `no_active_focus`          | true    | the national focus slot is empty                    |
+//! | `slot_empty_grace_days`    | 2       | game days the two alarms above wait while the plan lists what the executor starts there (`plan_run`: a slot it will fill, or one whose list ran out and raises the plan-exhausted alarm, is not reported twice) |
 //! | `idle_civilian_factories`  | 4       | civilian factories free for projects >= N           |
 //! | `idle_military_factories`  | 2       | military factories on no production line >= N       |
 //! | `political_power`          | 150     | political power > N                                 |

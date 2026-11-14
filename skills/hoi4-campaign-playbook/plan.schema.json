@@ -4050,6 +4050,12 @@
         "no_active_focus": {
           "type": "boolean"
         },
+        "slot_empty_grace_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "description": "game days research_slot_empty and no_active_focus wait while the plan lists what the executor starts there (research_path / research_priority, focus_path / focus_fallback): a slot the executor fills at its next tick is not reported, and a list that ran out raises the plan-exhausted alarm instead"
+        },
         "idle_civilian_factories": {
           "type": [
             "number",
@@ -4146,6 +4152,14 @@
             "boolean",
             "null"
           ]
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor. Names every alarm this object switches off and the reason (lint alarms.silenced)."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
         }
       },
       "additionalProperties": {
@@ -4155,7 +4169,7 @@
           "null"
         ]
       },
-      "description": "Alarm thresholds (native/src/alarms.rs table); any alarm code set to false is silenced."
+      "description": "Alarm thresholds (native/src/alarms.rs table); any alarm code set to false is silenced, and `why` then names it with the reason (lint alarms.silenced)."
     },
     "vp_targets": {
       "type": "array",

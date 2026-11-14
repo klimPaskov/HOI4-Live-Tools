@@ -500,6 +500,9 @@ struct Stages {
     focus_refused_wars: Option<String>,
     /// When the wars were last read for refused keys alone (no other key was left to ask about).
     focus_wars_read: GameHour,
+    /// Game hour since which a research slot (0) or the focus slot (1) the plan's lists own has
+    /// been seen empty at the end of a run; None while it is busy.
+    owned_empty_since: [Option<GameHour>; 2],
 }
 
 /// Refused focuses one tick may open (each look costs seconds of the input lane).
@@ -5563,18 +5566,28 @@ pub fn run(
     if let Some(alarm) = construction_alarm(state, tools, &plan, construction.as_deref()) {
         alarms.push(alarm);
     }
-    if research_line.is_none() && !strings(&plan, "research_priority").is_empty() {
+    if research_line.is_none() && lists_research(&plan) {
         research_line = Some((
             "research: not reached this tick (an earlier step acted)".into(),
             false,
         ));
     }
-    if focus_line.is_none() && !strings(&plan, "focus_path").is_empty() {
+    if focus_line.is_none() && lists_focuses(&plan) {
         focus_line = Some((
             "focus: not reached this tick (an earlier step acted)".into(),
             false,
         ));
     }
+    hold_owned_slot_alarms(
+        &mut state.stages.owned_empty_since,
+        state.last_hour,
+        &plan,
+        &mut alarms,
+        [
+            research_line.as_ref().is_some_and(|l| l.1),
+            focus_line.as_ref().is_some_and(|l| l.1),
+        ],
+    );
     let quiet = |code: &str| plan["alarms"][code] == json!(false);
     if research_line.as_ref().is_some_and(|l| l.1) && !quiet("research_slot_idle_plan_exhausted") {
         alarms.push(json!({"code": "research_slot_idle_plan_exhausted",
@@ -5697,6 +5710,70 @@ fn construction_alarm(
                 waited / DAY, digest.unwrap_or("construction stage did not run")),
             "fix": {"tool": "hoi4_state_slots", "args_hint": {"state_ids": "<own states>"}}})
     })
+}
+
+/// The plan lists technologies for the executor to start (`research_path` or `research_priority`).
+fn lists_research(plan: &Value) -> bool {
+    !strings(plan, "research_priority").is_empty()
+        || plan["research_path"]
+            .as_array()
+            .is_some_and(|path| path.iter().any(|step| !strings(step, "techs").is_empty()))
+}
+
+/// The plan lists focuses for the executor to start (`focus_path` or `focus_fallback`).
+fn lists_focuses(plan: &Value) -> bool {
+    !strings(plan, "focus_path").is_empty() || !strings(plan, "focus_fallback").is_empty()
+}
+
+/// Game days an executor-owned slot may stay empty before its plain alarm is raised
+/// (`alarms.slot_empty_grace_days`, default 2).
+fn slot_empty_grace(plan: &Value) -> GameHour {
+    let days = plan["alarms"]["slot_empty_grace_days"]
+        .as_f64()
+        .filter(|d| *d >= 0.0)
+        .unwrap_or(2.0);
+    (days * DAY as f64) as GameHour
+}
+
+/// The executor owns the research slots and the focus slot while the plan lists what to start
+/// there. A slot it has not reached yet in this run is filled at its next tick, and a slot it
+/// cannot fill raises the plan-exhausted alarm, whose fix (more keys in the plan) is the one
+/// that helps. The plain alarm (`research_slot_empty`, `no_active_focus`) would then repeat
+/// what is already known and ask the player for a start that races the executor, so it is held
+/// back until the slot has stayed empty for the grace with the plan not exhausted: the executor
+/// is stuck and someone has to look. Without a list the player owns the slot and the alarm is
+/// raised at once. `exhausted`: [research, focus] plan-exhausted flags of this run's digest.
+fn hold_owned_slot_alarms(
+    since: &mut [Option<GameHour>; 2],
+    now: GameHour,
+    plan: &Value,
+    alarms: &mut Vec<Value>,
+    exhausted: [bool; 2],
+) {
+    let grace = slot_empty_grace(plan);
+    let slots = [
+        ("research_slot_empty", lists_research(plan)),
+        ("no_active_focus", lists_focuses(plan)),
+    ];
+    for (i, (code, owned)) in slots.into_iter().enumerate() {
+        let Some(at) = alarms.iter().position(|a| a["code"] == json!(code)) else {
+            since[i] = None;
+            continue;
+        };
+        if !owned {
+            since[i] = None;
+            continue;
+        }
+        let first = *since[i].get_or_insert(now);
+        if exhausted[i] || now - first < grace {
+            alarms.remove(at);
+        } else if let Some(message) = alarms[at]["message"].as_str() {
+            alarms[at]["message"] = json!(format!(
+                "{message}; empty for {} game day(s) although the plan still lists keys: the executor did not fill it",
+                (now - first) / DAY
+            ));
+        }
+    }
 }
 
 /// Read what the alarms need (pure reads, never input) and compute them. A
@@ -9624,6 +9701,146 @@ mod tests {
         );
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(path2);
+    }
+
+    fn slot_alarms() -> Vec<Value> {
+        vec![
+            json!({"code": "research_slot_empty", "message": "1 research slot(s) empty: [0]"}),
+            json!({"code": "political_power", "message": "x"}),
+            json!({"code": "no_active_focus", "message": "No national focus is in progress"}),
+        ]
+    }
+
+    fn slot_codes(alarms: &[Value]) -> Vec<&str> {
+        alarms.iter().map(|a| a["code"].as_str().unwrap()).collect()
+    }
+
+    #[test]
+    fn a_slot_the_plan_owns_alarms_only_after_the_executor_left_it_empty() {
+        let plan =
+            json!({"research_path": [{"year": 1936, "techs": ["radio"]}], "focus_path": ["F"]});
+        let mut since = [None, None];
+        // first run with the slots empty: the executor fills them at its next tick
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(&mut since, START, &plan, &mut alarms, [false, false]);
+        assert_eq!(slot_codes(&alarms), ["political_power"]);
+        assert_eq!(since, [Some(START), Some(START)]);
+        // still inside the grace
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(
+            &mut since,
+            START + 2 * DAY - 1,
+            &plan,
+            &mut alarms,
+            [false, false],
+        );
+        assert_eq!(slot_codes(&alarms), ["political_power"]);
+        // two game days empty with keys left: the executor is stuck, both alarms speak
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(
+            &mut since,
+            START + 2 * DAY,
+            &plan,
+            &mut alarms,
+            [false, false],
+        );
+        assert_eq!(
+            slot_codes(&alarms),
+            ["research_slot_empty", "political_power", "no_active_focus"]
+        );
+        assert!(alarms[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("empty for 2 game day(s)"));
+        // a busy slot ends the spell: the next empty one starts a new grace
+        let mut alarms = vec![json!({"code": "political_power", "message": "x"})];
+        hold_owned_slot_alarms(
+            &mut since,
+            START + 3 * DAY,
+            &plan,
+            &mut alarms,
+            [false, false],
+        );
+        assert_eq!(since, [None, None]);
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(
+            &mut since,
+            START + 4 * DAY,
+            &plan,
+            &mut alarms,
+            [false, false],
+        );
+        assert_eq!(slot_codes(&alarms), ["political_power"]);
+    }
+
+    #[test]
+    fn an_exhausted_plan_speaks_through_its_own_alarm_and_a_plan_without_lists_at_once() {
+        let plan = json!({"research_priority": ["radio"], "focus_fallback": ["F"]});
+        let mut since = [Some(START), Some(START)];
+        // exhausted lists: the plan-exhausted alarms carry the fix, however long the slot is empty
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(
+            &mut since,
+            START + 30 * DAY,
+            &plan,
+            &mut alarms,
+            [true, true],
+        );
+        assert_eq!(slot_codes(&alarms), ["political_power"]);
+        // no research or focus list: the player owns the slots and hears at once
+        let mut since = [None, None];
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(&mut since, START, &json!({}), &mut alarms, [false, false]);
+        assert_eq!(
+            slot_codes(&alarms),
+            ["research_slot_empty", "political_power", "no_active_focus"]
+        );
+        assert_eq!(since, [None, None]);
+        // the grace is the plan's to set; 0 raises at once
+        let plan = json!({"research_priority": ["radio"], "alarms": {"slot_empty_grace_days": 0}});
+        let mut alarms = slot_alarms();
+        hold_owned_slot_alarms(&mut since, START, &plan, &mut alarms, [false, false]);
+        assert_eq!(
+            slot_codes(&alarms),
+            ["research_slot_empty", "political_power", "no_active_focus"]
+        );
+    }
+
+    #[test]
+    fn a_run_does_not_repeat_the_plan_exhausted_alarm_as_a_plain_slot_alarm() {
+        let tools = fake(vec![
+            ("hoi4_research", idle_research()),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done"]}),
+            ),
+            ("hoi4_overview", json!({"date": {"raw": START}})),
+        ]);
+        let path = plan_file(
+            &json!({"research_path": [{"year": 1936, "techs": ["radio"]}],
+                "research_fallback": false, "focus_path": ["Done"]}),
+        );
+        let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
+        let alarms = result["alarms"].as_array().unwrap();
+        let codes = slot_codes(alarms);
+        assert!(
+            codes.contains(&"research_slot_idle_plan_exhausted"),
+            "{codes:?}"
+        );
+        assert!(
+            codes.contains(&"no_active_focus_plan_exhausted"),
+            "{codes:?}"
+        );
+        assert!(!codes.contains(&"research_slot_empty"), "{codes:?}");
+        assert!(!codes.contains(&"no_active_focus"), "{codes:?}");
+        // a plan with no lists leaves both slots to the player, who is told at once
+        let bare = plan_file(&json!({}));
+        let result = run(&mut State::default(), &tools, &bare, "l", 1).unwrap();
+        let codes = slot_codes(result["alarms"].as_array().unwrap());
+        assert!(codes.contains(&"research_slot_empty"), "{codes:?}");
+        assert!(codes.contains(&"no_active_focus"), "{codes:?}");
+        let _ = std::fs::remove_file(path);
+        let _ = std::fs::remove_file(bare);
     }
 
     #[test]
