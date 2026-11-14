@@ -76,12 +76,21 @@ impl Watch {
     /// The watch for one owned game: the pause flag and date from a fresh clock read.
     pub(crate) fn for_process(process: Arc<dyn Process + Send + Sync>) -> Self {
         Self::new(Box::new(move || {
-            crate::game::clock_context(process.as_ref())
-                .ok()
-                .map(|context| Clock {
-                    paused: context.paused,
-                    hour: context.date_raw,
-                })
+            // A busy game day can tear one read; the guard must not go blind for it.
+            let mut tries = 0;
+            let context = loop {
+                match crate::game::clock_context(process.as_ref()) {
+                    Err(e) if e.code == "torn_read" && tries < 3 => {
+                        tries += 1;
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                    result => break result.ok()?,
+                }
+            };
+            Some(Clock {
+                paused: context.paused,
+                hour: context.date_raw,
+            })
         }))
     }
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
