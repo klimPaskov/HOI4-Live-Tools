@@ -178,7 +178,11 @@ const PEACE_PATIENCE: u32 = 5;
 /// The states `tag` owns (hoi4_states {query: tag}), None when unreadable or not a tag.
 fn tag_states(tools: &dyn Tools, tag: &str) -> Option<Vec<i64>> {
     let tag = tag.trim();
-    if tag.len() != 3 || !tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
+    if tag.len() != 3
+        || !tag
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+    {
         return None;
     }
     let read = tools.call("hoi4_states", &json!({"query": tag})).ok()?;
