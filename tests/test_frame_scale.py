@@ -73,10 +73,51 @@ class FrameScaleTests(unittest.TestCase):
         w = make_window((2560, 1440), (1920, 1080))
         inp = windows_input.Input(w, settle=0)
         w.ensure_foreground = lambda: None
+        w.make_visible = lambda sx, sy: (sx, sy)         # the screen of this machine does not matter here
         with mock.patch.object(windows_input, "move_screen") as move, mock.patch.object(windows_input, "_send"), \
                 mock.patch.object(windows_input.time, "sleep"):
             inp.click(961, 352)
         move.assert_called_with(1281, 469)
+
+
+@WIN
+class OffScreenTests(unittest.TestCase):
+    """A game window larger than the screen: the point to click is moved on screen by moving the window."""
+
+    def window(self, client, origin):
+        w = make_window(client, None, origin=origin)
+        self.moves = []
+        w.require = lambda: 1
+        return w
+
+    def run_with_screen(self, w, sx, sy, screen=(0, 0, 1920, 1080)):
+        from hoi4_live.platform import windows_window as ww
+        metrics = {76: screen[0], 77: screen[1], 78: screen[2], 79: screen[3]}
+        with mock.patch.object(ww.win32.user32, "GetSystemMetrics", side_effect=lambda i: metrics[i], create=True),                 mock.patch.object(ww.win32, "window_rect", return_value=(-328, -211, 2576, 1479)),                 mock.patch.object(ww.win32, "move_window", side_effect=lambda h, x, y: self.moves.append((x, y))),                 mock.patch.object(ww.time, "sleep"):
+            return w.make_visible(sx, sy)
+
+    def test_the_issue_case_start_button_below_the_screen(self):
+        w = self.window((2560, 1440), (-320, -180))
+        sx, sy = self.run_with_screen(w, 2099, 1218)               # START at client (2419, 1398)
+        self.assertLessEqual(sx, 1920 - 24)
+        self.assertLessEqual(sy, 1080 - 72)
+        self.assertEqual(self.moves, [(-328 + (sx - 2099), -211 + (sy - 1218))])
+
+    def test_a_point_already_on_screen_moves_nothing(self):
+        w = self.window((1920, 1080), (0, 0))
+        self.assertEqual(self.run_with_screen(w, 960, 540), (960, 540))
+        self.assertEqual(self.moves, [])
+
+    def test_a_point_left_of_the_desktop_is_brought_in(self):
+        w = self.window((2560, 1440), (0, 0))
+        sx, sy = self.run_with_screen(w, -50, 300)
+        self.assertEqual(sx, 24)
+        self.assertEqual(len(self.moves), 1)
+
+    def test_a_second_monitor_to_the_left_is_respected(self):
+        w = self.window((1920, 1080), (-1920, 0))
+        self.assertEqual(self.run_with_screen(w, -1000, 500, screen=(-1920, 0, 3840, 1080)), (-1000, 500))
+        self.assertEqual(self.moves, [])
 
 
 if __name__ == "__main__":

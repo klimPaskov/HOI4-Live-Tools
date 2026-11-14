@@ -152,6 +152,10 @@ class FakeSession:
         self.artifacts = []
         self.progress = []
         self.ocr = SimpleNamespace(recognize=self._recognize)
+        self.paged = {}                               # panel -> [texts of page 0, page 1, ...] for a scrolled list
+        self.page = 0
+        self.scrolls = []
+        self.input = SimpleNamespace(scroll=self._scroll)
         self.names = ["map"] + list(screen_mod.PANEL_KEYS)
 
     # panels
@@ -188,12 +192,20 @@ class FakeSession:
         self.events.append(("grab", self.view))
         return np.full((4, 4, 3), self.names.index(self.view), dtype=np.uint8)
 
+    def _scroll(self, x, y, notches):
+        self.scrolls.append((x, y, notches))
+        self.page = 0 if notches > 0 else self.page + 1
+
     def _recognize(self, img, region=None, scale=None):
         view = self.names[int(img[0, 0, 0])]
         self.events.append(("ocr", view, scale))
         if view in self.read_error:
             raise self.read_error[view]
-        return SimpleNamespace(lines=[line(t, y=10 + 30 * i) for i, t in enumerate(self.screens.get(view, []))])
+        texts = self.screens.get(view, [])
+        if view in self.paged:
+            pages = self.paged[view]
+            texts = pages[min(self.page, len(pages) - 1)]
+        return SimpleNamespace(lines=[line(t, y=10 + 30 * i) for i, t in enumerate(texts)])
 
     def artifact(self, img, name):
         self.artifacts.append(name)
@@ -399,6 +411,54 @@ class SweepTests(unittest.TestCase):
         self.assertIn("| trade | not_opened |", text)
         self.assertIn("no key / no panel", text)                      # a pipe would break the table
         self.assertIn("error.log: `Missing localisation key: abc`", text)
+
+
+class ScrolledListTests(unittest.TestCase):
+    """The decisions list is longer than the screen: a mod's own category sits at its end (live 1.19.4.2: the raw key
+    row of a decision without localisation was never read because the sweep looked at the first screen only)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        patcher = mock.patch.object(locsweep, "SCROLL_SETTLE", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_sweep(self, pages):
+        session = FakeSession(self.tmp.name)
+        session.paged["decisions"] = pages
+        with session.patched():
+            report = locsweep.sweep(session, panels=["decisions"])
+        return session, report
+
+    def test_later_pages_are_read_and_their_findings_counted(self):
+        session, report = self.run_sweep([["Naval Treaties", "Second London Naval Conference"],
+                                          ["debug_decisions", "Live test decision"],
+                                          ["Live test decision", "tivetest_missing_toc"]])
+        row = report["screens"][1]
+        self.assertEqual(row["pages"], 3)
+        found = {f["text"]: f["kind"] for f in row["findings"]}
+        self.assertEqual(found["tivetest_missing_toc"], "raw_key")
+        self.assertEqual(found["debug_decisions"], "raw_key")         # vanilla's own header has no text either
+        self.assertNotIn("Live test decision", found)
+
+    def test_it_stops_when_the_list_ends_and_goes_back_to_the_top(self):
+        session, report = self.run_sweep([["a decision"], ["another one"]])
+        self.assertEqual(report["screens"][1]["pages"], 2)
+        self.assertEqual(session.scrolls[0][2], 60)                  # to the top first
+        self.assertEqual(session.scrolls[-1][2], 60)                 # and back to the top at the end
+        self.assertEqual(session.scrolls[-1][:2], locsweep.SCROLL_AT["decisions"])
+
+    def test_the_page_limit_holds(self):
+        pages = [["row %d" % i] for i in range(locsweep.SCROLL_PAGES + 5)]
+        session, report = self.run_sweep(pages)
+        self.assertEqual(report["screens"][1]["pages"], 1 + locsweep.SCROLL_PAGES)
+
+    def test_other_panels_are_never_scrolled(self):
+        session = FakeSession(self.tmp.name, screens={"politics": ["Politics"]})
+        with session.patched():
+            locsweep.sweep(session, panels=["politics"])
+        self.assertEqual(session.scrolls, [])
 
 
 class ToolTests(unittest.TestCase):

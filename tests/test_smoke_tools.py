@@ -56,6 +56,7 @@ class World:
         self.stuck = set(stuck)             # event ids whose window does not close
         self.leaves = leaves or {}
         self.take_fails = set(take_fails)
+        self.row_missing = {}                         # decision id -> how many takes answer 'no decision row named'
         self.late = set(late)                # events whose window shows up one detection late
         self.handle_raises = set(handle_raises)
         self.no_window_again = set(no_window_again)       # a re-firing shows no window (fire_only_once)
@@ -125,6 +126,10 @@ class World:
         did = arguments["decision"]
         if did in self.dispatch_raises:
             raise ToolError("the decision panel did not open")
+        if self.row_missing.get(did, 0) > 0:
+            self.row_missing[did] -= 1
+            return {"content": [{"type": "text", "text": "no decision row named '%s' in the panel" % did}],
+                    "isError": True}
         self.taken.append(did)
         failed = did in self.take_fails
         return {"content": [{"type": "text", "text": "could not take: not on the panel" if failed else "taken"}],
@@ -399,6 +404,21 @@ class DecisionTests(Base):
         self.assertEqual(by_id["my_mod_mission"]["status"], "skipped")
         self.assertNotIn("my_mod_target", w.taken)
         self.assertNotIn("my_mod_mission", w.taken)
+
+    def test_a_row_that_was_not_read_is_looked_for_again(self):
+        w = World(self.tmp.name, leaves=self.LEAVES)
+        w.row_missing = {"my_mod_take_it": 1}
+        res = self.run_tool(w, what="decisions", decision_category="my_mod_decisions")
+        by_id = {r["id"]: r for r in res.data["decisions"]}
+        self.assertEqual(by_id["my_mod_take_it"]["status"], "ok")
+
+    def test_a_row_that_is_never_read_is_not_taken_after_the_retries(self):
+        w = World(self.tmp.name, leaves=self.LEAVES)
+        w.row_missing = {"my_mod_take_it": 99}
+        res = self.run_tool(w, what="decisions", decision_category="my_mod_decisions")
+        by_id = {r["id"]: r for r in res.data["decisions"]}
+        self.assertNotEqual(by_id["my_mod_take_it"]["status"], "ok")
+        self.assertEqual(99 - w.row_missing["my_mod_take_it"], 1 + st.TAKE_ROW_RETRIES)
 
     def test_a_decision_the_panel_refuses_is_not_taken_with_the_message(self):
         w, res, by_id = self.run_decisions(take_fails=("my_mod_take_fails",))

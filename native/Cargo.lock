@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "hoi4-live-native"
-version = "1.4.1"
+version = "1.4.2"
 dependencies = [
  "fs2",
  "libc",

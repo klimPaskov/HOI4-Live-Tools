@@ -32,6 +32,7 @@ from . import dispatch
 from .registry import ToolResult, tool
 
 MAX_ERRORS_SHOWN = 8
+TAKE_ROW_RETRIES = 2
 
 
 # ------------------------------------------------------------------------------------------------ events
@@ -44,6 +45,22 @@ def _errors(session, mark):
     return rows[:MAX_ERRORS_SHOWN], info.get("lines", 0)
 
 
+def rest_cursor(session):
+    """Move the cursor onto the middle of the screen, where the centred event window has its text, before the window
+    is read. After a click on an option the cursor stays on that option's position, and the next firing's window opens
+    under it: the option's tooltip then covers the title and text, and the second firing of every event was read as
+    garbage (seen live on 1.19.4.2: titles like "Second OPI Political Power:" and an empty chosen option). A spot above
+    the window is worse: with -debug the map under it shows a "switch to this country" tooltip."""
+    window, mouse = getattr(session, "window", None), getattr(session, "input", None)
+    if window is None or mouse is None:
+        return
+    try:
+        w, h = window.size()
+        mouse.move(int(w * 0.5), int(h * 0.5))
+    except ToolError:
+        pass
+
+
 def fire_once(session, ev, tag, option, wait_s):
     """Fire the event once and answer button `option` of its first window. Returns the record of this firing."""
     mark = f"smoke_{int(time.time() * 1000) % 10_000_000}"
@@ -51,6 +68,7 @@ def fire_once(session, ev, tag, option, wait_s):
     cmd = f"event {ev['id']}" + (f" {tag}" if tag else "")
     out = console.run(session, [cmd])
     session.park_cursor()
+    rest_cursor(session)
     session.sleep(wait_s)
     img = session.grab()
     found = popups_mod.detect(img)
@@ -134,8 +152,23 @@ def mark_repeated_errors(fires):
                 row["repeats_first_firing"] = True
 
 
+RAW_KEY_RX = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")     # my_mod.12.a: a key, never a sentence
+
+
+def _raw_key_texts(fires):
+    """Option, title and text strings of the windows that are an unresolved localisation key (the game shows the key
+    when the entry is missing, seen live: an option reading livetest.2.b)."""
+    found = []
+    for f in fires:
+        popup = f.get("popup") or {}
+        for text in list(popup.get("options") or []) + [popup.get("title"), f.get("chosen_text")]:
+            if text and RAW_KEY_RX.fullmatch(text.strip()) and text.strip() not in found:
+                found.append(text.strip())
+    return found
+
+
 def _event_status(ev, rec):
-    """ok | errors | stuck | partial | no_window. A run problem (a ToolError) counts as errors."""
+    """ok | errors | text_missing | stuck | partial | no_window. A run problem (a ToolError) counts as errors."""
     notes = []
     fires = rec["fires"]
     status = "ok"
@@ -150,6 +183,11 @@ def _event_status(ev, rec):
         notes.append("a window stayed open after its option was clicked")
         if status == "ok":
             status = "stuck"
+    raw = _raw_key_texts(fires)
+    if raw:
+        notes.append("the window shows a raw localisation key instead of text: " + ", ".join(raw))
+        if status in ("ok", "partial"):
+            status = "text_missing"
     if not fires:
         return status, notes
     if not ev["hidden"] and not fires[0].get("popup"):
@@ -217,6 +255,13 @@ def smoke_decision(session, did, d, tag, wait_s):
         session.logs.mark(mark, ("error",))
         out = dispatch.call(session, "hoi4_decisions", {"action": "take", "decision": did})
         text = "\n".join(c["text"] for c in out["content"] if c["type"] == "text")
+        for _ in range(TAKE_ROW_RETRIES):
+            # OCR reads a row differently from one pass to the next (a raw key most of all): read a missing row again
+            if not (out.get("isError") and text.startswith("no decision row named")):
+                break
+            session.sleep(1.5)
+            out = dispatch.call(session, "hoi4_decisions", {"action": "take", "decision": did})
+            text = "\n".join(c["text"] for c in out["content"] if c["type"] == "text")
         rec["take"] = {"ok": not out.get("isError"), "message": text.splitlines()[0] if text else ""}
         session.sleep(wait_s)
         rest = game_popups.handle_all(session, "first", phase="smoke")
@@ -379,7 +424,7 @@ def hoi4_smoke_namespace(session, args):
     t0 = time.time()
     report = {"namespace": ns, "tag": tag or "player", "events": [], "decisions": [], "plan": plan}
     total = len(events) + len(decisions)
-    problems = ("errors", "stuck", "no_window", "partial", "take_failed")
+    problems = ("errors", "text_missing", "stuck", "no_window", "partial", "take_failed")
     done = 0
     try:
         if tag:

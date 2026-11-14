@@ -136,6 +136,7 @@ class Input:
         """Move to client (x, y). glide > 0 moves along an eased path over that many seconds."""
         self._ready()
         sx, sy = self.window.to_screen(x, y)
+        sx, sy = self.window.make_visible(sx, sy)
         if glide > 0:
             x0, y0 = win32.cursor_pos()
             steps = max(6, int(glide * 90))

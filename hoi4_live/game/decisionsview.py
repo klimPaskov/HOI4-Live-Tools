@@ -134,8 +134,17 @@ def read_all(session, categories=None, max_pages=25):
     return out
 
 
+RAW_KEY_RX = re.compile(r"[A-Za-z0-9_.]+")
+RAW_KEY_THRESHOLD = 0.8
+
+
 def find_row(session, name, max_pages=25, threshold=0.88, categories=None):
-    """Scroll from the top until the decision row named `name` is visible; returns the row (with its y)."""
+    """Scroll from the top until the decision row named `name` is visible; returns the row (with its y).
+
+    A decision without a localisation shows its raw key (livetest_missing_loc), which OCR reads with several wrong
+    letters (tivetest_missing_toc, seen live on 1.19.4.2): such a name is matched with a lower threshold."""
+    if RAW_KEY_RX.fullmatch(name or "") and "_" in name:
+        threshold = min(threshold, RAW_KEY_THRESHOLD)
     scroll(session, 60)
     last = None
     for _ in range(max_pages):

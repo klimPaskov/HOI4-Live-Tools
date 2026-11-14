@@ -156,11 +156,48 @@ def _read_logs(session, mark=None):
 
 
 # ---------------------------------------------------------------------------------------------------- driver
-def _read_screen(session, name, extra_patterns, max_findings):
+# Panels whose list is longer than the screen, and where the mouse wheel scrolls it (1080p client pixels, the same
+# spot hoi4_decisions uses). The other panels fit on one screen, and a wheel turn elsewhere would zoom the map.
+SCROLL_AT = {"decisions": (260, 640)}
+SCROLL_PAGES = 25
+SCROLL_NOTCHES = 6
+
+
+SCROLL_SETTLE = 0.6
+
+
+def _scroll(session, at, notches):
+    import time
+    session.input.scroll(at[0], at[1], notches)
+    time.sleep(SCROLL_SETTLE)
+
+
+def _read_screen(session, name, extra_patterns, max_findings, scroll_at=None):
     img = session.grab()
     res = session.ocr.recognize(img, scale=1.5)
+    lines, shots, pages = list(res.lines), [img], 1
+    if scroll_at:
+        # the rows below the first screen (a mod's own category sits at the end of the decisions list, after the
+        # vanilla ones) are read page by page until the text stops changing, then the list goes back to the top
+        seen = tuple(l.text for l in res.lines)
+        try:
+            _scroll(session, scroll_at, 60)
+            for _ in range(SCROLL_PAGES):
+                _scroll(session, scroll_at, -SCROLL_NOTCHES)
+                page = session.grab()
+                pres = session.ocr.recognize(page, scale=1.5)
+                sig = tuple(l.text for l in pres.lines)
+                if sig == seen:
+                    break
+                seen = sig
+                lines.extend(pres.lines)
+                shots.append(page)
+                pages += 1
+        finally:
+            _scroll(session, scroll_at, 60)
     row = {"screen": name, "status": "ok"}
-    row.update(classify_lines(res.lines, extra_patterns, max_findings))
+    row.update(classify_lines(lines, extra_patterns, max_findings))
+    row["pages"] = pages
     row["screenshot"] = session.artifact(img, f"loc_sweep_{name}") if row["total"] else None
     return row
 
@@ -219,7 +256,7 @@ def _sweep_panel(session, name, patterns, max_findings):
         _leave(session)
         return {"screen": name, "status": "not_opened", "message": str(e)}
     try:
-        return _read_screen(session, name, patterns, max_findings)
+        return _read_screen(session, name, patterns, max_findings, SCROLL_AT.get(name))
     except ToolError as e:
         _reraise_cancel(e)
         return {"screen": name, "status": "read_failed", "message": str(e)}

@@ -36,9 +36,9 @@ builds and previews mod content.
 
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
-| Test mods and try agent play today | **`hoi4-live-tools-1.4.0.zip`** from the [1.4.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
-| Agent play with the full management toolset | **`hoi4-live-native-1.4.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
-| Agent play on Linux | **`hoi4-live-native-1.4.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 1.19.4.1 | Experimental |
+| Test mods and try agent play today | **`hoi4-live-tools-1.4.2.zip`** from the [1.4.2 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
+| Agent play with the full management toolset | **`hoi4-live-native-1.4.2-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
+| Agent play on Linux | **`hoi4-live-native-1.4.2-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 1.19.4.1 | Experimental |
 
 The Windows native game adapter is unfinished. An internal read-only foundation
 is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
@@ -78,6 +78,7 @@ Things every modder should know:
   read the screen as a picture (the frame) and scale click points from the frame to the window, so a capture
   that is smaller than the window still clicks the right spot. `hoi4_status` shows `window.client`, `window.frame`
   and the scale when they differ. Coordinates in tool results are frame pixels.
+  A window larger than the screen is moved when a click point would fall outside the desktop.
 - **Mods and `-debug`.** The Python package launches the game with whatever your
   playset enables. The native Linux launcher starts it with no mods.
 - **Not working yet.** The Windows native adapter, ARM64 Linux, and a clean
@@ -86,7 +87,7 @@ Things every modder should know:
 ### Mod checks (Windows, test mode)
 
 With the game running in test mode, an agent can run these. They are new: tested
-on fakes and recorded log lines, with the first run in the live game still pending.
+on fakes and recorded log lines first, then run live on HOI4 1.19.4.2 on 14 November 2026 (see the changelog).
 
 | Tool | What it answers |
 | --- | --- |
@@ -100,7 +101,7 @@ on fakes and recorded log lines, with the first run in the live game still pendi
 You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
 Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
 
-1. Download `hoi4-live-tools-1.4.0.zip` from the
+1. Download `hoi4-live-tools-1.4.2.zip` from the
    [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
    and unpack it anywhere.
 2. In that folder, run:
@@ -174,8 +175,8 @@ GitHub build attestations, so nothing needs to be built from source:
 
 ```sh
 sha256sum -c SHA256SUMS.txt --ignore-missing      # macOS: shasum -a 256 -c
-gh attestation verify hoi4-live-native-1.4.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
-tar -xzf hoi4-live-native-1.4.0-linux-x86_64.tar.gz
+gh attestation verify hoi4-live-native-1.4.2-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
+tar -xzf hoi4-live-native-1.4.2-linux-x86_64.tar.gz
 ```
 
 The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memory

@@ -1,6 +1,47 @@
 # Changelog
 
-## Unreleased
+## 1.4.2 - 2026-11-14
+
+Fixes for the four problems found on 1.19.4.2, the first live run of the R-5 mod checks (which found and fixed more), and the native and campaign changes merged since 1.4.1.
+
+### Launch, shutdown and menu fixes (HOI4 1.19.4.2)
+
+- `hoi4_launch` stops at once when the owned game process exits or the game opens its fatal-error dialog (the helper
+  `hoi4.exe -error_title ...`). The error carries the exit code, the dialog title and message when there is one, the
+  `error.log` lines and any crash folder, instead of waiting out the timeout (#30). Live: a normal launch with a broken map
+  file ended in 22 s with exit code 0xC0000005 (before, it ran to the timeout).
+- `hoi4_shutdown` waits until the owned process is really gone (pid dead and no longer in the process list, creation time
+  checked) before it restores the config and DLC files. The DLC restore allows a short grace for a process list that
+  clears late (#29). Live: the process was gone when the call returned, in every run.
+- `hoi4_new_game` with `exit_to_menu` clicks Exit to Menu on the Playthrough Overview window (#28). The label is read at
+  2x and 3x with a pattern that tolerates a misread letter (1.5x read it as "Exit*o Menu" live). The older fallback that
+  clicked any "Quit" is limited to the statistics screen: on the main menu, still being drawn, it exited the game.
+  Live: the resign took 11 s and the new game started.
+- Clicks are scaled from the captured frame to the game window when the capture has the window's shape at another size
+  (#27). `hoi4_status` shows the frame size and scale. The live setup on 14 November differed from the report: the
+  capture matched the window (2560x1440), but the screen was a single 1920x1080 display, so the START button lay below
+  the desktop and the cursor stopped at the corner. A click point outside the desktop now moves the game window until
+  the point is reachable (a window that fits is never moved). Live: with the window at 2560x1440 on that display, a new
+  game started in 25 s with no START retry (before: START was clicked four times in vain).
+
+### Mod checks (R-5), first live run
+
+Run on 14 November 2026 against a scratch mod with events, decisions and a focus tree, on a 1920x1080 window.
+
+- `hoi4_check_trigger` and `hoi4_check_focus` answered correctly, including the unmet prerequisite, `available`
+  conditions and false `OR` and `NOT` blocks.
+- `hoi4_smoke_namespace` fired events and answered every option, took a decision and named the unmet condition of
+  another. It reported a hidden event without options and a script error. Fixed: the cursor rests on the middle of the
+  screen before a window is read (a leftover option tooltip made every second firing unreadable); an option or title
+  that shows a raw localisation key is reported as `text_missing`; a decision row that OCR did not read is looked for
+  again, and a raw key name is matched more loosely (OCR reads `livetest_missing_loc` as `tivetest_missing_toc`).
+- `hoi4_sweep_loc` scrolls the decisions list page by page, so rows below the first screen are read. Before, a sweep
+  of the decisions panel found nothing; now it finds the raw key `debug_decisions`.
+- Not confirmed: the raw-key decision row of the scratch mod was not flagged by the sweep, and the smoke test did not
+  take that decision in one run (both OCR limits, issues #66 and #67); the `-error_title` dialog path of `hoi4_launch` is
+  covered by tests only.
+
+### Native runtime and campaign tools (changes merged since 1.4.1)
 
 The executor follows the route a plan gives to a victory-point target, and no plan key is left without a reader.
 
@@ -123,17 +164,6 @@ Focus starts cost less of the input lane.
 - `hoi4_focus_start` has 24 s for one start, enough for a cold tree and all twelve drags of its pan loop. With 12 s the
   deadline ended at the tenth drag, so a focus far across the tree could never start.
 
-Four launch and menu fixes found on 1.19.4.2 (9 November 2026).
-
-- `hoi4_launch` stops at once when the owned game process exits or the game opens its fatal-error dialog (the helper
-  `hoi4.exe -error_title ...`, for example "Failed to load the map"). The error carries the exit code, the dialog title and
-  message and the `error.log` lines, instead of waiting out the timeout (#30).
-- `hoi4_shutdown` waits until the owned process is really gone (pid dead and no longer in the process list, creation time
-  checked) before it restores the config and DLC files, and the DLC restore allows a short grace for a process list that
-  clears late (#29).
-- `hoi4_new_game` with `exit_to_menu` clicks Exit to Menu on the Playthrough Overview window of 1.19.4.2 (#28).
-- Clicks are scaled from the captured frame to the game window, so a 2560x1440 window captured as 1920x1080 clicks the
-  right spot (#27). `hoi4_status` shows the frame size and scale.
 
 ## 1.4.1 - 2026-11-09
 

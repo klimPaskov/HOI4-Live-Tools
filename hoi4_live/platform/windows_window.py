@@ -129,6 +129,25 @@ class GameWindow:
         sx, sy = self.frame_scale()
         return int(cx + round(x * sx)), int(cy + round(y * sy))
 
+    def make_visible(self, sx, sy, margin=24, bottom_margin=72):
+        """Move the window when the screen point (sx, sy) lies outside the desktop, which happens when the game window
+        is larger than the screen (a 2560x1440 window on a 1920x1080 display: the START button was off screen and the
+        cursor stopped at the corner, seen live on 1.19.4.2). The bottom margin keeps clear of the taskbar. Returns the
+        screen point after the move. A window that fits is never moved."""
+        g = win32.user32.GetSystemMetrics
+        vx, vy, vw, vh = g(76), g(77), g(78), g(79)
+        lo_x, hi_x = vx + margin, vx + vw - margin
+        lo_y, hi_y = vy + margin, vy + vh - bottom_margin
+        dx = lo_x - sx if sx < lo_x else (hi_x - sx if sx > hi_x else 0)
+        dy = lo_y - sy if sy < lo_y else (hi_y - sy if sy > hi_y else 0)
+        if not dx and not dy:
+            return sx, sy
+        hwnd = self.require()
+        wx, wy, _, _ = win32.window_rect(hwnd)
+        win32.move_window(hwnd, wx + dx, wy + dy)
+        time.sleep(0.3)
+        return sx + dx, sy + dy
+
     def from_screen(self, sx, sy):
         cx, cy, _, _ = self.client()
         fx, fy = self.frame_scale()

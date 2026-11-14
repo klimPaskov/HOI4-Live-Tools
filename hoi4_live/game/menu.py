@@ -334,19 +334,28 @@ def _confirm_if_asked(session, before_texts):
 
 
 OVERVIEW_TAB_RX = re.compile(r"playthrough\s*overview", re.I)
+STATS_SCREEN_RX = re.compile(r"statistic|score", re.I)
 OVERVIEW_EXIT_CLICKS = 3
+
+
+OVERVIEW_EXIT_RX = r"exit\s*(?:to|\Wo|t\W)\s*menu"      # live OCR read the button as "Exit*o Menu" at 1.5x
+OVERVIEW_OCR_SCALES = (2.0, 3.0)
 
 
 def _click_overview_exit(session):
     """Click Exit to Menu on the Playthrough Overview window (1.19.4.2 shows it after a resignation: tabs Playthrough
     Overview, Awards and Statistics). Only when that window is up, so the pause menu's own button is never mistaken
-    for it. Returns the clicked line's text or None."""
-    img, lines, res = ui.find_text(session, r"exit\s*to\s*menu", exact=True, scale=1.5)
-    if not lines or not any(OVERVIEW_TAB_RX.search(l.text) for l in res.lines):
-        return None
-    x, y = sorted(lines, key=lambda l: -l.box[1])[0].center
-    session.input.click(x, y)
-    return lines[0].text
+    for it. The small button label needs 2x or 3x OCR (1.5x misread it live), so those scales are tried in turn.
+    Returns the clicked line's text or None."""
+    for scale in OVERVIEW_OCR_SCALES:
+        img, lines, res = ui.find_text(session, OVERVIEW_EXIT_RX, exact=True, scale=scale)
+        if not any(OVERVIEW_TAB_RX.search(l.text) for l in res.lines):
+            return None                                   # that window is not up: never click another Exit to Menu
+        if lines:
+            x, y = sorted(lines, key=lambda l: -l.box[1])[0].center
+            session.input.click(x, y)
+            return lines[0].text
+    return None
 
 
 def quit_to_main_menu(session, timeout=240):
@@ -371,7 +380,10 @@ def quit_to_main_menu(session, timeout=240):
             continue
         if not clicked_quit:
             img, lines, res = ui.find_text(session, r"quit", exact=True, scale=1.5)
-            if lines:
+            # Quit is also a button of the main menu, which is still being drawn for a moment after the resignation
+            # and is not recognised yet: clicking it there exits the game (seen live on 1.19.4.2). Only the
+            # statistics screen's own Quit counts.
+            if lines and any(STATS_SCREEN_RX.search(l.text) for l in res.lines):
                 x, y = sorted(lines, key=lambda l: -l.box[1])[0].center
                 session.input.click(x, y)
                 clicked_quit = True

@@ -301,10 +301,10 @@ def hoi4_launch(session, args):
     while time.time() < deadline and not session.window.find():
         session.sleep(2)
         session.report("waiting for the game window")
+        _check_launch_alive(session, pid, crashes_before)       # first: it names the exit code, dialog and log lines
         if process.crash_dirs(cfg.user_dir) - crashes_before:
             session.restore_dlc_after_exit()
             raise ToolError("the game crashed during startup", {"crash": sorted(process.crash_dirs(cfg.user_dir) - crashes_before)})
-        _check_launch_alive(session, pid, crashes_before)
     if not session.window.find():
         raise ToolError("no game window appeared", data)
     session.logs.mark("launch", ("error", "game", "system", "setup"))
@@ -314,11 +314,11 @@ def hoi4_launch(session, args):
         session.sleep(20)
         while time.time() < deadline:
             session.check_cancel()
+            _check_launch_alive(session, pid, crashes_before)   # first: it names the exit code, dialog and log lines
             new = process.crash_dirs(cfg.user_dir) - crashes_before
             if new:
                 session.restore_dlc_after_exit()
                 raise ToolError("the game crashed during startup", {"crash": sorted(new)})
-            _check_launch_alive(session, pid, crashes_before)
             session.window.close_notepad_logs()
             launch_errors.check(session, args["debug"])          # a MAP_ERROR dialog: fail now, not at the timeout
             idle = session.logs.idle_seconds("setup") or 0
