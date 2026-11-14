@@ -112,7 +112,8 @@ infantry battalions, not mountaineers, marines or other special forces.
 
 - Pools: army, navy and air XP each cap at **500**; XP above the cap is lost, so plan spends before a pool fills.
 - Sources: combat (the main one); training divisions give at most 0.08 army XP a day and training ships at most 1
-  navy XP a day; army exercises in peace (no tool yet); focus and decision rewards (`army_experience = N`, read with
+  navy XP a day; army exercises in peace (no tool yet: an `xp_budget.army` entry with purpose
+  `exercise` is the plan form the executor will run, starting at peace and stopping at war); focus and decision rewards (`army_experience = N`, read with
   `facts.py focus <id>`); chiefs and high command with experience-gain traits (`politics-diplomacy-espionage.md` §4).
   Read the start pools with `hoi4_doctrines` at the first reconcile.
 - Costs: grand doctrine 100; subdoctrines 100 (most), 60 or 50 (§2); template edits 5 per battalion, 10 per support

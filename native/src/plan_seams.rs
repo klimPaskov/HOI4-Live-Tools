@@ -33,6 +33,24 @@
 //!                 still drives an army that is not in `war.reserve` (or a guard): the lint asks
 //!                 for that (orders.defense_reserve). One action per tick, judged once a game
 //!                 day. Done-memory `dl:<id>:on`, `dl:<id>:off`
+//!   garrison_template {"template"} (gap register occupation.garrison_template): the template the
+//!                 Occupied Territories view puts on garrison duty (its garrison_template_button,
+//!                 MAIN_GARRISON_TEMPLATE; the per-state garrison entries of the same view follow
+//!                 it). `template` is a templates[] id (its `name`) or a template name. Once the
+//!                 player occupies a state (hoi4_occupation role occupied_by_player) and the
+//!                 template exists (hoi4_division_templates) it is set once
+//!                 (hoi4_occupation_garrison {template}). Done-memory `gt:<name>`
+//!   xp_budget.army[] purpose "exercise" (gap register training.exercises): army exercises,
+//!                 the battle-plan toolbar's exercise button (btn_exercise, key K; Shift+K stops at
+//!                 the maximum, icn_exercise_stop_at_max). Divisions train toward
+//!                 NDefines.NMilitary.TRAINING_MAX_LEVEL (Regular) at UNIT_EXPERIENCE_PER_TRAINING_DAY
+//!                 and the country earns army XP up to TRAINING_MAX_DAILY_COUNTRY_EXP a day; it
+//!                 costs TRAINING_ATTRITION extra attrition (equipment) and fuel
+//!                 (ARMY_TRAINING_FUEL_MULT; out of fuel OUT_OF_FUEL_TRAINING_XP_GAIN_MULT of the
+//!                 XP). Once `when` holds at peace the entry's `armies` (names or army_layout
+//!                 roles; none = every own army) start exercising, stopping at the maximum
+//!                 (hoi4_army_exercise {armies, on: true, stop_at_max: true}); when a war starts
+//!                 they stop (on: false). Done-memory `ex:<id>:on`, `ex:<id>:off`
 use super::{item_id, list, strings, text, GameHour, State, Tools, DAY, RECEIPT_TOOLS};
 use crate::error::Result;
 use crate::plan_predicate::Truth;
@@ -52,6 +70,10 @@ pub(super) const FALLBACK_TOOL: &str = "hoi4_army_fallback";
 pub(super) const AREA_DEFENSE_TOOL: &str = "hoi4_army_area_defense";
 /// Deletes an army's order of one kind (battle-plan toolbar delete).
 pub(super) const DELETE_ORDER_TOOL: &str = "hoi4_army_orders_delete";
+/// Sets the default garrison template (Occupied Territories view).
+pub(super) const GARRISON_TOOL: &str = "hoi4_occupation_garrison";
+/// Starts or stops army exercises (battle-plan toolbar exercise button).
+pub(super) const EXERCISE_TOOL: &str = "hoi4_army_exercise";
 /// The area-defence settings the order's window offers (its toggle buttons, btn_setting_<name>).
 pub(super) const AREA_SETTINGS: &[&str] = &[
     "victory_points",
@@ -86,7 +108,200 @@ pub(super) fn step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    defense_lines_step(state, tools, plan, lease, now)
+    if let Some(done) = defense_lines_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = garrison_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    exercise_step(state, tools, plan, lease, now)
+}
+
+/// The line a seam writes when its tool is still to be built: what it would send.
+fn unbuilt(tool: &str, args: &Value, row: &str) -> String {
+    format!(
+        "would send {tool} {args}, but {tool} is not built yet (gap register {row}): nothing sent"
+    )
+}
+
+fn garrison_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let want = text(&plan["garrison_template"]["template"])
+        .trim()
+        .to_string();
+    if want.is_empty() || state.skipped(now, "sgt", "x") {
+        return Ok(None);
+    }
+    // a templates[] id stands for the name the template step gives it
+    let name = list(plan, "templates")
+        .iter()
+        .find(|t| text(&t["id"]) == want)
+        .map(|t| text(&t["name"]).trim().to_string())
+        .filter(|n| !n.is_empty())
+        .unwrap_or(want);
+    if state.done.contains_key(&format!("gt:{name}")) {
+        return Ok(None);
+    }
+    let key = "garrison_template";
+    let occupied = match tools.call("hoi4_occupation", &json!({})) {
+        Ok(read) => list(&read, "states")
+            .iter()
+            .any(|s| text(&s["role"]) == "occupied_by_player"),
+        Err(e) => {
+            note(state, key, format!("hoi4_occupation unreadable: {e}"));
+            state.skip(now, "sgt", "x", DAY);
+            return Ok(None);
+        }
+    };
+    if !occupied {
+        // the Occupied Territories view needs an occupied state to open
+        note(state, key, format!("{name}: waits for an occupied state"));
+        state.skip(now, "sgt", "x", 7 * DAY);
+        return Ok(None);
+    }
+    let exists = tools
+        .call("hoi4_division_templates", &json!({}))
+        .is_ok_and(|r| {
+            list(&r, "templates")
+                .iter()
+                .any(|t| text(&t["template"]) == name)
+        });
+    if !exists {
+        note(state, key, format!("waiting for the template {name}"));
+        state.skip(now, "sgt", "x", DAY);
+        return Ok(None);
+    }
+    let args = json!({"template": name});
+    if !built(GARRISON_TOOL) {
+        let line = unbuilt(GARRISON_TOOL, &args, "occupation.garrison_template");
+        note(state, key, line);
+        state.skip(now, "sgt", "x", 7 * DAY);
+        return Ok(None);
+    }
+    let (ok, why) = state.act(tools, lease, GARRISON_TOOL, args, "gt")?;
+    if ok {
+        state.done.insert(format!("gt:{name}"), now);
+    } else {
+        state.skip(now, "sgt", "x", 2 * DAY);
+    }
+    note(state, key, format!("garrison template {name}: {ok} {why}"));
+    Ok(Some(format!("garrison template {name}: {ok} {why}")))
+}
+
+fn exercise_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let entries: Vec<(String, &Value)> = list(&plan["xp_budget"], "army")
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| text(&e["purpose"]) == "exercise")
+        .map(|(i, e)| (item_id(e).unwrap_or_else(|| format!("#{i}")), e))
+        .filter(|(id, _)| !state.done.contains_key(&format!("ex:{id}:off")))
+        .collect();
+    if entries.is_empty() || state.skipped(now, "sex", "x") {
+        return Ok(None);
+    }
+    let at_war = match tools.call("hoi4_wars", &json!({})) {
+        Ok(r) => r["wars"]["at_war"].as_bool(),
+        Err(_) => None,
+    };
+    let Some(at_war) = at_war else {
+        state.skip(now, "sex", "x", DAY);
+        return Ok(None);
+    };
+    let mut roster: Option<Vec<String>> = None;
+    for (id, entry) in entries {
+        if state.skipped(now, "ex", &id) {
+            continue;
+        }
+        let key = format!("xp_budget.army:{id}");
+        let running = state.done.contains_key(&format!("ex:{id}:on"));
+        let (on, done) = if running {
+            if !at_war {
+                note(
+                    state,
+                    &key,
+                    "exercising (the game stops each army at the maximum)",
+                );
+                continue;
+            }
+            (false, format!("ex:{id}:off"))
+        } else {
+            if at_war {
+                note(state, &key, "at war: no exercise started");
+                continue;
+            }
+            let when = when_holds(state, tools, &entry["when"], now);
+            if when != Truth::True {
+                note(state, &key, format!("waits, when {}", when.label()));
+                continue;
+            }
+            (true, format!("ex:{id}:on"))
+        };
+        let named: Vec<String> = strings(entry, "armies")
+            .iter()
+            .map(|a| resolve(state, a))
+            .filter(|a| !a.is_empty())
+            .collect();
+        if roster.is_none() {
+            match tools.call("hoi4_armies", &json!({"threat": false})) {
+                Ok(r) => {
+                    roster = Some(
+                        list(&r, "armies")
+                            .iter()
+                            .map(|a| text(&a["army"]).to_string())
+                            .filter(|a| !a.is_empty())
+                            .collect(),
+                    )
+                }
+                Err(e) => {
+                    note(state, &key, format!("hoi4_armies unreadable: {e}"));
+                    state.skip(now, "sex", "x", DAY);
+                    return Ok(None);
+                }
+            }
+        }
+        let have = roster.as_deref().unwrap_or_default();
+        let armies: Vec<String> = if named.is_empty() {
+            have.to_vec()
+        } else {
+            named.into_iter().filter(|a| have.contains(a)).collect()
+        };
+        if armies.is_empty() {
+            note(state, &key, "no own army to exercise yet");
+            continue;
+        }
+        let mut args = json!({"armies": armies, "on": on});
+        if on {
+            args["stop_at_max"] = json!(true);
+        }
+        if !built(EXERCISE_TOOL) {
+            let line = unbuilt(EXERCISE_TOOL, &args, "training.exercises");
+            note(state, &key, line);
+            state.skip(now, "ex", &id, 7 * DAY);
+            continue;
+        }
+        let (ok, why) = state.act(tools, lease, EXERCISE_TOOL, args, "ex")?;
+        if ok {
+            state.done.insert(done, now);
+        } else {
+            state.skip(now, "ex", &id, 2 * DAY);
+        }
+        let verb = if on { "start" } else { "stop" };
+        note(state, &key, format!("{verb} exercises: {ok} {why}"));
+        return Ok(Some(format!("exercise {id}: {verb}: {ok} {why}")));
+    }
+    state.skip(now, "sex", "x", DAY);
+    Ok(None)
 }
 
 fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour) -> Truth {
@@ -375,6 +590,85 @@ mod tests {
         assert!(state.seams.notes["defense_lines:c"].contains("not fallback or area_defense"));
         assert!(state.done.contains_key("dl:d:off"));
         assert!(actions(&f).is_empty());
+    }
+
+    #[test]
+    fn garrison_and_exercise_tools_are_not_built_yet() {
+        for tool in [GARRISON_TOOL, EXERCISE_TOOL] {
+            assert!(!built(tool), "{tool} is built: update the gap register row");
+        }
+    }
+
+    #[test]
+    fn the_garrison_template_waits_for_an_occupied_state_then_names_what_it_would_set() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_occupation",
+            json!({"states": [{"state_id": 5, "role": "own_state_held_by_other"}]}),
+        );
+        f.replies.insert(
+            "hoi4_division_templates",
+            json!({"templates": [{"template": "Garrison Cavalry", "queued_lines": 0}]}),
+        );
+        let plan = json!({"garrison_template": {"template": "gar"},
+            "templates": [{"id": "gar", "name": "Garrison Cavalry"}]});
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert!(state.seams.notes["garrison_template"].contains("waits for an occupied state"));
+        f.replies.insert(
+            "hoi4_occupation",
+            json!({"states": [{"state_id": 5, "role": "occupied_by_player"}]}),
+        );
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        let line = &state.seams.notes["garrison_template"];
+        assert!(
+            line.contains("hoi4_occupation_garrison {\"template\":\"Garrison Cavalry\"}")
+                && line.contains("occupation.garrison_template"),
+            "{line}"
+        );
+        assert!(actions(&f).is_empty());
+        assert!(!state.done.contains_key("gt:Garrison Cavalry"));
+    }
+
+    #[test]
+    fn exercises_start_at_peace_for_the_named_armies_and_wait_otherwise() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": false, "enemies": []}}),
+        );
+        let plan = json!({"xp_budget": {"army": [
+            {"id": "drill", "cost": 0, "purpose": "exercise", "armies": ["west_guard", "Ghost"]},
+            {"id": "later", "cost": 0, "purpose": "exercise", "when": "at_war_with:SOV"},
+            {"id": "t", "cost": 50, "purpose": "template", "ref": "template:inf"}]}});
+        let mut state = State::default();
+        state
+            .layout
+            .insert("west_guard".into(), "Armia Poznan".into());
+        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        let line = &state.seams.notes["xp_budget.army:drill"];
+        assert!(
+            line.contains("hoi4_army_exercise")
+                && line.contains("\"armies\":[\"Armia Poznan\"]")
+                && line.contains("\"stop_at_max\":true")
+                && line.contains("training.exercises"),
+            "{line}"
+        );
+        assert!(state.seams.notes["xp_budget.army:later"].starts_with("waits, when"));
+        assert!(!state.seams.notes.contains_key("xp_budget.army:t"));
+        assert!(actions(&f).is_empty());
+        // at war nothing starts
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "enemies": ["GER"]}}),
+        );
+        let mut state = State::default();
+        step(&mut state, &f, &plan, "l", START).unwrap();
+        assert_eq!(
+            state.seams.notes["xp_budget.army:drill"],
+            "at war: no exercise started"
+        );
     }
 
     #[test]

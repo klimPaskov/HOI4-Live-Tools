@@ -2587,9 +2587,8 @@
       "required": [
         "template"
       ],
-      "description": "template the occupation view uses for garrisons (garrison_template_button)",
-      "x-owner": "player",
-      "x-executor-planned": "W1-7"
+      "description": "template the Occupied Territories view puts on garrison duty (garrison_template_button): plan_seams.rs sets it once the player occupies a state and the template exists. The tool for it is not built yet: the executor sends nothing and the digest (`seams`) says what it would set (gap register occupation.garrison_template)",
+      "x-owner": "executor"
     },
     "force_posture": {
       "type": "object",
@@ -2681,9 +2680,8 @@
         }
       },
       "additionalProperties": false,
-      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp)",
-      "x-owner": "player",
-      "x-executor-planned": "W1-6"
+      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp). The executor runs army entries with purpose exercise (plan_seams.rs: start at peace once `when` holds, stop at war; the exercise tool is not built yet, so the digest `seams` says what waits, gap register training.exercises); the XP spends themselves are the player's (cost)",
+      "x-owner": "executor"
     },
     "stockpile_targets": {
       "type": "object",
@@ -5145,7 +5143,16 @@
           },
           "cost": {
             "type": "number",
-            "minimum": 0
+            "minimum": 0,
+            "x-executor-planned": "W1-6"
+          },
+          "armies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "purpose exercise only: army names or army_layout name_hints that exercise (none: every own army)"
           },
           "purpose": {
             "type": "string",
@@ -5161,6 +5168,7 @@
           "ref": {
             "type": "string",
             "pattern": "^(template|doctrine|design|spirit):[A-Za-z0-9_.:-]+$",
+            "x-owner": "lint",
             "description": "the plan item paid for: template:<templates id>, doctrine:<doctrines id>, design:<id>, spirit:<idea>"
           },
           "when": {

@@ -376,9 +376,11 @@ class CoverageKeys(unittest.TestCase):
         for k in ("goal_reached", "goal_at_risk", "goal_risk_days", "checkpoint_missed", "phase_changed",
                   "contingency_triggered"):
             self.assertIn(k, alarms)
-        for key in ("force_posture", "xp_budget", "sea_transfer", "garrison_template",
-                    "retake_rules", "_coverage"):
+        for key in ("force_posture", "sea_transfer", "retake_rules", "_coverage"):
             self.assertEqual(owners[key], "player", key)
+        # plan_seams.rs: steps written ahead of their tools
+        for key in ("xp_budget", "garrison_template"):
+            self.assertEqual(owners[key], "executor", key)
         # wave 2: plan_military.rs and plan_affairs.rs took these over (hold_targets lands in parallel)
         for key in ("army_group", "navy", "invasions", "designs", "diplomacy", "faction", "intelligence", "mio", "trade",
                     "research_bonuses", "hold_targets", "stockpile_targets"):
@@ -387,12 +389,11 @@ class CoverageKeys(unittest.TestCase):
                      "production[].replace", "production[].switch_at_cover_days", "designs[].decommission"):
             self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
-        for key, item in (("xp_budget", "W1-6"), ("sea_transfer", "W1-14"),
-                          ("garrison_template", "W1-7"),
+        for key, item in (("xp_budget.army[].cost", "W1-6"), ("sea_transfer", "W1-14"),
                           ("manage.fuel_floor", "W3-10")):
             self.assertEqual(planned.get(key), item, key)
         for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "stockpile_targets",
-                    "manage.air_superiority", "occupation.per_state",
+                    "manage.air_superiority", "occupation.per_state", "xp_budget", "garrison_template",
                     "manage.casualty_ratio", "manage.casualty_days"):
             self.assertNotIn(key, planned)  # the step landed: no planned mark, the placeholder names are gone
 

@@ -1879,14 +1879,15 @@
     "supply-logistics-deployment.md#7. Garrison and occupation"
    ],
    "plan": [
-    "garrison_template"
+    "garrison_template",
+    "garrison_template.template"
    ],
    "tools": [],
-   "blocked": "garrison_template is 'planned': no executor step and no tool (garrison_template_button has no action)",
+   "blocked": "no tool sets the garrison template (the Occupied Territories view's garrison_template_button has no action); the executor step for garrison_template (plan_seams.rs) waits on that tool and says what it would set",
    "payoff": "high",
    "why": "garrisons otherwise eat front-line equipment and manpower",
    "closing": "both",
-   "owner": "garrison template action in the occupation view + executor step for garrison_template"
+   "owner": "offline done: executor step in plan_seams.rs (template resolved from templates[], waits for an occupied state and the template), GARRISON_TOOL hoi4_occupation_garrison {template}; live: build that tool (occupation view, garrison_template_button, template picker) with receipts, list it in RECEIPT_TOOLS, then live-verify"
   },
   {
    "id": "occupation.read_resistance",
@@ -4025,17 +4026,18 @@
     "xp_budget",
     "xp_budget.army",
     "xp_budget.army[].purpose",
-    "xp_budget.army[].when"
+    "xp_budget.army[].when",
+    "xp_budget.army[].armies"
    ],
    "tools": [],
-   "blocked": "no tool starts or stops army exercises (the army card's exercise button is not driven)",
+   "blocked": "no tool starts or stops army exercises (the battle-plan toolbar's btn_exercise is not driven); the executor step for xp_budget.army purpose exercise (plan_seams.rs) waits on that tool and says what it would send",
    "blocked_terms": [
     "exercise"
    ],
    "payoff": "medium",
    "why": "Regular is +25% over Trained; XP pays for templates and doctrines",
    "closing": "both",
-   "owner": "build hoi4_army_exercise {army, on} and the executor step for xp_budget (key is `planned`)"
+   "owner": "offline done: executor step in plan_seams.rs (start at peace once when holds, stop at war, armies from names or army_layout roles), EXERCISE_TOOL hoi4_army_exercise {armies, on, stop_at_max}; live: build that tool (select the army, btn_exercise / Shift+K, read the exercise state back) with receipts, list it in RECEIPT_TOOLS, then live-verify"
   },
   {
    "id": "training.early_deploy_cancel",

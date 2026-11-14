@@ -448,6 +448,14 @@ class CoverageTests(unittest.TestCase):
         self.assertFalse(any("peace.puppet[0]" in w for w in rep.warnings))
         self.assertTrue(any("garrison_template.template 'Nobody'" in w for w in rep.warnings))
 
+    def test_exercise_armies(self):
+        rep = self.new(xp_budget={"army": [
+            {"id": "drill", "cost": 0, "purpose": "exercise", "armies": ["Somebody's Army"]},
+            {"id": "t", "cost": 5, "purpose": "template", "ref": "template:line", "armies": ["x"]}]})
+        warn = "\n".join(rep.warnings)
+        self.assertIn("xp_budget.army[0].armies: \"Somebody's Army\" is no army_layout name_hint", warn)
+        self.assertIn("xp_budget.army[1]: armies is read for purpose exercise only", warn)
+
     # ------------------------------------------------------------------ wave-2 executor keys
     def wave2(self, **changes):
         plan = copy.deepcopy(WAVE2)
