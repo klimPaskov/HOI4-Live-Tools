@@ -226,6 +226,8 @@ PRED_OK = [
     "var:ITA_escalation > 4", "var:ETH.war_level != 0", "bop:ETH_centralization_balance >= -0.5",
     "mission_days:ITA_missiolini_conquer_ethiopia < 15", "surrender_progress:ETH >= 0.6", "surrender_progress:POL > 50%",
     "naval_dominance:42 >= 0.6", "naval_intel:ENG > 40%",
+    "own_surrender_progress > 25%", "own_surrender_progress >= 0.1", "factories:ETH > 10", "industry_ratio:GER > 0.4",
+    "industry_ratio:SOV >= 1.5",
     # the spellings native/src/plan_predicate.rs reads today
     "at_war_with:ETH", "controls_state:550", "controller:550 == ITA", "focus_done:ITA_paris", "tech_done:radio",
     "war_support >= 25", "war_support >= 25%", "stability<50%", "date:1936.6.1", "xp:land > 5", "xp:naval < 9",
@@ -236,10 +238,11 @@ PRED_BAD = [  # rejected by the schema pattern and by validate.parse_atom
     "stability > 0.5 ", "stability >> 0.5", "vp_share:Ethiopia>0.5", "resistance:Eritrea > 5", "phase:P-2",
     "stability = 0.5", "Ethiopia capitulated", "at_peace_conference:ETH", "equipment_fill: x < 0.8",
     "date >= soon", "manpower < 20k", "surrender_progress:Poland > 0.5", "surrender_progress:ETH", "naval_dominance:Red Sea > 0.5", "naval_intel:42 > 0.4",
+    "factories > 3", "industry_ratio:Germany > 0.4",
 ]
 PRED_RANGE = [  # pattern-valid, rejected by the parser's ranges, percent rule and calendar
     "stability >= 150", "war_support > 101%", "resistance:550 >= 150", "bop:x < -2", "date >= 1936.13.01",
-    "1936.02.31", "pp > 5%", "manpower < 10%",
+    "1936.02.31", "pp > 5%", "manpower < 10%", "own_surrender_progress > 120%", "industry_ratio:GER > 40%",
 ]
 
 

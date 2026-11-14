@@ -549,9 +549,44 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertIn("war_support > 0.5", f["message"])
         plan = copy.deepcopy(self.ita)
         plan["politics"][0]["when"] = "war_support > 0.5"
+        self.assertNoHit(plan, "politics.law_gates", "error")
+        self.assertNoHit(plan, "politics.law_gates", "warning")
+        # the gate's enemy-industry branch (ic_ratio > 0.4) is named as a way in
+        self.assertHit(plan, "politics.law_gates", "info", "industry_ratio:<enemy> > 0.4")
+        plan["politics"][0]["when"] = {"all": ["war_support > 0.5", "industry_ratio:ETH > 0.4"]}
         self.assertNoHit(plan, "politics.law_gates")
         plan["politics"][0]["when"] = {"all": ["1936.03.01", "stability >= 0.5"]}
         self.assertHit(plan, "politics.law_gates", "warning", "does not test war_support > 0.5")
+
+    # -------------------------------------------------------------- diplomacy.incoming
+    def test_incoming_rules(self):
+        plan = copy.deepcopy(self.ita)
+        plan["faction"] = {"join": "GER"}
+        plan["incoming_proposals"] = [
+            {"class": "lend_lease_request", "answer": "accept"},
+            {"class": "lend_lease_request", "from": ["SPR"], "answer": "refuse"},
+            {"class": "any", "answer": "refuse", "when": "war_support > 0.5"},
+            {"class": "guarantee", "from": ["XQZ"], "answer": "accept"},
+        ]
+        found = [f for f in self.run_lint(plan)["findings"] if f["rule"] == "diplomacy.incoming"]
+        got = {(f["severity"], f["where"]) for f in found}
+        self.assertIn(("warning", "incoming_proposals[0]"), got)   # accepts every lend-lease request
+        self.assertIn(("warning", "incoming_proposals[1]"), got)   # never reached after [0]
+        self.assertIn(("error", "incoming_proposals[2]"), got)     # refuses the invitation faction.join wants
+        self.assertIn(("error", "incoming_proposals[3]"), got)     # XQZ is no tag
+        plan["incoming_proposals"] = [{"class": "lend_lease_request", "from": ["SPR"], "answer": "accept"},
+                                      {"class": "any", "answer": "player"}]
+        self.assertNoHit(plan, "diplomacy.incoming")
+
+    # -------------------------------------------------------------- occupation.law_shown
+    def test_occupation_law_shown(self):
+        plan = copy.deepcopy(self.ita)
+        plan["occupation"] = {"default_law": "autonomous_occupation",
+                              "ladder": ["foreign_civilian_oversight", "brutally_oppressive_occupation"]}
+        found = [f for f in self.run_lint(plan)["findings"] if f["rule"] == "occupation.law_shown"]
+        # Italy is fascist at the start: the democratic law is not offered, the fascist one is
+        self.assertEqual([f["where"] for f in found], ["occupation.default_law"], found)
+        self.assertIn("has_government", found[0]["message"])
 
     # -------------------------------------------------------------- occupation and peace
     def test_occupation_and_peace(self):

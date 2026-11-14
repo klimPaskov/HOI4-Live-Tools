@@ -330,6 +330,7 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_design_obsolete",
     "hoi4_design_set_production",
     "hoi4_diplomacy_act",
+    "hoi4_diplomacy_incoming",
     "hoi4_division_disband",
     "hoi4_doctrine_adopt",
     "hoi4_event_choose",

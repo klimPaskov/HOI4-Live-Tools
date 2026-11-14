@@ -43,6 +43,17 @@
 //!   province_controlled:<p>     the province's controller is the player; found in the
 //!   province_controller:<p>     victory points and provinces_held_by_others of the own and
 //!                               the enemies' hoi4_states reads (other provinces: unknown)
+//!   own_surrender_progress      the share of the player's own victory points others hold (the
+//!                               game's surrender progress: the country capitulates when it
+//!                               reaches its surrender limit), hoi4_states{query:<own tag>}
+//!                               victory_points.share_held_by_others                  readable
+//!   factories:<TAG>             civilian + military + naval factories: the player's from
+//!                               hoi4_economy factory_trigger_count (live); another country's an
+//!                               estimate, hoi4_states{query:TAG} factories_start.controlled (the
+//!                               game files' factories of the states it controls now)  readable
+//!   industry_ratio:<TAG>        factories:<TAG> / the player's factories (the game's ic_ratio
+//!                               gate of war laws, e.g. "an enemy above 40% of yours"; a plain
+//!                               number, 1 is equal industry)                         readable
 //!   exists:<TAG>                TAG owns a state (hoi4_states{query:TAG})            readable
 //!   focus_done:<key>            hoi4_focus_completed completed (all pages)           readable
 //!   tech_done:<key>             hoi4_research researched[].id (all pages)            readable
@@ -208,6 +219,10 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("world_tension", Kind::Ratio, false),
     ("fuel_ratio", Kind::Ratio, false),
     ("vp_share", Kind::Ratio, true),
+    ("own_surrender_progress", Kind::Ratio, false),
+    ("surrender_progress", Kind::Ratio, true),
+    ("factories", Kind::Number, true),
+    ("industry_ratio", Kind::Number, true),
     ("equipment_fill", Kind::Ratio, true),
     ("resistance", Kind::Ratio, true),
     ("compliance", Kind::Ratio, true),
@@ -221,7 +236,6 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("mission_days", Kind::Number, true),
     ("naval_dominance", Kind::Ratio, true),
     ("naval_intel", Kind::Ratio, true),
-    ("surrender_progress", Kind::Ratio, true),
     ("at_peace_conference", Kind::Flag, false),
     ("at_war_with", Kind::Flag, true),
     ("controls_state", Kind::Flag, true),
@@ -751,6 +765,30 @@ fn tag_arg(atom: &Atom) -> Read<String> {
     }
 }
 
+/// A country's factories (civilian, military and naval): the player's own from hoi4_economy
+/// (live), another country's estimated from hoi4_states{query:TAG} factories_start.controlled
+/// (the factories the game files give the states it controls now; nothing reads another
+/// country's buildings live).
+fn factories(ctx: &mut Ctx, tag: &str) -> Read<f64> {
+    if ctx.me().ok().as_deref() == Some(tag) {
+        let counts = ctx
+            .read("hoi4_economy", &json!({}))
+            .map(|e| e["factory_trigger_count"].clone())
+            .ok_or("hoi4_economy unreadable")?;
+        let kinds = ["civilian", "military", "naval"];
+        let values: Option<Vec<f64>> = kinds.iter().map(|k| counts[*k].as_f64()).collect();
+        return values
+            .map(|v| v.iter().sum())
+            .ok_or_else(|| "hoi4_economy factory_trigger_count unreadable".into());
+    }
+    let read = ctx
+        .read("hoi4_states", &json!({"query": tag}))
+        .ok_or("hoi4_states unreadable")?;
+    read["factories_start"]["controlled"]["total"]
+        .as_f64()
+        .ok_or_else(|| format!("hoi4_states gives no factories_start for {tag}"))
+}
+
 /// A top-bar number of hoi4_country_status.
 fn status_field(ctx: &mut Ctx, field: &str) -> Read<f64> {
     let status = ctx
@@ -1062,7 +1100,6 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             "navy.dominance_intel_read",
         )
         .map(Reading::Number),
-        "surrender_progress" => surrender_progress(ctx, &tag_arg(atom)?).map(Reading::Number),
         "capitulated" => {
             // What a player sees: the war with TAG is over and either the peace conference that
             // follows a capitulation is open or TAG no longer exists (annexed). A white peace
@@ -1104,6 +1141,30 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
                     "hoi4_states lists no victory points owned by {tag}"
                 )),
             }
+        }
+        // surrender_progress:<TAG>: that enemy's progress from hoi4_wars
+        "surrender_progress" => surrender_progress(ctx, &tag_arg(atom)?).map(Reading::Number),
+        "own_surrender_progress" => {
+            // Bare: the player's own progress, the share of its own victory points others hold
+            // (it capitulates when that reaches its surrender limit).
+            let me = ctx.me()?;
+            let read = ctx
+                .read("hoi4_states", &json!({"query": me}))
+                .ok_or("hoi4_states unreadable")?;
+            match read["victory_points"]["share_held_by_others"].as_f64() {
+                Some(lost) => Ok(Reading::Number(lost)),
+                None => Err(format!("hoi4_states lists no victory points owned by {me}")),
+            }
+        }
+        "factories" => factories(ctx, &tag_arg(atom)?).map(Reading::Number),
+        "industry_ratio" => {
+            let tag = tag_arg(atom)?;
+            let me = ctx.me()?;
+            let own = factories(ctx, &me)?;
+            if own <= 0.0 {
+                return Err(format!("{me} has no factories to compare with"));
+            }
+            Ok(Reading::Number(factories(ctx, &tag)? / own))
         }
         "exists" => {
             let tag = tag_arg(atom)?;
@@ -1368,6 +1429,49 @@ mod tests {
                 {"enemy": {"tag": "ENG"}, "own_naval_intel": 35}]}}),
         );
         assert_eq!(eval(&f, json!("naval_intel:ENG >= 0.4")), Truth::False);
+    }
+    #[test]
+    fn law_gates_read_the_enemy_industry_and_the_own_surrender_progress() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_economy",
+            json!({"political_power": {"raw_signed": 0},
+                "factory_trigger_count": {"civilian": 20, "military": 15, "naval": 5}}),
+        );
+        let states = f.replies.get_mut("hoi4_states").unwrap();
+        states["ETH"]["factories_start"] =
+            json!({"owned": {"total": 12}, "controlled": {"total": 8}});
+        states["ITA"]["victory_points"] = json!({"share_held_by_others": 0.3});
+        for (p, want) in [
+            // the enemy's factories: the states it controls now (8), not the ones it owns
+            (json!("factories:ETH == 8"), Truth::True),
+            // the player's own count is live (20 + 15 + 5)
+            (json!("factories:ITA >= 40"), Truth::True),
+            // 8 / 40 = 0.2: the war economy gate "an enemy above 40% of yours" does not hold
+            (json!("industry_ratio:ETH > 0.4"), Truth::False),
+            (json!("industry_ratio:ETH >= 0.2"), Truth::True),
+            // 30% of the own victory points lost: Scraping the Barrel's "over 25%" holds
+            (json!("own_surrender_progress > 25%"), Truth::True),
+            (json!("own_surrender_progress > 0.5"), Truth::False),
+        ] {
+            assert_eq!(eval(&f, p.clone()), want, "{p}");
+        }
+        // a country hoi4_states lists no factories for, and no own count, stay unknown
+        assert_eq!(eval(&f, json!("factories:AUS > 1")), Truth::Unknown);
+        let mut g = game();
+        g.replies.insert("hoi4_economy", json!({}));
+        assert_eq!(eval(&g, json!("industry_ratio:ETH > 0.4")), Truth::Unknown);
+        // the own victory points not listed: unknown, never true
+        assert_eq!(
+            eval(&game(), json!("own_surrender_progress > 0")),
+            Truth::Unknown
+        );
+        let Predicate::Atom(a) = parse(&json!("industry_ratio:GER > 1.5")).unwrap() else {
+            panic!()
+        };
+        // a plain number, not a percentage: 1.5 is one and a half times the own industry
+        assert_eq!(a.cmp, Some((Op::Gt, Operand::Number(1.5))));
+        assert!(parse(&json!("factories")).is_err());
     }
     fn eval(f: &Fake, p: Value) -> Truth {
         let mut ctx = Ctx::new(f, date_hour("1936.05.01").unwrap());

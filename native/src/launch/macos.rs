@@ -647,6 +647,35 @@ pub(crate) struct GameContent {
     pub content: std::path::PathBuf,
     pub disabled_dlcs: Option<Vec<String>>,
 }
+/// Each law key with whether the game shows it and what could not be judged.
+type LawsShown = Vec<(String, crate::plan_predicate::Truth, Vec<String>)>;
+
+/// The occupation laws of the running game's content and whether the game shows each to the
+/// player named in a hoi4_occupation read (tag, date).
+fn occupation_laws(
+    exe: &str,
+    read: &Value,
+) -> Result<(std::sync::Arc<Vec<occlaw::Law>>, LawsShown)> {
+    let found = game_content(exe)?;
+    let laws = occlaw::laws(&found.content);
+    if laws.is_empty() {
+        return Err(Error::new(
+            "map_data_unavailable",
+            "No occupation laws in common/occupation_laws",
+        ));
+    }
+    let player = read["player"].as_str().unwrap_or("");
+    // "1936-01-01 12:00" (the date part only)
+    let date = read["date"]["iso"]
+        .as_str()
+        .and_then(|d| d.split(' ').next())
+        .and_then(crate::focus_rules::date);
+    let dlcs = crate::focus_rules::live::Dlcs::read(&found.install, found.disabled_dlcs.as_deref());
+    let rules = crate::focus_rules::Catalog::load(&found.content);
+    let known = occlaw::known(&found.content, player, date);
+    let rows = occlaw::shown(&laws, &rules, known, Some(&dlcs));
+    Ok((laws, rows))
+}
 pub(crate) fn game_content(exe: &str) -> Result<GameContent> {
     let install = mapdata::install_dir(exe)?;
     Ok(GameContent {
@@ -723,7 +752,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
+        json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
         json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; surrender progress (wars[].enemy_surrender_progress, own_surrender_progress) and the naval intel against each enemy (wars[].own_naval_intel) are not yet built and always null with a reason; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended. capital_land: own-controlled states the capital reaches over own-controlled land (history capital, else the largest own area); a division elsewhere is overseas (disbanding it loses 75% of its equipment).","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
         json!({"name":"hoi4_front_plan","description":"War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"},"description":"enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]"},"max_axes":{"type":"integer","minimum":1,"maximum":6}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
@@ -1573,7 +1602,12 @@ impl MacClock {
                 .identity()
                 .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
                 .exe;
-            return occupation::occupation(process, &mapdata::game_dir(exe)?, args);
+            let mut out = occupation::occupation(process, &mapdata::game_dir(exe)?, args)?;
+            if let Ok((laws, rows)) = occupation_laws(exe, &out) {
+                out["laws"] = occlaw::law_rows(&laws, &rows);
+                out["laws_source"] = json!("common/occupation_laws of the running game's content in the Default Law list's order; shown: whether the game shows the law to the player (null: its visible trigger reads something no tool reads; the ruling ideology is the history's)");
+            }
+            return Ok(out);
         }
         if name == "hoi4_wars" {
             allowed(args, &["enemies", "max_states"])?;
@@ -4597,8 +4631,14 @@ impl MacClock {
         if name == "hoi4_occupation_law" {
             allowed(args, &["law", "via_state", "request_id", "lease_token"])?;
             let law = string(args, "law")?;
-            if !occlaw::LAWS.iter().any(|(k, _)| *k == law) {
-                return Err(Error::new("invalid_arguments", "Unknown occupation law"));
+            if law.is_empty()
+                || law.len() > 96
+                || !law.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "Invalid occupation law key",
+                ));
             }
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
@@ -4609,6 +4649,13 @@ impl MacClock {
                 .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
                 .exe;
             let dir = mapdata::game_dir(exe)?;
+            // The law's row in the Default Law list, from the game files and the laws the game
+            // shows the player (refused before any input when it cannot be placed).
+            let row = {
+                let read = occupation::occupation(process, &dir, &serde_json::Map::new())?;
+                let (_, rows) = occupation_laws(exe, &read)?;
+                occlaw::row_of(&rows, law)
+            };
             let read_now = || -> Result<(Option<String>, Option<i32>)> {
                 let v = occupation::occupation(process, &dir, &serde_json::Map::new())?;
                 let current = v["player_occupation_law"]["key"]
@@ -4644,6 +4691,9 @@ impl MacClock {
                         "No occupied or resisting state to open the occupation view from; pass via_state",
                     ));
                 }
+                if let Err(e) = &row {
+                    return Err(Error::new(e.code, e.message.clone()));
+                }
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"occupation_law","law":law,"via_state":via});
@@ -4662,7 +4712,10 @@ impl MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                let result = occlaw::set_default(process, keys, via.unwrap_or(0), law);
+                let result = match &row {
+                    Ok(row) => occlaw::set_default(process, keys, via.unwrap_or(0), *row),
+                    Err(e) => Err(Error::new(e.code, e.message.clone())),
+                };
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
                 while std::time::Instant::now() < deadline
                     && read_now().ok().and_then(|x| x.0).as_deref() != Some(law)

@@ -411,7 +411,9 @@ laws". Facts: `F laws <TAG>` (current law and the `needs` gate of each), `F idea
 4. **Law jumps:** plan only the target law of each phase; gates never require the previous law (PO04).
 5. Gates as the files state them, including the enemy-industry ratio of War Economy and Total Mobilisation and
    surrender progress for the top conscription laws; war-only laws (Closed Economy, National Defence State)
-   before the peace (PO12, PO13, PO15).
+   before the peace (PO12, PO13, PO15). The `when` atoms for those branches: `industry_ratio:<enemy> > 0.4`
+   (the enemy's factories against the own; another country's count is estimated from the states it holds)
+   and `own_surrender_progress > 0.25` (the share of the own victory points the enemy holds).
 6. Trade law with the reason: Free Trade (open to every country) in the 1936 build-up unless the export share
    starves the plan's own lines (EC14).
 7. **No conscription law the plan does not need:** Service by Requirement -10%, All Adults Serve -30%, Scraping

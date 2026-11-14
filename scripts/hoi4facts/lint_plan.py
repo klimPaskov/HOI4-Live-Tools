@@ -183,9 +183,18 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            OOB: the game offers no Edit for it
   politics.law_gates       an economy or conscription law with an `available` gate bought without a
                            `when` predicate (other gated laws: warning; warning when `when` skips the
-                           gate's war support / stability)
+                           gate's war support / stability; info when the gate also opens on an enemy's
+                           industry (ic_ratio) or the own surrender progress and `when` tests neither
+                           industry_ratio nor own_surrender_progress)
+  diplomacy.incoming       incoming_proposals: a `from` sender that is no country tag; refusing the faction
+                           invitation faction.join waits for; (warning) a rule an earlier unconditional rule
+                           already answers (never reached); accepting every lend-lease or manpower request
+                           without `from` (equipment or men to anyone who asks)
   occupation.required      states resisting at the start, or states the plan conquers, without an
                            occupation key
+  occupation.law_shown     (warning) an occupation law the plan names whose `visible` trigger does not hold for
+                           the country at the start (ideology from its history, tag, DLC): the game does not
+                           offer it
   peace.enemies            an enemy without a peace item (one of its states, or its tag, in peace.take,
                            puppet or liberate)
   manage.thresholds        no manage key (plan_manage.rs runs the manpower, stability, equipment and
@@ -362,7 +371,8 @@ BALANCE_ERROR_DAYS = 120
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "supply.port_convoys",
              "supply.convoy_size",
              "construction.hub_cost", "air.base_capacity", "templates.equipment", "templates.xp", "templates.locked",
-             "politics.law_gates", "occupation.required", "peace.enemies", "manage.thresholds", "production.replace",
+             "politics.law_gates", "diplomacy.incoming", "occupation.required", "occupation.law_shown", "peace.enemies",
+             "manage.thresholds", "production.replace",
              "designs.decommission",
              "predicates.unreadable", "conquest.neutral_land", "alarms.silenced",
              # tactics research rules
@@ -2575,6 +2585,55 @@ class Lint:
                 if not any(a["name"] == key and a["op"] in (">", ">=") and a["value"] >= x - 1e-9 for _, a in atoms):
                     self.add("warning", "politics.law_gates", where,
                              f"`when` does not test {key} {op} {x:g}, the gate of {p['idea']}")
+            # The gate's enemy-industry / surrender branches (often the only way in for a democracy or a
+            # defender): a `when` that tests neither waits on the other branches alone.
+            ways = info.get("ways") or {}
+            if ways and not any(a["name"] in ways for _, a in atoms):
+                hint = " or ".join(
+                    (f"industry_ratio:<enemy> > {x:g}" if k == "industry_ratio" else f"own_surrender_progress > {x:g}")
+                    for k, x in sorted(ways.items()))
+                self.add("info", "politics.law_gates", where,
+                         f"the gate of {p['idea']} also opens on {hint}; `when` can wait on that branch")
+
+    def incoming(self):
+        """diplomacy.incoming: the incoming_proposals rules. The first matching rule answers, so a rule an
+        earlier unconditional rule already covers is never reached; a sender that is no country tag of
+        the game matches nothing; refusing the faction invitation faction.join waits for contradicts the
+        plan; accepting every lend-lease or manpower request gives equipment or men to anyone who asks."""
+        rules = self.list_of("incoming_proposals")
+        if not rules:
+            return
+        tags = self.game.country_tags()
+        join = ((self.plan.get("faction") or {}).get("join") or "") if isinstance(self.plan.get("faction"), dict) \
+            else ""
+        seen = []  # (class, senders or None) of the rules before, unconditional only
+        for i, r in enumerate(rules):
+            if not isinstance(r, dict):
+                continue
+            cls, answer = r.get("class") or "any", r.get("answer")
+            senders = [t for t in r.get("from") or [] if isinstance(t, str)]
+            where = f"incoming_proposals[{i}]"
+            for t in senders:
+                if tags and t not in tags:
+                    self.add("error", "diplomacy.incoming", where, f"{t} is no country tag of the game (common/country_tags)")
+            for j, (c, frm) in enumerate(seen):
+                if (c == "any" or c == cls) and (frm is None or (senders and set(senders) <= set(frm))):
+                    self.add("warning", "diplomacy.incoming", where,
+                             f"never reached: incoming_proposals[{j}] answers every {cls} proposal"
+                             + (f" from {', '.join(senders)}" if senders else "") + " first")
+                    break
+            if (answer == "refuse" and cls in ("any", "faction_invitation") and join
+                    and (join == "ANY" or not senders or join in senders)):
+                self.add("error", "diplomacy.incoming", where,
+                         f"refuses the faction invitation faction.join {join} waits for (the faction step accepts it "
+                         f"first; drop one of the two)")
+            if answer == "accept" and cls in ("any", "lend_lease_request", "manpower_request") and not senders:
+                self.add("warning", "diplomacy.incoming", where,
+                         f"accepts every {'lend-lease or manpower' if cls == 'any' else cls.replace('_', ' ')} request "
+                         f"from anyone: name the senders in `from` (or a `when`) so no equipment or manpower goes by "
+                         f"accident")
+            if r.get("when") in (None, "", True):
+                seen.append((cls, senders or None))
 
     def occupation(self):
         game = self.game
@@ -2585,6 +2644,7 @@ class Lint:
                 and owners.get(e["state"]) not in (None, self.tag)}
         conq |= {s for s in self.axis_states() if owners.get(s) in enemies}
         self.facts["occupation"] = {"resisting": sorted(res), "conquered": sorted(conq)}
+        self.occupation_laws_shown()
         if (res or conq) and not isinstance(self.plan.get("occupation"), dict):
             parts = []
             if res:
@@ -2594,6 +2654,35 @@ class Lint:
             self.add("error", "occupation.required", "occupation",
                      f"{' and '.join(parts)}, but the plan has no occupation key (default_law, ladder, "
                      f"harsher_at_resistance, milder_at_compliance)")
+
+    def occupation_laws_shown(self):
+        """occupation.law_shown: a law the occupation key names whose `visible` trigger (common/occupation_laws)
+        does not hold for the country at the start: the game does not offer it (hoi4_occupation_law refuses
+        it with law_not_shown), so the executor's step on it never acts. A warning: the government or a
+        focus can change before the law is wanted."""
+        occ = self.plan.get("occupation")
+        if not isinstance(occ, dict) or not self.tag:
+            return
+        named = [(f"occupation.{k}", occ.get(k)) for k in ("default_law", "law", "mildest", "harshest")]
+        named += [(f"occupation.ladder[{j}]", x) for j, x in enumerate(occ.get("ladder") or [])]
+        rows = {r["id"]: r for r in self.world.occupation_laws()}
+        visible = {}
+        for f in self.game.files("common/occupation_laws"):
+            for k, v in derive.parse_file(f):
+                if k and isinstance(v, list):
+                    b = derive.get1(v, "visible")
+                    visible[k] = b if isinstance(b, list) else None
+        facts = plan_gates.Facts(self.tag, self.ctx.dlcs if self.ctx else (), self.start,
+                                 government=self.world.ruling_party(self.tag),
+                                 focuses=self.meta.get("completed_focuses", []) or [])
+        for where, law in named:
+            if not isinstance(law, str) or law not in rows or not visible.get(law):
+                continue
+            if plan_gates.evaluate(visible[law], facts) is False:
+                why = "; ".join(plan_gates.blocking(visible[law], facts)[:2])
+                self.add("warning", "occupation.law_shown", where,
+                         f"the game does not show {law} to {self.tag} at the start ({why}): hoi4_occupation_law "
+                         f"refuses it (law_not_shown) until that changes")
 
     def peace(self):
         enemies = self.enemies()
@@ -4081,7 +4170,7 @@ class Lint:
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.port_convoys,
-                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.occupation, self.peace, self.manage,
+                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.templates, self.laws, self.incoming, self.occupation, self.peace, self.manage,
                  self.alarms_silenced,
                  self.production_changes, self.unreadable,
                  # tactics research rules (production.day0 reads production's factory count, pp_budget the focus

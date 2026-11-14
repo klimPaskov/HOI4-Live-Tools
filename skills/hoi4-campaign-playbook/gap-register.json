@@ -58,14 +58,17 @@
     "politics-diplomacy-espionage.md#11 PO13",
     "procedure.md#13. Gated laws"
    ],
-   "plan": [],
+   "plan": [
+    "politics[].when",
+    "politics_auto.order[].when"
+   ],
    "tools": [
     "hoi4_politics_options"
    ],
    "payoff": "medium",
    "why": "non-fascist states and defenders need these gates to reach war laws on time",
-   "closing": "offline",
-   "owner": "offline: predicate atoms for the enemy's factory count and own surrender progress so a law pick can wait on them"
+   "closing": "live",
+   "owner": "live: on a war with a major, compare industry_ratio:<enemy> with the game's War Economy gate (hoi4_politics_options shows the law enabled) and own_surrender_progress with the war overview"
   },
   {
    "id": "politics.conscription_by_manpower",
@@ -1031,14 +1034,16 @@
     "procedure.md#22. Diplomacy",
     "politics-diplomacy-espionage.md#10. Events and pop-ups"
    ],
-   "plan": [],
+   "plan": [
+    "incoming_proposals"
+   ],
    "tools": [
     "hoi4_diplomacy_incoming"
    ],
    "payoff": "medium",
    "why": "unanswered pop-ups cover panels and make army actions fail",
-   "closing": "both",
-   "owner": "offline: plan rules that answer incoming proposals by kind and sender; live: validate hoi4_diplomacy_incoming on an AI proposal"
+   "closing": "live",
+   "owner": "live: hoi4_diplomacy_incoming on an AI proposal, answered by an incoming_proposals rule (receipt verified, pop-up closed); an unmatched proposal wakes the player"
   },
   {
    "id": "diplomacy.auto_responses",
@@ -1469,14 +1474,16 @@
    "playbook": [
     "procedure.md#22. Diplomacy"
    ],
-   "plan": [],
+   "plan": [
+    "incoming_proposals"
+   ],
    "tools": [
     "hoi4_diplomacy_incoming"
    ],
    "payoff": "low",
    "why": "giving away equipment by accident hurts",
-   "closing": "both",
-   "owner": "offline: plan rules for incoming lend-lease and licence requests; live: validate hoi4_diplomacy_incoming"
+   "closing": "live",
+   "owner": "live: an AI lend-lease or licence request answered by an incoming_proposals rule with class lend_lease_request (receipt verified)"
   },
   {
    "id": "lendlease.send_volunteers",
@@ -1845,21 +1852,20 @@
     "politics-diplomacy-espionage.md#14 OC02"
    ],
    "plan": [
-    "occupation.default_law"
+    "occupation.default_law",
+    "occupation.ladder"
    ],
    "tools": [
     "hoi4_occupation_law"
    ],
-   "blocked": "hoi4_occupation_law has a hard-coded 9-law enum; autonomous_occupation, liberate_workers_occupation, colonial_police* are refused with invalid_arguments 'Unknown occupation law'",
+   "blocked": "hoi4_occupation_law places a law by the laws shown above it in the Default Law list; colonial_police* and other laws shown only through FROM scopes, focuses or flags cannot be placed and are refused with law_row_unknown (needs the per-state law button or a read of the list)",
    "blocked_terms": [
-    "autonomous_occupation",
-    "liberate_workers",
     "colonial"
    ],
    "payoff": "medium",
    "why": "Italy in Ethiopia: resistance target -45 and garrison -40%; also not mod-dynamic",
-   "closing": "both",
-   "owner": "read law keys from common/occupation_laws instead of the const list, then live on Italy"
+   "closing": "live",
+   "owner": "live on Italy: hoi4_occupation laws shown flags against the Default Law list, hoi4_occupation_law on two shown rows; colonial police stays refused until the list can be read"
   },
   {
    "id": "occupation.garrison_template",

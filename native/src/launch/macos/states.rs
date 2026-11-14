@@ -163,6 +163,11 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
         let centers = super::mapdata::state_centers(dir).ok();
         let victory = super::mapdata::state_victory_points(dir).ok();
         let infrastructure = super::mapdata::state_infrastructure(dir).ok();
+        let factories = super::mapdata::state_factories(dir);
+        let (mut owned_factories, mut controlled_factories) = (
+            super::mapdata::Factories::default(),
+            super::mapdata::Factories::default(),
+        );
         let (mut vp_total, mut vp_lost) = (0.0f64, 0.0f64);
         let mut vp_kept: Vec<Value> = Vec::new();
         let mut rows = Vec::new();
@@ -177,6 +182,24 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
                     }
                     if let Some(level) = infrastructure.as_ref().and_then(|m| m.get(&id)) {
                         row["infrastructure_start"] = json!(level);
+                    }
+                    // The factories the state started with (history/states): another country's
+                    // factories are not in memory reads, so its industry is estimated from the
+                    // states it holds now.
+                    if let Some(f) = factories.get(&id) {
+                        row["factories_start"] = json!({"civilian": f.civilian,
+                            "military": f.military, "naval": f.naval});
+                        let add = |sum: &mut super::mapdata::Factories| {
+                            sum.civilian += f.civilian;
+                            sum.military += f.military;
+                            sum.naval += f.naval;
+                        };
+                        if owner == query {
+                            add(&mut owned_factories);
+                        }
+                        if controller == query {
+                            add(&mut controlled_factories);
+                        }
                     }
                     // Provinces another country holds inside the state: an enemy can take part
                     // of a state while the state still counts as ours (w22: Eritrea went
@@ -218,6 +241,15 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
             }
         }
         let mut out = json!({"states": rows});
+        let sum = |f: &super::mapdata::Factories| {
+            json!({"civilian": f.civilian, "military": f.military, "naval": f.naval,
+                "total": f.total()})
+        };
+        out["factories_start"] = json!({
+            "owned": sum(&owned_factories),
+            "controlled": sum(&controlled_factories),
+            "note": "estimate: the factories history/states gives the states this country owns / controls now; construction, conversion and bombing since the start are not in it"
+        });
         if vp_total > 0.0 {
             vp_kept.sort_by(|a, b| {
                 b["victory_points"]

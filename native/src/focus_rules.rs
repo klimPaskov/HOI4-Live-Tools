@@ -1130,6 +1130,23 @@ fn bounded(mut list: Vec<String>) -> Vec<String> {
 }
 
 impl Catalog {
+    /// Any trigger block of the game's script (a `visible`, an `available`) judged for the player
+    /// in the player's country scope with this catalogue's scripted triggers: its truth and what
+    /// could not be judged. Only the macOS occupation-law tool reads visible triggers today.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn judge(&self, block: &[Entry], facts: &dyn Facts) -> (Truth, Vec<String>) {
+        let me = facts.player();
+        let Some(tag) = me.clone() else {
+            return (Truth::Unknown, vec!["the player's tag".into()]);
+        };
+        let out = Eval {
+            catalog: self,
+            facts,
+            me,
+        }
+        .block(block, &mut vec![Scope::Country(tag)], 0);
+        (out.truth, bounded(out.notes))
+    }
     /// Whether the player can start `id` now.
     pub fn verdict(&self, id: &str, facts: &dyn Facts) -> Verdict {
         let done = |state, why: Vec<String>, unknown: Vec<String>| Verdict {

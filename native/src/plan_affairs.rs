@@ -97,6 +97,15 @@
 //!                go ahead and retries the join after 30 game days. `create` founds the faction once
 //!                through hoi4_faction_create (already_in_faction counts as done). Tools: faction_create
 //!                opened live 6 Nov (descriptor UNVALIDATED); invite_accept and diplomacy_incoming never
+//!   incoming_proposals  [{"id"?,"class":"any"|<class>,"from"?:[TAG..],"answer":"accept"|"refuse"|"player",
+//!                "when"?}] the answers to the open diplomatic pop-ups (hoi4_diplomacy_incoming: faction
+//!                invitation, guarantee, non-aggression pact, military access, peace offer, call to arms,
+//!                lend-lease request, manpower request, other), once a game day while none is open: the
+//!                first rule matching a proposal's `class` (any: every class) and sender (`from`: the
+//!                pop-up names the tag or the country's name; absent: anyone) whose `when` holds answers it
+//!                (a rule whose `when` is unknown holds the proposal), "player" and no rule wake the player
+//!                once per proposal; an answer the pop-up does not offer wakes too. A faction invitation
+//!                `faction.join` still wants is left to the faction step. Tool never live-verified
 //!   intelligence {"agency":true|false,"upgrades":[ordered],"operatives"?:N|[{"mission","target"?:TAG,
 //!                "state_id"?}],"when"?}: "agency":true creates the agency once (hoi4_agency_create;
 //!                agency_exists and agency_creation_in_progress count as done), then nothing waits for
@@ -234,8 +243,8 @@ struct Run<'a> {
 
 type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
 
-/// Everything after plan_manage's step, at most one action: diplomacy, faction, trade, designs
-/// and line switches, MIOs, intelligence.
+/// Everything after plan_manage's step, at most one action: diplomacy, faction, incoming
+/// proposals, trade, designs and line switches, MIOs, intelligence.
 pub fn step(
     state: &mut State,
     tools: &dyn Tools,
@@ -249,9 +258,10 @@ pub fn step(
         lease,
         now,
     };
-    let sections: [Section; 8] = [
+    let sections: [Section; 9] = [
         diplomacy_step,
         faction_step,
+        incoming_step,
         trade_step,
         designs_step,
         line_design_step,
@@ -1429,6 +1439,34 @@ fn relation(
 // ---------------------------------------------------------------------------------------------
 // W2-12: faction (M5).
 
+/// The country name hoi4_diplomacy_countries gives `tag` (lower case), None when unknown.
+fn country_name(tools: &dyn Tools, tag: &str) -> Option<String> {
+    tools
+        .call(
+            "hoi4_diplomacy_countries",
+            &json!({"query": tag, "limit": 10}),
+        )
+        .ok()
+        .and_then(|r| {
+            list(&r, "countries")
+                .iter()
+                .find(|c| c["tag"].as_str() == Some(tag))
+                .map(|c| text(&c["name"]).to_lowercase())
+        })
+        .filter(|n| !n.is_empty())
+}
+
+/// Whether a proposal of hoi4_diplomacy_incoming comes from `tag`: the pop-up carries no sender
+/// tag, so its title or description must name the tag or the country's name.
+fn names_sender(proposal: &Value, tag: &str, name: Option<&str>) -> bool {
+    let words = format!(
+        "{} {}",
+        text(&proposal["title"]),
+        text(&proposal["description"])
+    );
+    words.contains(tag) || name.is_some_and(|n| words.to_lowercase().contains(n))
+}
+
 /// The index of an open faction invitation from `join` ("ANY": any), from hoi4_diplomacy_incoming.
 fn invitation(tools: &dyn Tools, join: &str) -> Option<u64> {
     let read = tools.call("hoi4_diplomacy_incoming", &json!({})).ok()?;
@@ -1442,28 +1480,10 @@ fn invitation(tools: &dyn Tools, join: &str) -> Option<u64> {
     if join == "ANY" {
         return offers[0]["index"].as_u64();
     }
-    let name = tools
-        .call(
-            "hoi4_diplomacy_countries",
-            &json!({"query": join, "limit": 10}),
-        )
-        .ok()
-        .and_then(|r| {
-            list(&r, "countries")
-                .iter()
-                .find(|c| c["tag"].as_str() == Some(join))
-                .map(|c| text(&c["name"]).to_lowercase())
-        })
-        .filter(|n| !n.is_empty());
+    let name = country_name(tools, join);
     offers
         .iter()
-        .find(|p| {
-            let words = format!("{} {}", text(&p["title"]), text(&p["description"]));
-            words.contains(join)
-                || name
-                    .as_ref()
-                    .is_some_and(|n| words.to_lowercase().contains(n))
-        })
+        .find(|p| names_sender(p, join, name.as_deref()))
         .and_then(|p| p["index"].as_u64())
 }
 
@@ -1609,6 +1629,165 @@ fn faction_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     }
     note(state, "faction", "waiting after a refusal");
     state.skip(now, "mfac", "x", DAY);
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Incoming proposals: alliance, guarantee, call to arms, lend-lease and manpower requests.
+
+/// What a proposal's rule says: the answer to send, or why it waits / goes to the player.
+enum Answer {
+    Send(&'static str),
+    Player(String),
+    Wait(String),
+}
+
+/// The first `incoming_proposals` rule that matches a proposal's class and sender and whose
+/// `when` holds decides it; a rule whose `when` is unknown stops the walk (a later rule must
+/// not answer what this one may still claim); no rule leaves the proposal to the player.
+fn incoming_answer(
+    state: &mut State,
+    run: &Run<'_>,
+    rules: &[Value],
+    proposal: &Value,
+    names: &mut HashMap<String, Option<String>>,
+) -> Answer {
+    let class = text(&proposal["class"]);
+    for (i, rule) in rules.iter().enumerate() {
+        let want = text(&rule["class"]);
+        if !(want.is_empty() || want == "any" || want == class) {
+            continue;
+        }
+        let from = strings(rule, "from");
+        if !from.is_empty() {
+            let sent_by = from.iter().any(|tag| {
+                let name = names
+                    .entry(tag.clone())
+                    .or_insert_with(|| country_name(run.tools, tag))
+                    .clone();
+                names_sender(proposal, tag, name.as_deref())
+            });
+            if !sent_by {
+                continue;
+            }
+        }
+        let label = item_id(rule).unwrap_or_else(|| format!("{i}"));
+        match when_holds(state, run.tools, &rule["when"], run.now) {
+            Truth::False => continue,
+            Truth::Unknown => return Answer::Wait(format!("rule {label}: when unknown")),
+            Truth::True => {}
+        }
+        return match text(&rule["answer"]) {
+            "accept" => Answer::Send("accept"),
+            "refuse" => Answer::Send("refuse"),
+            _ => Answer::Player(format!("rule {label} leaves it to the player")),
+        };
+    }
+    Answer::Player("no incoming_proposals rule matches".into())
+}
+
+/// `incoming_proposals` (once a game day while nothing is open, every tick while one is): the
+/// open diplomatic pop-ups of hoi4_diplomacy_incoming answered by the plan's rules through
+/// hoi4_diplomacy_incoming {answer, index, which}. A faction invitation the `faction` key still
+/// wants to join is left to the faction step. A proposal no rule answers, or one a rule gives to
+/// the player, wakes the player once per proposal.
+fn incoming_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let rules = list(plan, "incoming_proposals");
+    if rules.is_empty() || state.skipped(now, "minc", "x") {
+        return Ok(None);
+    }
+    let Ok(read) = tools.call("hoi4_diplomacy_incoming", &json!({})) else {
+        note(state, "incoming", "hoi4_diplomacy_incoming unreadable");
+        state.skip(now, "minc", "x", DAY);
+        return Ok(None);
+    };
+    let proposals = list(&read, "proposals");
+    if proposals.is_empty() {
+        note(state, "incoming", "no open proposal");
+        state.skip(now, "minc", "x", DAY);
+        return Ok(None);
+    }
+    let join = text(&plan["faction"]["join"]).trim().to_uppercase();
+    let joining = !join.is_empty() && !state.done.contains_key("faction:join");
+    let mut names: HashMap<String, Option<String>> = HashMap::new();
+    let mut lines: Vec<String> = Vec::new();
+    for proposal in proposals {
+        let (class, title) = (text(&proposal["class"]), text(&proposal["title"]));
+        let key = format!("{class}:{title}");
+        if state.skipped(now, "inc", &key) {
+            lines.push(format!("{title}: waiting after a refusal"));
+            continue;
+        }
+        if class == "faction_invitation" && joining {
+            let wanted = join == "ANY" || {
+                let name = names
+                    .entry(join.clone())
+                    .or_insert_with(|| country_name(tools, &join))
+                    .clone();
+                names_sender(proposal, &join, name.as_deref())
+            };
+            if wanted {
+                lines.push(format!("{title}: the faction step joins"));
+                continue;
+            }
+        }
+        match incoming_answer(state, run, rules, proposal, &mut names) {
+            Answer::Wait(why) => lines.push(format!("{title}: {why}")),
+            Answer::Player(why) => {
+                lines.push(format!("{title}: player ({why})"));
+                wake(
+                    state,
+                    plan,
+                    now,
+                    22,
+                    &format!("incoming:{key}"),
+                    format!("an incoming {class} proposal is open ({title}): {why}"),
+                    json!({"proposal": proposal}),
+                );
+            }
+            Answer::Send(answer) => {
+                let offered = if answer == "accept" {
+                    "can_accept"
+                } else {
+                    "can_refuse"
+                };
+                if proposal[offered] == json!(false) {
+                    lines.push(format!("{title}: the game does not offer {answer}"));
+                    wake(
+                        state,
+                        plan,
+                        now,
+                        22,
+                        &format!("incoming:{key}"),
+                        format!("the plan answers {class} ({title}) with {answer}, which the pop-up does not offer"),
+                        json!({"proposal": proposal}),
+                    );
+                    continue;
+                }
+                let mut args = json!({"answer": answer, "which": title});
+                if let Some(index) = proposal["index"].as_u64() {
+                    args["index"] = json!(index);
+                }
+                let (ok, why) =
+                    state.act(tools, run.lease, "hoi4_diplomacy_incoming", args, "in")?;
+                if !ok {
+                    state.skip(now, "inc", &key, DAY);
+                }
+                note(
+                    state,
+                    "incoming",
+                    format!("{class} {title}: {answer}: {ok}"),
+                );
+                return Ok(Some(format!(
+                    "incoming {class} '{title}' {answer}: {ok} {why}"
+                )));
+            }
+        }
+    }
+    note(state, "incoming", lines.join("; "));
+    // the open proposals stay on screen: look again in a few game hours, not a day
+    state.skip(now, "minc", "x", 6);
     Ok(None)
 }
 
@@ -3101,6 +3280,132 @@ mod tests {
         assert!(actions(&tools).is_empty());
         assert!(state.done.contains_key("dip:id:dow"));
         assert!(state.done.contains_key("dip:id:wg"));
+    }
+
+    // ----- incoming proposals
+
+    fn proposals() -> Value {
+        json!({"proposals": [
+            {"index": 0, "class": "lend_lease_request", "title": "Lend-Lease Request",
+                "description": "Spain asks us for equipment", "can_accept": true, "can_refuse": true},
+            {"index": 1, "class": "guarantee", "title": "Guarantee of Independence",
+                "description": "The United Kingdom offers to guarantee our independence",
+                "can_accept": true, "can_refuse": true}]})
+    }
+
+    #[test]
+    fn incoming_proposals_are_answered_by_class_and_sender_and_the_rest_wakes_the_player() {
+        let tools = fake(vec![
+            ("hoi4_diplomacy_incoming", proposals()),
+            (
+                "hoi4_diplomacy_countries",
+                json!({"countries": [{"tag": "ENG", "name": "United Kingdom"},
+                    {"tag": "SPR", "name": "Spain"}]}),
+            ),
+        ]);
+        let plan = json!({"incoming_proposals": [
+            {"id": "ll_ger", "class": "lend_lease_request", "from": ["GER"], "answer": "accept"},
+            {"id": "ll", "class": "lend_lease_request", "answer": "refuse"},
+            {"id": "uk", "class": "guarantee", "from": ["ENG"], "answer": "accept", "when": "stability > 0.9"}]});
+        let mut state = State::default();
+        // the lend-lease request is not from Germany: the second rule refuses it
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("incoming lend_lease_request 'Lend-Lease Request' refuse: true"),
+            "{out}"
+        );
+        let sent = actions(&tools);
+        assert_eq!(sent[0].0, "hoi4_diplomacy_incoming");
+        assert_eq!(sent[0].1["answer"], "refuse");
+        assert_eq!(sent[0].1["index"], 0);
+        assert_eq!(sent[0].1["which"], "Lend-Lease Request");
+        // answered: the guarantee is left; its rule's `when` does not hold (stability unknown is
+        // unknown, so it waits, not falls through)
+        let mut left = proposals();
+        left["proposals"].as_array_mut().unwrap().remove(0);
+        tools.reply("hoi4_diplomacy_incoming", left.clone());
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 1).unwrap(),
+            None
+        );
+        assert!(
+            state.affairs.notes["incoming"].contains("when unknown"),
+            "{:?}",
+            state.affairs.notes
+        );
+        assert!(wake_reasons(&mut state).is_empty());
+        // with the gate false, no rule is left: the player is woken, once
+        tools.reply(
+            "hoi4_country_status",
+            json!({"fields": {"stability": {"value": 0.5}}}),
+        );
+        let mut state = State::default();
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(
+            wake_reasons(&mut state),
+            vec!["incoming:guarantee:Guarantee of Independence"]
+        );
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
+            None
+        );
+        assert!(wake_reasons(&mut state).is_empty());
+        assert_eq!(actions(&tools).len(), 1);
+        // nothing open: one read a game day
+        tools.reply("hoi4_diplomacy_incoming", json!({"proposals": []}));
+        let before = reads(&tools, "hoi4_diplomacy_incoming");
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        step(&mut state, &tools, &plan, "l", START + 6).unwrap();
+        assert_eq!(reads(&tools, "hoi4_diplomacy_incoming"), before + 1);
+    }
+
+    #[test]
+    fn an_invitation_the_faction_key_joins_is_left_to_it_and_an_answer_not_offered_wakes() {
+        let tools = fake(vec![
+            (
+                "hoi4_diplomacy_incoming",
+                json!({"proposals": [
+                {"index": 2, "class": "faction_invitation", "title": "Japan wants us to join their faction",
+                    "can_accept": true, "can_refuse": true},
+                {"index": 3, "class": "call_to_arms", "title": "Call to Arms",
+                    "description": "Germany calls us to war", "can_accept": true, "can_refuse": false}]}),
+            ),
+            (
+                "hoi4_diplomacy_countries",
+                json!({"countries": [{"tag": "JAP", "name": "Japan"}]}),
+            ),
+            (
+                "hoi4_diplomacy_state",
+                json!({"faction": {"in_faction": false}}),
+            ),
+        ]);
+        let plan = json!({"faction": {"join": "JAP"},
+            "incoming_proposals": [{"class": "any", "answer": "refuse"}]});
+        let mut state = State::default();
+        // the faction step accepts the invitation; the refuse-all rule never touches it
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("faction invitation 2 accepted"), "{out}");
+        state.done.remove("faction:join");
+        state.skip(START, "mfac", "x", 30 * DAY);
+        // the call to arms cannot be refused: the player is woken instead of a failing click
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 1).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 1);
+        assert!(state.affairs.notes["incoming"].contains("the faction step joins"));
+        assert_eq!(
+            wake_reasons(&mut state),
+            vec!["incoming:call_to_arms:Call to Arms"]
+        );
     }
 
     // ----- faction

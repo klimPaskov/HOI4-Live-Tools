@@ -97,6 +97,7 @@ ENTRY_VARS = {
     "diplomacy": (["diplomacy_step", "justify", "declare", "relation", "widening", "expiry_watch",
                    "justify_items", "dip_target"], ["item", "j", "o"]),
     "mio": (["mio_step"], ["entry"]),
+    "incoming_proposals": (["incoming_step", "incoming_answer"], ["rule"]),
     "trade": (["trade_step"], ["item"]),
     "army_group": (["army_group_step", "marshals"], ["entry", "e"]),
     "invasions": (["invasion_step", "invasion_fleet", "invasion_claims"], ["entry", "e"]),

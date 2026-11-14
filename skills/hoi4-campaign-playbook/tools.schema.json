@@ -3065,22 +3065,13 @@
    "source": "--list-tools"
   },
   "hoi4_occupation_law": {
-   "description": "Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input: an occupied or resisting state's view, its occupation-law button, the default-law button, the law's row. Verified from the country's occupation law in memory (hoi4_occupation player_occupation_law). Laws, mild to harsh: no_garrison, foreign_civilian_oversight, local_police_force_garrison, secret_police_oversight, military_governor_occupation, martial_law_occupation, forced_labor_occupation, harsh_quotas_occupation, brutally_oppressive_occupation. Harsher laws cut resistance and raise the garrison need; milder ones raise compliance slowly and need fewer garrison troops. A law the game disables for you (ideology, DLC) is not applied: the readback refuses it with action_not_applied. `via_state` is an occupied or resisting state id (default: the first one hoi4_occupation lists).",
+   "description": "Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input: an occupied or resisting state's view, its occupation-law button, the default-law button, the law's row. Verified from the country's occupation law in memory (hoi4_occupation player_occupation_law). `law` is a key of the game's common/occupation_laws (mods included); hoi4_occupation `laws` lists them in the list's order with whether the game shows each to you (its visible trigger: ideology, tag, DLC). The row is found from the laws shown above it: refused before any input with law_not_shown (the game hides it from you) or law_row_unknown (a visible trigger on that row or above it reads something no tool reads yet, such as another country, a flag or a focus; the ruling ideology is taken from the country's history). Harsher laws cut resistance and raise the garrison need; milder ones raise compliance slowly and need fewer garrison troops. A law the game disables for you is not applied: the readback refuses it with action_not_applied. `via_state` is an occupied or resisting state id (default: the first one hoi4_occupation lists).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "law": {
-      "enum": [
-       "no_garrison",
-       "foreign_civilian_oversight",
-       "local_police_force_garrison",
-       "secret_police_oversight",
-       "military_governor_occupation",
-       "martial_law_occupation",
-       "forced_labor_occupation",
-       "harsh_quotas_occupation",
-       "brutally_oppressive_occupation"
-      ],
+      "maxLength": 96,
+      "pattern": "^[A-Za-z0-9_]+$",
       "type": "string"
      },
      "lease_token": {
@@ -4054,7 +4045,7 @@
    "source": "--list-tools"
   },
   "hoi4_states": {
-   "description": "Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. Pure read.",
+   "description": "Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
