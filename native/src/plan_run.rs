@@ -274,6 +274,10 @@ mod plan_route;
 #[path = "plan_seams.rs"]
 mod plan_seams;
 
+/// Encirclement (find a pocket, close it with two pincers, hold the ring, reduce it, resume).
+#[path = "plan_encircle.rs"]
+mod plan_encircle;
+
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
 /// span of game hours, so the plan behaves the same at speed 1, 5 or paused.
@@ -507,6 +511,8 @@ pub struct State {
     routes: plan_route::Memory,
     /// Steps ahead of their tools (plan_seams.rs): digest lines.
     seams: plan_seams::Memory,
+    /// The encirclement operation: the pocket, its arms, the ring, pockets given up.
+    encircle: plan_encircle::Memory,
     /// Army moves: the commitment rule, the budget and each move's reason.
     moves: Moves,
     /// divisions disbanded by the `disband` stage
@@ -667,6 +673,7 @@ impl Default for State {
             war_rules: Default::default(),
             routes: Default::default(),
             seams: Default::default(),
+            encircle: Default::default(),
             moves: Moves::default(),
             disbanded: 0,
             pol_fails: HashMap::new(),
@@ -896,6 +903,7 @@ impl State {
         plan_military::army_renamed(&mut self.military, old, new);
         plan_war::army_renamed(&mut self.war_rules, old, new);
         plan_route::army_renamed(&mut self.routes, old, new);
+        plan_encircle::army_renamed(&mut self.encircle, old, new);
     }
     /// One action with a fresh id; an uncertain dispatch is settled by
     /// retrying its own id once. If readback remains uncertain, stop the
@@ -3659,6 +3667,8 @@ fn war_step(
         }
     }
     let mut targets: Vec<(i32, bool)> = Vec::new();
+    // Every state an enemy at war controls (the encirclement's pocket and neck).
+    let mut enemy_held: HashSet<i32> = HashSet::new();
     for row in list(&mine, "states") {
         if let (Some(id), Some(x), Some(z)) = (
             row["state_id"].as_i64(),
@@ -3668,6 +3678,7 @@ fn war_step(
             state.centers.insert(id as i32, (x, z));
             if text(&row["owner"]) == me && text(&row["controller"]) != me {
                 enemies.insert(text(&row["controller"]).to_string());
+                enemy_held.insert(id as i32);
                 targets.push((id as i32, true));
             } else if text(&row["owner"]) == me {
                 // Part of an own state an enemy holds (w22: Ethiopia took Eritrea province by
@@ -3697,6 +3708,9 @@ fn war_step(
             state.centers.insert(id as i32, (x, z));
             let owner = text(&row["owner"]);
             let controller = text(&row["controller"]);
+            if enemies.contains(controller) {
+                enemy_held.insert(id as i32);
+            }
             if owner == tag && controller == tag && !targets.iter().any(|t| t.0 == id as i32) {
                 targets.push((id as i32, false));
             }
@@ -3943,6 +3957,46 @@ fn war_step(
             "war {label} {name} -> state {post}: {ok} {why}"
         )));
     }
+    // Encirclement (plan_encircle.rs): a pocket worth closing takes driven armies as its pincers,
+    // then holds the ring and reduces it; armies without a role are driven as before.
+    let roles: HashMap<String, plan_encircle::Role> = {
+        let cands: Vec<plan_encircle::Cand> = list(&roster, "armies")
+            .iter()
+            .filter_map(|a| {
+                let name = text(&a["army"]).to_string();
+                let here = a["main_state"].as_i64().map(|s| s as i32);
+                let in_theatre = theatre.is_empty()
+                    || here.is_some_and(|s| theatre.contains(&s) || !mine_ids.contains(&s));
+                let divisions = a["division_count"].as_u64().unwrap_or(0);
+                (!guards.contains_key(&name)
+                    && !reserve.contains(&name)
+                    && in_theatre
+                    && divisions >= min_army)
+                    .then(|| plan_encircle::Cand {
+                        supply: condition.get(&name).map(|c| c.1),
+                        fill: fill.get(&name).copied(),
+                        tired: state.moves.tired.contains(&name),
+                        name,
+                        state: here,
+                        divisions,
+                    })
+            })
+            .collect();
+        let tags: Vec<String> = enemies.iter().cloned().collect();
+        plan_encircle::step(
+            state,
+            tools,
+            plan,
+            &plan_encircle::Ctx {
+                enemies: &tags,
+                held: &enemy_held,
+                armies: &cands,
+                limits: &limits,
+                hold_only,
+                now,
+            },
+        )?
+    };
     // An own state an enemy holds that no army is retaking draws the nearest fighting army off
     // its axis at once: the axes alone left Eritrea and Somalia occupied for months (w15).
     for (lib, _) in targets.iter().filter(|t| t.1) {
@@ -3959,6 +4013,7 @@ fn war_step(
                 a["division_count"].as_u64().unwrap_or(0) >= min_army
                     && !reserve.iter().any(|r| r == n)
                     && !guards.contains_key(n)
+                    && !roles.contains_key(n)
                     && layout_allows(state, plan, n, *lib)
                     && !state
                         .war_assign
@@ -4026,6 +4081,57 @@ fn war_step(
                 )));
             }
         }
+        // An encirclement role: a holding arm draws its front against the outside of the ring
+        // and goes no further; a pincer or a reducing arm takes its state as the target.
+        let role = roles.get(&name).copied();
+        if let Some(plan_encircle::Role::Hold(facing)) = role {
+            if cfg["avoid_pockets"] != json!(false) {
+                if let Some(line) =
+                    pocket_fall_back(state, tools, plan, lease, army, &safe, cooldown, now)?
+                {
+                    return Ok(Some(line));
+                }
+            }
+            if let Some(old) = state.war_assign.remove(&name) {
+                if let Some(n) = load.get_mut(&old) {
+                    *n = n.saturating_sub(1);
+                }
+            }
+            state.war_stage.remove(&name);
+            state.war_move.remove(&name);
+            match plan_encircle::hold(state, tools, lease, army, facing)? {
+                Some((ok, why, line)) if !held_back(&why) => {
+                    state.war_cool.insert(
+                        name.clone(),
+                        now + if ok { WAR_STAGE_PAUSE } else { cooldown },
+                    );
+                    return Ok(Some(line));
+                }
+                _ => {
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    continue;
+                }
+            }
+        }
+        let forced: Option<i32> = role.and_then(plan_encircle::Role::target);
+        if let Some(t) = forced {
+            if state.war_assign.get(&name) != Some(&t) {
+                if let Some(old) = state.war_assign.insert(name.clone(), t) {
+                    if let Some(n) = load.get_mut(&old) {
+                        *n = n.saturating_sub(1);
+                    }
+                }
+                *load.entry(t).or_default() += 1;
+                // a standing front only needs the new offensive line
+                if army["battle_plan_orders"].as_u64().unwrap_or(0) > 0 {
+                    state.war_stage.insert(name.clone(), 1);
+                } else {
+                    state.war_stage.remove(&name);
+                }
+                state.war_move.remove(&name);
+                state.war_since.remove(&name);
+            }
+        }
         let position = here.and_then(|s| state.centers.get(&s).copied());
         let open = |id: i32| targets.iter().any(|x| x.0 == id);
         // Keep the current target while it is still held by an enemy, unless a state before it
@@ -4046,7 +4152,7 @@ fn war_step(
         // An entry with a `path` is followed leg by leg (plan_route.rs): the state and province
         // here are then the next waypoint's, not the far target's.
         let direct_mode = cfg["direct_moves"] == json!(true);
-        let vp: Option<Vp> = if hold_only {
+        let vp: Option<Vp> = if hold_only || forced.is_some() {
             None
         } else {
             vp_choice(
@@ -4067,7 +4173,8 @@ fn war_step(
             vp.as_ref().map(|v| v.state as i32)
         };
         let mut target = state.war_assign.get(&name).copied().filter(|t| {
-            (open(*t) || vp_state == Some(*t)) && !behind(*t) && (!hold_only || own(*t))
+            forced == Some(*t)
+                || (open(*t) || vp_state == Some(*t)) && !behind(*t) && (!hold_only || own(*t))
         });
         if target.is_none() {
             if let Some(old) = state.war_assign.remove(&name) {
@@ -4621,6 +4728,11 @@ fn war_step(
             )
             .is_some()
             {
+                state.war_cool.insert(name.clone(), now + cooldown);
+                continue;
+            }
+            // A pincer waits for the other arm so both go in together (plan_encircle.rs).
+            if plan_encircle::launch_wait(state, plan, &name, &roster, &limits, now).is_some() {
                 state.war_cool.insert(name.clone(), now + cooldown);
                 continue;
             }
@@ -6543,6 +6655,8 @@ mod tests {
             include_str!("plan_formations.rs"),
             include_str!("plan_war.rs"),
             include_str!("plan_predicate.rs"),
+            include_str!("plan_route.rs"),
+            include_str!("plan_encircle.rs"),
         ];
         let mut out = Vec::new();
         for src in sources {

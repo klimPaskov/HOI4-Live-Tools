@@ -550,6 +550,13 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    +2% a day to 30%, x0.8 without a deployed HQ) before executing; exceptions named (deadline or mission timer
    under 20 days, an enemy about to dig in) (OP01, L13). Keys `war.planning_wait` (default on, waits for 90%
    of the 30% cap), `war.planning_max_days` (default 15) and `war.planning_skip_days` (default 20).
+3b. **Encirclement:** the executor closes pockets on its own (`war.encircle`, default on at `measured`):
+   it reads the pockets the front offers, commits two driven armies as pincers into the neck with the planning
+   wait and launches them together, pins the pocket with a third army (the anvil) when one is free, holds the
+   ring and reduces the pocket, then resumes the advance. Set `war.encircle.boldness` from the front: `cautious`
+   when the line is thin or supply is short (one neck state, the full arm strength, one army kept free), `bold`
+   against a collapsing enemy with good supply (up to three neck states, half-strength arms). Name the armies
+   that may be committed (`war.encircle.armies`, army_layout name_hints) when guards or a second front must stay.
 3a. **Rest, resume, stall:** rest at about 30% of max org, resume at about 80% (executor defaults
    `war.rest_below_pct` 0.3 and `war.resume_above_pct` 0.8 of the highest organisation seen; the absolute
    `war.rest_below` / `war.resume_above` replace them when set) or rest at 60% strength; at a
@@ -829,6 +836,7 @@ the rule is a brief line (read, threshold, call) when the player must act.
 | Supply floor | no new offensive below 50% supply; below 35% nothing attacks (attrition). Executor defaults | `war.supply_floor`, `war.supply_hold` |
 | Planning wait | the execute order waits until the planning bonus reaches 90% of its 30% cap (about 14 game days), at most 15 days; skipped near the goal deadline | `war.planning_wait`, `war.planning_cap`, `war.planning_share`, `war.planning_gain`, `war.planning_max_days`, `war.planning_skip_days` |
 | Advance in bounds | after a captured hub, port or railway the army's next advance waits until it feeds the front (rail dead about 10 days, 5 on cores), at most 12 days | `war.bound`, `war.bound_rail_days`, `war.bound_core_days`, `war.bound_max_days` |
+| Encirclement | every 2 game days without an operation: the best pocket at or above the score whose two arms have a fit army each within reach gets the pincers (planning wait, launched together, anvil pins), ring held, pocket reduced, advance resumed; given up after 30 days or when an arm starves | `war.encircle` (`boldness`, `armies`, `keep_free`, `reduce`, `sync_days`, `close_max_days`) |
 | Stalled attack / forming pocket | 8 days without a province taken: the plan is stopped and planned again (twice per target), then a second direction, then the direct move; fall back at 50% of the surrounding land held by others when at most one own land province is left around the army | `war.stall_days`, `war.replans`, `war.second_direction`, `war.pocket_share`, `war.avoid_pockets` |
 | Factory rebalance | idle military factories to the line the divisions lack most, 3 per action, re-chosen; never pulled from a line; day 0 to the kept starting lines | `production_priority`, `production_min_idle`, `manage.rebalance_step`, `manage.day0_production` |
 | Supply line first at war | supply construction ahead of other lines | `war.supply_first` |

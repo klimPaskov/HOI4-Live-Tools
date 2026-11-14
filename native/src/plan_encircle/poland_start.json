@@ -1,0 +1,395 @@
+{
+  "calls_also_need": [
+    "request_id",
+    "lease_token"
+  ],
+  "elapsed_ms": 0,
+  "enemies": [
+    "POL"
+  ],
+  "max_gap": 2,
+  "method": "A pocket is a group of enemy-controlled states that would be cut from the rest of the enemy by taking the neck states (at most max_gap of them); sea, impassable states and non-enemy neighbours (neutral, allied) count as walls. Arms are the two own states farthest apart that touch the neck. Score is pocket value (points, industry, manpower, resources, capital) per effort (terrain cost of the neck plus pocket size). Visible ownership only; vanilla map; sea evacuation and enemy reserves are not modelled.",
+  "player": "GER",
+  "pockets": [
+    {
+      "already_cut_off": false,
+      "capital_inside": false,
+      "divisions_needed_per_arm": 6,
+      "effort": 4.6,
+      "gap": 2,
+      "industry": {
+        "civ": 5,
+        "dock": 3,
+        "mil": 4
+      },
+      "manpower": 7230700,
+      "neck_states": [
+        {
+          "category": "town",
+          "civ": 2,
+          "controller": "POL",
+          "enter_cost": 1.7,
+          "mil": 0,
+          "name": "Łódz",
+          "owner": "POL",
+          "state_id": 87,
+          "terrain": "plains",
+          "victory_points": 10
+        },
+        {
+          "category": "rural",
+          "civ": 0,
+          "controller": "POL",
+          "enter_cost": 2.1,
+          "mil": 0,
+          "name": "Płock",
+          "owner": "POL",
+          "state_id": 98,
+          "terrain": "forest",
+          "victory_points": 5
+        }
+      ],
+      "note": "Attack both arms into the neck states; the pocket closes when they are own-controlled.",
+      "pincer_arms": [
+        {
+          "army_candidate": {
+            "army": "Army 3",
+            "hops": 0
+          },
+          "divisions_available": 14,
+          "divisions_missing": 0,
+          "divisions_needed": 6,
+          "from_own_state": {
+            "category": "city",
+            "civ": 0,
+            "controller": "GER",
+            "enter_cost": 1.6,
+            "mil": 0,
+            "name": "Upper Silesia",
+            "owner": "GER",
+            "state_id": 67,
+            "terrain": "plains",
+            "victory_points": 8
+          },
+          "into_neck_state": {
+            "category": "town",
+            "civ": 2,
+            "controller": "POL",
+            "enter_cost": 1.7,
+            "mil": 0,
+            "name": "Łódz",
+            "owner": "POL",
+            "state_id": 87,
+            "terrain": "plains",
+            "victory_points": 10
+          }
+        },
+        {
+          "army_candidate": {
+            "army": "Army 1",
+            "hops": 0
+          },
+          "divisions_available": 12,
+          "divisions_missing": 0,
+          "divisions_needed": 6,
+          "from_own_state": {
+            "category": "town",
+            "civ": 0,
+            "controller": "GER",
+            "enter_cost": 2.4,
+            "mil": 0,
+            "name": "Ermland-Masuren",
+            "owner": "GER",
+            "state_id": 5,
+            "terrain": "forest",
+            "victory_points": 3
+          },
+          "into_neck_state": {
+            "category": "rural",
+            "civ": 0,
+            "controller": "POL",
+            "enter_cost": 2.1,
+            "mil": 0,
+            "name": "Płock",
+            "owner": "POL",
+            "state_id": 98,
+            "terrain": "forest",
+            "victory_points": 5
+          }
+        }
+      ],
+      "pincer_ready": true,
+      "pocket_states": [
+        {
+          "category": "city",
+          "civ": 1,
+          "controller": "POL",
+          "enter_cost": 1.9,
+          "mil": 2,
+          "name": "Danzig",
+          "owner": "POL",
+          "state_id": 85,
+          "terrain": "urban",
+          "victory_points": 10
+        },
+        {
+          "category": "city",
+          "civ": 1,
+          "controller": "POL",
+          "enter_cost": 2.2,
+          "mil": 0,
+          "name": "Poznań",
+          "owner": "POL",
+          "state_id": 86,
+          "terrain": "plains",
+          "victory_points": 10
+        },
+        {
+          "category": "city",
+          "civ": 1,
+          "controller": "POL",
+          "enter_cost": 1.9,
+          "mil": 2,
+          "name": "Gdynia",
+          "owner": "POL",
+          "state_id": 807,
+          "terrain": "forest",
+          "victory_points": 11
+        }
+      ],
+      "rank": 1,
+      "score": 23.7,
+      "sea_escape_possible": true,
+      "suggested_calls": [
+        {
+          "args": {
+            "army": "Army 3",
+            "state_id": 87
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 3",
+            "state_id": 87
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 3",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 98
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 98
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        }
+      ],
+      "third_party_neighbours": [],
+      "value": 133.4,
+      "victory_points": 46
+    },
+    {
+      "already_cut_off": false,
+      "capital_inside": false,
+      "divisions_needed_per_arm": 6,
+      "effort": 7.8,
+      "gap": 2,
+      "industry": {
+        "civ": 2,
+        "dock": 0,
+        "mil": 0
+      },
+      "manpower": 5231381,
+      "neck_states": [
+        {
+          "category": "rural",
+          "civ": 1,
+          "controller": "POL",
+          "enter_cost": 2.2,
+          "mil": 0,
+          "name": "Białystok",
+          "owner": "POL",
+          "state_id": 97,
+          "terrain": "forest",
+          "victory_points": 4
+        },
+        {
+          "category": "rural",
+          "civ": 0,
+          "controller": "POL",
+          "enter_cost": 4.7,
+          "mil": 0,
+          "name": "Polesie",
+          "owner": "POL",
+          "state_id": 94,
+          "terrain": "marsh",
+          "victory_points": 2
+        }
+      ],
+      "note": "Attack both arms into the neck states; the pocket closes when they are own-controlled.",
+      "pincer_arms": [
+        {
+          "army_candidate": {
+            "army": "Army 1",
+            "hops": 0
+          },
+          "divisions_available": 12,
+          "divisions_missing": 0,
+          "divisions_needed": 6,
+          "from_own_state": {
+            "category": "town",
+            "civ": 0,
+            "controller": "GER",
+            "enter_cost": 2.4,
+            "mil": 0,
+            "name": "Ermland-Masuren",
+            "owner": "GER",
+            "state_id": 5,
+            "terrain": "forest",
+            "victory_points": 3
+          },
+          "into_neck_state": {
+            "category": "rural",
+            "civ": 1,
+            "controller": "POL",
+            "enter_cost": 2.2,
+            "mil": 0,
+            "name": "Białystok",
+            "owner": "POL",
+            "state_id": 97,
+            "terrain": "forest",
+            "victory_points": 4
+          }
+        },
+        {
+          "divisions_available": 12,
+          "divisions_missing": 0,
+          "divisions_needed": 6,
+          "from_own_state": {
+            "category": "city",
+            "civ": 2,
+            "controller": "GER",
+            "enter_cost": 1.7,
+            "mil": 0,
+            "name": "Königsberg",
+            "owner": "GER",
+            "state_id": 763,
+            "terrain": "plains",
+            "victory_points": 10
+          },
+          "into_neck_state": {
+            "category": "rural",
+            "civ": 1,
+            "controller": "POL",
+            "enter_cost": 2.2,
+            "mil": 0,
+            "name": "Białystok",
+            "owner": "POL",
+            "state_id": 97,
+            "terrain": "forest",
+            "victory_points": 4
+          }
+        }
+      ],
+      "pincer_ready": true,
+      "pocket_states": [
+        {
+          "category": "rural",
+          "civ": 0,
+          "controller": "POL",
+          "enter_cost": 3.0,
+          "mil": 0,
+          "name": "Nowogródek",
+          "owner": "POL",
+          "state_id": 95,
+          "terrain": "forest",
+          "victory_points": 4
+        },
+        {
+          "category": "rural",
+          "civ": 0,
+          "controller": "POL",
+          "enter_cost": 2.3,
+          "mil": 0,
+          "name": "Wilejka",
+          "owner": "POL",
+          "state_id": 96,
+          "terrain": "forest",
+          "victory_points": 1
+        },
+        {
+          "category": "rural",
+          "civ": 1,
+          "controller": "POL",
+          "enter_cost": 1.7,
+          "mil": 0,
+          "name": "Vilna",
+          "owner": "POL",
+          "state_id": 784,
+          "terrain": "forest",
+          "victory_points": 3
+        }
+      ],
+      "rank": 2,
+      "score": 5.8,
+      "sea_escape_possible": false,
+      "suggested_calls": [
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 97
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 97
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        }
+      ],
+      "third_party_neighbours": [
+        11,
+        194,
+        204,
+        206,
+        207,
+        809,
+        810,
+        814,
+        815
+      ],
+      "value": 50.9,
+      "victory_points": 14
+    }
+  ],
+  "pockets_found": 2
+}

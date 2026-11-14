@@ -34,6 +34,10 @@ and follow it every war tick.
 
 ## 2. Encirclement procedure
 
+The executor runs this procedure itself when the plan lets it (`war.encircle`, on by default; the
+run result's `war.encircle` line says which pocket it is closing and why another was passed over).
+The player does it by hand only with the executor off, or for a pocket the executor gave up.
+
 For the chosen pocket (from step 5):
 
 1. **Anvil:** the line army facing the pocket keeps its front line (it pins the enemy).

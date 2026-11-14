@@ -244,6 +244,14 @@ impl Limits {
     pub(super) fn floor(&self) -> f64 {
         self.supply_floor
     }
+    /// Supply below which nothing attacks (attrition starts).
+    pub(super) fn hold(&self) -> f64 {
+        self.supply_hold
+    }
+    /// Supply a rested army resumes at.
+    pub(super) fn resume(&self) -> f64 {
+        self.supply_resume
+    }
 }
 
 /// Mean equipment fill per army (hoi4_supply divisions[].equipment_fill_min, 0..1); an army none
