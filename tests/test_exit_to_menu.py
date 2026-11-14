@@ -19,7 +19,10 @@ def line(text, center=(960, 900)):
 SCENES = {
     "overview": [line("Playthrough Overview", (300, 100)), line("Awards", (500, 100)), line("Statistics", (700, 100)),
                  line("Exit to Menu", (1500, 980))],
+    "overview_misread": [line("Playthrough Overview", (300, 100)), line("Awards", (500, 100)),
+                         line("Exit*o Menu", (1500, 980))],
     "statistics": [line("Statistics", (700, 100)), line("Quit", (1500, 980))],
+    "menu_drawing": [line("Quit", (960, 800)), line("Loading", (900, 500))],
     "loading": [line("Loading", (900, 500))],
     "menu": [line("Single Player", (960, 350)), line("Multiplayer", (960, 400))],
 }
@@ -68,11 +71,40 @@ class ExitToMenuTests(unittest.TestCase):
         self.assertFalse(out["statistics_quit"])
         self.assertEqual(screens.clicks, [(1500, 980)])
 
+    def test_a_misread_button_label_still_matches(self):
+        # live 1.19.4.2: OCR at 1.5x read the button as "Exit*o Menu"
+        screens = Screens("overview_misread", {"Exit*o Menu": "menu"})
+        out, _ = self.run_exit(screens)
+        self.assertTrue(out["overview_exit"])
+        self.assertEqual(screens.clicks, [(1500, 980)])
+
+    def test_the_label_is_read_at_two_times_or_more(self):
+        screens = Screens("overview", {"Exit to Menu": "menu"})
+        scales = []
+        original = screens.find_text
+
+        def spy(session, pattern, img=None, region=None, scale=None, exact=False):
+            scales.append(scale)
+            return original(session, pattern, img, region, scale, exact)
+        screens.find_text = spy
+        self.run_exit(screens)
+        self.assertIn(2.0, scales)
+        self.assertNotIn(1.5, scales[:1])
+
     def test_the_old_statistics_screen_still_uses_quit(self):
         screens = Screens("statistics", {"Quit": "menu"})
         out, _ = self.run_exit(screens)
         self.assertTrue(out["statistics_quit"])
         self.assertFalse(out["overview_exit"])
+
+    def test_the_main_menus_own_quit_button_is_never_clicked(self):
+        # live 1.19.4.2: the main menu was still being drawn, Single Player not yet read, and Quit exited the game
+        screens = Screens("menu_drawing", {"Quit": "menu"})
+        times = iter(range(0, 100))
+        with mock.patch.object(menu.time, "time", side_effect=lambda: next(times)):
+            with self.assertRaises(ToolError):
+                self.run_exit(screens, timeout=30)
+        self.assertEqual(screens.clicks, [])
 
     def test_the_overview_button_is_not_clicked_when_that_window_is_not_up(self):
         screens = Screens("loading", {})
