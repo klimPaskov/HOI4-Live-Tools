@@ -92,6 +92,9 @@ struct Fake {
     idles: usize,
     changes: BTreeMap<usize, State>,
     fail_read: Option<usize>,
+    /// Every read from this one on fails: an outcome that stays unproven then closes after
+    /// one settlement window whatever the deadline.
+    fail_from: Option<usize>,
     outcome: u8,
     apply: bool,
     path: std::path::PathBuf,
@@ -106,6 +109,7 @@ impl Fake {
             idles: 0,
             changes: BTreeMap::new(),
             fail_read: None,
+            fail_from: None,
             outcome: 0,
             apply: true,
             path,
@@ -116,7 +120,7 @@ impl Backend for Fake {
     type Candidate = ();
     fn observe(&mut self, _: &Target, _: Instant) -> Result<State> {
         self.reads += 1;
-        if self.fail_read == Some(self.reads) {
+        if self.fail_read == Some(self.reads) || self.fail_from.is_some_and(|n| self.reads >= n) {
             return Err(error("fixture_read_failure", TOKEN));
         }
         if let Some(s) = self.changes.get(&self.reads) {
@@ -188,70 +192,67 @@ fn increment_decrement_noop_and_historical_receipt_send_at_most_one_click() {
     }
 }
 #[test]
-fn lost_delivery_survives_restart_and_settles_only_original_target_without_replay() {
+fn lost_delivery_is_decided_by_what_the_game_shows() {
+    // The dispatcher lost its reply after a possible click. With the new count on screen the
+    // dispatch only failed late.
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = Fake::new(d.path(), 4);
+    f.outcome = 2;
+    let shown = execute(&mut j, &mut f, "one", 5).unwrap();
+    assert_eq!(shown.status, Status::Verified);
+    assert_eq!(shown.delivery, Some(Delivery::Unknown));
+    assert_eq!(f.dispatches, 1);
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn lost_delivery_never_shown_closes_unconfirmed_and_settles_only_original_target_by_reading() {
     let d = Scratch::new();
     let mut j = Journal::open(&d.path()).unwrap();
     let mut f = Fake::new(d.path(), 4);
     f.outcome = 2;
     f.apply = false;
+    // Three reads before the click, two unchanged ones after it, then nothing readable.
+    f.fail_from = Some(6);
     let e = execute(&mut j, &mut f, "one", 5).unwrap_err();
-    assert_eq!(e.code, "action_uncertain");
+    assert_eq!(e.code, "action_unconfirmed");
     assert!(!e.message.contains(TOKEN));
-    assert!(j.blocks_game(&epoch().game));
+    assert!(!j.blocks_game(&epoch().game));
+    assert_eq!(j.records["one"].status, Status::Unconfirmed);
     drop(j);
     let mut j = Journal::open(&d.path()).unwrap();
-    assert_eq!(
-        execute(&mut j, &mut f, "one", 5).unwrap_err().code,
-        "action_uncertain"
-    );
-    f.current.requested = 3;
-    assert_eq!(
-        execute(&mut j, &mut f, "one", 5).unwrap_err().code,
-        "action_uncertain"
-    );
-    assert_eq!(
-        execute(&mut j, &mut f, "new-id", 4).unwrap_err().code,
-        "action_uncertain"
-    );
+    assert!(!j.blocks_game(&epoch().game));
+    // The closed id never sends input again; while its original target does not show it
+    // answers from its record.
+    f.fail_from = None;
+    for requested in [4, 3] {
+        f.current.requested = requested;
+        assert_eq!(
+            execute(&mut j, &mut f, "one", 5).unwrap_err().code,
+            "action_unconfirmed"
+        );
+    }
     assert_eq!(f.dispatches, 1);
+    // Meanwhile a new id is accepted and decided by fresh state.
+    f.outcome = 0;
+    f.apply = true;
+    let fresh = execute(&mut j, &mut f, "new-id", 4).unwrap();
+    assert_eq!(fresh.status, Status::Verified);
+    assert_eq!(f.dispatches, 2);
+    // The original target observed later settles the closed step, by reading only.
     f.current.requested = 5;
     let settled = execute(&mut j, &mut f, "one", 5).unwrap();
     assert_eq!(settled.original_requested, Some(4));
     assert_eq!(settled.delivery, Some(Delivery::Unknown));
     assert!(!settled.event_causality_verified);
-    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.dispatches, 2);
     assert!(!j.blocks_game(&epoch().game));
     drop(j);
     Journal::open(&d.path()).unwrap();
 }
-#[test]
-fn reached_value_on_replaced_variant_or_campaign_never_settles() {
-    for field in 0..3 {
-        let d = Scratch::new();
-        let mut j = Journal::open(&d.path()).unwrap();
-        let mut f = Fake::new(d.path(), 4);
-        f.outcome = 2;
-        assert_eq!(
-            execute(&mut j, &mut f, "one", 5).unwrap_err().code,
-            "action_uncertain"
-        );
-        match field {
-            0 => f.current.line.variant += 8,
-            1 => f.current.line.line += 8,
-            _ => f.current.epoch.campaign = "new".into(),
-        }
-        assert_eq!(
-            execute(&mut j, &mut f, "one", 5).unwrap_err().code,
-            "action_uncertain"
-        );
-        assert_eq!(f.dispatches, 1);
-        assert!(j.blocks_game(&epoch().game));
-    }
-}
-#[test]
-fn intent_only_crash_recovery_uses_original_baseline() {
-    let d = Scratch::new();
-    let mut j = Journal::open(&d.path()).unwrap();
+/// An intent a stopped server left behind (`unix_ms`: when it was written, None for a record
+/// of an older build).
+fn orphan(j: &mut Journal, unix_ms: Option<u64>) {
     let before = state(4);
     j.append(Record {
         version: 1,
@@ -262,16 +263,40 @@ fn intent_only_crash_recovery_uses_original_baseline() {
         status: Status::Intent,
         delivery: None,
         cause: None,
+        unix_ms,
     })
     .unwrap();
+}
+#[test]
+fn reached_value_on_replaced_variant_or_campaign_never_settles_an_interrupted_intent() {
+    for field in 0..3 {
+        let d = Scratch::new();
+        let mut j = Journal::open(&d.path()).unwrap();
+        orphan(&mut j, None);
+        let mut f = Fake::new(d.path(), 5);
+        match field {
+            0 => f.current.line.variant += 8,
+            1 => f.current.line.line += 8,
+            _ => f.current.epoch.campaign = "new".into(),
+        }
+        assert_eq!(
+            execute(&mut j, &mut f, "one", 5).unwrap_err().code,
+            "action_unconfirmed"
+        );
+        assert_eq!(j.records["one"].status, Status::Unconfirmed);
+        assert_eq!(f.dispatches, 0);
+        assert!(!j.blocks_game(&epoch().game));
+    }
+}
+#[test]
+fn intent_only_crash_recovery_uses_original_baseline() {
+    // The original target shows: a read-only settlement against the original baseline.
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    orphan(&mut j, Some(stage_settle::now_ms()));
     drop(j);
     let mut j = Journal::open(&d.path()).unwrap();
-    let mut f = Fake::new(d.path(), 4);
-    assert_eq!(
-        execute(&mut j, &mut f, "one", 5).unwrap_err().code,
-        "action_uncertain"
-    );
-    f.current.requested = 5;
+    let mut f = Fake::new(d.path(), 5);
     assert_eq!(
         execute(&mut j, &mut f, "one", 5)
             .unwrap()
@@ -280,6 +305,97 @@ fn intent_only_crash_recovery_uses_original_baseline() {
     );
     assert_eq!(f.dispatches, 0);
     assert_eq!(f.candidates, 0);
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn an_interrupted_intent_holds_for_the_orphan_bound_and_the_next_call_closes_it() {
+    // `aged`: written by this build, the bound has passed. Otherwise: written by an older
+    // build, which recorded no time at all.
+    for aged in [true, false] {
+        let d = Scratch::new();
+        let mut j = Journal::open(&d.path()).unwrap();
+        orphan(&mut j, Some(stage_settle::now_ms()));
+        let mut f = Fake::new(d.path(), 4);
+        // Its input may still be in flight: its own id and new ids wait.
+        assert!(j.blocks_game(&epoch().game));
+        for (id, n) in [("one", 5), ("new", 5)] {
+            let e = execute(&mut j, &mut f, id, n).unwrap_err();
+            assert_eq!(e.code, "action_uncertain");
+            assert!(e.message.contains("at most 10 s"), "{}", e.message);
+        }
+        assert_eq!(f.dispatches, 0);
+        drop(j);
+        let text: String = fs::read_to_string(d.path())
+            .unwrap()
+            .lines()
+            .map(|line| {
+                let mut record: serde_json::Value = serde_json::from_str(line).unwrap();
+                if aged {
+                    record["unix_ms"] =
+                        serde_json::json!(stage_settle::now_ms() - stage_settle::ORPHAN_MS);
+                } else {
+                    record.as_object_mut().unwrap().remove("unix_ms");
+                }
+                format!("{record}\n")
+            })
+            .collect();
+        fs::write(d.path(), text).unwrap();
+        let mut j = Journal::open(&d.path()).unwrap();
+        assert!(!j.blocks_game(&epoch().game));
+        // A new request closes the orphan and then runs normally.
+        let next = execute(&mut j, &mut f, "new", 5).unwrap();
+        assert_eq!(next.status, Status::Verified);
+        assert_eq!(f.dispatches, 1);
+        let closed = &j.records["one"];
+        assert_eq!(closed.status, Status::Unconfirmed);
+        assert_eq!(closed.cause.as_ref().unwrap().code, "orphaned");
+        // The interrupted request itself now answers from that record and sends nothing
+        // (the count moved on to another target).
+        f.current.requested = 6;
+        let e = execute(&mut j, &mut f, "one", 5).unwrap_err();
+        assert_eq!(e.code, "action_unconfirmed");
+        assert!(e.message.contains("cause=orphaned"), "{}", e.message);
+        assert_eq!(f.dispatches, 1);
+    }
+}
+#[test]
+fn a_record_an_older_build_wrote_as_uncertain_loads_closed_and_holds_nothing() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = Fake::new(d.path(), 4);
+    f.apply = false;
+    f.fail_from = Some(5);
+    execute(&mut j, &mut f, "old", 5).unwrap_err();
+    drop(j);
+    // As the older build wrote it: the status by its old name, no time on any record.
+    let text: String = fs::read_to_string(d.path())
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let mut record: serde_json::Value = serde_json::from_str(line).unwrap();
+            record.as_object_mut().unwrap().remove("unix_ms");
+            if record["status"] == "Unconfirmed" {
+                record["status"] = serde_json::json!("Uncertain");
+            }
+            format!("{record}\n")
+        })
+        .collect();
+    assert!(text.contains("\"Uncertain\""));
+    fs::write(d.path(), text).unwrap();
+    let mut j = Journal::open(&d.path()).unwrap();
+    assert_eq!(j.records["old"].status, Status::Unconfirmed);
+    assert!(!j.blocks_game(&epoch().game));
+    f.fail_from = None;
+    assert_eq!(
+        execute(&mut j, &mut f, "old", 5).unwrap_err().code,
+        "action_unconfirmed"
+    );
+    assert_eq!(f.dispatches, 1);
+    f.apply = true;
+    assert_eq!(
+        execute(&mut j, &mut f, "new", 5).unwrap().status,
+        Status::Verified
+    );
 }
 #[test]
 fn before_and_after_intent_changes_never_queue_input() {
@@ -332,18 +448,36 @@ fn proven_not_queued_never_replays_but_allows_a_new_request() {
     assert_eq!(f.dispatches, 2);
 }
 #[test]
-fn failed_post_input_read_preserves_real_cause_and_blocks_all_new_ids() {
+fn failed_post_input_read_preserves_real_cause_and_holds_no_new_id() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = Fake::new(d.path(), 4);
+    f.fail_from = Some(4);
+    let e = execute(&mut j, &mut f, "one", 5).unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("fixture_read_failure"));
+    assert!(!e.message.contains(TOKEN));
+    assert_eq!(
+        j.failure_evidence("one", &target(5), &e),
+        crate::construction_stage::FailureEvidence::Unknown
+    );
+    // The click did land (the fake applied it): the next request starts from that state.
+    f.fail_from = None;
+    assert_eq!(
+        execute(&mut j, &mut f, "two", 6).unwrap().status,
+        Status::Verified
+    );
+    assert_eq!(f.dispatches, 2);
+}
+#[test]
+fn one_unreadable_moment_after_the_click_decides_nothing() {
     let d = Scratch::new();
     let mut j = Journal::open(&d.path()).unwrap();
     let mut f = Fake::new(d.path(), 4);
     f.fail_read = Some(4);
-    let e = execute(&mut j, &mut f, "one", 5).unwrap_err();
-    assert_eq!(e.code, "action_uncertain");
-    assert!(e.message.contains("fixture_read_failure"));
-    assert!(!e.message.contains(TOKEN));
     assert_eq!(
-        execute(&mut j, &mut f, "two", 6).unwrap_err().code,
-        "action_uncertain"
+        execute(&mut j, &mut f, "one", 5).unwrap().status,
+        Status::Verified
     );
     assert_eq!(f.dispatches, 1);
 }
@@ -353,11 +487,14 @@ fn unexpected_increment_does_not_count_as_success() {
     let mut j = Journal::open(&d.path()).unwrap();
     let mut f = Fake::new(d.path(), 4);
     f.changes.insert(4, state(9));
+    f.fail_from = Some(6);
     assert_eq!(
         execute(&mut j, &mut f, "one", 5).unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
-    assert!(j.blocks_game(&epoch().game));
+    assert_eq!(j.records["one"].status, Status::Unconfirmed);
+    assert_eq!(j.records["one"].last, state(9));
+    assert!(!j.blocks_game(&epoch().game));
     assert_eq!(f.dispatches, 1);
 }
 #[test]
@@ -452,6 +589,7 @@ fn partial_tail_oversized_line_and_missing_intent_are_rejected() {
                     status: Status::Verified,
                     delivery: Some(Delivery::Unknown),
                     cause: None,
+                    unix_ms: None,
                 };
                 let mut b = serde_json::to_vec(&r).unwrap();
                 b.push(b'\n');
@@ -578,7 +716,7 @@ fn panel_opens_once_and_already_open_never_toggles() {
     }
 }
 #[test]
-fn panel_uncertainty_blocks_allocations_and_only_original_panel_can_settle() {
+fn panel_lost_reply_is_decided_by_what_the_game_shows() {
     let d = Scratch::new();
     let mut j = Journal::open(&d.path()).unwrap();
     let mut f = PanelFake {
@@ -589,47 +727,72 @@ fn panel_uncertainty_blocks_allocations_and_only_original_panel_can_settle() {
         uncertain: true,
         transitions: 0,
     };
-    assert_eq!(
-        open(&mut j, &mut f, "open").unwrap_err().code,
-        "action_uncertain"
+    let shown = open(&mut j, &mut f, "open").unwrap();
+    assert_eq!(shown.status, Status::Verified);
+    assert_eq!(shown.delivery, Some(Delivery::Unknown));
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn an_unproven_panel_stage_closes_and_holds_neither_allocations_nor_panels() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    // The panel never leaves its transition inside the deadline.
+    let mut f = PanelFake {
+        state: panel_state(23, false),
+        dispatches: 0,
+        reads: 0,
+        fail: false,
+        uncertain: true,
+        transitions: usize::MAX,
+    };
+    let e = open(&mut j, &mut f, "open").unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(
+        e.message.contains("cause=fixture_lost_reply"),
+        "{}",
+        e.message
     );
     drop(j);
     let mut j = Journal::open(&d.path()).unwrap();
+    assert!(!j.blocks_game(&epoch().game));
+    // The closed id stays bound to its target.
     let mut allocation = Fake::new(d.path(), 4);
-    assert_eq!(
-        execute(&mut j, &mut allocation, "factory", 5)
-            .unwrap_err()
-            .code,
-        "action_uncertain"
-    );
-    assert_eq!(allocation.reads, 0);
     assert_eq!(
         execute(&mut j, &mut allocation, "open", 5)
             .unwrap_err()
             .code,
         "request_id_conflict"
     );
+    // New work is accepted while the step stays closed.
+    assert_eq!(
+        execute(&mut j, &mut allocation, "factory", 5)
+            .unwrap()
+            .status,
+        Status::Verified
+    );
+    // The closed id never sends input again. Only its original panel, shown, settles it.
+    f.transitions = 0;
     f.state = panel_state(5, true); // Constructor argument is not active production mode.
     assert_eq!(
         open(&mut j, &mut f, "open").unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     f.state = panel_state(23, false); // Unchanged does not mean input never applied.
     assert_eq!(
         open(&mut j, &mut f, "open").unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     f.state = panel_state(2, true);
     f.state.panel_identity[6] += 8;
     assert_eq!(
         open(&mut j, &mut f, "open").unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     f.state = panel_state(2, true);
     f.fail = true;
     assert_eq!(
         open(&mut j, &mut f, "open").unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     f.fail = false;
     assert_eq!(
@@ -640,12 +803,19 @@ fn panel_uncertainty_blocks_allocations_and_only_original_panel_can_settle() {
     assert!(!j.blocks_game(&epoch().game));
 }
 #[test]
-fn allocation_uncertainty_blocks_panel_and_invalid_panel_states_never_dispatch() {
+fn an_unproven_allocation_holds_no_panel_and_invalid_panel_states_never_dispatch() {
     let d = Scratch::new();
     let mut j = Journal::open(&d.path()).unwrap();
     let mut allocation = Fake::new(d.path(), 4);
     allocation.outcome = 2;
-    execute(&mut j, &mut allocation, "factory", 5).unwrap_err();
+    allocation.apply = false;
+    allocation.fail_from = Some(5);
+    assert_eq!(
+        execute(&mut j, &mut allocation, "factory", 5)
+            .unwrap_err()
+            .code,
+        "action_unconfirmed"
+    );
     let mut f = PanelFake {
         state: panel_state(23, false),
         dispatches: 0,
@@ -655,10 +825,11 @@ fn allocation_uncertainty_blocks_panel_and_invalid_panel_states_never_dispatch()
         transitions: 0,
     };
     assert_eq!(
-        open(&mut j, &mut f, "open").unwrap_err().code,
-        "action_uncertain"
+        open(&mut j, &mut f, "open").unwrap().status,
+        Status::Verified
     );
-    assert_eq!(f.reads, 0);
+    assert_eq!(f.dispatches, 1);
+    f.dispatches = 0;
     for (mode, shown) in [(5, true), (23, true), (2, false), (17, false), (24, false)] {
         let d = Scratch::new();
         let mut j = Journal::open(&d.path()).unwrap();
@@ -795,36 +966,35 @@ fn closing_never_hides_foreign_modes_or_accepts_inconsistent_visibility() {
     }
 }
 #[test]
-fn uncertain_close_survives_restart_blocks_open_and_only_settles_original_identity() {
+fn an_unproven_close_holds_no_open_and_only_settles_original_identity_by_reading() {
     let d = Scratch::new();
     let mut j = Journal::open(&d.path()).unwrap();
     let mut f = closing_fake(2, true);
     f.uncertain = true;
+    // The panel never leaves its transition inside the deadline.
+    f.transitions = usize::MAX;
     assert_eq!(
         close(&mut j, &mut f, "close").unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     drop(j);
     let mut j = Journal::open(&d.path()).unwrap();
-    let reads = f.reads;
-    assert_eq!(
-        open(&mut j, &mut f, "new-open").unwrap_err().code,
-        "action_uncertain"
-    );
-    assert_eq!(f.reads, reads);
+    assert!(!j.blocks_game(&epoch().game));
+    // The closed id never sends input again. Only its original panel, closed, settles it.
+    f.transitions = 0;
     for (mode, shown) in [(2, true), (2, false), (12, false), (23, true)] {
         f.state = panel_state(mode, shown);
         assert_eq!(
             close(&mut j, &mut f, "close").unwrap_err().code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
-        assert!(j.blocks_game(&epoch().game));
+        assert!(!j.blocks_game(&epoch().game));
     }
     f.state = panel_state(23, false);
     f.state.panel_identity[6] += 8;
     assert_eq!(
         close(&mut j, &mut f, "close").unwrap_err().code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     f.state = panel_state(23, false);
     assert_eq!(
@@ -832,7 +1002,13 @@ fn uncertain_close_survives_restart_blocks_open_and_only_settles_original_identi
         Status::Verified
     );
     assert_eq!(f.dispatches, 1);
-    assert!(!j.blocks_game(&epoch().game));
+    // A new request is accepted: opening the closed panel runs normally.
+    f.uncertain = false;
+    assert_eq!(
+        open(&mut j, &mut f, "new-open").unwrap().status,
+        Status::Verified
+    );
+    assert_eq!(f.dispatches, 2);
 }
 #[test]
 fn closing_transition_recovery_never_issues_another_click() {

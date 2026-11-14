@@ -5,6 +5,7 @@ use std::{
     collections::VecDeque,
     fs,
     sync::atomic::{AtomicUsize, Ordering},
+    thread,
 };
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 struct Scratch(std::path::PathBuf);
@@ -254,17 +255,22 @@ fn search_field_requires_empty_enabled_settled_control_and_both_receivers() {
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
         assert_eq!(f.dispatches, 1);
         drop(j);
+        // Closed: the game is not held, and a new request reaches the backend again.
         let mut j = Journal::open(&sc.path()).unwrap();
-        assert!(j.blocks_game(&t.epoch.game));
+        assert!(!j.blocks_game(&t.epoch.game));
+        assert!(matches!(
+            j.receipts["uncertain"].status,
+            Status::Unconfirmed | Status::Diverged
+        ));
         assert_eq!(
             run(&mut j, "new", t, &a, &g, &mut f, Duration::from_secs(1))
                 .unwrap_err()
                 .code,
-            "action_uncertain"
+            "fixture_end"
         );
         assert_eq!(f.dispatches, 1);
     }
@@ -302,6 +308,9 @@ struct Fake {
     post_delay: Duration,
     expire_readback: bool,
     dispatched_deadline: Option<Instant>,
+    /// A queued `fixture_end` error was reached: every later read fails the same way, so an
+    /// outcome that stays unproven closes after one settlement window whatever the deadline.
+    ended: bool,
 }
 impl Fake {
     fn new(stage: Stage) -> Self {
@@ -325,6 +334,7 @@ impl Fake {
             post_delay: Duration::ZERO,
             expire_readback: false,
             dispatched_deadline: None,
+            ended: false,
         }
     }
     fn sequence(stage: Stage, a: OwnState, b: OwnState) -> Self {
@@ -351,9 +361,14 @@ impl Backend for Fake {
                     Duration::ZERO
                 },
         );
+        if self.ended {
+            return Err(error("fixture_end", "End of fixture"));
+        }
         if let Some(r) = self.queue.pop_front() {
-            if let Ok(s) = &r {
-                self.last = s.clone();
+            match &r {
+                Ok(s) => self.last = s.clone(),
+                Err(e) if e.code == "fixture_end" => self.ended = true,
+                Err(_) => {}
             }
             r
         } else {
@@ -572,12 +587,22 @@ fn local_unknown_blockers_selection_and_busy_focus_keep_plan_unfinished() {
         assert!(!j.blocks_game(&epoch().game));
     }
 }
-#[test]
-fn crashed_intent_reopens_and_blocks_all_stage_ids_and_game() {
-    let sc = Scratch::new();
+/// Rewrite every record of the journal file through `edit` (as another build or time would
+/// have left it).
+fn rewrite_records(path: &std::path::Path, edit: impl Fn(&mut serde_json::Value)) {
+    let text: String = fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let mut record: serde_json::Value = serde_json::from_str(line).unwrap();
+            edit(&mut record);
+            format!("{record}\n")
+        })
+        .collect();
+    fs::write(path, text).unwrap();
+}
+fn crash_after_intent(sc: &Scratch) -> Fake {
     let mut j = Journal::open(&sc.path()).unwrap();
-    let a = authority();
-    let g = RwLock::new(true);
     let mut f = Fake::new(Stage::View);
     f.last = state(13);
     f.crash = true;
@@ -586,64 +611,281 @@ fn crashed_intent_reopens_and_blocks_all_stage_ids_and_game() {
             &mut j,
             "crashed",
             target(Stage::View),
-            &a,
-            &g,
+            &authority(),
+            &RwLock::new(true),
             &mut f,
             Duration::from_secs(1),
         );
     }))
     .is_err());
-    drop(j);
-    let mut j = Journal::open(&sc.path()).unwrap();
-    assert!(j.blocks_game(&epoch().game));
     f.crash = false;
-    for stage in [
-        Stage::OpenPolitics,
-        Stage::OpenFocus,
-        Stage::View,
-        Stage::Start,
-    ] {
-        assert_eq!(
-            run(
-                &mut j,
-                "new-id",
-                target(stage),
-                &a,
-                &g,
-                &mut f,
-                Duration::from_millis(30)
-            )
-            .unwrap_err()
-            .code,
-            "action_uncertain"
-        );
-    }
-    assert_eq!(f.dispatches, 1);
+    f
 }
 #[test]
-fn postdispatch_input_idle_or_expired_readback_stays_quarantined() {
-    for idle in [false, true] {
+fn crashed_intent_holds_its_game_only_while_its_input_may_be_in_flight() {
+    let sc = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = crash_after_intent(&sc);
+    let mut j = Journal::open(&sc.path()).unwrap();
+    assert_eq!(j.receipts["crashed"].status, Status::Intent);
+    assert!(j.receipts["crashed"].unix_ms.is_some());
+    assert!(j.blocks_game(&epoch().game));
+    for (id, stage) in [
+        ("new-id", Stage::OpenPolitics),
+        ("new-id", Stage::OpenFocus),
+        ("new-id", Stage::View),
+        ("crashed", Stage::View),
+    ] {
+        let e = run(
+            &mut j,
+            id,
+            target(stage),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_uncertain");
+        assert!(e.message.contains("at most 10 s"), "{}", e.message);
+    }
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(j.receipts["crashed"].status, Status::Intent);
+}
+#[test]
+fn an_interrupted_intent_past_the_orphan_bound_is_closed_by_the_next_call() {
+    // `aged`: written by this build, the bound has passed. Otherwise: written by an older
+    // build, which recorded no time at all.
+    for aged in [true, false] {
+        let sc = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut f = crash_after_intent(&sc);
+        rewrite_records(&sc.path(), |record| {
+            if aged {
+                record["unix_ms"] =
+                    serde_json::json!(stage_settle::now_ms() - stage_settle::ORPHAN_MS);
+            } else {
+                record.as_object_mut().unwrap().remove("unix_ms");
+            }
+        });
+        let mut j = Journal::open(&sc.path()).unwrap();
+        assert_eq!(j.receipts["crashed"].status, Status::Intent);
+        assert!(!j.blocks_game(&epoch().game));
+        // A new request closes the orphan without reading for it and then runs normally.
+        f.queue = VecDeque::from([Ok(state(13)), Ok(state(13)), Ok(view())]);
+        let execution = run(
+            &mut j,
+            "next",
+            target(Stage::View),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        assert_eq!(execution.receipt.status, Status::Verified);
+        assert_eq!(f.dispatches, 2);
+        let closed = &j.receipts["crashed"];
+        assert_eq!(closed.status, Status::Unconfirmed);
+        assert_eq!(closed.delivery, None);
+        assert!(closed.closed.as_deref().unwrap().starts_with("orphaned"));
+        // The interrupted request itself answers from that receipt: no read, no input.
+        f.ended = true;
+        let e = run(
+            &mut j,
+            "crashed",
+            target(Stage::View),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_unconfirmed");
+        assert_eq!(f.dispatches, 2);
+        drop(j);
+        let j = Journal::open(&sc.path()).unwrap();
+        assert_eq!(j.receipts["crashed"].status, Status::Unconfirmed);
+        assert!(!j.blocks_game(&epoch().game));
+    }
+}
+#[test]
+fn a_retry_of_an_interrupted_request_past_the_bound_closes_it_without_reading() {
+    let sc = Scratch::new();
+    let mut f = crash_after_intent(&sc);
+    rewrite_records(&sc.path(), |record| {
+        record.as_object_mut().unwrap().remove("unix_ms");
+    });
+    let mut j = Journal::open(&sc.path()).unwrap();
+    f.ended = true;
+    let e = run(
+        &mut j,
+        "crashed",
+        target(Stage::View),
+        &authority(),
+        &RwLock::new(true),
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("orphaned"), "{}", e.message);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(j.receipts["crashed"].status, Status::Unconfirmed);
+}
+#[test]
+fn an_unproven_start_closes_unconfirmed_and_the_next_request_is_accepted() {
+    // The target shows but input idle never confirms; or nothing readable follows the click.
+    for idle_missing in [true, false] {
         let sc = Scratch::new();
         let mut j = Journal::open(&sc.path()).unwrap();
         let a = authority();
         let g = RwLock::new(true);
-        let mut f = Fake::sequence(Stage::Start, view(), started());
-        f.idle = idle;
-        f.expire_readback = idle;
-        let timeout = Duration::from_secs(5);
-        assert!(run(
+        let mut f = if idle_missing {
+            Fake::sequence(Stage::Start, view(), started())
+        } else {
+            Fake::sequence(Stage::Start, view(), view())
+        };
+        f.idle = !idle_missing;
+        if !idle_missing {
+            f.queue.push_back(Err(error(
+                "fixture_end",
+                "Nothing readable after the click",
+            )));
+        }
+        let e = run(
             &mut j,
-            "uncertain",
+            "unproven",
             target(Stage::Start),
             &a,
             &g,
             &mut f,
-            timeout
+            Duration::from_secs(5),
         )
-        .is_err());
+        .unwrap_err();
+        assert_eq!(e.code, "action_unconfirmed");
+        assert!(
+            e.message.contains(if idle_missing {
+                "input_unavailable: Generated uncertain idle"
+            } else {
+                "fixture_end"
+            }),
+            "{}",
+            e.message
+        );
         assert_eq!(f.dispatches, 1);
-        assert!(j.blocks_game(&epoch().game));
+        assert!(!j.blocks_game(&epoch().game));
+        let closed = j.receipts["unproven"].clone();
+        assert_eq!(closed.status, Status::Unconfirmed);
+        assert_eq!(closed.delivery, Some(Delivery::ServerConfirmed));
+        assert_eq!(
+            j.failure_evidence("unproven", &target(Stage::Start), &e),
+            FailureEvidence::Unknown
+        );
+        // The same id answers from its receipt: no observation, no dispatch.
+        f.ended = true;
+        let replay = run(
+            &mut j,
+            "unproven",
+            target(Stage::Start),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
+        assert_eq!(replay.code, "action_unconfirmed");
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(j.receipts["unproven"], closed);
+        // A new id for the same game is accepted, also after a restart: fresh state decides.
+        drop(j);
+        let mut j = Journal::open(&sc.path()).unwrap();
+        assert!(!j.blocks_game(&epoch().game));
+        f.ended = false;
+        f.idle = true;
+        f.queue = VecDeque::from([Ok(view()), Ok(view()), Ok(started())]);
+        let execution = run(
+            &mut j,
+            "fresh",
+            target(Stage::Start),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        assert_eq!(execution.receipt.status, Status::Verified);
+        assert_eq!(f.dispatches, 2);
     }
+}
+#[test]
+fn a_readback_that_arrives_after_the_deadline_is_still_verified() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let mut f = Fake::sequence(Stage::Start, view(), started());
+    // The first read after the click returns only once the action's deadline has passed.
+    f.expire_readback = true;
+    let execution = run(
+        &mut j,
+        "late",
+        target(Stage::Start),
+        &authority(),
+        &RwLock::new(true),
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(Instant::now() >= f.dispatched_deadline.unwrap());
+    assert_eq!(execution.receipt.status, Status::Verified);
+    assert!(execution.current_state_verified);
+    assert_eq!(f.dispatches, 1);
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn a_closing_session_ends_the_observation_at_once_and_the_request_still_closes() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let gate = RwLock::new(true);
+    // The session closes while the first read after the click is under way.
+    struct Closing<'a>(Fake, &'a RwLock<bool>);
+    impl Backend for Closing<'_> {
+        fn observe(&mut self) -> Result<OwnState> {
+            if self.0.dispatches > 0 {
+                *self.1.write().unwrap() = false;
+                return Err(error("torn_read", "Session closing under the read"));
+            }
+            self.0.observe()
+        }
+        fn candidate(&mut self, target: &Target) -> Result<Candidate> {
+            self.0.candidate(target)
+        }
+        fn dispatch_once(&mut self, candidate: &Candidate, deadline: Instant) -> Delivery {
+            self.0.dispatch_once(candidate, deadline)
+        }
+        fn confirm_input_idle(&mut self, candidate: &Candidate, deadline: Instant) -> Result<()> {
+            self.0.confirm_input_idle(candidate, deadline)
+        }
+    }
+    let mut f = Closing(Fake::sequence(Stage::Start, view(), started()), &gate);
+    let e = j
+        .execute(
+            "closing",
+            target(Stage::Start),
+            &"a".repeat(32),
+            &authority(),
+            &gate,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(e.message.contains("observation stopped"), "{}", e.message);
+    assert_eq!(f.0.dispatches, 1);
+    // Two reads before the click; the queued target state was never read.
+    assert_eq!(f.0.queue.len(), 1);
+    assert_eq!(j.receipts["closing"].status, Status::Unconfirmed);
 }
 #[test]
 fn known_notqueued_is_terminal_nonreplay_and_new_id_can_retry() {
@@ -786,8 +1028,23 @@ fn missing_wrong_and_late_canonical_join_never_dispatch() {
     }
 }
 
+/// The marker an older build appended when a verified result arrived after its deadline.
+fn old_quarantine_marker(receipt: &Receipt) -> TerminalQuarantine {
+    let mut marker = TerminalQuarantine {
+        version: 1,
+        kind: "FocusTerminalQuarantine".into(),
+        request_id: receipt.request_id.clone(),
+        target: receipt.target.clone(),
+        code: "action_uncertain".into(),
+        reason: "Focus result arrived after original absolute deadline".into(),
+        receipt_hash: receipt_hash(receipt).unwrap(),
+        checksum: String::new(),
+    };
+    marker.checksum = marker.checksum().unwrap();
+    marker
+}
 #[test]
-fn late_verified_terminal_quarantine_retains_receipt_and_survives_reopen() {
+fn a_journal_with_an_old_terminal_quarantine_marker_loads_and_no_longer_blocks() {
     let sc = Scratch::new();
     let mut j = Journal::open(&sc.path()).unwrap();
     let a = authority();
@@ -804,21 +1061,96 @@ fn late_verified_terminal_quarantine_retains_receipt_and_survives_reopen() {
     )
     .unwrap();
     assert_eq!(f.dispatches, 1);
-    j.finish_before_deadline(&execution, Instant::now() + Duration::from_secs(1))
-        .unwrap();
-    assert!(!j.blocks_game(&epoch().game));
-    assert_eq!(
-        j.finish_before_deadline(&execution, Instant::now())
-            .unwrap_err()
-            .code,
-        "action_uncertain"
-    );
-    assert_eq!(j.receipts.get("late"), Some(&execution.receipt));
-    assert!(j.blocks_game(&epoch().game));
     drop(j);
+    // As the older build left the file: receipts without a time, then the marker.
+    rewrite_records(&sc.path(), |record| {
+        record.as_object_mut().unwrap().remove("unix_ms");
+    });
+    let mut old = execution.receipt.clone();
+    old.unix_ms = None;
+    let mut text = fs::read_to_string(sc.path()).unwrap();
+    text.push_str(&serde_json::to_string(&old_quarantine_marker(&old)).unwrap());
+    text.push('\n');
+    fs::write(sc.path(), &text).unwrap();
     let mut j = Journal::open(&sc.path()).unwrap();
-    assert!(j.blocks_game(&epoch().game));
-    for id in ["late", "new-id"] {
+    assert!(!j.blocks_game(&epoch().game));
+    // The late result is what it always was: verified. Its id replays the receipt.
+    let replay = run(
+        &mut j,
+        "late",
+        target(Stage::OpenPolitics),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    assert!(replay.historical);
+    assert_eq!(replay.receipt, old);
+    // New work for the same game is accepted and its receipts follow the marker.
+    f.queue = VecDeque::from([Ok(state(12)), Ok(state(12)), Ok(state(13))]);
+    f.candidate = Candidate::Point(point());
+    let next = run(
+        &mut j,
+        "new-id",
+        target(Stage::OpenFocus),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(5),
+    )
+    .unwrap();
+    assert_eq!(next.receipt.status, Status::Verified);
+    assert_eq!(f.dispatches, 2);
+    drop(j);
+    let j = Journal::open(&sc.path()).unwrap();
+    assert_eq!(j.receipts["new-id"].status, Status::Verified);
+    assert!(!j.blocks_game(&epoch().game));
+    drop(j);
+    // The marker stays checksum-bound to its receipt: a forged one is still refused.
+    let mut records: Vec<serde_json::Value> = text
+        .lines()
+        .map(|v| serde_json::from_str(v).unwrap())
+        .collect();
+    records.last_mut().unwrap()["receipt_hash"] = serde_json::json!("0".repeat(64));
+    fs::write(
+        sc.path(),
+        records
+            .iter()
+            .map(|v| format!("{}\n", v))
+            .collect::<String>(),
+    )
+    .unwrap();
+    assert_eq!(
+        Journal::open(&sc.path()).err().unwrap().code,
+        "invalid_journal"
+    );
+}
+
+#[test]
+fn a_receipt_that_cannot_be_written_still_blocks_everything() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let mut f = Fake::sequence(Stage::OpenPolitics, state(23), state(12));
+    // A handle that cannot append: the intent is never durable, so nothing is sent.
+    j.file = File::open(sc.path()).unwrap();
+    assert!(run(
+        &mut j,
+        "write-failure",
+        target(Stage::OpenPolitics),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(2),
+    )
+    .is_err());
+    assert_eq!(f.dispatches, 0);
+    assert!(j.poisoned && j.blocks_game(&epoch().game));
+    // Not an uncertain action: no time bound and no new id clears a persistence failure.
+    f.queue = VecDeque::from([Ok(state(23)), Ok(state(23)), Ok(state(12))]);
+    for id in ["write-failure", "new"] {
         assert_eq!(
             run(
                 &mut j,
@@ -834,82 +1166,16 @@ fn late_verified_terminal_quarantine_retains_receipt_and_survives_reopen() {
             "action_uncertain"
         );
     }
-    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.dispatches, 0);
     assert_eq!(
         j.failure_evidence(
-            "new-id",
+            "new",
             &target(Stage::OpenPolitics),
             &error("input_busy", "busy")
         ),
         FailureEvidence::Unknown
     );
-    drop(j);
-    let text = std::fs::read_to_string(sc.path())
-        .unwrap()
-        .replace("original absolute", "forged absolute");
-    // Both bounded reason and original receipt are checksum-bound.
-    let mut records: Vec<serde_json::Value> = text
-        .lines()
-        .map(|v| serde_json::from_str(v).unwrap())
-        .collect();
-    records.last_mut().unwrap()["receipt_hash"] = serde_json::json!("0".repeat(64));
-    std::fs::write(
-        sc.path(),
-        records
-            .iter()
-            .map(|v| format!("{}\n", v))
-            .collect::<String>(),
-    )
-    .unwrap();
-    assert_eq!(
-        Journal::open(&sc.path()).err().unwrap().code,
-        "invalid_journal"
-    );
 }
-
-#[test]
-fn late_verified_marker_write_failure_poison_retains_actual_evidence() {
-    let sc = Scratch::new();
-    let mut j = Journal::open(&sc.path()).unwrap();
-    let a = authority();
-    let gate = RwLock::new(true);
-    let mut f = Fake::sequence(Stage::OpenPolitics, state(23), state(12));
-    let execution = run(
-        &mut j,
-        "write-failure",
-        target(Stage::OpenPolitics),
-        &a,
-        &gate,
-        &mut f,
-        Duration::from_secs(2),
-    )
-    .unwrap();
-    j.file = File::open(sc.path()).unwrap();
-    let e = j
-        .finish_before_deadline(&execution, Instant::now())
-        .unwrap_err();
-    assert_eq!(e.code, "action_uncertain");
-    assert!(e.to_string().contains("persistence failed"));
-    assert!(j.poisoned && j.blocks_game(&epoch().game));
-    assert_eq!(j.receipts.get("write-failure"), Some(&execution.receipt));
-    assert_eq!(
-        run(
-            &mut j,
-            "new",
-            target(Stage::OpenPolitics),
-            &a,
-            &gate,
-            &mut f,
-            Duration::from_secs(2)
-        )
-        .unwrap_err()
-        .code,
-        "action_uncertain"
-    );
-    assert_eq!(f.dispatches, 1);
-    // No committed marker: do not claim independent reopen knows the failure.
-}
-
 fn close_state(mode: i32) -> OwnState {
     let mut s = state(mode);
     s.active_focus = ActiveFocus::Active("GER_rhineland".into());
@@ -1062,57 +1328,87 @@ fn close_politics_wrong_candidate_late_pre_change_and_post_change_are_distinct()
         assert_eq!(
             e.code,
             if after_input {
-                "action_uncertain"
+                "action_unconfirmed"
             } else {
                 "focus_precondition"
             }
         );
         assert_eq!(f.dispatches, usize::from(after_input));
         drop(j);
+        // The focus changed under the close key: recorded as diverged, closed, not held.
         let j = Journal::open(&sc.path()).unwrap();
-        assert_eq!(j.blocks_game(&epoch().game), after_input);
+        assert!(!j.blocks_game(&epoch().game));
+        assert_eq!(
+            j.receipts.get("changed").map(|r| r.status),
+            after_input.then_some(Status::Diverged)
+        );
+        if after_input {
+            assert!(e.message.contains("diverged="), "{}", e.message);
+        }
     }
 }
 #[test]
-fn close_politics_unknown_delivery_missing_idle_and_late_read_quarantine_no_replay() {
-    for failure in 0..3 {
+fn close_politics_unknown_delivery_or_missing_idle_closes_unconfirmed_without_replay() {
+    for idle_missing in [false, true] {
         let sc = Scratch::new();
         let mut j = Journal::open(&sc.path()).unwrap();
         let mut f = Fake::sequence(Stage::ClosePolitics, close_state(12), close_state(23));
-        match failure {
-            0 => {
-                f.delivery = Delivery::Unknown;
-                f.queue.pop_back();
-            }
-            1 => f.idle = false,
-            _ => f.expire_readback = true,
-        };
-        // Unknown delivery with unchanged mode12 has no successful postcondition.
+        if idle_missing {
+            f.idle = false;
+        } else {
+            // Unknown delivery and the panel stays open: no postcondition ever shows.
+            f.delivery = Delivery::Unknown;
+            f.queue.pop_back();
+            f.queue
+                .push_back(Err(error("fixture_end", "Nothing readable after the key")));
+        }
         let e = run(
             &mut j,
-            "uncertain",
+            "unproven",
             target(Stage::ClosePolitics),
             &authority(),
             &RwLock::new(true),
             &mut f,
-            Duration::from_millis(300),
+            Duration::from_secs(5),
         )
         .unwrap_err();
-        assert_eq!(e.code, "action_uncertain");
+        assert_eq!(e.code, "action_unconfirmed");
         assert_eq!(f.dispatches, 1);
         drop(j);
         let mut j = Journal::open(&sc.path()).unwrap();
-        assert!(j.blocks_game(&epoch().game));
-        assert!(run(
-            &mut j,
-            "other",
-            target(Stage::OpenPolitics),
-            &authority(),
-            &RwLock::new(true),
-            &mut f,
-            Duration::from_secs(1)
-        )
-        .is_err());
+        assert!(!j.blocks_game(&epoch().game));
+        assert_eq!(j.receipts["unproven"].status, Status::Unconfirmed);
+        // Never replayed: the same id answers from the receipt, without a read or a key.
+        f.ended = true;
+        assert_eq!(
+            run(
+                &mut j,
+                "unproven",
+                target(Stage::ClosePolitics),
+                &authority(),
+                &RwLock::new(true),
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
+        // Another stage is not refused by the journal: it gets as far as reading the game.
+        assert_eq!(
+            run(
+                &mut j,
+                "other",
+                target(Stage::OpenPolitics),
+                &authority(),
+                &RwLock::new(true),
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "fixture_end"
+        );
         assert_eq!(f.dispatches, 1);
     }
 }
@@ -1218,7 +1514,7 @@ fn close_politics_forged_idle_intent_cannot_reopen_as_positive_active() {
 }
 
 #[test]
-fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() {
+fn detailed_postinput_refusal_closes_with_its_cause_and_is_never_replayed() {
     for case in 0..3 {
         let sc = Scratch::new();
         let mut j = Journal::open(&sc.path()).unwrap();
@@ -1228,8 +1524,8 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         let mut f = Fake::sequence(Stage::OpenFocus, state(12), state(13));
         let cause = match case {
             0 => {
-                f.queue[2] = Err(error("invalid_focus_owner", "Generated own root mismatch"));
-                "invalid_focus_owner: Generated own root mismatch"
+                f.queue[2] = Err(error("fixture_end", "Generated own root mismatch"));
+                "fixture_end: Generated own root mismatch"
             }
             1 => {
                 let mut wrong = state(13);
@@ -1244,18 +1540,20 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         };
         let e = run(
             &mut j,
-            "uncertain",
+            "unproven",
             t.clone(),
             &a,
             &g,
             &mut f,
-            Duration::from_secs(2),
+            Duration::from_secs(5),
         )
         .unwrap_err();
-        assert_eq!(e.code, "action_uncertain");
-        assert!(e.message.contains(cause), "{}", e.message);
+        assert_eq!(e.code, "action_unconfirmed");
+        if case != 0 {
+            assert!(e.message.contains(cause), "{}", e.message);
+        }
         assert_eq!(
-            j.failure_evidence("uncertain", &t, &e),
+            j.failure_evidence("unproven", &t, &e),
             FailureEvidence::Unknown
         );
         assert_eq!(f.dispatches, 1);
@@ -1263,25 +1561,34 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         // Inspect persisted bytes only after releasing the owning journal.
         drop(j);
         let bytes = fs::read(sc.path()).unwrap();
-        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 1);
+        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 2);
         let mut j = Journal::open(&sc.path()).unwrap();
-        assert!(j.blocks_game(&epoch().game));
-        for id in ["uncertain", "different-id"] {
-            assert_eq!(
-                run(
-                    &mut j,
-                    id,
-                    t.clone(),
-                    &a,
-                    &g,
-                    &mut f,
-                    Duration::from_secs(2)
-                )
-                .unwrap_err()
-                .code,
-                "action_uncertain"
-            );
-        }
+        assert!(!j.blocks_game(&epoch().game));
+        let closed = &j.receipts["unproven"];
+        assert_eq!(closed.status, Status::Unconfirmed);
+        assert!(
+            closed
+                .closed
+                .as_deref()
+                .unwrap()
+                .contains(cause.split(": ").next().unwrap()),
+            "{closed:?}"
+        );
+        f.ended = true;
+        assert_eq!(
+            run(
+                &mut j,
+                "unproven",
+                t.clone(),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(2)
+            )
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
         assert_eq!(f.dispatches, 1);
         drop(j);
         assert_eq!(fs::read(sc.path()).unwrap(), bytes);

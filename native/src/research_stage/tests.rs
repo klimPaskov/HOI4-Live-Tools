@@ -3,6 +3,7 @@ use std::{
     collections::VecDeque,
     fs,
     sync::atomic::{AtomicUsize, Ordering},
+    thread,
 };
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 struct Scratch(std::path::PathBuf);
@@ -94,6 +95,9 @@ struct Fake {
     slow: Duration,
     expire_after_dispatch: bool,
     input_idle: bool,
+    /// A queued `fixture_end` error was reached: every later read fails the same way, so an
+    /// outcome that stays unproven closes after one settlement window whatever the deadline.
+    ended: bool,
 }
 impl Fake {
     fn new() -> Self {
@@ -108,6 +112,7 @@ impl Fake {
             slow: Duration::ZERO,
             expire_after_dispatch: false,
             input_idle: true,
+            ended: false,
         }
     }
     fn successful() -> Self {
@@ -133,9 +138,14 @@ impl Backend for Fake {
     fn observe(&mut self) -> Result<OwnState> {
         self.calls += 1;
         thread::sleep(self.slow);
+        if self.ended {
+            return Err(error("fixture_end", "End of fixture"));
+        }
         if let Some(result) = self.observations.pop_front() {
-            if let Ok(s) = &result {
-                self.last = s.clone();
+            match &result {
+                Ok(s) => self.last = s.clone(),
+                Err(e) if e.code == "fixture_end" => self.ended = true,
+                Err(_) => {}
             }
             result
         } else {
@@ -230,7 +240,7 @@ fn selection_verifies_empty_canonical_slot_and_replays_without_input() {
     assert_eq!(f.dispatches, 1);
 }
 #[test]
-fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart() {
+fn selection_refuses_nonempty_late_slot_and_unproven_delivery_closes_across_restart() {
     let scratch = Scratch::new();
     let a = authority();
     let g = RwLock::new(true);
@@ -259,7 +269,7 @@ fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart
     assert_eq!(
         execute(
             &mut j,
-            "select-uncertain",
+            "select-unproven",
             target(Stage::SelectSlot),
             &a,
             &g,
@@ -268,11 +278,15 @@ fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     assert_eq!(f.dispatches, 1);
     drop(j);
+    // Closed across the restart: no stage is refused by the journal, each reads the game.
     let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert_eq!(j.receipts["select-unproven"].status, Status::Unconfirmed);
+    assert!(!j.blocks_game(&epoch().game));
+    f.ended = true;
     for stage in [
         Stage::OpenPanel,
         Stage::SelectSlot,
@@ -291,7 +305,7 @@ fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "fixture_end"
         );
     }
     assert_eq!(f.dispatches, 1);
@@ -409,8 +423,104 @@ fn crash_intent_survives_restart_and_blocks_new_id_and_stage() {
     }
     assert_eq!(f.dispatches, 1);
 }
+/// Rewrite every record of the journal file through `edit` (as another build or time would
+/// have left it).
+fn rewrite_records(path: &std::path::Path, edit: impl Fn(&mut serde_json::Value)) {
+    let text: String = fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let mut record: serde_json::Value = serde_json::from_str(line).unwrap();
+            edit(&mut record);
+            format!("{record}\n")
+        })
+        .collect();
+    fs::write(path, text).unwrap();
+}
 #[test]
-fn timeout_and_foreign_readback_quarantine_without_input_replay() {
+fn an_interrupted_intent_past_the_orphan_bound_is_closed_by_the_next_call() {
+    // `aged`: written by this build, the bound has passed. Otherwise: written by an older
+    // build, which recorded no time at all.
+    for aged in [true, false] {
+        let scratch = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut f = Fake::new();
+        f.crash = true;
+        let mut j = Journal::open(&scratch.journal()).unwrap();
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| execute(
+                &mut j,
+                "crashed",
+                target(Stage::Research),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )))
+            .is_err()
+        );
+        drop(j);
+        f.crash = false;
+        let j = Journal::open(&scratch.journal()).unwrap();
+        assert!(j.receipts["crashed"].unix_ms.is_some());
+        assert!(j.blocks_game(&epoch().game));
+        drop(j);
+        rewrite_records(&scratch.journal(), |record| {
+            if aged {
+                record["unix_ms"] =
+                    serde_json::json!(stage_settle::now_ms() - stage_settle::ORPHAN_MS);
+            } else {
+                record.as_object_mut().unwrap().remove("unix_ms");
+            }
+        });
+        let mut j = Journal::open(&scratch.journal()).unwrap();
+        assert_eq!(j.receipts["crashed"].status, Status::Intent);
+        assert!(!j.blocks_game(&epoch().game));
+        // A new request closes the orphan without reading for it and then runs normally.
+        let mut next = Fake::successful();
+        let execution = execute(
+            &mut j,
+            "next",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut next,
+            Duration::from_secs(5),
+        )
+        .unwrap();
+        assert_eq!(execution.receipt.status, Status::Verified);
+        assert_eq!(next.dispatches, 1);
+        let closed = &j.receipts["crashed"];
+        assert_eq!(closed.status, Status::Unconfirmed);
+        assert_eq!(closed.delivery, None);
+        assert!(closed.closed.as_deref().unwrap().starts_with("orphaned"));
+        // The interrupted request itself answers from that receipt: no read, no input.
+        f.ended = true;
+        let reads = f.calls;
+        assert_eq!(
+            execute(
+                &mut j,
+                "crashed",
+                target(Stage::Research),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
+        assert_eq!((f.calls, f.dispatches), (reads, 1));
+        drop(j);
+        let j = Journal::open(&scratch.journal()).unwrap();
+        assert_eq!(j.receipts["crashed"].status, Status::Unconfirmed);
+        assert!(!j.blocks_game(&epoch().game));
+    }
+}
+#[test]
+fn timeout_and_foreign_readback_close_unconfirmed_without_input_replay() {
     for foreign in [false, true] {
         let scratch = Scratch::new();
         let a = authority();
@@ -423,6 +533,27 @@ fn timeout_and_foreign_readback_quarantine_without_input_replay() {
             f.observations = VecDeque::from([Ok(state()), Ok(state()), Ok(s)]);
         }
         let mut j = Journal::open(&scratch.journal()).unwrap();
+        let e = execute(
+            &mut j,
+            "attempt",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(if foreign { 5 } else { 1 }),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_unconfirmed");
+        if foreign {
+            assert!(e.message.contains("ownership_changed"), "{}", e.message);
+        }
+        assert!(!j.blocks_game(&epoch().game));
+        assert_eq!(j.receipts["attempt"].status, Status::Unconfirmed);
+        assert_eq!(f.dispatches, 1);
+        // Never replayed: the same id answers from its receipt without a read.
+        f.ended = true;
+        f.expire_after_dispatch = false;
+        let reads = f.calls;
         assert_eq!(
             execute(
                 &mut j,
@@ -431,14 +562,15 @@ fn timeout_and_foreign_readback_quarantine_without_input_replay() {
                 &a,
                 &g,
                 &mut f,
-                Duration::from_secs(5)
+                Duration::from_secs(1)
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
-        assert!(j.blocks_game(&epoch().game));
-        assert_eq!(f.dispatches, 1);
+        assert_eq!(f.calls, reads);
+        // A fresh request is accepted and decided by fresh state.
+        let mut next = Fake::successful();
         assert_eq!(
             execute(
                 &mut j,
@@ -446,15 +578,83 @@ fn timeout_and_foreign_readback_quarantine_without_input_replay() {
                 target(Stage::Research),
                 &a,
                 &g,
-                &mut f,
-                Duration::from_secs(1)
+                &mut next,
+                Duration::from_secs(5)
+            )
+            .unwrap()
+            .receipt
+            .status,
+            Status::Verified
+        );
+        assert_eq!((f.dispatches, next.dispatches), (1, 1));
+    }
+}
+#[test]
+fn a_readback_that_arrives_after_the_deadline_is_still_verified() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::successful();
+    // The click consumes the whole deadline; the target is read only afterwards.
+    f.expire_after_dispatch = true;
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let started = Instant::now();
+    let execution = execute(
+        &mut j,
+        "late",
+        target(Stage::Research),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(started.elapsed() >= Duration::from_secs(1));
+    assert_eq!(execution.receipt.status, Status::Verified);
+    assert!(execution.current_state_verified);
+    assert_eq!(f.dispatches, 1);
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn a_receipt_that_cannot_be_written_still_blocks_everything() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::successful();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    // A handle that cannot append: the intent is never durable, so nothing is sent.
+    j.file = File::open(scratch.journal()).unwrap();
+    assert!(execute(
+        &mut j,
+        "write-failure",
+        target(Stage::Research),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(2)
+    )
+    .is_err());
+    assert_eq!(f.dispatches, 0);
+    assert!(j.poisoned && j.blocks_game(&epoch().game));
+    // Not an uncertain action: no time bound and no new id clears a persistence failure.
+    let mut next = Fake::successful();
+    for id in ["write-failure", "new"] {
+        assert_eq!(
+            execute(
+                &mut j,
+                id,
+                target(Stage::Research),
+                &a,
+                &g,
+                &mut next,
+                Duration::from_secs(2)
             )
             .unwrap_err()
             .code,
             "action_uncertain"
         );
-        assert_eq!(f.dispatches, 1);
     }
+    assert_eq!((next.calls, next.dispatches), (0, 0));
 }
 #[test]
 fn preflight_gate_lease_and_invalid_candidate_leave_plan_retryable() {
@@ -612,6 +812,8 @@ fn malformed_transitions_tail_and_exclusive_writer_refuse() {
             status: Status::Intent,
             delivery: None,
             observed: state(),
+            unix_ms: None,
+            closed: None,
         };
         j.append(intent.clone()).unwrap();
         j.append(Receipt {
@@ -652,46 +854,49 @@ fn symlink_and_unprotected_existing_journal_refuse() {
 }
 
 #[test]
-fn canonical_assignment_without_input_idle_stays_quarantined() {
+fn canonical_assignment_without_input_idle_closes_unconfirmed_and_new_work_is_accepted() {
     let scratch = Scratch::new();
     let a = authority();
     let gate = RwLock::new(true);
     let mut f = Fake::successful();
     f.input_idle = false;
     let mut journal = Journal::open(&scratch.journal()).unwrap();
-    assert_eq!(
-        execute(
-            &mut journal,
-            "held",
-            target(Stage::Research),
-            &a,
-            &gate,
-            &mut f,
-            Duration::from_secs(1)
-        )
-        .unwrap_err()
-        .code,
-        "action_uncertain"
+    let e = execute(
+        &mut journal,
+        "held",
+        target(Stage::Research),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(5),
+    )
+    .unwrap_err();
+    assert_eq!(e.code, "action_unconfirmed");
+    assert!(
+        e.message
+            .contains("input_unavailable: Generated held input"),
+        "{}",
+        e.message
     );
     assert_eq!(f.dispatches, 1);
-    assert!(journal.blocks_game(&epoch().game));
-    assert_eq!(
-        execute(
-            &mut journal,
-            "new",
-            target(Stage::Research),
-            &a,
-            &gate,
-            &mut f,
-            Duration::from_secs(1)
-        )
-        .unwrap_err()
-        .code,
-        "action_uncertain"
-    );
+    assert!(!journal.blocks_game(&epoch().game));
+    assert_eq!(journal.receipts["held"].status, Status::Unconfirmed);
+    // The assignment is there: a fresh request verifies it from state, without input.
+    f.input_idle = true;
+    let fresh = execute(
+        &mut journal,
+        "new",
+        target(Stage::Research),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(fresh.receipt.status, Status::Verified);
+    assert_eq!(fresh.receipt.delivery, None);
     assert_eq!(f.dispatches, 1);
 }
-
 fn closed_map_state() -> OwnState {
     let mut s = panel_state();
     s.active_mode = Some(23);
@@ -828,7 +1033,7 @@ fn late_panel_change_refuses_without_consuming_retry() {
     assert_eq!(j.file.metadata().unwrap().len(), 0);
 }
 #[test]
-fn uncertain_panel_shortcut_blocks_all_stages_after_restart() {
+fn unproven_panel_shortcut_closes_and_holds_no_stage_after_restart() {
     let scratch = Scratch::new();
     let mut j = Journal::open(&scratch.journal()).unwrap();
     let a = authority();
@@ -848,11 +1053,13 @@ fn uncertain_panel_shortcut_blocks_all_stages_after_restart() {
         )
         .unwrap_err()
         .code,
-        "action_uncertain"
+        "action_unconfirmed"
     );
     assert_eq!(f.dispatches, 1);
     drop(j);
     let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert!(!j.blocks_game(&epoch().game));
+    f.ended = true;
     for stage in [
         Stage::OpenPanel,
         Stage::SelectSlot,
@@ -871,11 +1078,12 @@ fn uncertain_panel_shortcut_blocks_all_stages_after_restart() {
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "fixture_end"
         );
     }
     assert_eq!(f.dispatches, 1);
 }
+
 fn category_target() -> Target {
     let mut t = target(Stage::SelectCategory);
     t.technology.clear();
@@ -963,7 +1171,7 @@ fn category_unknown_and_late_slot_info_or_folder_state_refuse() {
     }
 }
 #[test]
-fn category_unknown_intent_restart_blocks_every_stage_id() {
+fn category_unproven_intent_closes_and_holds_no_stage_after_restart() {
     let sc = Scratch::new();
     let a = authority();
     let g = RwLock::new(true);
@@ -978,13 +1186,16 @@ fn category_unknown_intent_restart_blocks_every_stage_id() {
         &a,
         &g,
         &mut f,
-        Duration::from_secs(5)
+        Duration::from_secs(1)
     )
     .is_err());
     assert_eq!(f.dispatches, 1);
     drop(j);
     let mut j = Journal::open(&sc.journal()).unwrap();
-    assert!(j.blocks_game(&epoch().game));
+    assert_eq!(j.receipts["unknowncat"].status, Status::Unconfirmed);
+    assert!(!j.blocks_game(&epoch().game));
+    f.ended = true;
+    f.expire_after_dispatch = false;
     for stage in [
         Stage::OpenPanel,
         Stage::SelectSlot,
@@ -997,16 +1208,12 @@ fn category_unknown_intent_restart_blocks_every_stage_id() {
         } else {
             target(stage)
         };
-        assert!(execute(
-            &mut j,
-            "another",
-            t,
-            &a,
-            &g,
-            &mut f,
-            Duration::from_millis(20)
-        )
-        .is_err());
+        assert_eq!(
+            execute(&mut j, "another", t, &a, &g, &mut f, Duration::from_secs(1))
+                .unwrap_err()
+                .code,
+            "fixture_end"
+        );
     }
     assert_eq!(f.dispatches, 1);
 }
@@ -1140,6 +1347,7 @@ fn real_candidate_mutex_contention_is_proven_before_intent_and_postdispatch_busy
         Ok(state()),
         Ok(state()),
         Err(error("input_busy", "Injected postdispatch read busy")),
+        Err(error("fixture_end", "Nothing readable afterwards")),
     ]);
     let e = j
         .execute(
@@ -1152,17 +1360,18 @@ fn real_candidate_mutex_contention_is_proven_before_intent_and_postdispatch_busy
             Duration::from_secs(5),
         )
         .unwrap_err();
-    assert_eq!(e.code, "action_uncertain");
+    assert_eq!(e.code, "action_unconfirmed");
     assert_eq!(f.dispatches, 1);
+    // Possible input: never a proof that nothing was queued, and still nothing is held.
     assert_eq!(
         j.failure_evidence("busy-after-dispatch", &t, &e),
         FailureEvidence::Unknown
     );
-    assert!(j.blocks_game(&t.epoch.game));
+    assert!(!j.blocks_game(&t.epoch.game));
 }
 
 #[test]
-fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() {
+fn detailed_postinput_refusal_closes_with_its_cause_and_is_never_replayed() {
     for case in 0..3 {
         let sc = Scratch::new();
         let mut j = Journal::open(&sc.journal()).unwrap();
@@ -1174,11 +1383,8 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         f.observations = VecDeque::from([Ok(state()), Ok(state()), Ok(reached())]);
         let cause = match case {
             0 => {
-                f.observations[2] = Err(error(
-                    "invalid_research_owner",
-                    "Generated own slot mismatch",
-                ));
-                "invalid_research_owner: Generated own slot mismatch"
+                f.observations[2] = Err(error("fixture_end", "Generated own slot mismatch"));
+                "fixture_end"
             }
             1 => {
                 let mut wrong = reached();
@@ -1193,18 +1399,18 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         };
         let e = execute(
             &mut j,
-            "uncertain",
+            "unproven",
             t.clone(),
             &a,
             &g,
             &mut f,
-            Duration::from_secs(2),
+            Duration::from_secs(5),
         )
         .unwrap_err();
-        assert_eq!(e.code, "action_uncertain");
+        assert_eq!(e.code, "action_unconfirmed");
         assert!(e.message.contains(cause), "{}", e.message);
         assert_eq!(
-            j.failure_evidence("uncertain", &t, &e),
+            j.failure_evidence("unproven", &t, &e),
             FailureEvidence::Unknown
         );
         assert_eq!(f.dispatches, 1);
@@ -1212,26 +1418,30 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         // Inspect persisted bytes only after releasing the owning journal.
         drop(j);
         let bytes = fs::read(sc.journal()).unwrap();
-        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 1);
+        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 2);
         let mut j = Journal::open(&sc.journal()).unwrap();
-        assert!(j.blocks_game(&epoch().game));
-        for id in ["uncertain", "different-id"] {
-            assert_eq!(
-                execute(
-                    &mut j,
-                    id,
-                    t.clone(),
-                    &a,
-                    &g,
-                    &mut f,
-                    Duration::from_secs(2)
-                )
-                .unwrap_err()
-                .code,
-                "action_uncertain"
-            );
-        }
-        assert_eq!(f.dispatches, 1);
+        assert!(!j.blocks_game(&epoch().game));
+        let closed = &j.receipts["unproven"];
+        assert_eq!(closed.status, Status::Unconfirmed);
+        // The record keeps the state the intent saw before the input.
+        assert_eq!(closed.observed, state());
+        f.ended = true;
+        let reads = f.calls;
+        assert_eq!(
+            execute(
+                &mut j,
+                "unproven",
+                t.clone(),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(2)
+            )
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
+        assert_eq!((f.calls, f.dispatches), (reads, 1));
         drop(j);
         assert_eq!(fs::read(sc.journal()).unwrap(), bytes);
     }

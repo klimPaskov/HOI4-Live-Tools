@@ -163,7 +163,7 @@ fn next_is_exactly_one_step_with_wraparound_not_a_skip_or_arbitrary_key() {
 }
 
 #[test]
-fn search_step_rejects_changed_order_before_input_and_quarantines_after_input() {
+fn search_step_rejects_changed_order_before_input_and_closes_diverged_after_input() {
     for post_input in [false, true] {
         let sc = Scratch::new();
         let mut j = Journal::open(&sc.path()).unwrap();
@@ -199,7 +199,7 @@ fn search_step_rejects_changed_order_before_input_and_quarantines_after_input() 
         assert_eq!(
             e.code,
             if post_input {
-                "action_uncertain"
+                "action_unconfirmed"
             } else {
                 "torn_read"
             }
@@ -207,7 +207,11 @@ fn search_step_rejects_changed_order_before_input_and_quarantines_after_input() 
         assert_eq!(f.dispatches, usize::from(post_input));
         drop(j);
         let j = Journal::open(&sc.path()).unwrap();
-        assert_eq!(j.blocks_game(&t.epoch.game), post_input);
+        assert!(!j.blocks_game(&t.epoch.game));
+        assert_eq!(
+            j.receipts.get("changed").map(|r| r.status),
+            post_input.then_some(Status::Diverged)
+        );
     }
 }
 

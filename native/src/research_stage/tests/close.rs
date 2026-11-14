@@ -111,7 +111,7 @@ fn close_noop_requires_complete_closed_original_proof_and_does_not_dispatch() {
 }
 
 #[test]
-fn close_known_transition_retries_only_until_exact_readback_and_timeout_remains_quarantined() {
+fn close_known_transition_retries_until_exact_readback_and_a_timeout_closes_unconfirmed() {
     for finish in [false, true] {
         let scratch = Scratch::new();
         let mut journal = Journal::open(&scratch.journal()).unwrap();
@@ -147,8 +147,9 @@ fn close_known_transition_retries_only_until_exact_readback_and_timeout_remains_
             assert!(result.unwrap().current_state_verified);
             assert!(!journal.blocks_game(&epoch().game));
         } else {
-            assert_eq!(result.unwrap_err().code, "action_uncertain");
-            assert!(journal.blocks_game(&epoch().game));
+            assert_eq!(result.unwrap_err().code, "action_unconfirmed");
+            assert_eq!(journal.receipts["transition"].status, Status::Unconfirmed);
+            assert!(!journal.blocks_game(&epoch().game));
         }
         assert_eq!(fake.dispatches, 1);
     }
@@ -164,6 +165,8 @@ fn close_known_transition_retries_only_until_exact_readback_and_timeout_remains_
         )),
         Ok(reached()),
     ]);
+    // For another stage the same error is an unreadable moment, not an outcome: the complete
+    // state that follows is the proof.
     assert_eq!(
         execute(
             &mut journal,
@@ -174,12 +177,13 @@ fn close_known_transition_retries_only_until_exact_readback_and_timeout_remains_
             &mut fake,
             Duration::from_secs(2)
         )
-        .unwrap_err()
-        .code,
-        "action_uncertain"
+        .unwrap()
+        .receipt
+        .status,
+        Status::Verified
     );
-    assert_eq!(fake.calls, 3);
-    assert!(journal.blocks_game(&epoch().game));
+    assert_eq!(fake.calls, 4);
+    assert!(!journal.blocks_game(&epoch().game));
 }
 
 fn changed_states(mutator: impl Fn(&mut OwnState)) -> Vec<OwnState> {
@@ -237,7 +241,7 @@ fn close_refuses_every_original_assignment_identity_selection_folder_and_tab_cha
 }
 
 #[test]
-fn close_after_delivery_mutation_quarantines_and_intent_replay_never_settles() {
+fn close_after_delivery_mutation_closes_without_proof_and_is_never_replayed() {
     for case in 0..6 {
         let scratch = Scratch::new();
         let mut journal = Journal::open(&scratch.journal()).unwrap();
@@ -256,10 +260,40 @@ fn close_after_delivery_mutation_quarantines_and_intent_replay_never_settles() {
             _ => after.visible_info.push(Some("support_weapons".into())),
         }
         let mut fake = closer(vec![shown(), shown(), after]);
+        fake.observations
+            .push_back(Err(error("fixture_end", "End changed post-state")));
         assert_eq!(
             execute(
                 &mut journal,
-                "uncertain-close",
+                "changed-close",
+                close_target(),
+                &a,
+                &gate,
+                &mut fake,
+                Duration::from_secs(5)
+            )
+            .unwrap_err()
+            .code,
+            "action_unconfirmed"
+        );
+        assert_eq!(fake.dispatches, 1);
+        assert!(!journal.blocks_game(&epoch().game));
+        drop(journal);
+        let original_bytes = fs::read(scratch.journal()).unwrap();
+        let mut journal = Journal::open(&scratch.journal()).unwrap();
+        // The record keeps the original shown panel, never the changed state.
+        let record = journal.receipts["changed-close"].clone();
+        assert!(matches!(
+            record.status,
+            Status::Diverged | Status::Unconfirmed
+        ));
+        assert_eq!(record.observed, shown());
+        // The closed id is never settled again or replayed: no read, no key, no record.
+        let calls = fake.calls;
+        assert_eq!(
+            execute(
+                &mut journal,
+                "changed-close",
                 close_target(),
                 &a,
                 &gate,
@@ -268,31 +302,8 @@ fn close_after_delivery_mutation_quarantines_and_intent_replay_never_settles() {
             )
             .unwrap_err()
             .code,
-            "action_uncertain"
+            "action_unconfirmed"
         );
-        assert_eq!(fake.dispatches, 1);
-        assert!(journal.blocks_game(&epoch().game));
-        drop(journal);
-        let original_bytes = fs::read(scratch.journal()).unwrap();
-        let mut journal = Journal::open(&scratch.journal()).unwrap();
-        fake.last = closed();
-        let calls = fake.calls;
-        for id in ["uncertain-close", "fresh-close"] {
-            assert_eq!(
-                execute(
-                    &mut journal,
-                    id,
-                    close_target(),
-                    &a,
-                    &gate,
-                    &mut fake,
-                    Duration::from_secs(2)
-                )
-                .unwrap_err()
-                .code,
-                "action_uncertain"
-            );
-        }
         assert_eq!(fake.calls, calls);
         assert_eq!(fake.dispatches, 1);
         drop(journal);
@@ -312,6 +323,8 @@ fn close_journal_rejects_terminal_assignment_identity_tab_and_selected_state_tam
             status: Status::Intent,
             delivery: None,
             observed: shown(),
+            unix_ms: None,
+            closed: None,
         };
         journal.append(original.clone()).unwrap();
         let mut after = closed();
@@ -351,6 +364,8 @@ fn close_not_queued_retains_exact_original_proof_and_tampering_refuses_reopen() 
             status: Status::Intent,
             delivery: None,
             observed: shown(),
+            unix_ms: None,
+            closed: None,
         };
         journal.append(original.clone()).unwrap();
         let mut terminal = original.clone();
@@ -477,6 +492,8 @@ fn legacy_state_and_execution_json_remain_byte_identical_without_private_binding
         status: Status::Verified,
         delivery: None,
         observed: reached(),
+        unix_ms: None,
+        closed: None,
     };
     let private = serde_json::to_value(&receipt).unwrap();
     let public = serde_json::to_value(Execution {
@@ -651,7 +668,7 @@ fn identity_animation_before_intent_is_not_retried_and_never_dispatches() {
 }
 
 #[test]
-fn identity_animation_timeout_retains_cause_and_quarantine_across_reopen_without_replay() {
+fn identity_animation_past_the_deadline_closes_with_its_cause_and_is_never_replayed() {
     let scratch = Scratch::new();
     let a = authority();
     let gate = RwLock::new(true);
@@ -659,8 +676,10 @@ fn identity_animation_timeout_retains_cause_and_quarantine_across_reopen_without
     let mut f = Fake::new();
     f.candidate = Candidate::OpenPanel;
     f.delivery = Delivery::ServerConfirmed;
+    // The key consumes the whole deadline; the animation is still running afterwards.
+    f.expire_after_dispatch = true;
     f.observations = VecDeque::from([Ok(unopened()), Ok(unopened())]);
-    for _ in 0..100 {
+    for _ in 0..1000 {
         f.observations.push_back(Err(identity_transition()));
     }
     let t = target(Stage::OpenPanel);
@@ -671,36 +690,39 @@ fn identity_animation_timeout_retains_cause_and_quarantine_across_reopen_without
         &a,
         &gate,
         &mut f,
-        Duration::from_millis(200),
+        Duration::from_secs(1),
     )
     .unwrap_err();
-    assert_eq!(failure.code, "action_uncertain");
-    assert!(failure.message.contains("cause=research_deadline"));
-    assert!(failure.message.contains("rejected_identity_reads="));
+    assert_eq!(failure.code, "action_unconfirmed");
+    assert!(
+        failure.message.contains("rejected_identity_reads="),
+        "{}",
+        failure.message
+    );
     assert!(failure
         .message
         .contains("last_identity_transition=Known retained Research root animation"));
     assert!(failure.message.len() <= 512);
     assert!(f.calls > 2);
     assert_eq!(f.dispatches, 1);
-    assert!(journal.blocks_game(&epoch().game));
+    assert!(!journal.blocks_game(&epoch().game));
     drop(journal);
     let bytes = fs::read(scratch.journal()).unwrap();
     let mut journal = Journal::open(&scratch.journal()).unwrap();
+    assert_eq!(journal.receipts["timeout"].status, Status::Unconfirmed);
     let calls = f.calls;
-    for id in ["timeout", "new-id"] {
-        let failure = execute(
-            &mut journal,
-            id,
-            t.clone(),
-            &a,
-            &gate,
-            &mut f,
-            Duration::from_secs(1),
-        )
-        .unwrap_err();
-        assert_eq!(failure.code, "action_uncertain");
-    }
+    f.expire_after_dispatch = false;
+    let failure = execute(
+        &mut journal,
+        "timeout",
+        t.clone(),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap_err();
+    assert_eq!(failure.code, "action_unconfirmed");
     assert_eq!(f.calls, calls);
     assert_eq!(f.dispatches, 1);
     drop(journal);
@@ -708,7 +730,7 @@ fn identity_animation_timeout_retains_cause_and_quarantine_across_reopen_without
 }
 
 #[test]
-fn identity_animation_never_converts_unknown_or_changed_identity_into_recovery() {
+fn an_unknown_error_during_the_identity_animation_decides_nothing_fresh_state_does() {
     for code in [
         "research_precondition",
         "invalid_gui_type",
@@ -729,20 +751,19 @@ fn identity_animation_never_converts_unknown_or_changed_identity_into_recovery()
             )),
             Ok(panel_state()),
         ]);
-        let failure = execute(
+        let execution = execute(
             &mut journal,
-            "strict",
+            "after-input",
             target(Stage::OpenPanel),
             &authority(),
             &RwLock::new(true),
             &mut f,
-            Duration::from_secs(2),
+            Duration::from_secs(5),
         )
-        .unwrap_err();
-        assert_eq!(failure.code, "action_uncertain");
-        assert!(failure.message.contains(&format!("cause={code}")));
-        assert_eq!(f.calls, 4);
+        .unwrap();
+        assert_eq!(execution.receipt.status, Status::Verified);
+        assert_eq!(f.calls, 5);
         assert_eq!(f.dispatches, 1);
-        assert!(journal.blocks_game(&epoch().game));
+        assert!(!journal.blocks_game(&epoch().game));
     }
 }

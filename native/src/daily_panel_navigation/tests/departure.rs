@@ -98,6 +98,8 @@ fn research_execution(id: &str) -> research_adapter::Execution {
             status: research_adapter::Status::Verified,
             delivery: Some(research_adapter::Delivery::ServerConfirmed),
             observed: state,
+            unix_ms: None,
+            closed: None,
         },
         historical: false,
         current_state_verified: true,
@@ -524,7 +526,7 @@ fn opaque_production_proof_ignores_mutable_public_summary_and_rejects_historical
         )
         .is_err());
     execution.request_id = "public-summary-cannot-rebind-proof".into();
-    execution.status = ordinary::Status::Uncertain;
+    execution.status = ordinary::Status::Unconfirmed;
     execution.historical = true;
     execution.current_state_verified = false;
     n.verified_production(&id, &execution, closed_destination(original()), date())

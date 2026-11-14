@@ -1,12 +1,19 @@
 //! Durable single-stage ordinary focus attempts with borrowed input authority.
 //! The adapter supplies fresh own state/candidates and one ordinary dispatcher.
 //! No MCP registration, engine invocation or automatic input replay occurs here.
+//!
+//! Every intent ends in a terminal receipt before `execute` returns (`stage_settle`): after
+//! the one input the journal keeps observing, reading only, and records `Verified`,
+//! `Diverged` or `Unconfirmed`. A request closed without proof answers `action_unconfirmed`,
+//! is never replayed and holds nothing. Only an intent left open by a stopped server holds
+//! its game, for a bounded time; the next request closes it.
 use crate::{
     actions::Epoch,
     error::{Error, Result},
     input_lease::InputAuthority,
     platform::Identity,
     research_attempt::PointCandidate,
+    stage_settle::{self, Seen, Settled},
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -17,7 +24,6 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
     sync::RwLock,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -595,6 +601,12 @@ pub enum Status {
     Intent,
     NotQueued,
     Verified,
+    /// Input may have been sent and a settled state contradicts the stage (the active focus
+    /// or the search order changed under a navigation stage). Closed like `Unconfirmed`.
+    Diverged,
+    /// Input may have been sent and the observation ended without proof of the target.
+    /// Closed: never replayed, blocks nothing. The caller reads the state again.
+    Unconfirmed,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -605,6 +617,13 @@ pub struct Receipt {
     pub status: Status,
     pub delivery: Option<Delivery>,
     pub observed: OwnState,
+    /// When the intent was written; bounds how long an interrupted intent holds its game.
+    /// Absent on records of older builds (their serialized shape and hashes are kept).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unix_ms: Option<u64>,
+    /// Why a `Diverged` or `Unconfirmed` record closed (one bounded line).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closed: Option<String>,
 }
 #[derive(Debug, Serialize)]
 pub struct Execution {
@@ -619,6 +638,8 @@ pub(crate) enum FailureEvidence {
     ConfirmedNotQueued,
     Unknown,
 }
+/// A marker older builds wrote when a verified result arrived after its deadline; it used to
+/// hold the game for good. Still read and checked so those files load; it blocks nothing.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct TerminalQuarantine {
@@ -659,7 +680,6 @@ fn receipt_hash(receipt: &Receipt) -> Result<String> {
 pub struct Journal {
     file: File,
     receipts: BTreeMap<String, Receipt>,
-    quarantines: BTreeMap<String, TerminalQuarantine>,
     poisoned: bool,
 }
 const LIMIT: u64 = 64 << 20;
@@ -808,15 +828,6 @@ impl Journal {
             }
             let receipt: Receipt = serde_json::from_slice(&line)
                 .map_err(|_| error("invalid_journal", "Malformed focus receipt"))?;
-            if quarantines
-                .values()
-                .any(|q| q.target.epoch.game == receipt.target.epoch.game)
-            {
-                return Err(error(
-                    "invalid_journal",
-                    "Receipt follows terminal focus quarantine",
-                ));
-            }
             request_id(&receipt.request_id)?;
             receipt.target.validate_key()?;
             receipt.observed.validate(&receipt.target)?;
@@ -829,6 +840,7 @@ impl Journal {
                 || (receipt.status == Status::Intent && receipt.delivery.is_some())
                 || (receipt.status == Status::NotQueued
                     && receipt.delivery != Some(Delivery::NotQueued))
+                || !closed_shape(&receipt)
             {
                 return Err(error("invalid_journal", "Invalid focus receipt witness"));
             }
@@ -859,7 +871,10 @@ impl Journal {
                     ));
                 }
             } else if (receipt.target.stage.preserves_focus() && receipt.status == Status::Verified)
-                || receipt.status == Status::NotQueued
+                || matches!(
+                    receipt.status,
+                    Status::NotQueued | Status::Diverged | Status::Unconfirmed
+                )
                 || (receipt.status == Status::Verified && receipt.delivery.is_some())
             {
                 return Err(error("invalid_journal", "Missing durable focus intent"));
@@ -869,7 +884,6 @@ impl Journal {
         Ok(Self {
             file,
             receipts,
-            quarantines,
             poisoned: false,
         })
     }
@@ -901,79 +915,24 @@ impl Journal {
         self.poisoned = false;
         Ok(receipt)
     }
-    /// Preserve actual terminal evidence while prohibiting every subsequent input.
-    /// A failed append poisons this owner; it cannot promise an uncommitted marker
-    /// will survive a crash or independently reopening an unchanged old file.
-    #[cfg(any(target_os = "linux", test))]
-    pub(crate) fn finish_before_deadline(
-        &mut self,
-        execution: &Execution,
-        until: Instant,
-    ) -> Result<()> {
-        if Instant::now() < until {
-            return Ok(());
+    /// Close every intent an interrupted server left open once it no longer holds its game
+    /// (`stage_settle::holds`). Nothing is read and nothing is sent: the record only says the
+    /// outcome was never observed.
+    fn close_orphans(&mut self) -> Result<()> {
+        let now = stage_settle::now_ms();
+        let stale: Vec<Receipt> = self
+            .receipts
+            .values()
+            .filter(|r| r.status == Status::Intent && !stage_settle::holds(r.unix_ms, now))
+            .cloned()
+            .collect();
+        for intent in stale {
+            self.append(Receipt {
+                status: Status::Unconfirmed,
+                closed: Some("orphaned: the server stopped before the outcome was observed".into()),
+                ..intent
+            })?;
         }
-        let reason = "Focus result arrived after original absolute deadline";
-        if let Err(e) = self.quarantine_verified(&execution.receipt, reason) {
-            return Err(error(
-                "action_uncertain",
-                &format!("{reason}; quarantine persistence failed: {e}"),
-            ));
-        }
-        Err(error("action_uncertain", reason))
-    }
-    #[cfg(any(target_os = "linux", test))]
-    fn quarantine_verified(&mut self, receipt: &Receipt, reason: &str) -> Result<()> {
-        if self.poisoned {
-            return Err(error("journal_failed", "Focus journal requires recovery"));
-        }
-        self.poisoned = true;
-        if receipt.status != Status::Verified
-            || self.receipts.get(&receipt.request_id) != Some(receipt)
-            || reason.is_empty()
-            || reason.len() > 256
-            || reason.chars().any(char::is_control)
-        {
-            return Err(error(
-                "invalid_journal",
-                "Actual verified focus evidence required",
-            ));
-        }
-        let mut marker = TerminalQuarantine {
-            version: 1,
-            kind: "FocusTerminalQuarantine".into(),
-            request_id: receipt.request_id.clone(),
-            target: receipt.target.clone(),
-            code: "action_uncertain".into(),
-            reason: reason.into(),
-            receipt_hash: receipt_hash(receipt)?,
-            checksum: String::new(),
-        };
-        marker.checksum = marker.checksum()?;
-        if self.quarantines.get(&marker.request_id) == Some(&marker) {
-            return Ok(());
-        }
-        self.quarantines
-            .insert(marker.request_id.clone(), marker.clone());
-        let mut line = serde_json::to_vec(&marker)
-            .map_err(|_| error("invalid_journal", "Cannot encode quarantine"))?;
-        line.push(b'\n');
-        if line.len() > LINE
-            || self
-                .file
-                .metadata()?
-                .len()
-                .saturating_add(line.len() as u64)
-                > LIMIT
-        {
-            return Err(error(
-                "journal_full",
-                "No durable focus quarantine capacity",
-            ));
-        }
-        self.file.write_all(&line)?;
-        self.file.sync_all()?;
-        self.poisoned = false;
         Ok(())
     }
     /// Classify only immediately after execute returns an error, never from
@@ -985,7 +944,9 @@ impl Journal {
         target: &Target,
         error: &Error,
     ) -> FailureEvidence {
-        if self.poisoned || self.blocks_game(&target.epoch.game) || error.code == "action_uncertain"
+        if self.poisoned
+            || self.blocks_game(&target.epoch.game)
+            || matches!(error.code, "action_uncertain" | "action_unconfirmed")
         {
             return FailureEvidence::Unknown;
         }
@@ -1001,16 +962,17 @@ impl Journal {
             _ => FailureEvidence::Unknown,
         }
     }
+    /// A persistence failure holds everything. Otherwise only an intent an interrupted server
+    /// left open holds its game, and only for `stage_settle::ORPHAN_MS`: every call closes
+    /// its own intent before it returns.
     pub fn blocks_game(&self, game: &Identity) -> bool {
+        let now = stage_settle::now_ms();
         self.poisoned
-            || self
-                .quarantines
-                .values()
-                .any(|q| &q.target.epoch.game == game)
-            || self
-                .receipts
-                .values()
-                .any(|r| r.status == Status::Intent && &r.target.epoch.game == game)
+            || self.receipts.values().any(|r| {
+                r.status == Status::Intent
+                    && &r.target.epoch.game == game
+                    && stage_settle::holds(r.unix_ms, now)
+            })
     }
     #[allow(clippy::too_many_arguments)]
     pub fn execute(
@@ -1030,22 +992,20 @@ impl Journal {
         }
         let deadline = (Instant::now() + timeout).min(authority.authorize(token, &target.epoch)?);
         live(authority, token, &target, deadline, gate)?;
-        if self.blocks_game(&target.epoch.game) {
-            return Err(error(
-                "action_uncertain",
-                "Focus journal quarantines this game; never replay",
-            ));
+        if self.poisoned {
+            return Err(error("action_uncertain", "Focus journal requires recovery"));
         }
-        if let Some(r) = self.receipts.get(id) {
+        if let Some(r) = self.receipts.get(id).cloned() {
             if r.target != target {
                 return Err(error(
                     "request_id_conflict",
                     "Request token is bound to another stage/target",
                 ));
             }
+            // A closed request answers from its receipt: no read, no input.
             return match r.status {
                 Status::Verified => Ok(Execution {
-                    receipt: r.clone(),
+                    receipt: r,
                     historical: true,
                     current_state_verified: false,
                     event_causality_verified: false,
@@ -1054,17 +1014,27 @@ impl Journal {
                     "input_not_queued",
                     "Historical local refusal; preserved plan needs a fresh attempt token",
                 )),
-                Status::Intent => Err(error(
-                    "action_uncertain",
-                    "Unresolved focus attempt; never replay",
-                )),
+                Status::Diverged => Err(stage_settle::diverged(r.closed.as_deref().unwrap_or(""))),
+                Status::Unconfirmed => {
+                    Err(stage_settle::unconfirmed(r.closed.as_deref().unwrap_or("")))
+                }
+                Status::Intent if stage_settle::holds(r.unix_ms, stage_settle::now_ms()) => {
+                    Err(stage_settle::interrupted("focus"))
+                }
+                Status::Intent => {
+                    self.close_orphans()?;
+                    Err(stage_settle::unconfirmed(
+                        self.receipts
+                            .get(id)
+                            .and_then(|r| r.closed.as_deref())
+                            .unwrap_or(""),
+                    ))
+                }
             };
         }
+        self.close_orphans()?;
         if self.blocks_game(&target.epoch.game) {
-            return Err(error(
-                "action_uncertain",
-                "Unresolved input blocks new IDs and stages for this owned game",
-            ));
+            return Err(stage_settle::interrupted("focus"));
         }
         live(authority, token, &target, deadline, gate)?;
         let before = backend.observe()?;
@@ -1078,6 +1048,8 @@ impl Journal {
                 status: Status::Verified,
                 delivery: None,
                 observed: before,
+                unix_ms: None,
+                closed: None,
             })?;
             return Ok(Execution {
                 receipt,
@@ -1164,9 +1136,11 @@ impl Journal {
             status: Status::Intent,
             delivery: None,
             observed: fresh,
+            unix_ms: Some(stage_settle::now_ms()),
+            closed: None,
         })?;
-        // A known local refusal after intent is durable too; uncertain delivery
-        // retains Intent and never authorizes a second event.
+        // A known local refusal after intent is durable too. Any other delivery is observed
+        // below and closed with a terminal receipt; it never authorizes a second event.
         let delivery =
             match live(authority, token, &target, deadline, gate).and_then(|()| permit(gate)) {
                 Ok(p) => {
@@ -1193,74 +1167,118 @@ impl Journal {
                 "Ordinary attempt was refused before possible input; plan remains unfinished",
             ));
         }
-        loop {
-            live(authority, token, &target, deadline, gate).map_err(|cause| {
-                Error::after_possible_input(
-                    "Readback deadline/authority ended; never replay",
-                    cause,
-                )
-            })?;
-            match backend.observe() {
-                Err(e) if e.code == "torn_read" => {}
-                Err(cause) => {
-                    return Err(Error::after_possible_input(
-                        "Own readback unavailable; never replay",
-                        cause,
-                    ))
-                }
-                Ok(state) => {
-                    state.validate(&target).map_err(|cause| {
-                        Error::after_possible_input(
-                            "Own context changed after possible input",
-                            cause,
-                        )
-                    })?;
-                    if Instant::now() >= deadline {
-                        return Err(error(
-                            "action_uncertain",
-                            "Readback completed after bounded deadline",
-                        ));
-                    }
-                    if target.stage.preserves_focus()
-                        && state.active_focus != intent.observed.active_focus
-                    {
-                        return Err(error("action_uncertain", "Canonical active focus changed after focus navigation input; never replay"));
-                    }
-                    if target.stage == Stage::SearchNext
-                        && !same_search_order(&intent.observed, &state)
-                    {
-                        return Err(error(
-                            "action_uncertain",
-                            "Search order changed after next-result input; never replay",
-                        ));
-                    }
-                    if state.reached(&target) {
-                        backend.confirm_input_idle(&candidate,deadline).map_err(|cause|Error::after_possible_input(
-                            "Canonical result observed but input idle remains unverified; never replay",cause))?;
-                        live(authority, token, &target, deadline, gate).map_err(|cause| {
-                            Error::after_possible_input(
-                                "Input-idle check exceeded attempt authority/deadline",
-                                cause,
-                            )
-                        })?;
-                        let receipt=self.append(Receipt{status:Status::Verified,delivery:Some(delivery),observed:state,..intent})
-                            .map_err(|cause|Error::after_possible_input("Canonical result observed but terminal receipt could not be committed",cause))?;
-                        return Ok(Execution {
-                            receipt,
-                            historical: false,
-                            current_state_verified: true,
-                            event_causality_verified: false,
-                        });
-                    }
-                }
+        // From here the request always closes: observe (reading only, no lease needed) until
+        // the deadline or the settlement window ends, then write the terminal receipt.
+        let mut last_valid: Option<OwnState> = None;
+        let settled = stage_settle::settle(stage_settle::end(deadline, Instant::now()), |end| {
+            if permit(gate).is_err() {
+                return Seen::Stop("session_closed: owned input session closed".into());
             }
-            thread::sleep(
-                Duration::from_millis(20).min(deadline.saturating_duration_since(Instant::now())),
-            );
+            let state = match backend.observe() {
+                Err(e) if e.code == "torn_read" => {
+                    return Seen::Pending(stage_settle::readback(&e))
+                }
+                Err(e) => return Seen::Unreadable(stage_settle::readback(&e)),
+                Ok(state) => state,
+            };
+            if let Err(e) = state.validate(&target) {
+                return Seen::Unreadable(format!(
+                    "own context changed after possible input; {}",
+                    stage_settle::readback(&e)
+                ));
+            }
+            if target.stage.preserves_focus() && state.active_focus != intent.observed.active_focus
+            {
+                return Seen::Diverged(
+                    state,
+                    "canonical active focus changed after focus navigation input".into(),
+                );
+            }
+            if target.stage == Stage::SearchNext && !same_search_order(&intent.observed, &state) {
+                return Seen::Diverged(
+                    state,
+                    "search order changed after next-result input".into(),
+                );
+            }
+            if !state.reached(&target) {
+                last_valid = Some(state);
+                return Seen::Pending(String::new());
+            }
+            last_valid = Some(state.clone());
+            // A target that shows while input idle stays unverified for a whole window closes
+            // without proof: a held key or button does not release itself.
+            match backend.confirm_input_idle(&candidate, end) {
+                Ok(()) => Seen::Reached(state),
+                Err(e) => Seen::Unreadable(format!(
+                    "target observed but input idle is unverified; {}",
+                    stage_settle::readback(&e)
+                )),
+            }
+        });
+        let committed = |cause| {
+            Error::after_possible_input(
+                "Observed outcome could not be committed to the focus journal",
+                cause,
+            )
+        };
+        match settled {
+            Settled::Reached(state) => {
+                let receipt = self
+                    .append(Receipt {
+                        status: Status::Verified,
+                        delivery: Some(delivery),
+                        observed: state,
+                        ..intent
+                    })
+                    .map_err(committed)?;
+                Ok(Execution {
+                    receipt,
+                    historical: false,
+                    current_state_verified: true,
+                    event_causality_verified: false,
+                })
+            }
+            Settled::Diverged(state, why) => {
+                self.append(Receipt {
+                    status: Status::Diverged,
+                    delivery: Some(delivery),
+                    observed: state,
+                    closed: Some(why.clone()),
+                    ..intent
+                })
+                .map_err(committed)?;
+                Err(stage_settle::diverged(&why))
+            }
+            Settled::Unconfirmed(why) => {
+                let observed = last_valid.unwrap_or_else(|| intent.observed.clone());
+                self.append(Receipt {
+                    status: Status::Unconfirmed,
+                    delivery: Some(delivery),
+                    observed,
+                    closed: Some(why.clone()),
+                    ..intent
+                })
+                .map_err(committed)?;
+                Err(stage_settle::unconfirmed(&why))
+            }
         }
     }
 }
 
+/// `closed` is present exactly on the two closed-without-proof statuses, as one bounded line.
+fn closed_shape(receipt: &Receipt) -> bool {
+    let closed = matches!(receipt.status, Status::Diverged | Status::Unconfirmed);
+    match &receipt.closed {
+        None => !closed,
+        Some(why) => {
+            closed
+                && !why.is_empty()
+                && why.len() <= 256
+                && !why.chars().any(char::is_control)
+                && receipt.delivery != Some(Delivery::NotQueued)
+        }
+    }
+}
 fn same_search_order(before: &OwnState, after: &OwnState) -> bool {
     matches!((before.search_matches(), after.search_matches()), (Some(a), Some(b)) if a.ordered == b.ordered)
 }
@@ -1329,6 +1347,8 @@ mod daily_failure_classifier_tests {
                 requested_detail_ready: Some(false),
                 search_control: None,
             },
+            unix_ms: None,
+            closed: None,
         };
         j.receipts.insert("id".into(), receipt.clone());
         assert_eq!(
