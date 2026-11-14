@@ -1408,7 +1408,11 @@ fn rebase_target(entry: &Value, wing: &Value, bases: &[Value]) -> Option<i64> {
     }
     let here = wing["air_base"]["state_id"].as_i64();
     if let Some(target) = entry["base_state"].as_i64() {
-        return (here != Some(target)).then_some(target);
+        // A state without an own air base has nowhere to land (the base the plan counts on
+        // is not built yet, or the state was lost): the wing stays and flies from where it is.
+        let lands =
+            bases.is_empty() || bases.iter().any(|b| b["state_id"].as_i64() == Some(target));
+        return (here != Some(target) && lands).then_some(target);
     }
     let want = &entry["base_region"];
     if want.is_null() {
@@ -3354,6 +3358,25 @@ mod tests {
             Some("air_plan 2. Stormo cas over region 17: true Verified")
         );
         assert_eq!(actions(&tools).len(), 3);
+    }
+
+    #[test]
+    fn a_wing_is_not_rebased_to_a_state_without_an_own_air_base() {
+        let read = air_read();
+        let wing = &read["wings"][0];
+        let bases = read["air_bases"].as_array().unwrap();
+        // base 3 stands in state 550: the wing goes there
+        assert_eq!(
+            rebase_target(&json!({"base_state": 550}), wing, bases),
+            Some(550)
+        );
+        // no own base in state 908 (not built yet): no rebase order
+        assert_eq!(
+            rebase_target(&json!({"base_state": 908}), wing, bases),
+            None
+        );
+        // already there
+        assert_eq!(rebase_target(&json!({"base_state": 2}), wing, bases), None);
     }
 
     #[test]
