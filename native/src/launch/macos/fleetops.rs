@@ -565,8 +565,14 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
 /// UNVALIDATED prefix. The gap register (scripts/hoi4facts/gap_register.py check) fails when a register row
 /// records a live run while the descriptor still says UNVALIDATED.
 const LIVE: &[(&str, &str)] = &[
-    ("hoi4_fleet_merge", "31 Oct 2026 on 1.19.4; task forces in different ports are split off by the game"),
-    ("hoi4_fleet_split", "31 Oct 2026 on 1.19.4; delete and progress-loss dialogs accepted 6 Nov"),
+    (
+        "hoi4_fleet_merge",
+        "31 Oct 2026 on 1.19.4; task forces in different ports are split off by the game",
+    ),
+    (
+        "hoi4_fleet_split",
+        "31 Oct 2026 on 1.19.4; delete and progress-loss dialogs accepted 6 Nov",
+    ),
     ("hoi4_fleet_reserve", "31 Oct 2026 on 1.19.4"),
     ("hoi4_fleet_assign", "31 Oct 2026 on 1.19.4"),
 ];
@@ -861,7 +867,10 @@ mod tests {
             if LIVE.iter().any(|(tool, _)| *tool == name) {
                 assert!(description.starts_with("Live-verified ("), "{name}");
             } else {
-                assert!(description.starts_with("UNVALIDATED (no live test yet): "), "{name}");
+                assert!(
+                    description.starts_with("UNVALIDATED (no live test yet): "),
+                    "{name}"
+                );
             }
             let required = entry["inputSchema"]["required"].as_array().unwrap();
             assert!(
