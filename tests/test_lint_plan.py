@@ -783,9 +783,16 @@ class TacticsRules(unittest.TestCase):
         self.assertTrue(any("states no aim" in f["message"] for f in self.selection(sk)))
         sk = self.capitulation_plan(self.SK_TARGETS)
         bad = self.selection(sk)
-        # Aksum (1 VP behind the Tigray garrison, cost 16) is taken before Gondar (2 VP, cost 8, one step from Eritrea)
-        self.assertTrue(any("13237" in f["where"] and "order: 1984" in f["message"] for f in bad), bad)
-        ref = lint_plan.lint(sk, self.game)["facts"]["vp_selection"]["reference"]
+        # Dessie (1 VP, cost 9) is taken before Gondar (2 VP, cost 4, one step from Eritrea)
+        self.assertTrue(any("5097" in f["where"] and "order: 1984" in f["message"] for f in bad), bad)
+        facts = lint_plan.lint(sk, self.game)["facts"]["vp_selection"]
+        ref = facts["reference"]
+        # FAIR: enemy division positions are private, so no garrison term
+        self.assertIn("no garrison term", facts["method"])
+        self.assertEqual({r["garrison"] for r in ref}, {0})
+        meta = copy.deepcopy(sk)
+        meta.setdefault("_meta", {})["mode"] = "meta"
+        self.assertIn("enemy start divisions", lint_plan.lint(meta, self.game)["facts"]["vp_selection"]["method"])
         self.assertGreaterEqual(ref[-1]["running_vp"], 26)
         fixed = self.reference_plan(ref)
         self.assertEqual(self.selection(fixed), [])

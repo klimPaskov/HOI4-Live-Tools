@@ -523,8 +523,8 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    b. **State the aim.** `goal.capitulation` {`enemy`, `vp_needed`, `war_support`, `collaboration`}: the
       threshold at the war support and collaboration the used levers give (`F vp <TAG> --war-support S`).
    c. **Pick the cheapest set to the aim.** Start from lint `facts.vp_selection.reference` (greedy by VP on
-      the route over cost: terrain, infrastructure and rivers on the route, enemy divisions in the state,
-      supply short of 1.0) and keep the main targets to the set that reaches the aim, in value-for-difficulty
+      the route over cost: terrain, infrastructure and rivers on the route, supply short of 1.0, and in
+      META only the enemy's start divisions in the state; a FAIR plan never cites per-state enemy positions) and keep the main targets to the set that reaches the aim, in value-for-difficulty
       order per army. A target that is not needed is dropped; a target the aim needs only if the levers fail
       is `reserve` true and goes after the main set, so all targets still reach the unlowered threshold
       (`conquest.threshold`). Every target carries `running_vp`, the enemy VP held after it.

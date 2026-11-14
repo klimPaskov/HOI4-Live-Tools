@@ -92,7 +92,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            while a skipped enemy VP province worth as much costs VP_DOMINANCE of it or less; and,
                            for one army, a target taken before a later one worth as much at that share of the
                            cost. Cost = route cost (terrain, infrastructure, rivers) from the land held by then +
-                           VP_GARRISON_COST per enemy start division in the state + VP_SUPPLY_COST per point of
+                           VP_GARRISON_COST per enemy start division in the state (META plans only: positions
+                           are private in FAIR) + VP_SUPPLY_COST per point of
                            estimated supply under REACH_OK; facts.vp_selection gives each target's cost and value,
                            and the reference set greedy by value for difficulty (targets that lie on a later
                            target's leg or in a goal state are exempt from the need, skip and order checks)
@@ -1400,6 +1401,9 @@ class Lint:
         cache[prov] = best
         return best
 
+    def mode(self):
+        return __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["mode_of"]).mode_of(self.plan)
+
     def can_enter(self):
         open_tags, own = self.passable_tags(), self.world.owner_of_province
         return (lambda p: own(p) is None or own(p) in open_tags) if open_tags is not None else None
@@ -1407,8 +1411,9 @@ class Lint:
     def vp_options(self, ctl, enemy, vps, owners, pstate):
         """{province: option} for each VP province `enemy` owns at the start and `ctl` does not hold: the
         cheapest route from ctl (mapgraph step cost: terrain, infrastructure, rivers), the enemy VP taken on
-        it, and cost = route cost + VP_GARRISON_COST x the enemy's start divisions in the target state +
-        VP_SUPPLY_COST x the estimated supply short of REACH_OK there."""
+        it, and cost = route cost + VP_GARRISON_COST x the enemy's start divisions in the target state (META
+        only: per-division positions are private in FAIR) + VP_SUPPLY_COST x the estimated supply short of
+        REACH_OK there."""
         graph = self.game.map_graph()
         if graph is None:
             return {}
@@ -1417,7 +1422,9 @@ class Lint:
         dist, prev = mapgraph.costs_from(graph, front, allowed=self.can_enter())
         garrison = self.__dict__.get("_garrison", {}).get(enemy)
         if garrison is None:
-            garrison = Counter(d.get("state") for d in self.world.oob(enemy).get("divisions") or [])
+            garrison = Counter()
+            if self.mode() == "meta":
+                garrison = Counter(d.get("state") for d in self.world.oob(enemy).get("divisions") or [])
             self.__dict__.setdefault("_garrison", {})[enemy] = garrison
         out = {}
         for prov, v in vps.items():
@@ -1647,9 +1654,10 @@ class Lint:
             "enemy": enemy, "aim": aim, "vp_needed_base": surr["vp_needed"], "total_vp": surr["total_vp"],
             "aim_rests_on": {"war_support": ws, "collaboration": collab, "vp_needed": floor_need},
             "main_total": main_total, "plan": rows, "reference": ref, "reference_total": total,
-            "method": "cost = route cost (terrain, infrastructure, rivers) + %g x enemy start divisions in the "
-                      "state + %g x supply short of %g; value = VP on the route / cost; reference = greedy by value "
-                      "from the start control" % (VP_GARRISON_COST, VP_SUPPLY_COST, REACH_OK)}
+            "method": "cost = route cost (terrain, infrastructure, rivers) + %s + %g x supply short of %g; value = VP "
+                      "on the route / cost; reference = greedy by value from the start control" % (
+                          "%g x enemy start divisions in the state" % VP_GARRISON_COST if self.mode() == "meta" else
+                          "no garrison term (FAIR: enemy division positions are private)", VP_SUPPLY_COST, REACH_OK)}
         self.facts["capitulation_levers"] = levers
 
     def conquest_skipped_near(self, targets, vps, owners, pstate):
