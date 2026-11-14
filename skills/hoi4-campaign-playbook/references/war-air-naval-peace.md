@@ -683,7 +683,7 @@ Never improvise raw input for a gap.
 | OP17 | Pin the neighbours | Attack every enemy tile next to the breach with a careful-mode attack so the AI cannot shift reserves; pin with weak high-org infantry | Every breakthrough | FAIR |
 | OP18 | Spear and net | Armour breaks and keeps moving toward rail junctions, hubs and the capital; infantry follows and holds | Encirclements | FAIR |
 | OP19 | Retake with the reserve | A lost own state is retaken by the reserve or the corridor guard; draw a strike army only when no reserve is within 2 states and the state is on its own corridor | Defence behind an advance | FAIR |
-| OP20 | Equipment fill gates the attack | Every missing 1% of equipment costs about 1% attack; no offensive under 90% mean fill; under 80% merge or disband weak divisions into the strike armies | Before every offensive | FAIR |
+| OP20 | Equipment fill gates the attack | Every missing 1% of equipment costs about 1% attack; no offensive under 90% mean fill (executor: `war.fill_floor`, default 0.9); under 80% merge or disband weak divisions into the strike armies | Before every offensive | FAIR |
 | OP21 | Keep the tanks moving | After a breach, no rest while org is above 50% of max and supply above 70%: an enemy without time to dig in keeps retreating | Exploitation | FAIR |
 | OP22 | Rotate attack groups | Two strike armies on one axis alternate: B attacks while A rests | Dug-in lines, mountains | FAIR |
 | OP23 | Read the trend | Judge a battle by the predicted end and the trend, not the colour; stop an attack whose org falls faster than the enemy's over two reads 12 hours apart | Live battles | FAIR |

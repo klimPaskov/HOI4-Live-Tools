@@ -4072,6 +4072,12 @@
           "x-owner": "executor",
           "description": "absolute organisation at which a rested army resumes; replaces resume_above_pct when set (no default: the share rule applies)"
         },
+        "fill_floor": {
+          "type": "number",
+          "minimum": 0,
+          "x-owner": "executor",
+          "description": "mean equipment fill (0.9 or 90) of an army's divisions (hoi4_supply equipment_fill_min) below which it gets no new attack order and does not resume after a rest; 0 turns the gate off (default 0.9: every missing 1% of equipment costs about 1% attack)"
+        },
         "supply_floor": {
           "type": "number",
           "x-owner": "executor",
