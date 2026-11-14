@@ -176,14 +176,27 @@ def cmd_dossier(args):
         else:
             src = "--dlc"
         game = Game(game_dir, mods)
-        w = World(game, args.tag, args.date, dlcs, mode)
-        d = dossiermod.build_world(w, enemies=args.enemy or None, dlc_src=src)
         out = args.out or os.path.join(os.environ.get("HOI4_LIVE_RUN") or ".", "dossier")
-        r = dossiermod.write(d, out)
+        # one build per game build, mod set, DLCs, tag, date, mode and enemies: later runs copy it
+        key = dossiermod.cache_key(game, args.tag, args.date, dlcs, mode, args.enemy)
+        r = None if getattr(args, "fresh", False) else dossiermod.cached(key, out)
+        if r is None:
+            w = World(game, args.tag, args.date, dlcs, mode)
+            d = dossiermod.build_world(w, enemies=args.enemy or None, dlc_src=src)
+            r = dossiermod.write(d, out)
+            r["manifest"]["cache_key"] = key
+            with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as fh:
+                json.dump(r["manifest"], fh, ensure_ascii=False, indent=1)
+            dossiermod.keep(key, out)
+            r["cached"] = False
+        else:
+            r["cached"] = True
         return emit(args, {"dir": r["dir"], "md_bytes": r["md_bytes"], "md_tokens_estimate": r["md_bytes"] // 4,
-                           "content_hash": d["_meta"]["content_hash"], "dlcs": dlcs, "mods": [m.name for m in mods]},
-                    lambda x: f"dossier written to {x['dir']}: dossier.md {x['md_bytes']} bytes "
-                              f"(~{x['md_tokens_estimate']} tokens), hash {x['content_hash']}")
+                           "content_hash": r["manifest"].get("content_hash"), "cache_key": key,
+                           "cached": r["cached"], "dlcs": dlcs, "mods": [m.name for m in mods]},
+                    lambda x: f"dossier {'copied from the cache' if x['cached'] else 'written'} to {x['dir']}: "
+                              f"dossier.md {x['md_bytes']} bytes (~{x['md_tokens_estimate']} tokens), "
+                              f"hash {x['content_hash']}")
     d = dossier_dir(args.out)
     if not d or not os.path.isfile(os.path.join(d, "dossier.md")):
         return fail("no dossier found (use --out DIR, set HOI4_LIVE_RUN, or run dossier build)")
@@ -1556,6 +1569,7 @@ def parser():
     p = add("dossier", cmd_dossier, ("action", {"choices": ("build", "show")}), ("section", {"nargs": "?"}))
     p.add_argument("--mods", choices=("auto", "none"), default="auto")
     p.add_argument("--enemy", action="append", help="enemy tag for sections 3, 4 and 9 (default: wars at start)")
+    p.add_argument("--fresh", action="store_true", help="build even when the dossier cache has this one")
     add("focus", cmd_focus, "id")
     p = add("focus-tree", cmd_focus_tree, "TAG")
     p.add_argument("--branch")

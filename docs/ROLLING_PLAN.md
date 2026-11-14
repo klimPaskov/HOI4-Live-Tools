@@ -28,7 +28,7 @@ in atomically. The game never waits.
 | D9 | **Stability: cooldowns, hysteresis, ledger.** Each trigger has a cooldown in game days; a deviation trigger fires when its measure crosses the threshold and is re-armed only after it recovers past a margin; strategy changes need two consecutive confirmations at least 14 game days apart. A ledger of what was tried and how it ended (executor failures, given-up items, rejected updates, rolled-back updates) goes into every packet, and the default picks never re-propose a ledgered failure inside its cooldown. | Flip-flopping and retry loops were the most common waste in the shakedowns (the same politics pick five times, the same air mission given up and re-planned). |
 | D10 | **Cost ceiling, reported.** Per wall hour of play: at most `max_model_updates` model calls and `max_model_seconds` of model time, plus a token ceiling; past either, updates are deterministic until the hour rolls. Updates use the `planner` role (a cheaper, faster model); strategy changes escalate to the `strategist` role. Time and tokens of every call go to `RUN/planner/journal.jsonl` and the run report. | The opening is the expensive step and is paid once; updates must stay cheap enough to run all campaign. |
 | D11 | **Provider-neutral.** The planner calls models only through the strategist adapters (`scripts/strategist/adapters`, any configured launcher). With no planner model configured, the update goes to the user's own agent: the supervisor notes "plan update waiting", the agent reads `RUN/planner/request-<n>.md` and answers with `hoi4_run {op:"plan_patch"}`; the same gates apply, and the default pick is applied if no answer comes in time. | The product's player is the user's agent; it must be enough. |
-| D12 | **Dossier cached per game build and mod set.** `facts.py dossier build` output is keyed by the game's content hash, the mod set and the country/date/mode, kept in a user cache and copied into a run. | The dossier is deterministic; rebuilding it per run spends minutes for nothing. |
+| D12 | **Dossier cached per game build and mod set.** `facts.py dossier build` output is keyed by the effective game files (install plus mods, by path, size and time), the DLCs, the country, date, mode and enemies, and the hoi4facts code itself; it is kept in the hoi4facts user cache and copied into a run (`--fresh` builds anyway). | The dossier is deterministic; rebuilding it per run spent 10 to 20 s of every opening and every re-run; a copy takes a quarter of a second. |
 
 ## 2. Data flow
 
@@ -111,9 +111,17 @@ reason it was not; per hour the model time and tokens against the ceiling.
 ## 6. What the opening changes
 
 The strategist's procedure stays whole (dossier, 29-item checklist, gates, critic, answers). It adds the
-`horizons` key (later horizons: intent and targets) and sets `_meta.stop_date` to the end of the first
-horizon; research, focus and PP checks are measured to that date. The plan says in `horizons[0].intent`
-what the first update should extend first.
+`horizons` key and sets `_validator.stop_date` to the end of the first horizon (procedure item 27.5);
+research, focus and PP checks are measured to that date. Later horizons carry `intent` and numeric
+`targets` only. The plan says in each later horizon's `intent` what the first update in it extends first.
+
+`horizons` has its own reader in the plan-key reconcile: owner `planner`, the rolling planner
+(`hoi4_live/planner/targets.py`). Twenty-one game days before the horizon in force ends the planner raises
+`horizon_end:<id>` (a schedule-class update over every domain, with the next horizon's intent and targets
+in the packet); when a horizon ends it compares the targets the state answers (divisions, PP, VP and states
+held, equipment fill; factories and manpower when read) and raises `deviation:horizon:<id>` for one ended
+behind, a strategy trigger when two end behind in a row. Lint `plan.horizons` checks order, overlap, gaps,
+the first horizon at the start, the last at the goal deadline and `stop_date` at the first one's end.
 
 ## 7. Live checks
 

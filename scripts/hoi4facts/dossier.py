@@ -89,6 +89,57 @@ def dlcs_auto(game_dir, userdir=None):
     return names, "installed dlc folders"
 
 
+def cache_key(game, tag, date, dlcs, mode, enemies=None):
+    """Key of a built dossier: the effective game files (install plus mods), the DLCs, the tag, date, mode and
+    enemies, and the dossier code itself (every hoi4facts source), so a cached dossier is reused only when
+    nothing it was built from changed."""
+    h = hashlib.sha1()
+    h.update(game.content.signature().encode())
+    h.update(json.dumps([sorted(dlcs or []), tag, str(date), mode, sorted(enemies or []), GENERATOR]).encode())
+    here = os.path.dirname(os.path.abspath(__file__))
+    for name in sorted(os.listdir(here)):
+        if name.endswith(".py"):
+            with open(os.path.join(here, name), "rb") as fh:
+                h.update(name.encode() + fh.read())
+    return h.hexdigest()[:20]
+
+
+def cache_dir_for(key, cache_dir=None):
+    return os.path.join(cache_dir or mapgraph.default_cache_dir(), "dossier", key)
+
+
+def cached(key, out_dir, cache_dir=None):
+    """Copy a cached dossier into out_dir; its write() result, or None when there is none."""
+    src = cache_dir_for(key, cache_dir)
+    if not (os.path.isfile(os.path.join(src, "dossier.md")) and os.path.isfile(os.path.join(src, "manifest.json"))):
+        return None
+    os.makedirs(out_dir, exist_ok=True)
+    for name in os.listdir(src):
+        if os.path.isfile(os.path.join(src, name)):
+            shutil.copyfile(os.path.join(src, name), os.path.join(out_dir, name))
+    with open(os.path.join(out_dir, "manifest.json"), encoding="utf-8") as fh:
+        m = json.load(fh)
+    return {"dir": out_dir, "md_bytes": (m.get("files") or {}).get("dossier.md", 0), "manifest": m}
+
+
+def keep(key, out_dir, cache_dir=None):
+    """Store a freshly written dossier under its key (best effort: a read-only cache is skipped)."""
+    dst = cache_dir_for(key, cache_dir)
+    try:
+        tmp = dst + ".tmp%d" % os.getpid()
+        os.makedirs(tmp, exist_ok=True)
+        for name in os.listdir(out_dir):
+            if os.path.isfile(os.path.join(out_dir, name)):
+                shutil.copyfile(os.path.join(out_dir, name), os.path.join(tmp, name))
+        if os.path.isdir(dst):
+            shutil.rmtree(tmp)
+        else:
+            os.replace(tmp, dst)
+    except OSError:
+        return None
+    return dst
+
+
 def content_hash(world):
     h = hashlib.sha1()
     h.update(world.content.signature().encode())

@@ -1,5 +1,13 @@
 # Mid-game revision
 
+In a supervised campaign most changes never reach this procedure: the rolling planner in the play
+supervisor (docs/ROLLING_PLAN.md) extends research, focus, politics, production and construction from the
+live state when a queue runs low, before a horizon ends and on its schedule, and gates and applies each
+update in the background. It escalates here (full mode, `--revision full`) only for a strategy trigger:
+an unexpected war or peace, a phase that asks for a revision, two checkpoints or two horizons missed, a
+goal at risk. A revision keeps `horizons` and moves `_validator.stop_date` to the end of the horizon in
+force.
+
 The game never pauses for a revision. The executor keeps running the current plan while you work, and
 its `phases` and `contingencies` cover the gap. At speed 3 a game day is about 2.5 to 3 s, so five
 minutes of thinking cost about 100 to 120 game days: write the plan so the executor can switch at once
