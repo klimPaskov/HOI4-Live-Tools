@@ -952,7 +952,7 @@ class TacticsRules(unittest.TestCase):
         collab = rows["operation_collaboration_government"]
         self.assertEqual(collab["timeline_days"], {"agency": 30, "recruit": 30, "network": 125, "operation": 90})
         self.assertEqual(collab["earliest_ready"], "1936.10.03")
-        self.assertTrue(collab["tool_gap"])
+        self.assertFalse(collab["tool_gap"])  # hoi4_operation_start carries it
         # no lever listed
         plan = self.capitulation_plan(targets, levers=[])
         self.assertEqual(len(self.selection(plan, "conquest.levers")), 2)
@@ -962,21 +962,26 @@ class TacticsRules(unittest.TestCase):
         self.assertTrue(any("not needed" in f["message"] for f in self.selection(plan)))
         plan = self.capitulation_plan(targets, aim=21, war_support=0.3)
         self.assertTrue(any("asks 22" in f["message"] for f in self.selection(plan)))
-        # the collaboration operation used: the intelligence key and the tool gap
+        # the collaboration operation used: the intelligence key and the operations entry
         used = [{"lever": "war_support", "use": True, "start": "1936.1.1", "cost": "casualties, propaganda",
                  "effect_vp": 4},
                 {"lever": "collaboration_government", "use": True, "start": "1936.1.1", "ready_by": "1936.10.3",
                  "cost": "2 operatives, 1000 rifles, 200 support, 10 civilian factories for 60 days", "effect_vp": 1}]
         plan = self.capitulation_plan(targets, levers=used, war_support=0.3, collaboration=0.3)
         msgs = [f["message"] for f in self.selection(plan, "conquest.levers")]
-        self.assertTrue(any("set tool_gap" in m for m in msgs), msgs)
+        self.assertFalse(any("set tool_gap" in m for m in msgs), msgs)
         self.assertTrue(any("needs intelligence.agency" in m for m in msgs), msgs)
-        used[1]["tool_gap"] = "hoi4_operative_assign refuses operations"
-        plan["goal"]["capitulation"]["levers"] = used
+        self.assertTrue(any("no intelligence.operations entry" in m for m in msgs), msgs)
         plan["intelligence"] = {"agency": True, "upgrades": ["upgrade_training_centers"], "operatives": [
             {"mission": "build_intel_network", "state_id": 271}, {"mission": "build_intel_network", "state_id": 840}]}
+        msgs = [f["message"] for f in self.selection(plan, "conquest.levers")]
+        self.assertEqual(len(msgs), 1, msgs)
+        self.assertIn("no intelligence.operations entry", msgs[0])
+        plan["intelligence"]["operatives"] = 2
+        plan["intelligence"]["networks"] = [{"target": "ETH"}]
+        plan["intelligence"]["operations"] = [{"operation": "operation_collaboration_government", "target": "ETH"}]
         self.assertEqual(self.selection(plan, "conquest.levers"), [])
-        self.assertTrue(self.hits(plan, "conquest.tool_gap", "warning"))
+        self.assertFalse(self.hits(plan, "conquest.tool_gap", "warning"))
 
     # -------------------------------------------------------------- production
     def test_equipment_balance(self):
@@ -1386,3 +1391,44 @@ class DeriveReaders(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class IntelligenceOperations(unittest.TestCase):
+    """intelligence.operations: requests the game would never let the plan prepare."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+
+    def findings(self, tag, intel):
+        plan = copy.deepcopy(load(ITA))
+        plan["_validator"] = {"tag": tag, "start_date": "1936.1.1"}
+        plan["_meta"] = {"version": 1}
+        plan["intelligence"] = intel
+        lt = lint_plan.Lint(plan, self.game)
+        lt.intelligence_operations()
+        return [(f["severity"], f["message"]) for f in lt.findings]
+
+    def test_a_democracy_cannot_run_collaboration_government(self):
+        op = {"operation": "operation_collaboration_government", "target": "GER"}
+        intel = {"agency": True, "upgrades": ["upgrade_a"] * 5, "operatives": 2, "operations": [op]}
+        out = self.findings("FRA", intel)
+        self.assertEqual([s for s, _ in out], ["error"])
+        self.assertIn("democratic", out[0][1])
+        self.assertEqual(self.findings("ITA", intel), [])
+
+    def test_unknown_operation_missing_agency_and_too_few_operatives(self):
+        intel = {"agency": False, "operatives": 1, "operations": [
+            {"operation": "operation_nope", "target": "ETH"},
+            {"operation": "operation_collaboration_government", "target": "ETH"}]}
+        out = self.findings("ITA", intel)
+        self.assertEqual(sorted(s for s, _ in out), ["error", "error", "warning", "warning"])
+        self.assertTrue(any("no such operation" in m for _, m in out))
+        self.assertTrue(any("1 slot" in m for _, m in out))
+
+    def test_an_operation_that_picks_a_location_is_a_tool_gap(self):
+        intel = {"agency": True, "upgrades": ["upgrade_a"] * 5, "operatives": 2,
+                 "operations": [{"operation": "operation_coordinated_strike", "target": "ETH"}]}
+        out = self.findings("ITA", intel)
+        self.assertTrue(any(s == "error" and "operation_picks_location" in m for s, m in out), out)

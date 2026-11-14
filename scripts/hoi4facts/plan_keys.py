@@ -113,6 +113,8 @@ NESTED_VARS = {
     "faction_step": {"cfg": "faction", "create": "faction.create"},
     "intelligence_step": {"cfg": "intelligence", "op": "intelligence.operatives[]"},
     "upgrade_ref": {"entry": "intelligence.upgrades[]"},
+    "intel_networks": {"cfg": "intelligence", "net": "intelligence.networks[]"},
+    "intel_operations": {"cfg": "intelligence", "entry": "intelligence.operations[]"},
     "casualty_rule": {"m": "manage"},
     "air_superiority_rule": {"m": "manage"},
     "politics_auto_step": {"entry": "politics_auto.order[]"},
