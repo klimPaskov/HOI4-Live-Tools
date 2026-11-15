@@ -5093,10 +5093,19 @@ fn war_step(
                     return Ok(Some(line));
                 }
             }
-            // On a plan path the direct move goes to the leg's waypoint, not the state's centre.
+            // On a plan path the direct move goes to the leg's waypoint, not the state's centre;
+            // without a path, to the army's victory-point province when it lies in the target:
+            // the move gathers the army on the province the plan is after (the state's centre
+            // may be days of mountain away from it, and the front spreads the army along the
+            // whole border, so the province was never attacked in strength).
             let mut stalled = json!({"army": name, "state_id": target});
             if let Some((_, leg)) = leg.as_ref().filter(|(_, l)| l.state as i32 == target) {
                 stalled["province_id"] = json!(leg.province);
+            } else if let Some(v) = vp
+                .as_ref()
+                .filter(|v| !own_target && v.state as i32 == target)
+            {
+                stalled["province_id"] = json!(v.province);
             }
             let (ok, why) = state.act(tools, lease, "hoi4_army_move", stalled, "wm")?;
             state.war_move.insert(name.clone());

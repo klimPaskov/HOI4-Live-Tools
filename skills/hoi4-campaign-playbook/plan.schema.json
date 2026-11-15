@@ -4743,6 +4743,13 @@
           "x-owner": "executor",
           "description": "longest planning wait in game days"
         },
+        "planning_flat_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3,
+          "x-owner": "executor",
+          "description": "an offensive planned again (a stopped plan, a rest) executes once its planning bonus has stood still this many game days below the wanted level: divisions in contact or on the move build none"
+        },
         "planning_skip_days": {
           "type": "number",
           "minimum": 0,

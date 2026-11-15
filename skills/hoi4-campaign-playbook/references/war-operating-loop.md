@@ -147,6 +147,12 @@ the player decides strategy:
   nothing attacks.
 - Planning wait (default on): an offensive executes once planning reaches 90% of its 30% cap,
   at most `planning_max_days` 15; skipped `planning_skip_days` 20 before the goal deadline.
+  An offensive planned again (a stopped plan) also executes once its bonus has stood still for
+  `planning_flat_days` 3: divisions in contact or on the move build none, and the wait would
+  only give the enemy the time.
+- The stall's direct move goes to the army's victory-point province when it lies in the target
+  state (else to the plan path's waypoint, else to the state): it gathers the army on the
+  province the plan is after.
 - Advance in bounds (`bound`, default on): after a captured hub, port or railway the next
   advance waits until it feeds the front (rail about 10 days, 5 on cores), at most 12 days.
 - `"motorization": 2`: every driven army's supply hubs use trucks.

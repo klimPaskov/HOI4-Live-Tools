@@ -25,7 +25,8 @@
 //!                      or once it has stopped rising for a game day at half that level or more
 //!                      (it stands at the army's own cap, which techs, doctrines, traits and the HQ
 //!                      distance set and no tool reads; a lower bonus that stands still belongs to
-//!                      divisions still fighting or moving, and the wait goes on). Without the read the bonus is estimated from the game days since
+//!                      divisions still fighting or moving: the wait goes on for "planning_flat_days"
+//!                      (3) and then ends, since nothing is being built). Without the read the bonus is estimated from the game days since
 //!                      the line was drawn and the digest says so; the 1.19 x0.8 without a deployed
 //!                      HQ scales cap and speed alike, so the wait is the same. No wait when the
 //!                      goal deadline is less than "planning_skip_days" (20) away. A rest resumes at
@@ -107,6 +108,8 @@ pub(super) struct Memory {
     starved: HashMap<String, Starved>,
     /// target province -> game hour a relief railway was last asked for it
     relief_rail: HashMap<i32, GameHour>,
+    /// armies planning again on a line they already attacked along (a stopped offensive)
+    replanned: HashSet<String>,
 }
 
 /// One spell of an army below the supply floor: what the executor tried for it.
@@ -151,6 +154,9 @@ pub(super) fn army_renamed(memory: &mut Memory, old: &str, new: &str) {
     rekey(&mut memory.second, old, new);
     rekey(&mut memory.via, old, new);
     rekey(&mut memory.starved, old, new);
+    if memory.replanned.remove(old) {
+        memory.replanned.insert(new.to_string());
+    }
 }
 
 /// The last status of each rule (the run result's `war`), or None when nothing was said.
@@ -450,6 +456,7 @@ pub(super) fn supply_relief(
 
 /// The army's offensive line into `target` was drawn now: its planning starts.
 pub(super) fn drawn(state: &mut State, army: &str, target: i32, now: GameHour) {
+    state.war_rules.replanned.remove(army);
     state
         .war_rules
         .drawn
@@ -460,6 +467,7 @@ pub(super) fn drawn(state: &mut State, army: &str, target: i32, now: GameHour) {
 pub(super) fn replan(state: &mut State, army: &str, target: i32, now: GameHour) {
     state.war_rules.planning.remove(army);
     drawn(state, army, target, now);
+    state.war_rules.replanned.insert(army.to_string());
 }
 
 /// Why the army's execute order waits (None: execute now): the bound pause, then planning.
@@ -528,6 +536,13 @@ fn planning_wait(
             cap * wanted,
             elapsed,
             max_days,
+            // only for an offensive planned again: a first offensive waits for its divisions
+            // to reach their places on the line, however long they walk
+            if state.war_rules.replanned.contains(army) {
+                days(&cfg["planning_flat_days"], FLAT_GIVES_UP_DAYS)
+            } else {
+                f64::INFINITY
+            },
             now,
         );
     }
@@ -554,6 +569,12 @@ fn planning_wait(
 /// Share of the wanted planning bonus from which a bonus that stopped rising is taken for the
 /// army's own cap.
 const FLAT_CAP_SHARE: f64 = 0.5;
+/// Game days the bonus of an offensive planned again (a stopped plan, a rest) may stand still
+/// below that level before the wait ends: divisions in contact,
+/// on the move or out of position build no planning, and waiting for a bonus that does not come
+/// only gives the enemy the time (live 15 Nov 2026: three armies stopped as stalled stood 16 days
+/// at 0-5% and then went in as they were).
+const FLAT_GIVES_UP_DAYS: f64 = 3.0;
 
 #[allow(clippy::too_many_arguments)]
 fn planning_read(
@@ -565,6 +586,7 @@ fn planning_read(
     wanted: f64,
     elapsed: f64,
     max_days: f64,
+    flat_limit: f64,
     now: GameHour,
 ) -> Option<String> {
     let seen = state
@@ -590,6 +612,11 @@ fn planning_read(
         // two days after it was stopped, live 14 Nov 2026). The wait goes on, max_days bounds it.
         Some(format!(
             "planning stopped rising at {:.0}% for {flat_days:.1} game days (the army's cap)",
+            pct(bonus)
+        ))
+    } else if flat_days >= flat_limit && elapsed >= flat_limit {
+        Some(format!(
+            "planning stands at {:.0}% for {flat_days:.1} game days: the divisions are not building it",
             pct(bonus)
         ))
     } else if elapsed >= max_days {
@@ -1590,6 +1617,130 @@ mod tests {
         assert_eq!(w.actions().last().unwrap().0, "hoi4_army_plan");
     }
 
+    /// Army 1's offensive on state 28 stalled and was stopped to be planned again at the
+    /// returned hour (the plan needs "replans": 1); its plan no longer executes.
+    fn replanned(w: &W, p: &Value) -> (State, GameHour) {
+        let (mut state, at) = stalled(w, p);
+        let step = acted(tick(&mut state, w, p, "l", at).unwrap());
+        assert!(step.contains("plan stopped to plan again"), "{step}");
+        w.executing.set(false);
+        (state, at)
+    }
+
+    #[test]
+    fn an_offensive_planned_again_executes_once_its_bonus_stood_still_three_days() {
+        let w = W::new();
+        let p = plan(json!({"replans": 1}));
+        let (mut state, at) = replanned(&w, &p);
+        // 5%, far below half of the wanted 27%: the divisions are in contact and build nothing
+        w.planning.set(Some(0.05));
+        for day in 0..3 {
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", at + 2 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        // two hours short of three game days since the first read: still waiting
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", at + 3 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        let step = acted(tick(&mut state, &w, &p, "l", at + 2 + 3 * DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        let line = &state.war_rules.notes["planning:Army 1"];
+        assert!(
+            line.contains(
+                "planning stands at 5% for 3.0 game days: the divisions are not building it"
+            ),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn a_first_offensive_with_a_flat_low_bonus_waits_on() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let mut state = State::default();
+        let step = acted(tick(&mut state, &w, &p, "l", START).unwrap());
+        assert!(step.starts_with("war front and offensive Army 1"), "{step}");
+        // the same 5% for ten game days: its divisions are still walking to the line
+        w.planning.set(Some(0.05));
+        for day in 0..=10 {
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", START + 3 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        let line = &state.war_rules.notes["planning:Army 1"];
+        assert!(line.contains("read from hoi4_armies"), "{line}");
+        // the longest wait bounds it, as before
+        let step = acted(tick(&mut state, &w, &p, "l", START + 15 * DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        let line = &state.war_rules.notes["planning:Army 1"];
+        assert!(line.contains("after the 15 game days at most"), "{line}");
+    }
+
+    #[test]
+    fn planning_flat_days_sets_how_long_a_flat_bonus_is_waited_for() {
+        // one game day
+        let w = W::new();
+        let p = plan(json!({"replans": 1, "planning_flat_days": 1}));
+        let (mut state, at) = replanned(&w, &p);
+        w.planning.set(Some(0.05));
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", at + 2).unwrap(),
+            Tick::Nothing
+        );
+        let step = acted(tick(&mut state, &w, &p, "l", at + 2 + DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        // five: the wait goes on past the three days of the default
+        let w = W::new();
+        let p = plan(json!({"replans": 1, "planning_flat_days": 5}));
+        let (mut state, at) = replanned(&w, &p);
+        w.planning.set(Some(0.05));
+        for day in 0..5 {
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", at + 2 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        let step = acted(tick(&mut state, &w, &p, "l", at + 2 + 5 * DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        let line = &state.war_rules.notes["planning:Army 1"];
+        assert!(line.contains("stands at 5% for 5.0 game days"), "{line}");
+    }
+
+    #[test]
+    fn a_bonus_that_keeps_rising_is_waited_for_after_a_stopped_offensive() {
+        let w = W::new();
+        let p = plan(json!({"replans": 1}));
+        let (mut state, at) = replanned(&w, &p);
+        // +1% a game day from 2% to 8%: below half of the wanted 27%, but being built
+        for day in 0..7 {
+            w.planning.set(Some(0.02 + 0.01 * day as f64));
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", at + 2 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        // it stops at 8% on day 6: the three flat days count from that read
+        for day in 7..9 {
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", at + 2 + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        let step = acted(tick(&mut state, &w, &p, "l", at + 2 + 9 * DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        let line = &state.war_rules.notes["planning:Army 1"];
+        assert!(line.contains("stands at 8% for 3.0 game days"), "{line}");
+    }
+
     #[test]
     fn a_plan_stopped_by_a_rest_goes_back_to_the_planning_wait_not_into_a_stall() {
         let w = W::new();
@@ -1715,6 +1866,45 @@ mod tests {
         let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
         assert!(step.starts_with("war stalled Army 1"), "{step}");
         assert_eq!(w.actions().last().unwrap().0, "hoi4_army_move");
+    }
+
+    #[test]
+    fn a_stall_move_goes_to_the_armys_victory_point_province_in_the_target() {
+        // the direct move of a stalled Army 1 on state 28, with these `vp_targets`
+        let stall_move = |vp: Option<Value>| {
+            let w = W::new();
+            let mut p = plan(json!({"planning_wait": false, "second_direction": false}));
+            if let Some(vp) = vp {
+                p["vp_targets"] = vp;
+            }
+            let (mut state, now) = stalled(&w, &p);
+            let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+            assert!(
+                step.starts_with("war stalled Army 1 8 days -> move to state 28"),
+                "{step}"
+            );
+            let (tool, args) = w.actions().last().unwrap().clone();
+            assert_eq!(tool, "hoi4_army_move");
+            assert_eq!(args["army"], "Army 1");
+            assert_eq!(args["state_id"], 28);
+            args.get("province_id").cloned()
+        };
+        // province 282 of the target is not held (the state read lists 280 and 281 as taken)
+        assert_eq!(
+            stall_move(Some(
+                json!([{"province": 282, "state": 28, "army": "Army 1"}])
+            )),
+            Some(json!(282))
+        );
+        // no row: the move goes to the state, as before
+        assert_eq!(stall_move(None), None);
+        // a row whose province is held already is no target either
+        assert_eq!(
+            stall_move(Some(
+                json!([{"province": 280, "state": 28, "army": "Army 1"}])
+            )),
+            None
+        );
     }
 
     #[test]

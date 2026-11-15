@@ -3126,6 +3126,13 @@ fn overdrawn_destination(read: &Value, source: i64, army: &str, need: f64) -> Op
         .map(|(pid, sid, _)| (sid, pid))
 }
 
+/// Whether `army` is a group the overdrawn rule took out of a stack: it is on its way to fed
+/// ground or rests there, and is not merged back into a formation meanwhile (merged the tick
+/// after its detach it never moved, and its divisions went into the wrong formation).
+pub(super) fn spread_out(state: &State, army: &str) -> bool {
+    state.manage.spread.iter().any(|s| s.army == army)
+}
+
 /// supply.split_overdrawn (`manage.overdrawn_floor` 35, `overdrawn_share` 0.5,
 /// `overdrawn_rest_days` 10), once a game day from hoi4_supply: in a province on
 /// `overdrawn_provinces` whose divisions' mean supply is below the floor (attrition starts at
@@ -5270,6 +5277,73 @@ mod tests {
         );
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_group_out_of_an_overdrawn_stack_is_not_merged_back_while_it_rests() {
+        use super::super::plan_formations::command_step;
+        // formation N1 is army A in state 10; Army 9 is the group detached from it there
+        let tools = fake(vec![
+            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
+            (
+                "hoi4_armies",
+                json!({"armies": [
+                    {"army": "A", "division_count": 5, "commander": "X", "main_state": 10},
+                    {"army": "Army 9", "division_count": 3, "commander": "Y", "main_state": 10}]}),
+            ),
+        ]);
+        let plan = json!({"manage": {}, "armies": {},
+            "army_layout": [{"name_hint": "N1", "state": 10, "role": "strike"}]});
+        let mut state = State::default();
+        state.layout.insert("N1".into(), "A".into());
+        let merges = |tools: &Fake| {
+            actions(tools)
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_merge")
+                .count()
+        };
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("divisions out into Army 9"), "{out}");
+        assert!(spread_out(&state, "Army 9") && !spread_out(&state, "A"));
+        // detached and not yet moved: the command step leaves it alone
+        assert_eq!(
+            command_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("overdrawn: Army 9 out of the overdrawn stack"),
+            "{out}"
+        );
+        // moved and resting on fed ground: still not merged
+        assert_eq!(
+            command_step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert_eq!(merges(&tools), 0, "{:?}", actions(&tools));
+        // the rest is over and the stack is fed: the rule forgets the group, and the stray
+        // army in the formation's state is merged as before
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_supply".into(), overdrawn_read(60.0, 2.0));
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap(),
+            None
+        );
+        assert!(!spread_out(&state, "Army 9"));
+        let out = command_step(&mut state, &tools, &plan, "l", START + 10 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: Army 9 (3 division(s)) merged into A (N1): true"),
+            "{out}"
+        );
+        assert_eq!(merges(&tools), 1);
     }
 
     #[test]
