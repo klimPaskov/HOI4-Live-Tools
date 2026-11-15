@@ -21,10 +21,10 @@ SETUP (game is PAUSED on day one; at most 3 batches, then unpause):
  2. batch: answer open events the plan names; do the plan brief's day-one player items. Do NOT touch
     research, production, construction or armies the executor owns.
  3. wait (paused) for the executor to finish the opening: call hoi4_wait_change
-    '{"since":SEQ,"urgent_only":true,"timeout_seconds":10}' (SEQ from the last reply) up to 30 times and read
-    every reply: as soon as one lists a change whose "kind" is "setup_complete" (the armies are formed, their
-    fronts and offensive lines drawn, research, production and construction filled), or after the 30th
-    call, batch ["hoi4_time",{"paused":false,"speed":{SPEED_ARG}}]
+    '{"since":SEQ,"timeout_seconds":10}' (SEQ from the last reply) again and again and read every reply.
+    Replies that list changes mean the executor is still working (armies, fronts and offensive lines,
+    research, production, construction): keep waiting. As soon as a reply lists a change whose "kind"
+    is "setup_complete", or after 12 replies in a row that list no change at all, batch ["hoi4_time",{"paused":false,"speed":{SPEED_ARG}}]
     (the tool counts speeds from 0: {SPEED_ARG} is the game's speed {SPEED}).
     From then on never pause.
 
