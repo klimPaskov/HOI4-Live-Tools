@@ -9070,8 +9070,9 @@ mod tests {
         // no planning wait: the tick after its lines the war step has the execute order to give
         // (the front and the offensive line both go out in its first step)
         plan["war"]["planning_wait"] = json!(false);
+        // (no cost: this fake reads no political power, and a costed pick waits for a read)
         plan["politics"] = json!([{"id": "chief", "category": "military_staff", "slot": 0,
-            "idea": "ITA_chief", "cost": 50}]);
+            "idea": "ITA_chief"}]);
         let politics = |w: &War| {
             w.calls
                 .borrow()
