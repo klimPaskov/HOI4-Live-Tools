@@ -121,6 +121,8 @@ pub(super) struct Memory {
     parked: HashMap<String, GameHour>,
     /// province -> when its stack may be thinned again
     thinned: HashMap<i64, GameHour>,
+    /// the army the last order went to
+    turn: Option<String>,
 }
 
 struct Knobs {
@@ -290,11 +292,12 @@ impl World<'_> {
                 .get(&province)
                 .is_some_and(|row| row.1.iter().any(|n| self.passable(*n) && !self.held(*n)))
     }
-    /// How many divisions drawing `need` each the land at `target` feeds: the supply of the best
-    /// fed own province beside it (the objective's own supply is read only once own divisions
-    /// stand in it). None when no own division stands beside it.
-    fn feeds(&self, target: i64, need: f64) -> Option<usize> {
-        if need <= 0.0 {
+    /// How many divisions drawing `need` each the land at `target` feeds with at least `floor`
+    /// of their need (under it they lose strength): the supply of the best fed own province
+    /// beside it (the objective's own supply is read only once own divisions stand in it); at
+    /// least two, the fewest that can attack. None when no own division stands beside it.
+    fn feeds(&self, target: i64, need: f64, floor: f64) -> Option<usize> {
+        if need <= 0.0 || floor <= 0.0 {
             return None;
         }
         let here = self.supply.get(&target).map(|s| s.0);
@@ -305,7 +308,7 @@ impl World<'_> {
                 .max_by(f64::total_cmp)
         });
         let supply = here.or(beside)?;
-        Some(((supply / need).floor() as usize).max(1))
+        Some(((supply / (need * floor)).floor() as usize).max(2))
     }
     /// Held provinces within `steps` of `from` over held land, nearest first.
     fn near(&self, from: i64, steps: usize) -> Vec<i64> {
@@ -382,7 +385,8 @@ fn thin(
         if demand <= supply || need <= 0.0 {
             continue;
         }
-        let keep = ((supply / need).floor() as usize).max(1);
+        // as many as get `floor` of their need there
+        let keep = ((supply / (need * floor)).floor() as usize).max(1);
         if keep >= here.len() {
             continue;
         }
@@ -767,7 +771,16 @@ pub(super) fn step(
             })
         };
         let mut changes: Vec<Change> = Vec::new();
-        for (name, all) in &by_army {
+        // One order a tick, the armies in turn after the one that had the last (an army whose
+        // order keeps failing held every other army back for two weeks: live 15 Nov 2026).
+        let names: Vec<&String> = by_army.keys().collect();
+        let start = memory
+            .turn
+            .as_ref()
+            .and_then(|t| names.iter().position(|n| *n > t))
+            .unwrap_or(0);
+        for name in names[start..].iter().chain(names[..start].iter()).copied() {
+            let all = &by_army[name];
             if all.len() < 2 || reserve.contains(name) || (!knobs.guards && guards.contains(name)) {
                 continue;
             }
@@ -993,7 +1006,9 @@ pub(super) fn step(
                     let others = others_on(*p, name);
                     if knobs.feed
                         && others > 0
-                        && world.feeds(*p, need).is_some_and(|cap| others >= cap)
+                        && world
+                            .feeds(*p, need, knobs.floor)
+                            .is_some_and(|cap| others >= cap)
                     {
                         full.insert(*p);
                         continue;
@@ -1026,7 +1041,7 @@ pub(super) fn step(
             let mut sent = movers.clone();
             if knobs.feed && next == Mode::Strike {
                 let others = others_on(province, name);
-                if let Some(cap) = world.feeds(province, need) {
+                if let Some(cap) = world.feeds(province, need, knobs.floor) {
                     let room = cap.saturating_sub(others).max(1);
                     if room < sent.len() {
                         sent.sort_by(|a, b| {
@@ -1111,6 +1126,7 @@ pub(super) fn step(
         return Ok(Some(None));
     };
     let (ok, why) = state.act(tools, lease, a.tool, a.args, "ws")?;
+    state.strike.turn = Some(a.army.clone());
     if let Some(from) = a.province {
         state.strike.thinned.insert(from, now + 3 * DAY);
         if ok {
@@ -1189,6 +1205,8 @@ mod tests {
         provinces: RefCell<Vec<Value>>,
         /// every division's supply percent (negative: not read)
         pct: Cell<f64>,
+        /// march orders of Army 1 are not applied
+        refuse: Cell<bool>,
     }
     impl Map {
         fn new(province: i64) -> Self {
@@ -1204,6 +1222,7 @@ mod tests {
                 calls: RefCell::new(vec![]),
                 provinces: RefCell::new(vec![]),
                 pct: Cell::new(-1.0),
+                refuse: Cell::new(false),
             }
         }
         fn actions(&self) -> Vec<(String, Value)> {
@@ -1234,6 +1253,10 @@ mod tests {
             if args.get("request_id").is_some() {
                 if name == "hoi4_army_plan" {
                     self.executing.set(args["execute"] == json!(true));
+                }
+                if self.refuse.get() && name == "hoi4_army_move" && args["army"] == json!("Army 1")
+                {
+                    return Ok(json!({"receipt": {"status": "NotApplied"}}));
                 }
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
@@ -1508,10 +1531,10 @@ mod tests {
     #[test]
     fn a_strike_goes_with_as_many_divisions_as_the_land_beside_it_feeds() {
         let map = Map::new(11);
-        // province 11 receives 2.0 supply; each division draws 1.0
+        // province 11 receives 0.7 supply; each division draws 1.0: two get 35% of their need
         map.provinces
             .borrow_mut()
-            .push(json!({"province_id": 11, "supply": 2.0, "demand": 3.0}));
+            .push(json!({"province_id": 11, "supply": 0.7, "demand": 3.0}));
         let mut state = State::default();
         let line = run(&mut state, &map, &plan(json!(true)), START)
             .unwrap()
@@ -1531,7 +1554,7 @@ mod tests {
         map.taken.borrow_mut().push(20);
         map.pct.set(12.0);
         map.provinces.borrow_mut().extend([
-            json!({"province_id": 20, "supply": 1.2, "demand": 3.0}),
+            json!({"province_id": 20, "supply": 0.5, "demand": 3.0}),
             json!({"province_id": 11, "supply": 4.0, "demand": 1.0}),
         ]);
         map.divisions.borrow_mut()[0].3 = 5.0;
@@ -1545,6 +1568,21 @@ mod tests {
         let (_, args) = map.actions().last().cloned().unwrap();
         assert_eq!(args["province_id"], json!(11));
         assert!(args["divisions"].as_array().unwrap().contains(&json!("d0")));
+    }
+
+    #[test]
+    fn an_army_whose_orders_fail_does_not_hold_the_others_back() {
+        let map = Map::new(11);
+        map.divisions
+            .borrow_mut()
+            .extend((3..5).map(|n| (format!("d{n}"), "Army 2".to_string(), 11, 40.0, None)));
+        map.refuse.set(true);
+        let mut state = State::default();
+        let on = plan(json!(true));
+        let first = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(first.contains("strike Army 1"), "{first}");
+        let second = run(&mut state, &map, &on, START + 1).unwrap().unwrap();
+        assert!(second.contains("strike Army 2"), "{second}");
     }
 
     #[test]
