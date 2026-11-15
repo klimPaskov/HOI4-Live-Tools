@@ -176,6 +176,43 @@ pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     });
 }
 
+/// Click building `key`'s button and wait for the construction manager to name it. When the
+/// selection still names nothing after the wait, the button is found again and clicked once
+/// more: on a loaded machine the first click can land while the panel is still settling
+/// (live 16 Nov 2026: eight arms_factory orders refused in a month under heavy swapping, none
+/// in the runs before). A selection naming another building is not retried.
+fn click_building(process: &dyn Process, keys: &dyn GameInput, key: &str) -> Result<()> {
+    let mut last = None;
+    for _ in 0..2 {
+        let rect = settled(process, "building button", |r, i| {
+            button(r, i, key)?.ok_or_else(|| {
+                Error::new(
+                    "invalid_target",
+                    "This building is not offered in the construction panel",
+                )
+            })
+        })?;
+        super::ui::dismiss_notices(process, keys)?;
+        let (x, y) = rect.center();
+        keys.click(GAME, x, y)?;
+        match wait(process, "select building", |r, i| {
+            Ok(selection(r, i)?.1.as_deref() == Some(key))
+        }) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.code == "input_readback_failed" => {
+                let nothing = read(process, selection).is_ok_and(|(_, k)| k.is_none());
+                last = Some(e);
+                if !nothing {
+                    break;
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    let e = last.unwrap_or_else(|| Error::new("input_readback_failed", "select building"));
+    Err(with_selection(process, select_failed(e, key)))
+}
+
 /// Append what the construction manager selected instead (mode and building) to a
 /// selection failure, so an intermittent refusal explains itself.
 fn with_selection(process: &dyn Process, mut e: Error) -> Error {
@@ -377,21 +414,7 @@ pub(super) fn select_building(
         }
         thread::sleep(Duration::from_millis(100));
     }
-    let rect = settled(process, "building button", |r, i| {
-        button(r, i, key)?.ok_or_else(|| {
-            Error::new(
-                "invalid_target",
-                "This building is not offered in the construction panel",
-            )
-        })
-    })?;
-    super::ui::dismiss_notices(process, keys)?;
-    let (x, y) = rect.center();
-    keys.click(GAME, x, y)?;
-    wait(process, "select building", |r, i| {
-        Ok(selection(r, i)?.1.as_deref() == Some(key))
-    })
-    .map_err(|e| with_selection(process, select_failed(e, key)))
+    click_building(process, keys, key)
 }
 
 pub(super) fn add(
@@ -430,21 +453,7 @@ pub(super) fn add(
         }
         thread::sleep(Duration::from_millis(100));
     }
-    let rect = settled(process, "building button", |r, i| {
-        button(r, i, key)?.ok_or_else(|| {
-            Error::new(
-                "invalid_target",
-                "This building is not offered in the construction panel",
-            )
-        })
-    })?;
-    super::ui::dismiss_notices(process, keys)?;
-    let (x, y) = rect.center();
-    keys.click(GAME, x, y)?;
-    wait(process, "select building", |r, i| {
-        Ok(selection(r, i)?.1.as_deref() == Some(key))
-    })
-    .map_err(|e| with_selection(process, select_failed(e, key)))?;
+    click_building(process, keys, key)?;
     let result = (|| {
         // The state already in the open map (right of the construction panel) at aiming
         // height: click where the camera is. Otherwise the Find view centres it (it waits for
