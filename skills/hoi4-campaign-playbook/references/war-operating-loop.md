@@ -251,8 +251,20 @@ advance is the border it started from (`halt` stays false unless a plan has a re
 objective that is lost again comes before every new one, and so does own land an enemy holds
 beside the army. Keep the guard armies as guards on the border the advance leaves behind
 (`guards` false): when every army struck, the enemy retook towns and the home border behind
-them and the advance starved. Taken victory points get no garrison by themselves; a guard army
-whose front follows the advance, or a division left in each, is still an open question.
+them and the advance starved. A taken victory point at the front keeps one division (`garrison`).
+
+**Guards are posts, not front lines.** A front line follows the border as the advance takes land:
+a guard army given a front on its colony's border walked with the advance into an unfed
+province and starved there, and a strike army that covered two colonies left both empty when it
+went north, and lost one of them. So a formation keeps divisions standing on each own state it
+covers while that state touches enemy land (`cover`, one per state, or the size of the task the
+plan named), and a guard formation holds its states with every division and stands still where
+nothing faces it. The rest of the army strikes.
+
+**Do not march into land that did not feed.** Land where own divisions once stood at a province
+supply too small for two divisions is remembered: left-over divisions do not widen into it, an
+assembly there takes two divisions, and the way to the nearest objective goes around it when it
+can.
 
 **Never stack more than the head province feeds; spread instead.** A whole army in one
 province starves: eleven divisions in one unfed province stood for three months at 6-10% supply

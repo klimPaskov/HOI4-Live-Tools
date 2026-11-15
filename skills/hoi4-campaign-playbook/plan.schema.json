@@ -4762,6 +4762,45 @@
               "default": false,
               "description": "true: a strike that ends is halted and the army rests where it stands. Default: no halt order; the objective is closed for the army (rest_days after a worn strike, close_days after one that stood) and its next march order replaces the attack. A halted division walks back to the front line its army still holds"
             },
+            "feed": {
+              "type": "boolean",
+              "default": true,
+              "description": "outside a strike, a stack its province cannot feed (floor of the divisions' need) sends its most worn divisions to held land near it with room for them"
+            },
+            "floor": {
+              "type": "number",
+              "default": 0.35
+            },
+            "garrison": {
+              "type": "boolean",
+              "default": true,
+              "description": "a taken victory point at the front keeps the most worn division of the army standing in it"
+            },
+            "worn_gate": {
+              "type": "number",
+              "default": 0.5
+            },
+            "stack": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 4,
+              "description": "at most this many divisions strike or assemble from one province (0: no limit)"
+            },
+            "widen": {
+              "type": "boolean",
+              "default": true,
+              "description": "divisions a strike left over take the enemy provinces beside the army, two at a time; land that fed fewer than two divisions when own divisions last stood in it is not taken this way"
+            },
+            "state_weight": {
+              "type": "number",
+              "default": 2.0
+            },
+            "cover": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1,
+              "description": "divisions a formation keeps on each own state it covers (army_layout covers and guard_states_in_order, and the states of its tasks, sized by the task's count) while that state touches land the enemy holds; the rest strike. A guard formation holds its covered states with every division, spread over the exposed ones, and stands still where nothing faces it. 0: no posts"
+            },
             "why": {
               "type": "string"
             }
