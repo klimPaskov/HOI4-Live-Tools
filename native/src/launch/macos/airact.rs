@@ -1196,7 +1196,10 @@ pub(super) fn resolve_region(
             "Game install not found; give state_id only",
         )
     })?;
-    let id = pick_region(&airread::region_names(&dir), &text)?;
+    // By id or map file name first, then by the name the game shows for the region.
+    let id = pick_region(&airread::region_names(&dir), &text).or_else(|by_file| {
+        pick_region(&airread::region_display_names(&dir), &text).map_err(|_| by_file)
+    })?;
     let states = mapdata::state_regions(&dir)?;
     match state {
         Some(s) => match states.get(&s) {
