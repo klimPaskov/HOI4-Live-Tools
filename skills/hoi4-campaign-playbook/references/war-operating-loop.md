@@ -180,6 +180,9 @@ the player decides strategy:
   goes to another objective. No halt order is sent unless the plan says `"halt": true`: a halted
   division walks back to the front line its army still holds, far behind an advance. Size each army for the supply at the head of its road: three divisions took a supply hub
   four days after their order from a fed assembly province, twelve in one unfed province stood.
+  A row that was held and is lost again is retaken first, and so is own land an enemy holds beside
+  the army; leave the guard armies as guards (`guards` false): with every army striking, the towns
+  and the border behind the advance were retaken and its supply cut.
   Write the rows per army in the order the roads open; a row whose path crosses a neutral's land
   waits until that land is the player's.
 - `"execution": "rush"` (or `"careful"`, `"balanced"`): the execution mode of every driven

@@ -10,6 +10,8 @@ time with a single march order of the whole army, and orders the next objective 
   divisions beside it, else the nearest enemy victory point no other army strikes. A strike that wears its
   divisions out or stands 18 days ends and the army turns to another objective (the first is closed for 10 or 25
   days); a halt order is sent only with `war.strike.halt` (halted divisions walk back to their army's front line).
+  A row that was held and is lost again, and own land an enemy holds beside the army, come before every other
+  objective; keep a guard army on the border the advance leaves behind.
 - `hoi4_army_move`: `halt:true` cancels an army's march and attack orders (the unit panel's halt button); a march
   order on a province is sent while any division neither marches on it nor stands in it (it was skipped once half
   did). `hoi4_supply` rows carry `heading_province`. New read `hoi4_province_graph` (land provinces of states and

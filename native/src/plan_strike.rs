@@ -43,6 +43,12 @@
 //!   2. an enemy victory point with `beside` fresh divisions next to it (most value first);
 //!   3. the nearest enemy victory point over land no other army is already striking.
 //!
+//! A row that was held and is lost again comes first: the army drops its strike or march and
+//! retakes it (an advance that leaves its victory points empty is cut off behind its back:
+//! live 15 Nov 2026 two towns behind three armies fell and their supply with them). Keep a
+//! guard army on the border the advance leaves behind. A province of the player's own states
+//! that an enemy holds beside the army comes before every row.
+//!
 //! A province is held when the player controls it (victory points), when its state is under the
 //! player's control, or when own divisions have stood in it. Land of a country the player is
 //! not at war with is closed.
@@ -89,6 +95,8 @@ pub(super) struct Memory {
     graph_states: Vec<i64>,
     /// army -> when its executing battle plan was last told to stop
     stopped: HashMap<String, GameHour>,
+    /// enemy victory points the player has held at some time (a row lost again is retaken first)
+    had: HashSet<i64>,
 }
 
 struct Knobs {
@@ -136,6 +144,8 @@ struct World<'a> {
     vp: BTreeMap<i64, (bool, f64)>,
     own_states: HashSet<i64>,
     enemy_states: HashSet<i64>,
+    /// provinces of the player's own states an enemy holds
+    lost_own: HashSet<i64>,
 }
 
 impl World<'_> {
@@ -143,6 +153,9 @@ impl World<'_> {
         self.memory.graph.get(&province).map(|row| row.0)
     }
     fn held(&self, province: i64) -> bool {
+        if self.lost_own.contains(&province) {
+            return false;
+        }
         if let Some((mine, _)) = self.vp.get(&province) {
             return *mine;
         }
@@ -153,6 +166,7 @@ impl World<'_> {
     }
     fn passable(&self, province: i64) -> bool {
         self.held(province)
+            || self.lost_own.contains(&province)
             || self.vp.contains_key(&province)
             || self
                 .state_of(province)
@@ -262,6 +276,19 @@ fn choose(
     taken_by_others: &HashSet<i64>,
 ) -> Option<Order> {
     let here: HashSet<i64> = divisions.iter().map(|d| d.province).collect();
+    // Own land an enemy holds beside the army comes before every row.
+    let mut own: Vec<i64> = world.lost_own.iter().copied().collect();
+    own.sort_unstable();
+    for province in own {
+        if !closed.contains(&province)
+            && !world.beside(divisions, province, knobs.resume).1.is_empty()
+        {
+            return Some(Order::Strike(
+                province,
+                "own land the enemy holds".to_string(),
+            ));
+        }
+    }
     // The army's first open row, in plan order: its leg is the first province of the path (or
     // the row's province) not yet held. A row is open when its leg is not closed for the army,
     // lies in land the army may enter and touches land already held; a row that is not open
@@ -334,6 +361,18 @@ fn choose(
         }
     }
     best.map(|(_, leg, why)| Order::Strike(leg, why))
+}
+
+/// The names a plan row may use for an army: its own and the layout roles bound to it.
+fn army_names(name: &str, layout: &[(String, String)]) -> Vec<String> {
+    let mut names = vec![name.to_string()];
+    names.extend(
+        layout
+            .iter()
+            .filter(|(_, army)| army == name)
+            .map(|(hint, _)| hint.clone()),
+    );
+    names
 }
 
 /// The provinces of `states` with their neighbours, read once per state list.
@@ -416,6 +455,11 @@ pub(super) fn step(
         }
     }
     let held_points: f64 = vp.values().filter(|v| v.0).map(|v| v.1).sum();
+    for (province, (mine, _)) in &vp {
+        if *mine {
+            state.strike.had.insert(*province);
+        }
+    }
     if !state.strike.active {
         if held_points < knobs.after_vp {
             return Ok(None);
@@ -424,11 +468,17 @@ pub(super) fn step(
     }
     let mine = tools.call("hoi4_states", &json!({"query": me}))?;
     let mut own_states: HashSet<i64> = HashSet::new();
+    let mut lost_own: HashSet<i64> = HashSet::new();
     for row in list(&mine, "states") {
         if let Some(id) = row["state_id"].as_i64() {
             all_states.push(id);
             if text(&row["controller"]) == me {
                 own_states.insert(id);
+            }
+            for other in list(row, "provinces_held_by_others") {
+                if enemies.contains(text(&other["controller"])) {
+                    lost_own.extend(other["province"].as_i64());
+                }
             }
         }
     }
@@ -494,6 +544,7 @@ pub(super) fn step(
             vp,
             own_states,
             enemy_states,
+            lost_own,
         };
         // Objectives other armies are striking now (for the nearest-victory-point choice).
         let striking: HashMap<String, i64> = memory
@@ -582,6 +633,22 @@ pub(super) fn step(
                     }
                 }
             }
+            // A row of this army that was held and is lost again comes before everything else:
+            // the army drops its strike or march and its first open row is that province.
+            if matches!(mode, Mode::Strike | Mode::March) {
+                let lost = rows(plan, &army_names(name, &layout))
+                    .into_iter()
+                    .map(|(p, _)| p)
+                    .find(|p| world.memory.had.contains(p) && !world.held(*p));
+                let own_beside = world.lost_own.iter().any(|p| {
+                    *p != objective && !world.beside(members, *p, knobs.resume).1.is_empty()
+                });
+                if lost.is_some_and(|p| p != objective)
+                    || (own_beside && !world.lost_own.contains(&objective))
+                {
+                    mode = Mode::Idle;
+                }
+            }
             if mode == Mode::March {
                 let there = members.iter().filter(|d| d.province == objective).count();
                 if there * 2 >= members.len() || now - since >= 25 * DAY {
@@ -611,13 +678,7 @@ pub(super) fn step(
                 .filter(|(n, _)| *n != name)
                 .map(|(_, p)| *p)
                 .collect();
-            let mut names = vec![name.clone()];
-            names.extend(
-                layout
-                    .iter()
-                    .filter(|(_, a)| a == name)
-                    .map(|(h, _)| h.clone()),
-            );
+            let names = army_names(name, &layout);
             let Some(order) = choose(
                 &world,
                 &knobs,
@@ -725,6 +786,8 @@ mod tests {
         divisions: RefCell<Vec<Row>>,
         executing: Cell<bool>,
         annexed: Cell<bool>,
+        /// province 10 of the player's own state is held by the enemy
+        lost_own: Cell<bool>,
         calls: RefCell<Vec<(String, Value)>>,
     }
     impl Map {
@@ -737,6 +800,7 @@ mod tests {
                 divisions: RefCell::new(divisions),
                 executing: Cell::new(false),
                 annexed: Cell::new(false),
+                lost_own: Cell::new(false),
                 calls: RefCell::new(vec![]),
             }
         }
@@ -784,6 +848,10 @@ mod tests {
                     "ME" => {
                         let mut rows =
                             vec![json!({"state_id": 1, "owner": "ME", "controller": "ME"})];
+                        if self.lost_own.get() {
+                            rows[0]["provinces_held_by_others"] =
+                                json!([{"province": 10, "controller": "ENE"}]);
+                        }
                         if self.annexed.get() {
                             rows.push(json!({"state_id": 4, "owner": "ME", "controller": "ME"}));
                         }
@@ -1026,6 +1094,46 @@ mod tests {
             .unwrap();
         assert!(
             line.contains("on province 30") && line.contains("row 30"),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn a_row_lost_again_is_retaken_before_the_strike_goes_on() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let two = json!({"war": {"enemies": ["ENE"], "theatre": [1, 4], "strike": true},
+            "vp_targets": [{"province": 20, "state": 2, "army": "Army 1"},
+                           {"province": 30, "state": 3, "army": "Army 1"}]});
+        run(&mut state, &map, &two, START);
+        map.taken.borrow_mut().push(20);
+        map.stand(21);
+        let line = run(&mut state, &map, &two, START + 5 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("on province 30"), "{line}");
+        // the enemy takes 20 back behind the army: the strike on 30 is dropped for it
+        map.taken.borrow_mut().clear();
+        map.set(38.0, Some(30));
+        let line = run(&mut state, &map, &two, START + 7 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("on province 20") && line.contains("row 20"),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn own_land_the_enemy_holds_beside_the_army_comes_first() {
+        let map = Map::new(11);
+        map.lost_own.set(true);
+        let mut state = State::default();
+        let line = run(&mut state, &map, &plan(json!(true)), START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("on province 10") && line.contains("own land"),
             "{line}"
         );
     }
