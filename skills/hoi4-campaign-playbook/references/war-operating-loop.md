@@ -261,6 +261,19 @@ covers while that state touches enemy land (`cover`, one per state, or the size 
 plan named), and a guard formation holds its states with every division and stands still where
 nothing faces it. The rest of the army strikes.
 
+**Posts stand on fed land and fight for what they cover.** A post never holds where own divisions
+starved when its state has a province that fed them: a guard with nothing to face leaves an unfed
+province for the nearest fed province of a state it covers (a guard held a captured corridor at
+12-19% supply for three months). A covered state the enemy is taking needs more than its watch
+(two more divisions than the provinces it lost, within the formation's budget), and its posts go
+at the lost land, one order, then they fight for two days before they are sent again: one post
+that stood while the enemy took fifteen provinces around it lost the colony.
+
+**Read why an army waits.** Each driven army's status (mode, objective, days, organisation,
+supply, posts, garrisons, resting and widening divisions) is a line of the run's `war` block, written
+once a game day when it changes. Count the step's orders, not slow-step lines: a run judged by
+the slow-step log looked starved while the step had given ninety orders.
+
 **Do not march into land that did not feed.** Land where own divisions once stood at a province
 supply too small for two divisions is remembered: left-over divisions do not widen into it, an
 assembly there takes two divisions, and the way to the nearest objective goes around it when it
