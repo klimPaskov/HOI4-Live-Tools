@@ -3220,32 +3220,43 @@
                 "$ref": "#/definitions/id"
               },
               "from_state": {
-                "$ref": "#/definitions/state_id"
+                "$ref": "#/definitions/state_id",
+                "description": "ship only divisions standing in this state; absent: any state the capital reaches over own land outside the theatre"
               },
               "to_state": {
                 "$ref": "#/definitions/state_id"
               },
               "from_port": {
-                "$ref": "#/definitions/province_id"
+                "$ref": "#/definitions/province_id",
+                "x-owner": "player",
+                "x-executor-planned": "W1-14"
               },
               "to_port": {
-                "$ref": "#/definitions/province_id"
+                "$ref": "#/definitions/province_id",
+                "x-owner": "player",
+                "x-executor-planned": "W1-14"
               },
               "templates": {
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "division templates the route ships (exact names)"
               },
               "count": {
                 "type": "integer",
-                "minimum": 1
+                "minimum": 1,
+                "description": "divisions the route ships in all; absent: every one it finds"
               },
               "when": {
-                "$ref": "#/definitions/predicate"
+                "$ref": "#/definitions/predicate",
+                "x-owner": "player",
+                "x-executor-planned": "W1-14"
               },
               "call": {
-                "$ref": "#/definitions/call"
+                "$ref": "#/definitions/call",
+                "x-owner": "player",
+                "x-executor-planned": "W1-14"
               },
               "why": {
                 "type": "string",
@@ -3254,27 +3265,37 @@
               "note": {
                 "type": "string",
                 "description": "Free text for people and the player; never read by the executor."
+              },
+              "join": {
+                "type": "string",
+                "description": "army or army_layout name_hint the shipped army is merged into once it has landed; absent: it stays an army of its own"
               }
             },
             "additionalProperties": false,
             "required": [
               "id",
-              "from_state",
               "to_state"
             ]
-          }
+          },
+          "description": "each route ships home divisions of its templates to to_state with one sea move per army and merges them into join on landing; a route's divisions are never disbanded"
         },
         "convoys": {
           "type": "integer",
           "minimum": 0,
-          "description": "convoys the overseas supply and transfers need"
+          "description": "convoys the overseas supply and transfers need",
+          "x-owner": "player",
+          "x-executor-planned": "W1-14"
         },
         "ports": {
           "$ref": "#/definitions/state_ids",
-          "description": "overseas states supplied through their port"
+          "description": "overseas states supplied through their port",
+          "x-owner": "player",
+          "x-executor-planned": "W1-14"
         },
         "escort": {
-          "type": "boolean"
+          "type": "boolean",
+          "x-owner": "player",
+          "x-executor-planned": "W1-14"
         },
         "why": {
           "type": "string",
@@ -3286,9 +3307,8 @@
         }
       },
       "additionalProperties": false,
-      "description": "sea transfers and overseas supply (lint navy.overseas)",
-      "x-owner": "player",
-      "x-executor-planned": "W1-14"
+      "description": "sea transfers of home divisions to an overseas theatre (routes, executor plan_ship.rs) and overseas supply (lint navy.overseas)",
+      "x-owner": "executor"
     },
     "navy": {
       "type": "object",
@@ -4696,21 +4716,55 @@
           "description": "how the driven armies' battle plans are carried out (hoi4_army_plan mode), set once per army when it has its lines and before its first execute order: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default), rush (every province of the plan is attacked: it suits a weak or broken enemy line, lengthens the front and can gather an army in one province without supply). Absent: the game's default stands and nothing is sent"
         },
         "strike": {
-          "type": ["boolean", "object"],
+          "type": [
+            "boolean",
+            "object"
+          ],
           "default": false,
           "x-owner": "executor",
           "description": "Objective strikes: true or an object switches the war step from battle plans to one march order of a whole army on one province at a time, once the opening plans have done their work. Per army the objective is its first vp_targets row not yet held (the first province of the row's path that is not held) when the army stands beside it or on the path; else an enemy victory point with `beside` fresh divisions next to it; else a march to the first province of the row's path (the assembly point); else the nearest enemy victory point no other army strikes. The order is sent once; the next objective is ordered the tick the last one falls. A strike whose divisions beside the objective fall under `rest` of their best organisation, or that lasts `max_days`, ends: the objective is closed for the army (`rest_days` after a worn strike, `close_days` after one that stood or a second worn one) and its next march order replaces the attack; with `halt` true it is halted instead and the army strikes again at `resume` or after `rest_days`. While on, battle plans, pocket fall-back, rests, stall answers, the overdrawn rule and command merges do not act on the driven armies; guard armies keep their fronts unless `guards` is true; `reserve` armies and armies the player ordered lately are left alone.",
           "properties": {
-            "after_vp": {"type": "number", "default": 0, "description": "victory points of the enemies the player must hold before the step takes the armies over; until then the battle plans run"},
-            "rest": {"type": "number", "default": 0.35},
-            "resume": {"type": "number", "default": 0.72},
-            "rest_days": {"type": "number", "default": 10},
-            "max_days": {"type": "number", "default": 18},
-            "close_days": {"type": "number", "default": 25},
-            "beside": {"type": "number", "default": 2.0},
-            "guards": {"type": "boolean", "default": false},
-            "halt": {"type": "boolean", "default": false, "description": "true: a strike that ends is halted and the army rests where it stands. Default: no halt order; the objective is closed for the army (rest_days after a worn strike, close_days after one that stood) and its next march order replaces the attack. A halted division walks back to the front line its army still holds"},
-            "why": {"type": "string"}
+            "after_vp": {
+              "type": "number",
+              "default": 0,
+              "description": "victory points of the enemies the player must hold before the step takes the armies over; until then the battle plans run"
+            },
+            "rest": {
+              "type": "number",
+              "default": 0.35
+            },
+            "resume": {
+              "type": "number",
+              "default": 0.72
+            },
+            "rest_days": {
+              "type": "number",
+              "default": 10
+            },
+            "max_days": {
+              "type": "number",
+              "default": 18
+            },
+            "close_days": {
+              "type": "number",
+              "default": 25
+            },
+            "beside": {
+              "type": "number",
+              "default": 2.0
+            },
+            "guards": {
+              "type": "boolean",
+              "default": false
+            },
+            "halt": {
+              "type": "boolean",
+              "default": false,
+              "description": "true: a strike that ends is halted and the army rests where it stands. Default: no halt order; the objective is closed for the army (rest_days after a worn strike, close_days after one that stood) and its next march order replaces the attack. A halted division walks back to the front line its army still holds"
+            },
+            "why": {
+              "type": "string"
+            }
           },
           "additionalProperties": false
         },

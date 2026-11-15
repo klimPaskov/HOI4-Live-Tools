@@ -176,6 +176,9 @@
 //!                          templates outside keep_states and war.theatre, one army per tick; never
 //!                          overseas (the capital must reach the division over own-controlled land) nor
 //!                          in an army at encirclement risk (plan_war.rs)
+//!   sea_transfer.routes    [{"id","to_state","templates":[..],"count":N,"from_state"?,"join"?}] ship home
+//!                          divisions of these templates to the theatre (form, detach, one sea move, merge
+//!                          into `join` on landing); a route's divisions are never disbanded (plan_ship.rs)
 //!                          "vp_targets" name the state of an army's battle plan (direct province moves
 //!                          only with "direct_moves": true); the offensive line is drawn at the depth
 //!                          of the army's next row, and drawn again (the plan keeps executing, no new
@@ -276,6 +279,10 @@ mod plan_war;
 // Objective strikes: one march order of a whole army on one province at a time.
 #[path = "plan_strike.rs"]
 mod plan_strike;
+
+/// Sea transfers (home divisions shipped to the theatre, `sea_transfer.routes`).
+#[path = "plan_ship.rs"]
+mod plan_ship;
 
 /// Victory-point routes (a `vp_targets` path followed leg by leg, the pace between legs).
 #[path = "plan_route.rs"]
@@ -542,6 +549,8 @@ pub struct State {
     routes: plan_route::Memory,
     /// Objective strikes (plan_strike.rs): armies, objectives, the map graph.
     strike: plan_strike::Memory,
+    /// Sea transfers (plan_ship.rs): divisions shipped per route, voyages under way.
+    ship: plan_ship::Memory,
     /// Steps ahead of their tools (plan_seams.rs): digest lines.
     seams: plan_seams::Memory,
     /// The encirclement operation: the pocket, its arms, the ring, pockets given up.
@@ -707,6 +716,7 @@ impl Default for State {
             affairs: Default::default(),
             war_rules: Default::default(),
             strike: Default::default(),
+            ship: Default::default(),
             routes: Default::default(),
             seams: Default::default(),
             encircle: Default::default(),
@@ -792,6 +802,7 @@ fn move_reason(tag: &str) -> &'static str {
         "wd" | "w2" => "second direction",
         "wj" => "route jump-off",
         "ws" => "objective strike",
+        "sh" => "sea transfer",
         _ => "other",
     }
 }
@@ -1777,6 +1788,11 @@ pub fn tick(
             return Ok(Tick::Acted(step));
         }
     }
+    if !war_first && !cheap_first {
+        if let Some(step) = plan_ship::step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
     if plan["disband"].is_object() && !war_first && !cheap_first {
         if let Some(step) = disband_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
@@ -2099,7 +2115,7 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let steps: [Step; 8] = [
+    let steps: [Step; 9] = [
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
         // offensive line before any name, commander or disband. Lines cost nothing to hold and
@@ -2120,6 +2136,8 @@ fn war_first_steps(
         // African infantry fought at 13-33% for most of the year). Before the war step: behind
         // it the step first ran in April, when the front was already at a third of its
         // equipment (live 15 Nov 2026). It is bounded by `disband.max` and then quiet.
+        // The sea transfers go first: a division a route ships is not disbanded.
+        plan_ship::step,
         |state, tools, plan, lease, now| {
             if plan["disband"].is_object() {
                 disband_step(state, tools, plan, lease, now)
@@ -2962,6 +2980,8 @@ fn disband_step(
         return Ok(None);
     };
     let supply = tools.call("hoi4_supply", &json!({}))?;
+    // Divisions a sea-transfer route still wants, and those at sea, are not disbanded.
+    let (shipping, sailing) = plan_ship::reserved(state, plan);
     // Armies with a division in enemy-held land are fighting and left whole; a home army with
     // a few divisions already in the theatre is not. An army at encirclement risk is never
     // thinned (only 20% of the manpower would return).
@@ -2982,6 +3002,7 @@ fn disband_step(
         if d["army"].is_null() {
             if let (Some(id), Some(at)) = (d["id"].as_str(), d["state_id"].as_i64()) {
                 if templates.iter().any(|t| t == text(&d["template"]))
+                    && !shipping.contains(text(&d["template"]))
                     && own.contains(&at)
                     && !keep.contains(&at)
                     && home.contains(&at)
@@ -3002,7 +3023,9 @@ fn disband_step(
         // Italy while the African infantry fought at 13-33% equipment).
         let standing = d["state_id"].as_i64();
         let candidate = standing.is_some_and(|at| own.contains(&at) && !keep.contains(&at));
-        let wanted = templates.iter().any(|t| t == text(&d["template"]));
+        let wanted = templates.iter().any(|t| t == text(&d["template"]))
+            && !shipping.contains(text(&d["template"]))
+            && !sailing.contains(text(&d["id"]));
         if wanted && candidate && !standing.is_some_and(|at| home.contains(&at)) {
             overseas.push(id.to_string());
             continue;
