@@ -26,13 +26,13 @@
 //!               chooses again, usually the same objective
 //!   worn_gate   0.5: an army under this share of its best organisation opens no new strike
 //!               until `rest_days` after its last order (retaking own land does not wait)
-//!   feed        true: a strike goes with as many divisions as the land at the objective feeds
-//!               (the supply of the best fed own province beside it over what one division
-//!               draws, less what other armies already send there; those beside it and the
-//!               freshest first, by hoi4_army_move `divisions`), the rest keep where they stand;
-//!               and a stack its province cannot feed (`floor` 0.35 supply) sends its most worn
-//!               divisions to held land near it with room for them, where they rest. Armies may
-//!               converge on one objective while its land feeds them
+//!   feed        true: outside a strike, a stack its province cannot feed (`floor` 0.35 of
+//!               the divisions' need) sends its most worn divisions to held land near it with
+//!               room for them, where they rest (hoi4_army_move `divisions`); the army's next
+//!               strike goes without them. A strike goes with the whole army (resting and
+//!               garrison divisions apart); armies converge on one objective, but an army joins
+//!               one that others strike only with as many divisions as the own land around it
+//!               still feeds at the floor
 //!   garrison    true: a taken victory point at the front keeps the most worn division of the
 //!               army standing in it; the army's orders go to the others until the point lies
 //!               behind the front (an advance that leaves its towns empty loses them)
@@ -293,21 +293,30 @@ impl World<'_> {
                 .is_some_and(|row| row.1.iter().any(|n| self.passable(*n) && !self.held(*n)))
     }
     /// How many divisions drawing `need` each the land at `target` feeds with at least `floor`
-    /// of their need (under it they lose strength): the supply of the best fed own province
-    /// beside it (the objective's own supply is read only once own divisions stand in it); at
-    /// least two, the fewest that can attack. None when no own division stands beside it.
+    /// of their need (under it they lose strength): the supply of the own provinces around it,
+    /// where attackers stand (the objective's own once own divisions stand in it); at least
+    /// two, the fewest that can attack. None when no own division stands beside it.
     fn feeds(&self, target: i64, need: f64, floor: f64) -> Option<usize> {
         if need <= 0.0 || floor <= 0.0 {
             return None;
         }
-        let here = self.supply.get(&target).map(|s| s.0);
-        let beside = self.memory.graph.get(&target).and_then(|row| {
-            row.1
-                .iter()
-                .filter_map(|n| self.supply.get(n).map(|s| s.0))
-                .max_by(f64::total_cmp)
-        });
-        let supply = here.or(beside)?;
+        // Attackers stand in the provinces around the objective, each fed by its own.
+        let around: Vec<f64> = self
+            .memory
+            .graph
+            .get(&target)
+            .map(|row| {
+                row.1
+                    .iter()
+                    .filter_map(|n| self.supply.get(n).map(|s| s.0))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let supply = match self.supply.get(&target) {
+            Some(s) => s.0,
+            None if !around.is_empty() => around.iter().sum(),
+            None => return None,
+        };
         Some(((supply / (need * floor)).floor() as usize).max(2))
     }
     /// Held provinces within `steps` of `from` over held land, nearest first.
@@ -931,7 +940,8 @@ pub(super) fn step(
             }
             // A stack the province cannot feed: the most worn divisions go to held land near it
             // with room for them and rest there; the ones it feeds stay (in any mode).
-            if knobs.feed {
+            // Not while a strike runs: its attackers stand where they attack from.
+            if knobs.feed && mode != Mode::Strike {
                 if let Some((from, ids, to)) =
                     thin(&world, &members, knobs.floor, &memory.thinned, now)
                 {
@@ -1036,11 +1046,13 @@ pub(super) fn step(
             let Some(target_state) = world.state_of(province) else {
                 continue;
             };
-            // As many divisions as the land at the objective feeds: those beside it and the
-            // freshest first; the rest keep where they stand.
+            // The whole army strikes (a strike sized to the supply of one province beside the
+            // objective sent two divisions at Harar for a month, live 15 Nov 2026; the stack is
+            // thinned to what its province feeds once the strike is over). Another army joins
+            // an objective others strike only with what the land around it still feeds.
             let mut sent = movers.clone();
-            if knobs.feed && next == Mode::Strike {
-                let others = others_on(province, name);
+            let others = others_on(province, name);
+            if knobs.feed && next == Mode::Strike && others > 0 {
                 if let Some(cap) = world.feeds(province, need, knobs.floor) {
                     let room = cap.saturating_sub(others).max(1);
                     if room < sent.len() {
@@ -1529,23 +1541,32 @@ mod tests {
     }
 
     #[test]
-    fn a_strike_goes_with_as_many_divisions_as_the_land_beside_it_feeds() {
+    fn an_army_joins_an_objective_others_strike_only_with_what_its_land_feeds() {
         let map = Map::new(11);
-        // province 11 receives 0.7 supply; each division draws 1.0: two get 35% of their need
+        map.divisions
+            .borrow_mut()
+            .extend((3..6).map(|n| (format!("d{n}"), "Army 2".to_string(), 11, 40.0, None)));
+        // province 11 receives 1.05 supply; each division draws 1.0: three get 35% of it
         map.provinces
             .borrow_mut()
-            .push(json!({"province_id": 11, "supply": 0.7, "demand": 3.0}));
+            .push(json!({"province_id": 11, "supply": 1.05, "demand": 6.0}));
         let mut state = State::default();
-        let line = run(&mut state, &map, &plan(json!(true)), START)
+        let first = run(&mut state, &map, &plan(json!(true)), START)
             .unwrap()
             .unwrap();
-        assert!(line.contains("2 of 3 divisions"), "{line}");
-        let (_, args) = map.actions().last().cloned().unwrap();
-        assert_eq!(args["divisions"].as_array().map(Vec::len), Some(2));
-        // feed: false sends the whole army
-        let mut other = State::default();
-        run(&mut other, &map, &plan(json!({"feed": false})), START);
-        assert!(map.actions().last().unwrap().1.get("divisions").is_none());
+        // the first army goes whole
+        assert!(
+            first.contains("Army 1 on province 20") && first.contains("3 of 3"),
+            "{first}"
+        );
+        let second = run(&mut state, &map, &plan(json!(true)), START + 1)
+            .unwrap()
+            .unwrap();
+        // the land feeds three, the first army sends three: the second turns elsewhere
+        assert!(
+            second.contains("Army 2") && !second.contains("on province 20"),
+            "{second}"
+        );
     }
 
     #[test]
