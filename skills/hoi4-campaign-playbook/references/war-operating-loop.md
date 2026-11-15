@@ -269,6 +269,12 @@ province for the nearest fed province of a state it covers (a guard held a captu
 at the lost land, one order, then they fight for two days before they are sent again: one post
 that stood while the enemy took fifteen provinces around it lost the colony.
 
+**A starving stack sends what the fed land can take.** Where a province feeds fewer divisions than
+stand in it and their supply is low, the most worn leave for the roomiest fed province beside it
+(two steps when nothing beside it has room), as many as that province feeds, at least one. Waiting
+for a province with room for all of them kept ten divisions at a tenth of their supply for two
+months while their equipment ran out and the stockpile behind them was full.
+
 **Read why an army waits.** Each driven army's status (mode, objective, days, organisation,
 supply, posts, garrisons, resting and widening divisions) is a line of the run's `war` block, written
 once a game day when it changes. Count the step's orders, not slow-step lines: a run judged by

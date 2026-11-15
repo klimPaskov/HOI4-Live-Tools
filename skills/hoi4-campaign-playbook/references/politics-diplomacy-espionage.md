@@ -45,7 +45,10 @@ Each 10 points of stability above 50 is about +4% factory output; each 10 below 
 that raises it (an advisor, law or decision with a stability modifier) in the dated politics, at most one priced
 pick behind the start. Standing policies (`politics_auto`) spend only the power the dated picks leave: an owner
 there alone waited behind every dated buy and stability stayed 0.42-0.46 for a whole war (lint
-`manage.stability_first`).
+`manage.stability_first`). The dated picks are bought in their order: a pick the power cannot pay yet holds
+its cost back, and a later pick spends only the power above it; a pick is never tried while the power is
+unread, and one the game refused for power keeps its cost held back from `politics_auto` (a 50-point pick
+listed third, then a standing buy, took the power the stability pick listed second was waiting for).
 
 Drivers: defensive war +20% war support, offensive war -20%; world tension scales war support by up to 0.4; bombing, convoy losses and casualties cut war support (caps -30%, -50%, -30%). Enemy propaganda operatives cap at -20% stability and -20% war support.
 
