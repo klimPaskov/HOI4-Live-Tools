@@ -20,7 +20,22 @@
 //!   rest_days   10: or after this many game days
 //!   max_days    18: a strike that has not taken its objective ends after this many days
 //!   close_days  25: an objective is closed for the army for this long after a strike that
-//!               stood its whole `max_days`, or after two that wore the divisions out
+//!               stood its whole `max_days`, or after two that wore the divisions out. A strike
+//!               that wears its divisions out keeps its attack (the defender wears too): no new
+//!               order is sent until the army has rested (`resume` or `rest_days`), then it
+//!               chooses again, usually the same objective
+//!   worn_gate   0.5: an army under this share of its best organisation opens no new strike
+//!               until `rest_days` after its last order (retaking own land does not wait)
+//!   feed        true: a strike goes with as many divisions as the land at the objective feeds
+//!               (the supply of the best fed own province beside it over what one division
+//!               draws, less what other armies already send there; those beside it and the
+//!               freshest first, by hoi4_army_move `divisions`), the rest keep where they stand;
+//!               and a stack its province cannot feed (`floor` 0.35 supply) sends its most worn
+//!               divisions to held land near it with room for them, where they rest. Armies may
+//!               converge on one objective while its land feeds them
+//!   garrison    true: a taken victory point at the front keeps the most worn division of the
+//!               army standing in it; the army's orders go to the others until the point lies
+//!               behind the front (an advance that leaves its towns empty loses them)
 //!   beside      2.0: fresh divisions that must stand beside a victory point for the army to
 //!               turn on it without a plan row
 //!   halt        true: a strike that ends is halted (hoi4_army_move halt) and the army rests
@@ -41,7 +56,8 @@
 //!      not closed for the army. Beside the leg or on the path the army strikes it; from afar
 //!      it marches to the path's first province when that is held (the plan's assembly point);
 //!   2. an enemy victory point with `beside` fresh divisions next to it (most value first);
-//!   3. the nearest enemy victory point over land no other army is already striking.
+//!   3. the nearest enemy victory point over land (an objective whose land feeds no more
+//!      divisions than other armies already send there is passed over).
 //!
 //! A row that was held and is lost again comes first: the army drops its strike or march and
 //! retakes it (an advance that leaves its victory points empty is cut off behind its back:
@@ -78,6 +94,8 @@ struct Army {
     since: GameHour,
     ended: HashMap<i64, u8>,
     closed: HashMap<i64, GameHour>,
+    /// the divisions the last order went to (empty: the whole army)
+    group: Vec<String>,
 }
 
 /// What the strike step keeps (this server life).
@@ -97,6 +115,12 @@ pub(super) struct Memory {
     stopped: HashMap<String, GameHour>,
     /// enemy victory points the player has held at some time (a row lost again is retaken first)
     had: HashSet<i64>,
+    /// division id -> the taken victory point it holds for its army (left out of its orders)
+    garrison: HashMap<String, i64>,
+    /// division id -> until when it rests on fed land after leaving a starving stack
+    parked: HashMap<String, GameHour>,
+    /// province -> when its stack may be thinned again
+    thinned: HashMap<i64, GameHour>,
 }
 
 struct Knobs {
@@ -109,6 +133,10 @@ struct Knobs {
     beside: f64,
     guards: bool,
     halt: bool,
+    feed: bool,
+    floor: f64,
+    garrison: bool,
+    worn_gate: f64,
 }
 
 fn knobs(cfg: &Value) -> Option<Knobs> {
@@ -127,6 +155,10 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         beside: number("beside", 2.0),
         guards: k["guards"] == json!(true),
         halt: k["halt"] == json!(true),
+        feed: k["feed"] != json!(false),
+        floor: number("floor", 0.35),
+        garrison: k["garrison"] != json!(false),
+        worn_gate: number("worn_gate", 0.5),
     })
 }
 
@@ -136,6 +168,10 @@ struct Division {
     province: i64,
     organisation: f64,
     heading: Option<i64>,
+    /// supply percent (0-100), negative when unread
+    supply: f64,
+    /// supply the division draws
+    need: f64,
 }
 
 struct World<'a> {
@@ -146,6 +182,8 @@ struct World<'a> {
     enemy_states: HashSet<i64>,
     /// provinces of the player's own states an enemy holds
     lost_own: HashSet<i64>,
+    /// province with own divisions -> (supply it receives, supply its divisions draw)
+    supply: HashMap<i64, (f64, f64)>,
 }
 
 impl World<'_> {
@@ -243,6 +281,126 @@ impl World<'_> {
         cost.get(&target)
             .map(|c| (*c, first.get(&target).copied().unwrap_or(target)))
     }
+    /// A held province beside land the enemy still holds: what is taken there can be lost.
+    fn front(&self, province: i64) -> bool {
+        self.held(province)
+            && self
+                .memory
+                .graph
+                .get(&province)
+                .is_some_and(|row| row.1.iter().any(|n| self.passable(*n) && !self.held(*n)))
+    }
+    /// How many divisions drawing `need` each the land at `target` feeds: the supply of the best
+    /// fed own province beside it (the objective's own supply is read only once own divisions
+    /// stand in it). None when no own division stands beside it.
+    fn feeds(&self, target: i64, need: f64) -> Option<usize> {
+        if need <= 0.0 {
+            return None;
+        }
+        let here = self.supply.get(&target).map(|s| s.0);
+        let beside = self.memory.graph.get(&target).and_then(|row| {
+            row.1
+                .iter()
+                .filter_map(|n| self.supply.get(n).map(|s| s.0))
+                .max_by(f64::total_cmp)
+        });
+        let supply = here.or(beside)?;
+        Some(((supply / need).floor() as usize).max(1))
+    }
+    /// Held provinces within `steps` of `from` over held land, nearest first.
+    fn near(&self, from: i64, steps: usize) -> Vec<i64> {
+        let mut seen: HashSet<i64> = [from].into();
+        let mut ring = vec![from];
+        let mut out = Vec::new();
+        for _ in 0..steps {
+            let mut next = Vec::new();
+            for p in ring {
+                for n in self
+                    .memory
+                    .graph
+                    .get(&p)
+                    .map(|r| r.1.as_slice())
+                    .unwrap_or(&[])
+                {
+                    if self.held(*n) && seen.insert(*n) {
+                        next.push(*n);
+                        out.push(*n);
+                    }
+                }
+            }
+            ring = next;
+        }
+        out
+    }
+}
+
+/// The supply one division of `divisions` draws (median of those read), 0 when none is read.
+fn need_of(divisions: &[&Division]) -> f64 {
+    let mut needs: Vec<f64> = divisions
+        .iter()
+        .map(|d| d.need)
+        .filter(|n| *n > 0.0)
+        .collect();
+    if needs.is_empty() {
+        return 0.0;
+    }
+    needs.sort_by(f64::total_cmp);
+    needs[needs.len() / 2]
+}
+
+/// A stack of the army that starves: the province its divisions stand in feeds fewer of them
+/// than stand there and their supply is under `floor`. The divisions that leave (the most worn
+/// first, the ones that feed stay) and the held province near it with room for them: (source,
+/// division ids, destination).
+fn thin(
+    world: &World,
+    members: &[&Division],
+    floor: f64,
+    blocked: &HashMap<i64, GameHour>,
+    now: GameHour,
+) -> Option<(i64, Vec<String>, i64)> {
+    let mut by: BTreeMap<i64, Vec<&Division>> = BTreeMap::new();
+    for d in members {
+        by.entry(d.province).or_default().push(d);
+    }
+    for (province, mut here) in by {
+        if here.len() < 2 || blocked.get(&province).is_some_and(|until| *until > now) {
+            continue;
+        }
+        let read: Vec<f64> = here
+            .iter()
+            .map(|d| d.supply)
+            .filter(|s| *s >= 0.0)
+            .collect();
+        if read.is_empty() || read.iter().sum::<f64>() / (read.len() as f64) >= floor * 100.0 {
+            continue;
+        }
+        let Some((supply, demand)) = world.supply.get(&province).copied() else {
+            continue;
+        };
+        let need = need_of(&here);
+        if demand <= supply || need <= 0.0 {
+            continue;
+        }
+        let keep = ((supply / need).floor() as usize).max(1);
+        if keep >= here.len() {
+            continue;
+        }
+        here.sort_by(|a, b| world.share(a).total_cmp(&world.share(b)));
+        let out: Vec<&Division> = here[..here.len() - keep].to_vec();
+        let wanted: f64 = out.iter().map(|d| d.need.max(need)).sum();
+        let Some(to) = world
+            .near(province, 3)
+            .into_iter()
+            .filter_map(|p| world.supply.get(&p).map(|s| (p, s.0 - s.1)))
+            .filter(|(_, room)| *room >= wanted)
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+        else {
+            continue;
+        };
+        return Some((province, out.iter().map(|d| d.id.clone()).collect(), to.0));
+    }
+    None
 }
 
 /// The army's plan rows in order: (province, path).
@@ -273,7 +431,6 @@ fn choose(
     rows: &[(i64, Vec<i64>)],
     divisions: &[&Division],
     closed: &HashSet<i64>,
-    taken_by_others: &HashSet<i64>,
 ) -> Option<Order> {
     let here: HashSet<i64> = divisions.iter().map(|d| d.province).collect();
     // Own land an enemy holds beside the army comes before every row.
@@ -352,7 +509,7 @@ fn choose(
         let Some((cost, leg)) = world.way(&here, *province, closed) else {
             continue;
         };
-        if closed.contains(&leg) || taken_by_others.contains(&leg) {
+        if closed.contains(&leg) {
             continue;
         }
         let score = points / (1.0 + cost as f64);
@@ -505,7 +662,21 @@ pub(super) fn step(
                     province,
                     organisation: row["organisation"].as_f64().unwrap_or(0.0),
                     heading: row["heading_province"].as_i64(),
+                    supply: row["supply_percent"].as_f64().unwrap_or(-1.0),
+                    need: row["supply_need"].as_f64().unwrap_or(0.0),
                 })
+        })
+        .collect();
+    let fed: HashMap<i64, (f64, f64)> = list(&supply, "provinces")
+        .iter()
+        .filter_map(|row| {
+            Some((
+                row["province_id"].as_i64()?,
+                (
+                    row["supply"].as_f64()?,
+                    row["demand"].as_f64().unwrap_or(0.0),
+                ),
+            ))
         })
         .collect();
     for d in &divisions {
@@ -536,7 +707,7 @@ pub(super) fn step(
         .map(|(hint, army)| (hint.clone(), army.clone()))
         .collect();
     let mut memory = std::mem::take(&mut state.strike);
-    let mut act: Option<(String, Value, String, String, Mode, i64)> = None;
+    let mut act: Option<Act> = None;
     let mut stop: Option<String> = None;
     {
         let world = World {
@@ -545,20 +716,63 @@ pub(super) fn step(
             own_states,
             enemy_states,
             lost_own,
+            supply: fed,
         };
-        // Objectives other armies are striking now (for the nearest-victory-point choice).
-        let striking: HashMap<String, i64> = memory
-            .armies
+        // A garrison holds its victory point while that point is at the front and the division
+        // stands in it; then it goes back to its army's orders.
+        let at: HashMap<&str, i64> = divisions
             .iter()
-            .filter(|(_, a)| a.mode == Mode::Strike)
-            .map(|(n, a)| (n.clone(), a.objective))
+            .map(|d| (d.id.as_str(), d.province))
             .collect();
+        let released: Vec<String> = memory
+            .garrison
+            .iter()
+            .filter(|(id, p)| at.get(id.as_str()) != Some(*p) || !world.front(**p))
+            .map(|(id, _)| id.clone())
+            .collect();
+        // Divisions out of a starving stack rest on fed land until rested or their time is up.
+        let rested: Vec<String> = memory
+            .parked
+            .iter()
+            .filter(|(id, until)| {
+                **until <= now
+                    || divisions
+                        .iter()
+                        .find(|d| &d.id == *id)
+                        .is_none_or(|d| world.share(d) >= knobs.resume)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        let kept = |id: &str| {
+            (memory.garrison.contains_key(id) && !released.iter().any(|r| r == id))
+                || (memory.parked.contains_key(id) && !rested.iter().any(|r| r == id))
+        };
+        // Divisions other armies send on each objective (a strike sized to its supply leaves
+        // room for another army's divisions, and only that much).
+        let mut committed: HashMap<i64, Vec<(&str, usize)>> = HashMap::new();
+        for (n, a) in memory.armies.iter().filter(|(_, a)| a.mode == Mode::Strike) {
+            let size = if a.group.is_empty() {
+                by_army.get(n).map_or(0, Vec::len)
+            } else {
+                a.group.len()
+            };
+            committed
+                .entry(a.objective)
+                .or_default()
+                .push((n.as_str(), size));
+        }
+        let others_on = |p: i64, me: &str| -> usize {
+            committed.get(&p).map_or(0, |v| {
+                v.iter().filter(|(n, _)| *n != me).map(|(_, s)| s).sum()
+            })
+        };
         let mut changes: Vec<Change> = Vec::new();
-        for (name, members) in &by_army {
-            if members.len() < 2
-                || reserve.contains(name)
-                || (!knobs.guards && guards.contains(name))
-            {
+        for (name, all) in &by_army {
+            if all.len() < 2 || reserve.contains(name) || (!knobs.guards && guards.contains(name)) {
+                continue;
+            }
+            let members: Vec<&Division> = all.iter().copied().filter(|d| !kept(&d.id)).collect();
+            if members.is_empty() {
                 continue;
             }
             let default = Army::default();
@@ -567,39 +781,71 @@ pub(super) fn step(
             let mut mode = army.mode;
             let since = army.since;
             let objective = army.objective;
+            // The divisions the last order went to.
+            let group: Vec<&Division> = {
+                let g: Vec<&Division> = members
+                    .iter()
+                    .copied()
+                    .filter(|d| army.group.is_empty() || army.group.contains(&d.id))
+                    .collect();
+                if g.is_empty() {
+                    members.clone()
+                } else {
+                    g
+                }
+            };
             // An executing battle plan would send the divisions back to their line.
             if executing.contains(name) && memory.stopped.get(name).is_none_or(|at| now - at >= DAY)
             {
                 stop = Some(name.clone());
-                act = Some((
-                    "hoi4_army_plan".into(),
-                    json!({"army": name, "execute": false}),
-                    format!("strike {name}: battle plan stopped, the army goes by objectives"),
-                    name.clone(),
+                act = Some(Act {
+                    tool: "hoi4_army_plan",
+                    args: json!({"army": name, "execute": false}),
+                    line: format!(
+                        "strike {name}: battle plan stopped, the army goes by objectives"
+                    ),
+                    army: name.clone(),
                     mode,
                     objective,
-                ));
+                    group: None,
+                    garrison: None,
+                    park: Vec::new(),
+                    province: None,
+                });
                 break;
             }
             let mut ended: Option<(i64, u8)> = None;
             // The objective a strike has just turned away from (not chosen again this tick).
             let mut turned: Option<i64> = None;
             if mode == Mode::Strike {
-                let taken =
-                    world.held(objective) || members.iter().any(|d| d.province == objective);
+                let taken = world.held(objective) || group.iter().any(|d| d.province == objective);
                 let age = now - since;
                 if taken {
                     mode = Mode::Idle;
                 } else {
-                    let (_, near) = world.beside(members, objective, knobs.resume);
+                    let (_, near) = world.beside(&group, objective, knobs.resume);
                     let worn = !near.is_empty()
                         && near.iter().map(|d| world.share(d)).sum::<f64>() / (near.len() as f64)
                             < knobs.rest;
                     let over = (worn && age >= 3 * DAY) || age >= knobs.max_days * DAY;
-                    if over && !knobs.halt {
-                        // The strike ends without a halt order: the objective is closed for
-                        // the army and its next march order replaces this one.
-                        ended = Some((objective, if worn { 1 } else { 2 }));
+                    if over && !knobs.halt && worn {
+                        // Worn out, no halt order: the attack goes on as it stands (the enemy
+                        // wears too) and no new order is sent while the divisions recover; then
+                        // the army chooses again. A second worn strike on it closes the
+                        // objective (live 15 Nov 2026: the script that won kept its attacks;
+                        // the step that turned away at once took nothing after March).
+                        changes.push((
+                            name.clone(),
+                            Mode::Rest,
+                            objective,
+                            Some(now),
+                            Some((objective, 1)),
+                        ));
+                        continue;
+                    } else if over && !knobs.halt {
+                        // Stood its whole time with divisions to spare: the objective holds;
+                        // it is closed for the army and its next order replaces this one.
+                        ended = Some((objective, 2));
                         turned = Some(objective);
                         mode = Mode::Idle;
                     } else if over {
@@ -610,24 +856,28 @@ pub(super) fn step(
                             Some(now),
                             Some((objective, if worn { 1 } else { 2 })),
                         ));
-                        act = Some((
-                            "hoi4_army_move".into(),
-                            json!({"army": name, "halt": true}),
-                            format!(
+                        act = Some(Act {
+                            tool: "hoi4_army_move",
+                            args: json!({"army": name, "halt": true}),
+                            line: format!(
                                 "strike {name}: halt before province {objective} after {} days (organisation {:.0}% of its best)",
                                 age / DAY,
                                 mean * 100.0
                             ),
-                            name.clone(),
-                            Mode::Rest,
+                            army: name.clone(),
+                            mode: Mode::Rest,
                             objective,
-                        ));
+                            group: None,
+                            garrison: None,
+                            park: Vec::new(),
+                            province: None,
+                        });
                         break;
                     }
                     // The order was lost (a retreat, a battle plan): choose and send again.
                     if !over
                         && age >= 2 * DAY
-                        && !members.iter().any(|d| d.heading == Some(objective))
+                        && !group.iter().any(|d| d.heading == Some(objective))
                     {
                         mode = Mode::Idle;
                     }
@@ -641,7 +891,7 @@ pub(super) fn step(
                     .map(|(p, _)| p)
                     .find(|p| world.memory.had.contains(p) && !world.held(*p));
                 let own_beside = world.lost_own.iter().any(|p| {
-                    *p != objective && !world.beside(members, *p, knobs.resume).1.is_empty()
+                    *p != objective && !world.beside(&members, *p, knobs.resume).1.is_empty()
                 });
                 if lost.is_some_and(|p| p != objective)
                     || (own_beside && !world.lost_own.contains(&objective))
@@ -650,18 +900,47 @@ pub(super) fn step(
                 }
             }
             if mode == Mode::March {
-                let there = members.iter().filter(|d| d.province == objective).count();
-                if there * 2 >= members.len() || now - since >= 25 * DAY {
+                let there = group.iter().filter(|d| d.province == objective).count();
+                if there * 2 >= group.len() || now - since >= 25 * DAY {
                     mode = Mode::Idle;
                 }
             }
-            if mode == Mode::Rest && (mean >= knobs.resume || now - since >= knobs.rest_days * DAY)
+            if mode == Mode::Rest
+                && (mean >= knobs.resume
+                    || now - since >= knobs.rest_days * DAY
+                    || world.held(objective))
             {
                 mode = Mode::Idle;
                 ended = Some((objective, 0));
             }
             if mode != army.mode {
                 changes.push((name.clone(), mode, objective, None, ended));
+            }
+            // A stack the province cannot feed: the most worn divisions go to held land near it
+            // with room for them and rest there; the ones it feeds stay (in any mode).
+            if knobs.feed {
+                if let Some((from, ids, to)) =
+                    thin(&world, &members, knobs.floor, &memory.thinned, now)
+                {
+                    if let Some(to_state) = world.state_of(to) {
+                        act = Some(Act {
+                            tool: "hoi4_army_move",
+                            args: json!({"army": name, "state_id": to_state, "province_id": to, "divisions": ids}),
+                            line: format!(
+                                "strike {name}: {} of its divisions out of province {from} (it feeds fewer than stand there) to province {to}",
+                                ids.len()
+                            ),
+                            army: name.clone(),
+                            mode,
+                            objective,
+                            group: None,
+                            garrison: None,
+                            park: ids,
+                            province: Some(from),
+                        });
+                        break;
+                    }
+                }
             }
             if mode != Mode::Idle {
                 continue;
@@ -673,47 +952,135 @@ pub(super) fn step(
                 .map(|(p, _)| *p)
                 .collect();
             closed.extend(turned);
-            let others: HashSet<i64> = striking
+            // A garrison for a taken victory point at the front where the army stands: its most
+            // worn division there stays (it remains in the army; the order goes to the others).
+            let garrison = if knobs.garrison && members.len() >= 3 {
+                let mut by_share = members.clone();
+                by_share.sort_by(|a, b| world.share(a).total_cmp(&world.share(b)));
+                by_share
+                    .iter()
+                    .find(|d| {
+                        world.vp.get(&d.province).is_some_and(|v| v.0)
+                            && world.front(d.province)
+                            && !memory.garrison.values().any(|p| *p == d.province)
+                            && !members.iter().any(|o| {
+                                o.id != d.id
+                                    && o.province == d.province
+                                    && o.heading.is_none()
+                                    && kept(&o.id)
+                            })
+                    })
+                    .map(|d| (d.id.clone(), d.province))
+            } else {
+                None
+            };
+            let movers: Vec<&Division> = members
                 .iter()
-                .filter(|(n, _)| *n != name)
-                .map(|(_, p)| *p)
+                .copied()
+                .filter(|d| garrison.as_ref().is_none_or(|(id, _)| id != &d.id))
                 .collect();
             let names = army_names(name, &layout);
-            let Some(order) = choose(
-                &world,
-                &knobs,
-                &rows(plan, &names),
-                members,
-                &closed,
-                &others,
-            ) else {
+            let need = need_of(&movers);
+            // An objective whose land already feeds no more divisions is full for this army.
+            let mut full: HashSet<i64> = HashSet::new();
+            let mut order = None;
+            for _ in 0..4 {
+                let shut: HashSet<i64> = closed.union(&full).copied().collect();
+                let Some(o) = choose(&world, &knobs, &rows(plan, &names), &movers, &shut) else {
+                    break;
+                };
+                if let Order::Strike(p, _) = &o {
+                    let others = others_on(*p, name);
+                    if knobs.feed
+                        && others > 0
+                        && world.feeds(*p, need).is_some_and(|cap| others >= cap)
+                    {
+                        full.insert(*p);
+                        continue;
+                    }
+                }
+                order = Some(o);
+                break;
+            }
+            let Some(order) = order else {
                 continue;
             };
             let (province, why, next) = match order {
                 Order::Strike(p, why) => (p, why, Mode::Strike),
                 Order::March(p, why) => (p, why, Mode::March),
             };
+            // Too worn to open a new strike: the army waits for its organisation (at most
+            // rest_days); retaking own land does not wait.
+            if next == Mode::Strike
+                && mean < knobs.worn_gate
+                && now - since < knobs.rest_days * DAY
+                && !why.starts_with("own land")
+            {
+                continue;
+            }
             let Some(target_state) = world.state_of(province) else {
                 continue;
             };
+            // As many divisions as the land at the objective feeds: those beside it and the
+            // freshest first; the rest keep where they stand.
+            let mut sent = movers.clone();
+            if knobs.feed && next == Mode::Strike {
+                let others = others_on(province, name);
+                if let Some(cap) = world.feeds(province, need) {
+                    let room = cap.saturating_sub(others).max(1);
+                    if room < sent.len() {
+                        sent.sort_by(|a, b| {
+                            let near = |d: &Division| world.touches(province, d.province);
+                            near(b)
+                                .cmp(&near(a))
+                                .then(world.share(b).total_cmp(&world.share(a)))
+                        });
+                        sent.truncate(room);
+                    }
+                }
+            }
             let verb = if next == Mode::Strike {
                 "on"
             } else {
                 "marches to"
             };
-            act = Some((
-                "hoi4_army_move".into(),
-                json!({"army": name, "state_id": target_state, "province_id": province}),
-                format!(
-                    "strike {name} {verb} province {province} ({why}; {} divisions, organisation {:.0}% of their best)",
-                    members.len(),
+            let mut args = json!({"army": name, "state_id": target_state, "province_id": province});
+            let part = sent.len() < all.len();
+            if part {
+                args["divisions"] = json!(sent.iter().map(|d| d.id.clone()).collect::<Vec<_>>());
+            }
+            act = Some(Act {
+                tool: "hoi4_army_move",
+                args,
+                line: format!(
+                    "strike {name} {verb} province {province} ({why}; {} of {} divisions{}, organisation {:.0}% of their best)",
+                    sent.len(),
+                    all.len(),
+                    garrison
+                        .as_ref()
+                        .map(|(_, p)| format!(", one holds {p}"))
+                        .unwrap_or_default(),
                     mean * 100.0
                 ),
-                name.clone(),
-                next,
-                province,
-            ));
+                army: name.clone(),
+                mode: next,
+                objective: province,
+                group: Some(if part {
+                    sent.iter().map(|d| d.id.clone()).collect()
+                } else {
+                    Vec::new()
+                }),
+                garrison,
+                park: Vec::new(),
+                province: None,
+            });
             break;
+        }
+        for id in released {
+            memory.garrison.remove(&id);
+        }
+        for id in rested {
+            memory.parked.remove(&id);
         }
         for (name, mode, objective, at, ended) in changes {
             let army = memory.armies.entry(name).or_default();
@@ -731,10 +1098,6 @@ pub(super) fn step(
                     if *n >= 2 {
                         *n = 0;
                         army.closed.insert(province, now + knobs.close_days * DAY);
-                    } else if !knobs.halt {
-                        // Worn out once, no halt: another objective while the divisions that
-                        // fought recover, then this one again.
-                        army.closed.insert(province, now + knobs.rest_days * DAY);
                     }
                 }
             }
@@ -744,22 +1107,55 @@ pub(super) fn step(
         memory.stopped.insert(name, now);
     }
     state.strike = memory;
-    let Some((tool, args, line, name, mode, objective)) = act else {
+    let Some(a) = act else {
         return Ok(Some(None));
     };
-    let (ok, why) = state.act(tools, lease, &tool, args, "ws")?;
-    let army = state.strike.armies.entry(name).or_default();
-    if tool == "hoi4_army_move" && mode != Mode::Rest {
+    let (ok, why) = state.act(tools, lease, a.tool, a.args, "ws")?;
+    if let Some(from) = a.province {
+        state.strike.thinned.insert(from, now + 3 * DAY);
         if ok {
-            army.mode = mode;
-            army.objective = objective;
+            for id in &a.park {
+                state
+                    .strike
+                    .parked
+                    .insert(id.clone(), now + knobs.rest_days * DAY);
+            }
+        }
+        return Ok(Some(Some(format!("{}: {ok} {why}", a.line))));
+    }
+    let army = state.strike.armies.entry(a.army).or_default();
+    if a.tool == "hoi4_army_move" && a.mode != Mode::Rest {
+        if ok {
+            army.mode = a.mode;
+            army.objective = a.objective;
             army.since = now;
+            army.group = a.group.unwrap_or_default();
+            if let Some((id, p)) = a.garrison {
+                state.strike.garrison.insert(id, p);
+            }
         } else {
             // An order the game did not take: another objective for two days.
-            army.closed.insert(objective, now + 2 * DAY);
+            army.closed.insert(a.objective, now + 2 * DAY);
         }
     }
-    Ok(Some(Some(format!("{line}: {ok} {why}"))))
+    Ok(Some(Some(format!("{}: {ok} {why}", a.line))))
+}
+
+/// The one order of a tick and what it changes in the step's memory.
+struct Act {
+    tool: &'static str,
+    args: Value,
+    line: String,
+    army: String,
+    mode: Mode,
+    objective: i64,
+    /// the divisions a strike or march went to (empty: the whole army)
+    group: Option<Vec<String>>,
+    /// a division left to hold a taken victory point
+    garrison: Option<(String, i64)>,
+    /// divisions sent out of a starving stack, and that stack's province
+    park: Vec<String>,
+    province: Option<i64>,
 }
 
 /// The plan asks for objective strikes and the step has taken the armies over: the overdrawn
@@ -789,6 +1185,10 @@ mod tests {
         /// province 10 of the player's own state is held by the enemy
         lost_own: Cell<bool>,
         calls: RefCell<Vec<(String, Value)>>,
+        /// hoi4_supply province rows (supply, demand of own divisions there)
+        provinces: RefCell<Vec<Value>>,
+        /// every division's supply percent (negative: not read)
+        pct: Cell<f64>,
     }
     impl Map {
         fn new(province: i64) -> Self {
@@ -802,6 +1202,8 @@ mod tests {
                 annexed: Cell::new(false),
                 lost_own: Cell::new(false),
                 calls: RefCell::new(vec![]),
+                provinces: RefCell::new(vec![]),
+                pct: Cell::new(-1.0),
             }
         }
         fn actions(&self) -> Vec<(String, Value)> {
@@ -871,9 +1273,14 @@ mod tests {
                     {"province": 21, "state_id": 2, "neighbours": [11, 20, 30]},
                     {"province": 30, "state_id": 3, "neighbours": [20, 21, 40]},
                     {"province": 40, "state_id": 4, "neighbours": [10, 30]}]}),
-                "hoi4_supply" => json!({"divisions": self.divisions.borrow().iter().map(|d| json!({
-                    "id": d.0, "army": d.1, "province_id": d.2, "organisation": d.3,
-                    "heading_province": d.4})).collect::<Vec<_>>()}),
+                "hoi4_supply" => json!({"divisions": self.divisions.borrow().iter().map(|d| {
+                    let mut row = json!({"id": d.0, "army": d.1, "province_id": d.2,
+                        "organisation": d.3, "heading_province": d.4, "supply_need": 1.0});
+                    if self.pct.get() >= 0.0 {
+                        row["supply_percent"] = json!(self.pct.get());
+                    }
+                    row
+                }).collect::<Vec<_>>(), "provinces": self.provinces.borrow().clone()}),
                 "hoi4_armies" => json!({"armies": [{"army": "Army 1", "division_count": 3,
                     "plan_executing": self.executing.get()}]}),
                 _ => json!({}),
@@ -1052,27 +1459,114 @@ mod tests {
     }
 
     #[test]
-    fn a_worn_strike_turns_to_another_objective_and_comes_back() {
+    fn a_worn_strike_keeps_its_attack_rests_and_closes_after_a_second_one() {
         let map = Map::new(11);
         let mut state = State::default();
         let on = plan(json!(true));
         run(&mut state, &map, &on, START);
+        // worn out on day four: no new order, no halt; the attack goes on as it stands
         map.set(10.0, Some(20));
-        let line = run(&mut state, &map, &on, START + 4 * DAY)
-            .unwrap()
-            .unwrap();
-        assert!(
-            !line.contains("on province 20") && line.contains("on province"),
-            "{line}"
-        );
-        assert!(map.actions().iter().all(|(_, a)| a.get("halt").is_none()));
-        // rest_days later the first objective is open again
-        map.stand(11);
-        map.set(36.0, None);
-        let line = run(&mut state, &map, &on, START + 16 * DAY)
+        assert_eq!(run(&mut state, &map, &on, START + 4 * DAY), Some(None));
+        assert_eq!(map.actions().len(), 1);
+        // rested (organisation back): the same objective again (the game takes an order the
+        // divisions already follow without input)
+        map.set(36.0, Some(20));
+        let line = run(&mut state, &map, &on, START + 6 * DAY)
             .unwrap()
             .unwrap();
         assert!(line.contains("on province 20"), "{line}");
+        // worn out a second time: closed, and the next choice is another objective
+        map.set(10.0, Some(20));
+        assert_eq!(run(&mut state, &map, &on, START + 11 * DAY), Some(None));
+        map.set(36.0, None);
+        let line = run(&mut state, &map, &on, START + 22 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(!line.contains("on province 20"), "{line}");
+        assert!(map.actions().iter().all(|(_, a)| a.get("halt").is_none()));
+    }
+
+    #[test]
+    fn a_worn_army_opens_no_new_strike_until_it_has_rested() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!(true));
+        map.set(40.0, None);
+        run(&mut state, &map, &on, START);
+        map.taken.borrow_mut().push(20);
+        map.stand(20);
+        // the objective fell, the divisions are at a quarter of their best: they wait
+        map.set(10.0, None);
+        assert_eq!(run(&mut state, &map, &on, START + DAY), Some(None));
+        map.set(30.0, None);
+        let line = run(&mut state, &map, &on, START + 2 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("on province 30"), "{line}");
+    }
+
+    #[test]
+    fn a_strike_goes_with_as_many_divisions_as_the_land_beside_it_feeds() {
+        let map = Map::new(11);
+        // province 11 receives 2.0 supply; each division draws 1.0
+        map.provinces
+            .borrow_mut()
+            .push(json!({"province_id": 11, "supply": 2.0, "demand": 3.0}));
+        let mut state = State::default();
+        let line = run(&mut state, &map, &plan(json!(true)), START)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("2 of 3 divisions"), "{line}");
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["divisions"].as_array().map(Vec::len), Some(2));
+        // feed: false sends the whole army
+        let mut other = State::default();
+        run(&mut other, &map, &plan(json!({"feed": false})), START);
+        assert!(map.actions().last().unwrap().1.get("divisions").is_none());
+    }
+
+    #[test]
+    fn a_starving_stack_sends_its_most_worn_divisions_to_fed_land_near_it() {
+        let map = Map::new(20);
+        map.taken.borrow_mut().push(20);
+        map.pct.set(12.0);
+        map.provinces.borrow_mut().extend([
+            json!({"province_id": 20, "supply": 1.2, "demand": 3.0}),
+            json!({"province_id": 11, "supply": 4.0, "demand": 1.0}),
+        ]);
+        map.divisions.borrow_mut()[0].3 = 5.0;
+        let mut state = State::default();
+        let on = plan(json!({"garrison": false}));
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(
+            line.contains("2 of its divisions out of province 20"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["province_id"], json!(11));
+        assert!(args["divisions"].as_array().unwrap().contains(&json!("d0")));
+    }
+
+    #[test]
+    fn a_taken_victory_point_at_the_front_keeps_one_division() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        run(&mut state, &map, &plan(json!(true)), START);
+        map.taken.borrow_mut().push(20);
+        map.stand(20);
+        map.set(40.0, None);
+        map.divisions.borrow_mut()[2].3 = 24.0;
+        let line = run(&mut state, &map, &plan(json!(true)), START + 2 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("on province 30") && line.contains("one holds 20"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        let sent = args["divisions"].as_array().cloned().unwrap();
+        assert_eq!(sent.len(), 2);
+        assert!(!sent.contains(&json!("d2")));
     }
 
     #[test]
