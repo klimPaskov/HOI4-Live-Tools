@@ -2771,7 +2771,11 @@ pub(super) fn politics_reserve(
             continue;
         };
         let idea = text(&pick["idea"]).to_string();
-        if state.skipped(now, "pol", &key) {
+        // A pick the game refused while the power was below its cost was refused for power:
+        // it keeps its cost (live 16 Nov 2026: the stability pick, refused at 76 of 150, let
+        // the standing policy spend 81 points the next day and waited two more months).
+        let short_of_power = state.pol_pp_at_fail.get(&key).is_some_and(|pp| *pp < cost);
+        if state.skipped(now, "pol", &key) && !short_of_power {
             let left = state
                 .bad
                 .get(&skip_key("pol", &key))
@@ -5734,6 +5738,32 @@ mod tests {
             politics_auto_choice(&chief, "", &greyed[..1], &never, &none),
             Err(("vacant; nothing enabled".into(), false))
         );
+    }
+
+    #[test]
+    fn a_pick_refused_for_power_keeps_its_cost_in_reserve() {
+        let tools = fake(vec![
+            ("hoi4_economy", pp(120.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": null, "options": [{"idea": "ITA_roatta", "enabled": true}]}),
+            ),
+        ]);
+        let plan = json!({
+            "politics": [{"id": "stab", "category": "government", "slot": 5,
+                          "idea": "ITA_mazzolini", "cost": 150}],
+            "politics_auto": {"threshold": 0, "order": [
+                {"category": "military_staff", "slot": 5, "ideas": ["ITA_roatta"], "cost": 50}]}});
+        let mut state = State::default();
+        // refused at 76 of its 150: the refusal was the power, so the cost stays held back
+        state.skip(START, "pol", "pol:id:stab", 3 * DAY);
+        state.pol_pp_at_fail.insert("pol:id:stab".into(), 76.0);
+        assert_eq!(
+            politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let line = &state.manage.notes["politics_auto"];
+        assert!(line.contains("plan reserve 150"), "{line}");
     }
 
     #[test]
