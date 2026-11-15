@@ -2379,7 +2379,9 @@ fn network_state(tools: &dyn Tools, wanted: i64) -> Option<Option<i64>> {
     let me = tools.call("hoi4_overview", &json!({})).ok()?["player"]
         .as_str()?
         .to_string();
-    let row = tools.call("hoi4_states", &json!({"query": wanted})).ok()?;
+    let row = tools
+        .call("hoi4_states", &json!({"query": wanted.to_string()}))
+        .ok()?;
     let tag = list(&row, "states")
         .iter()
         .find(|r| r["state_id"].as_i64() == Some(wanted))
@@ -2794,6 +2796,10 @@ mod tests {
             }
             if self.unreadable.borrow().contains(name) {
                 return Err(Error::new("read_failed", "unreadable in the fake"));
+            }
+            // like the server: a state query is text (a tag, a name or a state id written out)
+            if name == "hoi4_states" && args.get("query").is_some_and(|q| !q.is_string()) {
+                return Err(Error::new("invalid_arguments", "query must be a string"));
             }
             Ok(self
                 .replies
