@@ -535,6 +535,9 @@ pub struct State {
     plan_tries: HashMap<String, (u32, String)>,
     /// `army_layout`: name_hint -> the army that plays that role.
     layout: HashMap<String, String>,
+    /// doctrine entry -> the folder experience it had when the game disabled its Unlock: it is
+    /// tried again only once the experience has grown (a retry by date alone failed four times)
+    doc_xp: HashMap<String, f64>,
     /// Failures per layout item ("create:<state>", "detach:<hint>") since it last worked.
     layout_fails: HashMap<String, u32>,
     /// Continuous management (plan_manage.rs): wake alarms, digest lines, the peace conference.
@@ -710,6 +713,7 @@ impl Default for State {
             plan_blocked: HashMap::new(),
             plan_tries: HashMap::new(),
             layout: HashMap::new(),
+            doc_xp: HashMap::new(),
             layout_fails: HashMap::new(),
             manage: Default::default(),
             military: Default::default(),
@@ -3893,8 +3897,25 @@ fn extras_step(
                 _ => "army",
             };
             let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
-            if xp < entry["xp"].as_f64().unwrap_or(100.0) {
+            let cost = entry["xp"].as_f64().unwrap_or(100.0);
+            if xp < cost {
                 break;
+            }
+            // the game disabled Unlock at this experience (the plan's cost is an estimate; the
+            // game's own cost modifiers are not read): wait until it has grown
+            if let Some(failed) = state.doc_xp.get(&part_key) {
+                let more = (cost * 0.2).max(10.0);
+                if xp < failed + more {
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: Unlock was disabled at {failed:.0} experience; waits for {:.0}",
+                            failed + more
+                        ),
+                    );
+                    break;
+                }
             }
             let mut args = json!({"doctrine": doctrine});
             if let Some(track) = track.filter(|t| !t.is_empty()) {
@@ -3912,8 +3933,15 @@ fn extras_step(
             }
             let (ok, why) = state.act(tools, lease, "hoi4_doctrine_adopt", args, "dc")?;
             if ok || why.contains("already") {
+                state.doc_xp.remove(&part_key);
                 state.done.insert(part_key, now);
             } else {
+                if why.contains("doctrine_unavailable")
+                    || why.contains("insufficient_experience")
+                    || why.contains("Unlock")
+                {
+                    state.doc_xp.insert(part_key.clone(), xp);
+                }
                 state.skip(now, "doc", &part_key, 15 * DAY);
             }
             return Ok(Some(format!("doctrine {doctrine}: {ok} {why}{held}")));
@@ -7197,6 +7225,12 @@ mod tests {
     struct Fake {
         calls: RefCell<Vec<(String, Value)>>,
         replies: HashMap<&'static str, Value>,
+        refuse: RefCell<HashMap<String, &'static str>>,
+    }
+    impl Fake {
+        fn refuse(&self, what: &str, code: &'static str) {
+            self.refuse.borrow_mut().insert(what.into(), code);
+        }
     }
     impl Tools for Fake {
         fn call(&self, name: &str, args: &Value) -> Result<Value> {
@@ -7204,6 +7238,9 @@ mod tests {
                 .borrow_mut()
                 .push((name.to_string(), args.clone()));
             if name.starts_with("hoi4_") && args.get("request_id").is_some() {
+                if let Some(code) = self.refuse.borrow().get(name) {
+                    return Err(crate::error::Error::new(code, "refused by the fake"));
+                }
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
             Ok(self.replies.get(name).cloned().unwrap_or_else(|| json!({})))
@@ -7213,6 +7250,7 @@ mod tests {
         Fake {
             calls: RefCell::new(Vec::new()),
             replies: replies.into_iter().collect(),
+            refuse: RefCell::new(HashMap::new()),
         }
     }
     #[test]
@@ -12944,6 +12982,22 @@ mod tests {
         );
         assert!(state.done.contains_key("doc:id:land-grand"));
         assert!(state.done.contains_key("doc:id:land-inf"));
+    }
+
+    #[test]
+    fn a_doctrine_the_game_disables_waits_for_more_experience_not_for_a_date() {
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "great_war_infantry", "xp": 55}]});
+        let tools = doctrine_tools();
+        tools.refuse("hoi4_doctrine_adopt", "doctrine_unavailable");
+        let mut state = State::default();
+        let first = doctrine_pass(&mut state, &tools, &plan, 0).unwrap();
+        assert!(first.contains("false"), "{first}");
+        // weeks later at the same experience (150): no second try
+        for week in 3..8 {
+            assert_eq!(doctrine_pass(&mut state, &tools, &plan, week), None);
+        }
+        assert_eq!(adopted(&tools).len(), 1);
     }
 
     #[test]
