@@ -311,7 +311,8 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            operatives than the
                            agency can hold with the planned upgrades (1 slot, one more per
                            AGENCY_UPGRADE_PER_OPERATIVE_SLOT upgrades, at most MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES more;
-                           advisors and spirits add others) or than intelligence.operatives recruits
+                           advisors and spirits add others) or than intelligence.operatives recruits; (warning) more
+                           intelligence.operatives than those slots, with or without operations
   peace.order              (info) peace.take ranks states the plan does not hold at the conference (no vp target
                            or axis there, not owned) ahead of a state it holds
 
@@ -4380,9 +4381,20 @@ class Lint:
 
     # ------------------------------------------------------------------
     def intelligence_operations(self):
-        """intelligence.operations entries the game would never let the plan prepare."""
+        """intelligence.operations entries the game would never let the plan prepare, and more planned
+        operatives than the agency's slots."""
         intel = self.plan.get("intelligence") if isinstance(self.plan.get("intelligence"), dict) else {}
         ops = [o for o in intel.get("operations") or [] if isinstance(o, dict)]
+        if intel.get("agency") is True and isinstance(intel.get("operatives"), list):
+            per_slot = self.define("AGENCY_UPGRADE_PER_OPERATIVE_SLOT", 5) or 5
+            cap = self.define("MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES", 1)
+            upgrades = len(intel.get("upgrades") or [])
+            slots = 1 + int(min(upgrades // per_slot, cap))
+            if len(intel["operatives"]) > slots:
+                self.add("warning", "intelligence.operations", "intelligence.operatives",
+                         f"{len(intel['operatives'])} operatives planned but {upgrades} planned agency upgrades give "
+                         f"{slots} slot(s) (one more per {int(per_slot)} upgrades; upgrade_training_centers offers "
+                         f"one more candidate, not a slot): the rest wait for a slot from advisors or spirits")
         if not ops:
             return
         defs = _operation_defs(self.game)
