@@ -1880,7 +1880,7 @@
    "source": "--list-tools"
   },
   "hoi4_doctrine_adopt": {
-   "description": "Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false.",
+   "description": "Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace` (swap the grand doctrine or the track's subdoctrine already chosen, instead of the refusals grand_doctrine_set and track_occupied) is not yet built: refused with not_yet_built.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -1890,6 +1890,9 @@
      },
      "lease_token": {
       "type": "string"
+     },
+     "replace": {
+      "type": "boolean"
      },
      "request_id": {
       "type": "string"
@@ -3069,7 +3072,7 @@
    "source": "--list-tools"
   },
   "hoi4_occupation_law": {
-   "description": "Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input: an occupied or resisting state's view, its occupation-law button, the default-law button, the law's row. Verified from the country's occupation law in memory (hoi4_occupation player_occupation_law). `law` is a key of the game's common/occupation_laws (mods included); hoi4_occupation `laws` lists them in the list's order with whether the game shows each to you (its visible trigger: ideology, tag, DLC). The row is found from the laws shown above it: refused before any input with law_not_shown (the game hides it from you) or law_row_unknown (a visible trigger on that row or above it reads something no tool reads yet, such as another country, a flag or a focus; the ruling ideology is taken from the country's history). Harsher laws cut resistance and raise the garrison need; milder ones raise compliance slowly and need fewer garrison troops. A law the game disables for you is not applied: the readback refuses it with action_not_applied. `via_state` is an occupied or resisting state id (default: the first one hoi4_occupation lists).",
+   "description": "Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input: an occupied or resisting state's view, its occupation-law button, the default-law button, the law's row. Verified from the country's occupation law in memory (hoi4_occupation player_occupation_law). `law` is a key of the game's common/occupation_laws (mods included); hoi4_occupation `laws` lists them in the list's order with whether the game shows each to you (its visible trigger: ideology, tag, DLC). The row is found from the laws shown above it: refused before any input with law_not_shown (the game hides it from you) or law_row_unknown (a visible trigger on that row or above it reads something no tool reads yet, such as another country, a flag or a focus; the ruling ideology is taken from the country's history). Harsher laws cut resistance and raise the garrison need; milder ones raise compliance slowly and need fewer garrison troops. A law the game disables for you is not applied: the readback refuses it with action_not_applied. `via_state` is an occupied or resisting state id (default: the first one hoi4_occupation lists). `state` (the law of that one state, not the default) is not yet built: refused with not_yet_built.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3083,6 +3086,11 @@
      },
      "request_id": {
       "type": "string"
+     },
+     "state": {
+      "maximum": 4095,
+      "minimum": 1,
+      "type": "integer"
      },
      "via_state": {
       "maximum": 4095,
@@ -3315,10 +3323,13 @@
    "source": "--list-tools"
   },
   "hoi4_peace_take": {
-   "description": "In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false.",
+   "description": "In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false. `force_government` (the force-government demand on the country owning the state) is not yet built: refused with not_yet_built.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "force_government": {
+      "type": "boolean"
+     },
      "lease_token": {
       "type": "string"
      },
@@ -4146,7 +4157,7 @@
    "source": "--list-tools"
   },
   "hoi4_template_create": {
-   "description": "Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...).",
+   "description": "Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save). `regiments` is up to 5 columns of up to 5 battalion keys from common/units (infantry, mountaineers, cavalry, motorized, artillery_brigade, anti_tank_brigade, light_armor, ...; one list per column, top to bottom, no gaps); `support` is up to 5 company keys (engineer, recon, artillery, logistics_company, ...). Saving spends army experience (5 per battalion, 10 per company, 25 per extra column on this build; the cost is read from the window and returned). Refused before any input: name_taken, name_not_typable, unit_unknown, unit_wrong_slot (a company in a column or a battalion in support), column_mixed_groups (one column holds one group: infantry/mountaineers together, cavalry or artillery in their own column), template_too_wide (> 40), regiments_gap, support_duplicate, empty_template, insufficient_experience (checked before Save). unit_not_unlocked and slot_locked are found while building (nothing is saved; the draft is dropped). Returns the receipt and the resulting hoi4_template_get row (width, hit points, organisation, manpower, equipment need, ...). `regimental_support` (the regimental support row, one company per column) is not yet built: refused with not_yet_built.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -4164,6 +4175,14 @@
        "elite"
       ],
       "type": "string"
+     },
+     "regimental_support": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 5,
+      "type": "array"
      },
      "regiments": {
       "items": {
@@ -4225,7 +4244,7 @@
    "source": "--list-tools"
   },
   "hoi4_template_edit": {
-   "description": "Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change.",
+   "description": "Edit an own division template in place through its Edit button: give the complete new `regiments` and/or `support` layout (omitted = unchanged), `priority` (reserve, regular, elite) and/or `new_name`. Only the differing slots are touched (Shift+click removes, slot click plus a choice replaces or adds). Verified from the designer's working copy and from the saved template. Templates used by divisions or training lines are refused (template_in_use) for layout changes unless allow_in_use is true: the game then reorganises those divisions at the new composition. Same refusals as hoi4_template_create plus template_unknown, nothing_to_change. `regimental_support` (the regimental support row, one company per column) is not yet built: refused with not_yet_built.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -4246,6 +4265,14 @@
        "elite"
       ],
       "type": "string"
+     },
+     "regimental_support": {
+      "items": {
+       "maxLength": 64,
+       "type": "string"
+      },
+      "maxItems": 5,
+      "type": "array"
      },
      "regiments": {
       "items": {

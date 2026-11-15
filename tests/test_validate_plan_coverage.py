@@ -426,7 +426,7 @@ class CoverageTests(unittest.TestCase):
                                            {"id": "y", "cost": 5, "purpose": "doctrine", "ref": "doctrine:inf"}]},
                        force_posture={"reason": "r", "phases": [{"phase": "P7", "land": 50, "air": 20, "navy": 0}]},
                        occupation={"default_law": "gentle", "ladder": ["no_garrison"], "mildest": "military_governor_occupation"},
-                       peace={"take": [3, 77, "BBB"], "puppet": ["BBB"]},
+                       peace={"take": [3, 77, "BBB"], "puppet": ["BBB"], "force_government": ["BBB", "ZZZ"]},
                        sea_transfer={"ports": [88], "routes": [{"id": "r", "from_state": 1, "to_state": 66}]},
                        garrison_template={"template": "Nobody"},
                        event_rules=[{"event": "aaa.1", "option_name": "aaa.1.b", "fallback_index": 5}])
@@ -440,6 +440,8 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("occupation.default_law: no occupation law gentle", text)
         self.assertIn("occupation.mildest: military_governor_occupation is not on occupation.ladder", text)
         self.assertIn("peace.take[1]: 77 is not a state id", text)
+        self.assertIn("peace.force_government[1]: 'ZZZ' is not a country tag", text)
+        self.assertNotIn("force_government[0]", text)
         self.assertNotIn("peace.take[2]", text)  # a tag stands for its states
         self.assertIn("sea_transfer.routes[0].to_state: 66", text)
         self.assertIn("sea_transfer.ports: 88", text)

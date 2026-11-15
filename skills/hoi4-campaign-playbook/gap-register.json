@@ -1672,11 +1672,13 @@
     "war-air-naval-peace.md#9.2 Peace conference",
     "war-air-naval-peace.md#18 PC06"
    ],
-   "plan": [],
+   "plan": [
+    "peace.force_government"
+   ],
    "tools": [
     "hoi4_peace_take"
    ],
-   "blocked": "hoi4_peace_take offers take, puppet and liberate only; force_government is read as a control but not demanded",
+   "blocked": "hoi4_peace_take refuses `force_government` with not_yet_built (held back in plan_run::UNBUILT_ARGS): it drives the take, puppet and release buttons only; the peace step notes the demand instead of making it",
    "blocked_terms": [
     "force government",
     "force_government"
@@ -1684,7 +1686,7 @@
    "payoff": "medium",
    "why": "turns a beaten major into an ally",
    "closing": "both",
-   "owner": "force_government demand in hoi4_peace_take and a plan key"
+   "owner": "offline done: peace.force_government [TAG] plan key, the tool argument (refused before input), the peace step demands it on one of the country's states once built; live: drive force_government_action plus a state of the loser, verify by the score drop and the post-war government, drop the UNBUILT_ARGS row, then live-verify"
   },
   {
    "id": "peace.take_navy_addons",
@@ -1833,7 +1835,7 @@
    "tools": [
     "hoi4_occupation_law"
    ],
-   "blocked": "occupation.per_state is noted, not applied: hoi4_occupation_law sets the default law only",
+   "blocked": "hoi4_occupation_law sets the default law only: its `state` argument is refused with not_yet_built and held back in plan_run::UNBUILT_ARGS, so the executor notes occupation.per_state instead of applying it",
    "blocked_terms": [
     "per_state",
     "per-state law",
@@ -1842,7 +1844,7 @@
    "payoff": "medium",
    "why": "+25% factories / +40% resources from conquered states",
    "closing": "both",
-   "owner": "per-state law action (state view occupation button) and executor wiring"
+   "owner": "offline done: occupation step applies per_state once per occupied state through hoi4_occupation_law {law, state} once the argument is built (UNBUILT_ARGS seam), tool refuses it before input; live: drive the per-state law button (occupied_territory_state_entry select_law_button), read the state's law back, drop the UNBUILT_ARGS row, then live-verify"
   },
   {
    "id": "occupation.ideology_colonial_laws",
@@ -3417,11 +3419,13 @@
     "research-doctrines-projects.md#10 Tactics (RE06, RE23)",
     "research-doctrines-projects.md#2 Doctrines (replacing within the same track is allowed)"
    ],
-   "plan": [],
+   "plan": [
+    "doctrines[].replace"
+   ],
    "tools": [
     "hoi4_doctrine_adopt"
    ],
-   "blocked": "hoi4_doctrine_adopt refuses track_occupied and grand_doctrine_set before input: no replace path",
+   "blocked": "hoi4_doctrine_adopt refuses `replace` with not_yet_built (held back in plan_run::UNBUILT_ARGS), and refuses a filled slot (grand_doctrine_set, track_occupied) before input: no swap path",
    "blocked_terms": [
     "replace",
     "swap"
@@ -3429,7 +3433,7 @@
    "payoff": "medium",
    "why": "XP/manpower banking then switch to the war doctrine",
    "closing": "both",
-   "owner": "replace mode in hoi4_doctrine_adopt and a plan flag (doctrines[].replace)"
+   "owner": "offline done: doctrines[].replace plan key, the tool argument (refused before input), the doctrine step sends it once built and says so until then; live: drive picking a filled slot again (cost and confirmation), read the swap back, drop the UNBUILT_ARGS row, then live-verify"
   },
   {
    "id": "doctrines.air",
@@ -3741,12 +3745,15 @@
    "plan": [
     "templates[].regimental_support"
    ],
-   "tools": [],
-   "blocked": "plan key accepted and skipped: plan_manage.rs:809 'regimental support row skipped (no tool fills it yet)'; hoi4_template_create/edit have no regimental argument",
+   "tools": [
+    "hoi4_template_create",
+    "hoi4_template_edit"
+   ],
+   "blocked": "hoi4_template_create/edit refuse `regimental_support` with not_yet_built (held back in plan_run::UNBUILT_ARGS); the template step makes the template without the row and says so",
    "payoff": "medium",
    "why": "AT/AA batteries against armour and CAS without extra width",
    "closing": "both",
-   "owner": "add a `regimental` argument (designer regimental-row slots) to hoi4_template_create/edit, wire templates[].regimental_support, verify live"
+   "owner": "offline done: the argument in both tool schemas (refused before input), template step sends it once built, validate_plan checks the companies against common/units (regimental = no, 3-battalion columns); live: fill the designer's regiment_support_grid, read it back in hoi4_template_get, drop the UNBUILT_ARGS rows, then live-verify"
   },
   {
    "id": "templates.reinforcement_priority",

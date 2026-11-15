@@ -307,6 +307,16 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     // mio.line_manufacturer): the organisation chooser is skipped with Shift+click today
     ("hoi4_production_add", "organization"),
     ("hoi4_design_set_production", "organization"),
+    // the law of one occupied state (gap register occupation.per_state_law): the tool sets the
+    // default law only
+    ("hoi4_occupation_law", "state"),
+    // the Division Designer's regimental support row (gap register templates.regimental_support)
+    ("hoi4_template_create", "regimental_support"),
+    ("hoi4_template_edit", "regimental_support"),
+    // swapping a chosen doctrine (gap register doctrines.replace_doctrine)
+    ("hoi4_doctrine_adopt", "replace"),
+    // the peace conference's force-government demand (gap register peace.force_government)
+    ("hoi4_peace_take", "force_government"),
 ];
 
 /// Whether the executor may send `arg` to `tool` (not held back in UNBUILT_ARGS).
@@ -3524,13 +3534,23 @@ fn extras_step(
             if let Some(track) = track.filter(|t| !t.is_empty()) {
                 args["track"] = json!(track);
             }
+            // `replace`: swap what fills the slot; held back while the tool cannot do it
+            let mut held = "";
+            if entry["replace"] == json!(true) {
+                if arg_built("hoi4_doctrine_adopt", "replace") {
+                    args["replace"] = json!(true);
+                } else {
+                    held = " (replace not sent: swapping a chosen doctrine is not built yet, \
+                            gap register doctrines.replace_doctrine)";
+                }
+            }
             let (ok, why) = state.act(tools, lease, "hoi4_doctrine_adopt", args, "dc")?;
             if ok || why.contains("already") {
                 state.done.insert(part_key, now);
             } else {
                 state.skip(now, "doc", &part_key, 15 * DAY);
             }
-            return Ok(Some(format!("doctrine {doctrine}: {ok} {why}")));
+            return Ok(Some(format!("doctrine {doctrine}: {ok} {why}{held}")));
         }
     }
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
@@ -10753,6 +10773,25 @@ mod tests {
         );
         assert!(state.done.contains_key("doc:id:land-grand"));
         assert!(state.done.contains_key("doc:id:land-inf"));
+    }
+
+    #[test]
+    fn a_doctrine_replace_is_held_back_until_the_swap_is_built() {
+        let plan = json!({"doctrines": [
+            {"id": "swap", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry",
+             "xp": 50, "replace": true}]});
+        let tools = doctrine_tools();
+        let mut state = State::default();
+        let line = doctrine_pass(&mut state, &tools, &plan, 0).unwrap();
+        assert!(
+            line.contains("replace not sent") && line.contains("doctrines.replace_doctrine"),
+            "{line}"
+        );
+        assert_eq!(
+            adopted(&tools),
+            vec![json!({"doctrine": "mobile_infantry", "track": "infantry"})]
+        );
+        assert!(!arg_built("hoi4_doctrine_adopt", "replace"));
     }
 
     #[test]

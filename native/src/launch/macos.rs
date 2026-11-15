@@ -726,7 +726,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         daily::Controller::tool(),
         json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key); {op:request_revision, reason} asks for a revised plan (written to the change feed as revision_requested; the plan in force stays until plan_revised). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false},{"properties":{"op":{"const":"request_revision"},"reason":{"type":"string","minLength":1,"maxLength":300}},"required":["op","reason"],"additionalProperties":false}]}}),
         json!({"name":"hoi4_peace_options","description":"Read the open peace conference from its window: header (current player, own remaining points = current_score, world tension, bidding phase, turn), which controls are usable (demand kinds take_state/liberate/puppet/force_government/take_navy, end turn, done), participant, available-action and bid lists as the window shows them, and for the asked `states` their owner and occupier. Costs are not stored: a state's tooltip shows them and hoi4_peace_take reports each state's cost as the score drop. No lease, no input. validated:false (no conference was arranged live; procedure in docs/PLAYBOOK_TOOL_GAPS.md).","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"maxItems":16}},"additionalProperties":false}}),
-        json!({"name":"hoi4_peace_take","description":"In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"puppet":{"type":"boolean"},"release":{"type":"boolean"},"max_cost":{"type":"number","minimum":0},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["states","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_peace_take","description":"In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state from the conference's own state list (country rows expand into state rows; Find and a map click as fallback), verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false. `force_government` (the force-government demand on the country owning the state) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"puppet":{"type":"boolean"},"release":{"type":"boolean"},"force_government":{"type":"boolean"},"max_cost":{"type":"number","minimum":0},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_peace_submit","description":"Submit Demands for the round (the conference's end-turn button; one submission per round under the blind-bid rules). Refused before input with round_not_ready or no_conference_open. Verified when the header (phase, turn, score of the turn) changes or the window closes. validated:false.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_peace_exit","description":"Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation); accepted bids persist. Refused before input with exit_not_available or no_conference_open. Verified when the conference window closes. validated:false.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_plan_run","description":"Carry out the standing plan for up to `seconds` (default 60): answer news and single-option events, fill empty research slots and the focus slot from the plan's lists, make planned politics picks and decisions, keep the training queue, put idle military factories on the priority lines and spend idle civilian factories on planned construction. Every step is an ordinary verified action under the given lease; the game is never paused. Returns early when a choice event needs the model or a peace conference opens. Use it instead of hoi4_wait_for while nothing else needs attention.","inputSchema":{"type":"object","properties":{"seconds":{"type":"integer","minimum":1,"maximum":300},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
@@ -1294,21 +1294,56 @@ fn not_applied_is_error(value: Value) -> Result<Value> {
 /// tools Shift+click past it today. Choosing one is not built yet, so the argument is accepted by
 /// the schema and refused before any input (`not_yet_built`); plan_run::UNBUILT_ARGS keeps the
 /// executor from sending it until the chooser is driven and verified live.
-fn refuse_unbuilt_organization(tool: &str, args: &serde_json::Map<String, Value>) -> Result<()> {
-    match args.get("organization") {
-        None => Ok(()),
-        Some(Value::String(org)) if !org.trim().is_empty() => Err(Error::new(
+///
+/// `state` on hoi4_occupation_law: the law of one occupied state instead of the default law. The
+/// Occupied Territories view lists each state (`occupied_territory_state_entry`, with its own
+/// `select_law_button` and `selected_law`) and the state view has the same button
+/// (countrystateview.gui `law_and_template_container`); the tool drives the default-law button
+/// only today, so the argument is refused the same way (gap register occupation.per_state_law).
+///
+/// `regimental_support` on hoi4_template_create / hoi4_template_edit: the regimental support row
+/// of the Division Designer (divisiondesignerview.gui `regiment_support_grid` under
+/// `regimental_support_header_label`), one company per regiment column up to
+/// NDefines.NMilitary.MAX_REGIMENTAL_SUPPORT_WIDTH, a column taking one only with
+/// REGIMENTAL_SUPPORT_REQUIRED_BATTALIONS battalions, at REGIMENTAL_SUPPORT_SLOT_COST_MULTIPLIER of
+/// a support slot's cost; a company whose common/units entry says `regimental = no` cannot go
+/// there. The tools fill the battalion grid and the division support column only, so the
+/// argument is refused (gap register templates.regimental_support).
+///
+/// `replace` on hoi4_doctrine_adopt: swapping the folder's grand doctrine or a track's chosen
+/// subdoctrine for another (the officer corps view's slot, picked again while filled). The tool
+/// adopts into empty slots only and refuses a filled one before input (grand_doctrine_set,
+/// track_occupied), so the argument is refused (gap register doctrines.replace_doctrine).
+///
+/// `force_government` on hoi4_peace_take: the peace conference's force-government demand
+/// (peace.rs reads its button, `force_government_action`, among the window's controls): picked
+/// with one state of the loser, it turns the country's government to the demander's ideology. The
+/// tool drives the take, puppet and release buttons only, so the argument is refused (gap
+/// register peace.force_government).
+pub(super) fn refuse_unbuilt_args(tool: &str, args: &serde_json::Map<String, Value>) -> Result<()> {
+    for (t, arg) in crate::plan_run::UNBUILT_ARGS {
+        if *t != tool {
+            continue;
+        }
+        let Some(value) = args.get(*arg) else {
+            continue;
+        };
+        let what = match *arg {
+            "organization" => "choosing the military-industrial organisation (the line gets none)",
+            "state" => "setting the law of one state (only the default law is set)",
+            "regimental_support" => "filling the regimental support row (the template gets none)",
+            "replace" => "replacing a chosen doctrine (an occupied slot is refused)",
+            "force_government" => {
+                "the force-government demand (take, puppet and release are built)"
+            }
+            _ => "this argument",
+        };
+        return Err(Error::new(
             "not_yet_built",
-            format!(
-                "{tool}: choosing the military-industrial organisation ({org}) is not built yet; \
-                 send the call without `organization` (the line gets no organisation)"
-            ),
-        )),
-        Some(_) => Err(Error::new(
-            "invalid_arguments",
-            "organization must be an organisation script key",
-        )),
+            format!("{tool}: `{arg}` ({value}) is not built yet: {what}; send the call without it"),
+        ));
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1344,11 +1379,11 @@ mod receipt_tools {
             );
             assert!(t["description"].as_str().unwrap().contains("not yet built"));
             let mut args = serde_json::Map::new();
-            args.insert((*arg).to_string(), "ITA_beretta_organization".into());
-            let e = super::refuse_unbuilt_organization(tool, &args).unwrap_err();
+            args.insert((*arg).to_string(), "x".into());
+            let e = super::refuse_unbuilt_args(tool, &args).unwrap_err();
             assert_eq!(e.code, "not_yet_built");
+            assert!(super::refuse_unbuilt_args(tool, &serde_json::Map::new()).is_ok());
         }
-        assert!(super::refuse_unbuilt_organization("t", &serde_json::Map::new()).is_ok());
     }
 }
 /// Tools that move the map camera; the camera is zoomed back out after them (army tools
@@ -2293,7 +2328,7 @@ impl MacClock {
                         "lease_token",
                     ],
                 )?;
-                refuse_unbuilt_organization(name, args)?;
+                refuse_unbuilt_args(name, args)?;
             }
             let design = design_arg(
                 process,
@@ -2569,6 +2604,7 @@ impl MacClock {
                         "name",
                         "regiments",
                         "support",
+                        "regimental_support",
                         "priority",
                         "request_id",
                         "lease_token",
@@ -2580,6 +2616,7 @@ impl MacClock {
                         "template",
                         "regiments",
                         "support",
+                        "regimental_support",
                         "priority",
                         "new_name",
                         "allow_in_use",
@@ -2590,6 +2627,7 @@ impl MacClock {
                 "rename" => allowed(args, &["template", "new_name", "request_id", "lease_token"])?,
                 _ => allowed(args, &["template", "request_id", "lease_token"])?,
             }
+            refuse_unbuilt_args(name, args)?;
             let existing = if kind == "create" {
                 None
             } else {
@@ -2893,7 +2931,7 @@ impl MacClock {
                         "lease_token",
                     ],
                 )?;
-                refuse_unbuilt_organization(name, args)?;
+                refuse_unbuilt_args(name, args)?;
             } else {
                 allowed(
                     args,
@@ -3699,11 +3737,13 @@ impl MacClock {
                         "states",
                         "puppet",
                         "release",
+                        "force_government",
                         "max_cost",
                         "request_id",
                         "lease_token",
                     ],
                 )?;
+                refuse_unbuilt_args(name, args)?;
             } else {
                 allowed(args, &["request_id", "lease_token"])?;
             }
@@ -4681,7 +4721,11 @@ impl MacClock {
             return stateslots::read_states(process, &self.keys, &ids);
         }
         if name == "hoi4_occupation_law" {
-            allowed(args, &["law", "via_state", "request_id", "lease_token"])?;
+            allowed(
+                args,
+                &["law", "via_state", "state", "request_id", "lease_token"],
+            )?;
+            refuse_unbuilt_args(name, args)?;
             let law = string(args, "law")?;
             if law.is_empty()
                 || law.len() > 96
