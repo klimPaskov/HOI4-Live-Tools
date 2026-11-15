@@ -613,7 +613,7 @@
               },
               "when": {
                 "$ref": "#/definitions/predicate",
-                "description": "the entry waits until this holds"
+                "description": "the entry waits until this holds; while it holds and the power cannot yet pay the entry, the power is saved for it (entries after it spend only what lies above its cost)"
               },
               "why": {
                 "type": "string",
