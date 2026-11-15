@@ -1348,6 +1348,18 @@ class TacticsRules(unittest.TestCase):
         f = self.assertHit(plan, "politics.pp_budget", "warning", "politics[0]")
         self.assertIn("114 days after its date", f["message"])
 
+    def test_stability_owner(self):
+        plan = self.plan()
+        plan["manage"] = {"stability_floor": 0.99}
+        f = self.assertHit(plan, "manage.stability_owner", "warning", "manage.stability_floor")
+        self.assertIn("nothing in politics", f["message"])
+        plan["politics_auto"] = {"order": [{"category": "government", "slot": 3, "ideas": ["ITA_a"], "cost": 150,
+                                            "when": "stability < 0.99"}]}
+        self.assertNoHit(plan, "manage.stability_owner")
+        plan = self.plan()
+        plan["manage"] = {"stability_floor": 0.01}
+        self.assertNoHit(plan, "manage.stability_owner")
+
     def test_politics_available(self):
         # the shakedown plan bought a high-command advisor whose gate needs a focus the path never takes
         plan = self.plan()

@@ -2851,6 +2851,9 @@ pub(super) fn politics_auto_step(
     let never = strings(cfg, "never");
     let conscription = strings(&plan["manage"], "conscription_laws");
     let mut seen: Vec<String> = Vec::new();
+    // Whether the power could have paid for any entry: power short of every entry's cost is
+    // being saved for the next buy (or the plan's reserve), not idle.
+    let mut could_buy = false;
     for entry in order.as_array().map_or(&[][..], Vec::as_slice) {
         let (category, slot) = (text(&entry["category"]).to_string(), &entry["slot"]);
         let slot_key = format!("{category}:{slot}");
@@ -2868,6 +2871,7 @@ pub(super) fn politics_auto_step(
             ));
             continue;
         }
+        could_buy = true;
         if state.skipped(now, "pauto", &slot_key) {
             let last = state.manage.pp_reads.get(&slot_key);
             if !last.is_some_and(|r| r.disabled && pp >= r.pp + grow) {
@@ -3016,6 +3020,18 @@ pub(super) fn politics_auto_step(
     // nothing bought: no reads again for a game day; power above the threshold with nothing to
     // buy for long wakes the player
     state.skip(now, "pauto", "x", DAY);
+    if !could_buy {
+        state.manage.pp_idle_since = None;
+        note(
+            state,
+            "politics_auto",
+            format!(
+                "PP {pp_text} ({reserve_text}): saved for the next buy [{}]",
+                seen.join(", ")
+            ),
+        );
+        return Ok(None);
+    }
     let since = *state.manage.pp_idle_since.get_or_insert(now);
     let idle_days = cfg["idle_wake_days"].as_i64().unwrap_or(30);
     if now.saturating_sub(since) >= idle_days * DAY {
@@ -5750,6 +5766,22 @@ mod tests {
         let opened = reads(&tools, "hoi4_politics_options");
         politics_auto_step(&mut state, &tools, &plan, "l", START + 2).unwrap();
         assert_eq!(reads(&tools, "hoi4_politics_options"), opened);
+    }
+
+    #[test]
+    fn power_saved_for_a_pick_it_cannot_yet_pay_is_not_idle() {
+        let tools = fake(vec![("hoi4_economy", pp(60.0))]);
+        let plan = json!({
+            "politics": [{"category": "military_staff", "slot": 3, "idea": "X_a", "cost": 100}],
+            "politics_auto": {"threshold": 0, "idle_wake_days": 0,
+                "order": [{"category": "government", "slot": 3, "ideas": ["X_b"], "cost": 150}]}});
+        let mut state = State::default();
+        for day in 0..40 {
+            politics_auto_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        assert!(wakes(&mut state).is_empty());
+        assert!(state.manage.notes["politics_auto"].contains("saved for the next buy"));
+        assert!(actions(&tools).is_empty());
     }
 
     #[test]

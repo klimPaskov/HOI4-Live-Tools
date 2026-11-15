@@ -4095,6 +4095,32 @@ class Lint:
                          f"{label} is affordable only on {derive.fmt(derive.date_of(d))}, {d - due} days after its "
                          f"date {derive.fmt(derive.date_of(due))}: {how}")
 
+    def stability_owner(self):
+        """A country that starts under the plan's stability floor needs something that raises it: a politics,
+        politics_auto.order or decision_rules entry whose `when` reads stability.
+        Without one the executor's stability rule can only wake the player, who buys nothing."""
+        manage = self.plan.get("manage")
+        if not isinstance(manage, dict) or "stability" in (manage.get("off") or []):
+            return
+        floor = manage.get("stability_floor", 0.5)
+        if not isinstance(floor, (int, float)):
+            return
+        start = calcmod.start_stability(self.world, self.tag) if self.world is not None else None
+        if not isinstance(start, (int, float)) or start >= floor:
+            return
+        auto = self.plan.get("politics_auto")
+        entries = list(self.list_of("politics")) + list(self.list_of("decision_rules")) + \
+            [e for e in ((auto.get("order") or []) if isinstance(auto, dict) else []) if isinstance(e, dict)]
+
+        def owns(e):
+            return e.get("when") is not None and "stability" in json.dumps(e["when"])
+        if any(owns(e) for e in entries if isinstance(e, dict)):
+            return
+        self.add("warning", "manage.stability_owner", "manage.stability_floor",
+                 f"{self.tag} starts at stability {start:g}, under the floor {floor:g}, and nothing in politics, "
+                 f"politics_auto.order or decision_rules raises it (an entry whose `when` reads stability): an advisor, "
+                 f"law or decision with a stability modifier, so power is spent on it")
+
     def politics_conscription(self):
         """A conscription law above what the plan's divisions need, or a manpower rule free to climb the
         whole ladder (manage.conscription_laws unset) into laws that cost factory output."""
@@ -4629,7 +4655,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget,
+                 self.politics_pp_budget, self.stability_owner,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
                  self.intelligence_operations, self.force_home_divisions]
