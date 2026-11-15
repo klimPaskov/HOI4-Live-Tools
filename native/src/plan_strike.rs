@@ -493,8 +493,18 @@ fn thin(
         let wanted: f64 = out.iter().map(|d| d.need.max(need)).sum();
         // Beside the stack only: a destination three provinces back emptied the front and the
         // towns it had taken were lost (live 15 Nov 2026).
-        let Some(to) = world
-            .near(province, 1)
+        // Beside the stack first; one step further only when nothing beside it has room (an
+        // unfed stretch two provinces deep kept a whole army starving where it stood).
+        let ring = {
+            let one = world.near(province, 1);
+            let roomy = |p: &i64| world.supply.get(p).is_some_and(|s| s.0 - s.1 >= wanted);
+            if one.iter().any(roomy) {
+                one
+            } else {
+                world.near(province, 2)
+            }
+        };
+        let Some(to) = ring
             .into_iter()
             .filter_map(|p| world.supply.get(&p).map(|s| (p, s.0 - s.1)))
             .filter(|(_, room)| *room >= wanted)
@@ -1243,6 +1253,21 @@ pub(super) fn step(
             }
             // At most `stack` divisions strike from one province (the freshest, those beside the
             // objective first); the rest widen the army's land once the strike runs.
+            // A march to an assembly province takes at most `stack` divisions too (the nearest,
+            // then the freshest): a whole army gathered on one province starved there (live 16
+            // Nov 2026: ten divisions of one army in an unfed province for three months); the
+            // others wait on the land they stand on until a strike sends them.
+            if next == Mode::March && knobs.stack > 0 && sent.len() > knobs.stack {
+                sent.sort_by(|a, b| {
+                    let near = |d: &Division| {
+                        world.touches(province, d.province) || d.province == province
+                    };
+                    near(b)
+                        .cmp(&near(a))
+                        .then(world.share(b).total_cmp(&world.share(a)))
+                });
+                sent.truncate(knobs.stack);
+            }
             if next == Mode::Strike && knobs.stack > 0 {
                 sent.sort_by(|a, b| {
                     let near = |d: &Division| world.touches(province, d.province);
@@ -1991,5 +2016,18 @@ mod tests {
         let got = decisive(&vp, state, &enemy);
         let want: HashSet<i64> = [21, 30].into_iter().collect();
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn a_march_to_an_assembly_province_takes_at_most_stack_divisions() {
+        let map = Map::new(10);
+        let mut state = State::default();
+        let on = json!({"war": {"enemies": ["ENE"], "theatre": [1, 4], "strike": {"stack": 2}},
+            "vp_targets": [{"province": 30, "state": 3, "army": "Army 1", "path": [11, 21]}]});
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(
+            line.contains("marches to province 11") && line.contains("2 of 3"),
+            "{line}"
+        );
     }
 }
