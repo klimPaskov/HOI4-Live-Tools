@@ -818,6 +818,16 @@ class ReportTests(Folder):
                      "Verified: 1", "Self-pauses recorded by the runtime: 1"):
             self.assertIn(word, text)
 
+    def test_the_report_states_the_pace_from_the_start_to_the_end(self):
+        self.assertAlmostEqual(report.pace("1936.01.01.12", "1936.03.02.12", 100.0, 100.0 + 600), 6.0)
+        self.assertIsNone(report.pace(None, "1936.03.02", 0, 600))
+        self.assertIsNone(report.pace("1936.01.01", "1936.03.02", 0, 30))
+        run = self.make_run()
+        with open(os.path.join(run, "supervisor.log"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"t": 0, "event": "ready", "date": "1936.01.01.12"}) + "\n")
+        text = report.build(run, "stopped_by_player", {}, {"date": "1936.01.31.12"}, 0, 600)
+        self.assertIn("Pace: 3.0 game days per wall minute", text)
+
     def test_capitulation_progress_against_the_aim(self):
         plan = {"goal": {"predicates": ["capitulated:ETH", "capitulated:AFA"],
                          "capitulation": {"enemy": "ETH", "vp_needed": 22, "levers": []}}}
