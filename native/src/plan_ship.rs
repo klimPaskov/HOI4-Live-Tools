@@ -50,6 +50,12 @@ pub(super) struct Memory {
     /// divisions ordered to sea, per route (index in plan order)
     shipped: HashMap<usize, usize>,
     voyages: Vec<Voyage>,
+    /// divisions detached to sail: never detached a second time, and their army is not folded
+    /// into another by the consolidation (plan_run.rs armies_step)
+    detached: HashSet<String>,
+    /// the game hour of the first call: the step acts only once game time runs (a sea move
+    /// given in the paused setup shows no heading and reads NotApplied, live 15 Nov 2026)
+    first: Option<GameHour>,
 }
 
 /// One route of `sea_transfer.routes`.
@@ -94,6 +100,18 @@ pub(super) fn reserved(state: &State, plan: &Value) -> (HashSet<String>, HashSet
     (templates, ids)
 }
 
+/// Divisions the step works on (detached to sail, or at sea): the consolidation leaves their
+/// armies alone (live 15 Nov 2026: a detached division was merged back twenty times).
+pub(super) fn claimed(state: &State) -> HashSet<String> {
+    state
+        .ship
+        .voyages
+        .iter()
+        .flat_map(|v| v.ids.iter().cloned())
+        .chain(state.ship.detached.iter().cloned())
+        .collect()
+}
+
 struct Row {
     id: String,
     army: Option<String>,
@@ -111,6 +129,9 @@ pub(super) fn step(
 ) -> Result<Option<String>> {
     let routes = routes(plan);
     if routes.is_empty() || state.skipped(now, "ship", "all") {
+        return Ok(None);
+    }
+    if *state.ship.first.get_or_insert(now) >= now {
         return Ok(None);
     }
     let pending = state.ship.voyages.is_empty()
@@ -190,6 +211,9 @@ fn landings(
                 .ship
                 .voyages
                 .retain(|v| v.ids.first() != first.as_ref());
+            for r in &mine {
+                state.ship.detached.remove(&r.id);
+            }
             plan_war::set_note(state, "ship", Some(line.clone()));
             line
         };
@@ -300,8 +324,8 @@ fn departures(
                 .iter()
                 .filter(|r| r.army.as_deref() == Some(army.as_str()))
                 .collect();
-            // an army with a division abroad or at sea is not a home army
-            if all.iter().any(|r| !at_home(r)) {
+            // an army with a division abroad or one already ordered to sea is not a home army
+            if all.iter().any(|r| !at_home(r) || at_sea.contains(&r.id)) {
                 continue;
             }
             if all.len() == want.len() && want.len() <= left {
@@ -338,7 +362,18 @@ fn departures(
             if take == 0 {
                 continue;
             }
-            let ids: Vec<&str> = want.iter().take(take).map(|r| r.id.as_str()).collect();
+            // a division detached once that stands in a mixed army again was folded back by
+            // another step: it stays (no detach loop)
+            let ids: Vec<&str> = want
+                .iter()
+                .filter(|r| !state.ship.detached.contains(&r.id))
+                .take(take)
+                .map(|r| r.id.as_str())
+                .collect();
+            if ids.is_empty() {
+                continue;
+            }
+            let take = ids.len();
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -346,7 +381,12 @@ fn departures(
                 json!({"army": army, "divisions": ids}),
                 "sd",
             )?;
-            if !ok {
+            if ok {
+                state
+                    .ship
+                    .detached
+                    .extend(ids.iter().map(|id| id.to_string()));
+            } else {
                 state.skip(now, "ship", army, 3 * DAY);
             }
             return Ok(Some(format!(
@@ -450,6 +490,15 @@ mod tests {
         ]));
         let plan = plan(2);
         let mut state = State::default();
+        // the paused setup: no order before game time runs
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
         state.layout.insert("Strike".into(), "North".into());
         // the cavalry stays: the infantry is detached into an army of its own
         let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
@@ -522,6 +571,15 @@ mod tests {
         ]));
         let plan = plan(10);
         let mut state = State::default();
+        // the paused setup: no order before game time runs
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
         state.layout.insert("Strike".into(), "North".into());
         let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
         assert!(
@@ -539,6 +597,15 @@ mod tests {
         let plan = json!({"war": {"theatre": [9]},
             "sea_transfer": {"routes": [{"id": "r", "to_state": 9, "templates": ["Infantry"]}]}});
         let mut state = State::default();
+        // the paused setup: no order before game time runs
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
         let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
         assert!(line.contains("Army 7 (1 division(s)) -> state 9"), "{line}");
         *game.rows.borrow_mut() = json!([div("a", Some("Army 7"), "Infantry", None)]);
@@ -556,5 +623,28 @@ mod tests {
             None
         );
         assert!(state.ship.voyages.is_empty());
+    }
+
+    #[test]
+    fn a_detached_division_folded_back_into_a_mixed_army_is_not_detached_again() {
+        let game = Game::new(json!([
+            div("a", Some("Army 2"), "Infantry", Some(1)),
+            div("c", Some("Army 2"), "Cavalry", Some(1)),
+        ]));
+        let plan = plan(1);
+        let mut state = State::default();
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
+        let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
+        assert!(line.contains("1 division(s) out of Army 2"), "{line}");
+        assert!(claimed(&state).contains("a"));
+        // another step merged it back: the step leaves it
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert_eq!(game.sent("hoi4_army_detach").len(), 1);
     }
 }

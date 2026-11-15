@@ -2337,9 +2337,17 @@ fn armies_step(
                         .map(|(a, _)| a.clone()),
                 )
                 .collect();
+            // Armies holding divisions a sea-transfer route detached or sent to sea are on
+            // their way out (plan_ship.rs): folding them back starts a loop.
+            let sailing = plan_ship::claimed(state);
             let mut sizes: Vec<(String, u64, bool)> = list(&roster, "armies")
                 .iter()
                 .filter(|a| !roles.contains(text(&a["army"])))
+                .filter(|a| {
+                    !list(a, "divisions")
+                        .iter()
+                        .any(|d| d.as_str().is_some_and(|id| sailing.contains(id)))
+                })
                 .map(|a| {
                     (
                         text(&a["army"]).to_string(),
