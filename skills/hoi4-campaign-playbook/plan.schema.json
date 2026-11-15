@@ -4709,6 +4709,7 @@
             "close_days": {"type": "number", "default": 25},
             "beside": {"type": "number", "default": 2.0},
             "guards": {"type": "boolean", "default": false},
+            "halt": {"type": "boolean", "default": false, "description": "true: a strike that ends is halted and the army rests where it stands. Default: no halt order; the objective is closed for the army (rest_days after a worn strike, close_days after one that stood) and its next march order replaces the attack. A halted division walks back to the front line its army still holds"},
             "why": {"type": "string"}
           },
           "additionalProperties": false

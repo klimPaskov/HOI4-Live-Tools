@@ -23,6 +23,14 @@
 //!               stood its whole `max_days`, or after two that wore the divisions out
 //!   beside      2.0: fresh divisions that must stand beside a victory point for the army to
 //!               turn on it without a plan row
+//!   halt        true: a strike that ends is halted (hoi4_army_move halt) and the army rests
+//!               where it stands before it chooses again. Default false: no halt order. The
+//!               objective is closed for the army (`rest_days` after a strike that wore its
+//!               divisions out, `close_days` after one that stood or a second worn one) and its
+//!               next march order replaces the attack; with no other objective the attack goes
+//!               on. A halted division returns to the front line its army still holds, which
+//!               lies far behind an advance (live 15 Nov 2026: halted armies walked back to the
+//!               border they had started from)
 //!   guards      true: guard armies are driven too (the border they held is no longer the
 //!               front). Default false: they keep their fronts
 //!
@@ -92,6 +100,7 @@ struct Knobs {
     close_days: GameHour,
     beside: f64,
     guards: bool,
+    halt: bool,
 }
 
 fn knobs(cfg: &Value) -> Option<Knobs> {
@@ -109,6 +118,7 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         close_days: number("close_days", 25.0) as GameHour,
         beside: number("beside", 2.0),
         guards: k["guards"] == json!(true),
+        halt: k["halt"] == json!(true),
     })
 }
 
@@ -521,6 +531,8 @@ pub(super) fn step(
                 break;
             }
             let mut ended: Option<(i64, u8)> = None;
+            // The objective a strike has just turned away from (not chosen again this tick).
+            let mut turned: Option<i64> = None;
             if mode == Mode::Strike {
                 let taken =
                     world.held(objective) || members.iter().any(|d| d.province == objective);
@@ -532,7 +544,14 @@ pub(super) fn step(
                     let worn = !near.is_empty()
                         && near.iter().map(|d| world.share(d)).sum::<f64>() / (near.len() as f64)
                             < knobs.rest;
-                    if (worn && age >= 3 * DAY) || age >= knobs.max_days * DAY {
+                    let over = (worn && age >= 3 * DAY) || age >= knobs.max_days * DAY;
+                    if over && !knobs.halt {
+                        // The strike ends without a halt order: the objective is closed for
+                        // the army and its next march order replaces this one.
+                        ended = Some((objective, if worn { 1 } else { 2 }));
+                        turned = Some(objective);
+                        mode = Mode::Idle;
+                    } else if over {
                         changes.push((
                             name.clone(),
                             Mode::Rest,
@@ -555,7 +574,10 @@ pub(super) fn step(
                         break;
                     }
                     // The order was lost (a retreat, a battle plan): choose and send again.
-                    if age >= 2 * DAY && !members.iter().any(|d| d.heading == Some(objective)) {
+                    if !over
+                        && age >= 2 * DAY
+                        && !members.iter().any(|d| d.heading == Some(objective))
+                    {
                         mode = Mode::Idle;
                     }
                 }
@@ -577,12 +599,13 @@ pub(super) fn step(
             if mode != Mode::Idle {
                 continue;
             }
-            let closed: HashSet<i64> = army
+            let mut closed: HashSet<i64> = army
                 .closed
                 .iter()
                 .filter(|(_, until)| **until > now)
                 .map(|(p, _)| *p)
                 .collect();
+            closed.extend(turned);
             let others: HashSet<i64> = striking
                 .iter()
                 .filter(|(n, _)| *n != name)
@@ -647,6 +670,10 @@ pub(super) fn step(
                     if *n >= 2 {
                         *n = 0;
                         army.closed.insert(province, now + knobs.close_days * DAY);
+                    } else if !knobs.halt {
+                        // Worn out once, no halt: another objective while the divisions that
+                        // fought recover, then this one again.
+                        army.closed.insert(province, now + knobs.rest_days * DAY);
                     }
                 }
             }
@@ -855,7 +882,7 @@ mod tests {
     fn a_worn_strike_halts_rests_and_strikes_again() {
         let map = Map::new(11);
         let mut state = State::default();
-        let on = plan(json!(true));
+        let on = plan(json!({"halt": true}));
         run(&mut state, &map, &on, START);
         map.set(10.0, Some(20));
         let line = run(&mut state, &map, &on, START + 4 * DAY)
@@ -943,20 +970,41 @@ mod tests {
         let mut state = State::default();
         let on = plan(json!({"max_days": 6}));
         run(&mut state, &map, &on, START);
-        // six days on, the divisions are not worn and the province still stands
+        // six days on, the divisions are not worn and the province still stands: the army
+        // turns to another objective the same tick, without a halt order
         map.set(38.0, Some(20));
         let line = run(&mut state, &map, &on, START + 6 * DAY)
             .unwrap()
             .unwrap();
-        assert!(line.contains("halt before province 20"), "{line}");
-        let line = run(&mut state, &map, &on, START + 6 * DAY + 1)
-            .unwrap()
-            .unwrap();
-        assert!(!line.contains("on province 20"), "{line}");
         assert!(
             line.contains("on province 21") || line.contains("on province 30"),
             "{line}"
         );
+        assert!(map.actions().iter().all(|(_, a)| a.get("halt").is_none()));
+    }
+
+    #[test]
+    fn a_worn_strike_turns_to_another_objective_and_comes_back() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!(true));
+        run(&mut state, &map, &on, START);
+        map.set(10.0, Some(20));
+        let line = run(&mut state, &map, &on, START + 4 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            !line.contains("on province 20") && line.contains("on province"),
+            "{line}"
+        );
+        assert!(map.actions().iter().all(|(_, a)| a.get("halt").is_none()));
+        // rest_days later the first objective is open again
+        map.stand(11);
+        map.set(36.0, None);
+        let line = run(&mut state, &map, &on, START + 16 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("on province 20"), "{line}");
     }
 
     #[test]

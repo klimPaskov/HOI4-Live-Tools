@@ -175,9 +175,10 @@ the player decides strategy:
   point with two fresh divisions beside it; else a march to the first province of the path (name a
   fed province there: the army assembles on it and the game routes from it); else the nearest
   enemy victory point no other army strikes. A strike that wears the divisions beside the
-  objective under 35% of their best organisation, or lasts 18 days, is halted (`halt:true`); the
-  army strikes again at 72% or after 10 days, and two ended strikes close that objective for 25
-  days. Size each army for the supply at the head of its road: three divisions took a supply hub
+  objective under 35% of their best organisation, or lasts 18 days, ends: the objective is closed
+  for the army (10 days after a worn strike, 25 after one that stood) and its next march order
+  goes to another objective. No halt order is sent unless the plan says `"halt": true`: a halted
+  division walks back to the front line its army still holds, far behind an advance. Size each army for the supply at the head of its road: three divisions took a supply hub
   four days after their order from a fed assembly province, twelve in one unfed province stood.
   Write the rows per army in the order the roads open; a row whose path crosses a neutral's land
   waits until that land is the player's.
