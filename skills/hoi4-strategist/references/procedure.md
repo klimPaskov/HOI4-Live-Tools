@@ -26,8 +26,7 @@ Items 1, 2 and 29 are never "not applicable". Write every resolution into the co
 §25 (all 29 rows: resolution, where it lives, the facts command used, the check).
 
 **Key or atom not in the schema yet.** Some items name keys whose executor step a later build item adds
-(schema `x-executor-planned`: `xp_budget.*[].cost`, `sea_transfer`,
-`production[].remove` / `replace`, `manage.convoys_free`, `manage.fuel_floor`), keys that do not exist
+(schema `x-executor-planned`: `xp_budget.*[].cost`, `sea_transfer`), keys that do not exist
 yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
 `var:<name>`, `mission_days:<id>`, `surrender_progress:<TAG>`, `naval_dominance:<region>`,
 `naval_intel:<TAG>`, gaps the register lists as not executable until hoi4_wars and hoi4_fleets read
@@ -825,8 +824,8 @@ Resolution: `checkpoints`, `contingencies`, `phases`, `horizons` (player keys; e
 Read: `strategy.md` "Production and shortage repair"; `operating-loop.md`; `war-operating-loop.md` §4,
 §5b. For each rule below give the campaign's value or "default" with a reason in plan.md §24. `manage`
 thresholds run in `plan_manage.rs` and `plan_military.rs` (the casualty and air-superiority rules); a
-threshold the schema marks `x-executor-planned` (`convoys_free`, `fuel_floor`) is not run yet: until it is,
-the rule is a brief line (read, threshold, call) when the player must act.
+threshold the schema marks `x-executor-planned` is not run yet: until it is, the rule is a brief line (read,
+threshold, call) when the player must act.
 
 | Rule | Default threshold | Key today |
 |---|---|---|
@@ -852,8 +851,9 @@ the rule is a brief line (read, threshold, call) when the player must act.
 | Occupation | resistance target ≥ 25 → harsher; milder only at peace | `occupation` |
 | Air wings idle at war / air plan switch | standing-by wing; `switch_when`; base over capacity | `air.war_missions` / `air_plan` |
 | Enemy air superiority on our front | > 60% → fighters to the region, delay the offensive (reported unknown until a tool maps it) | `manage.enemy_air_superiority`, `air_front_regions`, `air_hold_days` |
-| Convoys for overseas armies | free convoys < 10% of total, or overseas supply < floor | `manage` |
-| Fuel | < 25% of capacity → stop exercises, import oil | `manage` |
+| Convoys for overseas armies | free convoys < 10% of total (or a need above the stock) → idle dockyards to the convoy line or a new one; no idle dockyard wakes the player (lint `manage.convoys`) | `manage.convoys_free` |
+| Fuel | < 25% of capacity (FUEL_PENALTY_START_RATIO) → auto-import on (oil covers fuel); no auto_import, or still low after `deficit_wake_days`, wakes the player for training missions and refineries (lint `manage.fuel`) | `manage.fuel_floor` |
+| Auto-import budget | the game cuts it when civilian factories fall and never raises it: re-sent when the civilian count moves by `budget_step` | `auto_import.budget`, `auto_import.budget_step` |
 | Doctrines and template edits | XP ≥ the next planned spend | `doctrines` / `templates` |
 | Scenario variable, mission timer, BoP | the plan's thresholds (escalation level, mission days < 15, BoP range edge) | `contingencies` |
 | Peace conference open | open → peace step or wake the player | `peace` |

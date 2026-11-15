@@ -389,12 +389,11 @@ class CoverageKeys(unittest.TestCase):
                      "production[].replace", "production[].switch_at_cover_days", "designs[].decommission"):
             self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
-        for key, item in (("xp_budget.army[].cost", "W1-6"), ("sea_transfer", "W1-14"),
-                          ("manage.fuel_floor", "W3-10")):
+        for key, item in (("xp_budget.army[].cost", "W1-6"), ("sea_transfer", "W1-14")):
             self.assertEqual(planned.get(key), item, key)
         for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "stockpile_targets",
                     "manage.air_superiority", "occupation.per_state", "xp_budget", "garrison_template",
-                    "manage.casualty_ratio", "manage.casualty_days"):
+                    "manage.casualty_ratio", "manage.casualty_days", "manage.convoys_free", "manage.fuel_floor"):
             self.assertNotIn(key, planned)  # the step landed: no planned mark, the placeholder names are gone
 
     def test_planned_marks_are_build_items_on_non_executor_nodes(self):
@@ -410,7 +409,7 @@ class CoverageKeys(unittest.TestCase):
         m = self.props["manage"]["properties"]
         self.assertEqual(set(m["off"]["items"]["enum"]), {"alerts", "ledger", "manpower", "stability",
                                                           "equipment_fill", "resources", "stockpile", "trucks",
-                                                          "casualties", "air_superiority", "overdrawn"})
+                                                          "casualties", "air_superiority", "overdrawn", "convoys", "fuel"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
@@ -419,6 +418,8 @@ class CoverageKeys(unittest.TestCase):
                 "casualty_rest_days": 7, "enemy_air_superiority": 0.6, "air_hold_days": 10,
                 # plan_manage.rs: overdrawn provinces (supply.split_overdrawn)
                 "overdrawn_floor": 35, "overdrawn_share": 0.5, "overdrawn_rest_days": 10,
+                # plan_manage.rs: convoys (rule 20) and fuel (rule 26)
+                "convoys_free": 0.1, "fuel_floor": 0.25,
                 # executor rules that act with or without `manage` (production, templates, invasions)
                 "rebalance_step": 3, "day0_production": True, "war_priority": True, "war_civs": False,
                 "mature_line_days": 30, "mature_line_efficiency": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
@@ -429,6 +430,8 @@ class CoverageKeys(unittest.TestCase):
             self.assertEqual(m[k]["x-rule"], "casualties", k)
         for k in ("enemy_air_superiority", "air_front_regions", "air_hold_days"):
             self.assertEqual(m[k]["x-rule"], "air_superiority", k)
+        self.assertEqual(m["convoys_free"]["x-rule"], "convoys")
+        self.assertEqual(m["fuel_floor"]["x-rule"], "fuel")
         for k, node in m.items():
             if k not in ("why", "note"):
                 self.assertIn("default", node, k)  # every rule has a default
@@ -478,7 +481,7 @@ class CoverageKeys(unittest.TestCase):
         self.assertEqual(v(plan), [])
         self.assertEqual(v({"auto_import": 2}), [])
         self.assertEqual(v({"auto_import": True}), [])
-        for bad in ({"manage": {"off": ["fuel"]}}, {"manage": {"stability_floor": 150}},
+        for bad in ({"manage": {"off": ["exercises"]}}, {"manage": {"stability_floor": 150}},
                     {"manage": {"surprise": 1}}, {"templates": [{"name": "x"}]},
                     {"navy": {"posture": "big"}}, {"force_posture": {"phases": []}},
                     {"xp_budget": {"army": [{"id": "x", "cost": 1, "purpose": "template", "ref": "templates:x"}]}}):

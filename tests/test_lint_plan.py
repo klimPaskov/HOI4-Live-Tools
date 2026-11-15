@@ -648,9 +648,41 @@ class CoverageBuildRules(unittest.TestCase):
         self.assertNoHit(plan, "manage.thresholds")
         out = self.run_lint(plan)
         self.assertEqual(out["facts"]["manage"]["stability_floor"], 0.5)
-        plan["manage"] = {"off": ["stability"], "stability_floor": 0.4, "fuel_floor": 0.2}
+        plan["manage"] = {"off": ["stability", "fuel"], "stability_floor": 0.4, "fuel_floor": 0.2,
+                          "convoys_free": 0.2}
         self.assertHit(plan, "manage.thresholds", "warning", "rule stability is in manage.off")
-        self.assertHit(plan, "manage.thresholds", "warning", "not run by the executor yet (W3-10)")
+        self.assertHit(plan, "manage.thresholds", "warning", "rule fuel is in manage.off")
+        # the convoy and fuel rules run now: no "not run by the executor yet" for their thresholds
+        self.assertFalse([f for f in self.run_lint(plan)["findings"]
+                          if f["rule"] == "manage.thresholds" and "not run by the executor" in f["message"]
+                          and f["where"] in ("manage.fuel_floor", "manage.convoys_free")])
+
+    # -------------------------------------------------------------- manage.convoys / manage.fuel
+    def test_convoy_rule_must_be_able_to_build_convoys(self):
+        plan = copy.deepcopy(self.ita)  # supplies an overseas army by sea
+        plan["manage"] = {"convoys_free": 0.2}
+        self.assertNoHit(plan, "manage.convoys")
+        plan["manage"] = {"convoys_free": 0}
+        self.assertHit(plan, "manage.convoys", "error", "manage.convoys_free is 0")
+        plan["manage"] = {"off": ["convoys"]}
+        self.assertHit(plan, "manage.convoys", "error", "convoys is in manage.off")
+        plan["production"].append({"equipment": "convoy_1", "factories": 2})
+        self.assertNoHit(plan, "manage.convoys")  # a convoy line builds them
+        self.assertNoHit(self.eth, "manage.convoys")  # no sea supply
+
+    def test_fuel_floor_against_the_penalty_ratio_and_imports(self):
+        plan = copy.deepcopy(self.ita)
+        plan["manage"] = {"fuel_floor": 0.3}
+        plan["auto_import"] = {"budget": 3}
+        self.assertNoHit(plan, "manage.fuel")
+        plan["manage"] = {"fuel_floor": 0.1}
+        self.assertHit(plan, "manage.fuel", "warning", "FUEL_PENALTY_START_RATIO 0.25")
+        plan["manage"] = {"fuel_floor": 30}  # a percent
+        plan["auto_import"] = False
+        f = self.assertHit(plan, "manage.fuel", "warning", "allows no import")
+        self.assertNotIn("PENALTY", f["message"])
+        plan["manage"]["off"] = ["fuel"]
+        self.assertNoHit(plan, "manage.fuel")
 
     # -------------------------------------------------------------- predicates.unreadable
     def test_goal_on_an_always_unknown_atom_warns(self):

@@ -1031,7 +1031,8 @@ pub(super) fn production_options(process: &dyn Process) -> Result<Value> {
         .filter(|d| super::designs::kind_of(&d.variant.type_key) == "ship" && !d.variant.obsolete)
         .map(|d| {
             json!({"design_id":d.variant.id,"name":d.variant.name,"class_suffix":d.variant.class_suffix,
-                "equipment":d.variant.type_key,"manpower":d.variant.manpower,
+                "equipment":d.variant.type_key,"convoy":super::naval::is_convoy_key(&d.variant.type_key),
+                "manpower":d.variant.manpower,
                 "lines":d.lines.iter().map(|(h, n)| json!({"line_handle":h,"requested_factories":n})).collect::<Vec<_>>()})
         })
         .collect();
@@ -1039,7 +1040,8 @@ pub(super) fn production_options(process: &dyn Process) -> Result<Value> {
         .iter()
         .enumerate()
         .filter(|(_, l)| l.naval)
-        .map(|(i, l)| json!({"line_index":i,"line_handle":l.handle,"equipment":l.key,"requested_factories":l.requested}))
+        .map(|(i, l)| json!({"line_index":i,"line_handle":l.handle,"equipment":l.key,
+            "convoy":l.key.as_deref().is_some_and(super::naval::is_convoy_key),"requested_factories":l.requested}))
         .collect();
     Ok(json!({"designs":buildable,"naval_lines":naval_lines,
         "how":"hoi4_production_add {equipment: <the design's equipment key, e.g. ship_hull_light_2 or convoy_1>, design?: <design_id>, factories}; hoi4_production_set {line: <line_index>, equipment, factories}; hoi4_design_create makes new ship variants",

@@ -2722,7 +2722,9 @@
               "trucks",
               "casualties",
               "air_superiority",
-              "overdrawn"
+              "overdrawn",
+              "convoys",
+              "fuel"
             ]
           }
         },
@@ -2828,11 +2830,10 @@
         "convoys_free": {
           "type": "number",
           "default": 0.1,
-          "description": "free convoys / all convoys below which a convoy line or escort is due (audit rule 20)",
+          "description": "free convoys / all convoys (or / the game's need when it is larger) below which idle dockyards go to the convoy line, or a new line of the newest convoy design, every 3 game days; no idle dockyard wakes the player (audit rule 20, plan_manage.rs convoy_rule)",
           "minimum": 0,
           "maximum": 1,
-          "x-owner": "player",
-          "x-executor-planned": "W1-14"
+          "x-rule": "convoys"
         },
         "casualty_ratio_max": {
           "type": "number",
@@ -2892,11 +2893,10 @@
         "fuel_floor": {
           "type": "number",
           "default": 0.25,
-          "description": "fuel / capacity below which exercises stop and oil is imported (rule 26, FUEL_PENALTY_START_RATIO)",
+          "description": "fuel / capacity below which automatic importing is turned on (oil covers fuel), once a game day; without auto_import, or still low after deficit_wake_days, the player is woken for training missions, refineries and trade (rule 26; the game's FUEL_PENALTY_START_RATIO by default, plan_manage.rs fuel_rule)",
           "minimum": 0,
           "maximum": 1,
-          "x-owner": "player",
-          "x-executor-planned": "W3-10"
+          "x-rule": "fuel"
         },
         "rebalance_step": {
           "type": "integer",
@@ -2995,7 +2995,13 @@
         "budget": {
           "type": "integer",
           "minimum": 0,
-          "description": "civilian factories for imports (default: the game's)"
+          "description": "civilian factories for imports (default: the game's); the game cuts it when civilian factories fall and never raises it again, so the executor sends it again (budget_step)"
+        },
+        "budget_step": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2,
+          "description": "a change of the civilian factory count by this many since the last check re-reads hoi4_auto_import and sends `budget` again when the game has cut it (every 7 game days; plan_manage.rs import_budget_rule)"
         },
         "enabled": {
           "type": "boolean",
