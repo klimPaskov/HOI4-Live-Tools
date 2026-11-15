@@ -17,6 +17,7 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(super) mod mode;
 mod select;
 
 #[derive(Clone, Copy)]
@@ -2557,6 +2558,11 @@ pub(super) fn offensive(
         })
     };
     let target_provinces = super::mapdata::state_provinces(game_dir, state)?;
+    // Every stroke tried, for the failure message: a line that was not placed says where it was
+    // drawn (live 15 Nov 2026: the tool gave up toward Begemder without a word on its strokes).
+    let mut tried: Vec<Stroke> = Vec::new();
+    let failed =
+        |tried: &[Stroke], cause: Option<Error>| offensive_failure(state, through, tried, cause);
     // First choice: the line across the target, parallel to the army's front and as wide as the
     // state, at the depth of the objective (`through`, else the middle of the state), so the
     // whole front advances to it. A stroke from the army to the target's centre is a line along
@@ -2572,51 +2578,133 @@ pub(super) fn offensive(
         .filter_map(|p| pos.get(p).copied())
         .collect();
     let pivot = through.and_then(|p| pos.get(&p).copied());
-    if let Some((a, b)) = offensive_span(&own, &theirs, pivot) {
-        let framed = super::screenmap::frame_two(
-            process,
-            keys,
-            a,
-            b,
-            (420.0, 140.0, 1700.0, 880.0),
-            || find_state(process, keys, state),
-        )?;
-        if let Some((from, to)) = framed {
-            if draw_line(from, to).is_ok() {
-                return Ok(());
-            }
-            if read(process, |r, i| plan_nodes(r, i, army))? > before {
-                return Ok(());
-            }
-            reselect()?;
+    let strokes = [
+        ("across the state", offensive_span(&own, &theirs, pivot)),
+        (
+            "from the army to the state's centre",
+            mean(&provinces).zip(mean(&target_provinces)),
+        ),
+    ];
+    for (kind, ends) in strokes {
+        let Some((a, b)) = ends else {
+            tried.push(Stroke {
+                kind,
+                map: None,
+                screen: None,
+                outcome: format!(
+                    "no such stroke from {} army and {} state province positions",
+                    own.len(),
+                    theirs.len()
+                ),
+            });
+            continue;
+        };
+        let framed =
+            super::screenmap::frame_two(process, keys, a, b, (420.0, 140.0, 1700.0, 880.0), || {
+                find_state(process, keys, state)
+            })
+            .map_err(|e| failed(&tried, Some(e)))?;
+        let Some((from, to)) = framed else {
+            tried.push(Stroke {
+                kind,
+                map: Some((a, b)),
+                screen: None,
+                outcome: "its ends did not fit the map area together".into(),
+            });
+            continue;
+        };
+        let drawn = draw_line(from, to);
+        if drawn.is_ok() || read(process, |r, i| plan_nodes(r, i, army))? > before {
+            return Ok(());
         }
-    }
-    if let (Some(from_w), Some(to_w)) = (mean(&provinces), mean(&target_provinces)) {
-        let framed = super::screenmap::frame_two(
-            process,
-            keys,
-            from_w,
-            to_w,
-            (420.0, 140.0, 1700.0, 880.0),
-            || find_state(process, keys, state),
-        )?;
-        if let Some((from, to)) = framed {
-            if draw_line(from, to).is_ok() {
-                return Ok(());
-            }
-            if read(process, |r, i| plan_nodes(r, i, army))? > before {
-                return Ok(());
-            }
-            reselect()?;
-        }
+        tried.push(Stroke {
+            kind,
+            map: Some((a, b)),
+            screen: Some((from, to)),
+            outcome: "drawn, no new battle plan order".into(),
+        });
+        reselect().map_err(|e| failed(&tried, Some(e)))?;
     }
     // Fallback, the earlier stroke: the target centred, a short arrow from the army's side.
-    find_state(process, keys, state)?;
+    find_state(process, keys, state).map_err(|e| failed(&tried, Some(e)))?;
     let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
-    draw_line(
+    let (from, to) = (
         clamp(960.0 + dx * 260.0, 540.0 + dy * 260.0),
         clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0),
-    )
+    );
+    if draw_line(from, to).is_ok() {
+        return Ok(());
+    }
+    tried.push(Stroke {
+        kind: "short arrow at the centred state",
+        map: None,
+        screen: Some((from, to)),
+        outcome: "drawn, no new battle plan order".into(),
+    });
+    Err(failed(&tried, None))
+}
+/// One stroke `offensive` tried: its ends on the map (unit positions, x and z) and on the screen
+/// (game pixels) where it got that far, and how it ended.
+struct Stroke {
+    kind: &'static str,
+    map: Option<((f64, f64), (f64, f64))>,
+    screen: Option<((f64, f64), (f64, f64))>,
+    outcome: String,
+}
+/// The failure of an offensive line with every stroke tried. `cause` is the error that ended
+/// the attempts early (its code is kept); without one all strokes were drawn and none placed
+/// a line.
+fn offensive_failure(
+    state: i32,
+    through: Option<i32>,
+    tried: &[Stroke],
+    cause: Option<Error>,
+) -> Error {
+    let ends = |e: &((f64, f64), (f64, f64))| {
+        format!(
+            "({:.0},{:.0})-({:.0},{:.0})",
+            e.0 .0, e.0 .1, e.1 .0, e.1 .1
+        )
+    };
+    let strokes: Vec<String> = tried
+        .iter()
+        .enumerate()
+        .map(|(n, s)| {
+            let mut line = format!("{} {}", n + 1, s.kind);
+            if let Some(map) = &s.map {
+                line.push_str(&format!(" map {}", ends(map)));
+            }
+            if let Some(screen) = &s.screen {
+                line.push_str(&format!(" screen {}", ends(screen)));
+            }
+            format!("{line}: {}", s.outcome)
+        })
+        .collect();
+    let depth = through.map_or_else(
+        || "the middle of the state".to_string(),
+        |p| format!("province {p}"),
+    );
+    let tried_text = if strokes.is_empty() {
+        "no stroke was drawn".to_string()
+    } else {
+        format!("strokes tried: {}", strokes.join("; "))
+    };
+    match cause {
+        Some(e) => Error::new(
+            e.code,
+            format!(
+                "{} (offensive line into state {state} at the depth of {depth}; {tried_text})",
+                e.message
+            ),
+        ),
+        None => Error::new(
+            "input_readback_failed",
+            format!(
+                "offensive line placed: expected game change not observed. No offensive line \
+                 into state {state} at the depth of {depth} was taken by the game; {tried_text}"
+            ),
+        ),
+    }
 }
 /// The two ends of an offensive line across a target, parallel to the army's front: of the
 /// third of the target's provinces nearest in depth to `pivot` (the objective; without one, the
@@ -3457,6 +3545,62 @@ mod tests {
         // and one in the far row
         let (a, b) = super::offensive_span(&own, &target, Some((0.0, 70.0))).unwrap();
         assert_eq!((a.1, b.1), (70.0, 70.0));
+    }
+
+    #[test]
+    fn a_failed_offensive_line_names_every_stroke_it_tried() {
+        let tried = [
+            Stroke {
+                kind: "across the state",
+                map: Some(((3400.4, 1210.0), (3460.0, 1190.6))),
+                screen: Some(((812.0, 400.0), (1104.5, 470.0))),
+                outcome: "drawn, no new battle plan order".into(),
+            },
+            Stroke {
+                kind: "from the army to the state's centre",
+                map: Some(((3420.0, 1260.0), (3431.0, 1201.0))),
+                screen: None,
+                outcome: "its ends did not fit the map area together".into(),
+            },
+            Stroke {
+                kind: "short arrow at the centred state",
+                map: None,
+                screen: Some(((960.0, 800.0), (960.0, 500.0))),
+                outcome: "drawn, no new battle plan order".into(),
+            },
+        ];
+        let e = offensive_failure(841, Some(4050), &tried, None);
+        assert_eq!(e.code, "input_readback_failed");
+        assert_eq!(
+            e.message,
+            "offensive line placed: expected game change not observed. No offensive line into \
+             state 841 at the depth of province 4050 was taken by the game; strokes tried: \
+             1 across the state map (3400,1210)-(3460,1191) screen (812,400)-(1104,470): drawn, \
+             no new battle plan order; 2 from the army to the state's centre map \
+             (3420,1260)-(3431,1201): its ends did not fit the map area together; 3 short arrow \
+             at the centred state screen (960,800)-(960,500): drawn, no new battle plan order"
+        );
+        // an error that ended the attempts keeps its code and gains the strokes so far
+        let e = offensive_failure(
+            841,
+            None,
+            &tried[..1],
+            Some(Error::new(
+                "gui_target_unavailable",
+                "Find view did not open",
+            )),
+        );
+        assert_eq!(e.code, "gui_target_unavailable");
+        assert!(
+            e.message.starts_with(
+                "Find view did not open (offensive line into state 841 at the depth of the \
+                 middle of the state; strokes tried: 1 across the state map"
+            ),
+            "{}",
+            e.message
+        );
+        let e = offensive_failure(841, None, &[], Some(Error::new("torn_read", "x")));
+        assert!(e.message.ends_with("no stroke was drawn)"), "{}", e.message);
     }
 
     #[test]

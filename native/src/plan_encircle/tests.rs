@@ -191,7 +191,8 @@ impl Tools for Front {
         if args.get("request_id").is_some() {
             let army = text(&args["army"]).to_string();
             match name {
-                "hoi4_army_plan" => {
+                // a mode order alone leaves the plan as it is
+                "hoi4_army_plan" if args.get("execute").is_some() => {
                     self.army(&army, |a| a.executing = args["execute"] == json!(true))
                 }
                 "hoi4_army_front" => self.army(&army, |a| a.orders = a.orders.max(1)),

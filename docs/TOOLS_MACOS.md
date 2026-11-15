@@ -92,7 +92,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_army_motorization` (A): Set an army's supply motorization:
 - `hoi4_army_move` (A): Order an own army to move to the centre of a state with one right click (army card, Find view, right click);
 - `hoi4_army_offensive` (A): Draw an offensive line for an own army that already holds a front line, into a target state:
-- `hoi4_army_plan` (A): Execute or stop an own army's battle plan with the army card's play or stop button.
+- `hoi4_army_plan` (A): Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode).
 - `hoi4_army_rename` (A): Rename an own army with the game's own control:
 - `hoi4_army_split` (A): Split the first N divisions (list order, N 1..19) of an own army into a new army:
 - `hoi4_commanders` (R): Own army commanders:

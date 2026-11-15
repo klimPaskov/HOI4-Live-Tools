@@ -1,6 +1,7 @@
 //! Read-only map data from the owned game's content (install, or install plus enabled mods): province unit
 //! positions (map/unitstacks.txt) and state province lists (history/states).
-//! Used only to orient battle-plan drags on screen.
+//! Used only to orient battle-plan drags on screen. The state province lists hold land provinces
+//! only: a lake a state lists (map/definition.csv) is left out, so no map point falls on water.
 use crate::error::{Error, Result};
 use std::{
     collections::HashMap,
@@ -89,7 +90,6 @@ pub(super) fn parse_state_provinces(text: &str) -> Vec<i32> {
         .collect()
 }
 
-/// Every state's land provinces (history/states), read once per install.
 /// State id -> its starting infrastructure level (history/states `infrastructure = N`), read
 /// once per install. Construction places factories where infrastructure is high.
 pub(super) type LevelIndex = std::sync::Arc<HashMap<i32, i32>>;
@@ -219,7 +219,7 @@ pub(super) fn state_factories(dir: &Path) -> std::sync::Arc<HashMap<i32, Factori
         index
     })
 }
-/// State id -> its land provinces.
+/// State id -> its land provinces (history/states, lakes left out), read once per install.
 pub(super) type StateIndex = std::sync::Arc<HashMap<i32, Vec<i32>>>;
 pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, StateIndex>>> = OnceLock::new();
@@ -229,6 +229,7 @@ pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
     }
     let entries = std::fs::read_dir(dir.join("history/states"))
         .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let water = water_provinces(dir);
     let mut index = HashMap::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
@@ -240,7 +241,7 @@ pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
             continue;
         };
         if let Ok(text) = std::fs::read_to_string(entry.path()) {
-            let found = parse_state_provinces(&text);
+            let found = land_only(&water, parse_state_provinces(&text));
             if !found.is_empty() {
                 index.insert(id, found);
             }
@@ -253,6 +254,7 @@ pub(super) fn state_province_index(dir: &Path) -> Result<StateIndex> {
         .insert(dir.to_path_buf(), index.clone());
     Ok(index)
 }
+/// The land provinces of one state (history/states, lakes left out).
 pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
     let prefix = format!("{state}-");
     let entries = std::fs::read_dir(dir.join("history/states"))
@@ -262,7 +264,7 @@ pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
         if name.to_string_lossy().starts_with(&prefix) {
             let text = std::fs::read_to_string(entry.path())
                 .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
-            let found = parse_state_provinces(&text);
+            let found = land_only(&water_provinces(dir), parse_state_provinces(&text));
             if !found.is_empty() {
                 return Ok(found);
             }
@@ -271,7 +273,7 @@ pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
     Err(Error::new("invalid_target", "Unknown state"))
 }
 
-/// Mean map position of every state's provinces, read once per install.
+/// Mean map position of every state's land provinces, read once per install.
 pub(super) fn state_centers(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, (f64, f64)>>> {
     type Centers = HashMap<i32, (f64, f64)>;
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<Centers>>>> = OnceLock::new();
@@ -282,6 +284,7 @@ pub(super) fn state_centers(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, (f
     let pos = positions(dir)?;
     let entries = std::fs::read_dir(dir.join("history/states"))
         .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let water = water_provinces(dir);
     let mut out = HashMap::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
@@ -291,7 +294,7 @@ pub(super) fn state_centers(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, (f
         let Ok(text) = std::fs::read_to_string(entry.path()) else {
             continue;
         };
-        let provinces = parse_state_provinces(&text);
+        let provinces = land_only(&water, parse_state_provinces(&text));
         if let Some(center) = mean(provinces.iter().filter_map(|p| pos.get(p).copied())) {
             out.insert(id, center);
         }
@@ -440,6 +443,56 @@ pub(super) fn direction_to(dir: &Path, state: i32, provinces: &[i32]) -> Result<
     Ok((dx / len, dy / len))
 }
 
+/// Provinces that are not land (map/definition.csv `id;r;g;b;type;coastal;terrain;continent`
+/// with the type `sea` or `lake`), read once per install. A state's history file lists the lakes
+/// inside it beside its land (Begemder lists Lake Tana): a point on one is no place for a
+/// battle-plan line or a move order (live 15 Nov 2026: every offensive line toward Begemder
+/// failed, its ends and centre were taken from a list with the lake in it). Empty when the file
+/// is missing or unreadable: every listed province then counts as land, as before.
+pub(super) fn water_provinces(dir: &Path) -> std::sync::Arc<std::collections::HashSet<i32>> {
+    type Water = std::sync::Arc<std::collections::HashSet<i32>>;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Water>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return found.clone();
+    }
+    let out: Water = std::sync::Arc::new(
+        std::fs::read(dir.join("map/definition.csv"))
+            .map(|bytes| parse_water(&String::from_utf8_lossy(&bytes)))
+            .unwrap_or_default(),
+    );
+    cache.lock().unwrap().insert(dir.to_path_buf(), out.clone());
+    out
+}
+/// Province ids of the definition rows whose type is given and is not `land`.
+pub(super) fn parse_water(text: &str) -> std::collections::HashSet<i32> {
+    text.lines()
+        .filter_map(|line| {
+            let mut f = line.split(';');
+            let id = f.next()?.trim().parse::<i32>().ok()?;
+            let kind = f.nth(3)?.trim();
+            (!kind.is_empty() && !kind.eq_ignore_ascii_case("land")).then_some(id)
+        })
+        .collect()
+}
+/// `provinces` without the water among them. A list that would be left empty is kept whole
+/// (a state always has land; an empty answer would only hide the state).
+fn land_only(water: &std::collections::HashSet<i32>, provinces: Vec<i32>) -> Vec<i32> {
+    if water.is_empty() || !provinces.iter().any(|p| water.contains(p)) {
+        return provinces;
+    }
+    let land: Vec<i32> = provinces
+        .iter()
+        .copied()
+        .filter(|p| !water.contains(p))
+        .collect();
+    if land.is_empty() {
+        provinces
+    } else {
+        land
+    }
+}
+
 /// Coastal land provinces (map/definition.csv: id;r;g;b;land;true;terrain;continent).
 pub(super) fn coastal_provinces(
     dir: &Path,
@@ -497,6 +550,78 @@ mod tests {
     fn parses_coastal_land_provinces() {
         let c = parse_coastal("0;0;0;0;land;false;unknown;0\n12;1;2;3;land;true;plains;1\n13;1;2;4;sea;true;ocean;0\n");
         assert!(c.contains(&12) && !c.contains(&13) && c.len() == 1);
+    }
+    #[test]
+    fn parses_the_provinces_that_are_not_land() {
+        let w = parse_water(
+            "0;0;0;0;land;false;unknown;0\n1;230;81;119;lake;false;lakes;7\n12;1;2;3;land;true;plains;1\n\
+             13;1;2;4;sea;true;ocean;0\n14;1;2;5\nbad;1;2;3;lake\n15;1;2;6;LAND;false;hills;1\n",
+        );
+        assert_eq!(w, [1, 13].into_iter().collect());
+        // nothing known about water, or no water in the list: the list is returned as it is
+        assert_eq!(land_only(&Default::default(), vec![3, 4]), vec![3, 4]);
+        assert_eq!(land_only(&w, vec![12, 14]), vec![12, 14]);
+        assert_eq!(land_only(&w, vec![12, 1, 14, 13]), vec![12, 14]);
+        // a list of water alone is kept whole
+        assert_eq!(land_only(&w, vec![1, 13]), vec![1, 13]);
+    }
+    /// A content folder with two states: state 841 lists the lake 13137 beside its land.
+    fn content(name: &str, definition: Option<&str>) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hoi4-mapdata-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("history/states")).unwrap();
+        std::fs::create_dir_all(dir.join("map")).unwrap();
+        std::fs::write(
+            dir.join("history/states/841-Begemder.txt"),
+            "state={ id=841 provinces={ 100 13137 101 } }",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("history/states/842-Tigray.txt"),
+            "state={ id=842 provinces={ 200 201 } }",
+        )
+        .unwrap();
+        // the lake lies far to the east of the state's land
+        std::fs::write(
+            dir.join("map/unitstacks.txt"),
+            "100;0;10.0;0;10.0;0;0\n101;0;20.0;0;10.0;0;0\n13137;0;300.0;0;10.0;0;0\n\
+             200;0;10.0;0;40.0;0;0\n201;0;20.0;0;40.0;0;0\n",
+        )
+        .unwrap();
+        if let Some(text) = definition {
+            std::fs::write(dir.join("map/definition.csv"), text).unwrap();
+        }
+        dir
+    }
+    #[test]
+    fn a_lake_is_no_province_of_its_state() {
+        let dir = content(
+            "lake",
+            Some("100;1;1;1;land;false;hills;5\n101;1;1;2;land;false;hills;5\n13137;151;30;108;lake;false;lakes;5\n"),
+        );
+        assert_eq!(state_provinces(&dir, 841).unwrap(), vec![100, 101]);
+        assert_eq!(state_provinces(&dir, 842).unwrap(), vec![200, 201]);
+        let index = state_province_index(&dir).unwrap();
+        assert_eq!(index.get(&841), Some(&vec![100, 101]));
+        // the centre is the mean of the land, not pulled toward the lake
+        assert_eq!(state_centers(&dir).unwrap().get(&841), Some(&(15.0, 10.0)));
+        // an army in 842 stands north of the state: seen from the state it lies straight up the
+        // screen (x right, y down); with the lake in the list the direction pointed sideways
+        let (dx, dy) = direction_to(&dir, 841, &[200, 201]).unwrap();
+        assert!(dx.abs() < 1e-9 && (dy + 1.0).abs() < 1e-9, "{dx} {dy}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    #[test]
+    fn without_province_definitions_every_listed_province_is_kept() {
+        let dir = content("nodef", None);
+        assert!(water_provinces(&dir).is_empty());
+        assert_eq!(state_provinces(&dir, 841).unwrap(), vec![100, 13137, 101]);
+        assert_eq!(
+            state_province_index(&dir).unwrap().get(&841),
+            Some(&vec![100, 13137, 101])
+        );
+        assert_eq!(state_centers(&dir).unwrap().get(&841), Some(&(110.0, 10.0)));
+        let _ = std::fs::remove_dir_all(&dir);
     }
     #[test]
     fn parses_air_base_rows() {

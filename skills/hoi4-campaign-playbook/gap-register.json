@@ -4724,14 +4724,21 @@
    "capability": "Use spearhead orders and switch execution mode (careful / balanced / rush)",
    "playbook": [
     "war-air-naval-peace.md#OP28",
-    "war-air-naval-peace.md#2. Orders and battle plans"
+    "war-air-naval-peace.md#2. Orders and battle plans",
+    "war-operating-loop.md#5. Tool notes",
+    "war-operating-loop.md#5b. Let the plan runner carry routine fighting"
    ],
-   "plan": [],
-   "tools": [],
+   "plan": [
+    "war.execution",
+    "war.stall_rush"
+   ],
+   "tools": [
+    "hoi4_army_plan"
+   ],
    "payoff": "medium",
-   "why": "careful under 70% supply; rush to close a pocket",
-   "closing": "both",
-   "owner": "add execute mode to hoi4_army_plan and a spearhead order tool"
+   "why": "careful under 70% supply; rush against a weak or broken line and to close a pocket (it lengthens the front and can gather an army in one unsupplied province: a plan decision)",
+   "closing": "live",
+   "owner": "offline done: hoi4_army_plan mode (careful, balanced, rush: the army is selected, btn_priority opens planning_speed_window, the wanted btn_execute_N is clicked and the three buttons' frames are read back), plan keys war.execution (once per army after its lines) and war.stall_rush (opt-in, default off: the first answer to a stalled executing plan), tests; live: run hoi4_army_plan {army, mode} once per mode and correct the readback from the failure detail if the frames do not mark the chosen button, then record the run here. Still to build: a spearhead order tool (btn_order_draw_blitz)"
   },
   {
    "id": "orders.hold_guards",

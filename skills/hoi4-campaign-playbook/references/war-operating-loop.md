@@ -92,6 +92,14 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 - `hoi4_army_front` fails in very flat desert where the game shows no highlight: use
   `hoi4_army_move` into the enemy state as a direct attack order instead.
 - `hoi4_army_motorization {army, level}`: 0/1/2; level shown in `hoi4_armies` (motorization).
+- `hoi4_army_plan {army, mode}`: how the army's battle plans are carried out, `careful`, `balanced`
+  (the game's default) or `rush`; with `execute` the mode is set first. Rush suits a weak or
+  broken enemy line (few divisions, no forts, low organisation). It attacks every province of the
+  plan, lengthens the front and can gather an army in one unsupplied province, so it is a plan
+  decision, set with `war.execution` or `war.stall_rush`, and no cure for a plan that stands
+  still: an army executing on rush stood three weeks with a flat planning bonus. Go back to
+  balanced against a line that holds. Careful suits an army short of supply. (Gap register
+  `orders.spearhead_exec_mode`, unvalidated until its live run is recorded.)
 - `hoi4_army_create` folds every unassigned division standing in the state into the new army.
 - `hoi4_army_detach {army, divisions:[ids], into?}`: move chosen divisions (ids and their template, equipment
   fill and supply from `hoi4_supply`) into a new army or an existing one: weak units to the rear, fresh ones forward.
@@ -129,7 +137,10 @@ the player decides strategy:
   as the state, through the depth of the army's victory-point province (`hoi4_army_offensive`
   `province_id`; without one, through the middle of the state). The game extends every
   offensive line to the edges of the enemy land, so a battle plan cannot gather an army on one
-  province: only the depth of the line is a choice.
+  province: only the depth of the line is a choice. An executing army advances to its line and
+  stands there: when the row the line was drawn for is held and the plan's next row lies in the
+  same state, the executor draws the line again at the new row's depth (the plan keeps
+  executing, no new planning wait). By hand: `hoi4_army_offensive` with the next `province_id`.
 - Encirclement takes an army only when it has no target of its own or its target lies in the
   pocket or its neck.
 - A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
@@ -143,6 +154,13 @@ the player decides strategy:
   planning wait), then gets a second direction (an offensive on another axis, `second_direction`,
   default on), then a direct `hoi4_army_move` into its target. The direct move burns planning
   (3% a day) and has no flank cover.
+- `"stall_rush": true` (default off): before all of that, an executing plan that stalled is set
+  to rush once per army; it keeps executing and keeps its planning bonus, and the stall clock
+  starts again. A plan decision for a weak or broken enemy line, never automatic: rush lengthens
+  the front and can gather an army in one unsupplied province.
+- `"execution": "rush"` (or `"careful"`, `"balanced"`): the execution mode of every driven
+  army's battle plans, set once per army when its lines stand and before its first execute
+  order. Without the key the game's default (balanced) stands and nothing is sent.
 - Rest and resume (defaults): an army rests below 30% of the highest organisation it has shown
   (`rest_below_pct` 0.3) and resumes at 80% (`resume_above_pct` 0.8) with supply at 70%
   (`supply_resume`), after at most `rest_max_days` 20 unless supply is under `supply_hold`.

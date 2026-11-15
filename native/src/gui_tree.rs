@@ -316,6 +316,20 @@ pub(crate) fn rect_unclipped(
     Ok(Rect { x, y, w, h })
 }
 
+/// The sprite a widget of a reviewed class draws (icon, button, check box): the object that
+/// carries what the widget shows (its frame), for reads of a control's state.
+pub(crate) fn sprite(r: &Reader<'_>, image: u64, base: u64) -> Result<u64> {
+    let l = layout(r)?;
+    let primary = r.u64(base)?;
+    let Some(&(_, offset)) = l.renderers.iter().find(|(vt, _)| image + vt == primary) else {
+        return Err(Error::new(
+            "gui_geometry_unavailable",
+            "Widget class has no reviewed renderer",
+        ));
+    };
+    pointer(r.u64(base + offset)?)
+}
+
 /// Rectangle of a widget inside a zoomed view: the renderer translation is
 /// already scaled, the texture size is not.
 pub(crate) fn rect_zoomed(

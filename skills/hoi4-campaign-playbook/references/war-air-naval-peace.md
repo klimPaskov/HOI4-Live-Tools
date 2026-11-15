@@ -94,7 +94,7 @@ and holding lines per border.
 | Spearhead | One fast army ordered at a deep target | Single armies only; no tool |
 | Area defence | Defend a province set; units weigh VPs, ports, hubs (capital 50) | No tool |
 | Manual move | Mop up, reach a foothold, plug a hole | Planning decays 3% a day instead of 1% |
-| Execute modes | careful / balanced / rush: attack-score thresholds 25 / 0 / -200; careful needs full supply and refuses forts 5+ | No tool switches the mode |
+| Execute modes | careful / balanced / rush: attack-score thresholds 25 / 0 / -200; careful needs full supply and refuses forts 5+ | `hoi4_army_plan` `mode` (unvalidated: not yet run live); plan key `war.execution` |
 
 Rules of thumb:
 
@@ -665,7 +665,8 @@ Use `poland-meta.md` for the route. War specifics:
 
 Real gaps (no tool; use the workaround):
 
-- Battle-plan execution mode and army cohesion: the default (balanced) applies.
+- Army cohesion: the default (balanced) applies. (The battle-plan execution mode has a tool now:
+  `hoi4_army_plan` `mode`, unvalidated until its first live run.)
 - Fallback line, area-defence and spearhead orders: use front lines (`defense_lines` is planned
   but waits on its tools: a gap).
 - Planning % and entrenchment reads: count days since the order (+2% a day).

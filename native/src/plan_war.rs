@@ -7,7 +7,9 @@
 //! war step's own stages. All cadences are game time.
 //!
 //! Hooks in plan_run.rs: `war_step` reads [`Limits`] once per tick and feeds [`observe`] the
-//! armies' organisation; [`drawn`] marks an offensive line, [`execute_gate`] holds its execute
+//! armies' organisation; [`execution_step`] sets an army's execution mode and [`stall_rush`]
+//! answers a stall with it; [`line_behind`] says when the offensive line must follow the plan's
+//! next row; [`drawn`] marks an offensive line, [`execute_gate`] holds its execute
 //! order; [`captured`] starts a bound when the army's target falls; [`relocation`] and
 //! [`second_direction`] are the stall response before the direct move; [`pocket_risk`] decides
 //! `pocket_fall_back`; `disband_step` keeps only divisions [`home_land`] reaches; `run` adds
@@ -31,6 +33,24 @@
 //!                      HQ scales cap and speed alike, so the wait is the same. No wait when the
 //!                      goal deadline is less than "planning_skip_days" (20) away. A rest resumes at
 //!                      once (planning rebuilt while resting)
+//!   execution          "careful" | "balanced" | "rush": how the driven armies' battle plans are
+//!                      carried out (the three buttons of the battle plan bar; hoi4_army_plan mode).
+//!                      Sent once per army when it has its lines, before its first execute order,
+//!                      and for an army formed later; kept in plan_state.json and under a new name.
+//!                      Absent: the game's default (balanced) stands and nothing is sent. Rush
+//!                      attacks every province of the plan: it suits a weak or broken enemy line,
+//!                      lengthens the front and can gather an army in one province without supply,
+//!                      so it is a plan decision. A set that fails is tried again after 3 game days
+//!                      and under the failure ledger; the execute order never waits for it
+//!   stall_rush         true: an executing plan that took no ground for stall_days is first set
+//!                      to rush (unless `execution` is rush already): the plan keeps executing and
+//!                      keeps its planning bonus, the stall clock starts again, and only the next
+//!                      stall stops the plan to plan again. Once per army; it stays on rush until
+//!                      the plan names another mode. Default off (absent or false): a stall goes
+//!                      straight to its other answers. Rush did not make a standing plan attack
+//!                      (live 15 Nov 2026: an army executing on rush stood three weeks with a flat
+//!                      planning bonus, and thirteen divisions ended in one province without
+//!                      supply), so the step costs a stall period only where the plan asks for it
 //!   hold_prepares      false: a hold phase (`axes: []`) draws no line on enemy land (the old hold).
 //!                      Default: in a hold phase the armies still draw their front and offensive
 //!                      line toward their next target and plan on them; the execute order waits for
@@ -114,6 +134,15 @@ pub(super) struct Memory {
     relief_rail: HashMap<i32, GameHour>,
     /// armies planning again on a line they already attacked along (a stopped offensive)
     replanned: HashSet<String>,
+    /// army -> the `war.execution` mode last set for it (kept in plan_state.json)
+    exec: HashMap<String, String>,
+    /// armies a stall set to rush (kept in plan_state.json)
+    rushed: HashSet<String>,
+    /// army -> (target state, row province) its offensive line was last drawn for (province 0:
+    /// through the middle of the state); kept in plan_state.json
+    line: HashMap<String, (i32, i64)>,
+    /// army -> game hour its line was drawn again for the next row while its plan executed
+    redrawn: HashMap<String, GameHour>,
 }
 
 /// One spell of an army below the supply floor: what the executor tried for it.
@@ -161,6 +190,69 @@ pub(super) fn army_renamed(memory: &mut Memory, old: &str, new: &str) {
     if memory.replanned.remove(old) {
         memory.replanned.insert(new.to_string());
     }
+    rekey(&mut memory.exec, old, new);
+    if memory.rushed.remove(old) {
+        memory.rushed.insert(new.to_string());
+    }
+    rekey(&mut memory.line, old, new);
+    rekey(&mut memory.redrawn, old, new);
+}
+
+/// What of these rules survives a server restart (plan_state.json `war.rules`).
+pub(super) fn memory(memory: &Memory) -> Value {
+    let mut rushed: Vec<&String> = memory.rushed.iter().collect();
+    rushed.sort();
+    let line: HashMap<&String, [i64; 2]> = memory
+        .line
+        .iter()
+        .map(|(army, (target, province))| (army, [i64::from(*target), *province]))
+        .collect();
+    json!({"execution": memory.exec, "rushed": rushed, "line": line})
+}
+
+/// Take back a saved memory; what is already known for an army stands.
+pub(super) fn restore(memory: &mut Memory, saved: &Value) {
+    if let Some(modes) = saved["execution"].as_object() {
+        for (army, mode) in modes {
+            if let Some(mode) = mode.as_str().filter(|m| EXECUTION_MODES.contains(m)) {
+                memory
+                    .exec
+                    .entry(army.clone())
+                    .or_insert_with(|| mode.to_string());
+            }
+        }
+    }
+    for army in list(saved, "rushed").iter().filter_map(Value::as_str) {
+        memory.rushed.insert(army.to_string());
+    }
+    if let Some(lines) = saved["line"].as_object() {
+        for (army, at) in lines {
+            let target = at[0].as_i64().and_then(|t| i32::try_from(t).ok());
+            if let (Some(target), Some(province)) = (target, at[1].as_i64()) {
+                memory
+                    .line
+                    .entry(army.clone())
+                    .or_insert((target, province));
+            }
+        }
+    }
+}
+
+/// Armies that no longer exist are forgotten: a new army that takes an old name starts afresh.
+pub(super) fn forget_absent(state: &mut State, present: &HashSet<String>) {
+    state
+        .war_rules
+        .exec
+        .retain(|army, _| present.contains(army));
+    state.war_rules.rushed.retain(|army| present.contains(army));
+    state
+        .war_rules
+        .line
+        .retain(|army, _| present.contains(army));
+    state
+        .war_rules
+        .redrawn
+        .retain(|army, _| present.contains(army));
 }
 
 /// The last status of each rule (the run result's `war`), or None when nothing was said.
@@ -479,6 +571,182 @@ pub(super) fn supply_relief(
             .push(json!({"kind": crate::watch::ARMY_OUT_OF_SUPPLY, "detail": detail}));
     }
     Ok(None)
+}
+
+// ---------------------------------------------------------------------------------------------
+// The execution mode of the battle plans.
+
+/// The modes `war.execution` may name (hoi4_army_plan mode).
+pub(super) const EXECUTION_MODES: [&str; 3] = ["careful", "balanced", "rush"];
+/// Game hours a failed mode order is left alone (the failure ledger counts on top).
+const EXECUTION_RETRY: GameHour = 3 * DAY;
+
+/// `war.execution`: the mode the plan names, or None (absent, or no mode: nothing is sent).
+pub(super) fn execution(plan: &Value) -> Option<&'static str> {
+    let wanted = plan["war"]["execution"].as_str()?;
+    EXECUTION_MODES.iter().copied().find(|m| *m == wanted)
+}
+
+/// The plan's execution mode for an army that has its lines: sent once per army (and again when
+/// the plan names another mode). Some(line) when an order went out. A failed order is left
+/// alone for EXECUTION_RETRY, so the army's execute order goes out on the next tick.
+pub(super) fn execution_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    plan: &Value,
+    army: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let Some(mode) = execution(plan) else {
+        return Ok(None);
+    };
+    if state.war_rules.exec.get(army).map(String::as_str) == Some(mode)
+        || state.skipped(now, "exec", army)
+    {
+        return Ok(None);
+    }
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_army_plan",
+        json!({"army": army, "mode": mode}),
+        "wx",
+    )?;
+    if super::held_back(&why) {
+        return Ok(None);
+    }
+    if ok {
+        state
+            .war_rules
+            .exec
+            .insert(army.to_string(), mode.to_string());
+        state.war_rules.rushed.remove(army);
+    } else {
+        state.skip(now, "exec", army, EXECUTION_RETRY);
+    }
+    Ok(Some(format!("war execution {army} {mode}: {ok} {why}")))
+}
+
+/// With `war.stall_rush: true`, the first answer to an executing plan that took no ground for
+/// `days`: the rush mode. The plan keeps executing and keeps its planning bonus (a stop gives
+/// both up), and rush attacks every province of the plan where balanced waits for a shorter
+/// front. Once per army, and not when the plan asks for rush already. Off unless the plan asks
+/// for it: rush lengthens the front and can gather an army in one unsupplied province, and it
+/// did not make a standing plan attack (live 15 Nov 2026).
+/// Some((ok, line)) when the order went out; the caller restarts the stall clock on ok.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn stall_rush(
+    state: &mut State,
+    tools: &dyn Tools,
+    lease: &str,
+    plan: &Value,
+    army: &str,
+    target: i32,
+    days: GameHour,
+    now: GameHour,
+) -> Result<Option<(bool, String)>> {
+    if plan["war"]["stall_rush"] != json!(true)
+        || execution(plan) == Some("rush")
+        || state.war_rules.rushed.contains(army)
+        || state.skipped(now, "rush", army)
+    {
+        return Ok(None);
+    }
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_army_plan",
+        json!({"army": army, "mode": "rush"}),
+        "wx",
+    )?;
+    if super::held_back(&why) {
+        return Ok(None);
+    }
+    if ok {
+        state.war_rules.rushed.insert(army.to_string());
+    } else {
+        state.skip(now, "rush", army, EXECUTION_RETRY);
+    }
+    Ok(Some((
+        ok,
+        format!(
+            "war stalled {army} {days} days on state {target}: execution set to rush: {ok} {why}"
+        ),
+    )))
+}
+
+// ---------------------------------------------------------------------------------------------
+// The offensive line follows the plan's rows.
+
+/// Game hours a refused redraw of the offensive line is left alone (the ledger counts on top).
+pub(super) const LINE_RETRY: GameHour = DAY;
+/// Game hours after a redraw in which a plan found stopped is executed again at once.
+const REDRAW_RESUME: GameHour = 3 * DAY;
+
+/// The army's offensive line into `target` was drawn at the depth of `row` (the province of
+/// its victory-point row; None: through the middle of the state).
+pub(super) fn line_drawn(state: &mut State, army: &str, target: i32, row: Option<i64>) {
+    state
+        .war_rules
+        .line
+        .insert(army.to_string(), (target, row.unwrap_or(0)));
+}
+
+/// The row the army's offensive line into `target` stands at when the plan is after another
+/// row of the same state now (`row`): the line is to be drawn again for it. The offensive line
+/// is drawn across the target at the depth of one row, and the game holds the army on it: with
+/// the row held and the next one deeper in the same state the target state does not change,
+/// so nothing drew a new line and the plan went on executing with every division standing on
+/// the old one (live 15 Nov 2026: Aksum and Adwa held, Macalle in the same state never
+/// attacked; a line drawn by hand at Macalle's depth took it). None when the line stands at
+/// `row`. Lines whose row is not known (drawn before a restart without this memory, or by the
+/// player) are taken as drawn for the current row.
+pub(super) fn line_behind(state: &mut State, army: &str, target: i32, row: i64) -> Option<i64> {
+    match state.war_rules.line.get(army) {
+        Some((t, at)) if *t == target => (*at != row).then_some(*at),
+        _ => {
+            line_drawn(state, army, target, Some(row));
+            None
+        }
+    }
+}
+
+/// The line was drawn again for the next row. With the plan executing the front is the same
+/// and the game keeps executing; should it stop the plan, [`redrawn_lately`] lets the execute
+/// order go out again without a planning wait.
+pub(super) fn line_redrawn(
+    state: &mut State,
+    army: &str,
+    target: i32,
+    row: i64,
+    executing: bool,
+    now: GameHour,
+) {
+    line_drawn(state, army, target, Some(row));
+    if executing {
+        state.war_rules.redrawn.insert(army.to_string(), now);
+    } else {
+        state.war_rules.redrawn.remove(army);
+    }
+}
+
+/// The army's plan was executing when its line was drawn again less than REDRAW_RESUME ago.
+pub(super) fn redrawn_lately(state: &mut State, army: &str, now: GameHour) -> bool {
+    let rules = &mut state.war_rules;
+    if rules
+        .redrawn
+        .get(army)
+        .is_some_and(|at| now - at > REDRAW_RESUME)
+    {
+        rules.redrawn.remove(army);
+    }
+    rules.redrawn.contains_key(army)
+}
+
+/// The execute order after a redraw went out (or the plan is back before its planning wait).
+pub(super) fn redraw_settled(state: &mut State, army: &str) {
+    state.war_rules.redrawn.remove(army);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1178,6 +1446,8 @@ mod tests {
         flank: Cell<bool>,
         /// Army 1's planning bonus as hoi4_armies reads it (None: not read)
         planning: Cell<Option<f64>>,
+        /// the game refuses an execution mode order (hoi4_army_plan mode)
+        refuse_mode: Cell<bool>,
         calls: RefCell<Vec<(String, Value)>>,
     }
     impl W {
@@ -1193,6 +1463,7 @@ mod tests {
                 flow: Cell::new(0.0),
                 flank: Cell::new(false),
                 planning: Cell::new(None),
+                refuse_mode: Cell::new(false),
                 calls: RefCell::new(vec![]),
             }
         }
@@ -1211,6 +1482,12 @@ mod tests {
                 .borrow_mut()
                 .push((name.to_string(), args.clone()));
             if args.get("request_id").is_some() {
+                if self.refuse_mode.get() && args.get("mode").is_some() {
+                    return Err(super::super::Error::new(
+                        "input_readback_failed",
+                        "Execution mode rush of Army 1 is not verified",
+                    ));
+                }
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
             let taken = self.taken.get();
@@ -1631,6 +1908,272 @@ mod tests {
         let old = plan(json!({"pocket_share": 0.7}));
         let mut state = State::default();
         assert!(!acted(tick(&mut state, &w, &old, "l", START).unwrap()).starts_with("war pocket"));
+    }
+
+    /// Army 1 with its front and offensive line drawn toward state 28, before its execute order.
+    fn lined() -> State {
+        let mut state = State::default();
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_stage.insert("Army 1".into(), 2);
+        state
+    }
+    /// The execution mode orders sent: (army, mode); none of them carries an execute flag.
+    fn mode_orders(w: &W) -> Vec<(String, String)> {
+        w.actions()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_army_plan" && a.get("mode").is_some())
+            .map(|(_, a)| {
+                assert!(a.get("execute").is_none(), "{a}");
+                (text(&a["army"]).to_string(), text(&a["mode"]).to_string())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_plans_execution_mode_is_set_once_per_army_before_its_first_execute() {
+        let w = W::new();
+        let p = plan(json!({"execution": "rush", "planning_wait": false}));
+        let mut state = lined();
+        let step = acted(tick(&mut state, &w, &p, "l", START).unwrap());
+        assert_eq!(step, "war execution Army 1 rush: true Verified");
+        // then the execute order, and the mode is never sent again
+        let step = acted(tick(&mut state, &w, &p, "l", START + 2).unwrap());
+        assert!(step.starts_with("war execute Army 1 -> state 28"), "{step}");
+        w.executing.set(true);
+        for day in 1..=6 {
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        assert_eq!(
+            mode_orders(&w),
+            [("Army 1".to_string(), "rush".to_string())]
+        );
+        let plans: Vec<bool> = w
+            .actions()
+            .iter()
+            .filter(|(n, _)| n == "hoi4_army_plan")
+            .map(|(_, a)| a.get("mode").is_some())
+            .collect();
+        assert_eq!(
+            plans,
+            [true, false],
+            "the mode goes out before the execute order"
+        );
+        // the plan names another mode: it is sent once
+        let careful = plan(json!({"execution": "careful", "planning_wait": false}));
+        let step = acted(tick(&mut state, &w, &careful, "l", START + 7 * DAY).unwrap());
+        assert_eq!(step, "war execution Army 1 careful: true Verified");
+        assert_eq!(
+            tick(&mut state, &w, &careful, "l", START + 8 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        // without the key, or with a word that is no mode, nothing is sent: the game's default
+        for war in [
+            json!({"planning_wait": false}),
+            json!({"planning_wait": false, "execution": "fast"}),
+        ] {
+            let w = W::new();
+            let p = plan(war);
+            let mut state = lined();
+            let step = acted(tick(&mut state, &w, &p, "l", START).unwrap());
+            assert!(step.starts_with("war execute Army 1 -> state 28"), "{step}");
+            assert!(mode_orders(&w).is_empty());
+        }
+    }
+
+    #[test]
+    fn an_army_without_its_lines_gets_them_before_its_execution_mode() {
+        let w = W::new();
+        w.orders.set(0);
+        let p = plan(json!({"execution": "rush"}));
+        let mut state = State::default();
+        let step = acted(tick(&mut state, &w, &p, "l", START).unwrap());
+        assert!(
+            step.starts_with("war front and offensive Army 1 -> state 28"),
+            "{step}"
+        );
+        assert!(mode_orders(&w).is_empty());
+        let step = acted(tick(&mut state, &w, &p, "l", START + 3).unwrap());
+        assert_eq!(step, "war execution Army 1 rush: true Verified");
+    }
+
+    #[test]
+    fn a_refused_execution_mode_never_holds_the_execute_order_and_is_tried_again() {
+        let w = W::new();
+        w.refuse_mode.set(true);
+        let p = plan(json!({"execution": "rush", "planning_wait": false}));
+        let mut state = lined();
+        let step = acted(tick(&mut state, &w, &p, "l", START).unwrap());
+        assert!(
+            step.starts_with("war execution Army 1 rush: false input_readback_failed"),
+            "{step}"
+        );
+        // the next tick executes: the failed mode order is left alone for three game days
+        let step = acted(tick(&mut state, &w, &p, "l", START + 2).unwrap());
+        assert!(step.starts_with("war execute Army 1 -> state 28"), "{step}");
+        w.executing.set(true);
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", START + 2 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        assert_eq!(mode_orders(&w).len(), 1);
+        // then it is tried again, and once it works it is not sent any more
+        w.refuse_mode.set(false);
+        let step = acted(tick(&mut state, &w, &p, "l", START + 3 * DAY + 1).unwrap());
+        assert_eq!(step, "war execution Army 1 rush: true Verified");
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", START + 4 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        assert_eq!(mode_orders(&w).len(), 2);
+    }
+
+    #[test]
+    fn the_execution_mode_follows_a_rename_survives_a_restart_and_is_sent_to_a_new_army() {
+        let w = W::new();
+        let p = plan(json!({"execution": "careful", "planning_wait": false}));
+        let mut state = lined();
+        state.clock = START;
+        let sent = execution_step(&mut state, &w, "l", &p, "Army 1", START).unwrap();
+        assert_eq!(
+            sent.as_deref(),
+            Some("war execution Army 1 careful: true Verified")
+        );
+        assert_eq!(
+            execution_step(&mut state, &w, "l", &p, "Army 1", START).unwrap(),
+            None
+        );
+        // an army formed later has not been told
+        let sent = execution_step(&mut state, &w, "l", &p, "Army 2", START).unwrap();
+        assert_eq!(
+            sent.as_deref(),
+            Some("war execution Army 2 careful: true Verified")
+        );
+        // the memory follows a new name
+        state.army_renamed("Army 1", "North");
+        assert_eq!(
+            execution_step(&mut state, &w, "l", &p, "North", START).unwrap(),
+            None
+        );
+        state.war_rules.rushed.insert("Army 2".into());
+        // plan_state.json keeps it: after a restart nothing is sent again
+        let saved = state.memory(START);
+        assert_eq!(
+            saved["war"]["rules"]["execution"],
+            json!({"North": "careful", "Army 2": "careful"})
+        );
+        assert_eq!(saved["war"]["rules"]["rushed"], json!(["Army 2"]));
+        let mut again = State::default();
+        again.restore(&saved, START);
+        again.clock = START;
+        assert_eq!(
+            execution_step(&mut again, &w, "l", &p, "North", START).unwrap(),
+            None
+        );
+        assert!(again.war_rules.rushed.contains("Army 2"));
+        assert_eq!(mode_orders(&w).len(), 2);
+        // an army that no longer exists is forgotten: a new army under its name is told again
+        let present: HashSet<String> = ["North".to_string()].into_iter().collect();
+        forget_absent(&mut again, &present);
+        assert!(again.war_rules.rushed.is_empty());
+        let sent = execution_step(&mut again, &w, "l", &p, "Army 2", START).unwrap();
+        assert!(sent.is_some());
+    }
+
+    #[test]
+    fn a_stall_never_sets_rush_unless_the_plan_asks_for_it() {
+        // absent and false alike: the stall goes straight to the answers there were
+        for war in [
+            json!({"replans": 1}),
+            json!({"replans": 1, "stall_rush": false}),
+        ] {
+            let w = W::new();
+            let p = plan(war);
+            let (mut state, now) = stalled(&w, &p);
+            let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+            assert!(
+                step.starts_with(
+                    "war stalled Army 1 8 days on state 28: plan stopped to plan again (1 of 1): true"
+                ),
+                "{step}"
+            );
+            assert!(mode_orders(&w).is_empty());
+        }
+    }
+
+    #[test]
+    fn with_stall_rush_the_first_answer_to_a_stalled_executing_plan_is_the_rush_mode() {
+        let w = W::new();
+        let p = plan(json!({"replans": 1, "stall_rush": true}));
+        let (mut state, now) = stalled(&w, &p);
+        let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+        assert_eq!(
+            step,
+            "war stalled Army 1 8 days on state 28: execution set to rush: true Verified"
+        );
+        // the plan was not stopped: one mode order, no execute flag
+        assert_eq!(
+            mode_orders(&w),
+            [("Army 1".to_string(), "rush".to_string())]
+        );
+        assert_eq!(w.actions().len(), 1);
+        // the stall clock starts again: nothing for another stall time
+        for day in 1..8 {
+            assert_eq!(
+                tick(&mut state, &w, &p, "l", now + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        // the next stall goes on to the answers there were: the plan stops to plan again
+        let step = acted(tick(&mut state, &w, &p, "l", now + 8 * DAY).unwrap());
+        assert!(
+            step.starts_with(
+                "war stalled Army 1 8 days on state 28: plan stopped to plan again (1 of 1): true"
+            ),
+            "{step}"
+        );
+        assert_eq!(mode_orders(&w).len(), 1);
+    }
+
+    #[test]
+    fn a_plan_already_on_rush_and_a_refused_rush_go_on_to_the_other_answers() {
+        // `war.execution` is rush already (set when the lines were drawn): the stall stops the plan
+        let w = W::new();
+        let p = plan(json!({"replans": 1, "stall_rush": true, "execution": "rush"}));
+        let mut state = State::default();
+        state.war_rules.exec.insert("Army 1".into(), "rush".into());
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_stage.insert("Army 1".into(), 3);
+        w.executing.set(true);
+        assert_eq!(tick(&mut state, &w, &p, "l", START).unwrap(), Tick::Nothing);
+        let step = acted(tick(&mut state, &w, &p, "l", START + 8 * DAY).unwrap());
+        assert!(
+            step.contains("plan stopped to plan again (1 of 1)"),
+            "{step}"
+        );
+        assert!(mode_orders(&w).is_empty());
+        // a rush order the game refuses: reported, and the next tick stops the plan
+        let w = W::new();
+        w.refuse_mode.set(true);
+        let p = plan(json!({"replans": 1, "stall_rush": true}));
+        let (mut state, now) = stalled(&w, &p);
+        let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+        assert!(
+            step.starts_with(
+                "war stalled Army 1 8 days on state 28: execution set to rush: false input_readback_failed"
+            ),
+            "{step}"
+        );
+        let step = acted(tick(&mut state, &w, &p, "l", now + 2).unwrap());
+        assert!(
+            step.contains("plan stopped to plan again (1 of 1)"),
+            "{step}"
+        );
+        assert_eq!(mode_orders(&w).len(), 1);
     }
 
     fn stalled(w: &W, p: &Value) -> (State, GameHour) {

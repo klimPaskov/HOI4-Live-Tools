@@ -4685,12 +4685,28 @@
           "x-owner": "executor",
           "description": "supply trucks level set once on every driven army"
         },
+        "execution": {
+          "type": "string",
+          "enum": [
+            "careful",
+            "balanced",
+            "rush"
+          ],
+          "x-owner": "executor",
+          "description": "how the driven armies' battle plans are carried out (hoi4_army_plan mode), set once per army when it has its lines and before its first execute order: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default), rush (every province of the plan is attacked: it suits a weak or broken enemy line, lengthens the front and can gather an army in one province without supply). Absent: the game's default stands and nothing is sent"
+        },
+        "stall_rush": {
+          "type": "boolean",
+          "default": false,
+          "x-owner": "executor",
+          "description": "true: the first answer to an executing plan that took no ground for stall_days is the rush execution mode (once per army; the plan keeps executing and keeps its planning bonus, the stall clock starts again), and only the next stall goes on to replans, the second direction and the direct move. Not when execution is rush already. Default false: a stall goes straight to them. Rush suits a weak or broken enemy line; it attacks every province of the plan, lengthens the front and can gather an army in one unsupplied province, so it costs a stall period only where the plan asks for it"
+        },
         "stall_days": {
           "type": "integer",
           "default": 8,
           "minimum": 0,
           "x-owner": "executor",
-          "description": "game days without progress on a target (no new main state and no province taken in the target or the state the army stands in) before the stall response: the executing plan is stopped and planned again (replans), then a second direction, then a direct move with a back-off (default 8)"
+          "description": "game days without progress on a target (no new main state and no province taken in the target or the state the army stands in) before the stall response: the executing plan is stopped and planned again (replans), then a second direction, then a direct move with a back-off (default 8); with stall_rush true the rush execution mode comes first"
         },
         "replans": {
           "type": "integer",
