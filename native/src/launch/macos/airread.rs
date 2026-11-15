@@ -214,6 +214,37 @@ pub(super) fn region_names(dir: &Path) -> BTreeMap<i32, String> {
     out
 }
 
+/// One localisation line ` STRATEGICREGION_17: "Ethiopian Highlands"` -> (17, name).
+pub(super) fn parse_region_display(line: &str) -> Option<(i32, String)> {
+    let rest = line.trim_start().strip_prefix("STRATEGICREGION_")?;
+    let (id, text) = rest.split_once(':')?;
+    let name = text.split('"').nth(1)?.trim();
+    (!name.is_empty()).then_some((id.parse().ok()?, name.to_string()))
+}
+
+/// The regions' display names (the names the air map and the game's texts show), from the
+/// English localisation. The map file names differ from them for some regions (file
+/// `17-Africa.txt` is the region shown as Ethiopian Highlands), and a plan written from what
+/// the game shows names the display name.
+pub(super) fn region_display_names(dir: &Path) -> BTreeMap<i32, String> {
+    let mut out = BTreeMap::new();
+    if let Ok(entries) = std::fs::read_dir(dir.join("localisation/english")) {
+        for e in entries.flatten() {
+            let file = e.file_name();
+            if !file
+                .to_str()
+                .is_some_and(|n| n.contains("strategic_region"))
+            {
+                continue;
+            }
+            if let Ok(text) = std::fs::read_to_string(e.path()) {
+                out.extend(text.lines().filter_map(parse_region_display));
+            }
+        }
+    }
+    out
+}
+
 fn view(
     bases: &[Base],
     wings: &[Wing],
@@ -282,6 +313,21 @@ pub(super) fn schema() -> Value {
 mod tests {
     use super::super::testmem::{Mem, IMAGE};
     use super::*;
+
+    #[test]
+    fn region_display_names_come_from_the_localisation_lines() {
+        assert_eq!(
+            parse_region_display(" STRATEGICREGION_17: \"Ethiopian Highlands\""),
+            Some((17, "Ethiopian Highlands".to_string()))
+        );
+        // a version number after the colon, as the game's files write some lines
+        assert_eq!(
+            parse_region_display(" STRATEGICREGION_273:0 \"Danakil\""),
+            Some((273, "Danakil".to_string()))
+        );
+        assert_eq!(parse_region_display(" STRATEGICREGION_NAME: \"x\""), None);
+        assert_eq!(parse_region_display("l_english:"), None);
+    }
 
     #[test]
     fn decodes_mission_bits_and_region_files() {
