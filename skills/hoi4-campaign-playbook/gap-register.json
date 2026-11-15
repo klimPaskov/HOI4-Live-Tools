@@ -731,14 +731,16 @@
    "id": "focuses.continuous",
    "domain": "focuses",
    "capability": "Use continuous focuses after the tree ends (game folder common/continuous_focus)",
-   "playbook": [],
+   "playbook": [
+    "politics-diplomacy-espionage.md#11 PO31"
+   ],
    "plan": [],
    "tools": [],
    "blocked": "no tool or plan key for the continuous focus palette",
    "payoff": "low",
    "why": "small permanent bonuses late in a campaign",
    "closing": "both",
-   "owner": "a continuous-focus tool and plan key; add to the playbook"
+   "owner": "a continuous-focus tool and plan key"
   },
   {
    "id": "events.by_option_name",
@@ -1049,7 +1051,9 @@
    "id": "diplomacy.auto_responses",
    "domain": "diplomacy",
    "capability": "Set 1.19.4 automatic diplomatic responses so request pop-ups stop",
-   "playbook": [],
+   "playbook": [
+    "politics-diplomacy-espionage.md#12 DI23"
+   ],
    "plan": [],
    "tools": [],
    "blocked": "no tool sets the automatic-response settings",
@@ -1240,14 +1244,16 @@
    "id": "factions.manpower_contribution",
    "domain": "factions",
    "capability": "Faction member upgrades: contribute or draw manpower through the faction pool",
-   "playbook": [],
+   "playbook": [
+    "politics-diplomacy-espionage.md#12 DI24"
+   ],
    "plan": [],
    "tools": [],
-   "blocked": "no tool, no plan key; the playbook does not mention it",
+   "blocked": "no tool or plan key sets the contribution",
    "payoff": "low",
-   "why": "new 1.19 member-upgrade mechanic; effect size unclear",
+   "why": "feeds the faction garrison pool allies draw from; small for a conqueror",
    "closing": "both",
-   "owner": "research the mechanic, add to the playbook, then a tool if worth it"
+   "owner": "a contribution setting tool if a campaign needs it"
   },
   {
    "id": "factions.read_state",
@@ -1587,7 +1593,9 @@
    "id": "lendlease.garrison_support",
    "domain": "lendlease",
    "capability": "Ask a faction ally for garrison support in occupied land",
-   "playbook": [],
+   "playbook": [
+    "politics-diplomacy-espionage.md#14 OC09"
+   ],
    "plan": [
     "diplomacy[].action"
    ],
@@ -1595,9 +1603,9 @@
     "hoi4_diplomacy_act"
    ],
    "payoff": "low",
-   "why": "frees own garrison manpower; the playbook does not mention it",
+   "why": "frees own garrison manpower when allies filled the faction pool",
    "closing": "live",
-   "owner": "live request_garrison_support (row click) and a playbook line"
+   "owner": "live request_garrison_support (row click)"
   },
   {
    "id": "peace.take_states",
@@ -2610,7 +2618,9 @@
    "id": "construction.civilian_nuclear_reactor",
    "domain": "construction",
    "capability": "Build a civilian nuclear reactor in the biggest industry state to halve its energy need (late game)",
-   "playbook": [],
+   "playbook": [
+    "economy-build-orders.md#15 EC29"
+   ],
    "plan": [],
    "tools": [
     "hoi4_construction_add"
@@ -2618,7 +2628,7 @@
    "payoff": "low",
    "why": "late-game energy fix; outside 1936-41 scope",
    "closing": "both",
-   "owner": "add a playbook line (energy effect) and live-test commercial_nuclear_reactor placement"
+   "owner": "live-test commercial_nuclear_reactor placement and a plan key"
   },
   {
    "id": "construction.repair_priority",
@@ -3625,7 +3635,10 @@
    "id": "special_projects.reward_choice",
    "domain": "special_projects",
    "capability": "Choose prototype rewards when an iteration offers them",
-   "playbook": [],
+   "playbook": [
+    "research-doctrines-projects.md#10 RE27",
+    "research-doctrines-projects.md#5. Special projects, scientists, facilities"
+   ],
    "plan": [],
    "tools": [],
    "payoff": "low",
@@ -4365,11 +4378,13 @@
    "id": "formations.unit_medals",
    "domain": "formations",
    "capability": "Award division medals / commander rewards defined in common/unit_medals",
-   "playbook": [],
+   "playbook": [
+    "army-organisation.md#8 GN13"
+   ],
    "plan": [],
    "tools": [],
    "payoff": "low",
-   "why": "small division bonuses; the playbook does not mention them",
+   "why": "small division bonuses for 30 PP each",
    "closing": "both",
    "owner": "optional, low value: a medal action only if cheap"
   },

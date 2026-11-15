@@ -117,6 +117,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - EC26 Never build where the front will pass
 - EC27 Re-set the auto-import budget
 - EC28 Split long railways
+- EC29 Civilian nuclear reactor
 
 ## Research, doctrines and MIOs: [research-doctrines-projects.md §10](research-doctrines-projects.md#10-tactics-research-doctrines-and-mios)
 
@@ -146,6 +147,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - RE24 Human Wave Tactics
 - RE25 Planning wins prepared attacks
 - RE26 Mastery from training
+- RE27 Prototype reward choices
 
 ## Supply and logistics: [supply-logistics-deployment.md §11](supply-logistics-deployment.md#11-tactics-supply-and-logistics)
 
@@ -183,6 +185,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - GN10 Army HQ template by role
 - GN11 HQ abilities
 - GN12 Trait abilities and Staff Office Plan
+- GN13 Division medals
 
 ## Land operations: [war-air-naval-peace.md §15](war-air-naval-peace.md#15-tactics-land-operations)
 
@@ -370,6 +373,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - PO28 Party popularity is stability
 - PO29 Intelligence advisor operative
 - PO30 Total Mobilisation costs manpower
+- PO31 Continuous focuses for spare PP
 
 ## Diplomacy, factions and puppets: [politics-diplomacy-espionage.md §12](politics-diplomacy-espionage.md#12-tactics-diplomacy-factions-and-puppets)
 
@@ -395,6 +399,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - DI20 Spymaster as a relay
 - DI21 Subjects cannot stay out
 - DI22 Volunteer recall timing
+- DI23 Automatic diplomatic responses
+- DI24 Faction manpower contribution
 
 ## Intelligence: [politics-diplomacy-espionage.md §13](politics-diplomacy-espionage.md#13-tactics-intelligence)
 
@@ -421,6 +427,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - OC06 Accept the collaboration government
 - OC07 Equipment emergency
 - OC08 Plunder to the floor
+- OC09 Garrison support from the faction
 
 ## Continuous play at speed 3: [war-operating-loop.md §7](war-operating-loop.md#7-tactics-continuous-play-at-speed-3)
 
