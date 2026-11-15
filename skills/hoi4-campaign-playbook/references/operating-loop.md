@@ -130,7 +130,17 @@ for a landless enemy. A capitulation event can name any country: read its text.
 
 Every game alert has an owner: an executor rule fed by a plan key, or an entry in
 `manage.alerts_ignore` with its reason in `manage.alerts_ignore_why` (lint
-`alerts.owner`). An alert open for months with neither is a plan defect. Record unmet goals, defeat, timeout, crash and
+`alerts.owner`). An alert open for months with neither is a plan defect. Two owners need
+more than a nudge: a country-wide resource shortage that no production line draws (coal for
+energy, the insufficient_energy alert) counts as a deficit for auto-import, and one that
+outlasts `manage.deficit_wake_days` raises the import budget by a factory per 8 units short
+(up to `auto_import.budget_max`); a missing-equipment-production alert says, once every 60
+game days, whether an army gap without a line holds it or a request the server does not read
+(garrison or air reinforcement, a queued division), which the alert's tooltip lists.
+Unassigned divisions that share a province with an army go to that army: a stack shared with
+it can only be selected together with it. A doctrine whose Unlock the game disables is
+refused with the game's own price read from the row and the experience held; a shortfall
+waits for that price, a covered price means a precondition. Record unmet goals, defeat, timeout, crash and
 external interruption honestly. A two-year run proves its tested interval only;
 offline unit tests never prove live campaign acceptance.
 

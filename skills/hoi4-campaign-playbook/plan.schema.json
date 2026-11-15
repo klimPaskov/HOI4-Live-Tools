@@ -3221,6 +3221,11 @@
           "default": 2,
           "description": "a change of the civilian factory count by this many since the last check re-reads hoi4_auto_import and sends `budget` again when the game has cut it (every 7 game days; plan_manage.rs import_budget_rule)"
         },
+        "budget_max": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "highest budget the executor may raise to when a deficit (a country-wide one too, such as coal for energy) outlasts deficit_wake_days with auto-import on: one civilian factory per 8 units short, at most once every 14 game days, never above the factories the game offers (default: budget + 2; plan_manage.rs raise_import_budget)"
+        },
         "enabled": {
           "type": "boolean",
           "default": true

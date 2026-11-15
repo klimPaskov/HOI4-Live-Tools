@@ -659,10 +659,38 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 by_state.entry(*state).or_default().push(id);
             }
         }
-        let by_state: Vec<Value> = by_state
-            .into_iter()
-            .map(|(state, ids)| json!({"state_id":state,"divisions":ids.len(),"division_ids":ids}))
-            .collect();
+        // Which armies stand in the same province as an unassigned division: a click or a box on
+        // such a stack takes that army's divisions too, so only that army can receive it.
+        let provinces = division_provinces(r, image).unwrap_or_default();
+        let mut groups_at: BTreeMap<i32, BTreeSet<u64>> = BTreeMap::new();
+        for (id, group) in membership(r, image)? {
+            if group != 0 {
+                if let Some(Some(p)) = provinces.get(&id) {
+                    groups_at.entry(*p).or_default().insert(group);
+                }
+            }
+        }
+        let mut names: BTreeMap<u64, String> = BTreeMap::new();
+        let mut by_state_rows = Vec::with_capacity(by_state.len());
+        for (state, ids) in by_state {
+            let mut shared: BTreeMap<String, usize> = BTreeMap::new();
+            for id in &ids {
+                let Some(Some(p)) = provinces.get(*id) else {
+                    continue;
+                };
+                for g in groups_at.get(p).into_iter().flatten() {
+                    if !names.contains_key(g) {
+                        names.insert(*g, army_name(r, *g)?);
+                    }
+                    *shared.entry(names[g].clone()).or_default() += 1;
+                }
+            }
+            by_state_rows.push(
+                json!({"state_id":state,"divisions":ids.len(),"division_ids":ids,
+                "shared_with":shared}),
+            );
+        }
+        let by_state = by_state_rows;
         let groups = army_groups(r, image)?
             .into_iter()
             .map(|g| {
@@ -790,10 +818,17 @@ pub(super) fn plan_assign(
             }
             Some(army)
         }
+        // An army sharing provinces with the unassigned divisions comes first: a stack holding
+        // them and its divisions can only go to that army (another army's divisions in the
+        // selection refuse the right-click), so any other target leaves them unassigned for good
+        // (n1, 16 Nov 2026: six Eritrea divisions stayed unassigned 230 days).
         None => armies.iter().filter(|a| a.here > 0).max_by(|a, b| {
             let room = |x: &Standing| cap.saturating_sub(x.total);
-            room(a)
-                .cmp(&room(b))
+            let shares = |x: &Standing| shared_with(view, state, &x.name);
+            (room(a) > 0)
+                .cmp(&(room(b) > 0))
+                .then(shares(a).cmp(&shares(b)))
+                .then(room(a).cmp(&room(b)))
                 .then(a.here.cmp(&b.here))
                 .then(b.name.cmp(&a.name))
         }),
@@ -841,6 +876,34 @@ pub(super) fn plan_assign(
             .map(|a| a.here)
             .sum(),
     })
+}
+
+/// How many of `state`'s unassigned divisions stand in a province where `army` stands too
+/// (`hoi4_armies` unassigned_by_state shared_with).
+pub(super) fn shared_with(view: &Value, state: i32, army: &str) -> usize {
+    view["unassigned_by_state"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|row| row["state_id"].as_i64() == Some(state as i64))
+        .filter_map(|row| row["shared_with"][army].as_u64())
+        .sum::<u64>() as usize
+}
+
+/// The armies `state`'s unassigned divisions share provinces with, as "name (n)", most first.
+pub(super) fn sharing_armies(view: &Value, state: i32) -> Vec<String> {
+    let mut rows: Vec<(String, u64)> = view["unassigned_by_state"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|row| row["state_id"].as_i64() == Some(state as i64))
+        .filter_map(|row| row["shared_with"].as_object())
+        .flat_map(|m| m.iter().map(|(k, v)| (k.clone(), v.as_u64().unwrap_or(0))))
+        .collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    rows.into_iter()
+        .map(|(k, n)| format!("{k} ({n})"))
+        .collect()
 }
 
 /// The unassigned division ids of `state` from the same view (settlement pool).
@@ -901,7 +964,7 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
         Err(e) if matches!(e.code, "map_data_unavailable" | "camera_unavailable") => {
             return assign_boxes(process, keys, plan, army);
         }
-        Err(e) => return Err(e),
+        Err(e) => return Err(sharing_hint(e, &view, plan.state, army)),
     };
     // The settlement allows only this state's unassigned divisions to join.
     if !picked.verdict.loose.is_empty() {
@@ -929,6 +992,29 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
         pool.len()
     );
     Ok(())
+}
+/// A refused selection names the armies the unassigned divisions share provinces with: only
+/// they can receive those stacks (`army` names the one that was tried).
+pub(super) fn sharing_hint(e: Error, view: &Value, state: i32, army: &str) -> Error {
+    if !matches!(e.code, "selection_unavailable" | "selection_mismatch") {
+        return e;
+    }
+    let others: Vec<String> = sharing_armies(view, state)
+        .into_iter()
+        .filter(|a| !a.starts_with(&format!("{army} (")))
+        .collect();
+    if others.is_empty() {
+        return e;
+    }
+    Error::new(
+        e.code,
+        format!(
+            "{} Unassigned divisions of state {state} share provinces with {}: call \
+             hoi4_army_assign with that army (or without an army, which picks it).",
+            e.message,
+            others.join(", ")
+        ),
+    )
 }
 /// Right-click `army`'s card with the selection standing (the game's "Right-click to assign the
 /// selected Divisions"), verified by a membership change.
@@ -3883,6 +3969,52 @@ mod tests {
         // absorbing into a standing army is executable (right-click on the army card)
         assert!(assign_preflight(&plan).is_ok());
         assert_eq!(plan.target_here, 6);
+    }
+    #[test]
+    fn unassigned_divisions_sharing_a_province_go_to_the_army_standing_with_them() {
+        // n1, 16 Nov 2026: six Eritrea divisions shared provinces with Army 1 while the plan sent
+        // them to Army 2 (more room); every selection was refused for 230 days.
+        let mut v = assign_view();
+        v["unassigned_by_state"][0]["shared_with"] = json!({"Army 1": 4});
+        let plan = plan_assign(&v, 64, None, ARMY_CAP).unwrap();
+        assert_eq!(
+            plan.mode,
+            AssignMode::Absorb {
+                army: "Army 1".into()
+            }
+        );
+        assert_eq!((plan.take, plan.overflow), (5, 1));
+        // a full sharing army does not block the others
+        v["armies"][0]["division_count"] = json!(24);
+        let plan = plan_assign(&v, 64, None, ARMY_CAP).unwrap();
+        assert_eq!(
+            plan.mode,
+            AssignMode::Absorb {
+                army: "Army 2".into()
+            }
+        );
+        assert_eq!(shared_with(&v, 64, "Army 1"), 4);
+        assert_eq!(shared_with(&v, 64, "Army 2"), 0);
+    }
+    #[test]
+    fn a_refused_selection_names_the_armies_sharing_the_provinces() {
+        let mut v = assign_view();
+        v["unassigned_by_state"][0]["shared_with"] = json!({"Army 1": 4, "Army 2": 1});
+        let e = sharing_hint(
+            Error::new("selection_unavailable", "None of the 6 wanted divisions."),
+            &v,
+            64,
+            "Army 2",
+        );
+        assert_eq!(e.code, "selection_unavailable");
+        assert!(
+            e.message.contains("share provinces with Army 1 (4)"),
+            "{}",
+            e.message
+        );
+        assert!(!e.message.contains("Army 2 (1)"));
+        let e = sharing_hint(Error::new("army_full", "x"), &v, 64, "Army 2");
+        assert_eq!(e.message, "x");
     }
     #[test]
     fn the_settlement_pool_is_the_unassigned_ids_of_that_state() {
