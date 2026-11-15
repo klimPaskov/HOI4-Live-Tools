@@ -314,6 +314,68 @@ pub(super) fn division_provinces(
     }
     Ok(out)
 }
+/// division id -> the province it marches on (its movement target; 0 or its own province when
+/// it has no march order).
+pub(super) fn division_headings(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, i32>> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = BTreeMap::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        let handle = r.read(division + u.division_handle, 8)?;
+        let id = format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        );
+        out.insert(id, r.i32(division + u.heading_for)?);
+    }
+    Ok(out)
+}
+/// How many of the listed divisions march on a province other than the one they stand in.
+pub(super) fn marching(
+    headings: &BTreeMap<String, i32>,
+    at: &BTreeMap<String, Option<i32>>,
+    ids: &[String],
+) -> usize {
+    ids.iter()
+        .filter(|id| {
+            let heading = headings.get(*id).copied().unwrap_or(0);
+            heading > 0 && at.get(*id).copied().flatten() != Some(heading)
+        })
+        .count()
+}
+/// Halt `army`: its card selects its divisions and the unit panel's halt control (btn_hold,
+/// shortcut H, "Halt all selected units") cancels every march and attack order they hold. The
+/// divisions stay where they stand; a front line they are assigned to keeps them. Returns
+/// whether the shown button was clicked (else its shortcut was pressed). The game keeps each
+/// division's last heading after a halt, so the stop cannot be read from the headings.
+pub(super) fn halt(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<bool> {
+    clear_notices(process, keys)?;
+    // The halt control lives in the unit panel, which slides in after the selection: the
+    // shortcut does nothing before it is shown (live 15 Nov 2026: the key right after the
+    // card click left every division marching).
+    select_army(process, keys, army)?;
+    // The button itself when the division list shows it, its shortcut otherwise.
+    let clicked = match settled(process, "halt button", |r, i| {
+        list_widget(r, i, "btn_hold")?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "No shown halt button"))
+    }) {
+        Ok(button) => {
+            let (x, y) = button.center();
+            keys.click(GAME, x, y)?;
+            true
+        }
+        Err(_) => {
+            keys.press(Key::letter('h')?)?;
+            false
+        }
+    };
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    clear_selection(process, keys)?;
+    Ok(clicked)
+}
 /// `threat` per army in an `armies` view: the land provinces bordering the army's provinces
 /// (outside them) and how many another country holds. `encirclement_risk` from 70% on.
 pub(super) fn add_threats(

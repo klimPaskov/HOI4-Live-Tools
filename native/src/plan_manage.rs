@@ -3151,7 +3151,8 @@ fn overdrawn_rule(
     now: GameHour,
 ) -> Result<Option<String>> {
     let m = &plan["manage"];
-    if !m.is_object() || off(plan, "overdrawn") {
+    // An army on an objective strike is one order: taking divisions out of it undoes the strike.
+    if !m.is_object() || off(plan, "overdrawn") || super::plan_strike::owns_armies(state, plan) {
         return Ok(None);
     }
     let rest = m["overdrawn_rest_days"]

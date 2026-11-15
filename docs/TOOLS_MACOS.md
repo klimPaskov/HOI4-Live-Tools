@@ -12,7 +12,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_input_lease` (A): Exclusive configured-controller lease for ordinary macOS input.
 - `hoi4_plan` (R): Read or change the standing plan (plan.json in the run directory):
 - `hoi4_plan_run` (A): Carry out the standing plan for up to `seconds` (default 60):
-- `hoi4_time` (A): Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback.
+- `hoi4_time` (A): Set desired pause or internal speed 0..4 (the game's speeds 1 to 5:
 
 ## Economy, construction and production
 
@@ -131,11 +131,11 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_fleet_balance` (A): UNVALIDATED (no live test yet) - Rebalance the ships of one own fleet's task forces with the toolbar's Task-force-o-matic button (btn_taskforce_o_matic;
 - `hoi4_fleet_create` (A): Found a new fleet from one own task force with the game's ordinary controls:
 - `hoi4_fleet_delete` (A): UNVALIDATED (no live test yet) - DESTROY one own task force and its ships with the toolbar delete button (btn_delete) and the 'Delete task force' confirmation.
-- `hoi4_fleet_merge` (A): Live-verified: Merge all task forces of one own fleet into a single task force:
+- `hoi4_fleet_merge` (A): UNVALIDATED (no live test yet) - Merge all task forces of one own fleet into a single task force:
 - `hoi4_fleet_mission` (A): Give one own task force a mission with the game's ordinary mission buttons (Strategic Navy map mode F2, fleet card, the task force entry's Select button, the mission button;
 - `hoi4_fleet_region` (A): Add a sea region to a fleet's area of operation (or remove it with remove:true) with ordinary input:
 - `hoi4_fleet_reserve` (A): Live-verified: Send one own task force to the reserve fleet with the toolbar's set-as-reserve button (btn_exclude);
-- `hoi4_fleet_split` (A): Live-verified: Split one own task force in half:
+- `hoi4_fleet_split` (A): UNVALIDATED (no live test yet) - Split one own task force in half:
 - `hoi4_fleets` (R): Own navy read from game memory (no panel, no input, never pauses):
 - `hoi4_naval_invasion` (A): UNVALIDATED (no live test yet) - Order ONE naval invasion of an enemy coastal state for land units:
 - `hoi4_navy_ui` (A): DEBUG ONLY (never listed to a player):
@@ -148,6 +148,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
 - `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
+- `hoi4_occupation_law` (A): Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input:
 - `hoi4_operation_start` (A): Prepare an intelligence operation against a target with ordinary input, as a player does:
 - `hoi4_operative_assign` (A): Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
 - `hoi4_operative_recruit` (A): Recruit an operative into a free slot of the operative bar:
@@ -156,6 +157,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_peace_status` (R): Read-only:
 - `hoi4_peace_submit` (A): Submit Demands for the round (the conference's end-turn button;
 - `hoi4_peace_take` (A): In the open peace conference, choose the demand kind (default Take State;
+- `hoi4_province_graph` (R): Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states):
 - `hoi4_railway_build` (A): Queue ONE railway with the game's railway construction mode:
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
 - `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.

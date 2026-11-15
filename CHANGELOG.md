@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Objective strikes (`war.strike`): after the opening battle plans the executor sends each army at one province at a
+time with a single march order of the whole army, and orders the next objective the tick the last one falls.
+
+- Objectives per army: its next open `vp_targets` row (the first province of the row's path not yet held; from
+  afar the army first assembles on the path's first province), else an enemy victory point with two fresh
+  divisions beside it, else the nearest enemy victory point no other army strikes. A strike that wears its
+  divisions out or stands 18 days is halted and the army rests; an objective that holds is closed for 25 days.
+- `hoi4_army_move`: `halt:true` cancels an army's march and attack orders (the unit panel's halt button); a march
+  order on a province is sent while any division neither marches on it nor stands in it (it was skipped once half
+  did). `hoi4_supply` rows carry `heading_province`. New read `hoi4_province_graph` (land provinces of states and
+  their neighbours, from the map files).
+- While strikes are on, battle plans, pocket fall-back, rests, stall answers, the overdrawn rule and command
+  merges leave the driven armies alone.
+
+
 `hoi4-live play COUNTRY "GOAL"` starts a native campaign on macOS from the install (docs/PLAY_FLOW.md).
 
 - It attaches to the game you started from Steam (or asks Steam with `--launch`), waits while you start or load the

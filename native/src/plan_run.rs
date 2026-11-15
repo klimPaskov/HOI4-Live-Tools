@@ -273,6 +273,9 @@ mod plan_affairs;
 /// the stall's second direction, the bound pause, the disband land-route guard).
 #[path = "plan_war.rs"]
 mod plan_war;
+// Objective strikes: one march order of a whole army on one province at a time.
+#[path = "plan_strike.rs"]
+mod plan_strike;
 
 /// Victory-point routes (a `vp_targets` path followed leg by leg, the pace between legs).
 #[path = "plan_route.rs"]
@@ -537,6 +540,8 @@ pub struct State {
     war_rules: plan_war::Memory,
     /// Victory-point routes: where each waypoint lies, legs taken, jump-off moves (plan_route.rs).
     routes: plan_route::Memory,
+    /// Objective strikes (plan_strike.rs): armies, objectives, the map graph.
+    strike: plan_strike::Memory,
     /// Steps ahead of their tools (plan_seams.rs): digest lines.
     seams: plan_seams::Memory,
     /// The encirclement operation: the pocket, its arms, the ring, pockets given up.
@@ -701,6 +706,7 @@ impl Default for State {
             military: Default::default(),
             affairs: Default::default(),
             war_rules: Default::default(),
+            strike: Default::default(),
             routes: Default::default(),
             seams: Default::default(),
             encircle: Default::default(),
@@ -4021,6 +4027,15 @@ fn war_step(
                 })
                 .collect();
             enemies.retain(|t| at_war.contains(t));
+        }
+    }
+    // Objective strikes (`war.strike`): once on, the step owns the driven armies and the rest of
+    // the war step (battle plans, rests, pocket fall-back, stall answers) does not run.
+    if !lines_only {
+        if let Some(done) =
+            plan_strike::step(state, tools, plan, lease, &me, &enemies, &reserve, now)?
+        {
+            return Ok(done);
         }
     }
     let mut targets: Vec<(i32, bool)> = Vec::new();

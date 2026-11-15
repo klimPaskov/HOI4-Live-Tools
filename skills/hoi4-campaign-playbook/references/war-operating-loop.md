@@ -113,6 +113,13 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 - `hoi4_occupation_law {law}`: default occupation law; `hoi4_occupation` reads it.
 - At the end of a war, `hoi4_war_stats`: own losses must be far below the enemy's.
 - `hoi4_army_move` replaces the army's battle plan with a manual order (planning is lost).
+  With `province_id` the whole army marches on that one province and attacks what stands there: the
+  way to mass an army on one objective. It is sent again while any division neither marches on the
+  province nor stands in it. `{"army":..., "halt":true}` cancels every march and attack order of
+  the army (the unit panel's halt button): worn divisions stop attacking and recover where they
+  stand. `hoi4_supply` shows each division's `heading_province`.
+- `hoi4_province_graph {"states":[ids]}`: the land provinces of those states and the provinces each
+  touches: which provinces an objective can be attacked from, and the way to it over land.
 - `hoi4_naval_invasion` needs convoys and naval superiority; its receipt does not confirm the
   landing, so check the map/army after it starts.
 - Peace: `hoi4_peace_options`, `hoi4_peace_take {"states":[ids]}`, `hoi4_peace_submit`,
@@ -158,6 +165,22 @@ the player decides strategy:
   to rush once per army; it keeps executing and keeps its planning bonus, and the stall clock
   starts again. A plan decision for a weak or broken enemy line, never automatic: rush lengthens
   the front and can gather an army in one unsupplied province.
+- `"strike": {"after_vp": 5}` (default off): objective strikes. A front spreads an army along the whole
+  border and a battle plan cannot gather it on one province, so planned offensives take the border
+  states and then stand. With this key the war step changes method once the player holds `after_vp`
+  of the enemies' victory points: every driven army gets ONE march order (`hoi4_army_move` with
+  `province_id`) on one province, the whole army gathers on it, and the next objective is ordered
+  the tick it falls. The objective is the army's next `vp_targets` row (the first province of the
+  row's `path` not yet held) when the army stands beside it or on the path; else an enemy victory
+  point with two fresh divisions beside it; else a march to the first province of the path (name a
+  fed province there: the army assembles on it and the game routes from it); else the nearest
+  enemy victory point no other army strikes. A strike that wears the divisions beside the
+  objective under 35% of their best organisation, or lasts 18 days, is halted (`halt:true`); the
+  army strikes again at 72% or after 10 days, and two ended strikes close that objective for 25
+  days. Size each army for the supply at the head of its road: three divisions took a supply hub
+  four days after their order from a fed assembly province, twelve in one unfed province stood.
+  Write the rows per army in the order the roads open; a row whose path crosses a neutral's land
+  waits until that land is the player's.
 - `"execution": "rush"` (or `"careful"`, `"balanced"`): the execution mode of every driven
   army's battle plans, set once per army when its lines stand and before its first execute
   order. Without the key the game's default (balanced) stands and nothing is sent.
