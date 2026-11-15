@@ -271,6 +271,10 @@ class HandPlans(unittest.TestCase):
             ("war.encircle", "war.direct_moves"),  # direct moves switch encirclement off
             ("war.planning_wait", "war.direct_moves"),  # direct moves build no planning
             ("war.supply_floor", "war.supply_floor"),  # 30 is under the 35% attrition line
+            # the Ca.101 and Ca.133 wings at home: no selector names them and the war missions never reach them
+            ("air.idle_wings", "air_plan"),
+            # army rows in vp_targets, and the plan does not say battle plans or objective strikes
+            ("war.strike_choice", "war"),
         ]))
         reach = {r["where"]: r for r in out["facts"]["supply_reach"]}
         self.assertEqual(reach["war_by_phase.P2_tigray.axes[0] state 842"]["from"], 13250)  # Asmara hub
@@ -1399,6 +1403,30 @@ class TacticsRules(unittest.TestCase):
         self.assertTrue(hits and "without a reason" in hits[0]["message"])
         plan["manage"]["alerts_ignore_why"] = {"free_dockyards": "no ships are needed in this war"}
         self.assertEqual(self.hits(plan, "alerts.owner", text="free_dockyards"), [])
+    def test_air_idle_wings(self):
+        plan = self.plan()
+        f = self.assertHit(plan, "air.idle_wings", "warning", "air_plan")
+        self.assertIn("state 158", f["message"])
+        # the medium_plane_airframe_0 wings at home are the idle ones: a selector for each clears them
+        plan["air_plan"] = list(plan["air_plan"]) + [
+            {"id": f"home_{sid}", "airframe": "medium_plane_airframe_0", "base_state": sid, "mission": "naval_bomber"}
+            for sid in (2, 115, 158, 448)]
+        self.assertNoHit(plan, "air.idle_wings")
+        plan = self.plan(war={"enemies": []})
+        plan["goal"] = {}
+        self.assertNoHit(plan, "air.idle_wings")
+
+    def test_strike_choice(self):
+        plan = self.plan()
+        self.assertTrue(any(isinstance(e.get("army"), str) for e in plan["vp_targets"]))
+        plan["war"] = dict(plan["war"])
+        plan["war"].pop("strike", None)
+        self.assertHit(plan, "war.strike_choice", "warning", "war")
+        plan["war"]["strike"] = False
+        self.assertNoHit(plan, "war.strike_choice")
+        plan["war"].pop("strike")
+        plan["phases"] = [{"id": "p1", "overrides": {"war": {"strike": {"after_vp": 5}}}}]
+        self.assertNoHit(plan, "war.strike_choice")
 
     def test_politics_available(self):
         # the shakedown plan bought a high-command advisor whose gate needs a focus the path never takes
