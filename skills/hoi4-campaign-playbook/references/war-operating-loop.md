@@ -254,13 +254,27 @@ beside the army. Keep the guard armies as guards on the border the advance leave
 them and the advance starved. Taken victory points get no garrison by themselves; a guard army
 whose front follows the advance, or a division left in each, is still an open question.
 
-**Never stack more than the head province feeds.** The strike sends the whole army into one
-province and does not size it. Three divisions took a supply hub four days after their order
-from a fed assembly province; eleven in one unfed province stood for three months at 6-10%
-supply and organisation about 10. Plan small armies, one per road, sized to the supply where
-the road ends (`hoi4_supply` province supply against demand at the assembly province), and name
-a fed province as each row's first path province. While strikes run, the overdrawn rule does
-not thin the driven armies, so the size is the plan's job.
+**Never stack more than the head province feeds; spread instead.** A whole army in one
+province starves: eleven divisions in one unfed province stood for three months at 6-10% supply
+and organisation about 10, while three divisions took a supply hub four days after their order.
+The game's own AI fights the same colonial war with about two dozen divisions spread over eleven
+to fifteen provinces, never more than four in one, and keeps 75-100% supply; its organisation and
+equipment are no better than ours, its supply is. So a strike goes with at most `stack` (4)
+divisions from one province (the freshest, those beside the objective first), and the divisions
+it leaves over take the enemy provinces beside the army two at a time, those touching the
+objective first (`widen`). Each taken province is more land to stand on, another road for
+supply and another direction for the next strike; the left-over divisions rejoin their army when
+their province is held or after `max_days`. Plan armies one per road and name a fed province as
+each row's first path province. Outside a strike, a stack its province cannot feed still sends
+its most worn divisions to held land beside it.
+
+**More force does not cure starvation.** Shipping a dozen home divisions into a theatre that
+starves at the head made the war slower, not faster: they joined the same corridor, and the
+divisions kept for shipping were no longer disbanded, so the front's equipment fill fell from
+about 0.8 to 0.3. Ship only what opens its own road (another port, another axis) and keep the
+equipment of what is useless flowing to the front. In a war where the enemy's escalation counts
+the attacker's divisions in the theatre (Ethiopia 1936: more than 24 regular Italian divisions is
+one trigger towards a closed Suez canal), the AI keeps under it.
 
 **Why orders must be few.** At speed 3 one decision and its call take 30-90 seconds of wall time,
 5-15 game days. A war of about six months is about twenty decisions. Orders must be few, given
@@ -295,15 +309,18 @@ off for every army.
 - With no open row an army takes an enemy victory point with `beside` (2) fresh divisions next to
   it, else the nearest enemy victory point no other army strikes.
 - Knobs and defaults: `after_vp` 0, `rest` 0.35, `resume` 0.72, `rest_days` 10, `max_days` 18,
-  `close_days` 25, `beside` 2, `guards` false, `halt` false. `war.reserve` and
+  `close_days` 25, `beside` 2, `stack` 4, `widen` true, `guards` false, `halt` false. `war.reserve` and
   `war.player_claim_seconds` (300) keep the step off armies the player orders.
 
-**What is still unproven.** The method won one run with the rules run as a script (the defender
-capitulated four weeks before the game's own AI would have managed it) and one of four runs with
-the executor step and a small player model (two weeks after the AI); the other three stalled:
-halted armies walked back to their old front, an objective held while towns behind the advance
-were lost, and stacks starved at the head. Strikes sized to supply need an order for part of an
-army, which no tool gives yet; garrisons for taken victory points are open. Treat the numbers above as defaults to check, not tuned values.
+**What is still unproven.** The game's own AI does not win this kind of war on a fixed date:
+measured twice from another seat, it took Ethiopia's capitulation on 17 June once and in early
+September once (2 of 32 victory points in mid-February, 7 in mid-April), so judge a run against a
+spread of dates, not one mark, and do not end a run as lost only because it is behind the faster
+one. The strike method won by date ahead of the slow AI game several times and stalled at 5-17
+victory points in others, each time with stacks starving at the head; spreading (`stack`,
+`widen`) is the answer to that and still has to show it holds over a series of runs. Garrisons
+for taken victory points are open. Treat the numbers above as defaults to check, not tuned
+values.
 
 ## 6. Principles (any war)
 

@@ -46,6 +46,15 @@
 //!               on. A halted division returns to the front line its army still holds, which
 //!               lies far behind an advance (live 15 Nov 2026: halted armies walked back to the
 //!               border they had started from)
+//!   stack       4: at most this many divisions of the army strike from one province (the
+//!               freshest, those beside the objective first). Combat width lets only a few fight
+//!               from one direction and a deep stack starves: whole-army strikes stood 7-15
+//!               deep at 40-60% supply while the game's own AI never put more than four in one
+//!               province and kept 75-100% (live 15 Nov 2026). 0: no limit
+//!   widen       true: while a strike runs, the divisions it left over take the enemy
+//!               provinces beside the army, two at a time (those touching the objective first:
+//!               a second direction for the next strike), and rejoin their army when the
+//!               province is held, after `max_days`, or when the order was lost
 //!   guards      true: guard armies are driven too (the border they held is no longer the
 //!               front). Default false: they keep their fronts
 //!
@@ -121,6 +130,9 @@ pub(super) struct Memory {
     parked: HashMap<String, GameHour>,
     /// province -> when its stack may be thinned again
     thinned: HashMap<i64, GameHour>,
+    /// division id -> (the enemy province beside the army it was sent to take, since when): a
+    /// division a strike left over widens the army's land instead of crowding the stack
+    flank: HashMap<String, (i64, GameHour)>,
     /// the army the last order went to
     turn: Option<String>,
 }
@@ -139,6 +151,8 @@ struct Knobs {
     floor: f64,
     garrison: bool,
     worn_gate: f64,
+    stack: usize,
+    widen: bool,
 }
 
 fn knobs(cfg: &Value) -> Option<Knobs> {
@@ -161,6 +175,8 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         floor: number("floor", 0.35),
         garrison: k["garrison"] != json!(false),
         worn_gate: number("worn_gate", 0.5),
+        stack: number("stack", 4.0).max(0.0) as usize,
+        widen: k["widen"] != json!(false),
     })
 }
 
@@ -343,6 +359,39 @@ impl World<'_> {
             ring = next;
         }
         out
+    }
+}
+
+impl World<'_> {
+    /// An enemy province for divisions a strike left over in `from`: one the army can attack
+    /// from `from` or a held province beside it, not held, not `avoid`. Provinces touching the
+    /// objective come first (a second direction for the next strike), then those touching `from`
+    /// itself, then the one with the most held land around it (the shortest new front).
+    fn widen_target(&self, from: i64, objective: i64, avoid: &HashSet<i64>) -> Option<i64> {
+        let graph = &self.memory.graph;
+        let mut bases = vec![from];
+        bases.extend(self.near(from, 1));
+        let mut best: Option<((bool, bool, usize), i64)> = None;
+        for base in bases {
+            for n in graph.get(&base).map(|r| r.1.as_slice()).unwrap_or(&[]) {
+                if *n == objective || self.held(*n) || !self.passable(*n) || avoid.contains(n) {
+                    continue;
+                }
+                let around = graph.get(n).map(|r| r.1.as_slice()).unwrap_or(&[]);
+                let key = (
+                    around.contains(&objective),
+                    around.contains(&from),
+                    around.iter().filter(|p| self.held(**p)).count(),
+                );
+                if best
+                    .as_ref()
+                    .is_none_or(|(k, p)| key > *k || (key == *k && *n < *p))
+                {
+                    best = Some((key, *n));
+                }
+            }
+        }
+        best.map(|(_, p)| p)
     }
 }
 
@@ -758,10 +807,31 @@ pub(super) fn step(
             })
             .map(|(id, _)| id.clone())
             .collect();
+        // A division sent to widen the army's land rejoins its army when the province is held,
+        // when its time is up, or when it neither marches on it nor stands in it two days on.
+        let rejoined: Vec<String> = memory
+            .flank
+            .iter()
+            .filter(|(id, (p, since))| {
+                divisions.iter().find(|d| &d.id == *id).is_none_or(|d| {
+                    world.held(*p)
+                        || now - since >= knobs.max_days * DAY
+                        || (now - since >= 2 * DAY && d.heading != Some(*p) && d.province != *p)
+                })
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
         let kept = |id: &str| {
             (memory.garrison.contains_key(id) && !released.iter().any(|r| r == id))
                 || (memory.parked.contains_key(id) && !rested.iter().any(|r| r == id))
+                || (memory.flank.contains_key(id) && !rejoined.iter().any(|r| r == id))
         };
+        let flank_targets: HashSet<i64> = memory
+            .flank
+            .iter()
+            .filter(|(id, _)| !rejoined.contains(id))
+            .map(|(_, (p, _))| *p)
+            .collect();
         // Divisions other armies send on each objective (a strike sized to its supply leaves
         // room for another army's divisions, and only that much).
         let mut committed: HashMap<i64, Vec<(&str, usize)>> = HashMap::new();
@@ -835,6 +905,7 @@ pub(super) fn step(
                     garrison: None,
                     park: Vec::new(),
                     province: None,
+                    flank: None,
                 });
                 break;
             }
@@ -900,6 +971,7 @@ pub(super) fn step(
                             garrison: None,
                             park: Vec::new(),
                             province: None,
+                            flank: None,
                         });
                         break;
                     }
@@ -967,9 +1039,63 @@ pub(super) fn step(
                             garrison: None,
                             park: ids,
                             province: Some(from),
+                            flank: None,
                         });
                         break;
                     }
+                }
+            }
+            // Divisions a strike left over (more than `stack` stood in one province) take the
+            // enemy provinces beside the army, a few each, instead of starving in the stack: the
+            // game's own AI held 11-15 provinces with 23-26 divisions, never more than four in
+            // one, at 75-100% supply, while whole-army strikes stood 7-15 deep at 40-60%.
+            if knobs.widen && matches!(mode, Mode::Strike | Mode::Rest) && !army.group.is_empty() {
+                let mut spare: BTreeMap<i64, Vec<&Division>> = BTreeMap::new();
+                for d in members.iter().copied().filter(|d| {
+                    !army.group.contains(&d.id) && d.heading.is_none_or(|h| h == d.province)
+                }) {
+                    spare.entry(d.province).or_default().push(d);
+                }
+                let mut avoid: HashSet<i64> = army
+                    .closed
+                    .iter()
+                    .filter(|(_, until)| **until > now)
+                    .map(|(p, _)| *p)
+                    .collect();
+                avoid.extend(flank_targets.iter().copied());
+                avoid.extend(committed.keys().copied());
+                let mut widened = false;
+                for (from, mut here) in spare {
+                    let Some(to) = world.widen_target(from, objective, &avoid) else {
+                        continue;
+                    };
+                    let Some(to_state) = world.state_of(to) else {
+                        continue;
+                    };
+                    here.sort_by(|a, b| world.share(b).total_cmp(&world.share(a)));
+                    here.truncate(2);
+                    let ids: Vec<String> = here.iter().map(|d| d.id.clone()).collect();
+                    act = Some(Act {
+                        tool: "hoi4_army_move",
+                        args: json!({"army": name, "state_id": to_state, "province_id": to, "divisions": ids}),
+                        line: format!(
+                            "strike {name}: {} left-over division(s) from province {from} take province {to} beside the army",
+                            ids.len()
+                        ),
+                        army: name.clone(),
+                        mode,
+                        objective,
+                        group: None,
+                        garrison: None,
+                        park: Vec::new(),
+                        province: None,
+                        flank: Some((ids, to)),
+                    });
+                    widened = true;
+                    break;
+                }
+                if widened {
+                    break;
                 }
             }
             if mode != Mode::Idle {
@@ -1073,6 +1199,22 @@ pub(super) fn step(
                     }
                 }
             }
+            // At most `stack` divisions strike from one province (the freshest, those beside the
+            // objective first); the rest widen the army's land once the strike runs.
+            if next == Mode::Strike && knobs.stack > 0 {
+                sent.sort_by(|a, b| {
+                    let near = |d: &Division| world.touches(province, d.province);
+                    near(b)
+                        .cmp(&near(a))
+                        .then(world.share(b).total_cmp(&world.share(a)))
+                });
+                let mut per: HashMap<i64, usize> = HashMap::new();
+                sent.retain(|d| {
+                    let n = per.entry(d.province).or_insert(0);
+                    *n += 1;
+                    *n <= knobs.stack
+                });
+            }
             let verb = if next == Mode::Strike {
                 "on"
             } else {
@@ -1107,6 +1249,7 @@ pub(super) fn step(
                 garrison,
                 park: Vec::new(),
                 province: None,
+                flank: None,
             });
             break;
         }
@@ -1115,6 +1258,9 @@ pub(super) fn step(
         }
         for id in rested {
             memory.parked.remove(&id);
+        }
+        for id in rejoined {
+            memory.flank.remove(&id);
         }
         for (name, mode, objective, at, ended) in changes {
             let army = memory.armies.entry(name).or_default();
@@ -1146,6 +1292,18 @@ pub(super) fn step(
     };
     let (ok, why) = state.act(tools, lease, a.tool, a.args, "ws")?;
     state.strike.turn = Some(a.army.clone());
+    if let Some((ids, to)) = a.flank {
+        if ok {
+            for id in ids {
+                state.strike.flank.insert(id, (to, now));
+            }
+        } else {
+            // A province the game would not send them to: another for two days.
+            let army = state.strike.armies.entry(a.army).or_default();
+            army.closed.insert(to, now + 2 * DAY);
+        }
+        return Ok(Some(Some(format!("{}: {ok} {why}", a.line))));
+    }
     if let Some(from) = a.province {
         state.strike.thinned.insert(from, now + 3 * DAY);
         if ok {
@@ -1191,6 +1349,8 @@ struct Act {
     /// divisions sent out of a starving stack, and that stack's province
     park: Vec<String>,
     province: Option<i64>,
+    /// divisions sent to widen the army's land, and the enemy province they take
+    flank: Option<(Vec<String>, i64)>,
 }
 
 /// The plan asks for objective strikes and the step has taken the armies over: the overdrawn
@@ -1696,5 +1856,81 @@ mod tests {
             line.contains("on province 10") && line.contains("own land"),
             "{line}"
         );
+    }
+
+    #[test]
+    fn a_strike_sends_at_most_stack_divisions_from_one_province_and_the_rest_widen() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!({"stack": 2}));
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(
+            line.contains("on province 20") && line.contains("2 of 3"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        let sent = args["divisions"].as_array().cloned().unwrap();
+        assert_eq!(sent.len(), 2);
+        let spare = ["d0", "d1", "d2"]
+            .into_iter()
+            .find(|d| !sent.contains(&json!(d)))
+            .unwrap();
+        // the strike runs: the division it left over takes the enemy province beside the army
+        // that also touches the objective (a second direction)
+        for d in map.divisions.borrow_mut().iter_mut() {
+            if sent.contains(&json!(d.0)) {
+                d.4 = Some(20);
+            }
+        }
+        let line = run(&mut state, &map, &on, START + DAY).unwrap().unwrap();
+        assert!(line.contains("take province 21"), "{line}");
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["divisions"], json!([spare]));
+        assert_eq!(args["province_id"], json!(21));
+        // marching on it, nothing more is sent
+        for d in map.divisions.borrow_mut().iter_mut() {
+            if d.0 == spare {
+                d.4 = Some(21);
+            }
+        }
+        assert_eq!(run(&mut state, &map, &on, START + 2 * DAY), Some(None));
+    }
+
+    #[test]
+    fn a_flank_division_rejoins_its_army_when_its_province_is_held() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!({"stack": 2, "garrison": false}));
+        run(&mut state, &map, &on, START);
+        map.set(40.0, Some(20));
+        map.divisions.borrow_mut()[2].4 = None;
+        run(&mut state, &map, &on, START + DAY);
+        assert!(state.strike.flank.contains_key("d2"));
+        // it stands in 21 (held now) and the objective falls: the next strike takes it along
+        map.divisions.borrow_mut()[2].2 = 21;
+        map.divisions.borrow_mut()[2].4 = None;
+        map.taken.borrow_mut().push(20);
+        for d in map.divisions.borrow_mut().iter_mut().take(2) {
+            d.2 = 20;
+            d.4 = None;
+        }
+        let line = run(&mut state, &map, &on, START + 4 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("on province 30"), "{line}");
+        assert!(!state.strike.flank.contains_key("d2"));
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert!(args.get("divisions").is_none(), "{args}");
+    }
+
+    #[test]
+    fn without_widen_the_left_over_divisions_wait_in_their_province() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!({"stack": 2, "widen": false}));
+        run(&mut state, &map, &on, START);
+        map.set(40.0, Some(20));
+        map.divisions.borrow_mut()[2].4 = None;
+        assert_eq!(run(&mut state, &map, &on, START + DAY), Some(None));
     }
 }
