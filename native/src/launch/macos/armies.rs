@@ -3066,6 +3066,8 @@ fn order_at(
 /// list, a click on a division's row selects that division alone (as for a detach), then one
 /// right click on the province. Each order counts when that division marches on the province;
 /// the others of the army keep their orders. A division already marching on it gets no input.
+/// A division that takes no order (live 15 Nov 2026: one division refused every order for weeks
+/// and held its whole army back) is passed over; an error only when none took the order.
 pub(super) fn move_divisions(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -3074,13 +3076,17 @@ pub(super) fn move_divisions(
     state: i32,
     province: i32,
 ) -> Result<()> {
+    let mut refused: Vec<&str> = Vec::new();
     for id in ids {
         if read(process, division_headings)?.get(id) == Some(&province) {
             continue;
         }
         clear_notices(process, keys)?;
         select_army(process, keys, army)?;
-        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let Ok(row) = settled(process, "division row", |r, i| division_row(r, i, id)) else {
+            refused.push(id);
+            continue;
+        };
         let (x, y) = row.center();
         keys.click(GAME, x, y)?;
         wait(process, "division selected", |r, i| {
@@ -3117,11 +3123,14 @@ pub(super) fn move_divisions(
             }
         }
         if !took {
-            return Err(Error::new(
-                "input_readback_failed",
-                format!("Division {id} took no march order to province {province} (not on screen, or its map icons took every click)"),
-            ));
+            refused.push(id);
         }
+    }
+    if !ids.is_empty() && refused.len() == ids.len() {
+        return Err(Error::new(
+            "input_readback_failed",
+            format!("No division took a march order to province {province} (not on screen, or its map icons took every click): {}", refused.join(", ")),
+        ));
     }
     Ok(())
 }

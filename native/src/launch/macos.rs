@@ -5542,7 +5542,9 @@ impl MacClock {
                     let (on_way, there) = count()?;
                     let detail = json!({"army":army,"state_id":state,"province_id":p,
                         "divisions":ids.len(),"divisions_heading":on_way,"divisions_there":there});
-                    Ok(if on_way + there >= ids.len() {
+                    // Most of them on the way counts: a division that takes no order is reported
+                    // in the counts and does not hold the others back.
+                    Ok(if (on_way + there) * 2 >= ids.len() && on_way + there > 0 {
                         journal::Outcome::Reached(detail)
                     } else if retry {
                         journal::Outcome::Diverged(detail)
