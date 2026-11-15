@@ -8,7 +8,9 @@ runs, [H] judgement, [?] unverified. Dates use the game's 365-day calendar; focu
 **Win condition.** Full control (every province) of **Eritrea 550, Italian Somaliland 559 and Jubaland 844**,
 then the decision **`ETH_defeat_italy`** "Defeat the Colonizers": Italy's AI always accepts (option a 10,
 b 0) and transfers the three states with a white peace, as long as Italy is in no faction [V MECH §2,
-DETH:3-61, events/Ethiopia.txt:9-55]. Second route: Italy's withdrawal offer (AI from 1937-03-01) —
+DETH:3-61, events/Ethiopia.txt:9-55]. With By Blood Alone active (this plan's DLC set) the decision's category is
+hidden, so the decision is never offered [V common/decisions/categories/ETH_decision_categories.txt:5-22]: the
+routes below end the war. Second route: Italy's withdrawal offer (AI from 1937-03-01) —
 accept only when it hands over both 550 and 559. Third route: focus `ETH_fait_accompli` (needs every
 Ethiopian state controlled) [V MECH §2].
 

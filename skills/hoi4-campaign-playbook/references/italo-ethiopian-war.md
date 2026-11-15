@@ -40,7 +40,11 @@ all dates below use it.
    and Massaua-Asmara. Section 7.
 9. Ethiopia wins outright with the decision **ETH_defeat_italy** ("Defeat the Colonizers") once it fully
    controls Eritrea 550, Somaliland 559 and Jubaland 844 while Italy is in no faction; Italy's AI always
-   accepts (ai_chance 10 vs 0) and hands over the three states with a white peace. Section 6.
+   accepts (ai_chance 10 vs 0) and hands over the three states with a white peace. Section 6. **Only without
+   By Blood Alone:** the decision's category `ETH_defeat_italy_category` is visible only when the DLC is not
+   active (`common/decisions/categories/ETH_decision_categories.txt`). With it active the decision is never
+   offered; the war then ends by Italy's withdrawal decision (`ITA_withdraw_from_ethiopia`, open once Italy
+   lacks full control of 550, 559 or 844) or Ethiopia's focus `ETH_fait_accompli` (section 2).
 10. Aussa (tag AFA, state 908) is a separate neutral country between Eritrea and Addis. Once Italy fully
     controls an Ethiopian core state touching 908 (Tigray, Wello, Hararghe or Shewa), Italy gets an event
     to demand its subjugation; Aussa's AI almost always folds and Italy annexes 908 with two free bands.
@@ -68,7 +72,7 @@ Missions activate on the first daily check, so a date can shift by a day.
 | Way | Trigger | Result |
 |---|---|---|
 | Ethiopia capitulates | surrender progress >= limit (section 3) | peace conference; `ITA_end_the_italo_ethiopian_war`: victory flag if Italy or a subject controls state 271, else **defeat flag** |
-| Ethiopia's decision `ETH_defeat_italy` | ETH has full control of 550, 559, 844, at war with ITA, ITA in no faction | event `ETH_events.1` to Italy: a = ETH gets 550, 559, 844, white peace, Italy -25% fascism, -10% stability, completes Struggle in Ethiopia; AI ai_chance a 10, b 0 |
+| Ethiopia's decision `ETH_defeat_italy` (not offered with By Blood Alone active: its category is hidden then) | ETH has full control of 550, 559, 844, at war with ITA, ITA in no faction | event `ETH_events.1` to Italy: a = ETH gets 550, 559, 844, white peace, Italy -25% fascism, -10% stability, completes Struggle in Ethiopia; AI ai_chance a 10, b 0 |
 | Italy's decision `ITA_withdraw_from_ethiopia` | date > 1937-01-01 OR Italy lacks full control of 550, 559 or 844; 15 PP; once | event `BBA_italy_second_italo_ethiopian_war.1` to ETH: accept = ETH gets each of 550/559/844 it fully controls, plus Afar 908 if Italian-owned, white peace. AI ETH never accepts if stronger than Italy |
 | Ethiopian focus `ETH_fait_accompli` | all ETH-owned states controlled by ETH or ally, Italy not in civil war | event .120 to Italy: a = ETH gets every Italian African state ETH controls, white peace (AI a 10 x modifiers vs b 2); b = Italy -25% war support, -20% stability, -250 PP, -20% ruling popularity, escalation +1 |
 | Ethiopian focus `ETH_international_mediation` (exile branch) | escalation > 6, ETH controls > 4 states, LoN active | event .110 to Italy: a = white peace; b = -5% war support, -100 PP, Italy leaves the LoN and every democratic LoN major gets event .113 (topple_government wargoal on Italy) |
