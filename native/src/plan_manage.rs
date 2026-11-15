@@ -364,6 +364,24 @@ fn supply(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> 
     Some(read)
 }
 
+/// Archetypes the fielded divisions lack that no production line makes ("name (short n)").
+fn unproduced_army_gaps(read: &Value) -> Vec<String> {
+    list(read, "equipment")
+        .iter()
+        .filter(|row| {
+            row["fielded_short"].as_f64().unwrap_or(0.0) > 0.0
+                && row["production_lines"].as_i64().unwrap_or(0) == 0
+        })
+        .map(|row| {
+            format!(
+                "{} (short {:.0})",
+                text(&row["archetype"]),
+                row["fielded_short"].as_f64().unwrap_or(0.0)
+            )
+        })
+        .collect()
+}
+
 /// hoi4_stockpile, read at most once a game day (None when unreadable or listing nothing).
 fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
     if let Some((at, read)) = &state.manage.stockpile {
@@ -574,6 +592,46 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
                 }
                 let cleared = nudge(state, kinds);
                 lines.push(format!("{name}: {step} step nudged ({cleared} timers)"));
+                if name == "missing_equipment_production" && now - since >= persist * DAY {
+                    // The game raises it for equipment that reinforcements (divisions, garrisons,
+                    // air wings) or queued divisions request and no line makes. Army gaps are
+                    // read (hoi4_stockpile) and owned by the stockpile rule; the others are not
+                    // read, so nudging the production step never closes them (n1, 16 Nov 2026:
+                    // open 230 days). Say which case it is, once every 60 game days.
+                    let gaps = stockpile(state, tools, now)
+                        .map(|read| unproduced_army_gaps(&read))
+                        .unwrap_or_default();
+                    if !state.skipped(now, "megap", "x") {
+                        state.skip(now, "megap", "x", 60 * DAY);
+                        let why = if gaps.is_empty() {
+                            "every equipment the divisions lack has a production line, so the request \
+                             comes from garrison or air reinforcement or a queued division, which the \
+                             server does not read: hover the alert (its tooltip lists the equipment), add \
+                             a line with hoi4_production_add, or put the alert in manage.alerts_ignore \
+                             with the reason"
+                                .to_string()
+                        } else {
+                            format!(
+                                "the divisions lack equipment no line makes: {}; add a line with \
+                                 hoi4_production_add or a production entry",
+                                gaps.join(", ")
+                            )
+                        };
+                        wake(
+                            state,
+                            plan,
+                            now,
+                            3,
+                            &reason,
+                            format!(
+                                "game alert {name} has stayed {} game days: {why}",
+                                (now - since) / DAY
+                            ),
+                            evidence,
+                        );
+                    }
+                    continue;
+                }
                 if now - since >= persist * DAY {
                     wake(
                         state,
@@ -1580,7 +1638,30 @@ fn resources_step(
     let priority = strings(plan, "production_priority");
     let mut short: BTreeSet<String> = BTreeSet::new();
     let mut lines: Vec<String> = Vec::new();
+    let mut units = 0.0f64;
     if let Ok(read) = tools.call("hoi4_production_shortages", &json!({})) {
+        // A resource short for the whole country that no line draws (coal for energy in 1.19)
+        // has no priority line to show it, yet it slows every factory: it counts too (n1, 16 Nov
+        // 2026: coal short 205 days under the insufficient_energy alert, the step saw "no deficit").
+        let drawn: BTreeSet<String> = list(&read, "lines")
+            .iter()
+            .flat_map(|l| list(l, "resources"))
+            .map(|a| text(&a["resource"]).to_string())
+            .collect();
+        if let Ok(country) = tools.call("hoi4_resources", &json!({})) {
+            if let Some(map) = country["resources"].as_object() {
+                for (name, r) in map {
+                    if r["shortage"]["short"] == json!(true) && !drawn.contains(name) {
+                        let deficit = r["shortage"]["deficit"].as_f64().unwrap_or(0.0);
+                        units += deficit;
+                        lines.push(format!(
+                            "{name} short {deficit:.0} (country demand, no line draws it)"
+                        ));
+                        short.insert(name.clone());
+                    }
+                }
+            }
+        }
         for line in list(&read, "lines") {
             let equipment = text(&line["equipment"]);
             let of: Vec<String> = strings(line, "short_of");
@@ -1659,6 +1740,9 @@ fn resources_step(
         ),
     );
     if now - since >= days * DAY {
+        if let Some(done) = raise_import_budget(state, tools, plan, lease, now, units, &deficit)? {
+            return Ok(Some(done));
+        }
         wake(
             state,
             plan,
@@ -1670,6 +1754,71 @@ fn resources_step(
         );
     }
     Ok(None)
+}
+
+/// A deficit that automatic importing has not closed in `deficit_wake_days` raises its budget by
+/// the factories the deficit costs (one civilian factory buys about 8 units), up to the factories
+/// the game offers and `auto_import.budget_max` (the plan's budget + 2 by default); at most once
+/// every 14 game days. None when there is nothing to raise (the player is woken instead).
+fn raise_import_budget(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    units: f64,
+    deficit: &str,
+) -> Result<Option<String>> {
+    if state.skipped(now, "mimpraise", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mimpraise", "x", 14 * DAY);
+    let (_, budget) = import_cfg(plan);
+    let cap = plan["auto_import"]["budget_max"]
+        .as_i64()
+        .or(budget.map(|b| b + 2))
+        .unwrap_or(i64::MAX);
+    let Ok(read) = tools.call("hoi4_auto_import", &json!({"lease_token": lease})) else {
+        return Ok(None);
+    };
+    let auto = &read["auto_import"];
+    let (Some(have), Some(available)) = (
+        auto["budget_factories"].as_i64(),
+        auto["available_factories"].as_i64(),
+    ) else {
+        return Ok(None);
+    };
+    if auto["enabled"] != json!(true) {
+        return Ok(None);
+    }
+    let need = ((units / 8.0).ceil() as i64).max(1);
+    let to = (have + need).min(available).min(cap);
+    if to <= have {
+        note(
+            state,
+            "resources",
+            format!(
+                "deficit {deficit}: import budget {have} cannot grow (available {available}, cap {})",
+                if cap == i64::MAX { "none".to_string() } else { cap.to_string() }
+            ),
+        );
+        return Ok(None);
+    }
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_auto_import",
+        json!({"enabled": true, "budget": to}),
+        "ai",
+    )?;
+    note(
+        state,
+        "resources",
+        format!("deficit {deficit} outlasted auto-import: budget {have} -> {to}: {ok}"),
+    );
+    Ok(Some(format!(
+        "auto_import budget {have} -> {to} for {deficit}: {ok} {why}"
+    )))
 }
 
 /// The plan's auto-import: (allowed, budget). `auto_import` true, a budget number, or an object
@@ -4933,6 +5082,106 @@ mod tests {
             json!(["chromium", "steel"])
         );
         assert_eq!(actions(&tools).len(), 1);
+    }
+
+    #[test]
+    fn a_country_wide_shortage_no_line_draws_counts_and_a_lasting_one_raises_the_import_budget() {
+        // n1, 16 Nov 2026: coal short (energy) 205 days, the step saw "no deficit on a priority line"
+        let tools = fake(vec![
+            (
+                "hoi4_production_shortages",
+                json!({"lines": [{"equipment": "infantry_equipment_1", "short_of": [],
+                    "resources": [{"resource": "steel"}]}]}),
+            ),
+            (
+                "hoi4_resources",
+                json!({"resources": {"coal": {"shortage": {"short": true, "deficit": 5.0}},
+                    "steel": {"shortage": {"short": false, "deficit": 0.0}}}}),
+            ),
+            (
+                "hoi4_auto_import",
+                json!({"auto_import": {"enabled": true, "budget_factories": 3, "available_factories": 6}}),
+            ),
+        ]);
+        let plan = json!({"auto_import": {"budget": 3}, "production_priority": ["infantry_equipment"],
+            "manage": {"off": ["manpower", "stability", "equipment_fill", "stockpile", "trucks"]}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("auto_import on (budget 3) for coal: true Verified")
+        );
+        step(&mut state, &tools, &plan, "l", START + 7 * DAY).unwrap();
+        let out = step(&mut state, &tools, &plan, "l", START + 14 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("auto_import budget 3 -> 4 for coal: true Verified")
+        );
+        let last = actions(&tools).pop().unwrap().1;
+        assert_eq!(
+            (last["budget"].clone(), last["enabled"].clone()),
+            (json!(4), json!(true))
+        );
+        // the cap (budget + 2 = 5) and the 14-day spacing hold
+        set_reply(
+            &tools,
+            "hoi4_auto_import",
+            json!({"auto_import": {"enabled": true, "budget_factories": 5, "available_factories": 6}}),
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 28 * DAY).unwrap();
+        assert_eq!(out, None);
+        assert_eq!(
+            wakes(&mut state).last().unwrap()["reason"],
+            "resource_deficit"
+        );
+    }
+
+    #[test]
+    fn a_lasting_missing_production_alert_says_whether_an_army_gap_or_an_unread_request_holds_it() {
+        let tools = fake(vec![
+            (
+                "hoi4_alerts",
+                json!({"alerts": [{"frame": 8, "alert": "missing_equipment_production"}]}),
+            ),
+            (
+                "hoi4_stockpile",
+                json!({"equipment": [{"archetype": "artillery_equipment", "fielded_short": 64.0,
+                    "production_lines": 1, "stockpile": 40.0}]}),
+            ),
+        ]);
+        let plan = json!({"production": [{"equipment": "artillery_equipment_1", "factories": 3}],
+            "manage": {"alert_persist_days": 3,
+            "off": ["manpower", "stability", "equipment_fill", "resources", "stockpile", "trucks"]}});
+        let mut state = State::default();
+        for day in 0..3 {
+            step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        assert!(wakes(&mut state).is_empty());
+        step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        let alarms = wakes(&mut state);
+        assert_eq!(alarms.len(), 1);
+        let text = alarms[0]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+            + alarms[0]["why"].as_str().unwrap_or_default();
+        assert!(
+            text.contains("garrison or air reinforcement"),
+            "{}",
+            alarms[0]
+        );
+        // not again within 60 days
+        for day in 4..40 {
+            step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        assert!(wakes(&mut state).is_empty());
+        // an army gap without a line is named
+        let read = json!({"equipment": [{"archetype": "anti_tank_equipment", "fielded_short": 12.0,
+            "production_lines": 0}]});
+        assert_eq!(
+            unproduced_army_gaps(&read),
+            vec!["anti_tank_equipment (short 12)"]
+        );
     }
 
     fn set_reply(tools: &Fake, tool: &str, v: Value) {

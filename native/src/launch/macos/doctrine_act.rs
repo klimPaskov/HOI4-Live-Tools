@@ -540,9 +540,27 @@ fn adopt(process: &dyn Process, keys: &dyn GameInput, t: &Target, display: &str)
             Ok(gui_tree::shown(r, button)? && !gui_tree::disabled(r, button)?)
         })?;
         if !unlock_enabled {
+            // Say why: the row's own cost text (the game's price with every cost modifier) and
+            // the experience held now (n1, 16 Nov 2026: refused three times with no reason).
+            let cost_text = read(process, |r, i| {
+                let root = selection_root(r, i)?.ok_or_else(|| {
+                    Error::new("window_not_open", "Doctrine selection list closed")
+                })?;
+                let grid = pk::need(r, i, root, "doctrines_grid", 6)?;
+                let items = pk::items(r, i, grid)?;
+                match items.get(row) {
+                    Some(item) => pk::text(r, i, item.frame, "xp_cost_text", 2),
+                    None => Ok(None),
+                }
+            })
+            .ok()
+            .flatten();
+            let have = read(process, doctrines::snapshot)
+                .ok()
+                .and_then(|s| doctrines::xp_index(&t.xp_type).map(|k| s.xp[k]));
             return Err(refuse(
                 "doctrine_unavailable",
-                "The game disables Unlock for this doctrine (not enough experience or a precondition is unmet); nothing was adopted",
+                unlock_refusal(display, &t.xp_type, cost_text.as_deref(), have),
             ));
         }
         pk::click(process, keys, "unlock button", |r, i| {
@@ -555,6 +573,48 @@ fn adopt(process: &dyn Process, keys: &dyn GameInput, t: &Target, display: &str)
     })();
     leave(process, keys);
     result
+}
+
+/// The number in a cost text ("55", "£army_experience 55", "55.5").
+fn cost_number(text: &str) -> Option<f64> {
+    let digits: String = text
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    digits.trim_end_matches('.').parse().ok()
+}
+
+/// Why Unlock is disabled, from the row's cost text and the experience held: a shortfall names
+/// both numbers; a cost that is covered names the precondition as the cause.
+pub(super) fn unlock_refusal(
+    display: &str,
+    xp_type: &str,
+    cost_text: Option<&str>,
+    have: Option<f64>,
+) -> String {
+    let cost = cost_text.and_then(cost_number);
+    let held = have.map(|h| format!("{} {xp_type} experience held", mgmt::round(h, 1)));
+    match (cost, have) {
+        (Some(c), Some(h)) if h + 0.05 < c => format!(
+            "Unlock disabled: {display} costs {c} {xp_type} experience, {} held ({} short; the \
+             game's price with its cost modifiers); nothing was adopted",
+            mgmt::round(h, 1),
+            mgmt::round(c - h, 1)
+        ),
+        (Some(c), Some(_)) => format!(
+            "The game disables Unlock for {display} although its cost {c} is covered ({}): the \
+             cause is not experience but an unmet precondition (its `available` trigger, a choice \
+             it excludes, or the track); nothing was adopted",
+            held.unwrap_or_default()
+        ),
+        _ => format!(
+            "The game disables Unlock for {display} (cost text {:?}, {}): not enough experience \
+             or a precondition is unmet; nothing was adopted",
+            cost_text.unwrap_or("unread"),
+            held.unwrap_or_else(|| "experience unread".into())
+        ),
+    }
 }
 
 fn leave(process: &dyn Process, keys: &dyn GameInput) {
@@ -675,7 +735,7 @@ pub(super) fn call(
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_doctrine_adopt","description":"Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace` (swap the grand doctrine or the track's subdoctrine already chosen, instead of the refusals grand_doctrine_set and track_occupied) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_doctrine_adopt","description":"Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled; the message names the game's price read from the row and the experience held, or says the price is covered and a precondition is unmet). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace` (swap the grand doctrine or the track's subdoctrine already chosen, instead of the refusals grand_doctrine_set and track_occupied) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
 }
 
 #[cfg(test)]
@@ -764,6 +824,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_disabled_unlock_names_the_shortfall_or_the_precondition() {
+        let m = unlock_refusal("Great War Infantry", "army", Some("55"), Some(41.2));
+        assert!(
+            m.contains("costs 55 army experience") && m.contains("13.8 short"),
+            "{m}"
+        );
+        let m = unlock_refusal("Great War Infantry", "army", Some("55"), Some(80.0));
+        assert!(
+            m.contains("not experience but an unmet precondition"),
+            "{m}"
+        );
+        let m = unlock_refusal("X", "army", None, Some(10.0));
+        assert!(
+            m.contains("unread") && m.contains("10 army experience held"),
+            "{m}"
+        );
+        assert_eq!(cost_number("£army_experience 57.5"), Some(57.5));
+        assert_eq!(cost_number("none"), None);
+    }
     #[test]
     fn best_cost_reduction_lowers_the_estimate() {
         let c = cat();

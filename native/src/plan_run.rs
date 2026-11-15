@@ -3950,7 +3950,28 @@ fn extras_step(
                 state.doc_xp.remove(&part_key);
                 state.done.insert(part_key, now);
             } else {
-                if why.contains("doctrine_unavailable")
+                // The tool read the game's own price and the experience held: a shortfall is
+                // experience after all, so the entry waits for that price and is not dropped.
+                let priced = why
+                    .split(" costs ")
+                    .nth(1)
+                    .and_then(|t| t.split_whitespace().next())
+                    .and_then(|n| n.parse::<f64>().ok())
+                    .filter(|_| why.contains(" short;") && why.contains("Unlock disabled"));
+                if let Some(price) = priced {
+                    let more = (cost * 0.2).max(10.0);
+                    state
+                        .doc_xp
+                        .insert(part_key.clone(), (price - more).max(xp));
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: the game prices it at {price:.0} experience ({xp:.0} held); \
+                             waits for it (the plan's xp {cost:.0} is below the game's price)"
+                        ),
+                    );
+                } else if why.contains("doctrine_unavailable")
                     || why.contains("insufficient_experience")
                     || why.contains("Unlock")
                 {
@@ -7260,8 +7281,15 @@ mod tests {
         calls: RefCell<Vec<(String, Value)>>,
         replies: HashMap<&'static str, Value>,
         refuse: RefCell<HashMap<String, &'static str>>,
+        refuse_text: RefCell<HashMap<String, String>>,
     }
     impl Fake {
+        fn refuse_with(&self, what: &str, code: &'static str, text: &str) {
+            self.refuse.borrow_mut().insert(what.into(), code);
+            self.refuse_text
+                .borrow_mut()
+                .insert(what.into(), text.into());
+        }
         fn refuse(&self, what: &str, code: &'static str) {
             self.refuse.borrow_mut().insert(what.into(), code);
         }
@@ -7273,7 +7301,11 @@ mod tests {
                 .push((name.to_string(), args.clone()));
             if name.starts_with("hoi4_") && args.get("request_id").is_some() {
                 if let Some(code) = self.refuse.borrow().get(name) {
-                    return Err(crate::error::Error::new(code, "refused by the fake"));
+                    let text = self.refuse_text.borrow().get(name).cloned();
+                    return Err(crate::error::Error::new(
+                        code,
+                        text.unwrap_or_else(|| "refused by the fake".into()),
+                    ));
                 }
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
@@ -7285,6 +7317,7 @@ mod tests {
             calls: RefCell::new(Vec::new()),
             replies: replies.into_iter().collect(),
             refuse: RefCell::new(HashMap::new()),
+            refuse_text: RefCell::new(HashMap::new()),
         }
     }
     #[test]
@@ -13033,6 +13066,29 @@ mod tests {
             assert_eq!(doctrine_pass(&mut state, &tools, &plan, week), None);
         }
         assert_eq!(adopted(&tools).len(), 1);
+    }
+
+    #[test]
+    fn a_doctrine_priced_above_the_held_experience_waits_for_the_price_and_is_not_dropped() {
+        // n1, 16 Nov 2026: refused three times with no reason and dropped; the tool now reads the
+        // game's price from the row, and a shortfall is waited out.
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "great_war_infantry", "xp": 55}]});
+        let tools = doctrine_tools();
+        tools.refuse_with(
+            "hoi4_doctrine_adopt",
+            "doctrine_unavailable",
+            "Unlock disabled: Great War Infantry costs 180 army experience, 150 held (30 short; the \
+             game's price with its cost modifiers); nothing was adopted",
+        );
+        let mut state = State::default();
+        for week in 0..6 {
+            doctrine_pass(&mut state, &tools, &plan, week * 3);
+        }
+        // tried once, then waits at 150 for 180: never dropped
+        assert_eq!(adopted(&tools).len(), 1);
+        assert!(!state.done.contains_key("doc:id:inf"));
+        assert!(!state.doc_refused.contains_key("doc:id:inf"));
     }
 
     #[test]
