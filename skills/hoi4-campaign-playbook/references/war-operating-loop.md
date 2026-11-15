@@ -316,11 +316,12 @@ off for every army.
 measured twice from another seat, it took Ethiopia's capitulation on 17 June once and in early
 September once (2 of 32 victory points in mid-February, 7 in mid-April), so judge a run against a
 spread of dates, not one mark, and do not end a run as lost only because it is behind the faster
-one. The strike method won by date ahead of the slow AI game several times and stalled at 5-17
-victory points in others, each time with stacks starving at the head; spreading (`stack`,
-`widen`) is the answer to that and still has to show it holds over a series of runs. Garrisons
-for taken victory points are open. Treat the numbers above as defaults to check, not tuned
-values.
+one. With spreading (`stack`, `widen`) and capped assembly marches, four of five product runs in a
+row won in 1936 (late June to early September); the one that lost stood with a whole army in a
+province that fed nothing. Land with no supply at all (no hub or port in reach) still traps armies
+that must cross it; strike across it quickly with few divisions and keep the rest on fed land.
+Garrisons for taken victory points and guards for one's own colonies behind an advance are open.
+Treat the numbers above as defaults to check, not tuned values.
 
 ## 6. Principles (any war)
 
