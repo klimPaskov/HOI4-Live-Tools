@@ -155,6 +155,9 @@ pub(super) struct Memory {
     post: HashMap<String, (String, i64, GameHour)>,
     /// (army, state) -> until when a post order the game refused is not sent again
     post_wait: HashMap<(String, i64), GameHour>,
+    /// (army, state) -> until when the posts of a state the enemy is taking are not sent at
+    /// the lost land again (they are on their way or have just fought for it)
+    retake_wait: HashMap<(String, i64), GameHour>,
     /// province -> the supply it gave own divisions the last time they stood in it
     fed_seen: HashMap<i64, f64>,
 }
@@ -412,14 +415,7 @@ impl World<'_> {
     /// Where a post of `state` stands: an own province the enemy holds there first (it is
     /// retaken), else the fed province of the state with the most enemy land around it.
     fn post_target(&self, state: i64) -> Option<i64> {
-        let mut lost: Vec<i64> = self
-            .lost_own
-            .iter()
-            .copied()
-            .filter(|p| self.state_of(*p) == Some(state))
-            .collect();
-        lost.sort_unstable();
-        if let Some(p) = lost.first() {
+        if let Some(p) = self.lost_in(state).first() {
             return Some(*p);
         }
         self.memory
@@ -433,6 +429,32 @@ impl World<'_> {
                     .filter(|n| self.passable(**n) && !self.held(**n))
                     .count();
                 (open, std::cmp::Reverse(*p))
+            })
+            .max()
+            .map(|(_, p)| p.0)
+    }
+    /// Own provinces of `state` an enemy holds now.
+    fn lost_in(&self, state: i64) -> Vec<i64> {
+        let mut lost: Vec<i64> = self
+            .lost_own
+            .iter()
+            .copied()
+            .filter(|p| self.state_of(*p) == Some(state))
+            .collect();
+        lost.sort_unstable();
+        lost
+    }
+    /// A held province of `state` that fed own divisions the last time they stood in it: the
+    /// best fed one seen first, then one never stood in (not known to starve). None when every
+    /// held province of the state starved.
+    fn fed_spot(&self, state: i64) -> Option<i64> {
+        self.memory
+            .graph
+            .iter()
+            .filter(|(p, row)| row.0 == state && self.held(**p) && !self.unfed.contains(*p))
+            .map(|(p, _)| {
+                let fed = self.memory.fed_seen.get(p).copied().unwrap_or(0.0);
+                ((fed * 1000.0) as i64, std::cmp::Reverse(*p))
             })
             .max()
             .map(|(_, p)| p.0)
@@ -668,9 +690,20 @@ fn thin(
     None
 }
 
+/// Why a post order goes out.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum PostKind {
+    /// a covered state is short of its posts
+    Hold,
+    /// the enemy is taking a covered state: its posts go at the lost land
+    Retake,
+    /// posts on land that does not feed them move to fed land of the states they cover
+    Feed,
+}
+
 /// Posts released, new posts taken where divisions stand, and at most one order that sends
-/// divisions to a covered state still short: (army, division ids, province, state).
-type PostOrder = (String, Vec<String>, i64, i64);
+/// divisions to a covered state: (army, division ids, province, state, why).
+type PostOrder = (String, Vec<String>, i64, i64, PostKind);
 #[allow(clippy::type_complexity)]
 fn posts(
     world: &World,
@@ -731,14 +764,61 @@ fn posts(
             .collect();
         let mut held_count = divs.iter().filter(|d| post_of(&d.id).is_some()).count();
         if *guard && exposed.is_empty() {
-            // nothing to face: a guard holds the covered own states where it stands
+            // Nothing to face: a guard holds the covered own states where it stands, on land
+            // that feeds it. Divisions standing where own divisions starved go, one stack an
+            // order, to the nearest fed province of a covered state (live 15 Nov 2026: a guard
+            // with nothing exposed held a captured corridor at 12-19% supply for three months).
+            let mut starving: Vec<&Division> = Vec::new();
             for d in free {
-                if let Some(s) = world.state_of(d.province) {
-                    if states.iter().any(|(c, _)| *c == s) && world.own_states.contains(&s) {
-                        new.push((d.id.clone(), army.clone(), s));
+                let Some(s) = world.state_of(d.province) else {
+                    continue;
+                };
+                if !states.iter().any(|(c, _)| *c == s) || !world.own_states.contains(&s) {
+                    continue;
+                }
+                if world.unfed.contains(&d.province) && d.heading.is_none() {
+                    starving.push(d);
+                } else {
+                    new.push((d.id.clone(), army.clone(), s));
+                }
+            }
+            if order.is_none() {
+                if let Some(first) = starving.first() {
+                    let from = first.province;
+                    let spot = states
+                        .iter()
+                        .filter(|(s, _)| world.own_states.contains(s))
+                        .filter(|(s, _)| {
+                            !memory
+                                .post_wait
+                                .get(&(army.clone(), *s))
+                                .is_some_and(|until| *until > now)
+                        })
+                        .filter_map(|(s, _)| {
+                            let spot = world.fed_spot(*s)?;
+                            Some((world.steps_to_state(from, *s)?, spot, *s))
+                        })
+                        .min();
+                    if let Some((_, spot, s)) = spot {
+                        let ids: Vec<String> = starving
+                            .iter()
+                            .filter(|d| d.province == from)
+                            .map(|d| d.id.clone())
+                            .collect();
+                        moved.extend(ids.iter().filter(|id| post_of(id).is_some()).cloned());
+                        order = Some((army.clone(), ids, spot, s, PostKind::Feed));
                     }
                 }
             }
+            for d in starving {
+                if order.as_ref().is_some_and(|o| o.1.contains(&d.id)) {
+                    continue;
+                }
+                if let Some(s) = world.state_of(d.province) {
+                    new.push((d.id.clone(), army.clone(), s));
+                }
+            }
+            released.extend(moved);
             continue;
         }
         // a strike army keeps at least two divisions to strike with
@@ -765,16 +845,28 @@ fn posts(
             .map(|a| a.group.clone())
             .unwrap_or_default();
         for (s, n) in exposed {
+            // A state the enemy is taking needs more than its watch: two more than the land
+            // it has lost, within the formation's budget (live 15 Nov 2026: one post stood in
+            // a colony while the enemy took fifteen of its provinces around it).
+            let lost = world.lost_in(s);
             let need = if *guard { per_guard } else { n };
+            let need = if lost.is_empty() {
+                need
+            } else {
+                need.max(lost.len() + 2)
+            };
             let mut have = divs.iter().filter(|d| post_of(&d.id) == Some(s)).count()
                 + new
                     .iter()
                     .filter(|(_, a, st)| a == army && *st == s)
                     .count();
+            // A state with fed land keeps no post where own divisions starved.
+            let feeds_somewhere = world.fed_spot(s).is_some();
             // divisions already standing there take the post where they stand
             let mut i = 0;
             while i < free.len() && have < need && held_count < budget {
-                if world.state_of(free[i].province) == Some(s) {
+                let starves = feeds_somewhere && world.unfed.contains(&free[i].province);
+                if world.state_of(free[i].province) == Some(s) && !starves {
                     let d = free.remove(i);
                     if post_of(&d.id).is_some() {
                         moved.push(d.id.clone());
@@ -784,6 +876,31 @@ fn posts(
                     held_count += 1;
                 } else {
                     i += 1;
+                }
+            }
+            // The enemy is taking the state: its posts go at the land it lost (an own province
+            // the enemy holds is retaken, not watched), one order, then they are left to fight
+            // for two days before they are sent again.
+            if let (Some(target), None) = (lost.first().copied(), order.as_ref()) {
+                let waiting = memory
+                    .retake_wait
+                    .get(&(army.clone(), s))
+                    .is_some_and(|until| *until > now);
+                let idle: Vec<String> = divs
+                    .iter()
+                    .filter(|d| {
+                        post_of(&d.id) == Some(s)
+                            || new
+                                .iter()
+                                .any(|(id, a, st)| id == &d.id && a == army && *st == s)
+                    })
+                    .filter(|d| d.province != target && d.heading != Some(target))
+                    .filter(|d| !lost.iter().any(|p| d.heading == Some(*p)))
+                    .map(|d| d.id.clone())
+                    .collect();
+                if !waiting && !idle.is_empty() {
+                    order = Some((army.clone(), idle, target, s, PostKind::Retake));
+                    continue;
                 }
             }
             if have >= need || held_count >= budget || order.is_some() {
@@ -821,7 +938,7 @@ fn posts(
             }
             held_count += ids.len();
             free.retain(|d| !ids.contains(&d.id));
-            order = Some((army.clone(), ids, target, s));
+            order = Some((army.clone(), ids, target, s, PostKind::Hold));
         }
         released.extend(moved);
     }
@@ -1254,12 +1371,17 @@ pub(super) fn step(
             })
         };
         let mut changes: Vec<Change> = Vec::new();
-        if let Some((army, ids, province, post_state)) = post_order {
+        if let Some((army, ids, province, post_state, kind)) = post_order {
+            let what = match kind {
+                PostKind::Hold => "hold covered state",
+                PostKind::Retake => "retake the land the enemy took in covered state",
+                PostKind::Feed => "leave land that does not feed them for covered state",
+            };
             act = Some(Act {
                 tool: "hoi4_army_move",
                 args: json!({"army": army, "state_id": post_state, "province_id": province, "divisions": ids}),
                 line: format!(
-                    "strike {army}: {} division(s) hold covered state {post_state} at province {province}",
+                    "strike {army}: {} division(s) {what} {post_state} at province {province}",
                     ids.len()
                 ),
                 army: army.clone(),
@@ -1270,7 +1392,7 @@ pub(super) fn step(
                 park: Vec::new(),
                 province: None,
                 flank: None,
-                post: Some((ids, post_state)),
+                post: Some((ids, post_state, kind)),
             });
         }
         // One order a tick, the armies in turn after the one that had the last (an army whose
@@ -1742,18 +1864,25 @@ pub(super) fn step(
         memory.stopped.insert(name, now);
     }
     state.strike = memory;
+    status_notes(state, &by_army, now);
     let Some(a) = act else {
         return Ok(Some(None));
     };
     let (ok, why) = state.act(tools, lease, a.tool, a.args, "ws")?;
     state.strike.turn = Some(a.army.clone());
-    if let Some((ids, post_state)) = a.post {
+    if let Some((ids, post_state, kind)) = a.post {
         if ok {
             for id in ids {
                 state
                     .strike
                     .post
                     .insert(id, (a.army.clone(), post_state, now));
+            }
+            if kind == PostKind::Retake {
+                state
+                    .strike
+                    .retake_wait
+                    .insert((a.army.clone(), post_state), now + 2 * DAY);
             }
         } else {
             state
@@ -1805,6 +1934,64 @@ pub(super) fn step(
     Ok(Some(Some(format!("{}: {ok} {why}", a.line))))
 }
 
+/// Where each driven army stands in the step, for the run's `war` block: its mode and
+/// objective, how long, how worn, and the divisions held back (posts per state, garrisons,
+/// resting, widening). No order line says why an army waits; without these lines a run that
+/// stalled could not tell a step that chose to wait from one that never ran.
+fn status_notes(state: &mut State, by_army: &BTreeMap<String, Vec<&Division>>, now: GameHour) {
+    let mut lines: Vec<(String, String)> = Vec::new();
+    for (name, divs) in by_army {
+        let m = &state.strike;
+        let share = |d: &Division| match m.best.get(&d.id) {
+            Some(best) if *best > 0.0 => d.organisation / best,
+            _ => 1.0,
+        };
+        let mean = divs.iter().map(|d| share(d)).sum::<f64>() / divs.len().max(1) as f64;
+        let supply: Vec<f64> = divs
+            .iter()
+            .map(|d| d.supply)
+            .filter(|s| *s >= 0.0)
+            .collect();
+        let supply = if supply.is_empty() {
+            "unread".to_string()
+        } else {
+            format!("{:.0}%", supply.iter().sum::<f64>() / supply.len() as f64)
+        };
+        let mut posts: BTreeMap<i64, usize> = BTreeMap::new();
+        for (army, st, _) in m.post.values() {
+            if army == name {
+                *posts.entry(*st).or_default() += 1;
+            }
+        }
+        let count = |ids: &mut dyn Iterator<Item = &String>| {
+            ids.filter(|id| divs.iter().any(|d| &d.id == *id)).count()
+        };
+        let garrison = count(&mut m.garrison.keys());
+        let parked = count(&mut m.parked.keys());
+        let flank = count(&mut m.flank.keys());
+        let (mode, objective, age) = m.armies.get(name).map_or((Mode::Idle, 0, 0), |a| {
+            (a.mode, a.objective, (now - a.since).max(0) / DAY)
+        });
+        let doing = match mode {
+            Mode::Idle => "idle (no objective open now)".to_string(),
+            Mode::Strike => format!("strikes province {objective} for {age} days"),
+            Mode::March => format!("marches to province {objective} for {age} days"),
+            Mode::Rest => format!("rests after province {objective} for {age} days"),
+        };
+        lines.push((
+            format!("strike:{name}"),
+            format!(
+                "{name} {doing}; {} divisions at {:.0}% of their best organisation, supply {supply}; posts {posts:?}, garrisons {garrison}, resting {parked}, widening {flank}",
+                divs.len(),
+                mean * 100.0
+            ),
+        ));
+    }
+    for (key, line) in lines {
+        super::plan_war::set_note(state, &key, Some(line));
+    }
+}
+
 /// The one order of a tick and what it changes in the step's memory.
 struct Act {
     tool: &'static str,
@@ -1822,8 +2009,8 @@ struct Act {
     province: Option<i64>,
     /// divisions sent to widen the army's land, and the enemy province they take
     flank: Option<(Vec<String>, i64)>,
-    /// divisions sent to hold a covered state, and that state
-    post: Option<(Vec<String>, i64)>,
+    /// divisions sent to hold a covered state, that state, and why
+    post: Option<(Vec<String>, i64, PostKind)>,
 }
 
 /// The plan asks for objective strikes and the step has taken the armies over: the overdrawn
@@ -2431,6 +2618,55 @@ mod tests {
         assert_eq!(run(&mut state, &map, &covered("guard"), START), Some(None));
         assert!(map.actions().is_empty());
         assert_eq!(state.strike.post.len(), 3);
+    }
+
+    #[test]
+    fn a_guard_with_nothing_to_face_leaves_land_that_starves_it_for_fed_covered_land() {
+        let map = Map::new(40);
+        map.annexed.set(true);
+        map.taken.borrow_mut().extend([20, 30]);
+        map.provinces
+            .borrow_mut()
+            .push(json!({"province_id": 40, "supply": 0.5, "demand": 3.0}));
+        let mut state = State::default();
+        state.strike.seen.insert(21);
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        let mut p = plan(json!(true));
+        p["army_layout"] = json!([{"name_hint": "Army 1", "role": "guard", "covers": [4, 1]}]);
+        let line = run(&mut state, &map, &p, START).unwrap().unwrap();
+        assert!(
+            line.contains("leave land that does not feed them for covered state 1 at province 10"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["divisions"].as_array().map(Vec::len), Some(3));
+        assert!(state.strike.post.values().all(|(_, s, _)| *s == 1));
+        // standing on fed land, the guard holds where it stands
+        map.stand(10);
+        map.provinces.borrow_mut().clear();
+        assert_eq!(run(&mut state, &map, &p, START + DAY), Some(None));
+    }
+
+    #[test]
+    fn the_posts_of_a_covered_state_the_enemy_is_taking_go_at_the_lost_land() {
+        let map = Map::new(11);
+        map.lost_own.set(true);
+        let mut state = State::default();
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        let line = run(&mut state, &map, &covered("strike"), START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("retake the land the enemy took in covered state 1 at province 10"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["province_id"], json!(10));
+        // sent, they are left to fight for it: the next order is not the same retake
+        let line = run(&mut state, &map, &covered("strike"), START + DAY)
+            .unwrap()
+            .unwrap_or_default();
+        assert!(!line.contains("retake"), "{line}");
     }
 
     #[test]
