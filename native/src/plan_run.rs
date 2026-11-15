@@ -4855,8 +4855,27 @@ fn war_step(
         // next stall move, each twice as late as the last, with full planning bonus and no
         // execute order (live 14 Nov 2026: three armies stood so from June to December).
         let lines = army["battle_plan_orders"].as_u64().unwrap_or(0);
-        let moved_long_ago =
-            state.war_move.contains(&name) && lines >= 2 && now - since >= MOVE_SETTLES;
+        let settled = state.war_move.contains(&name) && now - since >= MOVE_SETTLES;
+        let moved_long_ago = settled && lines >= 2;
+        // An army sent on a move because its front could not be drawn (the tool found no
+        // highlighted front that time) has no lines at all. It does not stay in move mode
+        // either: after the move has settled its front is tried again, so one failed front
+        // order does not leave a whole axis without a battle plan (live 15 Nov 2026: the
+        // southern army's front failed once in February and it never got a plan; the second
+        // front never opened).
+        if settled
+            && lines < 2
+            && army["plan_executing"] == json!(false)
+            && !standing_in_target
+            && !direct
+            && !liberate
+        {
+            state.war_move.remove(&name);
+            state.war_stage.insert(name.clone(), lines.min(1) as u8);
+            state.war_since.insert(name.clone(), (target, here, now));
+            state.war_cool.insert(name.clone(), now + cooldown);
+            continue;
+        }
         if (stage >= 3 || moved_long_ago)
             && army["plan_executing"] == json!(false)
             && lines > 0
@@ -9859,11 +9878,14 @@ mod tests {
         tick(&mut state, &w, &plan, "l", START).unwrap();
         tick(&mut state, &w, &plan, "l", START + 4 * DAY).unwrap();
         assert_eq!(moves(&w), 1);
-        // the army did not move: the next one waits 8 days, not 4
+        // the army did not move and has no lines: once the move has settled it leaves move mode
+        // and its front is drawn again, instead of a second move twice as late
         tick(&mut state, &w, &plan, "l", START + 8 * DAY + 1).unwrap();
         assert_eq!(moves(&w), 1);
+        assert!(!state.war_move.contains("Army 1"));
         tick(&mut state, &w, &plan, "l", START + 12 * DAY + 1).unwrap();
-        assert_eq!(moves(&w), 2);
+        assert_eq!(moves(&w), 1);
+        assert_eq!(w.calls.borrow().last().unwrap().0, "hoi4_army_front");
     }
 
     #[test]

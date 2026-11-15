@@ -1103,6 +1103,8 @@ mod tests {
     /// by the test.
     struct W {
         executing: Cell<bool>,
+        /// battle plan orders of Army 1 (front and offensive line: 2)
+        orders: Cell<u64>,
         org: Cell<f64>,
         supply: Cell<f64>,
         share: Cell<f64>,
@@ -1118,6 +1120,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 executing: Cell::new(false),
+                orders: Cell::new(2),
                 org: Cell::new(50.0),
                 supply: Cell::new(90.0),
                 share: Cell::new(0.2),
@@ -1181,7 +1184,7 @@ mod tests {
                 },
                 "hoi4_armies" => {
                     let mut armies = vec![json!({"army": "Army 1", "division_count": 10,
-                        "main_state": self.here.get(), "battle_plan_orders": 2,
+                        "main_state": self.here.get(), "battle_plan_orders": self.orders.get(),
                         "plan_executing": self.executing.get(), "commander": "X",
                         "threat": {"share": self.share.get(), "encirclement_risk": self.share.get() >= 0.7},
                         "planning": self.planning.get().map(|p| json!({"mean": p, "min": p, "max": p}))})];
@@ -1569,6 +1572,22 @@ mod tests {
             w.actions().iter().all(|(tool, _)| tool != "hoi4_army_move"),
             "no direct move"
         );
+    }
+
+    #[test]
+    fn an_army_in_move_mode_without_lines_tries_its_front_again() {
+        let w = W::new();
+        let p = plan(json!({}));
+        let (mut state, now) = stalled(&w, &p);
+        // its front could not be drawn and it was sent on a move: no battle plan orders
+        state.war_move.insert("Army 1".into());
+        w.executing.set(false);
+        w.orders.set(0);
+        assert_eq!(tick(&mut state, &w, &p, "l", now).unwrap(), Tick::Nothing);
+        assert!(!state.war_move.contains("Army 1"));
+        assert_eq!(state.war_stage.get("Army 1"), Some(&0));
+        let step = acted(tick(&mut state, &w, &p, "l", now + 2).unwrap());
+        assert!(step.starts_with("war front Army 1 -> state 28"), "{step}");
     }
 
     #[test]
