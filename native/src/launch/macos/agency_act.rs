@@ -168,6 +168,20 @@ pub(super) fn upgrade_refusal(g: &AgencyGui) -> Option<(&'static str, String)> {
     })
 }
 
+/// The game queues an upgrade that needs more civilian factories than are free for projects
+/// instead of running it.
+pub(super) fn factories_refusal(need: f64, free: Option<f64>) -> Option<(&'static str, String)> {
+    let free = free?;
+    (free < need).then(|| {
+        (
+            "upgrade_needs_factories",
+            format!(
+                "The upgrade uses {need:.0} civilian factories while it runs and {free:.0} are free for projects: the game would only queue it"
+            ),
+        )
+    })
+}
+
 fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
     match r {
         Some((code, message)) => Err(refuse(code, message)),
@@ -1123,7 +1137,9 @@ pub(super) fn call(
                             .upgrades
                             .iter()
                             .find(|(_, d)| d.key == u)
-                            .map(|(_, d)| (d.levels, d.requires.clone()))
+                            .map(|(_, d)| {
+                                (d.levels, d.requires.clone(), d.factories_during_progress)
+                            })
                     });
                     upgrade_check(
                         &mem(process)?,
@@ -1131,6 +1147,17 @@ pub(super) fn call(
                         def.as_ref().map(|d| d.0).filter(|l| *l > 0),
                         def.as_ref().map_or(&[][..], |d| &d.1[..]),
                     )?;
+                    // An upgrade uses civilian factories while it runs; with fewer free for
+                    // projects the game only queues it ("not enough Civilian Factories ...
+                    // Queued", live 16 Nov 2026) and nothing runs.
+                    if let Some(need) = def.as_ref().and_then(|d| d.2) {
+                        let free = crate::economy::snapshot(process)?
+                            ["civilian_factories_available_for_projects"]
+                            .as_f64();
+                        if let Some((code, message)) = factories_refusal(need, free) {
+                            return Err(no(code, message));
+                        }
+                    }
                     let mut keys_wanted = vec![branch];
                     keys_wanted.extend(upgrade_key);
                     let names_map = loc::lookup(&dir, &keys_wanted);
@@ -1318,7 +1345,7 @@ pub(super) const TOOLS: [&str; 4] = [
 pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name":"hoi4_agency_create","description":"Create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Refusals from a fresh memory read before any input: agency_exists, agency_creation_in_progress; agency_creation_unavailable when the game disables the button. Verified by memory (creating or created). Live-verified on 1.19.4. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_agency_upgrade","description":"Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_agency_upgrade","description":"Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_needs_factories when the upgrade's civilian factory use (scripts) is above the factories free for projects (the game would only queue it); upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_operative_recruit","description":"Recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, then the candidate `candidate` (0-based index into hoi4_intelligence's candidate list, default 0), picked in the recruitment window by its name. Typed refusals before input, from memory: agency_not_created, no_free_operative_slot, operative_slot_locked (says in how many days candidates are offered: AGENCY_OPERATIVE_RECRUITMENT_TIME counts from creation), unknown_candidate; candidate_not_shown and operative_bar_unavailable from the window. Verified by memory: Reached when the operative count grew, Diverged when someone else was recruited. Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"candidate":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_operative_assign","description":"Send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` refuse with mission_not_built / operation_not_built (operations are started with hoi4_operation_start). Typed refusals before input: invalid_arguments, target_required, country_has_no_states, unknown_country; agency_not_created, operative_unknown, operative_busy (on an operation), already_on_mission from memory; operative_bar_unavailable, mission_unavailable (the game disables the button) from the windows. Verified by memory (mission and target). Live-verified on 1.19.4.","inputSchema":{"type":"object","properties":{"operative":{"type":"integer","minimum":0,"maximum":31},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"country":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["operative","request_id","lease_token"],"additionalProperties":false}}),
     ]
@@ -1460,6 +1487,15 @@ mod tests {
         for key in intelligence::MISSIONS {
             assert!(MISSIONS.iter().any(|m| m.0 == *key), "{key}");
         }
+    }
+
+    #[test]
+    fn an_upgrade_needs_its_factories_free_for_projects() {
+        let (code, message) = factories_refusal(10.0, Some(7.0)).unwrap();
+        assert_eq!(code, "upgrade_needs_factories");
+        assert!(message.contains("10") && message.contains('7'), "{message}");
+        assert!(factories_refusal(10.0, Some(10.0)).is_none());
+        assert!(factories_refusal(10.0, None).is_none());
     }
 
     #[test]
