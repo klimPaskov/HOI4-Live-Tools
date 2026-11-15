@@ -62,6 +62,16 @@
 //!               which is why the game's own AI saw it capitulate at 16-18 of 32 points
 //!   guards      true: guard armies are driven too (the border they held is no longer the
 //!               front). Default false: they keep their fronts
+//!   cover       1: divisions a formation keeps standing on each own state it covers (layout
+//!               `covers`, `guard_states_in_order`, the states of its tasks, sized by
+//!               `cover_counts`) while that state touches enemy land; a guard formation holds
+//!               them with every division and stands still where nothing faces it (a front line
+//!               follows the advance: a guard walked into unfed land and starved, and a strike
+//!               army left two colonies empty and lost one, live 15 Nov 2026). 0: no posts
+//!
+//! Land that fed fewer than two divisions when own divisions last stood in it is remembered:
+//! left-over divisions do not widen into it, an assembly there takes two divisions, and the way
+//! to the nearest victory point counts it dearer.
 //!
 //! The objective of an army, in this order:
 //!   1. its first open `vp_targets` row (rows naming the army, in plan order): the leg is the
@@ -140,6 +150,13 @@ pub(super) struct Memory {
     flank: HashMap<String, (i64, GameHour)>,
     /// the army the last order went to
     turn: Option<String>,
+    /// division id -> (its army, the covered own state it holds, since when): a division kept on
+    /// a state its formation covers while the rest of the army strikes elsewhere
+    post: HashMap<String, (String, i64, GameHour)>,
+    /// (army, state) -> until when a post order the game refused is not sent again
+    post_wait: HashMap<(String, i64), GameHour>,
+    /// province -> the supply it gave own divisions the last time they stood in it
+    fed_seen: HashMap<i64, f64>,
 }
 
 struct Knobs {
@@ -159,6 +176,7 @@ struct Knobs {
     stack: usize,
     widen: bool,
     state_weight: f64,
+    cover: usize,
 }
 
 fn knobs(cfg: &Value) -> Option<Knobs> {
@@ -184,6 +202,7 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         stack: number("stack", 4.0).max(0.0) as usize,
         widen: k["widen"] != json!(false),
         state_weight: number("state_weight", 2.0).max(1.0),
+        cover: number("cover", 1.0).max(0.0) as usize,
     })
 }
 
@@ -212,6 +231,8 @@ struct World<'a> {
     /// victory points that decide their state's control (the largest of a state the enemy
     /// controls): taking one turns the whole state
     decisive: HashSet<i64>,
+    /// provinces that fed own divisions under the floor the last time they stood there
+    unfed: HashSet<i64>,
 }
 
 impl World<'_> {
@@ -289,7 +310,8 @@ impl World<'_> {
                     continue;
                 }
                 let held = self.held(*n);
-                let step = here + if held { 1 } else { 3 };
+                let step =
+                    here + if held { 1 } else { 3 } + if self.unfed.contains(n) { 3 } else { 0 };
                 if cost.get(n).is_none_or(|c| step < *c) {
                     cost.insert(*n, step);
                     let leg = match first.get(&p) {
@@ -373,6 +395,130 @@ impl World<'_> {
 }
 
 impl World<'_> {
+    /// A covered own state the enemy can reach: the player controls it (or the enemy holds part
+    /// of it) and one of its provinces touches land the enemy holds, or is held by the enemy.
+    fn exposed(&self, state: i64) -> bool {
+        let mine = self.own_states.contains(&state)
+            || self
+                .lost_own
+                .iter()
+                .any(|p| self.state_of(*p) == Some(state));
+        mine && self
+            .memory
+            .graph
+            .iter()
+            .any(|(p, row)| row.0 == state && (self.lost_own.contains(p) || self.front(*p)))
+    }
+    /// Where a post of `state` stands: an own province the enemy holds there first (it is
+    /// retaken), else the fed province of the state with the most enemy land around it.
+    fn post_target(&self, state: i64) -> Option<i64> {
+        let mut lost: Vec<i64> = self
+            .lost_own
+            .iter()
+            .copied()
+            .filter(|p| self.state_of(*p) == Some(state))
+            .collect();
+        lost.sort_unstable();
+        if let Some(p) = lost.first() {
+            return Some(*p);
+        }
+        self.memory
+            .graph
+            .iter()
+            .filter(|(p, row)| row.0 == state && self.front(**p) && !self.unfed.contains(*p))
+            .map(|(p, row)| {
+                let open = row
+                    .1
+                    .iter()
+                    .filter(|n| self.passable(**n) && !self.held(**n))
+                    .count();
+                (open, std::cmp::Reverse(*p))
+            })
+            .max()
+            .map(|(_, p)| p.0)
+    }
+    /// Steps over held land from `from` to the nearest province of `state` (None: no way).
+    fn steps_to_state(&self, from: i64, state: i64) -> Option<usize> {
+        if self.state_of(from) == Some(state) {
+            return Some(0);
+        }
+        let mut seen: HashSet<i64> = [from].into();
+        let mut ring = vec![from];
+        for step in 1..=40 {
+            let mut next = Vec::new();
+            for p in ring {
+                for n in self
+                    .memory
+                    .graph
+                    .get(&p)
+                    .map(|r| r.1.as_slice())
+                    .unwrap_or(&[])
+                {
+                    if !(self.held(*n) || self.lost_own.contains(n)) || !seen.insert(*n) {
+                        continue;
+                    }
+                    if self.state_of(*n) == Some(state) {
+                        return Some(step);
+                    }
+                    next.push(*n);
+                }
+            }
+            if next.is_empty() {
+                return None;
+            }
+            ring = next;
+        }
+        None
+    }
+}
+
+/// What a formation keeps on the states it covers while it strikes elsewhere (a task such as a
+/// border guard is divisions inside the formation, plan_formations.rs): a guard formation holds
+/// them with all its divisions, any other with `cover_counts[state]` (the task's size) or the
+/// `cover` knob per state. Army name -> (guard, [(state, divisions)]).
+fn covers(
+    plan: &Value,
+    layout: &[(String, String)],
+    knob: usize,
+) -> HashMap<String, (bool, Vec<(i64, usize)>)> {
+    let mut out: HashMap<String, (bool, Vec<(i64, usize)>)> = HashMap::new();
+    for e in list(plan, "army_layout") {
+        let hint = text(&e["name_hint"]);
+        let Some((_, army)) = layout.iter().find(|(h, a)| h == hint && !a.is_empty()) else {
+            continue;
+        };
+        let guard = text(&e["role"]) == "guard";
+        let mut states: Vec<i64> = Vec::new();
+        for key in ["guard_states_in_order", "covers"] {
+            for s in list(e, key).iter().filter_map(Value::as_i64) {
+                if !states.contains(&s) {
+                    states.push(s);
+                }
+            }
+        }
+        if guard {
+            if let Some(home) = e["state"].as_i64() {
+                if !states.contains(&home) {
+                    states.insert(0, home);
+                }
+            }
+        }
+        let entry = out.entry(army.clone()).or_insert((guard, Vec::new()));
+        entry.0 |= guard;
+        for s in states {
+            let n = e["cover_counts"][s.to_string()]
+                .as_u64()
+                .map_or(knob, |n| n as usize);
+            if n > 0 && !entry.1.iter().any(|(have, _)| *have == s) {
+                entry.1.push((s, n));
+            }
+        }
+    }
+    out.retain(|_, (_, states)| !states.is_empty());
+    out
+}
+
+impl World<'_> {
     /// How much more a victory point counts when it turns its whole state.
     fn state_weight(&self, province: i64, knobs: &Knobs) -> f64 {
         if self.decisive.contains(&province) {
@@ -392,7 +538,12 @@ impl World<'_> {
         let mut best: Option<((bool, bool, usize), i64)> = None;
         for base in bases {
             for n in graph.get(&base).map(|r| r.1.as_slice()).unwrap_or(&[]) {
-                if *n == objective || self.held(*n) || !self.passable(*n) || avoid.contains(n) {
+                if *n == objective
+                    || self.held(*n)
+                    || !self.passable(*n)
+                    || avoid.contains(n)
+                    || self.unfed.contains(n)
+                {
                     continue;
                 }
                 let around = graph.get(n).map(|r| r.1.as_slice()).unwrap_or(&[]);
@@ -515,6 +666,166 @@ fn thin(
         return Some((province, out.iter().map(|d| d.id.clone()).collect(), to.0));
     }
     None
+}
+
+/// Posts released, new posts taken where divisions stand, and at most one order that sends
+/// divisions to a covered state still short: (army, division ids, province, state).
+type PostOrder = (String, Vec<String>, i64, i64);
+#[allow(clippy::type_complexity)]
+fn posts(
+    world: &World,
+    memory: &Memory,
+    cover: &HashMap<String, (bool, Vec<(i64, usize)>)>,
+    by_army: &BTreeMap<String, Vec<&Division>>,
+    kept_base: &dyn Fn(&str) -> bool,
+    now: GameHour,
+) -> (Vec<String>, Vec<(String, String, i64)>, Option<PostOrder>) {
+    let mut released: Vec<String> = Vec::new();
+    for (id, (army, st, since)) in &memory.post {
+        let division = by_army
+            .get(army)
+            .and_then(|ds| ds.iter().find(|d| &d.id == id));
+        let covered = cover
+            .get(army)
+            .is_some_and(|(_, states)| states.iter().any(|(s, _)| s == st));
+        let guard = cover.get(army).is_some_and(|(g, _)| *g);
+        let gone = match division {
+            None => true,
+            Some(d) => {
+                // sent but never arrived (a lost order): free again after 20 days
+                world.state_of(d.province) != Some(*st)
+                    && d.heading.is_none()
+                    && now - since >= 20 * DAY
+            }
+        };
+        if gone || !covered || (!guard && !world.exposed(*st)) {
+            released.push(id.clone());
+        }
+    }
+    let mut new: Vec<(String, String, i64)> = Vec::new();
+    let mut order: Option<PostOrder> = None;
+    let mut armies: Vec<&String> = cover.keys().collect();
+    armies.sort();
+    for army in armies {
+        let (guard, states) = &cover[army];
+        let Some(divs) = by_army.get(army) else {
+            continue;
+        };
+        let mut moved: Vec<String> = Vec::new();
+        let post_of = |id: &str| -> Option<i64> {
+            memory
+                .post
+                .get(id)
+                .filter(|_| !released.iter().any(|r| r == id))
+                .map(|(_, s, _)| *s)
+        };
+        let exposed: Vec<(i64, usize)> = states
+            .iter()
+            .copied()
+            .filter(|(s, _)| world.exposed(*s))
+            .collect();
+        let mut free: Vec<&Division> = divs
+            .iter()
+            .copied()
+            .filter(|d| !kept_base(&d.id) && post_of(&d.id).is_none())
+            .collect();
+        let mut held_count = divs.iter().filter(|d| post_of(&d.id).is_some()).count();
+        if *guard && exposed.is_empty() {
+            // nothing to face: a guard holds the covered own states where it stands
+            for d in free {
+                if let Some(s) = world.state_of(d.province) {
+                    if states.iter().any(|(c, _)| *c == s) && world.own_states.contains(&s) {
+                        new.push((d.id.clone(), army.clone(), s));
+                    }
+                }
+            }
+            continue;
+        }
+        // a strike army keeps at least two divisions to strike with
+        let budget = if *guard {
+            divs.len()
+        } else {
+            divs.len().saturating_sub(2)
+        };
+        let per_guard = divs.len().div_ceil(exposed.len().max(1)).max(1);
+        // a guard's posts on states nothing faces any more are free for the exposed ones
+        if *guard {
+            for d in divs {
+                if let Some(s) = post_of(&d.id) {
+                    if !exposed.iter().any(|(e, _)| *e == s) {
+                        free.push(d);
+                        held_count -= 1;
+                    }
+                }
+            }
+        }
+        let group: Vec<String> = memory
+            .armies
+            .get(army)
+            .map(|a| a.group.clone())
+            .unwrap_or_default();
+        for (s, n) in exposed {
+            let need = if *guard { per_guard } else { n };
+            let mut have = divs.iter().filter(|d| post_of(&d.id) == Some(s)).count()
+                + new
+                    .iter()
+                    .filter(|(_, a, st)| a == army && *st == s)
+                    .count();
+            // divisions already standing there take the post where they stand
+            let mut i = 0;
+            while i < free.len() && have < need && held_count < budget {
+                if world.state_of(free[i].province) == Some(s) {
+                    let d = free.remove(i);
+                    if post_of(&d.id).is_some() {
+                        moved.push(d.id.clone());
+                    }
+                    new.push((d.id.clone(), army.clone(), s));
+                    have += 1;
+                    held_count += 1;
+                } else {
+                    i += 1;
+                }
+            }
+            if have >= need || held_count >= budget || order.is_some() {
+                continue;
+            }
+            if memory
+                .post_wait
+                .get(&(army.clone(), s))
+                .is_some_and(|until| *until > now)
+            {
+                continue;
+            }
+            let Some(target) = world.post_target(s) else {
+                continue;
+            };
+            let mut near: Vec<(bool, usize, i64, &Division)> = free
+                .iter()
+                .filter_map(|d| {
+                    world.steps_to_state(d.province, s).map(|steps| {
+                        let worn = (world.share(d) * 100.0) as i64;
+                        (group.contains(&d.id), steps, worn, *d)
+                    })
+                })
+                .collect();
+            near.sort_by(|a, b| (a.0, a.1, a.2, &a.3.id).cmp(&(b.0, b.1, b.2, &b.3.id)));
+            let take = (need - have).min(budget - held_count);
+            let ids: Vec<String> = near.iter().take(take).map(|n| n.3.id.clone()).collect();
+            if ids.is_empty() {
+                continue;
+            }
+            for id in &ids {
+                if post_of(id).is_some() {
+                    moved.push(id.clone());
+                }
+            }
+            held_count += ids.len();
+            free.retain(|d| !ids.contains(&d.id));
+            order = Some((army.clone(), ids, target, s));
+        }
+        released.extend(moved);
+    }
+    (released, new, order)
 }
 
 /// The army's plan rows in order: (province, path).
@@ -800,6 +1111,28 @@ pub(super) fn step(
         }
         state.strike.seen.insert(d.province);
     }
+    for (province, (supply, _)) in &fed {
+        state.strike.fed_seen.insert(*province, *supply);
+    }
+    // Land that fed fewer than two divisions (the fewest that can attack) when own divisions
+    // last stood in it: an advance, a widening or a post does not go there unless it must
+    // (live 15-16 Nov 2026: three armies starved for months in a corridor at province supply 0).
+    let one_need = {
+        let mut needs: Vec<f64> = divisions
+            .iter()
+            .map(|d| d.need)
+            .filter(|n| *n > 0.0)
+            .collect();
+        needs.sort_by(f64::total_cmp);
+        needs.get(needs.len() / 2).copied().unwrap_or(0.5)
+    };
+    let unfed: HashSet<i64> = state
+        .strike
+        .fed_seen
+        .iter()
+        .filter(|(_, supply)| **supply < 2.0 * one_need)
+        .map(|(p, _)| *p)
+        .collect();
     let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
     let executing: HashSet<String> = list(&roster, "armies")
         .iter()
@@ -833,6 +1166,7 @@ pub(super) fn step(
             lost_own,
             supply: fed,
             decisive,
+            unfed,
         };
         // A garrison holds its victory point while that point is at the front and the division
         // stands in it; then it goes back to its army's orders.
@@ -873,10 +1207,26 @@ pub(super) fn step(
             })
             .map(|(id, _)| id.clone())
             .collect();
-        let kept = |id: &str| {
+        let kept_base = |id: &str| {
             (memory.garrison.contains_key(id) && !released.iter().any(|r| r == id))
                 || (memory.parked.contains_key(id) && !rested.iter().any(|r| r == id))
                 || (memory.flank.contains_key(id) && !rejoined.iter().any(|r| r == id))
+        };
+        // Posts: each state a formation covers keeps its divisions while the rest strike (a
+        // strike army that went north left Somaliland and Jubaland to the enemy, live 15 Nov
+        // 2026; a guard's front line followed the advance into unfed land). A division already
+        // standing in the state takes the post where it stands; else the nearest is sent.
+        let cover = if knobs.cover > 0 {
+            covers(plan, &layout, knobs.cover)
+        } else {
+            HashMap::new()
+        };
+        let (post_released, post_new, post_order) =
+            posts(&world, &memory, &cover, &by_army, &kept_base, now);
+        let kept = |id: &str| {
+            kept_base(id)
+                || (memory.post.contains_key(id) && !post_released.iter().any(|r| r == id))
+                || post_new.iter().any(|(d, _, _)| d == id)
         };
         let flank_targets: HashSet<i64> = memory
             .flank
@@ -904,6 +1254,25 @@ pub(super) fn step(
             })
         };
         let mut changes: Vec<Change> = Vec::new();
+        if let Some((army, ids, province, post_state)) = post_order {
+            act = Some(Act {
+                tool: "hoi4_army_move",
+                args: json!({"army": army, "state_id": post_state, "province_id": province, "divisions": ids}),
+                line: format!(
+                    "strike {army}: {} division(s) hold covered state {post_state} at province {province}",
+                    ids.len()
+                ),
+                army: army.clone(),
+                mode: Mode::Idle,
+                objective: 0,
+                group: None,
+                garrison: None,
+                park: Vec::new(),
+                province: None,
+                flank: None,
+                post: Some((ids, post_state)),
+            });
+        }
         // One order a tick, the armies in turn after the one that had the last (an army whose
         // order keeps failing held every other army back for two weeks: live 15 Nov 2026).
         let names: Vec<&String> = by_army.keys().collect();
@@ -913,6 +1282,9 @@ pub(super) fn step(
             .and_then(|t| names.iter().position(|n| *n > t))
             .unwrap_or(0);
         for name in names[start..].iter().chain(names[..start].iter()).copied() {
+            if act.is_some() {
+                break;
+            }
             let all = &by_army[name];
             if all.len() < 2 || reserve.contains(name) || (!knobs.guards && guards.contains(name)) {
                 continue;
@@ -958,6 +1330,7 @@ pub(super) fn step(
                     park: Vec::new(),
                     province: None,
                     flank: None,
+                    post: None,
                 });
                 break;
             }
@@ -1024,6 +1397,7 @@ pub(super) fn step(
                             park: Vec::new(),
                             province: None,
                             flank: None,
+                            post: None,
                         });
                         break;
                     }
@@ -1092,6 +1466,7 @@ pub(super) fn step(
                             park: ids,
                             province: Some(from),
                             flank: None,
+                            post: None,
                         });
                         break;
                     }
@@ -1142,6 +1517,7 @@ pub(super) fn step(
                         park: Vec::new(),
                         province: None,
                         flank: Some((ids, to)),
+                        post: None,
                     });
                     widened = true;
                     break;
@@ -1268,6 +1644,11 @@ pub(super) fn step(
                 });
                 sent.truncate(knobs.stack);
             }
+            // An assembly province that fed fewer than two divisions last time takes two: the
+            // rest wait on fed land until the strike sends them.
+            if next == Mode::March && world.unfed.contains(&province) && sent.len() > 2 {
+                sent.truncate(2);
+            }
             if next == Mode::Strike && knobs.stack > 0 {
                 sent.sort_by(|a, b| {
                     let near = |d: &Division| world.touches(province, d.province);
@@ -1317,6 +1698,7 @@ pub(super) fn step(
                 park: Vec::new(),
                 province: None,
                 flank: None,
+                post: None,
             });
             break;
         }
@@ -1328,6 +1710,12 @@ pub(super) fn step(
         }
         for id in rejoined {
             memory.flank.remove(&id);
+        }
+        for id in post_released {
+            memory.post.remove(&id);
+        }
+        for (id, army, post_state) in post_new {
+            memory.post.insert(id, (army, post_state, now));
         }
         for (name, mode, objective, at, ended) in changes {
             let army = memory.armies.entry(name).or_default();
@@ -1359,6 +1747,22 @@ pub(super) fn step(
     };
     let (ok, why) = state.act(tools, lease, a.tool, a.args, "ws")?;
     state.strike.turn = Some(a.army.clone());
+    if let Some((ids, post_state)) = a.post {
+        if ok {
+            for id in ids {
+                state
+                    .strike
+                    .post
+                    .insert(id, (a.army.clone(), post_state, now));
+            }
+        } else {
+            state
+                .strike
+                .post_wait
+                .insert((a.army.clone(), post_state), now + 2 * DAY);
+        }
+        return Ok(Some(Some(format!("{}: {ok} {why}", a.line))));
+    }
     if let Some((ids, to)) = a.flank {
         if ok {
             for id in ids {
@@ -1418,6 +1822,8 @@ struct Act {
     province: Option<i64>,
     /// divisions sent to widen the army's land, and the enemy province they take
     flank: Option<(Vec<String>, i64)>,
+    /// divisions sent to hold a covered state, and that state
+    post: Option<(Vec<String>, i64)>,
 }
 
 /// The plan asks for objective strikes and the step has taken the armies over: the overdrawn
@@ -1961,6 +2367,90 @@ mod tests {
             }
         }
         assert_eq!(run(&mut state, &map, &on, START + 2 * DAY), Some(None));
+    }
+
+    fn covered(role: &str) -> Value {
+        let mut p = plan(json!(true));
+        p["army_layout"] = json!([{"name_hint": "Army 1", "role": role, "covers": [1]}]);
+        p
+    }
+
+    #[test]
+    fn a_covered_state_keeps_a_division_where_it_stands_and_the_rest_strike() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        let line = run(&mut state, &map, &covered("strike"), START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("on province 20") && line.contains("2 of 3"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        let sent = args["divisions"].as_array().cloned().unwrap();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(state.strike.post.len(), 1);
+        let (army, post_state, _) = state.strike.post.values().next().cloned().unwrap();
+        assert_eq!((army.as_str(), post_state), ("Army 1", 1));
+    }
+
+    #[test]
+    fn an_army_that_left_its_covered_state_sends_a_division_back() {
+        let map = Map::new(11);
+        map.taken.borrow_mut().push(20);
+        map.stand(20);
+        let mut state = State::default();
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        let line = run(&mut state, &map, &covered("strike"), START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("hold covered state 1 at province 11"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["divisions"].as_array().map(Vec::len), Some(1));
+        assert_eq!(args["state_id"], json!(1));
+        assert_eq!(state.strike.post.len(), 1);
+        // the next order is the strike, without the post
+        let line = run(&mut state, &map, &covered("strike"), START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.contains("on province 30") && line.contains("2 of 3"),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn a_guard_formation_holds_its_covered_state_with_every_division() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        assert_eq!(run(&mut state, &map, &covered("guard"), START), Some(None));
+        assert!(map.actions().is_empty());
+        assert_eq!(state.strike.post.len(), 3);
+    }
+
+    #[test]
+    fn left_over_divisions_do_not_widen_into_land_that_fed_too_little() {
+        let map = Map::new(11);
+        map.provinces
+            .borrow_mut()
+            .push(json!({"province_id": 21, "supply": 0.2, "demand": 3.0}));
+        let mut state = State::default();
+        let on = plan(json!({"stack": 2}));
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(line.contains("2 of 3"), "{line}");
+        let (_, args) = map.actions().last().cloned().unwrap();
+        let sent = args["divisions"].as_array().cloned().unwrap();
+        for d in map.divisions.borrow_mut().iter_mut() {
+            if sent.contains(&json!(d.0)) {
+                d.4 = Some(20);
+            }
+        }
+        assert_eq!(run(&mut state, &map, &on, START + DAY), Some(None));
     }
 
     #[test]

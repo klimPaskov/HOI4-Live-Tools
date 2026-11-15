@@ -185,6 +185,17 @@ pub(super) fn concentrate(plan: &Value) -> Option<Value> {
         covered.extend(ints(&e["covers"]));
         push_unique(f, "covers", &covered);
         push_unique(f, "axis", &ints(&e["axis"]));
+        // the task's size is what the formation keeps on those states (plan_strike.rs posts)
+        if let Some(count) = e["count"].as_u64().filter(|c| *c > 0) {
+            if !f["cover_counts"].is_object() {
+                f["cover_counts"] = json!({});
+            }
+            for s in &covered {
+                let key = s.to_string();
+                let have = f["cover_counts"][&key].as_u64().unwrap_or(0);
+                f["cover_counts"][&key] = json!(have.max(count));
+            }
+        }
     }
     // already concentrated and nothing to widen: leave the plan alone
     let one_theatre = groups.len() < 2;
