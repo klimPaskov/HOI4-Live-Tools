@@ -468,10 +468,18 @@ fn merge_and_lead(
             }
         }
         let reserve = strings(&plan["war"], "reserve");
+        // divisions the sea transfers work on: their army is merged by plan_ship on landing
+        // (live 15 Nov 2026, pt1: a landed army folded into the North Strike here, and the
+        // landing merge then moved the whole North Strike into the Gondar Group)
+        let sailing = super::plan_ship::claimed(state);
         for a in armies {
             let name = text(&a["army"]).to_string();
             let n = a["division_count"].as_u64().unwrap_or(0);
+            let ships = list(a, "divisions")
+                .iter()
+                .any(|d| d.as_str().is_some_and(|id| sailing.contains(id)));
             if n == 0
+                || ships
                 || playing.contains(&name)
                 || reserve.contains(&name)
                 || plan_military::invading(state, plan, &name)
@@ -832,6 +840,45 @@ mod tests {
             .borrow()
             .iter()
             .any(|(n, a)| n == "hoi4_army_merge" && a["source"] == "Home"));
+    }
+
+    #[test]
+    fn an_army_the_sea_transfers_work_on_is_not_merged_into_a_formation() {
+        let plan = concentrate(&layout_plan()).unwrap();
+        let tools = game(vec![(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Army 1", "division_count": 6, "commander": "Messe", "main_state": 550},
+                {"army": "Army 2", "division_count": 3, "commander": "Vecchiarelli", "main_state": 550},
+                {"army": "Army 3", "division_count": 2, "commander": "Baldassarre", "main_state": 559},
+                {"army": "Army 7", "division_count": 2, "commander": null, "main_state": 559,
+                    "divisions": ["d7a", "d7b"]},
+                {"army": "Army 5", "division_count": 1, "commander": null, "main_state": 842}]}),
+        )]);
+        let mut state = State::default();
+        for (h, a) in [
+            ("N1", "Army 1"),
+            ("N2", "Army 2"),
+            ("S1", "Army 3"),
+            ("GA", "Army 5"),
+        ] {
+            state.layout.insert(h.into(), a.into());
+        }
+        state.war_guard.insert("Army 5".into(), 908);
+        super::super::plan_ship::claim(&mut state, "d7b");
+        // Army 7 landed from a sea transfer: plan_ship merges it into its route's join army
+        let out = command_step(&mut state, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: Army 5 (1 division(s)) merged into Army 1 (N1)"),
+            "{out}"
+        );
+        assert!(!tools
+            .actions
+            .borrow()
+            .iter()
+            .any(|(n, a)| n == "hoi4_army_merge" && a["source"] == "Army 7"));
     }
 
     #[test]

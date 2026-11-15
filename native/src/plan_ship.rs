@@ -144,12 +144,19 @@ pub(super) fn claimed(state: &State) -> HashSet<String> {
         .collect()
 }
 
+/// Test helper for sibling modules: mark a division as one the sea transfers work on.
+#[cfg(test)]
+pub(super) fn claim(state: &mut State, id: &str) {
+    state.ship.detached.insert(id.to_string());
+}
+
 struct Row {
     id: String,
     army: Option<String>,
     template: String,
     state: Option<i64>,
     province: Option<i64>,
+    heading: Option<i64>,
 }
 
 /// Own naval-base provinces (hoi4_convoys); empty when unreadable.
@@ -215,6 +222,7 @@ pub(super) fn step(
                 template: text(&d["template"]).to_string(),
                 state: d["state_id"].as_i64(),
                 province: d["province_id"].as_i64(),
+                heading: d["heading_province"].as_i64(),
             })
         })
         .collect();
@@ -281,6 +289,22 @@ fn landings(
             plan_war::set_note(state, "ship", Some(line.clone()));
             line
         };
+        // the army to merge is the shipped one only while it holds nothing but the voyage's
+        // divisions: one another step folded them into (a formation) is never merged away
+        // (live 15 Nov 2026, pt1: the landed army went into the North Strike, and the merge
+        // then moved the whole North Strike into the Gondar Group)
+        let foreign = rows
+            .iter()
+            .any(|r| r.army.as_deref() == Some(source.as_str()) && !voyage.ids.contains(&r.id));
+        if foreign {
+            let line = format!(
+                "sea transfer: {} division(s) landed in state {} and already serve in {source}; not merged",
+                mine.len(),
+                route.to_state
+            );
+            done(state, line);
+            continue;
+        }
         if route.join.is_empty() || source.is_empty() || source == target {
             let line = format!(
                 "sea transfer: {} division(s) of {source} landed in state {}",
@@ -400,6 +424,12 @@ fn departures(
                 let ashore = all
                     .iter()
                     .find(|r| r.province.is_none_or(|p| !ports.contains(&p)));
+                // still marching (to the port): looked at again when it stands (live 15 Nov
+                // 2026, pt1: an army on its way to Piedmont's port was sent to the port of a
+                // state it passed through)
+                if ashore.is_some() && all.iter().any(|r| r.heading.is_some()) {
+                    continue;
+                }
                 if let Some(at) = ashore.and_then(|r| r.state) {
                     if let Some(port) = state_port(tools, at, ports) {
                         let (ok, why) = state.act(
@@ -835,9 +865,18 @@ mod tests {
             step(&mut state, &game, &plan, "l", START + 1).unwrap(),
             None
         );
+        // on its way through another state: no new order while it marches
+        let mut passing = at("a", "Army 6", 2, 41);
+        passing["heading_province"] = json!(50);
+        *game.0.rows.borrow_mut() = json!([passing, at("b", "Army 6", 1, 50)]);
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START + DAY + 1).unwrap(),
+            None
+        );
+        assert_eq!(game.0.sent("hoi4_army_move").len(), 1);
         // both divisions in a port: the sea order to the theatre
         *game.0.rows.borrow_mut() = json!([at("a", "Army 6", 1, 50), at("b", "Army 6", 1, 50)]);
-        let line = step(&mut state, &game, &plan, "l", START + DAY + 1)
+        let line = step(&mut state, &game, &plan, "l", START + DAY + 2)
             .unwrap()
             .unwrap();
         assert!(
@@ -856,5 +895,34 @@ mod tests {
         step(&mut state, &game, &one, "l", START - 1).unwrap();
         let line = step(&mut state, &game, &one, "l", START).unwrap().unwrap();
         assert!(line.contains("Army 8 (1 division(s)) -> state 9"), "{line}");
+    }
+
+    #[test]
+    fn a_landed_voyage_already_inside_a_formation_is_never_merged_away() {
+        let game = Game::new(json!([
+            div("a", Some("Army 6"), "Infantry", Some(1)),
+            div("b", Some("Army 6"), "Infantry", Some(1)),
+            div("s1", Some("Guard"), "Infantry", Some(9)),
+        ]));
+        let plan = plan(2);
+        let mut state = State::default();
+        state.layout.insert("Strike".into(), "Gondar".into());
+        step(&mut state, &game, &plan, "l", START - 1).unwrap();
+        let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
+        assert!(line.contains("-> state 9: true"), "{line}");
+        // landed, but another step folded them into North (which holds s1 too)
+        *game.rows.borrow_mut() = json!([
+            div("a", Some("North"), "Infantry", Some(9)),
+            div("b", Some("North"), "Infantry", Some(9)),
+            div("s1", Some("North"), "Infantry", Some(9)),
+            div("g1", Some("Gondar"), "Infantry", Some(9)),
+        ]);
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START + 20 * DAY).unwrap(),
+            None
+        );
+        assert!(game.sent("hoi4_army_merge").is_empty());
+        assert!(state.ship.voyages.is_empty());
+        assert!(claimed(&state).is_empty());
     }
 }
