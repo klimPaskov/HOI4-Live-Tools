@@ -4160,18 +4160,23 @@ fn war_step(
     } else {
         tools.call("hoi4_supply", &json!({})).ok()
     };
+    // Organisation is judged on the divisions that fight (the more worn half), not on the army
+    // mean: fresh divisions behind the attack kept spent ones attacking (plan_war.rs).
+    let fighting = plan_war::fighting_organisation(supply_read.as_ref());
     let condition: HashMap<String, (f64, f64)> = supply_read
         .as_ref()
         .map(|supply| {
             list(supply, "armies")
                 .iter()
                 .filter_map(|a| {
+                    let army = text(&a["army"]).to_string();
+                    let org = match fighting.get(&army) {
+                        Some(org) => *org,
+                        None => a["organisation_mean"].as_f64()?,
+                    };
                     Some((
-                        text(&a["army"]).to_string(),
-                        (
-                            a["organisation_mean"].as_f64()?,
-                            a["supply_percent_mean"].as_f64().unwrap_or(100.0),
-                        ),
+                        army,
+                        (org, a["supply_percent_mean"].as_f64().unwrap_or(100.0)),
                     ))
                 })
                 .collect()
