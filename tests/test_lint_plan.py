@@ -1427,6 +1427,15 @@ class IntelligenceOperations(unittest.TestCase):
         self.assertTrue(any("no such operation" in m for _, m in out))
         self.assertTrue(any("1 slot" in m for _, m in out))
 
+    def test_more_operatives_than_slots(self):
+        ops = [{"mission": "build_intel_network", "state_id": 839}, {"mission": "build_intel_network", "state_id": 838},
+               {"mission": "propaganda", "target": "ETH"}]
+        out = self.findings("ITA", {"agency": True, "upgrades": ["upgrade_training_centers"], "operatives": ops})
+        self.assertEqual([s for s, _ in out], ["warning"], out)
+        self.assertIn("not a slot", out[0][1])
+        five = ["upgrade_a"] * 5
+        self.assertEqual(self.findings("ITA", {"agency": True, "upgrades": five, "operatives": ops[:2]}), [])
+
     def test_an_operation_that_picks_a_location_is_a_tool_gap(self):
         intel = {"agency": True, "upgrades": ["upgrade_a"] * 5, "operatives": 2,
                  "operations": [{"operation": "operation_coordinated_strike", "target": "ETH"}]}

@@ -1239,7 +1239,7 @@ pub(super) fn call(
             if args.contains_key("operation") {
                 return Err(Error::new(
                     "operation_not_built",
-                    "Launching operations (operation overview window, operative slots, target) is not driven yet; use mission",
+                    "hoi4_operative_assign does not run operations: call hoi4_operation_start {target: <tag>, operation: <key>} (it fills the operative slots itself), or plan intelligence.operations; hoi4_operations says first what each operation still needs",
                 ));
             }
             let operative = args
