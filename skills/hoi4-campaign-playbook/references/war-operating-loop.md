@@ -127,8 +127,12 @@ the player decides strategy:
   still gets them and plans while it recovers; the limits hold back the execute order and moves.
 - The offensive line is drawn across the target state, parallel to the army's front and as wide
   as the state, through the depth of the army's victory-point province (`hoi4_army_offensive`
-  `province_id`; without one, through the middle of the state), so the whole front advances to
-  the objective.
+  `province_id`; without one, through the middle of the state). On an objective the line is
+  short, about a province for every three divisions, so the army gathers on the objective; a
+  front alone spreads it one division to a province along the whole border. Keep a guard
+  formation on that border: the strike army leaves it.
+- Encirclement takes an army only when it has no target of its own or its target lies in the
+  pocket or its neck.
 - A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
   the armies draw their lines toward their next target and plan on them, the execute order waits
   for a phase with axes, and a plan still executing on enemy land is stopped. The planning wait

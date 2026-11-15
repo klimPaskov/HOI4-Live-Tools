@@ -2572,7 +2572,11 @@ pub(super) fn offensive(
         .filter_map(|p| pos.get(p).copied())
         .collect();
     let pivot = through.and_then(|p| pos.get(&p).copied());
-    if let Some((a, b)) = offensive_span(&own, &theirs, pivot) {
+    // On an objective the line is short, about a province for every three divisions: every
+    // division of the army gets its place on the line, so a short line gathers the army on the
+    // objective where a line as wide as the state spreads it one division to a province.
+    let width = (provinces.len() / 3).max(3);
+    if let Some((a, b)) = offensive_span(&own, &theirs, pivot, width) {
         let framed = super::screenmap::frame_two(
             process,
             keys,
@@ -2618,15 +2622,18 @@ pub(super) fn offensive(
         clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0),
     )
 }
-/// The two ends of an offensive line across a target, parallel to the army's front: of the
-/// third of the target's provinces nearest in depth to `pivot` (the objective; without one, the
-/// target's centre), the two farthest apart sideways (map points; `own` are the army's province
-/// positions, `target` the target's). None when the target has no width seen from the army
-/// (one province, or all in a row along the advance).
+/// The two ends of an offensive line across a target, parallel to the army's front (map points;
+/// `own` are the army's province positions, `target` the target's). The line lies in the third of
+/// the target's provinces nearest in depth to `pivot` (the objective; without one, the target's
+/// centre). With an objective it is short: of that band, the `width` provinces nearest the
+/// objective sideways, so the army gathers on it. Without one it is as wide as the band. None
+/// when the target has no width seen from the army (one province, or all in a row along the
+/// advance).
 pub(super) fn offensive_span(
     own: &[(f64, f64)],
     target: &[(f64, f64)],
     pivot: Option<(f64, f64)>,
+    width: usize,
 ) -> Option<((f64, f64), (f64, f64))> {
     let mean = |pts: &[(f64, f64)]| -> Option<(f64, f64)> {
         (!pts.is_empty()).then(|| {
@@ -2647,7 +2654,19 @@ pub(super) fn offensive_span(
     let at = pivot.as_ref().map_or(0.0, depth);
     let mut band: Vec<&(f64, f64)> = target.iter().collect();
     band.sort_by(|x, y| (depth(x) - at).abs().total_cmp(&(depth(y) - at).abs()));
-    band.truncate((target.len() / 3).max(3));
+    // the third nearest in depth, and every province as near as the last of them
+    let last = (target.len() / 3).max(3).min(band.len()) - 1;
+    let reach = (depth(band[last]) - at).abs() + 1e-6;
+    band.retain(|p| (depth(p) - at).abs() <= reach);
+    if let Some(p) = pivot.as_ref() {
+        let beside = side(p);
+        band.sort_by(|x, y| {
+            (side(x) - beside)
+                .abs()
+                .total_cmp(&(side(y) - beside).abs())
+        });
+        band.truncate(width.max(2));
+    }
     let a = band
         .iter()
         .copied()
@@ -3379,29 +3398,41 @@ mod tests {
             }
         }
         // without an objective: across the middle row, side to side
-        let (a, b) = super::offensive_span(&own, &target, None).unwrap();
+        let (a, b) = super::offensive_span(&own, &target, None, 3).unwrap();
         assert_eq!((a.1, b.1), (50.0, 50.0));
         assert_eq!((a.0 - b.0).abs(), 20.0);
         // an objective in the near row: the line runs along that row
-        let (a, b) = super::offensive_span(&own, &target, Some((10.0, 30.0))).unwrap();
+        let (a, b) = super::offensive_span(&own, &target, Some((10.0, 30.0)), 3).unwrap();
         assert_eq!((a.1, b.1), (30.0, 30.0));
         assert_eq!((a.0 - b.0).abs(), 20.0);
+        // a short line on an objective in a wide target: the provinces beside it, not the
+        // whole width
+        let wide: Vec<(f64, f64)> = (0..9).map(|i| (f64::from(i) * 10.0, 40.0)).collect();
+        let own_wide = [(40.0, 0.0)];
+        let (a, b) = super::offensive_span(&own_wide, &wide, Some((40.0, 40.0)), 3).unwrap();
+        assert_eq!((a.0 - b.0).abs(), 20.0);
+        assert_eq!((a.0 + b.0) / 2.0, 40.0);
+        let (a, b) = super::offensive_span(&own_wide, &wide, None, 3).unwrap();
+        assert_eq!((a.0 - b.0).abs(), 80.0);
         // and one in the far row
-        let (a, b) = super::offensive_span(&own, &target, Some((0.0, 70.0))).unwrap();
+        let (a, b) = super::offensive_span(&own, &target, Some((0.0, 70.0)), 3).unwrap();
         assert_eq!((a.1, b.1), (70.0, 70.0));
     }
 
     #[test]
     fn a_target_without_width_has_no_line_across() {
         let own = [(0.0, 0.0)];
-        assert!(super::offensive_span(&own, &[(0.0, 30.0)], None).is_none());
+        assert!(super::offensive_span(&own, &[(0.0, 30.0)], None, 3).is_none());
         // provinces in a row along the advance
         assert!(
-            super::offensive_span(&own, &[(0.0, 30.0), (0.0, 50.0), (0.0, 70.0)], None).is_none()
+            super::offensive_span(&own, &[(0.0, 30.0), (0.0, 50.0), (0.0, 70.0)], None, 3)
+                .is_none()
         );
-        assert!(super::offensive_span(&[], &[(0.0, 30.0), (9.0, 30.0)], None).is_none());
+        assert!(super::offensive_span(&[], &[(0.0, 30.0), (9.0, 30.0)], None, 3).is_none());
         // the army standing on the target's centre has no direction
-        assert!(super::offensive_span(&[(5.0, 5.0)], &[(0.0, 5.0), (10.0, 5.0)], None).is_none());
+        assert!(
+            super::offensive_span(&[(5.0, 5.0)], &[(0.0, 5.0), (10.0, 5.0)], None, 3).is_none()
+        );
     }
 
     fn view() -> Value {
