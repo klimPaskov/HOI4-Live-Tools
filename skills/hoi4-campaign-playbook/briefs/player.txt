@@ -77,7 +77,8 @@ DON'T: re-read the same state every turn; order an army the executor is moving (
 army in the plan's army_layout, army_group and hold_targets, all research, focus, production, construction,
 laws, events and templates in the plan — your items are only what the brief lists); send a move that failed
 twice; start research that is not in hoi4_technology_list {"available":true}; build in front states;
-reassign a general who already has an army.
+reassign a general who already has an army; walk an action through other arguments after a refusal (other
+slots, indexes or states): the refusal's message is the answer, log it once.
 
 LOG one line per turn to {LOG} (date, what changed, what you did). STOP after the peace conference, at game
 date {STOP_DATE}, or after {MINUTES} minutes. Leave the game running. Final reply: outcome against the
