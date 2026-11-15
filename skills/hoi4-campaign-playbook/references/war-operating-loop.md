@@ -13,7 +13,10 @@ and follow it every war tick.
 - **Never leave a border empty.** Every border with an enemy has a front line held by an army.
   Attacking armies come from a separate pool, not from the defensive line.
 - **Plan, then execute.** Draw lines, let planning build (10-15 game days), execute all
-  attacking armies on the same day.
+  attacking armies on the same day. Against a weak defender with no continuous line, strike
+  its victory points instead (section 5c): one march order per army, no planning wait.
+- **Few orders, long-lived.** At speed 3 a decision and its call cost days of game time; give
+  each army one order that holds for weeks and let rules carry the rest (section 5c).
 - **Watch supply and organisation.** An attack that outruns supply stops and gets encircled.
 
 ## 1. Before the war (or on day one)
@@ -56,7 +59,8 @@ For the chosen pocket (from step 5):
 7. Next pocket.
 
 No pocket available: attack the top `hoi4_front_plan` axis with the strike armies
-(front + offensive toward the axis target, execute), and keep line armies holding.
+(front + offensive toward the axis target, execute), and keep line armies holding. Against a
+weak defender whose victory points lie far apart, use objective strikes instead (section 5c).
 
 ## 3. Defence procedure
 
@@ -84,7 +88,8 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 4. `hoi4_supply` : under 50% -> no new attacks there; under 35% stop and pull 25-50% of the
    divisions out; resume at 70%.
 5. `hoi4_encirclement_candidates` : new pockets -> start section 2.
-6. Stalled offensive (no progress for 10+ days) -> stop it, re-plan on another axis.
+6. Stalled offensive (no progress for 10+ days) -> stop it, re-plan on another axis. Under
+   objective strikes the army turns to its next objective by itself; do not re-order it.
 7. Production: replacement equipment for the losses (infantry equipment, artillery, support).
 
 ## 5. Tool notes
@@ -165,26 +170,9 @@ the player decides strategy:
   to rush once per army; it keeps executing and keeps its planning bonus, and the stall clock
   starts again. A plan decision for a weak or broken enemy line, never automatic: rush lengthens
   the front and can gather an army in one unsupplied province.
-- `"strike": {"after_vp": 5}` (default off): objective strikes. A front spreads an army along the whole
-  border and a battle plan cannot gather it on one province, so planned offensives take the border
-  states and then stand. With this key the war step changes method once the player holds `after_vp`
-  of the enemies' victory points: every driven army gets ONE march order (`hoi4_army_move` with
-  `province_id`) on one province, the whole army gathers on it, and the next objective is ordered
-  the tick it falls. The objective is the army's next `vp_targets` row (the first province of the
-  row's `path` not yet held) when the army stands beside it or on the path; else an enemy victory
-  point with two fresh divisions beside it; else a march to the first province of the path (name a
-  fed province there: the army assembles on it and the game routes from it); else the nearest
-  enemy victory point no other army strikes. A strike that wears the divisions beside the
-  objective under 35% of their best organisation, or lasts 18 days, ends: the objective is closed
-  for the army (10 days after a worn strike, 25 after one that stood) and its next march order
-  goes to another objective. No halt order is sent unless the plan says `"halt": true`: a halted
-  division walks back to the front line its army still holds, far behind an advance. Size each army for the supply at the head of its road: three divisions took a supply hub
-  four days after their order from a fed assembly province, twelve in one unfed province stood.
-  A row that was held and is lost again is retaken first, and so is own land an enemy holds beside
-  the army; leave the guard armies as guards (`guards` false): with every army striking, the towns
-  and the border behind the advance were retaken and its supply cut.
-  Write the rows per army in the order the roads open; a row whose path crosses a neutral's land
-  waits until that land is the player's.
+- `"strike": {"after_vp": 5}` (default off): objective strikes instead of battle plans once the
+  player holds `after_vp` of the enemies' victory points. How it chooses, ends and retakes, the
+  knobs and how to write the rows: section 5c.
 - `"execution": "rush"` (or `"careful"`, `"balanced"`): the execution mode of every driven
   army's battle plans, set once per army when its lines stand and before its first execute
   order. Without the key the game's default (balanced) stands and nothing is sent.
@@ -221,6 +209,97 @@ the player decides strategy:
 - `"disband": {"templates": [...], "max": N}`: divisions of weak templates standing in own states
   outside the theatre are disbanded so their equipment refills the front.
 
+## 5c. Objective strikes: the method that won against a weak defender
+
+Battle plans spread an army along the whole border, and the game extends every offensive line
+to the edges of the enemy land, so a planned offensive takes the border states and then stands.
+What took victory points at speed 3 was simpler: one direct march order of a whole army on one
+victory-point province it stands beside, sent once, and the next objective ordered the day the
+last one falls. The strike step of the executor (`war.strike`) does exactly this; a player can do
+it by hand with `hoi4_army_move {"army":..., "province_id":...}`.
+
+**When to prefer it.** A defender with few divisions and no continuous line, victory points far
+apart, roads more than fronts (colonial and minor wars, a collapsing enemy, the mop-up after a
+capitulation of the main army). Keep battle plans and encirclement (sections 2-3) against a
+continuous line, a strong defender, or a pocket that can be closed: a march order has no planning
+bonus, no flank cover and pushes rather than encircles. Let the opening plans take the border
+first (`after_vp`), then switch.
+
+**How a strike runs.**
+- The army stands beside the objective, ideally in two or three provinces touching it (more
+  directions, OP04). From afar it first marches to an assembly province on its road.
+- One order, never repeated while the army moves or fights: a new order starts the march again.
+  The tool resends only to divisions that neither march on the province nor stand in it.
+- The province falls: the next objective is ordered the same day. Strikes that took their
+  objective did so in days to a few weeks.
+
+**Turn away from an objective that holds.** A strike ends when the divisions beside the
+objective fall under about 35% of their best organisation, or after about 18 days. Do not feed
+it: the objective is closed for that army (about 10 days after a worn strike, 25 after one that
+stood its whole time) and the army's next march order goes to another objective. Whether the
+same town falls in four days or holds for months varies from game to game; there is no read yet
+of the enemy divisions beside an objective, so the step finds out by striking. Do not halt the
+army: a halted division walks back to the front line its army still holds, which after an
+advance is the border it started from (`halt` stays false unless a plan has a reason).
+
+**Retake behind the advance first.** An advance leaves its victory points empty. A held
+objective that is lost again comes before every new one, and so does own land an enemy holds
+beside the army. Keep the guard armies as guards on the border the advance leaves behind
+(`guards` false): when every army struck, the enemy retook towns and the home border behind
+them and the advance starved. Taken victory points get no garrison by themselves; a guard army
+whose front follows the advance, or a division left in each, is still an open question.
+
+**Never stack more than the head province feeds.** The strike sends the whole army into one
+province and does not size it. Three divisions took a supply hub four days after their order
+from a fed assembly province; eleven in one unfed province stood for three months at 6-10%
+supply and organisation about 10. Plan small armies, one per road, sized to the supply where
+the road ends (`hoi4_supply` province supply against demand at the assembly province), and name
+a fed province as each row's first path province. While strikes run, the overdrawn rule does
+not thin the driven armies, so the size is the plan's job.
+
+**Why orders must be few.** At speed 3 one decision and its call take 30-90 seconds of wall time,
+5-15 game days. A war of about six months is about twenty decisions. Orders must be few, given
+early and meant to last weeks; everything else is a rule the executor runs. A player who
+re-orders an army every tick gives the enemy the days.
+
+**Keep the regrouping rules off armies under orders.** The overdrawn rule detaches divisions
+from a crowded province and the command step merges small armies: on an army someone is
+ordering they undo the grouping. The strike step switches both off for the armies it drives.
+An army the player orders by hand goes in `war.reserve` (by exact name, and so does any army
+made by a detach); `manage.off: ["overdrawn"]` and `armies.consolidate: false` switch the rules
+off for every army.
+
+**In the plan.**
+
+```json
+"war": {"enemies": ["ENE"], "strike": {"after_vp": 5, "why": "weak defender, towns far apart"}},
+"vp_targets": [
+  {"order": 1, "province": 1001, "state": 10, "army": "North strike", "path": [2001, 2002], "vp": 5},
+  {"order": 2, "province": 1002, "state": 11, "army": "North strike", "vp": 3},
+  {"order": 3, "province": 1003, "state": 12, "army": "South strike", "path": [2010], "vp": 10}
+]
+```
+
+- `vp_targets` rows per army, in the order its road opens: the step takes an army's rows in list
+  order. `army` must be the army's exact name or its `army_layout` name hint; a row without an
+  army is not used by the strike step.
+- `path`: waypoint provinces from own land to the objective, each touching the next. The first
+  is the assembly point (name a fed province); the first one not yet held is the next leg. A row
+  is open only when its leg touches land already held; a path through a neutral's land waits
+  until that land is the player's.
+- With no open row an army takes an enemy victory point with `beside` (2) fresh divisions next to
+  it, else the nearest enemy victory point no other army strikes.
+- Knobs and defaults: `after_vp` 0, `rest` 0.35, `resume` 0.72, `rest_days` 10, `max_days` 18,
+  `close_days` 25, `beside` 2, `guards` false, `halt` false. `war.reserve` and
+  `war.player_claim_seconds` (300) keep the step off armies the player orders.
+
+**What is still unproven.** The method won one run with the rules run as a script (the defender
+capitulated four weeks before the game's own AI would have managed it) and one of four runs with
+the executor step and a small player model (two weeks after the AI); the other three stalled:
+halted armies walked back to their old front, an objective held while towns behind the advance
+were lost, and stacks starved at the head. Strikes sized to supply need an order for part of an
+army, which no tool gives yet; garrisons for taken victory points are open. Treat the numbers above as defaults to check, not tuned values.
+
 ## 6. Principles (any war)
 
 - **Supply caps a front.** Every front has a supply ceiling. More divisions than it carries starve all of them
@@ -234,7 +313,8 @@ the player decides strategy:
 - **Concentrate on victory points.** Strike armies go for the enemy's victory-point cities in order of value, not
   along the whole border; the line armies only hold.
 - **Organisation decides attacks.** Attack with organisation above about 50% of the template's max; rest at about
-  30%, resume at about 80%, then attack again all at once on the same axis. Continuous weak attacks lose.
+  30%, resume at about 80%, then attack again all at once on the same axis. Continuous weak attacks lose. Under
+  objective strikes a worn army turns to another objective instead of resting in front of the same one (5c).
 - **Exploit what the enemy lacks.** No air force: every fighter and CAS wing over the attack. No anti-tank: armour
   and fast divisions lead breakthroughs and pincers. Weak defence in open terrain: encircle there.
 - **Aim at victory points.** Capitulation comes from lost victory points; the capital and big cities end wars, so
@@ -251,8 +331,9 @@ the player decides strategy:
   advancing); check them before planning and plan the operation around them.
 - **Construction is slow.** Buildings finish long after a short war; in a war of months spend factories on the
   economy and production, not on front-line infrastructure or supply hubs.
-- **Never idle.** Every army has an order every tick; every stalled offensive is re-planned, every idle army gets a
-  task (hold a border, reserve, or attack).
+- **Never idle, never busy.** Every army has a standing order (hold a border, reserve, an offensive or a strike);
+  every stalled offensive is re-planned or turned to another objective, every idle army gets a task. An order that
+  is working is left alone: re-issuing it costs days (5c).
 - **Adapt.** When the situation changes (new enemy, counter-offensive, an ally collapsing, a pocket against you),
   stop, re-read `hoi4_wars`, `hoi4_front_plan` and `hoi4_encirclement_candidates`, and re-plan from section 1. No
   scenario plan survives contact; these principles do.
@@ -270,3 +351,10 @@ the player decides strategy:
 | CP07 | Rebalance after a capitulation | A phase that enters on the capitulation frees the guards, re-axes the armies, switches occupation laws and moves factories land to air or navy | Each capitulation | FAIR |
 | CP08 | Air missions at war start | Air plan entries with a `when` on the war predicate start every wing at once | War start | FAIR |
 | CP09 | Posture per phase with a cull | Each phase sets the production posture and removes the lines it no longer needs | Phase changes | FAIR |
+| CP10 | Objective strikes | One march order of a whole army on a victory-point province it stands beside, sent once; the next objective the day it falls (`war.strike`, 5c) | Weak defender, victory points far apart | FAIR |
+| CP11 | Strike or battle plan | Strikes against a weak defender without a continuous line; battle plans and pockets against a line, a strong defender or a pocket that can close; the opening plans take the border first (`after_vp`) | Choosing the war method | FAIR |
+| CP12 | Turn away from a town that holds | A strike ends at about 35% of best organisation or 18 days; the objective closes for the army and it marches on another; no halt order (halted divisions walk back to the old front) | Every strike | FAIR |
+| CP13 | Retake behind the advance first | A lost objective and own land an enemy holds beside the army come before new objectives; guard armies stay guards (`guards` false) | Every advance | FAIR |
+| CP14 | Stack only what the head feeds | The strike sends the whole army into one province: plan one small army per road, sized to the supply where the road ends, with a fed assembly province first in the path | Planning strike armies | FAIR |
+| CP15 | Few, long-lived orders | A decision costs 5-15 game days at speed 3, so a six-month war has room for about twenty; rules carry the rest; never re-issue an order that is working | All war play at speed 3 | FAIR |
+| CP16 | Regrouping rules off ordered armies | The overdrawn rule and command merges undo a grouping someone is ordering: the strike step switches them off for its armies; hand-ordered armies go in `war.reserve` by exact name | Hand orders beside the executor | FAIR |
