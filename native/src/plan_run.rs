@@ -4439,12 +4439,6 @@ fn war_step(
         {
             continue;
         }
-        // A layout role with "direct": true attacks by direct moves on its victory-point
-        // provinces, like every army under war.direct_moves: it holds no front, so it is not
-        // spread along the border and arrives on its objective as one body. The other armies
-        // keep their battle plans (and the border: a role that attacks by moves guards nothing).
-        let army_direct = cfg["direct_moves"] == json!(true)
-            || layout_entry(state, plan, &name).is_some_and(|e| e["direct"] == json!(true));
         // Trucks for the army's supply hubs (far from railways supply needs them). After the
         // lines: an army plans from the day they stand, and trucks change nothing before it moves.
         if let Some(level) = cfg["motorization"].as_u64().filter(|_| !lines_only) {
@@ -4453,7 +4447,7 @@ fn war_step(
                 && (state.war_stage.get(&name).copied().unwrap_or(0) >= 2
                     || army["battle_plan_orders"].as_u64().unwrap_or(0) >= 2
                     || army["plan_executing"] == json!(true)
-                    || army_direct)
+                    || cfg["direct_moves"] == json!(true))
             {
                 let (ok, why) = state.act(
                     tools,
@@ -4538,7 +4532,7 @@ fn war_step(
         // strike armies (Italy 1936: only fronts and moves were ever sent, no offensive).
         // An entry with a `path` is followed leg by leg (plan_route.rs): the state and province
         // here are then the next waypoint's, not the far target's.
-        let direct_mode = army_direct;
+        let direct_mode = cfg["direct_moves"] == json!(true);
         let vp: Option<Vp> = if (hold_only && !prepare) || forced.is_some() {
             None
         } else {
@@ -4667,7 +4661,7 @@ fn war_step(
         // `direct_moves`: attack with direct moves, state then province by province, instead of
         // battle plans (w11 and w23: the plans stalled for weeks in the Ethiopian mountains and a
         // direct move broke each stall).
-        let direct = army_direct;
+        let direct = cfg["direct_moves"] == json!(true);
         let liberate = direct || targets.iter().any(|t| t.0 == target && t.1);
         // Battle plan orders that plan (a planning bonus above zero): a front stands.
         let orders = if army["planning"]["mean"].as_f64().unwrap_or(0.0) > 0.0 {
@@ -4921,17 +4915,6 @@ fn war_step(
                 }
                 continue;
             }
-        }
-        // A hold phase sends no direct move into enemy land (the army may have gone to its
-        // jump-off on own land above: that is where it waits).
-        if holding_phase && direct {
-            plan_war::held_note(
-                state,
-                &name,
-                format!("{name} holds: the phase attacks nothing; it moves on state {target} when a phase with axes follows"),
-            );
-            state.war_cool.insert(name.clone(), now + cooldown);
-            continue;
         }
         // After a captured hub, port or railway a direct-move army holds its next advance.
         if direct && !own_target {
@@ -8296,82 +8279,6 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(out.starts_with("war vp target A -> province 50"), "{out}");
-    }
-
-    #[test]
-    fn a_direct_role_attacks_its_victory_point_province_by_moves_and_waits_in_a_hold_phase() {
-        let states = json!({"states": [
-            {"state_id": 1, "owner": "ITA", "controller": "ITA", "x": 0.0, "z": 0.0},
-            {"state_id": 2, "owner": "ETH", "controller": "ETH", "x": 10.0, "z": 0.0,
-             "provinces": [{"province": 50, "controller": "ETH"}]}]});
-        let tools = fake(vec![
-            ("hoi4_states", states),
-            (
-                "hoi4_armies",
-                json!({"armies": [
-                    {"army": "A", "division_count": 6, "main_state": 1,
-                     "battle_plan_orders": 0, "planning": {"mean": 0.0}},
-                    {"army": "B", "division_count": 6, "main_state": 1,
-                     "battle_plan_orders": 0, "planning": {"mean": 0.0}}]}),
-            ),
-        ]);
-        let plan = json!({"war": {"me": "ITA", "enemies": ["ETH"], "supply_first": false, "rest": false},
-            "army_layout": [{"name_hint": "fist", "state": 1, "role": "strike", "direct": true, "axis": [2]},
-                            {"name_hint": "line", "state": 1, "role": "strike", "axis": [2]}],
-            "vp_targets": [{"province": 50, "state": 2, "army": "fist"}]});
-        let bound = |state: &mut State| {
-            state.layout.insert("fist".into(), "A".into());
-            state.layout.insert("line".into(), "B".into());
-        };
-        // a phase that attacks: the fist moves on the province, the other army draws its lines
-        let mut state = State {
-            clock: START,
-            ..Default::default()
-        };
-        bound(&mut state);
-        let mut lines = Vec::new();
-        for hour in 0..4 {
-            if let Some(line) = war_step(&mut state, &tools, &plan, "l", START + hour * 13).unwrap()
-            {
-                lines.push(line);
-            }
-        }
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.starts_with("war vp target A -> province 50")),
-            "{lines:?}"
-        );
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.starts_with("war front and offensive B -> state 2")),
-            "{lines:?}"
-        );
-        assert!(!tools
-            .calls
-            .borrow()
-            .iter()
-            .any(|(n, a)| n == "hoi4_army_front" && a["army"] == "A"));
-        // a hold phase: the fist sends no move into enemy land; the other army still plans
-        let mut hold = plan.clone();
-        hold["war"]["axes"] = json!([]);
-        let mut state = State {
-            clock: START,
-            ..Default::default()
-        };
-        bound(&mut state);
-        tools.calls.borrow_mut().clear();
-        for hour in 0..4 {
-            war_step(&mut state, &tools, &hold, "l", START + hour * 13).unwrap();
-        }
-        let calls = tools.calls.borrow();
-        assert!(!calls
-            .iter()
-            .any(|(n, a)| n == "hoi4_army_move" && a["army"] == "A"));
-        assert!(calls
-            .iter()
-            .any(|(n, a)| n == "hoi4_army_front" && a["army"] == "B"));
     }
 
     struct Extras(std::cell::RefCell<Vec<(String, Value)>>);

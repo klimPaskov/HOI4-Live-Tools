@@ -1052,12 +1052,6 @@
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
           },
-          "direct": {
-            "type": "boolean",
-            "default": false,
-            "x-owner": "executor",
-            "description": "true: this formation attacks by direct moves on its victory-point provinces (like every army under war.direct_moves) instead of a battle plan: it holds no front, so it is not spread along the border and arrives on its objective as one body; with a path it first goes to the jump-off on own land and waits there through a hold phase. It guards nothing: keep a guard formation on its border"
-          },
           "task_of": {
             "type": "string",
             "x-owner": "executor",

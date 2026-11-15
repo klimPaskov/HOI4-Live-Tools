@@ -131,11 +131,6 @@ the player decides strategy:
   short, about a province for every three divisions, so the army gathers on the objective; a
   front alone spreads it one division to a province along the whole border. Keep a guard
   formation on that border: the strike army leaves it.
-- A layout role with `"direct": true` is a fist: it attacks by direct moves on its victory-point
-  provinces while the other formations keep their battle plans. It holds no front, so it is
-  not spread along the border; with a `path` it goes to the jump-off on own land first and
-  waits there through a hold phase. Use it for an objective a spread front never reaches (a
-  mountain town behind a river), and keep a guard formation on the border it leaves.
 - Encirclement takes an army only when it has no target of its own or its target lies in the
   pocket or its neck.
 - A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
