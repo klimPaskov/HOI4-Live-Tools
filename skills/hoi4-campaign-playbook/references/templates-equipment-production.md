@@ -325,6 +325,12 @@ time only when a template is waiting for the tech.
    efficiency x 30% for a tier switch, e.g. 50% to 15%, beats new factories at 10%). Variant switches (90%)
    any time; a young line (under 15%) switches at once; finish an expensive unit in progress first. Older
    gear stays valid in divisions that ask for the archetype.
+2a. **A shortage the divisions feel outranks a mature line.** With no idle factory, equipment the fielded
+   divisions lack with nothing in stock (or under the critical days of cover) takes factories from a line
+   whose equipment nobody lacks and whose stock covers twice its target, a few at a time; the donor keeps
+   at least one factory. A stock left at 0 for months starves every attack (artillery at 0 from May left a
+   strike army at a sixth of its equipment). Plans switch this off only with a reason
+   (`manage.shift_factories`).
 3. **Adding factories is safe**: it never lowers the existing factories' efficiency; each new one starts at
    10% (+5% per dispersed level); only the displayed average drops.
 4. **Keep lines non-empty**: a line with 0 factories and no progress is wasted, and an empty slot loses 1
