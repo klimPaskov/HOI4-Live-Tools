@@ -2056,11 +2056,10 @@ fn war_first_steps(
         // Command before the war step: the war step acts in nearly every tick, so anything
         // behind it never ran (no army group or general was ever given in sk2, 1936).
         plan_formations::command_step,
-        war_step,
-        construction_plan_step,
-        armies_step,
         // Home divisions disbanded early refill the fighting armies' equipment (w16: the
-        // African infantry fought at 13-33% for most of the year).
+        // African infantry fought at 13-33% for most of the year). Before the war step: behind
+        // it the step first ran in April, when the front was already at a third of its
+        // equipment (live 15 Nov 2026). It is bounded by `disband.max` and then quiet.
         |state, tools, plan, lease, now| {
             if plan["disband"].is_object() {
                 disband_step(state, tools, plan, lease, now)
@@ -2068,6 +2067,9 @@ fn war_first_steps(
                 Ok(None)
             }
         },
+        war_step,
+        construction_plan_step,
+        armies_step,
     ];
     // A step whose order failed (or that the failure ledger held back) does not end the tick:
     // the next steps still get it (shakedown 10 Nov 2026: a failing army_create in the layout
@@ -4295,7 +4297,11 @@ fn war_step(
         if let Some((org, supply)) = org {
             let tired = limits.tired(state, &name, org);
             let starving = limits.starving(supply);
-            if (tired || starving) && !state.war_rest.contains_key(&name) {
+            // An executing plan is stopped under the fill floor too: the gate held back new
+            // orders only, and a plan already executing went on attacking down to a third of
+            // its equipment (live 15 Nov 2026).
+            let short = limits.underfilled(fill.get(&name).copied()) && executing;
+            if (tired || starving || short) && !state.war_rest.contains_key(&name) {
                 if executing {
                     let (ok, why) = state.act(
                         tools,
@@ -4308,8 +4314,12 @@ fn war_step(
                         state.war_rest.insert(name.clone(), now);
                     }
                     state.war_cool.insert(name.clone(), now + cooldown);
+                    let fill_note = match fill.get(&name) {
+                        Some(f) if short => format!(", equipment fill {:.0}%", f * 100.0),
+                        _ => String::new(),
+                    };
                     return Ok(Some(format!(
-                        "war rest {name} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
+                        "war rest {name} (organisation {org:.0}, supply {supply:.0}%{fill_note}): {ok} {why}"
                     )));
                 }
                 if direct && !own_target {
