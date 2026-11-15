@@ -16,6 +16,10 @@ closes or the run is stopped:
                 report. The next player call lifts that pause (executor on, the game running again); any player
                 call resets the timer. A pause the player or the user asks for is theirs and never lifted here.
     health      the game or the runtime gone: stop
+    end         the plan's goal reached (the executor's goal_reached change) or its goal.deadline passed in the
+                game: stop with that reason (HOI4_LIVE_END=off keeps the run going)
+    watch       every SAMPLE_EVERY seconds one line in watch.jsonl: game date, war stats, each army's supply and
+                organisation (reads only), for the report and for looking back at how the war went
     stop        executor off, lease released, runtime closed, report.md written, the active-run pointer removed;
                 the game itself is never closed
 
@@ -44,6 +48,7 @@ CAMPAIGN_WAIT = 1800
 RETRY_EVERY = 5
 TICK = 5
 HEALTH_EVERY = 15
+SAMPLE_EVERY = 60
 HOLDER = "hoi4-live-play"
 # Actions whose repeat is meaningful (a clock change, a plan step) or that the supervisor owns.
 NOT_DEDUPED = {"hoi4_time", "hoi4_army_plan", "hoi4_plan_run", "hoi4_autopilot", "hoi4_input_lease"}
@@ -174,6 +179,8 @@ class Supervisor:
         self.last_player = self.started
         self.last_renew = self.started
         self.last_health = self.started
+        self.last_sample = self.started
+        self.goal_reached = None
         self.idle_paused = False
         self.idle_paused_game = False
         self.idle_woken = False
@@ -529,10 +536,14 @@ class Supervisor:
         err, body = self.native.call("hoi4_overview", {})
         if err and error_code(body) in GONE:
             return False
-        err, feed = self.native.call("hoi4_observe", {"since": self.feed_seq, "kinds": ["autopilot_stopped"]})
+        err, feed = self.native.call("hoi4_observe", {"since": self.feed_seq,
+                                                      "kinds": ["autopilot_stopped", "goal_reached"]})
         if not err and isinstance(feed, dict):
             self.feed_seq = feed.get("seq", self.feed_seq)
             for change in feed.get("changes") or []:
+                if change.get("kind") == "goal_reached":
+                    self.goal_reached = change.get("detail") or {}
+                    self.event("goal_reached", detail=change.get("detail"))
                 if change.get("kind") == "autopilot_stopped" and not self.idle_paused:
                     self.counts["executor_stops"] += 1
                     self.event("executor_stopped", detail=change.get("detail"))
@@ -547,13 +558,55 @@ class Supervisor:
         if not self.health(now):
             self.stop("game_closed")
             return
+        if self.goal_reached is not None and self.ends():
+            self.stop("goal_reached")
+            return
         self.renew(now)
         self.watchdog(now)
+        if now - self.last_sample >= SAMPLE_EVERY:
+            self.last_sample = now
+            date = self.sample(now)
+            if date and self.ends() and self.past_deadline(date):
+                self.stop("deadline")
+                return
         if self.planner is not None:
             try:
                 self.planner.tick()
             except Exception as exc:  # noqa: BLE001 - the plan in force stays; the next tick tries again
                 self.event("planner_failed", error=str(exc)[:300])
+
+    # ------------------------------------------------------------------------------------------ end and watch
+    @staticmethod
+    def ends():
+        return os.environ.get("HOI4_LIVE_END") != "off"
+
+    def past_deadline(self, date):
+        """True once the game date (hoi4_overview text, YYYY.MM.DD[.HH]) is past the plan's goal.deadline."""
+        plan = runs.read_json(os.path.join(self.run, "plan.json")) or {}
+        goal = plan.get("goal") if isinstance(plan.get("goal"), dict) else {}
+        day = report._day_number(date)  # noqa: SLF001 - the report's date reader, shared
+        deadline = report._day_number(goal.get("deadline"))  # noqa: SLF001
+        return day is not None and deadline is not None and int(day) > int(deadline)
+
+    def sample(self, now):
+        """One watch.jsonl line (reads only); the game date, or None when it could not be read."""
+        err, overview = self.native.call("hoi4_overview", {})
+        if err or not isinstance(overview, dict):
+            return None
+        date = (overview.get("date") or {}).get("text")
+        line = {"t": round(now, 3), "date": date, "paused": overview.get("paused")}
+        err, stats = self.native.call("hoi4_war_stats", {})
+        if not err and isinstance(stats, dict):
+            line["war"] = shrink(stats, 1500)
+        err, supply = self.native.call("hoi4_supply", {"summary": True})
+        if not err and isinstance(supply, dict):
+            line["armies"] = [{"army": a.get("army"), "supply": a.get("supply_percent_mean"),
+                               "org": a.get("organisation_mean"), "divisions": a.get("divisions")}
+                              for a in (supply.get("armies") or []) if isinstance(a, dict)][:40]
+        with self.lock:
+            with open(os.path.join(self.run, "watch.jsonl"), "a", encoding="utf-8") as f:
+                f.write(json.dumps(line) + "\n")
+        return date
 
     # ------------------------------------------------------------------------------------------ planner
     def start_planner(self, load_facts=True):

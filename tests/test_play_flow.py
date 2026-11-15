@@ -13,6 +13,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 import helpers
 
@@ -575,6 +576,48 @@ class SupervisorTests(Folder):
         self.assertEqual(s.feed_seq, 7)
         notes = s.handle("hoi4_overview", {})["body"]["supervisor_notes"]
         self.assertIn("invalid_plan", notes[0])
+
+    def test_the_run_ends_when_the_executor_reports_the_goal_reached(self):
+        s = self.ready()
+        self.fake.handlers["hoi4_observe"] = lambda a: (False, {"seq": 3, "changes": [
+            {"kind": "goal_reached", "detail": {"status": "reached"}}]})
+        self.clock.now += supervisor.HEALTH_EVERY + 1
+        s.tick()
+        observed = [a for n, a in self.fake.calls if n == "hoi4_observe"]
+        self.assertIn("goal_reached", observed[0]["kinds"])
+        self.assertTrue(s.finished.is_set())
+        self.assertEqual(s.end_reason, "goal_reached")
+
+    def test_the_goal_reached_keeps_the_run_going_when_ending_is_switched_off(self):
+        s = self.ready()
+        self.fake.handlers["hoi4_observe"] = lambda a: (False, {"seq": 3, "changes": [
+            {"kind": "goal_reached", "detail": {}}]})
+        self.clock.now += supervisor.HEALTH_EVERY + 1
+        with mock.patch.dict(os.environ, {"HOI4_LIVE_END": "off"}):
+            s.tick()
+        self.assertFalse(s.finished.is_set())
+
+    def test_the_watch_samples_each_minute_and_the_deadline_ends_the_run(self):
+        s = self.ready()
+        plan = runs.read_json(os.path.join(self.run_dir, "plan.json"))
+        plan["goal"] = {"predicates": ["capitulated:ETH"], "deadline": "1936.06.01"}
+        runs.write_json(os.path.join(self.run_dir, "plan.json"), plan)
+        self.fake.handlers["hoi4_supply"] = lambda a: (False, {"armies": [
+            {"army": "Army 1", "supply_percent_mean": 80.0, "organisation_mean": 55.0, "divisions": 12}]})
+        self.clock.now += supervisor.SAMPLE_EVERY + 1
+        s.tick()
+        self.assertFalse(s.finished.is_set())
+        with open(os.path.join(self.run_dir, "watch.jsonl"), encoding="utf-8") as f:
+            line = json.loads(f.readline())
+        self.assertEqual(line["date"], "1936.01.01.12")
+        self.assertEqual(line["armies"], [{"army": "Army 1", "supply": 80.0, "org": 55.0, "divisions": 12}])
+        self.assertIn(("hoi4_supply", {"summary": True}), self.fake.calls)
+        # the game date passes the deadline: the run ends with that reason
+        self.fake.handlers["hoi4_overview"] = lambda a: (False, {"player": "ITA", "paused": False,
+                                                                  "date": {"text": "1936.06.02.01"}})
+        self.clock.now += supervisor.SAMPLE_EVERY + 1
+        s.tick()
+        self.assertEqual(s.end_reason, "deadline")
 
     def test_the_lease_is_renewed_and_taken_again_when_lost(self):
         s = self.ready()
