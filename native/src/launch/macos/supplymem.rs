@@ -471,6 +471,17 @@ pub(super) fn overdrawn(provinces: &BTreeMap<i32, ProvinceSupply>) -> Vec<(i32, 
     v
 }
 
+/// Whether the read caught the supply map while the game was rebuilding it: every province a
+/// node reaches reads a supply of exactly zero, own home provinces included. The game refills
+/// the map within the day; divisions read a tenth of their real supply meanwhile.
+pub(super) fn settling(provinces: &BTreeMap<i32, ProvinceSupply>) -> bool {
+    let reached: Vec<&ProvinceSupply> = provinces
+        .values()
+        .filter(|p| p.flows.iter().any(|f| f.flow > 0.0))
+        .collect();
+    reached.len() >= 2 && reached.iter().all(|p| p.supply == 0.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::testmem::{Mem, IMAGE};
@@ -764,6 +775,37 @@ mod tests {
         assert_eq!(weighted_mean(&[(0.0, 0.1)]), None);
         let m = weighted_mean(&[(1.0, 1.0), (3.0, 0.5)]).unwrap();
         assert!((m - 0.625).abs() < 1e-12);
+    }
+    #[test]
+    fn a_supply_map_caught_empty_is_settling() {
+        let p = |demand, supply, flow: f64| ProvinceSupply {
+            demand,
+            supply,
+            flows: if flow > 0.0 {
+                vec![Flow { node: 7, flow }]
+            } else {
+                Vec::new()
+            },
+        };
+        // every reached province at zero, a home hub province among them
+        let mut empty = BTreeMap::new();
+        empty.insert(1, p(1.3, 0.0, 2.985));
+        empty.insert(2, p(0.0, 0.0, 6.5));
+        empty.insert(3, p(0.2, 0.0, 0.0));
+        assert!(settling(&empty));
+        // one reached province with supply: a real shortage elsewhere, not a rebuild
+        let mut short = empty.clone();
+        short.insert(4, p(0.5, 3.8, 4.9));
+        assert!(!settling(&short));
+        // provinces no node reaches say nothing either way
+        let mut unreached = BTreeMap::new();
+        unreached.insert(1, p(0.2, 0.0, 0.0));
+        unreached.insert(2, p(0.4, 0.0, 0.0));
+        assert!(!settling(&unreached));
+        // one reached province is too little to tell
+        let mut one = BTreeMap::new();
+        one.insert(1, p(1.0, 0.0, 3.0));
+        assert!(!settling(&one));
     }
     #[test]
     fn overdrawn_provinces_worst_first() {
