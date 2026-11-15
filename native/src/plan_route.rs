@@ -606,10 +606,13 @@ mod tests {
         let before = map.actions().len();
         run(&mut state, &map, &plan, START + 13);
         assert_eq!(map.actions().len(), before);
-        // arrived: the front is drawn on the leg's state from there
+        // arrived: the front and the offensive line are drawn on the leg's state from there
         map.here.set(60);
         let line = run(&mut state, &map, &plan, START + 26);
-        assert!(line.starts_with("war front Army 1 -> state 28"), "{line}");
+        assert!(
+            line.starts_with("war front and offensive Army 1 -> state 28"),
+            "{line}"
+        );
     }
 
     #[test]
@@ -632,7 +635,10 @@ mod tests {
         let mut state = State::default();
         let line = run(&mut state, &map, &plan(false), START);
         // own routing: the battle plan on the target's state from where the army stands
-        assert!(line.starts_with("war front Army 1 -> state 28"), "{line}");
+        assert!(
+            line.starts_with("war front and offensive Army 1 -> state 28"),
+            "{line}"
+        );
         let why = note(&state, "route:Army 1");
         assert!(
             why.contains("own routing")
@@ -650,7 +656,10 @@ mod tests {
         let mut plan = plan(false);
         plan["vp_targets"][0]["path"] = json!([420, 9999, 281]);
         let line = run(&mut state, &map, &plan, START);
-        assert!(line.starts_with("war front Army 1 -> state 28"), "{line}");
+        assert!(
+            line.starts_with("war front and offensive Army 1 -> state 28"),
+            "{line}"
+        );
         assert!(
             note(&state, "route:Army 1")
                 .contains("waypoint 9999 is in no state read around the target"),
@@ -669,7 +678,10 @@ mod tests {
             .unwrap()
             .remove("path");
         let line = run(&mut state, &map, &plan, START);
-        assert!(line.starts_with("war front Army 1 -> state 28"), "{line}");
+        assert!(
+            line.starts_with("war front and offensive Army 1 -> state 28"),
+            "{line}"
+        );
         assert_eq!(note(&state, "route:Army 1"), "");
     }
 

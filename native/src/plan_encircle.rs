@@ -829,6 +829,15 @@ fn roles(state: &State, cfg: &Cfg, ctx: &Ctx) -> HashMap<String, Role> {
     out
 }
 
+/// Whether the running operation uses this army (an arm or the anvil).
+pub(super) fn committed(state: &State, army: &str) -> bool {
+    state
+        .encircle
+        .op
+        .as_ref()
+        .is_some_and(|op| op.arm_of(army).is_some() || op.anvil.as_deref() == Some(army))
+}
+
 /// A pincer arm's execute order waits for the other arm (both plans go in together), at most
 /// `sync_days` from the game hour it was first ready. Some(why) holds the order this tick.
 pub(super) fn launch_wait(

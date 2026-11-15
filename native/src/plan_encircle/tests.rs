@@ -304,7 +304,10 @@ fn the_best_pocket_gets_two_pincers_into_its_neck() {
     let plan = plan("POL", json!({}));
     let line = step(&mut state, &front, &plan, START).unwrap();
     // the largest army goes first, for its arm: Kraków into Lublin
-    assert!(line.starts_with("war front Army 2 -> state 92"), "{line}");
+    assert!(
+        line.starts_with("war front and offensive Army 2 -> state 92"),
+        "{line}"
+    );
     let n = note(&state, "encircle");
     assert!(
         n.starts_with("closing pocket Poznań (86), Łódz (87), Kielce (90) (score 44.6) at the neck Warsaw (10), Lublin (92)"),
@@ -735,4 +738,38 @@ fn keep_free_and_the_armies_list_limit_what_is_committed() {
     );
     let n = note(&state, "encircle");
     assert!(n.starts_with("reducing pocket Danzig (85)"), "{n}");
+}
+
+/// One turn of the war block as the executor runs it: the opening pass (lines only), then the
+/// war step itself when the pass ordered nothing.
+fn block(state: &mut State, front: &Front, plan: &Value, now: GameHour) -> Option<String> {
+    state.war_lines_only = true;
+    let lines = war_step(state, front, plan, "l", now).unwrap();
+    state.war_lines_only = false;
+    lines.or_else(|| step(state, front, plan, now))
+}
+
+#[test]
+fn the_opening_pass_leaves_the_armies_of_an_operation_to_their_roles() {
+    let front = Front::poland(POLAND_MID, &[807, 98, 762, 88], mid_armies());
+    let mut state = State::default();
+    let plan = plan("POL", json!({}));
+    // the operation starts in the war step; from then on the pass draws no line for its armies
+    step(&mut state, &front, &plan, START);
+    for i in 1..40 {
+        block(&mut state, &front, &plan, START + i * 3);
+    }
+    // each arm's lines go into its own neck state, as without the pass
+    for (arm, neck) in [("Army 1", 10), ("Army 2", 92)] {
+        for line in ["hoi4_army_front", "hoi4_army_offensive"] {
+            let drawn = sent(&front, arm, line);
+            assert_eq!(drawn.len(), 1, "{arm} {line} {drawn:?}");
+            assert_eq!(drawn[0]["state_id"], json!(neck), "{arm} {line}");
+        }
+    }
+    // the anvil holds its front against the pocket: one front, never an offensive line
+    let fronts = sent(&front, "Army 3", "hoi4_army_front");
+    assert_eq!(fronts.len(), 1, "{fronts:?}");
+    assert_eq!(fronts[0]["state_id"], json!(86));
+    assert!(sent(&front, "Army 3", "hoi4_army_offensive").is_empty());
 }

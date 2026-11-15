@@ -4703,6 +4703,12 @@
           "x-owner": "executor",
           "description": "false: do not pull encircled armies back"
         },
+        "hold_prepares": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "in a hold phase (axes: []) the armies still draw their front and offensive line toward their next target and plan on them; only the execute order waits for a phase with axes, and a plan still executing on enemy land is stopped. false: a hold phase draws no line on enemy land"
+        },
         "planning_wait": {
           "type": "boolean",
           "default": true,

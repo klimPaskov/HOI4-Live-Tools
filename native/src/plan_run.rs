@@ -480,6 +480,10 @@ pub struct State {
     seq: u64,
     war_assign: HashMap<String, i32>,
     war_stage: HashMap<String, u8>,
+    /// The war step runs as the opening pass: it only draws the lines of armies that have none.
+    war_lines_only: bool,
+    /// The first tick with nothing left to do in a paused game was noted (`setup_complete`).
+    setup_noted: bool,
     war_cool: HashMap<String, GameHour>,
     /// per army: (target, main state, game hour) of the last progress seen
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
@@ -666,6 +670,8 @@ impl Default for State {
             seq: 0,
             war_assign: HashMap::new(),
             war_stage: HashMap::new(),
+            war_lines_only: false,
+            setup_noted: false,
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             cheap_first_spent: None,
@@ -2073,8 +2079,19 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let steps: [Step; 7] = [
+    let steps: [Step; 8] = [
         layout_step,
+        // The opening pass of the war step: an army without its lines gets its front and its
+        // offensive line before any name, commander or disband. Lines cost nothing to hold and
+        // the planning bonus only grows once they stand; behind the other steps the first front
+        // was drawn on 31 January and the first attack went in on 23 February (live 15 Nov
+        // 2026). Everything else the war step does keeps its place below.
+        |state, tools, plan, lease, now| {
+            state.war_lines_only = true;
+            let out = war_step(state, tools, plan, lease, now);
+            state.war_lines_only = false;
+            out
+        },
         |state, tools, _, lease, now| layout_names_step(state, tools, lease, now),
         // Command before the war step: the war step acts in nearly every tick, so anything
         // behind it never ran (no army group or general was ever given in sk2, 1936).
@@ -3950,6 +3967,28 @@ fn war_step(
     let min_army = cfg["min_army"].as_u64().unwrap_or(6);
     let per_target = cfg["per_target"].as_u64().unwrap_or(2) as usize;
     let cooldown: GameHour = cfg["cooldown_hours"].as_i64().unwrap_or(12);
+    let lines_only = state.war_lines_only;
+    // The opening pass has work only while an army it may order stands without its lines (a
+    // guard holds one, its front; a driven army two): one cheap read decides.
+    if lines_only {
+        let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        let waiting = list(&roster, "armies").iter().any(|a| {
+            let name = text(&a["army"]);
+            let guard_done = state.war_stage.get(&format!("guard:{name}")) == Some(&2);
+            let stage = state.war_stage.get(name).copied().unwrap_or(0);
+            a["division_count"].as_u64().unwrap_or(0) >= min_army
+                && a["plan_executing"] != json!(true)
+                && !guard_done
+                && stage < 2
+                && !state.war_move.contains(name)
+                && !state.war_rest.contains_key(name)
+                && !plan_encircle::committed(state, name)
+                && !state.war_cool.get(name).is_some_and(|until| *until > now)
+        });
+        if !waiting {
+            return Ok(None);
+        }
+    }
     // Armies the player ordered directly in the last `player_claim_seconds` (default 300) are
     // left to the player, like `reserve` (the executor never fights the player for an army).
     let mut reserve = strings(cfg, "reserve");
@@ -4046,7 +4085,10 @@ fn war_step(
     // At war, supply comes first in the construction queue: a hub or railway behind another
     // line gets no factories (w23: the Tigray and Wello hubs sat behind industrial complexes
     // with none and the army starved in Wello).
-    if cfg["supply_first"] != json!(false) && !state.skipped(now, "supplyfirst", "queue") {
+    if !lines_only
+        && cfg["supply_first"] != json!(false)
+        && !state.skipped(now, "supplyfirst", "queue")
+    {
         let queue = tools.call("hoi4_construction_queue", &json!({"limit": 32}))?;
         if let Some(line) = supply_line_to_raise(list(&queue, "lines")) {
             let (ok, why) = state.act(
@@ -4088,6 +4130,16 @@ fn war_step(
     // strike armies drew fronts and offensives in the hold phase and were pulled across the
     // theatre). A plan without the key keeps the nearest-target rule.
     let hold_only = cfg["axes"].as_array().is_some_and(|a| a.is_empty());
+    // A hold phase still prepares the attack that follows it: the armies draw their front and
+    // their offensive line toward their own next target (their victory-point row or their
+    // layout axis) and plan on them; only the execute order waits for the phase that attacks.
+    // Without it the lines were first drawn when the hold ended and the planning wait began
+    // then (live 15 Nov 2026: a hold until 16 January, first attack on 23 February).
+    // "hold_prepares": false keeps the old hold (no line on enemy land). So does a plan that
+    // attacks with direct moves: it has no lines to prepare, and a target kept for it in the
+    // hold was attacked with moves.
+    let prepare =
+        hold_only && cfg["hold_prepares"] != json!(false) && cfg["direct_moves"] != json!(true);
     // Theatre: own states armies must stand in to be driven (armies in enemy land always are);
     // keeps home armies that can never reach the war out of it.
     let theatre: HashSet<i32> = list(cfg, "theatre")
@@ -4268,7 +4320,9 @@ fn war_step(
     }
     // Encirclement (plan_encircle.rs): a pocket worth closing takes driven armies as its pincers,
     // then holds the ring and reduces it; armies without a role are driven as before.
-    let roles: HashMap<String, plan_encircle::Role> = {
+    let roles: HashMap<String, plan_encircle::Role> = if lines_only {
+        HashMap::new()
+    } else {
         let cands: Vec<plan_encircle::Cand> = list(&roster, "armies")
             .iter()
             .filter_map(|a| {
@@ -4372,10 +4426,27 @@ fn war_step(
         {
             continue;
         }
-        // Trucks for the army's supply hubs (far from railways supply needs them).
-        if let Some(level) = cfg["motorization"].as_u64() {
+        // An army of a running encirclement is left to the war step: its lines follow its role
+        // there (the pass knows no roles, and drew a holding arm an attack front and an
+        // offensive line again after every cooldown).
+        if lines_only
+            && (state.war_stage.get(&name).copied().unwrap_or(0) >= 2
+                || army["plan_executing"] == json!(true)
+                || state.war_move.contains(&name)
+                || state.war_rest.contains_key(&name)
+                || plan_encircle::committed(state, &name))
+        {
+            continue;
+        }
+        // Trucks for the army's supply hubs (far from railways supply needs them). After the
+        // lines: an army plans from the day they stand, and trucks change nothing before it moves.
+        if let Some(level) = cfg["motorization"].as_u64().filter(|_| !lines_only) {
             if army["motorization"].as_u64().unwrap_or(0) < level
                 && !state.skipped(now, "motor", &name)
+                && (state.war_stage.get(&name).copied().unwrap_or(0) >= 2
+                    || army["battle_plan_orders"].as_u64().unwrap_or(0) >= 2
+                    || army["plan_executing"] == json!(true)
+                    || cfg["direct_moves"] == json!(true))
             {
                 let (ok, why) = state.act(
                     tools,
@@ -4461,7 +4532,7 @@ fn war_step(
         // An entry with a `path` is followed leg by leg (plan_route.rs): the state and province
         // here are then the next waypoint's, not the far target's.
         let direct_mode = cfg["direct_moves"] == json!(true);
-        let vp: Option<Vp> = if hold_only || forced.is_some() {
+        let vp: Option<Vp> = if (hold_only && !prepare) || forced.is_some() {
             None
         } else {
             vp_choice(
@@ -4483,7 +4554,9 @@ fn war_step(
         };
         let mut target = state.war_assign.get(&name).copied().filter(|t| {
             forced == Some(*t)
-                || (open(*t) || vp_state == Some(*t)) && !behind(*t) && (!hold_only || own(*t))
+                || (open(*t) || vp_state == Some(*t))
+                    && !behind(*t)
+                    && (!hold_only || prepare || own(*t))
         });
         if target.is_none() {
             if let Some(old) = state.war_assign.remove(&name) {
@@ -4524,7 +4597,7 @@ fn war_step(
                 Some(axis) => vec![axis],
                 None => axes.clone(),
             };
-            let from_axes: Vec<(i32, f64)> = if hold_only {
+            let from_axes: Vec<(i32, f64)> = if hold_only && !prepare {
                 Vec::new()
             } else {
                 axes_here
@@ -4547,6 +4620,14 @@ fn war_step(
                     })
                     .min_by(|a, b| a.1.total_cmp(&b.1))
             };
+            // In a hold that prepares, an army with a victory-point row and no axis plans on
+            // that row's state.
+            let best = best.or_else(|| {
+                vp_state
+                    .filter(|_| prepare)
+                    .filter(|st| open(*st))
+                    .map(|st| (st, 0.0))
+            });
             if let Some((id, _)) = best {
                 state.war_assign.insert(name.clone(), id);
                 *load.entry(id).or_default() += 1;
@@ -4593,8 +4674,21 @@ fn war_step(
         let org = condition.get(&name).copied();
         // Progress: the army's main state changes, or the target changes. Reset on either,
         // with the ground held then as the mark for the stall check (provinces count too).
+        // Ground is measured wherever the army stands, not only in its main state: a front
+        // along a whole border advances through the states beside its target too, and ground
+        // taken there read as a stall (live 15 Nov 2026: an army with its target in Begemder
+        // took Tigray province by province and was stopped three times as stalled).
         let mut measured = vec![target];
         measured.extend(here.filter(|h| *h != target));
+        if let Some(stands) = army["states"].as_object() {
+            let mut more: Vec<i32> = stands
+                .keys()
+                .filter_map(|k| k.parse::<i32>().ok())
+                .filter(|id| !measured.contains(id))
+                .collect();
+            more.sort_unstable();
+            measured.extend(more);
+        }
         let since = match state.war_since.get(&name) {
             Some((t, h, at)) if *t == target && *h == here => *at,
             _ => {
@@ -4614,6 +4708,27 @@ fn war_step(
             }
         }
         let own_target = targets.iter().any(|t| t.0 == target && t.1);
+        // A hold phase attacks nothing: a plan still executing on enemy land is stopped. Its
+        // lines stay, so the army plans on them until a phase with axes lets it execute.
+        let holding_phase = prepare && !own_target && forced.is_none();
+        if holding_phase && executing && !lines_only {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_plan",
+                json!({"army": name, "execute": false}),
+                "wr",
+            )?;
+            if ok {
+                state.war_stage.insert(name.clone(), 2);
+                plan_war::replan(state, &name, target, now);
+                state.war_since.insert(name.clone(), (target, here, now));
+            }
+            state.war_cool.insert(name.clone(), now + cooldown);
+            return Ok(Some(format!(
+                "war hold {name}: plan stopped for the hold phase (its lines stay): {ok} {why}"
+            )));
+        }
         // The leg of a plan path this army follows now (never while it retakes own land).
         let leg: Option<(i64, plan_route::Leg)> = vp
             .as_ref()
@@ -4665,6 +4780,9 @@ fn war_step(
                 return Ok(Some(line));
             }
         }
+        // Below its organisation, supply or equipment limits (set below): the army may draw its
+        // lines, and takes no step into enemy land.
+        let mut limited = false;
         // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
         // recovers, or after `rest_max_days` when the supply is above the hard hold (supply where
         // the army stands may never recover). A direct-move army has no plan to stop: it rests by
@@ -4745,10 +4863,16 @@ fn war_step(
             }
             // No new attack order below the supply floor or the rest line; below the hard hold
             // not even a move to retake an own state.
+            // Drawing a front or an offensive line is not an attack: an army short of
+            // organisation, supply or equipment still gets its lines and plans on them while it
+            // recovers. The limits hold back what attacks: the execute order and every move.
+            let draws_lines =
+                stage < 2 && !executing && !direct && !liberate && !state.war_move.contains(&name);
+            limited = tired || starving || underfilled;
             let blocked = if own_target {
                 limits.held(supply)
             } else {
-                tired || starving || underfilled
+                limited && !draws_lines
             };
             if blocked {
                 let fill_note = army_fill
@@ -4890,7 +5014,13 @@ fn war_step(
             state.war_cool.insert(name.clone(), now + cooldown);
             continue;
         }
-        if ordered && (!standing_in_target || stuck_inside) && now - since >= stall_now {
+        // Never in a hold phase: the stall's answers end in a direct move into the target, and
+        // the phase attacks nothing (an army left in move mode waits the hold out).
+        if ordered
+            && !holding_phase
+            && (!standing_in_target || stuck_inside)
+            && now - since >= stall_now
+        {
             // Progress is ground taken, not only a new main state: an offensive that takes
             // provinces of its target is advancing, however long the state takes to fall.
             if let Some(count) = provinces_held(tools, &me, &measured) {
@@ -5053,6 +5183,15 @@ fn war_step(
                 2,
             )
         } else if stage == 2 {
+            if holding_phase {
+                plan_war::held_note(
+                    state,
+                    &name,
+                    format!("{name} holds: its lines on state {target} are drawn and it plans; the phase attacks nothing"),
+                );
+                state.war_cool.insert(name.clone(), now + cooldown);
+                continue;
+            }
             // Planning before execution and the bound pause after a captured hub (plan_war.rs).
             let mean = org.map(|o| o.1);
             let planning = army["planning"]["mean"].as_f64();
@@ -5093,6 +5232,35 @@ fn war_step(
             state.war_cool.insert(name.clone(), now + cooldown);
             continue;
         }
+        if ok && label == "front" {
+            // The offensive line follows its front in the same step: the two are one order to
+            // a player, and apart they were two turns of the war block with other domains in
+            // between (and the pause between stages is game time, which stands still in a
+            // paused opening).
+            state.war_stage.insert(name.clone(), 1);
+            let (ok2, why2) = state.act(
+                tools,
+                lease,
+                "hoi4_army_offensive",
+                json!({"army": name, "state_id": target}),
+                "wr",
+            )?;
+            if ok2 {
+                state.war_stage.insert(name.clone(), 2);
+                plan_war::drawn(state, &name, target, now);
+                state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
+                return Ok(Some(format!(
+                    "war front and offensive {name} -> state {target}: ok"
+                )));
+            }
+            state.war_cool.insert(name.clone(), now + cooldown);
+            if held_back(&why2) {
+                return Ok(Some(format!("war front {name} -> state {target}: ok")));
+            }
+            return Ok(Some(format!(
+                "war front {name} -> state {target}: ok; offensive: false {why2}"
+            )));
+        }
         if ok {
             state.war_stage.insert(name.clone(), next_stage);
             state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
@@ -5119,6 +5287,20 @@ fn war_step(
             return Ok(Some(format!(
                 "war front {name} -> state {target}: false {why} (it has {} battle plan order(s): the offensive follows)",
                 orders.max(raw_orders)
+            )));
+        }
+        // The step into the state below is a move into enemy land. An army below its limits
+        // does not take it, and no army does in a hold phase: drawing a line is all they may do
+        // there, so the front is tried again after the cooldown.
+        if label == "front" && (limited || holding_phase) {
+            state.war_cool.insert(name.clone(), now + cooldown);
+            return Ok(Some(format!(
+                "war front {name} -> state {target}: false {why} (no step into the state: {})",
+                if holding_phase {
+                    "the phase holds"
+                } else {
+                    "the army is below its limits"
+                }
             )));
         }
         // No foothold for a front line yet: step into the state first.
@@ -6503,7 +6685,26 @@ pub fn run(
                 break json!(why);
             }
             Tick::Idle => break json!("plan inactive (active:false)"),
-            Tick::Nothing => Duration::from_secs(12),
+            Tick::Nothing => {
+                // The first time nothing is left to do while the game is still paused, the
+                // opening is set up: the feed says so once, and a player waiting to unpause
+                // need not guess from the army list when the executor is done.
+                if !state.setup_noted {
+                    state.setup_noted = true;
+                    let paused = tools
+                        .call("hoi4_overview", &json!({}))
+                        .is_ok_and(|overview| overview["paused"] == json!(true));
+                    if paused {
+                        crate::watch::feed().note(
+                            crate::watch::SETUP_COMPLETE,
+                            true,
+                            json!({"game_hour": state.last_hour, "actions": actions.len(),
+                                "next": "the executor has nothing left to order while paused: unpause"}),
+                        );
+                    }
+                }
+                Duration::from_secs(12)
+            }
         };
         if std::time::Instant::now() + pause >= deadline {
             break json!("deadline");
@@ -8030,9 +8231,18 @@ mod tests {
         let out = war_step(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap();
-        assert!(out.starts_with("war front A -> state 2"), "{out}");
+        assert!(
+            out.starts_with("war front and offensive A -> state 2"),
+            "{out}"
+        );
         let calls = tools.calls.borrow();
         assert!(!calls.iter().any(|(n, _)| n == "hoi4_army_move"));
+        for line in ["hoi4_army_front", "hoi4_army_offensive"] {
+            assert!(
+                calls.iter().any(|(n, a)| n == line && a["state_id"] == 2),
+                "{line} on the province's state"
+            );
+        }
         drop(calls);
         // with direct moves the province itself is the order
         let mut plan = plan;
@@ -8585,6 +8795,9 @@ mod tests {
         };
         let mut state = State::default();
         let mut plan = war_plan();
+        // no planning wait: the tick after its lines the war step has the execute order to give
+        // (the front and the offensive line both go out in its first step)
+        plan["war"]["planning_wait"] = json!(false);
         plan["politics"] = json!([{"id": "chief", "category": "military_staff", "slot": 0,
             "idea": "ITA_chief", "cost": 50}]);
         let politics = |w: &War| {
@@ -9272,15 +9485,47 @@ mod tests {
         let w = war(false);
         let mut state = State::default();
         let plan = json!({"war": {"enemies": ["FRA"], "axes": []}});
-        tick(&mut state, &w, &plan, "l", START).unwrap();
-        assert!(
-            !w.calls
+        let orders = |w: &War| -> Vec<String> {
+            w.calls
                 .borrow()
                 .iter()
-                .any(|(n, a)| n.starts_with("hoi4_army_") && a.get("request_id").is_some()),
-            "{:?}",
-            w.calls.borrow()
+                .filter(|(n, a)| n.starts_with("hoi4_army_") && a.get("request_id").is_some())
+                .map(|(n, _)| n.clone())
+                .collect()
+        };
+        // an army with no target of its own (no layout axis, no victory-point row) gets no order
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(orders(&w).is_empty(), "{:?}", w.calls.borrow());
+        // with a victory-point row the hold prepares: the army draws its front and its offensive
+        // line on the row's state and plans there, and no execute order follows in the hold
+        let mut prepared = plan.clone();
+        prepared["vp_targets"] = json!([{"province": 280, "state": 28, "army": "Army 1"}]);
+        let w = war(false);
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &prepared, "l", START).unwrap();
+        assert_eq!(
+            step,
+            Tick::Acted("war front and offensive Army 1 -> state 28: ok".into())
         );
+        for day in 1..=20 {
+            assert_eq!(
+                tick(&mut state, &w, &prepared, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        assert_eq!(orders(&w), ["hoi4_army_front", "hoi4_army_offensive"]);
+        // "hold_prepares": false keeps the old hold: no line on enemy land at all
+        prepared["war"]["hold_prepares"] = json!(false);
+        let w = war(false);
+        let mut state = State::default();
+        for day in 0..3 {
+            assert_eq!(
+                tick(&mut state, &w, &prepared, "l", START + day * DAY).unwrap(),
+                Tick::Nothing
+            );
+        }
+        assert!(orders(&w).is_empty(), "{:?}", w.calls.borrow());
         // an own state to retake is still retaken
         let w = war(true);
         let mut state = State::default();
@@ -9378,7 +9623,7 @@ mod tests {
             "the layout tried first"
         );
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front and offensive Army 1")),
             "{step:?}"
         );
     }
@@ -9879,13 +10124,18 @@ mod tests {
         tick(&mut state, &w, &plan, "l", START + 4 * DAY).unwrap();
         assert_eq!(moves(&w), 1);
         // the army did not move and has no lines: once the move has settled it leaves move mode
-        // and its front is drawn again, instead of a second move twice as late
+        // and its front and offensive line are drawn again, instead of a second move twice as late
         tick(&mut state, &w, &plan, "l", START + 8 * DAY + 1).unwrap();
         assert_eq!(moves(&w), 1);
         assert!(!state.war_move.contains("Army 1"));
         tick(&mut state, &w, &plan, "l", START + 12 * DAY + 1).unwrap();
         assert_eq!(moves(&w), 1);
-        assert_eq!(w.calls.borrow().last().unwrap().0, "hoi4_army_front");
+        let calls = w.calls.borrow();
+        let last_two: Vec<&str> = calls[calls.len() - 2..]
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect();
+        assert_eq!(last_two, ["hoi4_army_front", "hoi4_army_offensive"]);
     }
 
     #[test]
@@ -9910,7 +10160,7 @@ mod tests {
     }
 
     #[test]
-    fn an_army_fronts_the_nearest_enemy_state_then_draws_the_offensive_and_executes() {
+    fn an_army_draws_its_front_and_offensive_on_the_nearest_enemy_state_then_executes() {
         let w = War {
             liberate: false,
             front_ok: true,
@@ -9919,20 +10169,44 @@ mod tests {
         let mut state = State::default();
         let now = START;
         let first = tick(&mut state, &w, &war_plan(), "l", now).unwrap();
-        assert!(matches!(&first, Tick::Acted(s) if s.starts_with("war front Army 1 -> state 28")));
-        let (name, args) = last_action(&w);
         assert_eq!(
-            (name.as_str(), &args["state_id"]),
-            ("hoi4_army_front", &json!(28))
+            first,
+            Tick::Acted("war front and offensive Army 1 -> state 28: ok".into())
         );
+        // one step, two orders: the front, then the offensive line on the same state
+        let lines: Vec<(String, Value)> = w
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, _)| n.starts_with("hoi4_army_"))
+            .map(|(n, a)| (n.clone(), a["state_id"].clone()))
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                ("hoi4_army_front".to_string(), json!(28)),
+                ("hoi4_army_offensive".to_string(), json!(28))
+            ]
+        );
+        // the planning bonus builds first (13.5 game days by the default estimate)
         let later = now + 3;
         let second = tick(&mut state, &w, &war_plan(), "l", later).unwrap();
-        assert!(matches!(&second, Tick::Acted(s) if s.starts_with("war offensive")));
-        // the planning bonus builds first (13.5 game days by the default estimate)
-        let third = tick(&mut state, &w, &war_plan(), "l", later + 3).unwrap();
-        assert_eq!(third, Tick::Nothing);
-        let fourth = tick(&mut state, &w, &war_plan(), "l", later + 14 * DAY).unwrap();
-        assert!(matches!(&fourth, Tick::Acted(s) if s.starts_with("war execute")));
+        assert_eq!(second, Tick::Nothing);
+        let third = tick(&mut state, &w, &war_plan(), "l", now + 14 * DAY).unwrap();
+        assert!(matches!(&third, Tick::Acted(s) if s.starts_with("war execute")));
+        // the execute order is the only order after the lines: neither line is drawn twice
+        let (name, args) = last_action(&w);
+        assert_eq!(
+            (name.as_str(), &args["execute"]),
+            ("hoi4_army_plan", &json!(true))
+        );
+        let orders = w
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, _)| n.starts_with("hoi4_army_"))
+            .count();
+        assert_eq!(orders, 3);
     }
 
     /// A war with a configurable army (executing flag, main state) and organisation.
@@ -10090,41 +10364,59 @@ mod tests {
     }
 
     #[test]
-    fn an_army_under_the_fill_floor_gets_no_attack_order() {
+    fn an_army_under_the_fill_floor_draws_its_lines_but_gets_no_execute_order() {
         // sk9/sk10 (14 Nov): offensives at 8-30% equipment fill lost 4-6 own per enemy.
+        // Lines are no attack: they are drawn at once, so the army plans while it refills.
         let w = War2::new();
         w.fill.set(0.6);
-        let plan = json!({"war": {"enemies": ["FRA"]}});
+        // no planning wait: only the fill floor stands between the lines and the execute order
+        let plan = json!({"war": {"enemies": ["FRA"], "planning_wait": false}});
         let mut state = State::default();
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
         assert_eq!(
-            tick(&mut state, &w, &plan, "l", START).unwrap(),
-            Tick::Nothing
+            step,
+            Tick::Acted("war front and offensive Army 1 -> state 28: ok".into())
         );
+        for day in 1..4 {
+            assert_eq!(
+                tick(&mut state, &w, &plan, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
         assert!(!w
             .calls
             .borrow()
             .iter()
-            .any(|(n, _)| n == "hoi4_army_front" || n == "hoi4_army_plan"));
+            .any(|(n, _)| n == "hoi4_army_plan" || n == "hoi4_army_move"));
         let held = plan_war::digest(&state).unwrap_or_default();
         assert!(
-            held["hold:Army 1"]
-                .as_str()
-                .is_some_and(|v| v.contains("equipment fill 60%")),
+            held["hold:Army 1"].as_str().is_some_and(
+                |v| v.contains("gets no attack order") && v.contains("equipment fill 60%")
+            ),
             "{held}"
         );
-        // refilled: the attack goes ahead; a plan may lower the floor
+        // refilled: the attack goes ahead on the lines that stand; a plan may lower the floor
         w.fill.set(0.95);
-        let step = tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
+        let step = tick(&mut state, &w, &plan, "l", START + 4 * DAY).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war execute Army 1")),
             "{step:?}"
         );
-        let low = json!({"war": {"enemies": ["FRA"], "fill_floor": 0.5}});
+        let fronts = w
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, _)| n == "hoi4_army_front")
+            .count();
+        assert_eq!(fronts, 1, "the lines are drawn once");
+        let low = json!({"war": {"enemies": ["FRA"], "planning_wait": false, "fill_floor": 0.5}});
         let mut fresh = State::default();
         w.fill.set(0.6);
-        let step = tick(&mut fresh, &w, &low, "l", START).unwrap();
+        tick(&mut fresh, &w, &low, "l", START).unwrap();
+        let step = tick(&mut fresh, &w, &low, "l", START + 3).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war execute Army 1")),
             "{step:?}"
         );
     }
@@ -10136,9 +10428,729 @@ mod tests {
         let mut state = State::default();
         let step = tick(&mut state, &w, &plan, "l", START).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1 -> state 18")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front and offensive Army 1 -> state 18")),
             "{step:?}"
         );
+    }
+
+    /// One army (Army 1, ten divisions, standing in own state 42) at war with FRA: state 28 is
+    /// the nearest enemy state, 30 lies beside it and 18 behind. The fake keeps what the orders
+    /// change (the army's battle plan orders and its executing flag); the test sets the rest.
+    struct Field {
+        executing: Cell<bool>,
+        orders: Cell<u64>,
+        org: Cell<f64>,
+        fill: Cell<f64>,
+        /// the state most of the army stands in
+        here: Cell<i64>,
+        /// divisions of the army that stand in state 30, beside its target
+        in_30: Cell<u64>,
+        /// provinces of state 30 the player holds
+        held_30: Cell<usize>,
+        /// a tool whose orders the game refuses
+        refuse: Cell<Option<&'static str>>,
+        calls: RefCell<Vec<(String, Value)>>,
+    }
+    impl Field {
+        fn new() -> Self {
+            Self {
+                executing: Cell::new(false),
+                orders: Cell::new(0),
+                org: Cell::new(40.0),
+                fill: Cell::new(1.0),
+                here: Cell::new(42),
+                in_30: Cell::new(0),
+                held_30: Cell::new(0),
+                refuse: Cell::new(None),
+                calls: RefCell::new(vec![]),
+            }
+        }
+        /// The orders sent, in order: (tool, arguments).
+        fn orders_sent(&self) -> Vec<(String, Value)> {
+            self.calls
+                .borrow()
+                .iter()
+                .filter(|(_, a)| a.get("request_id").is_some())
+                .cloned()
+                .collect()
+        }
+        /// The tools of the orders sent, in order.
+        fn tools_sent(&self) -> Vec<String> {
+            self.orders_sent().into_iter().map(|(n, _)| n).collect()
+        }
+        fn sent(&self, tool: &str) -> usize {
+            self.tools_sent().iter().filter(|n| *n == tool).count()
+        }
+    }
+    impl Tools for Field {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            if args.get("request_id").is_some() {
+                if self.refuse.get() == Some(name) {
+                    return Err(Error::new("input_readback_failed", "refused by the fake"));
+                }
+                match name {
+                    "hoi4_army_plan" => self.executing.set(args["execute"] == json!(true)),
+                    "hoi4_army_front" => self.orders.set(self.orders.get().max(1)),
+                    "hoi4_army_offensive" => self.orders.set(2),
+                    _ => {}
+                }
+                return Ok(json!({"receipt": {"status": "Verified"}}));
+            }
+            let provinces = |state: i64, held: usize, of: usize| {
+                let rows: Vec<Value> = (0..of)
+                    .map(|i| {
+                        json!({"province": state * 10 + i as i64,
+                        "controller": if i < held { "GER" } else { "FRA" }})
+                    })
+                    .collect();
+                json!({"states": [{"state_id": state, "provinces": rows}]})
+            };
+            Ok(match name {
+                "hoi4_research" => json!({"slots": [{"researching": "a"}]}),
+                "hoi4_focus_completed" => json!({"active_key": "f"}),
+                "hoi4_economy" => json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0}),
+                "hoi4_overview" => json!({"player": "GER"}),
+                "hoi4_states" => match args["query"].as_str().unwrap() {
+                    "GER" => json!({"states": [
+                        {"state_id": 42, "owner": "GER", "controller": "GER", "x": 0.0, "z": 0.0}]}),
+                    "FRA" => json!({"states": [
+                        {"state_id": 28, "owner": "FRA", "controller": "FRA", "x": 10.0, "z": 10.0},
+                        {"state_id": 30, "owner": "FRA", "controller": "FRA", "x": 30.0, "z": -5.0},
+                        {"state_id": 18, "owner": "FRA", "controller": "FRA", "x": 50.0, "z": 50.0}]}),
+                    "42" => provinces(42, 2, 2),
+                    "28" => provinces(28, 0, 2),
+                    "30" => provinces(30, self.held_30.get(), 3),
+                    other if other.parse::<i32>().is_ok() => json!({"states": []}),
+                    other => panic!("unexpected query {other}"),
+                },
+                "hoi4_armies" => {
+                    let beside = self.in_30.get();
+                    let mut army = json!({"army": "Army 1", "division_count": 10,
+                        "main_state": self.here.get(),
+                        "battle_plan_orders": self.orders.get(),
+                        "plan_executing": self.executing.get(), "commander": "X"});
+                    if beside > 0 {
+                        army["states"] = json!({"42": 10 - beside, "30": beside});
+                    }
+                    json!({"unassigned_by_state": [], "armies": [army]})
+                }
+                "hoi4_supply" => json!({
+                    "armies": [{"army": "Army 1", "organisation_mean": self.org.get(),
+                        "supply_percent_mean": 80.0}],
+                    "divisions": [{"army": "Army 1", "equipment_fill_min": self.fill.get()},
+                                  {"army": "Army 1", "equipment_fill_min": self.fill.get()}]}),
+                _ => json!({}),
+            })
+        }
+    }
+    /// The status line the war rules keep under `key` (the run result's `war`).
+    fn war_note(state: &State, key: &str) -> String {
+        plan_war::digest(state)
+            .and_then(|d| d[key].as_str().map(str::to_string))
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn the_front_and_the_offensive_line_are_drawn_in_one_step() {
+        let f = Field::new();
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        let out = war_step(&mut state, &f, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("war front and offensive Army 1 -> state 28: ok")
+        );
+        let sent: Vec<(String, Value)> = f
+            .orders_sent()
+            .into_iter()
+            .map(|(n, a)| (n, json!([a["army"], a["state_id"]])))
+            .collect();
+        assert_eq!(
+            sent,
+            [
+                ("hoi4_army_front".to_string(), json!(["Army 1", 28])),
+                ("hoi4_army_offensive".to_string(), json!(["Army 1", 28]))
+            ]
+        );
+        // both lines stand: the army is before its execute order and its planning has started
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        assert_eq!(state.last_ok, Some(true));
+        // the same game hour again (a paused opening): neither line is drawn a second time
+        assert_eq!(war_step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        state.clock = START + DAY;
+        assert_eq!(
+            war_step(&mut state, &f, &plan, "l", START + DAY).unwrap(),
+            None
+        );
+        assert_eq!(f.tools_sent().len(), 2);
+        assert!(
+            war_note(&state, "planning:Army 1").contains("plans its offensive on state 28: 1.0 of"),
+            "{}",
+            war_note(&state, "planning:Army 1")
+        );
+    }
+
+    #[test]
+    fn a_refused_offensive_line_leaves_the_front_standing_and_is_tried_alone_next() {
+        let f = Field::new();
+        f.refuse.set(Some("hoi4_army_offensive"));
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        let out = war_step(&mut state, &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with(
+                "war front Army 1 -> state 28: ok; offensive: false input_readback_failed"
+            ),
+            "{out}"
+        );
+        // the front counts: the army waits before its offensive line, and the step reads as failed
+        assert_eq!(state.war_stage.get("Army 1"), Some(&1));
+        assert_eq!(state.last_ok, Some(false));
+        // within the cooldown nothing is sent again
+        assert_eq!(
+            war_step(&mut state, &f, &plan, "l", START + 3).unwrap(),
+            None
+        );
+        // then the offensive line alone: the front is not drawn a second time
+        f.refuse.set(None);
+        state.clock = START + DAY;
+        let out = war_step(&mut state, &f, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out, "war offensive Army 1 -> state 28: ok");
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        assert_eq!(
+            f.tools_sent(),
+            [
+                "hoi4_army_front",
+                "hoi4_army_offensive",
+                "hoi4_army_offensive"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_offensive_line_the_ledger_holds_back_is_not_sent_with_the_front() {
+        let f = Field::new();
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        // the same offensive order failed three times in the last game hours: it waits
+        let order = format!(
+            "hoi4_army_offensive {}",
+            json!({"army": "Army 1", "state_id": 28})
+        );
+        state
+            .failures
+            .insert(order, vec![START - 3, START - 2, START - 1]);
+        let out = war_step(&mut state, &f, &plan, "l", START).unwrap();
+        assert_eq!(out.as_deref(), Some("war front Army 1 -> state 28: ok"));
+        assert_eq!(f.tools_sent(), ["hoi4_army_front"]);
+        assert_eq!(state.war_stage.get("Army 1"), Some(&1));
+    }
+
+    #[test]
+    fn the_opening_pass_draws_the_lines_before_a_pending_rename() {
+        let f = Field::new();
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        // the army is bound to a role whose name it does not carry yet: a rename is due
+        state.layout.insert("North".into(), "Army 1".into());
+        let first = war_first_steps(&mut state, &f, &plan, "l", START).unwrap();
+        assert_eq!(
+            first.as_deref(),
+            Some("war front and offensive Army 1 -> state 28: ok")
+        );
+        assert_eq!(f.sent("hoi4_army_rename"), 0);
+        // one cheap roster read decided that the pass had work
+        assert!(f
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, a)| n == "hoi4_armies" && a["threat"] == json!(false)));
+        assert!(!state.war_lines_only, "the pass ends with its step");
+        // the lines stand: the pass has nothing left to draw and the name follows
+        let second = war_first_steps(&mut state, &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            second.starts_with("layout: Army 1 renamed North: true"),
+            "{second}"
+        );
+        assert_eq!(
+            f.tools_sent(),
+            ["hoi4_army_front", "hoi4_army_offensive", "hoi4_army_rename"]
+        );
+    }
+
+    #[test]
+    fn the_opening_pass_orders_only_an_army_without_its_lines() {
+        let plan = json!({"war": {"enemies": ["FRA"], "planning_wait": false, "motorization": 2}});
+        let pass = |state: &mut State, f: &Field, now: GameHour| {
+            state.clock = now;
+            state.war_lines_only = true;
+            let out = war_step(state, f, &plan, "l", now).unwrap();
+            state.war_lines_only = false;
+            out
+        };
+        let reads = |f: &Field| -> Vec<String> {
+            f.calls
+                .borrow()
+                .iter()
+                .filter(|(_, a)| a.get("request_id").is_none())
+                .map(|(n, _)| n.clone())
+                .collect()
+        };
+        // lines drawn: the execute order is not the pass's to give, and the roster read is all
+        // the pass costs
+        let f = Field::new();
+        let mut state = State::default();
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_stage.insert("Army 1".into(), 2);
+        assert_eq!(pass(&mut state, &f, START), None);
+        assert!(f.tools_sent().is_empty());
+        assert_eq!(reads(&f), ["hoi4_overview", "hoi4_armies"]);
+        // an executing plan, a moving army and a resting one are not the pass's either
+        for case in 0..3 {
+            let f = Field::new();
+            let mut state = State::default();
+            match case {
+                0 => f.executing.set(true),
+                1 => {
+                    state.war_move.insert("Army 1".into());
+                }
+                _ => {
+                    state.war_rest.insert("Army 1".into(), START);
+                }
+            }
+            assert_eq!(pass(&mut state, &f, START), None, "case {case}");
+            assert!(f.tools_sent().is_empty(), "case {case}");
+            assert_eq!(reads(&f), ["hoi4_overview", "hoi4_armies"], "case {case}");
+        }
+        // without lines: both are drawn, and nothing else of the war step runs in the pass (no
+        // supply-first queue read, no pocket search, no trucks)
+        let f = Field::new();
+        let mut state = State::default();
+        assert_eq!(
+            pass(&mut state, &f, START).as_deref(),
+            Some("war front and offensive Army 1 -> state 28: ok")
+        );
+        assert_eq!(f.tools_sent(), ["hoi4_army_front", "hoi4_army_offensive"]);
+        for read in ["hoi4_construction_queue", "hoi4_encirclement_candidates"] {
+            assert!(!reads(&f).iter().any(|n| n == read), "{read}");
+        }
+        // the war step itself then gives the trucks and the execute order
+        state.clock = START + 3;
+        let out = war_step(&mut state, &f, &plan, "l", START + 3)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("war motorization Army 1 level 2: true"),
+            "{out}"
+        );
+        state.clock = START + 6;
+        let out = war_step(&mut state, &f, &plan, "l", START + 6)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("war execute Army 1 -> state 28"), "{out}");
+    }
+
+    #[test]
+    fn trucks_are_ordered_only_after_the_army_has_its_lines() {
+        let f = Field::new();
+        let plan = json!({"war": {"enemies": ["FRA"], "motorization": 2}});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        // no lines yet: the lines come first, the trucks wait
+        let out = war_step(&mut state, &f, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("war front and offensive Army 1 -> state 28: ok")
+        );
+        assert_eq!(f.sent("hoi4_army_motorization"), 0);
+        state.clock = START + 3;
+        let out = war_step(&mut state, &f, &plan, "l", START + 3)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("war motorization Army 1 level 2: true"),
+            "{out}"
+        );
+        // lines from before a restart (the roster shows both), or a plan already executing:
+        // the trucks go out in the first step
+        for executing in [false, true] {
+            let f = Field::new();
+            f.orders.set(2);
+            f.executing.set(executing);
+            let mut state = State {
+                clock: START,
+                ..Default::default()
+            };
+            let out = war_step(&mut state, &f, &plan, "l", START)
+                .unwrap()
+                .unwrap();
+            assert!(
+                out.starts_with("war motorization Army 1 level 2: true"),
+                "executing {executing}: {out}"
+            );
+        }
+        // an army that attacks with direct moves has no lines to wait for
+        let f = Field::new();
+        let direct = json!({"war": {"enemies": ["FRA"], "motorization": 2, "direct_moves": true}});
+        let mut state = State {
+            clock: START,
+            ..Default::default()
+        };
+        let out = war_step(&mut state, &f, &direct, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("war motorization Army 1 level 2: true"),
+            "{out}"
+        );
+    }
+
+    /// A hold phase (`axes: []`) for the Field army, bound to a strike role with its own axis.
+    fn hold_plan(war: Value) -> Value {
+        let mut plan = json!({"war": {"enemies": ["FRA"], "axes": []},
+            "army_layout": [{"name_hint": "Army 1", "state": 42, "role": "strike",
+                "axis": [28, 18]}]});
+        for (k, v) in war.as_object().unwrap() {
+            plan["war"][k] = v.clone();
+        }
+        plan
+    }
+    fn strike_state() -> State {
+        let mut state = State::default();
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        state
+    }
+
+    #[test]
+    fn a_hold_phase_prepares_the_lines_and_the_phase_with_axes_executes_on_them() {
+        let f = Field::new();
+        let hold = hold_plan(json!({}));
+        let mut state = strike_state();
+        // the hold: the army draws its front and its offensive line toward its own axis
+        let step = tick(&mut state, &f, &hold, "l", START).unwrap();
+        assert_eq!(
+            step,
+            Tick::Acted("war front and offensive Army 1 -> state 28: ok".into())
+        );
+        // however long the hold lasts, nothing executes and nothing moves
+        for day in 1..=20 {
+            assert_eq!(
+                tick(&mut state, &f, &hold, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        assert_eq!(f.tools_sent(), ["hoi4_army_front", "hoi4_army_offensive"]);
+        assert!(
+            war_note(&state, "hold:Army 1")
+                .starts_with("Army 1 holds: its lines on state 28 are drawn"),
+            "{}",
+            war_note(&state, "hold:Army 1")
+        );
+        // the phase that attacks: the days planned in the hold count, the execute order goes out
+        let mut attack = hold.clone();
+        attack["war"]["axes"] = json!([[28, 18]]);
+        let step = tick(&mut state, &f, &attack, "l", START + 21 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war execute Army 1 -> state 28")),
+            "{step:?}"
+        );
+        assert_eq!(
+            f.tools_sent(),
+            ["hoi4_army_front", "hoi4_army_offensive", "hoi4_army_plan"]
+        );
+        // "hold_prepares": false is the old hold: no line on enemy land
+        let f = Field::new();
+        let old = hold_plan(json!({"hold_prepares": false}));
+        let mut state = strike_state();
+        for day in 0..3 {
+            assert_eq!(
+                tick(&mut state, &f, &old, "l", START + day * DAY).unwrap(),
+                Tick::Nothing
+            );
+        }
+        assert!(f.tools_sent().is_empty(), "{:?}", f.tools_sent());
+    }
+
+    #[test]
+    fn a_plan_still_executing_is_stopped_when_a_hold_phase_begins() {
+        let f = Field::new();
+        f.executing.set(true);
+        f.orders.set(2);
+        let hold = json!({"war": {"enemies": ["FRA"], "axes": []}});
+        let attacking = || {
+            let mut state = State::default();
+            state.war_assign.insert("Army 1".into(), 28);
+            state.war_stage.insert("Army 1".into(), 3);
+            state
+        };
+        let mut state = attacking();
+        let step = tick(&mut state, &f, &hold, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with(
+                "war hold Army 1: plan stopped for the hold phase (its lines stay): true")),
+            "{step:?}"
+        );
+        let (tool, args) = f.orders_sent().last().cloned().unwrap();
+        assert_eq!(
+            (tool.as_str(), &args["execute"]),
+            ("hoi4_army_plan", &json!(false))
+        );
+        // back before its execute order, on the lines it has: no new line, no second stop
+        assert_eq!(state.war_stage.get("Army 1"), Some(&2));
+        for day in 1..=10 {
+            assert_eq!(
+                tick(&mut state, &f, &hold, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        assert_eq!(f.tools_sent(), ["hoi4_army_plan"]);
+        // the phase with axes plans again from the stop, then executes
+        let attack = json!({"war": {"enemies": ["FRA"], "axes": [[28, 18]]}});
+        assert_eq!(
+            tick(&mut state, &f, &attack, "l", START + 11 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        let step = tick(&mut state, &f, &attack, "l", START + 14 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war execute Army 1 -> state 28")),
+            "{step:?}"
+        );
+        // "hold_prepares": false is the old hold: the target on enemy land is dropped and no
+        // order is sent for the army
+        let f = Field::new();
+        f.executing.set(true);
+        f.orders.set(2);
+        let old = json!({"war": {"enemies": ["FRA"], "axes": [], "hold_prepares": false}});
+        let mut state = attacking();
+        assert_eq!(
+            tick(&mut state, &f, &old, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        assert!(f.tools_sent().is_empty(), "{:?}", f.tools_sent());
+        assert!(!state.war_assign.contains_key("Army 1"));
+    }
+
+    #[test]
+    fn a_hold_phase_never_sends_an_army_into_enemy_land() {
+        // the front cannot be drawn (no foothold): in an attacking phase the army steps into
+        // the state, in a hold phase it stays where it is
+        let f = Field::new();
+        f.refuse.set(Some("hoi4_army_front"));
+        let mut state = strike_state();
+        let hold = hold_plan(json!({}));
+        for day in 0..3 {
+            let _ = tick(&mut state, &f, &hold, "l", START + day * DAY).unwrap();
+        }
+        assert_eq!(f.sent("hoi4_army_move"), 0, "{:?}", f.orders_sent());
+        assert!(f.sent("hoi4_army_front") > 0);
+        // an army in move mode inside its target gets no stall move while the phase holds
+        let f = Field::new();
+        f.here.set(28);
+        let mut state = strike_state();
+        state.war_assign.insert("Army 1".into(), 28);
+        state.war_move.insert("Army 1".into());
+        for day in [0, 20, 40, 60] {
+            let _ = tick(&mut state, &f, &hold, "l", START + day * DAY).unwrap();
+        }
+        assert_eq!(f.sent("hoi4_army_move"), 0, "{:?}", f.orders_sent());
+        // direct moves have no lines to prepare: their hold stays the old hold
+        let f = Field::new();
+        let mut state = strike_state();
+        let direct = hold_plan(json!({"direct_moves": true}));
+        for day in 0..3 {
+            assert_eq!(
+                tick(&mut state, &f, &direct, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        assert!(f.tools_sent().is_empty(), "{:?}", f.orders_sent());
+    }
+
+    #[test]
+    fn a_tired_army_draws_its_lines_and_waits_with_the_execute_order() {
+        let f = Field::new();
+        f.org.set(8.0);
+        // absolute organisation thresholds by key (the default is a share of the highest seen)
+        let plan = json!({"war": {"enemies": ["FRA"], "planning_wait": false,
+            "rest_below": 12, "resume_above": 30}});
+        let mut state = State::default();
+        let step = tick(&mut state, &f, &plan, "l", START).unwrap();
+        assert_eq!(
+            step,
+            Tick::Acted("war front and offensive Army 1 -> state 28: ok".into())
+        );
+        for day in 1..4 {
+            assert_eq!(
+                tick(&mut state, &f, &plan, "l", START + day * DAY).unwrap(),
+                Tick::Nothing,
+                "day {day}"
+            );
+        }
+        assert_eq!(f.tools_sent(), ["hoi4_army_front", "hoi4_army_offensive"]);
+        assert!(
+            war_note(&state, "hold:Army 1").contains("gets no attack order: organisation 8"),
+            "{}",
+            war_note(&state, "hold:Army 1")
+        );
+        f.org.set(35.0);
+        let step = tick(&mut state, &f, &plan, "l", START + 4 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war execute Army 1 -> state 28")),
+            "{step:?}"
+        );
+    }
+
+    #[test]
+    fn an_army_under_the_fill_floor_is_not_moved_into_the_state_when_its_front_fails() {
+        // Without a foothold a front cannot be drawn and the army steps into the state: a move
+        // into enemy land, which the limits hold back like the execute order.
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let f = Field::new();
+        f.fill.set(0.6);
+        f.refuse.set(Some("hoi4_army_front"));
+        let mut state = State::default();
+        let step = tick(&mut state, &f, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with(
+                "war front Army 1 -> state 28: false input_readback_failed")),
+            "{step:?}"
+        );
+        assert_eq!(f.tools_sent(), ["hoi4_army_front"]);
+        assert!(!state.war_move.contains("Army 1"));
+        // at full equipment the same refusal is answered with the step into the state
+        let f = Field::new();
+        f.refuse.set(Some("hoi4_army_front"));
+        let mut state = State::default();
+        let step = tick(&mut state, &f, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 28: true")),
+            "{step:?}"
+        );
+        assert_eq!(f.tools_sent(), ["hoi4_army_front", "hoi4_army_move"]);
+    }
+
+    #[test]
+    fn ground_taken_in_a_state_beside_the_target_is_progress_not_a_stall() {
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8}});
+        let attacking = |f: &Field| {
+            f.executing.set(true);
+            f.orders.set(2);
+            let mut state = State::default();
+            state.war_assign.insert("Army 1".into(), 28);
+            state.war_stage.insert("Army 1".into(), 3);
+            state
+        };
+        // three divisions of the army stand in state 30, beside its target 28
+        let f = Field::new();
+        f.in_30.set(3);
+        let mut state = attacking(&f);
+        assert_eq!(
+            tick(&mut state, &f, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        // a province of state 30 falls: after the stall time the plan is left running
+        f.held_30.set(1);
+        assert_eq!(
+            tick(&mut state, &f, &plan, "l", START + 8 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        assert!(f.tools_sent().is_empty(), "{:?}", f.orders_sent());
+        assert!(f.executing.get());
+        // no more ground in the next stall time: now it is a stall
+        let step = tick(&mut state, &f, &plan, "l", START + 16 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with(
+                "war stalled Army 1 8 days on state 28: plan stopped to plan again")),
+            "{step:?}"
+        );
+        // ground is measured where the army stands: with no division in state 30 the province
+        // taken there (by another army) is not this army's progress
+        let f = Field::new();
+        let mut state = attacking(&f);
+        assert_eq!(
+            tick(&mut state, &f, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        f.held_30.set(1);
+        let step = tick(&mut state, &f, &plan, "l", START + 8 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war stalled Army 1 8 days on state 28")),
+            "{step:?}"
+        );
+    }
+
+    /// The `setup_complete` changes the feed holds for one game hour (the feed is one per
+    /// process and other tests note into it: the game hour tells this test's entries apart).
+    fn setup_notes(at: GameHour) -> usize {
+        let feed = crate::watch::feed().observe(
+            0,
+            &[crate::watch::SETUP_COMPLETE.to_string()],
+            false,
+            2000,
+        );
+        list(&feed, "changes")
+            .iter()
+            .filter(|c| c["detail"]["game_hour"] == json!(at))
+            .count()
+    }
+
+    #[test]
+    fn a_paused_game_with_nothing_left_to_order_is_noted_as_set_up_once() {
+        // game hours no other test runs at
+        let paused_at = hour("1936.01.01") + 7;
+        let running_at = hour("1936.01.01") + 9;
+        let path = plan_file(&json!({}));
+        let tools = fake(vec![(
+            "hoi4_overview",
+            json!({"paused": true, "date": {"raw": paused_at}}),
+        )]);
+        let mut state = State::default();
+        assert!(!state.setup_noted);
+        let result = run(&mut state, &tools, &path, "l", 1).unwrap();
+        assert_eq!(result["reason"], json!("deadline"), "{result}");
+        assert!(state.setup_noted);
+        assert_eq!(setup_notes(paused_at), 1);
+        // the next idle tick of the same server life says nothing new
+        run(&mut state, &tools, &path, "l", 1).unwrap();
+        assert_eq!(setup_notes(paused_at), 1);
+        // a running game with nothing to do is not a finished setup
+        let tools = fake(vec![(
+            "hoi4_overview",
+            json!({"paused": false, "date": {"raw": running_at}}),
+        )]);
+        let mut state = State::default();
+        let result = run(&mut state, &tools, &path, "l", 1).unwrap();
+        assert_eq!(result["reason"], json!("deadline"), "{result}");
+        assert_eq!(setup_notes(running_at), 0);
+        let _ = std::fs::remove_file(state_path(&path));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

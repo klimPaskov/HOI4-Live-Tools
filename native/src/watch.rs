@@ -31,6 +31,10 @@ pub const CONSTRUCTION_BLOCKED: &str = "construction_item_blocked";
 /// A driven army stayed below the war supply floor and the executor's own supply levers did not
 /// lift it (detail: army, state, supply, days, levers, next).
 pub const ARMY_OUT_OF_SUPPLY: &str = "army_out_of_supply";
+/// The executor found nothing left to do in a game still paused (the opening's orders are
+/// given: armies, lines, research, production, construction): the player may unpause
+/// (detail: game_hour, actions).
+pub const SETUP_COMPLETE: &str = "setup_complete";
 /// The change kinds the standing plan's strategy layer notes.
 pub const PLAN_KINDS: [&str; 7] = [
     GOAL_REACHED,

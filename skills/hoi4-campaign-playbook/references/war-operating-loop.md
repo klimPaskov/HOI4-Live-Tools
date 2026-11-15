@@ -119,7 +119,20 @@ the player decides strategy:
 - `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
   every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
   axis whose next enemy-held state is nearest: front line, offensive line, execute.
-- `"stall_days": 8` (default): an ordered army that took no province of its target for that long
+- Lines first. An army without its lines gets its front and its offensive line in one step,
+  before any rename, commander or disband: planning only grows once the lines stand. In a game
+  still paused before the first unpause the executor draws them too, and the feed says
+  `setup_complete` when nothing is left to order; unpause then. Trucks (`motorization`) follow
+  the lines. Drawing lines is not an attack: an army short of organisation, supply or equipment
+  still gets them and plans while it recovers; the limits hold back the execute order and moves.
+- The offensive line is drawn across the far side of the target state, as wide as the state, so
+  the whole front advances and takes the state on the way.
+- A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
+  the armies draw their lines toward their next target and plan on them, the execute order waits
+  for a phase with axes, and a plan still executing on enemy land is stopped. The planning wait
+  therefore runs during the hold, not after it.
+- `"stall_days": 8` (default): an ordered army that took no province of its target, or of any
+  state its divisions stand in, for that long
   first has its plan stopped and planned again (`replans`, default 2 per target: it stands on its
   line, regains organisation, entrenches and rebuilds planning bonus, then executes through the
   planning wait), then gets a second direction (an offensive on another axis, `second_direction`,

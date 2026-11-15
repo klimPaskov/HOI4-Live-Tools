@@ -30,6 +30,13 @@
 //!                      HQ scales cap and speed alike, so the wait is the same. No wait when the
 //!                      goal deadline is less than "planning_skip_days" (20) away. A rest resumes at
 //!                      once (planning rebuilt while resting)
+//!   hold_prepares      false: a hold phase (`axes: []`) draws no line on enemy land (the old hold).
+//!                      Default: in a hold phase the armies still draw their front and offensive
+//!                      line toward their next target and plan on them; the execute order waits for
+//!                      a phase with axes, and a plan still executing on enemy land is stopped. Off
+//!                      with `direct_moves`. Lines are never held back by the limits below: an army
+//!                      short of organisation, supply or equipment draws them and plans while it
+//!                      recovers; the limits hold back the execute order and every move
 //!   supply_floor       50: an executing army below this supply percent rests (plan stopped), and no
 //!                      army below it gets a new attack order (execute, front, offensive, direct
 //!                      or stall move), except a move to retake an own state
@@ -1299,27 +1306,29 @@ mod tests {
         let w = W::new();
         let plan = plan(json!({}));
         let mut state = State::default();
-        assert!(acted(tick(&mut state, &w, &plan, "l", START).unwrap()).starts_with("war front"));
-        assert!(acted(tick(&mut state, &w, &plan, "l", START + 3).unwrap())
-            .starts_with("war offensive"));
+        // the front and the offensive line are one step: the planning starts with them
+        let step = acted(tick(&mut state, &w, &plan, "l", START).unwrap());
+        assert!(
+            step.starts_with("war front and offensive Army 1 -> state 28"),
+            "{step}"
+        );
         // 0.9 x 30% at +2%/day: 13.5 game days
         for day in 1..13 {
             assert_eq!(
-                tick(&mut state, &w, &plan, "l", START + 3 + day * DAY).unwrap(),
+                tick(&mut state, &w, &plan, "l", START + day * DAY).unwrap(),
                 Tick::Nothing
             );
         }
         let line = &state.war_rules.notes["planning:Army 1"];
         assert!(line.contains("no tool reads planning"), "{line}");
-        let step = acted(tick(&mut state, &w, &plan, "l", START + 3 + 14 * DAY).unwrap());
+        let step = acted(tick(&mut state, &w, &plan, "l", START + 14 * DAY).unwrap());
         assert!(step.starts_with("war execute Army 1"), "{step}");
-        // switched off: the next tick after the line, like before
+        // switched off: the next tick after the lines, like before
         let mut state = State::default();
         let off = plan_with(json!({"planning_wait": false}));
         tick(&mut state, &w, &off, "l", START).unwrap();
-        tick(&mut state, &w, &off, "l", START + 3).unwrap();
         assert!(
-            acted(tick(&mut state, &w, &off, "l", START + 6).unwrap()).starts_with("war execute")
+            acted(tick(&mut state, &w, &off, "l", START + 3).unwrap()).starts_with("war execute")
         );
     }
     #[test]
@@ -1397,14 +1406,14 @@ mod tests {
         let w = W::new();
         let mut p = plan(json!({"planning_max_days": 2}));
         let mut state = State::default();
+        // both lines are drawn in the first step: the two days count from it
         tick(&mut state, &w, &p, "l", START).unwrap();
-        tick(&mut state, &w, &p, "l", START + 3).unwrap();
         assert_eq!(
-            tick(&mut state, &w, &p, "l", START + 3 + DAY).unwrap(),
+            tick(&mut state, &w, &p, "l", START + DAY).unwrap(),
             Tick::Nothing
         );
         assert!(
-            acted(tick(&mut state, &w, &p, "l", START + 3 + 2 * DAY).unwrap())
+            acted(tick(&mut state, &w, &p, "l", START + 2 * DAY).unwrap())
                 .starts_with("war execute")
         );
         // a goal deadline ten days away: no wait at all
@@ -1412,8 +1421,7 @@ mod tests {
         let now = super::super::date_hour("1936.01.01").unwrap();
         let mut state = State::default();
         tick(&mut state, &w, &p, "l", now).unwrap();
-        tick(&mut state, &w, &p, "l", now + 3).unwrap();
-        assert!(acted(tick(&mut state, &w, &p, "l", now + 6).unwrap()).starts_with("war execute"));
+        assert!(acted(tick(&mut state, &w, &p, "l", now + 3).unwrap()).starts_with("war execute"));
     }
 
     #[test]
@@ -1462,16 +1470,39 @@ mod tests {
     }
 
     #[test]
-    fn a_starving_army_gets_no_new_front_and_the_hold_stops_own_state_retakes() {
+    fn a_starving_army_draws_its_lines_but_gets_no_execute_order_and_no_move() {
         let w = W::new();
         w.supply.set(45.0);
-        let p = plan(json!({}));
+        // no planning wait: only the supply floor stands between the lines and the execute order
+        let p = plan(json!({"planning_wait": false}));
         let mut state = State::default();
-        assert_eq!(tick(&mut state, &w, &p, "l", START).unwrap(), Tick::Nothing);
-        assert!(w.actions().is_empty());
+        // drawing lines is not an attack: the front and the offensive line go out below the floor
+        let step = acted(tick(&mut state, &w, &p, "l", START).unwrap());
+        assert!(
+            step.starts_with("war front and offensive Army 1 -> state 28"),
+            "{step}"
+        );
+        // the execute order is what the floor holds back
+        assert_eq!(
+            tick(&mut state, &w, &p, "l", START + DAY).unwrap(),
+            Tick::Nothing
+        );
+        let sent: Vec<String> = w.actions().into_iter().map(|(tool, _)| tool).collect();
+        assert_eq!(sent, ["hoi4_army_front", "hoi4_army_offensive"]);
         assert!(state.war_rules.notes["hold:Army 1"].contains("supply 45%"));
         w.supply.set(55.0);
-        assert!(acted(tick(&mut state, &w, &p, "l", START + DAY).unwrap()).starts_with("war front"));
+        let step = acted(tick(&mut state, &w, &p, "l", START + 2 * DAY).unwrap());
+        assert!(step.starts_with("war execute Army 1"), "{step}");
+        // with direct moves the army has no line to draw: below the floor it gets no move
+        let w = W::new();
+        w.supply.set(45.0);
+        let direct = plan(json!({"direct_moves": true}));
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &w, &direct, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        assert!(w.actions().is_empty(), "{:?}", w.actions());
     }
 
     #[test]
@@ -1587,7 +1618,10 @@ mod tests {
         assert!(!state.war_move.contains("Army 1"));
         assert_eq!(state.war_stage.get("Army 1"), Some(&0));
         let step = acted(tick(&mut state, &w, &p, "l", now + 2).unwrap());
-        assert!(step.starts_with("war front Army 1 -> state 28"), "{step}");
+        assert!(
+            step.starts_with("war front and offensive Army 1 -> state 28"),
+            "{step}"
+        );
     }
 
     #[test]
@@ -1610,18 +1644,25 @@ mod tests {
     #[test]
     fn a_stall_brings_an_idle_army_beside_the_target_first() {
         let w = W::new();
-        let p = plan(json!({"planning_wait": false, "reserve": []}));
+        let p = plan(json!({"planning_wait": false, "reserve": [], "axes": [[28], [18]]}));
         let (mut state, now) = stalled(&w, &p);
+        // Army 2 stands beside the target with its lines drawn on the other axis and no plan
+        // executing (an army without lines is no idle army: the opening pass draws them at once)
         w.flank.set(true);
+        state.war_assign.insert("Army 2".into(), 18);
+        state.war_stage.insert("Army 2".into(), 2);
         let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
         assert!(
             step.contains("second direction, Army 2 attacks it from state 43"),
             "{step}"
         );
         assert_eq!(state.war_assign.get("Army 2"), Some(&28));
-        // Army 2 draws its own front at the target next
+        // Army 2 draws its own front and offensive line at the target next
         let step = acted(tick(&mut state, &w, &p, "l", now + 1).unwrap());
-        assert!(step.starts_with("war front Army 2 -> state 28"), "{step}");
+        assert!(
+            step.starts_with("war front and offensive Army 2 -> state 28"),
+            "{step}"
+        );
         // the next stall of Army 1 on 28 is the direct move
         let later = now + 8 * DAY + 2;
         let moves = |w: &W| {
@@ -1657,10 +1698,13 @@ mod tests {
             tick(&mut state, &w, &p, "l", now + DAY).unwrap(),
             Tick::Nothing
         );
-        // arrived: the front is drawn from there
+        // arrived: the front and the offensive line are drawn from there
         w.here.set(44);
         let step = acted(tick(&mut state, &w, &p, "l", now + 2 * DAY).unwrap());
-        assert!(step.starts_with("war front Army 1 -> state 28"), "{step}");
+        assert!(
+            step.starts_with("war front and offensive Army 1 -> state 28"),
+            "{step}"
+        );
     }
 
     #[test]
@@ -1688,10 +1732,12 @@ mod tests {
         w.here.set(28);
         w.share.set(0.2);
         let step = acted(tick(&mut state, &w, &p, "l", START + DAY).unwrap());
-        assert!(step.starts_with("war front Army 1 -> state 18"), "{step}");
+        assert!(
+            step.starts_with("war front and offensive Army 1 -> state 18"),
+            "{step}"
+        );
         assert!(state.war_rules.bound.contains_key("Army 1"));
-        let step = acted(tick(&mut state, &w, &p, "l", START + DAY + 3).unwrap());
-        assert!(step.starts_with("war offensive"), "{step}");
+        // the lines stand; the bound holds the execute order
         assert_eq!(
             tick(&mut state, &w, &p, "l", START + 3 * DAY).unwrap(),
             Tick::Nothing
