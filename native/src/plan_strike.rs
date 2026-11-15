@@ -402,8 +402,10 @@ fn thin(
         here.sort_by(|a, b| world.share(a).total_cmp(&world.share(b)));
         let out: Vec<&Division> = here[..here.len() - keep].to_vec();
         let wanted: f64 = out.iter().map(|d| d.need.max(need)).sum();
+        // Beside the stack only: a destination three provinces back emptied the front and the
+        // towns it had taken were lost (live 15 Nov 2026).
         let Some(to) = world
-            .near(province, 3)
+            .near(province, 1)
             .into_iter()
             .filter_map(|p| world.supply.get(&p).map(|s| (p, s.0 - s.1)))
             .filter(|(_, room)| *room >= wanted)
@@ -840,7 +842,12 @@ pub(super) fn step(
             // The objective a strike has just turned away from (not chosen again this tick).
             let mut turned: Option<i64> = None;
             if mode == Mode::Strike {
-                let taken = world.held(objective) || group.iter().any(|d| d.province == objective);
+                // A victory point counts when it is held; another province when the army stands in
+                // it (a division inside a victory point the enemy still holds is no capture, and
+                // treating it as one re-sent the same order every few hours).
+                let taken = world.held(objective)
+                    || (!world.vp.contains_key(&objective)
+                        && group.iter().any(|d| d.province == objective));
                 let age = now - since;
                 if taken {
                     mode = Mode::Idle;
