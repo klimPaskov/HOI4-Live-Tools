@@ -238,6 +238,10 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
   manage.fuel              (warning) manage.fuel_floor below the game's FUEL_PENALTY_START_RATIO (the armies fight
                            with the out-of-fuel penalty before the rule reacts); a fuel_floor the plan sets while
                            auto_import allows no import (the rule can only wake the player)
+  air.idle_wings           (warning) a plan at war leaves start air wings outside war.theatre, war.guard_states and
+                           the axes with no air_plan entry: the default war missions never reach them
+  war.strike_choice        (warning) vp_targets name armies and no war.strike is set in war, a phase or a
+                           contingency override: the war step runs battle plans without the plan deciding it
   predicates.unreadable    (warning) a goal, fail predicate, checkpoint, phase or contingency that can never
                            hold because it rests on atoms the executor cannot read yet (x-atoms readable:
                            false: var, mission_days, surrender_progress,
@@ -4221,6 +4225,49 @@ class Lint:
                      f"the game alert {alert} has no owner: give the plan one of {list(keys)} or list it in "
                      f"manage.alerts_ignore with a reason in manage.alerts_ignore_why (otherwise it stays open all "
                      f"campaign and only wakes the player)")
+    def idle_wings(self):
+        """air.idle_wings: start air wings outside the war's theatre that no air_plan entry names fly no mission
+        all war (the default war missions only reach wings based in the theatre or the guard states)."""
+        oob = self.world.oob(self.tag) if self.world is not None and self.tag else {}
+        if not self.enemies() or not oob.get("air"):
+            return
+        near = set(_ints(self.war.get("theatre"))) | set(_ints(self.war.get("guard_states"))) | self.axis_states()
+        named = set()
+        frames = []
+        for e in self.list_of("air_plan"):
+            m = re.search(r" at (\d+)$", e.get("wing") or "")
+            if m:
+                named.add(int(m.group(1)))
+            elif isinstance(e.get("airframe"), str) and e["airframe"] and not e.get("wing"):
+                frames.append(e["airframe"])
+        idle = Counter()
+        for w in oob["air"]:
+            sid = w.get("state")
+            if sid in near or sid in named or any(str(w.get("type") or "").startswith(f) for f in frames):
+                continue
+            idle[sid] += int(w.get("amount") or 0)
+        if idle:
+            rows = ", ".join(f"state {sid} ({n} planes)" for sid, n in sorted(idle.items()))
+            self.add("warning", "air.idle_wings", "air_plan",
+                     f"start air wings outside the war's theatre fly no mission all war ({rows}): the default war "
+                     f"missions only reach wings based in the theatre or guard states. Give each an air_plan entry "
+                     f"(\"<variant> at <state>\": a rebase to the theatre within the escalation limits, a home "
+                     f"mission, or training) or say in air.why why it stays idle")
+
+    def strike_choice(self):
+        """war.strike_choice: a plan at war with army rows in vp_targets decides the war step, battle plans or
+        objective strikes (war-operating-loop.md 5c); the executor's default is battle plans."""
+        if not self.enemies() or not any(isinstance(e.get("army"), str) for e in self.list_of("vp_targets")):
+            return
+        wars = [self.war] + [((p.get("overrides") or {}).get("war") or {}) for p in self.list_of("phases")] + \
+               [((c.get("overrides") or {}).get("war") or {}) for c in self.list_of("contingencies")]
+        if any(isinstance(w, dict) and "strike" in w for w in wars):
+            return
+        self.add("warning", "war.strike_choice", "war",
+                 "vp_targets name armies but no war.strike is set (here or in a phase or contingency override): the "
+                 "war step runs battle plans. Against a defender with few divisions, no continuous line and victory "
+                 "points far apart set war.strike {after_vp, stack, widen, cover} (objective strikes); against a "
+                 "continuous line set war.strike false and say why in war.why")
 
     def politics_conscription(self):
         """A conscription law above what the plan's divisions need, or a manpower rule free to climb the
@@ -4756,7 +4803,8 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.alert_owners, self.idle_wings,
+                 self.strike_choice,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
                  self.intelligence_operations, self.force_home_divisions]

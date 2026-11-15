@@ -437,6 +437,11 @@ their exits), `F defines BASE_STABILITY_WAR_FACTOR`, `F idea <spirit>`, `F decis
    Civil War or the Sino-Japanese War after improving relations to 20 (`diplomacy` `improve_relations`, then
    `send_attache`), war propaganda, focuses (PO19, PO21). Improve Worker Conditions when stability is under
    80% and war is over 12 months away, at most twice (PO18).
+5. **A stability owner from day one** when the country starts under the floor: the first `politics` pick is the
+   cheapest advisor, law or decision that raises stability (`F characters <TAG> --role advisor` traits, `F idea`),
+   with a `when` that reads stability. An owner only in `politics_auto.order` waits behind every dated pick, and on
+   a small income it is never bought: a live war ran under the floor all year that way (lint
+   `manage.stability_owner`, `manage.stability_first`).
 Resolution: executor `politics`, `decisions`, `diplomacy` (attaché); player `decision_rules`; `contingencies` with the atom
 pending; plan.md §16. Check: rubric row 9.
 
@@ -590,8 +595,38 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    fighters up 7-14 days earlier, laws at their gates, stockpile cover 30+ days (CP01).
 5. Phase-specific `war` in `phases[].overrides.war`.
 6. Naval invasions are item 21 (`invasions`).
-Resolution: executor `war`, `vp_targets`, `phases`, `hold_targets`; player `retake_rules`; plan.md §7,
-§7.1, §8. Check: lint `conquest.vp_selection`, `conquest.levers`, `conquest.tool_gap`, `conquest.threshold`,
+7. **War step: battle plans or objective strikes** (`war-operating-loop.md` §5c). Decide it for every war and
+   write the reason. Against a defender with few divisions, no continuous line and victory points far apart
+   (a colonial or minor war, a collapsing enemy, a counter-offensive into thinly held land) set `war.strike`:
+   `after_vp` (the enemy VP the opening battle plans take first), `stack` (at most 4 divisions strike or assemble
+   from one province: the game's own AI never stacks more and keeps its supply), `widen` true (left-over
+   divisions take the provinces beside the army), `cover` (divisions each formation keeps on every own state it
+   covers while that state touches enemy land), `state_weight`, `why`. Each strike army gets its `vp_targets`
+   rows (`army` = its layout name_hint) in the order its road opens, the first `path` province on fed land, and
+   state capitals early (holding half the enemy's states can start a scripted surrender clock). Against a
+   continuous line keep battle plans and encirclement and set `war.strike` false with the reason in `war.why`.
+   A phase may switch it (`phases[].overrides.war.strike`). Lint `war.strike_choice`.
+8. **Defence first** (a defender, or every front the plan does not attack on):
+   a. Per enemy front, the line on the best ground: rivers, mountains, forests and hills from `F province` and
+      `F route --avoid-rivers`, as short as the force can man. `defense_lines` {`id`, `army`, `kind`: `fallback`
+      on that line or `area_defense` over the victory points, ports and the capital, `states`, `settings` (area
+      defence only), `when`}; the army goes in `war.reserve` so the war step does not drive it off the line
+      (lint `orders.defense_reserve`). A corridor or a pass held by a formation is a `hold_targets` post.
+   b. Every victory point whose loss moves the own surrender progress toward the limit is inside a line, a hold
+      or a guard state; the capital always. Say in plan.md §7 at which VP count the country would surrender
+      (`F vp <TAG> --war-support S`) and how far the plan stays from it.
+   c. One reserve formation one state behind the most threatened sector: it retakes lost provinces and
+      counter-attacks a breach, never the line army.
+   d. When to attack: the switch to the offensive is a phase whose `enter` is a predicate the executor reads
+      (an enemy bonus or timer ended, the line holds, equipment fill and supply above the floor), with the
+      counter-offensive's `vp_targets` rows and `war.strike` when the land it enters is thinly held. Until
+      then the war step only retakes own land.
+   e. A small economy fights with what it has: production on the one or two items the front lacks most,
+      purchases and volunteers from decisions (`decision_rules` with `when` and political power), the
+      scripted missions it can win (each held mission is a checkpoint), and the escalation or outside help the
+      enemy's actions trigger (contingencies on the predicate that reads it, or the brief when no atom does).
+Resolution: executor `war` (with `war.strike`), `vp_targets`, `phases`, `hold_targets`, `defense_lines`; player
+`retake_rules`; plan.md §7, §7.1, §8. Check: lint `war.strike_choice`, `orders.defense_reserve`, `conquest.vp_selection`, `conquest.levers`, `conquest.tool_gap`, `conquest.threshold`,
 `conquest.mandatory`, `conquest.adjacency`,
 `conquest.by_order`, `conquest.rivers`, `army.guards` (a hold post outside its army's guard states),
 `war.planning_wait`, `war.supply_floor`; validate_plan (hold corridors touch on the map graph, armies
@@ -875,6 +910,20 @@ threshold, call) when the player must act.
 | Command power near the cap | ≥ 70 of 80 → planned trait or ability; wake the player | `manage` |
 | Agency upgrade idle | no upgrade running → next upgrade | `intelligence.upgrades` |
 | Refused action | 3 refusals in 10 days → wake the player with the evidence (failure ledger) | executor default |
+
+**Every game alert has an owner.** The executor answers a game alert (`hoi4_alerts`) with a step only when the
+plan sets a key that step needs (`native/src/plan_manage.rs` `route`): `no_national_focus` → `focus_path`;
+`missing_equipment_production` → `production`; `insufficient_resources` → `auto_import`;
+`air_wings_without_mission` → `air` or `air_plan`; `no_divisions_in_training` → `training`; `unassigned_divisions` →
+`armies`; `decisions_available` → `decisions` or `decision_rules`; `doctrines_available` → `doctrines`. Without the key
+the alert stays open all run and only wakes the player (lint `alerts.owner`; an alert the plan leaves open goes in
+`manage.alerts_ignore` with its reason). Also
+decide, per country: every start air wing (outside the theatre the default war missions never reach it: an
+`air_plan` entry, or a reason in `air.why`; lint `air.idle_wings`); doctrines with the experience that pays for them
+(item 5, never an entry the army experience cannot reach); idle dockyards (`free_dockyards`: convoys or ships in
+`production`, item 21); an admiral for every fleet (`navy.admirals`; `admiral_assignable`); the officer-corps and
+high-command seats (`modify_officer_corps`: `politics_auto.order` entries for the free `military_staff` slots).
+The last three only wake the player: give each a key or a brief line.
 
 Resolution: executor `alarms`, `war` thresholds, `training_rules`, `manage`, `navy`, `diplomacy`,
 `intelligence`; brief lines for what no key runs yet; plan.md §24. Check: lint `manage.thresholds`; rubric
