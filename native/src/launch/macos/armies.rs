@@ -2514,6 +2514,7 @@ pub(super) fn offensive(
     game_dir: &std::path::Path,
     army: &str,
     state: i32,
+    through: Option<i32>,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
@@ -2556,10 +2557,12 @@ pub(super) fn offensive(
         })
     };
     let target_provinces = super::mapdata::state_provinces(game_dir, state)?;
-    // First choice: the line across the far side of the target, as wide as the state, so the
-    // whole front advances to it and the state is taken on the way. A stroke from the army to
-    // the target's centre is a line along the advance: the army files down one corridor of
-    // provinces and stops at the centre with the enemy on both flanks.
+    // First choice: the line across the target, parallel to the army's front and as wide as the
+    // state, at the depth of the objective (`through`, else the middle of the state), so the
+    // whole front advances to it. A stroke from the army to the target's centre is a line along
+    // the advance: the army files down one corridor of provinces and stops at the centre with
+    // the enemy on both flanks. A line on the far side of a large state is no better: the game
+    // joins it to the front with one long arrow round the state (the Ogaden, live 15 Nov 2026).
     let own: Vec<(f64, f64)> = provinces
         .iter()
         .filter_map(|p| pos.get(p).copied())
@@ -2568,7 +2571,8 @@ pub(super) fn offensive(
         .iter()
         .filter_map(|p| pos.get(p).copied())
         .collect();
-    if let Some((a, b)) = offensive_span(&own, &theirs) {
+    let pivot = through.and_then(|p| pos.get(&p).copied());
+    if let Some((a, b)) = offensive_span(&own, &theirs, pivot) {
         let framed = super::screenmap::frame_two(
             process,
             keys,
@@ -2614,13 +2618,15 @@ pub(super) fn offensive(
         clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0),
     )
 }
-/// The two ends of an offensive line across a target: of the target's provinces at least as far
-/// from the army as the target's centre, the two farthest apart sideways (map points; `own` are
-/// the army's province positions, `target` the target's). None when the target has no width
-/// seen from the army (one province, or all in a row along the advance).
+/// The two ends of an offensive line across a target, parallel to the army's front: of the
+/// third of the target's provinces nearest in depth to `pivot` (the objective; without one, the
+/// target's centre), the two farthest apart sideways (map points; `own` are the army's province
+/// positions, `target` the target's). None when the target has no width seen from the army
+/// (one province, or all in a row along the advance).
 pub(super) fn offensive_span(
     own: &[(f64, f64)],
     target: &[(f64, f64)],
+    pivot: Option<(f64, f64)>,
 ) -> Option<((f64, f64), (f64, f64))> {
     let mean = |pts: &[(f64, f64)]| -> Option<(f64, f64)> {
         (!pts.is_empty()).then(|| {
@@ -2638,15 +2644,15 @@ pub(super) fn offensive_span(
     let (dx, dy) = (dx / len, dy / len);
     let depth = |p: &(f64, f64)| (p.0 - to.0) * dx + (p.1 - to.1) * dy;
     let side = |p: &(f64, f64)| -(p.0 - to.0) * dy + (p.1 - to.1) * dx;
-    let mut far: Vec<&(f64, f64)> = target.iter().filter(|p| depth(p) >= 0.0).collect();
-    if far.len() < 2 {
-        far = target.iter().collect();
-    }
-    let a = far
+    let at = pivot.as_ref().map_or(0.0, depth);
+    let mut band: Vec<&(f64, f64)> = target.iter().collect();
+    band.sort_by(|x, y| (depth(x) - at).abs().total_cmp(&(depth(y) - at).abs()));
+    band.truncate((target.len() / 3).max(3));
+    let a = band
         .iter()
         .copied()
         .max_by(|x, y| side(x).total_cmp(&side(y)))?;
-    let b = far
+    let b = band
         .iter()
         .copied()
         .min_by(|x, y| side(x).total_cmp(&side(y)))?;
@@ -3363,33 +3369,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_offensive_line_runs_across_the_far_side_of_the_target() {
-        // the army stands south of a target three provinces wide and two deep
+    fn an_offensive_line_runs_across_the_target_at_the_depth_of_its_objective() {
+        // the army stands south of a target three provinces wide and three deep
         let own = [(0.0, 0.0), (10.0, 0.0), (20.0, 0.0)];
-        let target = [
-            (0.0, 30.0),
-            (10.0, 30.0),
-            (20.0, 30.0),
-            (0.0, 50.0),
-            (10.0, 50.0),
-            (20.0, 50.0),
-        ];
-        let (a, b) = super::offensive_span(&own, &target).unwrap();
-        // both ends on the far row, at its two sides
-        assert_eq!(a.1, 50.0);
-        assert_eq!(b.1, 50.0);
+        let mut target = Vec::new();
+        for y in [30.0, 50.0, 70.0] {
+            for x in [0.0, 10.0, 20.0] {
+                target.push((x, y));
+            }
+        }
+        // without an objective: across the middle row, side to side
+        let (a, b) = super::offensive_span(&own, &target, None).unwrap();
+        assert_eq!((a.1, b.1), (50.0, 50.0));
         assert_eq!((a.0 - b.0).abs(), 20.0);
+        // an objective in the near row: the line runs along that row
+        let (a, b) = super::offensive_span(&own, &target, Some((10.0, 30.0))).unwrap();
+        assert_eq!((a.1, b.1), (30.0, 30.0));
+        assert_eq!((a.0 - b.0).abs(), 20.0);
+        // and one in the far row
+        let (a, b) = super::offensive_span(&own, &target, Some((0.0, 70.0))).unwrap();
+        assert_eq!((a.1, b.1), (70.0, 70.0));
     }
 
     #[test]
     fn a_target_without_width_has_no_line_across() {
         let own = [(0.0, 0.0)];
-        assert!(super::offensive_span(&own, &[(0.0, 30.0)]).is_none());
+        assert!(super::offensive_span(&own, &[(0.0, 30.0)], None).is_none());
         // provinces in a row along the advance
-        assert!(super::offensive_span(&own, &[(0.0, 30.0), (0.0, 50.0), (0.0, 70.0)]).is_none());
-        assert!(super::offensive_span(&[], &[(0.0, 30.0), (9.0, 30.0)]).is_none());
+        assert!(
+            super::offensive_span(&own, &[(0.0, 30.0), (0.0, 50.0), (0.0, 70.0)], None).is_none()
+        );
+        assert!(super::offensive_span(&[], &[(0.0, 30.0), (9.0, 30.0)], None).is_none());
         // the army standing on the target's centre has no direction
-        assert!(super::offensive_span(&[(5.0, 5.0)], &[(0.0, 5.0), (10.0, 5.0)]).is_none());
+        assert!(super::offensive_span(&[(5.0, 5.0)], &[(0.0, 5.0), (10.0, 5.0)], None).is_none());
     }
 
     fn view() -> Value {

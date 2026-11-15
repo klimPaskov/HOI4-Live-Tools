@@ -125,8 +125,10 @@ the player decides strategy:
   `setup_complete` when nothing is left to order; unpause then. Trucks (`motorization`) follow
   the lines. Drawing lines is not an attack: an army short of organisation, supply or equipment
   still gets them and plans while it recovers; the limits hold back the execute order and moves.
-- The offensive line is drawn across the far side of the target state, as wide as the state, so
-  the whole front advances and takes the state on the way.
+- The offensive line is drawn across the target state, parallel to the army's front and as wide
+  as the state, through the depth of the army's victory-point province (`hoi4_army_offensive`
+  `province_id`; without one, through the middle of the state), so the whole front advances to
+  the objective.
 - A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
   the armies draw their lines toward their next target and plan on them, the execute order waits
   for a phase with axes, and a plan still executing on enemy land is stopped. The planning wait

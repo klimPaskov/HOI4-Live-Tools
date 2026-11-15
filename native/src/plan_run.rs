@@ -5124,6 +5124,15 @@ fn war_step(
             // state to retake or take, go on province by province below.
             continue;
         }
+        // The offensive line runs through the depth of the army's victory-point province when
+        // it lies in the target state (else through the middle of the state).
+        let mut offensive_order = json!({"army": name, "state_id": target});
+        if let Some(v) = vp
+            .as_ref()
+            .filter(|v| !own_target && v.state as i32 == target)
+        {
+            offensive_order["province_id"] = json!(v.province);
+        }
         let (tool, args, label, next_stage) = if liberate {
             if standing_in_target {
                 // Inside the state: go for the nearest province the enemy holds in it (w22: the
@@ -5187,7 +5196,7 @@ fn war_step(
         } else if stage == 1 {
             (
                 "hoi4_army_offensive",
-                json!({"army": name, "state_id": target}),
+                offensive_order.clone(),
                 "offensive",
                 2,
             )
@@ -5251,7 +5260,7 @@ fn war_step(
                 tools,
                 lease,
                 "hoi4_army_offensive",
-                json!({"army": name, "state_id": target}),
+                offensive_order.clone(),
                 "wr",
             )?;
             if ok2 {
