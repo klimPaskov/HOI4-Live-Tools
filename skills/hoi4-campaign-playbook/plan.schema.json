@@ -3166,6 +3166,22 @@
         "note": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
+        },
+        "shift_factories": {
+          "type": "boolean",
+          "default": true,
+          "description": "with no idle military factory, equipment the divisions lack (or under the critical days of cover) takes factories from a line whose equipment nobody lacks and whose stock covers twice its target",
+          "x-rule": "stockpile"
+        },
+        "idle_dockyards": {
+          "type": "string",
+          "enum": [
+            "convoys",
+            "keep"
+          ],
+          "default": "convoys",
+          "description": "dockyards no naval line uses: \"convoys\" puts them on the convoy line (a new line of the newest convoy design when none) even when convoys are not short; \"keep\" leaves them for the player",
+          "x-rule": "convoys"
         }
       },
       "additionalProperties": false,

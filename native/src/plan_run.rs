@@ -538,6 +538,8 @@ pub struct State {
     /// doctrine entry -> the folder experience it had when the game disabled its Unlock: it is
     /// tried again only once the experience has grown (a retry by date alone failed four times)
     doc_xp: HashMap<String, f64>,
+    /// doctrine entry -> how often the game refused its Unlock
+    doc_refused: HashMap<String, u32>,
     /// Failures per layout item ("create:<state>", "detach:<hint>") since it last worked.
     layout_fails: HashMap<String, u32>,
     /// Continuous management (plan_manage.rs): wake alarms, digest lines, the peace conference.
@@ -714,6 +716,7 @@ impl Default for State {
             plan_tries: HashMap::new(),
             layout: HashMap::new(),
             doc_xp: HashMap::new(),
+            doc_refused: HashMap::new(),
             layout_fails: HashMap::new(),
             manage: Default::default(),
             military: Default::default(),
@@ -3940,7 +3943,27 @@ fn extras_step(
                     || why.contains("insufficient_experience")
                     || why.contains("Unlock")
                 {
-                    state.doc_xp.insert(part_key.clone(), xp);
+                    // Refused a third time, or with twice the experience the entry costs: what
+                    // the game wants is not experience (already adopted, another track, a
+                    // prerequisite), so the entry is dropped and said, not retried all year
+                    // (live 15 Nov 2026: the same refusal four times in 285 days).
+                    let n = state.doc_refused.entry(part_key.clone()).or_insert(0);
+                    *n += 1;
+                    if *n >= 3 || xp >= 2.0 * cost {
+                        let n = *n;
+                        state.done.insert(part_key.clone(), now);
+                        plan_manage::note(
+                            state,
+                            "doctrines",
+                            format!(
+                                "{doctrine}: Unlock refused {n} time(s), the last at {xp:.0} experience (cost {cost:.0}): \
+                                 not experience; the entry is dropped (check the plan: adopted already, another track \
+                                 or a prerequisite)"
+                            ),
+                        );
+                    } else {
+                        state.doc_xp.insert(part_key.clone(), xp);
+                    }
                 }
                 state.skip(now, "doc", &part_key, 15 * DAY);
             }

@@ -426,7 +426,9 @@ class CoverageKeys(unittest.TestCase):
                 # executor rules that act with or without `manage` (production, templates, invasions)
                 "rebalance_step": 3, "day0_production": True, "war_priority": True, "war_civs": False,
                 "mature_line_days": 30, "mature_line_efficiency": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
-                "invasion_techs": {}}
+                "invasion_techs": {},
+                # plan_manage.rs: a felt shortage takes factories (rule 11), idle dockyards go to convoys (rule 20)
+                "shift_factories": True, "idle_dockyards": "convoys"}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):

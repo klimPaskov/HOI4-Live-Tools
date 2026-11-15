@@ -1909,7 +1909,8 @@ fn fuel_rule(
 /// a convoy comes from hoi4_naval_production_options (`convoy` of its designs and lines); idle
 /// dockyards are hoi4_economy's naval factories minus the naval lines' requests. With no idle
 /// dockyard (taking one from a warship line is a decision), no convoy design, or a shortage that
-/// outlasts `manage.deficit_wake_days`, the player is woken.
+/// outlasts `manage.deficit_wake_days`, the player is woken. With enough convoys, dockyards no line
+/// uses go to convoys the same way (no wake), unless `manage.idle_dockyards` is "keep".
 fn convoy_rule(
     state: &mut State,
     tools: &dyn Tools,
@@ -1938,16 +1939,26 @@ fn convoy_rule(
     };
     let needed = counts.and_then(|c| c["needed"].as_f64()).unwrap_or(0.0);
     let floor = (share * total.max(needed)).ceil();
-    if free >= floor && needed <= total {
+    // Enough convoys: dockyards no line uses still build convoys (more trade and sea supply for
+    // every war overseas) unless the plan keeps them (`manage.idle_dockyards`: "keep"). Without
+    // this owner the free-dockyards alert stayed open all campaign (live 15 Nov 2026).
+    let spare_only = free >= floor && needed <= total;
+    if spare_only {
         state.manage.convoys_low_since = None;
         note(
             state,
             "convoys",
             format!("{free} free of {total} (floor {floor}, needed {needed})"),
         );
-        return Ok(None);
+        if m["idle_dockyards"] == json!("keep") {
+            return Ok(None);
+        }
     }
-    let since = *state.manage.convoys_low_since.get_or_insert(now);
+    let since = if spare_only {
+        now
+    } else {
+        *state.manage.convoys_low_since.get_or_insert(now)
+    };
     let mut evidence = json!({"free": free, "total": total, "needed": needed, "share": share,
         "floor": floor, "since_hour": since});
     let low = format!("{free} free of {total} (floor {floor}, needed {needed})");
@@ -1955,7 +1966,7 @@ fn convoy_rule(
         .as_i64()
         .filter(|d| *d > 0)
         .unwrap_or(14);
-    if now - since >= wake_days * DAY {
+    if !spare_only && now - since >= wake_days * DAY {
         wake(
             state,
             plan,
@@ -1993,6 +2004,9 @@ fn convoy_rule(
         .sum();
     let idle = dockyards - used;
     evidence["idle_dockyards"] = json!(idle);
+    if spare_only && idle <= 0 {
+        return Ok(None);
+    }
     if idle <= 0 {
         note(
             state,
@@ -2033,6 +2047,9 @@ fn convoy_rule(
             .filter(|d| d["convoy"] == json!(true) && !text(&d["equipment"]).is_empty())
             .max_by_key(|d| d["design_id"].as_i64().unwrap_or(0));
         let Some(design) = design else {
+            if spare_only {
+                return Ok(None);
+            }
             note(
                 state,
                 "convoys",
@@ -3833,6 +3850,25 @@ fn stockpile_rule(
             }
         }
     }
+    // Equipment the fielded divisions lack with nothing in stock counts as low even when the
+    // plan named no target for it (a shortage at the front is never "not planned").
+    if stock_on {
+        for row in list(&read, "equipment") {
+            let arche = text(&row["archetype"]).to_string();
+            let short = row["fielded_short"].as_f64().unwrap_or(0.0);
+            let stock = row["stockpile"].as_f64().unwrap_or(-1.0);
+            if arche.is_empty() || short <= 0.0 || stock > short || low.iter().any(|l| l.1 == arche)
+            {
+                continue;
+            }
+            low.push((
+                arche.clone(),
+                arche,
+                0.0,
+                format!("the divisions lack {short:.0} and {stock:.0} are in stock"),
+            ));
+        }
+    }
     note(
         state,
         "stockpile_days",
@@ -3851,11 +3887,64 @@ fn stockpile_rule(
     let (military, idle) = military_lines(tools, &economy)?;
     let step = m["rebalance_step"].as_i64().filter(|n| *n > 0).unwrap_or(3);
     let give = idle.min(step);
+    // No idle factory: a shortage the divisions feel (or a cover under the critical days) takes
+    // factories from a line whose equipment nobody lacks and whose stock covers twice its
+    // target. Without this owner a stock stayed at 0 for eight months while every factory
+    // built what was already plenty (live 15 Nov 2026: artillery 0 from May, the strike army
+    // at a sixth of its equipment, the missing-production alert open all year).
+    let felt = short_of(&read, &archetype) > 0.0 || days < critical;
+    if give <= 0 && felt && m["shift_factories"] != json!(false) {
+        if let Some(((index, have, factories, _), take)) =
+            donor_line(&read, plan, &military, &archetype, warning, step)
+        {
+            let (ok, result) = state.act(
+                tools,
+                lease,
+                "hoi4_production_set",
+                json!({"line": index, "equipment": have, "factories": factories - take}),
+                "pk",
+            )?;
+            let mut line = format!("{have} {factories}-{take}: {ok} {result}");
+            if ok {
+                let target = military
+                    .iter()
+                    .filter(|l| l.1.starts_with(archetype.as_str()))
+                    .max_by_key(|l| l.2)
+                    .cloned();
+                let (ok2, result2) = match &target {
+                    Some((i, eq, f, _)) => state.act(
+                        tools,
+                        lease,
+                        "hoi4_production_set",
+                        json!({"line": i, "equipment": eq, "factories": f + take}),
+                        "pk",
+                    )?,
+                    None => state.act(
+                        tools,
+                        lease,
+                        "hoi4_production_add",
+                        json!({"equipment": archetype, "factories": take}),
+                        "pk",
+                    )?,
+                };
+                line.push_str(&format!("; {archetype} +{take}: {ok2} {result2}"));
+            }
+            state.skip(now, "mstockline", &archetype, 3 * DAY);
+            note(
+                state,
+                "stockpile",
+                format!("{equipment}: {why}; {take} factories moved from {have}: {ok}"),
+            );
+            return Ok(Some(format!(
+                "stockpile {equipment} low ({why}), no idle factory: {line}"
+            )));
+        }
+    }
     if give <= 0 {
         note(
             state,
             "stockpile",
-            format!("{equipment}: {why}; no idle military factory to raise its line"),
+            format!("{equipment}: {why}; no idle military factory to raise its line and no line to spare"),
         );
         if days < critical {
             wake(
@@ -3909,6 +3998,47 @@ fn stockpile_rule(
     Ok(Some(format!(
         "stockpile {equipment} low ({why}): {what}: {ok} {result}"
     )))
+}
+
+/// What the fielded divisions lack of an archetype (hoi4_stockpile `fielded_short`), 0 unread.
+fn short_of(read: &Value, archetype: &str) -> f64 {
+    list(read, "equipment")
+        .iter()
+        .find(|r| text(&r["archetype"]) == archetype)
+        .and_then(|r| r["fielded_short"].as_f64())
+        .unwrap_or(0.0)
+}
+
+/// The line that can spare factories for `needy`: its equipment is not short at the front, its
+/// stock covers at least twice its target (`stockpile_targets`, else `warning` days) or is not
+/// falling, and it keeps at least one factory. The line with the most factories gives at most
+/// `step`. None when no line can spare any.
+fn donor_line(
+    read: &Value,
+    plan: &Value,
+    military: &[MilLine],
+    needy: &str,
+    warning: f64,
+    step: i64,
+) -> Option<(MilLine, i64)> {
+    military
+        .iter()
+        .filter(|l| l.2 > 1 && !l.1.starts_with(needy))
+        .filter(|l| {
+            let Some(arche) = archetype_row(read, &l.1) else {
+                return false;
+            };
+            if short_of(read, &arche) > 0.0 {
+                return false;
+            }
+            let want = plan["stockpile_targets"][arche.as_str()]
+                .as_f64()
+                .or_else(|| plan["stockpile_targets"][l.1.as_str()].as_f64())
+                .unwrap_or(warning);
+            crate::plan_predicate::stockpile_days(read, &l.1).is_ok_and(|d| d >= 2.0 * want)
+        })
+        .max_by_key(|l| (l.2, std::cmp::Reverse(l.0)))
+        .map(|l| (l.clone(), step.min(l.2 - 1)))
 }
 
 /// The archetype row a key names in a hoi4_stockpile read (itself, or the row holding the variant).
@@ -4911,6 +5041,42 @@ mod tests {
             .unwrap()
             .is_some());
         assert_eq!(actions(&tools)[0].1["factories"], 3);
+    }
+
+    #[test]
+    fn dockyards_no_line_uses_build_convoys_unless_the_plan_keeps_them() {
+        let replies = || {
+            vec![
+                (
+                    "hoi4_convoys",
+                    json!({"convoys": {"total": 50, "in_use": 10, "free": 40, "needed": 10}}),
+                ),
+                (
+                    "hoi4_naval_production_options",
+                    json!({"designs": [{"design_id": 2, "equipment": "convoy_1", "convoy": true}],
+                        "naval_lines": []}),
+                ),
+                (
+                    "hoi4_economy",
+                    json!({"factory_trigger_count": {"naval": 5}}),
+                ),
+            ]
+        };
+        let tools = fake(replies());
+        let mut state = State::default();
+        let plan = json!({"manage": {}});
+        assert!(convoy_rule(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .is_some());
+        assert_eq!(actions(&tools)[0].1["equipment"], "convoy_1");
+        assert!(wakes(&mut state).is_empty());
+        let tools = fake(replies());
+        let mut state = State::default();
+        let keep = json!({"manage": {"idle_dockyards": "keep"}});
+        assert!(convoy_rule(&mut state, &tools, &keep, "l", START)
+            .unwrap()
+            .is_none());
+        assert!(actions(&tools).is_empty());
     }
 
     #[test]
@@ -6023,6 +6189,50 @@ mod tests {
         let mut quiet = json!({"manage": {}});
         quiet["stockpile_targets"] = json!({"infantry_equipment": 30});
         assert_eq!(step(&mut state, &tools, &quiet, "l", START).unwrap(), None);
+    }
+
+    #[test]
+    fn a_shortage_at_the_front_takes_factories_from_a_well_stocked_line_when_none_is_idle() {
+        let mut replies = lines_with(0);
+        let trucks = json!({"archetype": "motorized_equipment", "stockpile": 500.0,
+            "fielded_need": 100.0, "fielded_short": 0.0, "days_of_cover": null,
+            "depleting": false, "variants": []});
+        replies.push((
+            "hoi4_stockpile",
+            json!({"equipment": [
+                {"archetype": "infantry_equipment", "stockpile": 900.0, "fielded_short": 0.0,
+                 "days_of_cover": null, "depleting": false,
+                 "variants": [{"type": "infantry_equipment_1", "amount": 900.0}]},
+                {"archetype": "artillery_equipment", "stockpile": 0.0, "fielded_short": 30.0,
+                 "days_of_cover": 0.0, "depleting": true,
+                 "variants": [{"type": "artillery_equipment_1", "amount": 0.0}]},
+                trucks.clone()], "trucks": trucks}),
+        ));
+        let tools = fake(replies);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("no idle factory"), "{out}");
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 2, "{sent:?}");
+        assert_eq!(
+            (sent[0].1["line"].clone(), sent[0].1["factories"].clone()),
+            (json!(0), json!(9))
+        );
+        assert_eq!(
+            (sent[1].1["line"].clone(), sent[1].1["factories"].clone()),
+            (json!(1), json!(11))
+        );
+        // switched off by the plan: the player is woken instead
+        let mut replies = lines_with(0);
+        replies.push(("hoi4_stockpile", stock_rows(json!(5.0), 500.0, 100.0)));
+        let tools = fake(replies);
+        let mut state = State::default();
+        let off = json!({"manage": {"shift_factories": false}});
+        assert_eq!(step(&mut state, &tools, &off, "l", START).unwrap(), None);
+        assert!(actions(&tools).is_empty());
     }
 
     #[test]

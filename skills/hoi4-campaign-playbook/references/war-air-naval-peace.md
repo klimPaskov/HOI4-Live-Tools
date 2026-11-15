@@ -268,6 +268,8 @@ Fleet composition:
   submarine visibility, deep ocean -15%.
 - Convoy defence: destroyers on escort in every region your supply or troop
   convoys cross; keep spare convoy production (`hoi4_convoys`).
+  Dockyards no naval line uses build convoys by default even when convoys are not short (more trade and sea
+  supply); a plan that keeps them for ships says so (`manage.idle_dockyards: "keep"`).
 
 ### 6.3 Blockading or defeating Britain
 
