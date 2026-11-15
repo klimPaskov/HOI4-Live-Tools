@@ -4113,13 +4113,81 @@ class Lint:
             [e for e in ((auto.get("order") or []) if isinstance(auto, dict) else []) if isinstance(e, dict)]
 
         def owns(e):
-            return e.get("when") is not None and "stability" in json.dumps(e["when"])
+            return (e.get("when") is not None and "stability" in json.dumps(e["when"])) or \
+                e.get("purpose") == "stability"
         if any(owns(e) for e in entries if isinstance(e, dict)):
+            # politics_auto spends only what the dated picks leave: an owner there alone waits
+            # behind every priced dated pick (a run sat at 0.42-0.46 all war that way)
+            dated = self.list_of("politics")
+            first = next((i for i, e in enumerate(dated) if owns(e)), None)
+            ahead = [e.get("idea") for e in (dated if first is None else dated[:first])
+                     if isinstance(e.get("cost"), (int, float)) and e.get("cost") > 0 and not owns(e)]
+            in_rules = any(owns(e) for e in self.list_of("decision_rules"))
+            if (first is None and ahead and not in_rules) or (first is not None and len(ahead) > 1):
+                self.add("warning", "manage.stability_first", "politics",
+                         f"{self.tag} starts at stability {start:g}, under the floor {floor:g}, and the dated politics "
+                         f"picks {ahead} spend power before anything that raises it: put the stability pick in "
+                         f"`politics` (purpose \"stability\") at most one priced pick behind the start")
             return
         self.add("warning", "manage.stability_owner", "manage.stability_floor",
                  f"{self.tag} starts at stability {start:g}, under the floor {floor:g}, and nothing in politics, "
                  f"politics_auto.order or decision_rules raises it (an entry whose `when` reads stability): an advisor, "
                  f"law or decision with a stability modifier, so power is spent on it")
+
+    # The game's alerts and the plan keys the executor serves each one from (native
+    # plan_manage.rs `route`); an alert with none of them only wakes the player, who in live
+    # runs left eight of them open for the whole year.
+    ALERT_OWNERS = {
+        "missing_equipment_production": ("production", "production_priority"),
+        "air_wings_without_mission": ("air", "air_plan"),
+        "no_divisions_in_training": ("training",),
+        "unassigned_divisions": ("armies", "army_layout"),
+        "decisions_available": ("decisions", "decision_rules"),
+        "doctrines_available": ("doctrines",),
+        "free_dockyards": ("manage.convoys",),
+        "admiral_assignable": ("navy.admirals", "navy.fleets.admiral"),
+        "modify_officer_corps": ("politics", "politics_auto"),
+        "not_enough_garrison": ("occupation",),
+    }
+
+    def alert_owners(self):
+        """Every game alert has an owner: a plan key the executor serves it from, or an entry in
+        `manage.alerts_ignore` with `manage.alerts_ignore_why` saying why it may stay open."""
+        manage = self.plan.get("manage") if isinstance(self.plan.get("manage"), dict) else {}
+        ignored = set(manage.get("alerts_ignore") or [])
+        why = manage.get("alerts_ignore_why") if isinstance(manage.get("alerts_ignore_why"), dict) else {}
+
+        def has(path):
+            head, _, rest = path.partition(".")
+            v = self.plan.get(head)
+            if not rest:
+                return v not in (None, [], {}, False)
+            if path == "manage.convoys":
+                # the convoy rule puts dockyards no line uses on convoys unless switched off or kept
+                return isinstance(v, dict) and "convoys" not in (v.get("off") or []) and \
+                    v.get("idle_dockyards") != "keep"
+            if rest == "fleets.admiral":
+                return any(isinstance(f, dict) and f.get("admiral") for f in (v or {}).get("fleets") or []) \
+                    if isinstance(v, dict) else False
+            return isinstance(v, dict) and v.get(rest) not in (None, [], {}, False)
+        for alert, keys in self.ALERT_OWNERS.items():
+            if alert in ignored:
+                if not why.get(alert):
+                    self.add("warning", "alerts.owner", "manage.alerts_ignore",
+                             f"{alert} is ignored without a reason in manage.alerts_ignore_why")
+                continue
+            if alert == "modify_officer_corps":
+                auto = self.plan.get("politics_auto")
+                cats = {e.get("category") for e in self.list_of("politics")} | \
+                    {e.get("category") for e in ((auto or {}).get("order") or []) if isinstance(e, dict)}
+                if cats & {"military_staff", "high_command", "army_chief", "navy_chief", "air_chief", "theorist"}:
+                    continue
+            elif any(has(k) for k in keys):
+                continue
+            self.add("warning", "alerts.owner", "manage.alerts_ignore",
+                     f"the game alert {alert} has no owner: give the plan one of {list(keys)} or list it in "
+                     f"manage.alerts_ignore with a reason in manage.alerts_ignore_why (otherwise it stays open all "
+                     f"campaign and only wakes the player)")
 
     def politics_conscription(self):
         """A conscription law above what the plan's divisions need, or a manpower rule free to climb the
@@ -4655,7 +4723,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner,
+                 self.politics_pp_budget, self.stability_owner, self.alert_owners,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
                  self.intelligence_operations, self.force_home_divisions]

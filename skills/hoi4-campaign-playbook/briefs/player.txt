@@ -65,6 +65,10 @@ READS (exact calls; no other arguments exist — never guess one):
     Each read at most once per feed change that concerns it. The reply of step A carries `now` (date,
     wars, armies, open events, idle slots, own provinces held by others): that is the situation; a read
     repeats it only in more detail. The win check and hoi4_war_stats: once, for the final reply.
+    THE WAR RESULT: {CALL} hoi4_wars '{}' gives each war a `result` ("WON: ..." or "ongoing: ...") and
+    wars.wars_won / wars.fighting. That line is the answer. An enemy that owns no land is beaten even if the
+    game keeps the war open (a government in exile). A country_capitulated event can be about ANY country:
+    read its text for the name before you log anything about your war.
 
 ONE ACTION, ONE TRY: if an action returns action_unconfirmed (its effect was not observed; the request is
 closed and blocks nothing), do not resend it blindly: re-read the state and act only if the effect is missing.

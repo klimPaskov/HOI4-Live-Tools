@@ -223,6 +223,9 @@ class HandPlans(unittest.TestCase):
         # the coverage-build rules report as warnings on a hand plan (_meta.source "hand")
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 7, 9, 14, 15, 17, 21, 22, 23, 24, 25, 27)]
         self.assertEqual(warnings, sorted(gaps + [
+            # six game alerts with no plan key and no alerts_ignore reason (training, decisions, dockyards,
+            # admiral, officer corps, garrison)
+            *[("alerts.owner", "manage.alerts_ignore")] * 6,
             # one army per guard task: three tiny guard armies and four formations in one theatre
             ("army.formations", "army_layout"),
             ("army.formations", "army_layout[4] 'South guard'"),
@@ -309,6 +312,7 @@ class HandPlans(unittest.TestCase):
         _, warnings = self.findings(load(ETH), "warning")
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
         self.assertEqual(warnings, sorted(gaps + [
+            *[("alerts.owner", "manage.alerts_ignore")] * 4,  # dockyards, admiral, officer corps, garrison
             ("army.width_terrain", "army_layout"),  # Mehal Sefari and Mountain Division are 8 wide (0.92)
             ("manage.thresholds", "manage"),
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
@@ -1359,6 +1363,29 @@ class TacticsRules(unittest.TestCase):
         plan = self.plan()
         plan["manage"] = {"stability_floor": 0.01}
         self.assertNoHit(plan, "manage.stability_owner")
+
+    def test_stability_first(self):
+        # an owner only in politics_auto waits behind the priced dated picks
+        plan = self.plan()
+        plan["manage"] = {"stability_floor": 0.99}
+        plan["politics"] = [{"id": f"p{k}", "category": "government", "slot": 3 + k, "idea": f"ITA_{k}", "cost": 150}
+                            for k in range(2)]
+        plan["politics_auto"] = {"order": [{"category": "government", "slot": 5, "ideas": ["ITA_a"], "cost": 150,
+                                            "when": "stability < 0.99"}]}
+        self.assertHit(plan, "manage.stability_first", "warning", "politics")
+        plan["politics"].insert(1, {"id": "ps", "category": "government", "slot": 5, "idea": "ITA_s", "cost": 150,
+                                    "purpose": "stability"})
+        self.assertNoHit(plan, "manage.stability_first")
+
+    def test_alert_owners(self):
+        plan = self.plan()
+        f = self.assertHit(plan, "alerts.owner", "warning", "manage.alerts_ignore")
+        self.assertIn("has no owner", f["message"])
+        plan.setdefault("manage", {})["alerts_ignore"] = ["free_dockyards"]
+        hits = self.hits(plan, "alerts.owner", text="free_dockyards")
+        self.assertTrue(hits and "without a reason" in hits[0]["message"])
+        plan["manage"]["alerts_ignore_why"] = {"free_dockyards": "no ships are needed in this war"}
+        self.assertEqual(self.hits(plan, "alerts.owner", text="free_dockyards"), [])
 
     def test_politics_available(self):
         # the shakedown plan bought a high-command advisor whose gate needs a focus the path never takes
