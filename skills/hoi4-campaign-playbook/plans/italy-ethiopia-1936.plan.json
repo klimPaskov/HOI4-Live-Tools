@@ -550,7 +550,17 @@
       "Reggimento di Cavalleria",
       "Divisione Celere"
     ],
-    "max": 14
+    "max": 14,
+    "keep": [
+      {
+        "states": [
+          448
+        ],
+        "role": "garrison",
+        "why": "the Libyan division holds its port; it stands overseas, where a disband loses most of its equipment"
+      }
+    ],
+    "why": "the home divisions the capital reaches by land give their equipment and manpower to the African armies, which start short of both; no neighbour threatens Italy inside the plan's horizon"
   },
   "air": {
     "war_missions": true

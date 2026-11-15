@@ -141,6 +141,64 @@ class EvalWithoutGame(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class HomeDivisions(unittest.TestCase):
+    """force.home_divisions: every start division outside the theatre is disbanded or kept with a reason."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+
+    def found(self, change):
+        plan = load(ITA)
+        plan["disband"] = {"templates": ["Divisione di Fanteria"], "keep_states": [550, 559, 844], "max": 3,
+                           "why": "their rifles refill the African armies"}
+        change(plan)
+        out = lint_plan.lint(plan, self.game, hand=False)
+        return [f for f in out["findings"] if f["rule"] == "force.home_divisions"]
+
+    def test_divisions_neither_disbanded_nor_kept_are_named(self):
+        got = self.found(lambda p: None)
+        self.assertEqual([(f["severity"], f["where"]) for f in got], [("error", "disband")])
+        self.assertIn("neither disbanded nor kept", got[0]["message"])
+        self.assertIn("state 448: 1 Divisione Ascari Libica", got[0]["message"])
+
+    def test_a_keep_entry_for_the_rest_settles_it(self):
+        def change(p):
+            p["disband"]["keep"] = [{"role": "home_defence", "why": "the French border and the islands"}]
+        self.assertEqual(self.found(change), [])
+
+    def test_a_disband_or_a_keep_without_a_reason_is_refused(self):
+        def change(p):
+            del p["disband"]["why"]
+            p["disband"]["keep"] = [{"role": "reserve", "why": " "}]
+        got = sorted((f["where"], f["message"].split(":")[0]) for f in self.found(change))
+        self.assertEqual(got, [("disband", "disband names templates without a why"),
+                               ("disband.keep[0]", "a kept group needs a why")])
+
+    def test_a_keep_entry_that_matches_nothing_and_a_shipment_without_ports(self):
+        def change(p):
+            p.pop("sea_transfer", None)
+            p["disband"]["keep"] = [
+                {"role": "garrison", "templates": ["No Such Template"], "why": "x"},
+                {"role": "ship", "why": "the theatre feeds six more divisions"}]
+        got = sorted((f["where"], f["message"][:24]) for f in self.found(change))
+        self.assertEqual(got, [("disband.keep[0]", "matches no start divisio"),
+                               ("disband.keep[1]", "role ship without sea_tr")])
+
+    def test_a_count_limits_what_an_entry_keeps(self):
+        def change(p):
+            p["disband"]["keep"] = [{"role": "reserve", "count": 1, "why": "one division at the capital"}]
+        got = self.found(change)
+        self.assertEqual(len(got), 1)
+        self.assertIn("neither disbanded nor kept", got[0]["message"])
+
+    def test_a_plan_without_a_war_is_not_asked(self):
+        def change(p):
+            p["war"] = {}
+        self.assertEqual(self.found(change), [])
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
 class HandPlans(unittest.TestCase):
     """The two hand plans give only these findings (each is explained in the commit / reply)."""
 

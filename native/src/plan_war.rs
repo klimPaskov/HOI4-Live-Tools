@@ -65,8 +65,12 @@
 //!                      end at rest_max_days (attrition starts at 35%)
 //!   supply_resume      70: a rested army resumes at or above it (with the organisation below)
 //!   rest_below_pct     0.30 / resume_above_pct 0.80: rest below, resume at, this share of the
-//!                      army's maximum organisation. No tool reads maximum organisation: it is the
-//!                      highest organisation_mean (hoi4_supply) seen for the army this server life.
+//!                      army's maximum organisation. The organisation judged is that of the
+//!                      divisions that fight: the mean of the more worn half of the army's
+//!                      divisions (hoi4_supply division rows), so fresh divisions behind the
+//!                      attack do not keep spent ones attacking. No tool reads maximum
+//!                      organisation: it is the highest such value seen for the army this server
+//!                      life.
 //!                      An absolute "rest_below" / "resume_above" in the plan replaces the share
 //!                      (the old behaviour; rest_max_days 20 still resumes when supply allows)
 //!   pocket_share       0.5: an army falls back when this share of the land provinces around it is
@@ -377,6 +381,32 @@ pub(super) fn army_fill(supply: Option<&Value>) -> HashMap<String, f64> {
     sums.into_iter().map(|(a, (s, n))| (a, s / n)).collect()
 }
 
+/// Organisation of the divisions that fight, per army: the mean of the more worn half of its
+/// divisions (hoi4_supply division rows). The divisions in the attack lose organisation while
+/// the ones behind them keep theirs, so the army mean stayed above the rest line with the
+/// strike divisions at 1-16 of 50 (live 15 Nov 2026: ten spent divisions went on attacking a
+/// mountain line). Armies without division rows are left out (the caller keeps the army mean).
+pub(super) fn fighting_organisation(supply: Option<&Value>) -> HashMap<String, f64> {
+    let mut by_army: HashMap<String, Vec<f64>> = HashMap::new();
+    for d in supply
+        .and_then(|s| s["divisions"].as_array())
+        .into_iter()
+        .flatten()
+    {
+        if let (Some(army), Some(org)) = (d["army"].as_str(), d["organisation"].as_f64()) {
+            by_army.entry(army.to_string()).or_default().push(org);
+        }
+    }
+    by_army
+        .into_iter()
+        .map(|(army, mut orgs)| {
+            orgs.sort_by(f64::total_cmp);
+            let worn = &orgs[..orgs.len().div_ceil(2)];
+            (army, worn.iter().sum::<f64>() / worn.len() as f64)
+        })
+        .collect()
+}
+
 /// Record each army's organisation: the highest value seen is its maximum estimate.
 pub(super) fn observe(state: &mut State, condition: &HashMap<String, (f64, f64)>) {
     for (army, (org, _)) in condition {
@@ -389,7 +419,7 @@ pub(super) fn observe(state: &mut State, condition: &HashMap<String, (f64, f64)>
         note(
             state,
             "rest",
-            "organisation shares are of the highest organisation_mean seen per army (no maximum-organisation read)",
+            "organisation is the mean of the more worn half of an army's divisions; shares are of the highest value seen per army (no maximum-organisation read)",
         );
     }
 }
@@ -1810,6 +1840,28 @@ mod tests {
     }
 
     #[test]
+    fn the_fighting_organisation_is_the_more_worn_half_of_an_army() {
+        let d = |army: &str, org: f64| json!({"army": army, "organisation": org});
+        // ten divisions: the five that attack are spent, the five behind them are fresh
+        let mut rows: Vec<Value> = [1.0, 8.0, 11.0, 13.0, 14.0, 34.0, 41.0, 43.0, 45.0, 50.0]
+            .iter()
+            .map(|o| d("Strike", *o))
+            .collect();
+        rows.push(d("Guard", 41.0));
+        rows.push(d("Guard", 43.0));
+        rows.push(d("Guard", 39.0));
+        rows.push(json!({"army": "Loose", "organisation": null}));
+        let supply = json!({"divisions": rows});
+        let org = fighting_organisation(Some(&supply));
+        assert!((org["Strike"] - 9.4).abs() < 1e-9, "{org:?}");
+        // an odd count takes the larger half
+        assert!((org["Guard"] - 40.0).abs() < 1e-9, "{org:?}");
+        assert!(!org.contains_key("Loose"));
+        assert!(fighting_organisation(None).is_empty());
+        assert!(fighting_organisation(Some(&json!({"armies": []}))).is_empty());
+    }
+
+    #[test]
     fn rest_and_resume_follow_the_share_of_the_highest_organisation_seen() {
         let w = W::new();
         let p = plan(json!({"planning_wait": false}));
@@ -1835,7 +1887,7 @@ mod tests {
             acted(tick(&mut state, &w, &p, "l", START + 3 * DAY).unwrap())
                 .starts_with("war resume Army 1")
         );
-        assert!(state.war_rules.notes["rest"].contains("highest organisation_mean"));
+        assert!(state.war_rules.notes["rest"].contains("more worn half"));
     }
 
     #[test]

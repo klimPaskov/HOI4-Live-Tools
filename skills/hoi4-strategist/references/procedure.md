@@ -490,8 +490,13 @@ dossier §9.
    `war.move_window_days` (10); every move costs organisation.
 4. Planned trait assignments and command-power use (15 CP per trait, 20 per preferred tactic): no tool
    yet: plan.md only, `commanders` key pending.
-5. `disband`: far divisions whose equipment the front needs; keep a home guard; never divisions overseas
-   (75% of their equipment is lost) or in a pocket.
+5. `disband`: decide every start division outside the theatre, one by one, from what the campaign needs:
+   the force the theatre can use and feed, home defence against threats real within the horizon,
+   garrisons, the equipment and manpower a disband frees, and whether shipping it to the front beats its
+   equipment. Useless divisions go (`disband.templates`, `keep_states`, `max`, `why`); each kept group
+   is named in `disband.keep` with a `role` (home_defence, garrison, reserve, ship, training) and a
+   `why`. Never divisions overseas (75% of their equipment is lost) or in a pocket. Lint
+   `force.home_divisions` refuses a division with neither.
 6. One deployed HQ per strike army close to its front (no HQ costs 20% planning cap and speed); generals
    chosen once, divisions swapped between generals rather than unassigned (GN03, GN04); no HQ tool yet:
    plan.md and a brief line.

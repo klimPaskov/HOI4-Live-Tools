@@ -2871,11 +2871,21 @@ pub(super) fn move_to(
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     let before = read(process, |r, i| headings(r, i, army))?;
+    // Every division already marches on the named province: the order stands, and a second
+    // click would only read as an order that changed nothing.
+    if let Some(p) = province {
+        if !before.is_empty() && before.iter().all(|h| *h == p) {
+            return Ok(());
+        }
+    }
     // The state already on screen (the usual case for a front-line army): right-click one of
     // its projected provinces where the camera is. The Find view (open, type, glide, about
     // 1.5 s) only when none shows, and the camera stays where the viewer follows the units.
-    let visible = target_points(process, state, province).unwrap_or_default();
-    if !visible.is_empty() && order_at(process, keys, army, &before, visible, false)? {
+    let visible = with_icon_offsets(
+        target_points(process, state, province).unwrap_or_default(),
+        province,
+    );
+    if !visible.is_empty() && order_at(process, keys, army, &before, visible, false, province)? {
         return Ok(());
     }
     find_state(process, keys, state)?;
@@ -2897,9 +2907,51 @@ pub(super) fn move_to(
     // Points around the centre stand in for the state; a named province is only its own point.
     if province.is_none() {
         points.extend(POINTS);
+    } else if points.is_empty() {
+        // A named province of a large state lies off screen at the Find view's zoom (Dire Dawa
+        // at the far edge of Hararghe, live 15 Nov 2026: no click was sent and the order read
+        // as not applied): zoom out until it shows.
+        if let Some(at) = province_position(process, province) {
+            let area = (470.0, 120.0, 1700.0, 880.0);
+            if let Some((point, _)) =
+                super::screenmap::frame_two(process, keys, at, at, area, || Ok(()))?
+            {
+                points.push(point);
+            }
+        }
     }
-    order_at(process, keys, army, &before, points, projected)?;
-    Ok(())
+    let points = with_icon_offsets(points, province);
+    if order_at(process, keys, army, &before, points, projected, province)? {
+        return Ok(());
+    }
+    // A named province that took no order is an error with its reason, not a silent success
+    // the caller finds out about from the divisions standing still.
+    match province {
+        Some(p) => Err(Error::new(
+            "input_readback_failed",
+            format!("No division of the army took a march order to province {p} (not on screen, or its map icons took every click)"),
+        )),
+        None => Ok(()),
+    }
+}
+/// Map position of a named province (map files), when it has one.
+fn province_position(process: &dyn Process, province: Option<i32>) -> Option<(f64, f64)> {
+    let identity = process.identity()?;
+    let dir = super::mapdata::game_dir(&identity.exe).ok()?;
+    let positions = super::mapdata::positions(&dir).ok()?;
+    positions.get(&province?).copied()
+}
+/// A named province has one map point, and its city, victory point, hub or port icon can sit on
+/// it and take the right click for itself: after the point, three points beside it.
+fn with_icon_offsets(points: Vec<(f64, f64)>, province: Option<i32>) -> Vec<(f64, f64)> {
+    if province.is_none() {
+        return points;
+    }
+    let mut out = points.clone();
+    for (x, y) in points {
+        out.extend([(x + 14.0, y + 12.0), (x - 14.0, y + 12.0), (x, y - 16.0)]);
+    }
+    out
 }
 /// Right-click `points` in turn until the army's headings change (true). Divisions waiting in
 /// their ports show no new heading for a sea transfer: with `projected` points, one click on a
@@ -2911,6 +2963,7 @@ fn order_at(
     before: &[i32],
     points: Vec<(f64, f64)>,
     projected: bool,
+    want: Option<i32>,
 ) -> Result<bool> {
     let in_ports = projected && {
         let ports = read(process, super::naval::naval_base_provinces).unwrap_or_default();
@@ -2931,7 +2984,14 @@ fn order_at(
         keys.right_click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
         while std::time::Instant::now() < deadline {
-            if read(process, |r, i| headings(r, i, army))? != before {
+            let now = read(process, |r, i| headings(r, i, army))?;
+            // A named province: the order counts when divisions march on it. A point beside its
+            // icon can fall in the next province; the next point then corrects the order.
+            let took = match want {
+                Some(p) => now.contains(&p),
+                None => now != before,
+            };
+            if took {
                 return Ok(true);
             }
             std::thread::sleep(std::time::Duration::from_millis(40));
