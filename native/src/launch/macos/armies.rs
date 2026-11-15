@@ -2943,14 +2943,26 @@ pub(super) fn move_to(
     // The state already on screen (the usual case for a front-line army): right-click one of
     // its projected provinces where the camera is. The Find view (open, type, glide, about
     // 1.5 s) only when none shows, and the camera stays where the viewer follows the units.
+    // Far out (above the aiming height) a whole state is a few pixels under its own map icons:
+    // no click on it gives an order (live 15 Nov 2026: a sea move to Eritrea from the world view
+    // showed the route on hover and never took).
+    let close = super::screenmap::aim_height_ok(process);
     let visible = with_icon_offsets(
         target_points(process, state, province).unwrap_or_default(),
         province,
     );
-    if !visible.is_empty() && order_at(process, keys, army, &before, visible, false, province)? {
+    if close
+        && !visible.is_empty()
+        && order_at(process, keys, army, &before, visible, false, province)?
+    {
         return Ok(());
     }
     find_state(process, keys, state)?;
+    // The Find view centres the state but keeps the height: bring a far camera in first.
+    if !super::screenmap::aim_height_ok(process) {
+        super::screenmap::zoom_in_to_strategic(process, keys)?;
+        super::screenmap::wait_camera_still(process, 700);
+    }
     // Map icons at the state's centre (air base, port, victory point) take a right click
     // for themselves (seen live 10 Dec 2026: Tripoli's air base); try points around the
     // centre until the divisions get a new heading.
