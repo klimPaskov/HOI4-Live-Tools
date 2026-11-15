@@ -55,6 +55,11 @@
 //!               provinces beside the army, two at a time (those touching the objective first:
 //!               a second direction for the next strike), and rejoin their army when the
 //!               province is held, after `max_days`, or when the order was lost
+//!   state_weight 2.0: outside the plan rows, a victory point that decides its state's control
+//!               (the largest of a state the enemy controls) counts this many times its points.
+//!               Taking states, not only points, is what turns some wars: Ethiopia 1936 gets a
+//!               lower surrender limit once it has held half of its states or fewer for 90 days,
+//!               which is why the game's own AI saw it capitulate at 16-18 of 32 points
 //!   guards      true: guard armies are driven too (the border they held is no longer the
 //!               front). Default false: they keep their fronts
 //!
@@ -153,6 +158,7 @@ struct Knobs {
     worn_gate: f64,
     stack: usize,
     widen: bool,
+    state_weight: f64,
 }
 
 fn knobs(cfg: &Value) -> Option<Knobs> {
@@ -177,6 +183,7 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         worn_gate: number("worn_gate", 0.5),
         stack: number("stack", 4.0).max(0.0) as usize,
         widen: k["widen"] != json!(false),
+        state_weight: number("state_weight", 2.0).max(1.0),
     })
 }
 
@@ -202,6 +209,9 @@ struct World<'a> {
     lost_own: HashSet<i64>,
     /// province with own divisions -> (supply it receives, supply its divisions draw)
     supply: HashMap<i64, (f64, f64)>,
+    /// victory points that decide their state's control (the largest of a state the enemy
+    /// controls): taking one turns the whole state
+    decisive: HashSet<i64>,
 }
 
 impl World<'_> {
@@ -363,6 +373,14 @@ impl World<'_> {
 }
 
 impl World<'_> {
+    /// How much more a victory point counts when it turns its whole state.
+    fn state_weight(&self, province: i64, knobs: &Knobs) -> f64 {
+        if self.decisive.contains(&province) {
+            knobs.state_weight
+        } else {
+            1.0
+        }
+    }
     /// An enemy province for divisions a strike left over in `from`: one the army can attack
     /// from `from` or a held province beside it, not held, not `avoid`. Provinces touching the
     /// objective come first (a second direction for the next strike), then those touching `from`
@@ -393,6 +411,28 @@ impl World<'_> {
         }
         best.map(|(_, p)| p)
     }
+}
+
+/// The victory point of each enemy-controlled state that decides who controls it: the state's
+/// largest (live 15 Nov 2026: a state turned to the player with its largest victory point
+/// alone, and stayed the enemy's while it held that point, however many smaller ones were
+/// lost). Losing states, not only points, is what some countries' surrender rules count.
+fn decisive(
+    vp: &BTreeMap<i64, (bool, f64)>,
+    state_of: impl Fn(i64) -> Option<i64>,
+    enemy_states: &HashSet<i64>,
+) -> HashSet<i64> {
+    let mut best: BTreeMap<i64, (f64, i64)> = BTreeMap::new();
+    for (province, (_, points)) in vp {
+        let Some(state) = state_of(*province).filter(|s| enemy_states.contains(s)) else {
+            continue;
+        };
+        let e = best.entry(state).or_insert((*points, *province));
+        if *points > e.0 {
+            *e = (*points, *province);
+        }
+    }
+    best.values().map(|(_, p)| *p).collect()
 }
 
 /// The supply one division of `divisions` draws (median of those read), 0 when none is read.
@@ -552,7 +592,7 @@ fn choose(
         }
         let (weight, near) = world.beside(divisions, *province, knobs.resume);
         if weight >= knobs.beside {
-            let score = points * weight;
+            let score = points * weight * world.state_weight(*province, knobs);
             if best.as_ref().is_none_or(|b| score > b.0) {
                 best = Some((
                     score,
@@ -576,7 +616,7 @@ fn choose(
         if closed.contains(&leg) {
             continue;
         }
-        let score = points / (1.0 + cost as f64);
+        let score = points * world.state_weight(*province, knobs) / (1.0 + cost as f64);
         if best.as_ref().is_none_or(|b| score > b.0) {
             best = Some((score, leg, format!("the nearest victory point {province}")));
         }
@@ -774,6 +814,7 @@ pub(super) fn step(
     let mut act: Option<Act> = None;
     let mut stop: Option<String> = None;
     {
+        let decisive = decisive(&vp, |p| memory.graph.get(&p).map(|r| r.0), &enemy_states);
         let world = World {
             memory: &memory,
             vp,
@@ -781,6 +822,7 @@ pub(super) fn step(
             enemy_states,
             lost_own,
             supply: fed,
+            decisive,
         };
         // A garrison holds its victory point while that point is at the front and the division
         // stands in it; then it goes back to its army's orders.
@@ -1932,5 +1974,22 @@ mod tests {
         map.set(40.0, Some(20));
         map.divisions.borrow_mut()[2].4 = None;
         assert_eq!(run(&mut state, &map, &on, START + DAY), Some(None));
+    }
+
+    #[test]
+    fn the_largest_victory_point_of_an_enemy_state_decides_it() {
+        let vp: BTreeMap<i64, (bool, f64)> = [
+            (20, (false, 1.0)),
+            (21, (false, 3.0)),
+            (30, (true, 5.0)),
+            (50, (false, 2.0)),
+        ]
+        .into_iter()
+        .collect();
+        let state = |p: i64| Some(p / 10);
+        let enemy: HashSet<i64> = [2, 3].into_iter().collect();
+        let got = decisive(&vp, state, &enemy);
+        let want: HashSet<i64> = [21, 30].into_iter().collect();
+        assert_eq!(got, want);
     }
 }

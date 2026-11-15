@@ -324,6 +324,12 @@ values.
 
 ## 6. Principles (any war)
 
+- **Take states, not only points.** A state is controlled by whoever holds its largest victory point, and
+  some countries' surrender rules count states: Ethiopia in 1936 gets a 15% lower surrender limit once it has
+  controlled half of its states or fewer for 90 days, which is why it capitulates at about half of its victory
+  points. Read the enemy's decisions and national spirits in the game files for such rules before the war;
+  order objectives so the states fall early (the cheapest largest point of each state), because the clock
+  starts with the state count, not with the points. The strike step weighs such points (`state_weight`).
 - **Supply caps a front.** Every front has a supply ceiling. More divisions than it carries starve all of them
   (18 divisions on one front sat at 14-27% supply and organisation about 12). Read `hoi4_supply` every war tick;
   when an army is below 50% supply, thin it (split and move part elsewhere) rather than adding more.
