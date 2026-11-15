@@ -99,6 +99,9 @@ whole campaign. It does what the developer rig's broker, plan loop and monitor d
 - **stops cleanly** when the game closes or the runtime loses it: executor off, lease released, report written,
   the active-run pointer removed. `hoi4-live stop` and `hoi4_run {"op":"stop"}` do the same and leave the game
   running;
+- **ends the run** when the executor reports the plan's goal reached, or once the game date passes the plan's
+  `goal.deadline` (reasons `goal_reached`, `deadline`); `HOI4_LIVE_END=off` keeps the run going past both;
+- writes `watch.jsonl` once a minute (game date, war stats, each army's supply and organisation; reads only);
 - writes `calls.jsonl` (token-free), `supervisor.log` and, at the end, `report.md`: wall time, game dates, calls,
   action receipts by outcome, duplicates refused, idle wakes, idle pauses (each with its time, game date, reason
   and when it was lifted), pauses the player asked for, self-pauses the runtime recorded, why it ended, and the
