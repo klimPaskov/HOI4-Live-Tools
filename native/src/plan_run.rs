@@ -165,9 +165,9 @@
 //!                          "execution":"rush" sets how every driven army's battle plans are carried
 //!                          out ("careful" | "balanced" | "rush", hoi4_army_plan mode) once per army
 //!                          when it has its lines; absent: the game's default stands and nothing is
-//!                          sent. An executing plan that takes no ground for stall_days is first set
-//!                          to rush (it keeps executing; "stall_rush":false turns this off) and only
-//!                          the next stall stops it to plan again;
+//!                          sent. With "stall_rush":true an executing plan that takes no ground for
+//!                          stall_days is first set to rush (it keeps executing) and only the next
+//!                          stall stops it to plan again; default off: the stall's answers below;
 //!                          supply relief: an army below supply_floor for "relief_after_days":2 gets
 //!                          a railway to the own node nearest where it starves, then one more
 //!                          motorization level; after "relief_report_days":10 the alarm
@@ -5132,8 +5132,9 @@ fn war_step(
                     continue;
                 }
             }
-            // The first answer to an executing plan that stands still is the rush mode: the
-            // plan keeps executing and the stall clock starts again (plan_war.rs stall_rush).
+            // Where the plan asks for it (`war.stall_rush`), the first answer to an executing
+            // plan that stands still is the rush mode: the plan keeps executing and the stall
+            // clock starts again (plan_war.rs stall_rush).
             if executing && !direct && !liberate {
                 if let Some((ok, line)) = plan_war::stall_rush(
                     state,
@@ -11473,7 +11474,7 @@ mod tests {
 
     #[test]
     fn ground_taken_in_a_state_beside_the_target_is_progress_not_a_stall() {
-        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "stall_rush": false}});
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8}});
         let attacking = |f: &Field| {
             f.executing.set(true);
             f.orders.set(2);
@@ -11588,7 +11589,7 @@ mod tests {
     fn a_stalled_plan_becomes_a_direct_move_into_the_target() {
         let w = War2::new();
         let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "planning_wait": false,
-            "replans": 0, "stall_rush": false}});
+            "replans": 0}});
         let mut state = State::default();
         let mut now = START;
         for _ in 0..3 {

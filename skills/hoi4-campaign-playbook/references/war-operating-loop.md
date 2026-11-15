@@ -93,12 +93,13 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
   `hoi4_army_move` into the enemy state as a direct attack order instead.
 - `hoi4_army_motorization {army, level}`: 0/1/2; level shown in `hoi4_armies` (motorization).
 - `hoi4_army_plan {army, mode}`: how the army's battle plans are carried out, `careful`, `balanced`
-  (the game's default) or `rush`; with `execute` the mode is set first. Rush attacks every province
-  of the plan even if the front becomes longer or units end up exposed: use it against a weak or
-  broken enemy line (few divisions, no forts, low organisation) and for an executing plan that
-  stands still beside its arrow with fresh divisions on it; go back to balanced against a line
-  that holds, where rush only spends organisation. Careful suits an army short of supply. The mode
-  step has not run live yet (gap register `orders.spearhead_exec_mode`, unvalidated).
+  (the game's default) or `rush`; with `execute` the mode is set first. Rush suits a weak or
+  broken enemy line (few divisions, no forts, low organisation). It attacks every province of the
+  plan, lengthens the front and can gather an army in one unsupplied province, so it is a plan
+  decision, set with `war.execution` or `war.stall_rush`, and no cure for a plan that stands
+  still: an army executing on rush stood three weeks with a flat planning bonus. Go back to
+  balanced against a line that holds. Careful suits an army short of supply. (Gap register
+  `orders.spearhead_exec_mode`, unvalidated until its live run is recorded.)
 - `hoi4_army_create` folds every unassigned division standing in the state into the new army.
 - `hoi4_army_detach {army, divisions:[ids], into?}`: move chosen divisions (ids and their template, equipment
   fill and supply from `hoi4_supply`) into a new army or an existing one: weak units to the rear, fresh ones forward.
@@ -148,13 +149,15 @@ the player decides strategy:
   therefore runs during the hold, not after it.
 - `"stall_days": 8` (default): an ordered army that took no province of its target, or of any
   state its divisions stand in, for that long
-  first has its executing plan set to rush (`stall_rush`, default on, once per army: the plan
-  keeps executing and keeps its planning bonus, and the stall clock starts again), then has its
-  plan stopped and planned again (`replans`, default 2 per target: it stands on its
+  first has its plan stopped and planned again (`replans`, default 2 per target: it stands on its
   line, regains organisation, entrenches and rebuilds planning bonus, then executes through the
   planning wait), then gets a second direction (an offensive on another axis, `second_direction`,
   default on), then a direct `hoi4_army_move` into its target. The direct move burns planning
   (3% a day) and has no flank cover.
+- `"stall_rush": true` (default off): before all of that, an executing plan that stalled is set
+  to rush once per army; it keeps executing and keeps its planning bonus, and the stall clock
+  starts again. A plan decision for a weak or broken enemy line, never automatic: rush lengthens
+  the front and can gather an army in one unsupplied province.
 - `"execution": "rush"` (or `"careful"`, `"balanced"`): the execution mode of every driven
   army's battle plans, set once per army when its lines stand and before its first execute
   order. Without the key the game's default (balanced) stands and nothing is sent.

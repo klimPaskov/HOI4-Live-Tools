@@ -38,15 +38,19 @@
 //!                      Sent once per army when it has its lines, before its first execute order,
 //!                      and for an army formed later; kept in plan_state.json and under a new name.
 //!                      Absent: the game's default (balanced) stands and nothing is sent. Rush
-//!                      attacks every province of the plan even if the front becomes longer: for a
-//!                      weak or broken enemy line. A set that fails is tried again after 3 game days
+//!                      attacks every province of the plan: it suits a weak or broken enemy line,
+//!                      lengthens the front and can gather an army in one province without supply,
+//!                      so it is a plan decision. A set that fails is tried again after 3 game days
 //!                      and under the failure ledger; the execute order never waits for it
-//!   stall_rush         false: a stall goes straight to its other answers. Default: an executing
-//!                      plan that took no ground for stall_days is first set to rush (unless
-//!                      `execution` is rush already): the plan keeps executing and keeps its
-//!                      planning bonus, the stall clock starts again, and only the next stall stops
-//!                      the plan to plan again. Once per army; it stays on rush until the plan
-//!                      names another mode
+//!   stall_rush         true: an executing plan that took no ground for stall_days is first set
+//!                      to rush (unless `execution` is rush already): the plan keeps executing and
+//!                      keeps its planning bonus, the stall clock starts again, and only the next
+//!                      stall stops the plan to plan again. Once per army; it stays on rush until
+//!                      the plan names another mode. Default off (absent or false): a stall goes
+//!                      straight to its other answers. Rush did not make a standing plan attack
+//!                      (live 15 Nov 2026: an army executing on rush stood three weeks with a flat
+//!                      planning bonus, and thirteen divisions ended in one province without
+//!                      supply), so the step costs a stall period only where the plan asks for it
 //!   hold_prepares      false: a hold phase (`axes: []`) draws no line on enemy land (the old hold).
 //!                      Default: in a hold phase the armies still draw their front and offensive
 //!                      line toward their next target and plan on them; the execute order waits for
@@ -594,11 +598,12 @@ pub(super) fn execution_step(
     Ok(Some(format!("war execution {army} {mode}: {ok} {why}")))
 }
 
-/// The first answer to an executing plan that took no ground for `days`: the rush mode. The
-/// plan keeps executing and keeps its planning bonus (a stop gives both up), and rush attacks
-/// every province of the plan where balanced waits for a shorter front (live 15 Nov 2026: an
-/// executing plan stood beside its arrow for weeks with eight fresh divisions on it). Once per
-/// army, not when the plan asks for rush already, and off with `war.stall_rush: false`.
+/// With `war.stall_rush: true`, the first answer to an executing plan that took no ground for
+/// `days`: the rush mode. The plan keeps executing and keeps its planning bonus (a stop gives
+/// both up), and rush attacks every province of the plan where balanced waits for a shorter
+/// front. Once per army, and not when the plan asks for rush already. Off unless the plan asks
+/// for it: rush lengthens the front and can gather an army in one unsupplied province, and it
+/// did not make a standing plan attack (live 15 Nov 2026).
 /// Some((ok, line)) when the order went out; the caller restarts the stall clock on ok.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn stall_rush(
@@ -611,7 +616,7 @@ pub(super) fn stall_rush(
     days: GameHour,
     now: GameHour,
 ) -> Result<Option<(bool, String)>> {
-    if plan["war"]["stall_rush"] == json!(false)
+    if plan["war"]["stall_rush"] != json!(true)
         || execution(plan) == Some("rush")
         || state.war_rules.rushed.contains(army)
         || state.skipped(now, "rush", army)
@@ -1518,10 +1523,9 @@ mod tests {
         }
     }
     fn plan(extra: Value) -> Value {
-        // "replans": 0 and "stall_rush": false: these tests are about what follows the rush
-        // mode and the planning cycles of a stall
-        let mut war = json!({"enemies": ["FRA"], "axes": [[28, 18]], "cooldown_hours": 1,
-            "replans": 0, "stall_rush": false});
+        // "replans": 0: these tests are about what follows the planning cycles of a stall
+        let mut war =
+            json!({"enemies": ["FRA"], "axes": [[28, 18]], "cooldown_hours": 1, "replans": 0});
         for (k, v) in extra.as_object().unwrap() {
             war[k] = v.clone();
         }
@@ -2028,7 +2032,28 @@ mod tests {
     }
 
     #[test]
-    fn the_first_answer_to_a_stalled_executing_plan_is_the_rush_mode() {
+    fn a_stall_never_sets_rush_unless_the_plan_asks_for_it() {
+        // absent and false alike: the stall goes straight to the answers there were
+        for war in [
+            json!({"replans": 1}),
+            json!({"replans": 1, "stall_rush": false}),
+        ] {
+            let w = W::new();
+            let p = plan(war);
+            let (mut state, now) = stalled(&w, &p);
+            let step = acted(tick(&mut state, &w, &p, "l", now).unwrap());
+            assert!(
+                step.starts_with(
+                    "war stalled Army 1 8 days on state 28: plan stopped to plan again (1 of 1): true"
+                ),
+                "{step}"
+            );
+            assert!(mode_orders(&w).is_empty());
+        }
+    }
+
+    #[test]
+    fn with_stall_rush_the_first_answer_to_a_stalled_executing_plan_is_the_rush_mode() {
         let w = W::new();
         let p = plan(json!({"replans": 1, "stall_rush": true}));
         let (mut state, now) = stalled(&w, &p);

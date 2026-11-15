@@ -4736,9 +4736,9 @@
     "hoi4_army_plan"
    ],
    "payoff": "medium",
-   "why": "careful under 70% supply; rush against a weak or broken line, for an executing plan that stands still, and to close a pocket",
+   "why": "careful under 70% supply; rush against a weak or broken line and to close a pocket (it lengthens the front and can gather an army in one unsupplied province: a plan decision)",
    "closing": "live",
-   "owner": "offline done: hoi4_army_plan mode (careful, balanced, rush: the army is selected, btn_priority opens planning_speed_window, the wanted btn_execute_N is clicked and the three buttons' frames are read back), plan keys war.execution (once per army after its lines) and war.stall_rush (the first answer to a stalled executing plan), tests; live: run hoi4_army_plan {army, mode} once per mode and correct the readback from the failure detail if the frames do not mark the chosen button, then record the run here. Still to build: a spearhead order tool (btn_order_draw_blitz)"
+   "owner": "offline done: hoi4_army_plan mode (careful, balanced, rush: the army is selected, btn_priority opens planning_speed_window, the wanted btn_execute_N is clicked and the three buttons' frames are read back), plan keys war.execution (once per army after its lines) and war.stall_rush (opt-in, default off: the first answer to a stalled executing plan), tests; live: run hoi4_army_plan {army, mode} once per mode and correct the readback from the failure detail if the frames do not mark the chosen button, then record the run here. Still to build: a spearhead order tool (btn_order_draw_blitz)"
   },
   {
    "id": "orders.hold_guards",
