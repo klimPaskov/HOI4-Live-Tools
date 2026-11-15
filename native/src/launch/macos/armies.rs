@@ -3061,6 +3061,70 @@ fn order_at(
     }
     Ok(false)
 }
+/// Order some divisions of `army` (ids as hoi4_armies lists them) to march on `province` of
+/// `state`, one division at a time with the game's controls: the army's card opens its division
+/// list, a click on a division's row selects that division alone (as for a detach), then one
+/// right click on the province. Each order counts when that division marches on the province;
+/// the others of the army keep their orders. A division already marching on it gets no input.
+pub(super) fn move_divisions(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    ids: &[String],
+    state: i32,
+    province: i32,
+) -> Result<()> {
+    for id in ids {
+        if read(process, division_headings)?.get(id) == Some(&province) {
+            continue;
+        }
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let (x, y) = row.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "division selected", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == 1)
+        })?;
+        let mut points = target_points(process, state, Some(province)).unwrap_or_default();
+        if points.is_empty() {
+            find_state(process, keys, state)?;
+            points = target_points(process, state, Some(province)).unwrap_or_default();
+        }
+        if points.is_empty() {
+            if let Some(at) = province_position(process, Some(province)) {
+                let area = (470.0, 120.0, 1700.0, 880.0);
+                if let Some((point, _)) =
+                    super::screenmap::frame_two(process, keys, at, at, area, || Ok(()))?
+                {
+                    points.push(point);
+                }
+            }
+        }
+        let mut took = false;
+        for (x, y) in with_icon_offsets(points, Some(province)) {
+            keys.right_click(GAME, x, y)?;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
+            while std::time::Instant::now() < deadline {
+                if read(process, division_headings)?.get(id) == Some(&province) {
+                    took = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            if took {
+                break;
+            }
+        }
+        if !took {
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("Division {id} took no march order to province {province} (not on screen, or its map icons took every click)"),
+            ));
+        }
+    }
+    Ok(())
+}
 /// Screen points of the land provinces of `state` (map files, live camera), nearest the screen
 /// centre first, skipping the centre itself where the state's map icons sit; at most eight.
 fn target_points(

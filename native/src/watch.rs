@@ -200,11 +200,23 @@ impl Compact {
             c.civ_idle = e["civilian_factories_idle"].as_i64();
         }
         if let Some(st) = &r.states {
+            // Only states the player owns: a state of the enemy the player now controls is
+            // listed too, and its "held by others" are the provinces the player has taken from
+            // their owner (the feed called each capture an own province lost; live 15 Nov 2026).
+            let me = r
+                .overview
+                .as_ref()
+                .and_then(|o| o["player"].as_str())
+                .map(str::to_string);
             c.own_provinces_lost = Some(
                 st["states"]
                     .as_array()
                     .into_iter()
                     .flatten()
+                    .filter(|row| match (&me, row["owner"].as_str()) {
+                        (Some(me), Some(owner)) => owner == me,
+                        _ => true,
+                    })
                     .flat_map(|row| {
                         row["provinces_held_by_others"]
                             .as_array()
@@ -695,6 +707,28 @@ mod tests {
         assert!(kinds.contains(&("army_moved", false)));
         assert!(kinds.contains(&("army_organisation_low", true)));
         assert!(diff(&a, &a, Limits::default()).is_empty());
+    }
+    #[test]
+    fn provinces_taken_from_an_enemy_state_are_not_own_provinces_lost() {
+        let reads = |taken: &[i64], lost: &[i64]| Reads {
+            overview: Some(json!({"player": "ITA"})),
+            states: Some(json!({"states": [
+                {"state_id": 550, "owner": "ITA", "controller": "ITA",
+                 "provinces_held_by_others": lost.iter().map(|p| json!({"province": p, "controller": "ETH"})).collect::<Vec<_>>()},
+                {"state_id": 271, "owner": "ETH", "controller": "ITA",
+                 "provinces_held_by_others": taken.iter().map(|p| json!({"province": p, "controller": "ITA"})).collect::<Vec<_>>()}
+            ]})),
+            ..Reads::default()
+        };
+        let a = Compact::from_reads(&reads(&[], &[]));
+        let b = Compact::from_reads(&reads(&[5010], &[]));
+        assert!(diff(&a, &b, Limits::default()).is_empty());
+        let c = Compact::from_reads(&reads(&[5010], &[13250]));
+        let kinds: Vec<&str> = diff(&b, &c, Limits::default())
+            .iter()
+            .map(|c| c.kind)
+            .collect();
+        assert_eq!(kinds, vec!["own_province_lost"]);
     }
     #[test]
     fn an_unreadable_field_keeps_its_value_and_makes_no_change() {

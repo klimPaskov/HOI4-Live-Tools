@@ -50,7 +50,7 @@ pub(super) fn label(frame: u32) -> Option<(&'static str, &'static str)> {
         ),
         26 => (
             "no_divisions_in_training",
-            "nothing is training: hoi4_train",
+            "nothing is training: hoi4_train {template, count, deploy_state_id} (templates: hoi4_division_templates; deploy_state_id: an own state with a land route to the front, hoi4_states with the own tag)",
         ),
         30 => (
             "resistance",
@@ -86,7 +86,7 @@ pub(super) fn label(frame: u32) -> Option<(&'static str, &'static str)> {
         ),
         67 => (
             "admiral_assignable",
-            "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true}",
+            "an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}",
         ),
         // Named from the game's tooltips on 6 Nov 2026 (1.19.4.1).
         68 => (

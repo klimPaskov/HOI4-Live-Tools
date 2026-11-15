@@ -791,6 +791,7 @@ fn move_reason(tag: &str) -> &'static str {
         "im" => "naval invasion staging",
         "wd" | "w2" => "second direction",
         "wj" => "route jump-off",
+        "ws" => "objective strike",
         _ => "other",
     }
 }
@@ -798,7 +799,11 @@ fn move_reason(tag: &str) -> &'static str {
 impl Moves {
     /// Some(why) when the move of `army` (sent by the step `tag`) is held.
     fn gate(&self, army: &str, tag: &str, now: GameHour) -> Option<String> {
-        if matches!(tag, "wp" | "im") {
+        // The strike step is the one driver of the armies it owns and keeps its own pace (one
+        // order per objective, rests, closed objectives): another step cannot be overridden,
+        // and its orders for part of an army (a garrison, a stack thinned to its supply) are
+        // not churn.
+        if matches!(tag, "wp" | "im" | "ws") {
             return None;
         }
         if self.tired.contains(army) {
