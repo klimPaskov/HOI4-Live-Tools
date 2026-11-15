@@ -1924,6 +1924,10 @@ fn politics_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let mut political_power: Option<f64> = None;
+    // The cost of earlier picks the power cannot pay yet: a later pick spends only the power
+    // above it, so the plan's order holds (live 16 Nov 2026: a 50-point pick listed third took
+    // the power twice while the 150-point stability pick listed second waited all war).
+    let mut held_back = 0.0;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
         let key = politics_key(index, pick);
         if state.done.contains_key(&key) || state.skipped(now, "pol", &key) {
@@ -1941,16 +1945,23 @@ fn politics_step(
                 .map(|raw| raw / 100_000.0);
         }
         // Not before the country has gained 15 points since the last refusal, or the
-        // pick's own "cost" when the plan names it.
-        if let Some(pp) = political_power {
-            let need = pick["cost"].as_f64().unwrap_or(0.0);
-            let since = state
-                .pol_pp_at_fail
-                .get(&key)
-                .map_or(f64::MIN, |p| p + 15.0);
-            if pp < need || pp < since {
-                continue;
+        // pick's own "cost" when the plan names it (above what earlier picks wait for). A
+        // power that cannot be read is no reason to try: the game refused such a blind try
+        // and the refusal let the standing policy spend the power the pick was waiting for.
+        let need = pick["cost"].as_f64().unwrap_or(0.0);
+        match political_power {
+            Some(pp) => {
+                let since = state
+                    .pol_pp_at_fail
+                    .get(&key)
+                    .map_or(f64::MIN, |p| p + 15.0);
+                if pp < need + held_back || pp < since {
+                    held_back += need;
+                    continue;
+                }
             }
+            None if need > 0.0 => continue,
+            None => {}
         }
         let (ok, why) = state.act(
             tools,
@@ -13593,6 +13604,40 @@ mod tests {
         assert_eq!(status(&state), "reached");
         let alarms = crate::alarms::strategy(&plan, &state.strategy.summary, &[]);
         assert_eq!(alarm_codes(&alarms), ["goal_reached"]);
+    }
+
+    #[test]
+    fn a_later_pick_waits_for_an_earlier_one_and_an_unread_power_tries_nothing() {
+        let plan = json!({"politics": [
+            {"id": "stab", "category": "government", "slot": 5, "idea": "big", "cost": 150},
+            {"id": "cheap", "category": "military_staff", "slot": 0, "idea": "small", "cost": 50}]});
+        let power = |pp: f64| {
+            fake(vec![(
+                "hoi4_economy",
+                json!({"political_power": {"raw_signed": pp * 100_000.0}}),
+            )])
+        };
+        let chosen = |f: &Fake| -> Vec<Value> {
+            f.calls
+                .borrow()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_politics_choose")
+                .map(|(_, a)| a["idea"].clone())
+                .collect()
+        };
+        let mut state = State::default();
+        // 100 pays the cheap pick but not the stability pick listed before it: nothing
+        let some = power(100.0);
+        tick(&mut state, &some, &plan, "l", START).unwrap();
+        assert!(chosen(&some).is_empty(), "{:?}", chosen(&some));
+        // the power cannot be read: no blind try
+        let unread = fake(vec![]);
+        tick(&mut state, &unread, &plan, "l", START + DAY).unwrap();
+        assert!(chosen(&unread).is_empty());
+        // 160: the stability pick first
+        let enough = power(160.0);
+        tick(&mut state, &enough, &plan, "l", START + 2 * DAY).unwrap();
+        assert_eq!(chosen(&enough).first(), Some(&json!("big")));
     }
 
     #[test]
