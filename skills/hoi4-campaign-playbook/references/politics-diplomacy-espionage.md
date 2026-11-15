@@ -41,6 +41,12 @@ Effects scale linearly between 50% and the extreme:
 
 Each 10 points of stability above 50 is about +4% factory output; each 10 below 50 costs about 10%.
 
+**Under the floor, the stability pick comes first.** A country that starts under 50% stability puts the pick
+that raises it (an advisor, law or decision with a stability modifier) in the dated politics, at most one priced
+pick behind the start. Standing policies (`politics_auto`) spend only the power the dated picks leave: an owner
+there alone waited behind every dated buy and stability stayed 0.42-0.46 for a whole war (lint
+`manage.stability_first`).
+
 Drivers: defensive war +20% war support, offensive war -20%; world tension scales war support by up to 0.4; bombing, convoy losses and casualties cut war support (caps -30%, -50%, -30%). Enemy propaganda operatives cap at -20% stability and -20% war support.
 
 **Crisis events.** Only at war (not in a civil war) and while stability or war support is under 50%. Mean time 360 days, x0.75 under 40%, x0.75 again under 20%, doubled for non-democracies. Each adds `draft_dodging` (conscription -20/-30/-40%), `strikes_1..3` (factory output -20/-30/-50%, consumer goods +40/60/80%) or `mutiny_1..3` (attack -25/-50/-75%, org -10/-20/-50%, longer training). Suppressed under Disarmed Nation or Volunteer Only plus a civilian or isolation economy. A neglected level-3 crisis at stability under 21% can start a civil war. Answers arrive as free decisions in the `crisis` category and as events `stability.21/22/23` (section 10).

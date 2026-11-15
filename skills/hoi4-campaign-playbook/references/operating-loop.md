@@ -122,7 +122,15 @@ mode, and evidence location. Save checkpoints at meaningful milestones or to
 resume a real interruption; do not serialize the world every observation.
 
 Victory requires the country card's territorial/war/peace predicates, shown in
-fresh player-visible evidence. Record unmet goals, defeat, timeout, crash and
+fresh player-visible evidence. A war is won when the enemy owns and controls no
+state, or controls none of its own: the game can keep the war relation of an
+annexed enemy (a government in exile) for months, so `hoi4_wars` gives each war a
+plain `result` ("WON: ..." / "ongoing: ...") and `capitulated:<TAG>` reads true
+for a landless enemy. A capitulation event can name any country: read its text.
+
+Every game alert has an owner: an executor rule fed by a plan key, or an entry in
+`manage.alerts_ignore` with its reason in `manage.alerts_ignore_why` (lint
+`alerts.owner`). An alert open for months with neither is a plan defect. Record unmet goals, defeat, timeout, crash and
 external interruption honestly. A two-year run proves its tested interval only;
 offline unit tests never prove live campaign acceptance.
 

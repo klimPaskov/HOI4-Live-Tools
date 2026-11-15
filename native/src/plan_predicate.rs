@@ -78,8 +78,9 @@
 //!                               scaled down). Both unknown today: the tools report the fields null
 //!                               with a reason until they are located in memory (gap register
 //!                               navy.dominance_intel_read)
-//!   capitulated:<TAG>           hoi4_wars + hoi4_events + hoi4_states: no longer at war with TAG and
-//!                               (a peace conference is open or TAG owns no state)
+//!   capitulated:<TAG>           hoi4_wars + hoi4_events + hoi4_states: TAG owns and controls no
+//!                               state (annexed or in exile, even while the game keeps the war), or
+//!                               the war is over and a peace conference is open or TAG owns no state
 //!   surrender_progress:<TAG>    hoi4_wars wars.wars[] row of the war with TAG, field
 //!                               enemy_surrender_progress (0..1: the share of TAG's surrender limit
 //!                               reached, the bar under TAG's flag in the war overview; 1 is the
@@ -1104,9 +1105,21 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             // What a player sees: the war with TAG is over and either the peace conference that
             // follows a capitulation is open or TAG no longer exists (annexed). A white peace
             // leaves TAG existing with no conference, so it does not count.
+            // An enemy that owns no state any more was annexed (or fights on only as a
+            // government in exile): the game can keep its war relation for months after the
+            // capitulation, and reading that relation alone called a won war lost (live 15 Nov
+            // 2026).
             let tag = tag_arg(atom)?;
             if enemies(ctx)?.contains(&tag) {
-                return Ok(Reading::Flag(false));
+                let read = ctx
+                    .read("hoi4_states", &json!({"query": tag}))
+                    .ok_or("hoi4_states unreadable")?;
+                let rows = read["states"].as_array().ok_or("hoi4_states unreadable")?;
+                let landless = !rows.iter().any(|r| {
+                    r["owner"].as_str() == Some(tag.as_str())
+                        || r["controller"].as_str() == Some(tag.as_str())
+                });
+                return Ok(Reading::Flag(landless));
             }
             let conference = ctx
                 .read("hoi4_events", &json!({}))
@@ -1342,6 +1355,13 @@ mod tests {
             .insert("hoi4_events", json!({"peace_conference_open": false}));
         assert_eq!(eval(&f, json!("capitulated:ETH")), Truth::False);
         // war over, ETH owns nothing: annexed
+        assert_eq!(eval(&f, json!("capitulated:AUS")), Truth::True);
+        // still a war relation, but the enemy holds no land: annexed or in exile, won
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": true, "validated": true, "enemies": ["AUS"]}}),
+        );
         assert_eq!(eval(&f, json!("capitulated:AUS")), Truth::True);
     }
     #[test]

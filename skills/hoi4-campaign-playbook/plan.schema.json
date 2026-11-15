@@ -540,6 +540,11 @@
           "note": {
             "type": "string",
             "description": "Free text for people and the player; never read by the executor."
+          },
+          "purpose": {
+            "type": "string",
+            "x-owner": "lint",
+            "description": "what the pick is for; \"stability\" marks the pick that raises stability (strategist lint manage.stability_first: a country under its stability floor puts it at most one priced pick behind the start)"
           }
         },
         "additionalProperties": false,
@@ -3182,6 +3187,15 @@
           "default": "convoys",
           "description": "dockyards no naval line uses: \"convoys\" puts them on the convoy line (a new line of the newest convoy design when none) even when convoys are not short; \"keep\" leaves them for the player",
           "x-rule": "convoys"
+        },
+        "alerts_ignore_why": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "alert name -> why the plan leaves it open (strategist lint alerts.owner: every game alert has a plan key that owns it or is ignored here with a reason)",
+          "x-rule": "alerts"
         }
       },
       "additionalProperties": false,

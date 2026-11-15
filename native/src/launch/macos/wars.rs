@@ -390,6 +390,44 @@ fn ids(list: &[i32]) -> String {
         .join(", ")
 }
 
+/// Each war's result in plain words, from the land each enemy still owns and controls: an enemy
+/// that owns and controls no state was annexed or fights on only as a government in exile, so
+/// the war is won even while the game keeps its war relation (live 15 Nov 2026: Ethiopia
+/// capitulated in September, was annexed, and a player read "still at war" in December as a
+/// war not won). Adds `result` and `enemy_land` to every war, and `wars_won` (tags) and
+/// `fighting` (tags with land) to the wars block.
+fn war_results(result: &mut Value, states: &[StateRow]) {
+    let Some(wars) = result
+        .get_mut("wars")
+        .and_then(|w| w.get_mut("wars"))
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let mut won: Vec<String> = Vec::new();
+    let mut fighting: Vec<String> = Vec::new();
+    for war in wars.iter_mut() {
+        let Some(tag) = war["enemy"]["tag"].as_str().map(str::to_string) else {
+            continue;
+        };
+        let owned = states.iter().filter(|s| s.owner == tag).count();
+        let controlled = states.iter().filter(|s| s.controller == tag).count();
+        war["enemy_land"] = json!({"states_owned": owned, "states_controlled": controlled});
+        war["result"] = json!(if owned == 0 && controlled == 0 {
+            won.push(tag.clone());
+            format!("WON: {tag} owns and controls no state any more (annexed, or a government in exile with no land); nothing is left to fight. The game keeps the war relation, which does not change the result")
+        } else if controlled == 0 {
+            won.push(tag.clone());
+            format!("WON: {tag} controls none of its {owned} state(s) (it has capitulated); a peace conference or annexation follows")
+        } else {
+            fighting.push(tag.clone());
+            format!("ongoing: {tag} owns {owned} and controls {controlled} state(s)")
+        });
+    }
+    result["wars"]["wars_won"] = json!(won);
+    result["wars"]["fighting"] = json!(fighting);
+}
+
 fn analyse(input: &Input<'_>) -> Value {
     let player = input.player;
     let rows: BTreeMap<i32, &StateRow> = input.states.iter().map(|s| (s.id, s)).collect();
@@ -485,6 +523,7 @@ fn analyse(input: &Input<'_>) -> Value {
             "front_line_orders": "unknown (order contents unmapped)"
         },
     });
+    war_results(&mut result, input.states);
 
     let adjacency = match &input.adjacency {
         Ok(a) => *a,
@@ -1034,6 +1073,37 @@ mod tests {
         assert_eq!(v["wars"]["count"], 1);
         assert_eq!(v["borders"][0]["hostile"], true);
         assert_eq!(v["borders"][0]["hostile_basis"][0], "war_relation");
+    }
+
+    #[test]
+    fn a_war_against_an_enemy_without_land_reads_won_and_one_with_land_ongoing() {
+        let states = [
+            row(1, "GER", "GER"),
+            row(2, "GER", "GER"),
+            row(3, "CZE", "CZE"),
+        ];
+        let mut v = json!({"wars": {"at_war": true, "wars": [
+            {"enemy": {"tag": "POL", "name": "Poland"}},
+            {"enemy": {"tag": "CZE", "name": "Czechoslovakia"}}]}});
+        war_results(&mut v, &states);
+        assert!(v["wars"]["wars"][0]["result"]
+            .as_str()
+            .unwrap()
+            .starts_with("WON: POL owns and controls no state"));
+        assert!(v["wars"]["wars"][1]["result"]
+            .as_str()
+            .unwrap()
+            .starts_with("ongoing"));
+        assert_eq!(v["wars"]["wars_won"], json!(["POL"]));
+        assert_eq!(v["wars"]["fighting"], json!(["CZE"]));
+        // occupied but still owning land: capitulated
+        let states = [row(1, "GER", "GER"), row(3, "CZE", "GER")];
+        let mut v = json!({"wars": {"wars": [{"enemy": {"tag": "CZE"}}]}});
+        war_results(&mut v, &states);
+        assert!(v["wars"]["wars"][0]["result"]
+            .as_str()
+            .unwrap()
+            .contains("controls none of its 1 state(s)"));
     }
 
     #[test]

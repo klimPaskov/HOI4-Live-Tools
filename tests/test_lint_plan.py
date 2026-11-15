@@ -1360,6 +1360,29 @@ class TacticsRules(unittest.TestCase):
         plan["manage"] = {"stability_floor": 0.01}
         self.assertNoHit(plan, "manage.stability_owner")
 
+    def test_stability_first(self):
+        # an owner only in politics_auto waits behind the priced dated picks
+        plan = self.plan()
+        plan["manage"] = {"stability_floor": 0.99}
+        plan["politics"] = [{"id": f"p{k}", "category": "government", "slot": 3 + k, "idea": f"ITA_{k}", "cost": 150}
+                            for k in range(2)]
+        plan["politics_auto"] = {"order": [{"category": "government", "slot": 5, "ideas": ["ITA_a"], "cost": 150,
+                                            "when": "stability < 0.99"}]}
+        self.assertHit(plan, "manage.stability_first", "warning", "politics")
+        plan["politics"].insert(1, {"id": "ps", "category": "government", "slot": 5, "idea": "ITA_s", "cost": 150,
+                                    "purpose": "stability"})
+        self.assertNoHit(plan, "manage.stability_first")
+
+    def test_alert_owners(self):
+        plan = self.plan()
+        f = self.assertHit(plan, "alerts.owner", "warning", "manage.alerts_ignore")
+        self.assertIn("has no owner", f["message"])
+        plan.setdefault("manage", {})["alerts_ignore"] = ["free_dockyards"]
+        hits = self.hits(plan, "alerts.owner", text="free_dockyards")
+        self.assertTrue(hits and "without a reason" in hits[0]["message"])
+        plan["manage"]["alerts_ignore_why"] = {"free_dockyards": "no ships are needed in this war"}
+        self.assertEqual(self.hits(plan, "alerts.owner", text="free_dockyards"), [])
+
     def test_politics_available(self):
         # the shakedown plan bought a high-command advisor whose gate needs a focus the path never takes
         plan = self.plan()
