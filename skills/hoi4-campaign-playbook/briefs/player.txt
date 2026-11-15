@@ -21,7 +21,8 @@ SETUP (game is PAUSED on day one; at most 3 batches, then unpause):
  2. batch: answer open events the plan names; do the plan brief's day-one player items. Do NOT touch
     research, production, construction or armies the executor owns.
  3. wait (paused) until hoi4_armies shows the armies the plan's army_layout needs (hoi4_wait_change with
-    timeout_seconds 10, up to 12 times), then batch ["hoi4_time",{"paused":false,"speed":{SPEED}}].
+    timeout_seconds 10, up to 12 times), then batch ["hoi4_time",{"paused":false,"speed":{SPEED_ARG}}]
+    (the tool counts speeds from 0: {SPEED_ARG} is the game's speed {SPEED}).
     From then on never pause.
 
 THE LOOP (every turn):

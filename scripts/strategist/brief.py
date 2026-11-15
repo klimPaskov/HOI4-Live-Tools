@@ -18,7 +18,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 TEMPLATE = os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "briefs", "player.txt")
-PLACEHOLDERS = ("TITLE", "RUN", "SPEED", "CALL", "BATCH", "PLAN_BRIEF", "SITREP", "LOG", "STOP_DATE", "MINUTES")
+PLACEHOLDERS = ("TITLE", "RUN", "SPEED", "SPEED_ARG", "CALL", "BATCH", "PLAN_BRIEF", "SITREP", "LOG", "STOP_DATE",
+                "MINUTES")
 
 
 def read_json(path):
@@ -42,6 +43,9 @@ def render(run_dir, call, batch, sitrep=None, log=None, stop_date=None, minutes=
         "TITLE": "%s: %s" % (spec.get("tag", "?"), spec.get("goal", "campaign")),
         "RUN": run,
         "SPEED": str(speed),
+        # hoi4_time counts speeds from 0 (0..4 for the game's 1..5): the game's speed 3 is the argument 2.
+        # A brief that passed the game's number ran every campaign one speed step too fast.
+        "SPEED_ARG": str(max(0, int(speed) - 1)),
         "CALL": call,
         "BATCH": batch,
         "PLAN_BRIEF": plan_brief,
