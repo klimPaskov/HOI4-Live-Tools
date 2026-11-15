@@ -376,8 +376,10 @@ class CoverageKeys(unittest.TestCase):
         for k in ("goal_reached", "goal_at_risk", "goal_risk_days", "checkpoint_missed", "phase_changed",
                   "contingency_triggered"):
             self.assertIn(k, alarms)
-        for key in ("force_posture", "sea_transfer", "retake_rules", "_coverage"):
+        for key in ("force_posture", "retake_rules", "_coverage"):
             self.assertEqual(owners[key], "player", key)
+        # plan_ship.rs: the routes are the executor's, the overseas supply keys still wait for W1-14
+        self.assertEqual(owners["sea_transfer"], "executor")
         # plan_seams.rs: steps written ahead of their tools
         for key in ("xp_budget", "garrison_template"):
             self.assertEqual(owners[key], "executor", key)
@@ -389,7 +391,8 @@ class CoverageKeys(unittest.TestCase):
                      "production[].replace", "production[].switch_at_cover_days", "designs[].decommission"):
             self.assertEqual(_lookup(self.schema, path).get("x-owner"), "executor", path)
         planned = schema_check.planned(self.schema)
-        for key, item in (("xp_budget.army[].cost", "W1-6"), ("sea_transfer", "W1-14")):
+        for key, item in (("xp_budget.army[].cost", "W1-6"), ("sea_transfer.ports", "W1-14"),
+                          ("sea_transfer.routes[].when", "W1-14")):
             self.assertEqual(planned.get(key), item, key)
         for key in ("navy", "hold_targets", "designs", "intelligence", "mio", "trade", "stockpile_targets",
                     "manage.air_superiority", "occupation.per_state", "xp_budget", "garrison_template",

@@ -34,6 +34,11 @@ and follow it every war tick.
    A pocket with `pincer_ready:true` and high score is the first operation.
 6. Air: fighters `air_superiority`, CAS `cas` over the region of the main axis
    (`hoi4_air_mission`, state_id of the target).
+7. Overseas war: the home army is part of the force. Ship the divisions that fight well in the
+   theatre in the first weeks (plan `sea_transfer.routes`; one `hoi4_army_move {army, state_id}`
+   per army, three to four weeks through one canal) and let each landed army join a strike
+   formation; disband the rest so their equipment refills the front. A war fought with the
+   colonial garrison alone is slower than the game's own AI, which ships its home army at once.
 
 ## 2. Encirclement procedure
 

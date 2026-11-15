@@ -684,9 +684,14 @@ Read: `war-air-naval-peace.md` §6, §7; `strategy.md` "Naval invasion state mac
    `F oob`), `admiral`, `state_id`, `missions`: [{`mission`, `regions` (sea region display names, or
    {`region`, `state_id`}), `task_force`, `when`}]}], `convoy_escort` {`fleet`, `regions`, `when`},
    `repair_below` / `repair_until`}: per task force the first mission entry whose `when` holds.
-2. Overseas theatres (mandatory): sea transfers of armies (player `hoi4_army_move {army, state_id}`;
-   the readback reports `sea_transfer_unverified` until the troops land), convoys and escort for the
-   route, the landing ports (item 19). Naval invasions: `invasions` [{`id`, `from_state` (own coastal
+2. Overseas theatres (mandatory): sea transfers of armies. The executor ships home divisions by
+   `sea_transfer.routes` [{`id`, `to_state` (a port state of the theatre), `templates`, `count`,
+   `from_state`?, `join`? (the formation the shipped army merges into on landing)}]: it forms or detaches
+   an army of the route's divisions at home, sends one `hoi4_army_move {army, state_id}` (the readback
+   reports `sea_transfer_unverified` until the troops land, three to four weeks across one canal) and
+   never disbands a division a route still wants. Ship the home divisions that fight well in the theatre
+   in the first weeks and disband the rest (`disband`, other templates); check that the theatre's ports
+   and hubs feed the larger front. Convoys and escort for the route, the landing ports (item 19). Naval invasions: `invasions` [{`id`, `from_state` (own coastal
    state), `target_state` (`F province <id>` names the state of the landing province), `target_province`,
    `armies`, `fleet` (its task forces get invasion_support), `when`}], one at a time; list the armies in
    `war.reserve` too.

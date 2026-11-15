@@ -2943,14 +2943,42 @@ pub(super) fn move_to(
     // The state already on screen (the usual case for a front-line army): right-click one of
     // its projected provinces where the camera is. The Find view (open, type, glide, about
     // 1.5 s) only when none shows, and the camera stays where the viewer follows the units.
+    // Far out (above the aiming height) a whole state is a few pixels under its own map icons:
+    // no click on it gives an order (live 15 Nov 2026: a sea move to Eritrea from the world view
+    // showed the route on hover and never took).
+    let close = super::screenmap::aim_height_ok(process);
     let visible = with_icon_offsets(
         target_points(process, state, province).unwrap_or_default(),
         province,
     );
-    if !visible.is_empty() && order_at(process, keys, army, &before, visible, false, province)? {
+    if close
+        && !visible.is_empty()
+        && order_at(process, keys, army, &before, visible, false, province)?
+    {
         return Ok(());
     }
     find_state(process, keys, state)?;
+    // The Find view centres the state but keeps the height: bring a far camera in first.
+    if !super::screenmap::aim_height_ok(process) {
+        super::screenmap::zoom_in_to_strategic(process, keys)?;
+        super::screenmap::wait_camera_still(process, 700);
+    }
+    // A state order goes to the state's port first: inland points near a front lie under the
+    // drawn front lines and battle-plan arrows, which take the right click for themselves (live
+    // 15 Nov 2026: a sea move to Eritrea clicked North Guard's offensive arrow every time), and
+    // a port is where a sea transfer lands. Any heading change counts (a sea move first heads
+    // for the embarkation port).
+    if province.is_none() {
+        if let Some(port) = state_port(process, state) {
+            let points = twice(with_icon_offsets(
+                target_points(process, state, Some(port)).unwrap_or_default(),
+                Some(port),
+            ));
+            if !points.is_empty() && order_at(process, keys, army, &before, points, false, None)? {
+                return Ok(());
+            }
+        }
+    }
     // Map icons at the state's centre (air base, port, victory point) take a right click
     // for themselves (seen live 10 Dec 2026: Tripoli's air base); try points around the
     // centre until the divisions get a new heading.
@@ -2983,6 +3011,11 @@ pub(super) fn move_to(
         }
     }
     let points = with_icon_offsets(points, province);
+    let points = if province.is_none() {
+        twice(points)
+    } else {
+        points
+    };
     if order_at(process, keys, army, &before, points, projected, province)? {
         return Ok(());
     }
@@ -2995,6 +3028,21 @@ pub(super) fn move_to(
         )),
         None => Ok(()),
     }
+}
+/// Each point twice: the game plans a long route (a sea transfer) while the cursor rests on the
+/// target and takes a right click only once the route shows; a click that arrives with the
+/// cursor is dropped (live 15 Nov 2026: the hover read "first division arrives in 19 days" and
+/// no order took), the second click on the same point lands on the planned route.
+fn twice(points: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    points.into_iter().flat_map(|p| [p, p]).collect()
+}
+/// The province of a naval base in `state`, when the state has one.
+fn state_port(process: &dyn Process, state: i32) -> Option<i32> {
+    let identity = process.identity()?;
+    let dir = super::mapdata::game_dir(&identity.exe).ok()?;
+    let provinces = super::mapdata::state_provinces(&dir, state).ok()?;
+    let ports = read(process, super::naval::naval_base_provinces).ok()?;
+    ports.into_iter().find(|p| provinces.contains(p))
 }
 /// Map position of a named province (map files), when it has one.
 fn province_position(process: &dyn Process, province: Option<i32>) -> Option<(f64, f64)> {

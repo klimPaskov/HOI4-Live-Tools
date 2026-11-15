@@ -84,7 +84,7 @@ class Reconcile(unittest.TestCase):
                 "sea_transfer": {"ports": [1]}}
         unread = plan_keys.unread_in(plan, self.schema)
         self.assertEqual(unread["lint"], ["vp_targets[].by", "vp_targets[].order"])
-        self.assertEqual(unread["planned"], ["sea_transfer"])
+        self.assertEqual(unread["planned"], ["sea_transfer.ports"])
         self.assertNotIn("vp_targets[].path", sum(unread.values(), []))
 
 

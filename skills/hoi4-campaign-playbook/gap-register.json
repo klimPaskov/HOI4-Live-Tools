@@ -5718,19 +5718,30 @@
    "plan": [
     "sea_transfer",
     "sea_transfer.routes",
+    "sea_transfer.routes[].templates",
+    "sea_transfer.routes[].count",
     "sea_transfer.routes[].from_state",
     "sea_transfer.routes[].to_state",
+    "sea_transfer.routes[].join",
+    "sea_transfer.routes[].from_port",
+    "sea_transfer.routes[].to_port",
+    "sea_transfer.routes[].when",
+    "sea_transfer.routes[].call",
     "sea_transfer.convoys",
+    "sea_transfer.ports",
     "sea_transfer.escort"
    ],
    "tools": [
     "hoi4_army_move",
+    "hoi4_army_detach",
+    "hoi4_army_merge",
+    "hoi4_army_assign",
     "hoi4_convoys"
    ],
    "payoff": "high",
    "why": "Ethiopia and every overseas war depend on it; past runs lost time on transfers",
    "closing": "both",
-   "owner": "live: confirm a sea transfer lands (army_move readback); W1-14 builds the executor step for the sea_transfer key",
+   "owner": "live: a shipped army lands and joins its formation (executor routes); W1-14 still owes from_port, to_port, when, call, convoys, ports and escort",
    "priority": 6
   },
   {
