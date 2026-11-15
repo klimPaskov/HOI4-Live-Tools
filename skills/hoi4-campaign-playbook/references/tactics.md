@@ -440,6 +440,13 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - CP07 Rebalance after a capitulation
 - CP08 Air missions at war start
 - CP09 Posture per phase with a cull
+- CP10 Objective strikes
+- CP11 Strike or battle plan
+- CP12 Turn away from a town that holds
+- CP13 Retake behind the advance first
+- CP14 Stack only what the head feeds
+- CP15 Few, long-lived orders
+- CP16 Regrouping rules off ordered armies
 
 ## Strong-player scripts: [italo-ethiopian-war.md §12](italo-ethiopian-war.md#12-strong-player-scripts)
 

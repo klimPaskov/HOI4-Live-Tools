@@ -93,7 +93,7 @@ and holding lines per border.
 | Offensive line | Attack through the front into a named state | Drawn after the front; execute afterwards |
 | Spearhead | One fast army ordered at a deep target | Single armies only; no tool |
 | Area defence | Defend a province set; units weigh VPs, ports, hubs (capital 50) | No tool |
-| Manual move | Mop up, reach a foothold, plug a hole | Planning decays 3% a day instead of 1% |
+| Manual move | Mop up, reach a foothold, plug a hole; against a weak defender, an objective strike: the whole army on one victory-point province beside it (war-operating-loop.md 5c) | Planning decays 3% a day instead of 1% |
 | Execute modes | careful / balanced / rush: attack-score thresholds 25 / 0 / -200; careful needs full supply and refuses forts 5+ | `hoi4_army_plan` `mode` (unvalidated: not yet run live); plan key `war.execution` |
 
 Rules of thumb:
@@ -107,6 +107,8 @@ Rules of thumb:
 - At most 24 divisions per army and 5 armies per army group.
 - Do not edit orders daily: each new order resets that army's planning; act
   only on a trigger (section 13).
+- Against a defender with no continuous line, battle plans take the border
+  states and then stand: switch to objective strikes (war-operating-loop.md 5c).
 
 ---------------------------------------------------------------------------
 
