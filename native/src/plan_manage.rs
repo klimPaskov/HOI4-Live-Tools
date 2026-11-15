@@ -2343,7 +2343,12 @@ fn air_plan_step(
             if name.is_empty() || state.skipped(now, "airplan", &name) {
                 continue;
             }
-            if let Some(base) = rebase_target(entry, region, wing, bases) {
+            // A base the game refused (full, or out of the wing's reach) is not asked again for
+            // 30 days; the wing flies its mission from where it stands meanwhile (n1, 16 Nov 2026:
+            // the same refused rebase every 15 days and no mission in between).
+            let target = rebase_target(entry, region, wing, bases)
+                .filter(|_| !state.skipped(now, "airrebase", &name));
+            if let Some(base) = target {
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -2351,7 +2356,14 @@ fn air_plan_step(
                     json!({"wing": name, "state_id": base}),
                     "ab",
                 )?;
-                if !ok {
+                if why.contains("rebase_refused") {
+                    state.skip(now, "airrebase", &name, 30 * DAY);
+                    note(
+                        state,
+                        "air_plan",
+                        format!("{name}: the game refused the base in state {base}; the wing flies from its own base for 30 days"),
+                    );
+                } else if !ok {
                     state.skip(now, "airplan", &name, 7 * DAY);
                 }
                 return Ok(Some(format!(
@@ -5282,6 +5294,31 @@ mod tests {
             Some("air_plan 2. Stormo cas over region 17: true Verified")
         );
         assert_eq!(actions(&tools).len(), 3);
+    }
+
+    #[test]
+    fn a_refused_rebase_waits_30_days_and_the_wing_flies_its_mission_meanwhile() {
+        let tools = fake(vec![("hoi4_air", air_read())]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_air_rebase".into(), "rebase_refused");
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_0", "version": "CR.32", "base_region": 273,
+             "mission": "air_superiority", "region": 273}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains("rebase to state 551: false"));
+        let out = step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("air_plan 1. Stormo air_superiority over region 273: true Verified")
+        );
+        let rebases = actions(&tools)
+            .iter()
+            .filter(|(n, _)| n == "hoi4_air_rebase")
+            .count();
+        assert_eq!(rebases, 1);
     }
 
     #[test]
