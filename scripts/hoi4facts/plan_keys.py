@@ -48,12 +48,12 @@ PLAN_RUN = os.path.join(ROOT, "native", "src", "plan_run.rs")
 # The runner's child modules read plan keys too (plan_manage.rs: continuous management;
 # plan_military.rs: army groups, navy, invasions, casualty and air superiority rules;
 # plan_predicate.rs: the predicate evaluator; plan_affairs.rs: designs, diplomacy, faction, trade,
-# MIOs, intelligence, research bonuses; plan_war.rs: the war-step rules; plan_seams.rs: steps written
+# MIOs, intelligence, research bonuses; plan_war.rs: the war-step rules; plan_strike.rs: objective strikes; plan_seams.rs: steps written
 # ahead of their tools). Missing files are skipped.
 EXECUTOR_SOURCES = [PLAN_RUN] + [os.path.join(ROOT, "native", "src", name)
                                  for name in ("plan_manage.rs", "plan_military.rs", "plan_predicate.rs",
                                               "plan_affairs.rs", "plan_war.rs", "plan_route.rs",
-                                              "plan_seams.rs", "plan_encircle.rs")]
+                                              "plan_seams.rs", "plan_encircle.rs", "plan_strike.rs")]
 # Sources searched for a key's name when no read pattern finds it (helpers with their own variables).
 LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
                                       for name in ("plan_formations.rs", "alarms.rs", "watch.rs",

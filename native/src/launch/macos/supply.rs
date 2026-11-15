@@ -159,6 +159,8 @@ pub(super) fn report(process: &dyn Process, strength_below: f64) -> Result<Value
             Ok(s) => (Some(s), None),
             Err(e) => (None, Some(e)),
         };
+        // Where each division marches (its movement target), for the rows' `heading_province`.
+        let headings = super::armies::division_headings(r, image).unwrap_or_default();
         let mut rows = Vec::new();
         let mut shortages = Vec::new();
         let mut below_70 = Vec::new();
@@ -215,6 +217,8 @@ pub(super) fn report(process: &dyn Process, strength_below: f64) -> Result<Value
             rows.push(json!({
                 "id":d.id,"army":d.army,"template":t.map(|(n, _)| n.as_str()),
                 "state_id":d.state,"province_id":d.province,
+                "heading_province":headings.get(&d.id).copied()
+                    .filter(|h| *h > 0 && Some(*h) != d.province),
                 "hp":round(d.hp,2),"hp_max":hp_max,"hp_percent":hp_pct,
                 "organisation":round(d.org,2),
                 "manpower":d.manpower,"manpower_max":manpower_max,

@@ -657,12 +657,15 @@
    "source": "--list-tools"
   },
   "hoi4_army_move": {
-   "description": "Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.",
+   "description": "Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "army": {
       "type": "string"
+     },
+     "halt": {
+      "type": "boolean"
      },
      "lease_token": {
       "type": "string"
@@ -684,7 +687,6 @@
     },
     "required": [
      "army",
-     "state_id",
      "request_id",
      "lease_token"
     ],
@@ -3663,6 +3665,29 @@
    "inputSchema": {
     "additionalProperties": false,
     "properties": {},
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_province_graph": {
+   "description": "Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours. Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "states": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "states"
+    ],
     "type": "object"
    },
    "source": "--list-tools"

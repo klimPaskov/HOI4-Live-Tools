@@ -380,8 +380,10 @@ pub(super) fn command_step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    // Armies on objective strikes keep their divisions: no merge moves them between armies.
     if (plan["armies"].is_object() || plan["army_layout"].is_array())
         && !state.skipped(now, "command", "armies")
+        && !super::plan_strike::owns_armies(state, plan)
     {
         if let Some(done) = merge_and_lead(state, tools, plan, lease, now)? {
             return Ok(Some(done));

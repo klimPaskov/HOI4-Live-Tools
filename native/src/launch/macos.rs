@@ -749,11 +749,12 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
         json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"halt":{"type":"boolean"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked: it lengthens the front and can gather an army in one unsupplied province; it suits a weak or broken enemy line and is a plan decision). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. A failure of the mode step names the bar, the window, the rectangles and the frames it found.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean","description":"true executes the plan, false stops it; may be left out only when mode is given"},"mode":{"type":"string","enum":["careful","balanced","rush"],"description":"execution mode of the army's battle plans; alone it only sets the mode"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
         json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; surrender progress (wars[].enemy_surrender_progress, own_surrender_progress) and the naval intel against each enemy (wars[].own_naval_intel) are not yet built and always null with a reason; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended. capital_land: own-controlled states the capital reaches over own-controlled land (history capital, else the largest own area); a division elsewhere is overseas (disbanding it loses 75% of its equipment).","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
+        json!({"name":"hoi4_province_graph","description":"Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours. Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":128}},"required":["states"],"additionalProperties":false}}),
         json!({"name":"hoi4_front_plan","description":"War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"},"description":"enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]"},"max_axes":{"type":"integer","minimum":1,"maximum":6}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
         json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
@@ -894,6 +895,7 @@ impl Commands for MacClock {
                     | "hoi4_railway_build"
                     | "hoi4_construction_order"
                     | "hoi4_front_plan"
+                    | "hoi4_province_graph"
                     | "hoi4_encirclement_candidates"
                     | "hoi4_war_goal_targets"
                     | "hoi4_events"
@@ -1699,6 +1701,49 @@ impl MacClock {
                 .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
                 .exe;
             return wars::wars(process, &mapdata::game_dir(exe)?, args);
+        }
+        if name == "hoi4_province_graph" {
+            allowed(args, &["states"])?;
+            let states: Vec<i32> = args
+                .get("states")
+                .and_then(Value::as_array)
+                .map(|rows| {
+                    rows.iter()
+                        .filter_map(Value::as_i64)
+                        .filter(|v| (1..4096).contains(v))
+                        .map(|v| v as i32)
+                        .collect()
+                })
+                .unwrap_or_default();
+            if states.is_empty() || states.len() > 128 {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "states must list 1..128 state ids",
+                ));
+            }
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            let dir = mapdata::game_dir(exe)?;
+            let neighbours = wars::province_neighbours(&dir)?;
+            let mut rows = Vec::new();
+            for state in states {
+                // A state id the map does not know is left out, not an error for the others.
+                let Ok(provinces) = mapdata::state_provinces(&dir, state) else {
+                    continue;
+                };
+                for province in provinces {
+                    // Lakes and sea provinces a state lists have no land edge.
+                    let Some(next) = neighbours.get(&province) else {
+                        continue;
+                    };
+                    let mut next = next.clone();
+                    next.sort_unstable();
+                    rows.push(json!({"province": province, "state_id": state, "neighbours": next}));
+                }
+            }
+            return Ok(json!({"provinces": rows, "source": "map files"}));
         }
         if matches!(
             name,
@@ -5334,11 +5379,68 @@ impl MacClock {
                     "army",
                     "state_id",
                     "province_id",
+                    "halt",
                     "request_id",
                     "lease_token",
                 ],
             )?;
             let army = string(args, "army")?;
+            // halt: the unit panel's halt control for the whole army (no target).
+            if args.get("halt").and_then(Value::as_bool) == Some(true) {
+                if args.get("state_id").is_some() || args.get("province_id").is_some() {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "halt takes no state_id or province_id",
+                    ));
+                }
+                let id = string(args, "request_id")?;
+                let token = string(args, "lease_token")?;
+                let observed = guard.observe(process)?;
+                let epoch = observed.epoch;
+                authority.authorize(token, &epoch)?;
+                let marching = || -> Result<(usize, usize)> {
+                    let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))?;
+                    let headings = ui::read(process, armies::division_headings)?;
+                    let at = ui::read(process, armies::division_provinces)?;
+                    Ok((armies::marching(&headings, &at, &ids), ids.len()))
+                };
+                let (before, total) = marching()?;
+                let retry = actions.receipt_exists(id);
+                let action = json!({"kind":"army_halt","army":army});
+                if !retry && before == 0 {
+                    return Ok(json!({"receipt": {"status": "Verified", "action": action,
+                        "detail": {"army": army, "divisions": total, "marching_before": 0,
+                            "marching": 0,
+                            "note": "no division of the army holds a march order: nothing was sent"}}}));
+                }
+                if !retry {
+                    self.keys.preflight()?;
+                }
+                let keys = &self.keys;
+                // The halt button was clicked while shown: the game keeps each division's last
+                // heading, so the click itself is the evidence (organisation recovers after it,
+                // live 15 Nov 2026).
+                let clicked = std::cell::Cell::new(false);
+                let mut settle = || {
+                    let (now, total) = marching()?;
+                    let detail = json!({"army":army,"divisions":total,"marching_before":before,"marching":now,
+                        "halt_button_clicked":clicked.get()});
+                    Ok(if clicked.get() || now < before || now == 0 {
+                        journal::Outcome::Reached(detail)
+                    } else if retry {
+                        journal::Outcome::Diverged(detail)
+                    } else {
+                        journal::Outcome::Unchanged(detail)
+                    })
+                };
+                let mut dispatch = || {
+                    authority.authorize(token, &epoch)?;
+                    clicked.set(armies::halt(process, keys, army)?);
+                    Ok(())
+                };
+                let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+                return Ok(json!({"receipt":receipt}));
+            }
             let state = args
                 .get("state_id")
                 .and_then(Value::as_i64)
@@ -5376,9 +5478,10 @@ impl MacClock {
             let retry = actions.receipt_exists(id);
             let action =
                 json!({"kind":"army_move","army":army,"state_id":state,"province_id":province});
-            // Already on its way there, or already standing there (half the divisions or more):
-            // no input at all (w24: the same three Somaliland provinces were ordered 17 times,
-            // each a card click, a Find view and a right click).
+            // Already on its way there or already standing there, every division: no input at all
+            // (w24: the same three Somaliland provinces were ordered 17 times, each a card click,
+            // a Find view and a right click). While some division does neither, the order is
+            // sent: half an army marching left the other half without it (live 15 Nov 2026).
             if !retry {
                 let (on_way, total) = heading().unwrap_or((0, 0));
                 let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
@@ -5393,7 +5496,7 @@ impl MacClock {
                             .is_some_and(|p| wanted.contains(&p))
                     })
                     .count();
-                if total > 0 && (on_way + standing) * 2 >= total {
+                if total > 0 && on_way + standing >= total {
                     return Ok(json!({"receipt": {"status": "Verified", "action": action,
                         "detail": {"army": army, "divisions": total, "divisions_heading": on_way,
                             "divisions_there": standing,
