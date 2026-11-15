@@ -4703,6 +4703,12 @@
           "x-owner": "executor",
           "description": "false: do not pull encircled armies back"
         },
+        "hold_prepares": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "in a hold phase (axes: []) the armies still draw their front and offensive line toward their next target and plan on them; only the execute order waits for a phase with axes, and a plan still executing on enemy land is stopped. false: a hold phase draws no line on enemy land"
+        },
         "planning_wait": {
           "type": "boolean",
           "default": true,
@@ -4736,6 +4742,13 @@
           "default": 15,
           "x-owner": "executor",
           "description": "longest planning wait in game days"
+        },
+        "planning_flat_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 3,
+          "x-owner": "executor",
+          "description": "an offensive planned again (a stopped plan, a rest) executes once its planning bonus has stood still this many game days below the wanted level: divisions in contact or on the move build none"
         },
         "planning_skip_days": {
           "type": "number",

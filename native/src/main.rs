@@ -331,6 +331,24 @@ fn autopilot_step(server: &Server, commands: &dyn hoi4_live_native::protocol::Co
                 "error": body["error"]["code"]})
         );
     }
+    // Why each army waits or goes (the war rules' status lines) is written down when it changes:
+    // the action lines say what was ordered, not what held an order back.
+    if body["war"].is_object() {
+        static LAST_WAR: std::sync::Mutex<(i64, String)> =
+            std::sync::Mutex::new((i64::MIN, String::new()));
+        let now = body["war"].to_string();
+        // at most one line a game day: the lines carry numbers that move every step
+        let day = body["game_hour"].as_i64().unwrap_or(0) / 24;
+        if let Ok(mut last) = LAST_WAR.lock() {
+            if last.1 != now && last.0 != day {
+                eprintln!(
+                    "[war] {}",
+                    serde_json::json!({"game_hour": body["game_hour"], "war": body["war"]})
+                );
+                *last = (day, now);
+            }
+        }
+    }
     if result["isError"] == serde_json::json!(true) {
         let code = body["error"]["code"].as_str().unwrap_or("");
         if autopilot_stops_on(code) {

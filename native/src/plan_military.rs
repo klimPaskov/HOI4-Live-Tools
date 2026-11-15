@@ -4317,7 +4317,10 @@ mod tests {
         let plan = corridor_plan();
         let mut free = State::default();
         let out = war_at(&mut free, &tools, &json!({"war": plan["war"]}), START).unwrap();
-        assert!(out.starts_with("war front Guardia -> state 2"), "{out}");
+        assert!(
+            out.starts_with("war front and offensive Guardia -> state 2"),
+            "{out}"
+        );
         // held: no order for it, also when an own province is lost (no retake draw either)
         let tools = Corridor::new();
         let mut state = State::default();

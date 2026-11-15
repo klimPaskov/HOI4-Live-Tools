@@ -473,6 +473,7 @@ fn merge_and_lead(
                 || playing.contains(&name)
                 || reserve.contains(&name)
                 || plan_military::invading(state, plan, &name)
+                || super::plan_manage::spread_out(state, &name)
                 || state.skipped(now, "cmerge", &name)
             {
                 continue;
