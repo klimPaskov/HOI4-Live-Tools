@@ -385,7 +385,8 @@ what they leave unspent (default: every vacant military staff seat; laws and pol
 order names them). The executor holds back the cost of each `politics` pick that could be bought now (its `when`
 holds and the game has not just refused it) and lets `politics_auto` spend only above that; a gated or refused
 pick holds nothing back and is paid for once it opens, from the power there is then. So bank for a gated law
-with `politics_auto.threshold`, not with the pick. A pick that can never be taken (an advisor whose `available`
+with `politics_auto.threshold`, not with the pick. Inside `politics_auto.order` an entry with a `when` that holds (a stability advisor under
+`when: "stability < 0.5"`) is saved for: the entries after it spend only the power above its cost. A pick that can never be taken (an advisor whose `available`
 gate needs a focus the plan never completes, lint `politics.available`) is tried again and again and never
 bought: check each pick's gate (`F characters <TAG> --role advisor` prints `available`) against the focus path. The lint simulates the income to the horizon the executor's way
 (`facts.pp_budget`: income, spent, reserved at the end); give `politics_auto.order` enough entries (political

@@ -2779,7 +2779,8 @@ pub(super) fn politics_reserve(
 /// `politics_auto` (default on): political power at or above `threshold` (100) beyond what the
 /// plan's own pending `politics` picks can take now ([`politics_reserve`]), or within
 /// `cap_margin` (30) of `cap` (2000), buys the first affordable entry of `order` (default
-/// [`politics_auto_default`]) the game offers. One `hoi4_politics_options` read per entry at
+/// [`politics_auto_default`]) the game offers. An entry with a `when` that holds and that the
+/// power cannot yet pay is saved for: entries after it spend only the power above its cost. One `hoi4_politics_options` read per entry at
 /// most every `recheck_days` (30), or sooner once the power has grown by `recheck_pp` (25) since
 /// a read that found a wanted idea disabled; the reads stop for a game day after a scan buys
 /// nothing. Every entry passed over says why in the digest (`manage.politics_auto`): short of
@@ -2854,6 +2855,11 @@ pub(super) fn politics_auto_step(
     // Whether the power could have paid for any entry: power short of every entry's cost is
     // being saved for the next buy (or the plan's reserve), not idle.
     let mut could_buy = false;
+    // Power held back for an earlier entry whose `when` holds but which the power cannot yet pay:
+    // the order is a priority, so a cheaper entry after it spends only what lies above its cost
+    // (live 15 Nov 2026: the stability advisor, first in the order, never reached its 150 while
+    // the power went to 50-point staff picks below it, and stability sat at 0.42 all war).
+    let mut saving = 0.0;
     for entry in order.as_array().map_or(&[][..], Vec::as_slice) {
         let (category, slot) = (text(&entry["category"]).to_string(), &entry["slot"]);
         let slot_key = format!("{category}:{slot}");
@@ -2864,11 +2870,23 @@ pub(super) fn politics_auto_step(
             } else {
                 150.0
             });
-        if budget < cost {
-            seen.push(format!(
-                "{slot_key} needs {cost}, {} free above the reserve",
-                budget.round()
-            ));
+        if budget - saving < cost {
+            let urgent = saving == 0.0
+                && !entry["when"].is_null()
+                && !state.skipped(now, "pauto", &slot_key)
+                && matches!(when_holds(state, tools, &entry["when"], now), Truth::True);
+            if urgent {
+                saving = cost;
+                seen.push(format!(
+                    "{slot_key} needs {cost} and its when holds: power is saved for it ({} free above the reserve)",
+                    budget.round()
+                ));
+            } else {
+                seen.push(format!(
+                    "{slot_key} needs {cost}, {} free above the reserve",
+                    (budget - saving).round()
+                ));
+            }
             continue;
         }
         could_buy = true;
@@ -5782,6 +5800,37 @@ mod tests {
         assert!(wakes(&mut state).is_empty());
         assert!(state.manage.notes["politics_auto"].contains("saved for the next buy"));
         assert!(actions(&tools).is_empty());
+    }
+
+    #[test]
+    fn power_is_saved_for_an_urgent_entry_before_cheaper_ones_after_it() {
+        let tools = fake(vec![
+            ("hoi4_economy", pp(120.0)),
+            (
+                "hoi4_country_status",
+                json!({"fields": {"stability": {"value": 0.42}}}),
+            ),
+            (
+                "hoi4_politics_options",
+                json!({"current": null, "options": [{"idea": "X_staff", "enabled": true}]}),
+            ),
+        ]);
+        let plan = json!({"politics_auto": {"threshold": 0, "idle_wake_days": 0, "order": [
+            {"category": "government", "slot": 5, "ideas": ["X_calm"], "cost": 150,
+             "when": "stability < 0.5"},
+            {"category": "military_staff", "slot": 5, "ideas": ["X_staff"], "cost": 50}]}});
+        let mut state = State::default();
+        politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(actions(&tools).is_empty());
+        assert!(state.manage.notes["politics_auto"].contains("power is saved for it"));
+        // stable again: the urgent entry no longer holds and the cheaper one is bought
+        tools.replies.borrow_mut().insert(
+            "hoi4_country_status".into(),
+            json!({"fields": {"stability": {"value": 0.7}}}),
+        );
+        politics_auto_step(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        assert_eq!(actions(&tools).len(), 1);
+        assert_eq!(actions(&tools)[0].1["idea"], "X_staff");
     }
 
     #[test]
