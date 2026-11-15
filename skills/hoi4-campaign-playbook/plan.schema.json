@@ -907,6 +907,55 @@
           "type": "integer",
           "minimum": 0
         },
+        "keep": {
+          "type": "array",
+          "x-owner": "lint",
+          "description": "The divisions outside the theatre the plan does not disband, each group with its use and reason. Read by the lint (force.home_divisions), not by the executor.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "states": {
+                "$ref": "#/definitions/state_ids",
+                "x-owner": "lint",
+                "description": "lint force.home_divisions: the kept group stands in these states (absent: any state)"
+              },
+              "templates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "x-owner": "lint",
+                "description": "lint force.home_divisions: the kept group has these templates (absent: any template)"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1,
+                "x-owner": "lint",
+                "description": "lint force.home_divisions: at most this many divisions are kept by the entry (absent: all that match)"
+              },
+              "role": {
+                "enum": [
+                  "home_defence",
+                  "garrison",
+                  "reserve",
+                  "ship",
+                  "training"
+                ],
+                "x-owner": "lint",
+                "description": "lint force.home_divisions: what the kept divisions are for; ship also needs sea_transfer.ports"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "why"
+            ]
+          }
+        },
         "why": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."

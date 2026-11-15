@@ -23,6 +23,14 @@ from a country script.
   while equipment is short. At home all their manpower and equipment return to the pool. A
   whole army goes in one call when every division of it is listed.
 - Never disband divisions overseas (75% of their equipment is lost) or in a pocket.
+- Decide it per division, from what the campaign needs: the force the theatre can use and feed,
+  home defence against threats that are real within the plan's horizon, garrisons, the
+  equipment and manpower a disband frees, and whether the division is worth more shipped to
+  the front than as equipment. A division useless to the campaign is disbanded; a kept one has
+  a stated use. The plan writes both down: `disband` (templates, `keep_states`, `max`, `why`)
+  for what goes, `disband.keep` (states or templates, `role` home_defence, garrison, reserve,
+  ship or training, `why`) for what stays. The lint (`force.home_divisions`) refuses a war plan
+  that leaves a start division outside the theatre without either.
 - Never leave weak divisions in a strike army: `hoi4_army_detach` moves them to a rear army.
 
 ## 3. Train what wins
