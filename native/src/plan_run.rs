@@ -177,7 +177,10 @@
 //!                          overseas (the capital must reach the division over own-controlled land) nor
 //!                          in an army at encirclement risk (plan_war.rs)
 //!                          "vp_targets" name the state of an army's battle plan (direct province moves
-//!                          only with "direct_moves": true); an entry's "path" (waypoint provinces) is
+//!                          only with "direct_moves": true); the offensive line is drawn at the depth
+//!                          of the army's next row, and drawn again (the plan keeps executing, no new
+//!                          planning wait) when that row is held and the next one lies in the same
+//!                          state; an entry's "path" (waypoint provinces) is
 //!                          followed leg by leg: the next waypoint not held is the target, from the held
 //!                          waypoint before it, the next leg only once the army is supplied again; a
 //!                          path through land the country may not enter falls back to the executor's own
@@ -4971,6 +4974,53 @@ fn war_step(
                 )));
             }
         }
+        // The offensive line runs through the depth of the army's victory-point province when
+        // it lies in the target state (else through the middle of the state).
+        let row: Option<i64> = vp
+            .as_ref()
+            .filter(|v| !own_target && v.state as i32 == target)
+            .map(|v| v.province);
+        let mut offensive_order = json!({"army": name, "state_id": target});
+        if let Some(p) = row {
+            offensive_order["province_id"] = json!(p);
+        }
+        // The line follows the plan's rows: when the row it was drawn for is held (or the
+        // army's row changed) and the next row lies in the same state, the line is drawn again
+        // at the new row's depth. The front is the same, so the plan keeps executing and no
+        // planning wait starts; once per row, a refused order waits a day and under the ledger.
+        if let Some(p) =
+            row.filter(|_| stage >= 2 && !direct && !liberate && !state.war_move.contains(&name))
+        {
+            if let Some(old) = plan_war::line_behind(state, &name, target, p) {
+                if !state.skipped(now, "line", &name) {
+                    let (ok, why) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_army_offensive",
+                        offensive_order.clone(),
+                        "wl",
+                    )?;
+                    if !held_back(&why) {
+                        if ok {
+                            plan_war::line_redrawn(state, &name, target, p, executing, now);
+                            // a new objective: the stall clock starts again
+                            state.war_since.insert(name.clone(), (target, here, now));
+                        } else {
+                            state.skip(now, "line", &name, plan_war::LINE_RETRY);
+                        }
+                        state.war_cool.insert(name.clone(), now + cooldown);
+                        let stood = if old == 0 {
+                            "the middle of the state".to_string()
+                        } else {
+                            format!("province {old}")
+                        };
+                        return Ok(Some(format!(
+                            "war offensive {name} -> state {target}: line drawn again at province {p}, the next row (it stood at {stood}): {ok} {why}"
+                        )));
+                    }
+                }
+            }
+        }
         // Stalled: no progress for `stall_days` while ordered. Direct moves into the target
         // advance where battle plans do not (seen in Ethiopia: a plan that never left the
         // start state; moves took Bale and Sidamo).
@@ -5018,6 +5068,36 @@ fn war_step(
             state.war_since.insert(name.clone(), (target, here, now));
             state.war_cool.insert(name.clone(), now + cooldown);
             continue;
+        }
+        // A plan the game stopped when its offensive line was drawn again for the next row
+        // executes again at once: the front is the same and its planning stands, so it does
+        // not go back through the planning wait like a plan stopped for a rest.
+        if army["plan_executing"] == json!(false)
+            && lines > 0
+            && !state.war_move.contains(&name)
+            && !direct
+            && !liberate
+            && !holding_phase
+            && plan_war::redrawn_lately(state, &name, now)
+        {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_plan",
+                json!({"army": name, "execute": true}),
+                "wr",
+            )?;
+            if !held_back(&why) {
+                plan_war::redraw_settled(state, &name);
+                if ok {
+                    state.war_stage.insert(name.clone(), 3);
+                    state.war_since.insert(name.clone(), (target, here, now));
+                }
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(format!(
+                    "war execute {name} -> state {target}: the plan stopped when its line was drawn again, executed again without a planning wait: {ok} {why}"
+                )));
+            }
         }
         if (stage >= 3 || moved_long_ago)
             && army["plan_executing"] == json!(false)
@@ -5163,15 +5243,6 @@ fn war_step(
             // state to retake or take, go on province by province below.
             continue;
         }
-        // The offensive line runs through the depth of the army's victory-point province when
-        // it lies in the target state (else through the middle of the state).
-        let mut offensive_order = json!({"army": name, "state_id": target});
-        if let Some(v) = vp
-            .as_ref()
-            .filter(|v| !own_target && v.state as i32 == target)
-        {
-            offensive_order["province_id"] = json!(v.province);
-        }
         let (tool, args, label, next_stage) = if liberate {
             if standing_in_target {
                 // Inside the state: go for the nearest province the enemy holds in it (w22: the
@@ -5305,6 +5376,7 @@ fn war_step(
             if ok2 {
                 state.war_stage.insert(name.clone(), 2);
                 plan_war::drawn(state, &name, target, now);
+                plan_war::line_drawn(state, &name, target, row);
                 state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
                 return Ok(Some(format!(
                     "war front and offensive {name} -> state {target}: ok"
@@ -5326,6 +5398,7 @@ fn war_step(
             }
             if next_stage == 2 {
                 plan_war::drawn(state, &name, target, now);
+                plan_war::line_drawn(state, &name, target, row);
             }
             // A liberation move is a direct move: wait for progress, and let the stall check
             // (with its backoff) re-issue it (live 8 Nov 2026: the same move to an occupied own
@@ -6525,7 +6598,8 @@ impl State {
             self.layout.iter().filter(|(_, a)| !a.is_empty()).collect();
         // The war step's stage and target per army survive a restart (shakedown 10 Nov 2026:
         // after one, S_strike's front was drawn again, refused, and the offensive never came).
-        // So do the execution modes set (war.rules): they are sent once per army.
+        // So do the execution modes set and the row each offensive line was drawn for
+        // (war.rules): a mode is sent once per army, a line is drawn once per row.
         let stage: HashMap<&String, &u8> = self
             .war_stage
             .iter()
@@ -10898,6 +10972,276 @@ mod tests {
             out.starts_with("war motorization Army 1 level 2: true"),
             "{out}"
         );
+    }
+
+    /// One army (G, ten divisions, standing in own state 1) of ITA at war with ETH. State 842
+    /// holds the plan's first two rows (provinces 50 and 51; 52 lies beside them), state 841 the
+    /// third (60). The fake keeps what the orders change; the test sets which provinces are held.
+    struct Rows {
+        executing: Cell<bool>,
+        orders: Cell<u64>,
+        held: RefCell<HashSet<i64>>,
+        /// a tool whose orders the game refuses
+        refuse: Cell<Option<&'static str>>,
+        /// the game stops an executing plan when a line is added to it
+        stops_on_line: Cell<bool>,
+        calls: RefCell<Vec<(String, Value)>>,
+    }
+    impl Rows {
+        fn new() -> Self {
+            Self {
+                executing: Cell::new(false),
+                orders: Cell::new(0),
+                held: RefCell::new(HashSet::new()),
+                refuse: Cell::new(None),
+                stops_on_line: Cell::new(false),
+                calls: RefCell::new(vec![]),
+            }
+        }
+        /// An army already executing on the lines it drew for the first row.
+        fn executing() -> (Self, State) {
+            let f = Self::new();
+            f.executing.set(true);
+            f.orders.set(2);
+            let mut state = State::default();
+            state.war_assign.insert("G".into(), 842);
+            state.war_stage.insert("G".into(), 3);
+            plan_war::line_drawn(&mut state, "G", 842, Some(50));
+            (f, state)
+        }
+        fn plan(war: Value) -> Value {
+            let mut plan = json!({"war": {"me": "ITA", "enemies": ["ETH"], "supply_first": false,
+                    "rest": false, "planning_wait": false},
+                "vp_targets": [{"province": 50, "state": 842, "army": "G"},
+                    {"province": 51, "state": 842, "army": "G"},
+                    {"province": 60, "state": 841, "army": "G"}]});
+            for (k, v) in war.as_object().unwrap() {
+                plan["war"][k] = v.clone();
+            }
+            plan
+        }
+        /// The orders sent, in order: (tool, arguments).
+        fn orders_sent(&self) -> Vec<(String, Value)> {
+            self.calls
+                .borrow()
+                .iter()
+                .filter(|(_, a)| a.get("request_id").is_some())
+                .cloned()
+                .collect()
+        }
+        /// The offensive lines drawn: (state, province).
+        fn lines(&self) -> Vec<(i64, i64)> {
+            self.orders_sent()
+                .iter()
+                .filter(|(n, _)| n == "hoi4_army_offensive")
+                .map(|(_, a)| {
+                    (
+                        a["state_id"].as_i64().unwrap(),
+                        a["province_id"].as_i64().unwrap(),
+                    )
+                })
+                .collect()
+        }
+        fn step(&self, state: &mut State, plan: &Value, now: GameHour) -> Option<String> {
+            state.clock = now;
+            war_step(state, self, plan, "l", now).unwrap()
+        }
+    }
+    impl Tools for Rows {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            if args.get("request_id").is_some() {
+                if self.refuse.get() == Some(name) {
+                    return Err(Error::new("input_readback_failed", "refused by the fake"));
+                }
+                match name {
+                    "hoi4_army_plan" if args.get("execute").is_some() => {
+                        self.executing.set(args["execute"] == json!(true))
+                    }
+                    "hoi4_army_front" => self.orders.set(self.orders.get().max(1)),
+                    "hoi4_army_offensive" => {
+                        self.orders.set((self.orders.get() + 1).max(2));
+                        if self.stops_on_line.get() {
+                            self.executing.set(false);
+                        }
+                    }
+                    _ => {}
+                }
+                return Ok(json!({"receipt": {"status": "Verified"}}));
+            }
+            let provinces = |state: i64, ids: &[i64]| {
+                let rows: Vec<Value> = ids
+                    .iter()
+                    .map(|id| {
+                        let ours = state == 1 || self.held.borrow().contains(id);
+                        json!({"province": id, "controller": if ours { "ITA" } else { "ETH" }})
+                    })
+                    .collect();
+                json!({"states": [{"state_id": state, "provinces": rows}]})
+            };
+            Ok(match name {
+                "hoi4_states" => match args["query"].as_str().unwrap() {
+                    "ITA" => json!({"states": [
+                        {"state_id": 1, "owner": "ITA", "controller": "ITA", "x": 0.0, "z": 0.0}]}),
+                    "ETH" => json!({"states": [
+                        {"state_id": 842, "owner": "ETH", "controller": "ETH", "x": 10.0, "z": 0.0},
+                        {"state_id": 841, "owner": "ETH", "controller": "ETH", "x": 30.0, "z": 0.0}]}),
+                    "1" => provinces(1, &[10, 11]),
+                    "842" => provinces(842, &[50, 51, 52]),
+                    "841" => provinces(841, &[60, 61]),
+                    other if other.parse::<i32>().is_ok() => json!({"states": []}),
+                    other => panic!("unexpected query {other}"),
+                },
+                "hoi4_armies" => json!({"unassigned_by_state": [], "armies": [
+                    {"army": "G", "division_count": 10, "main_state": 1,
+                     "battle_plan_orders": self.orders.get(),
+                     "plan_executing": self.executing.get(), "commander": "X"}]}),
+                _ => json!({}),
+            })
+        }
+    }
+
+    #[test]
+    fn the_offensive_line_is_drawn_again_for_the_next_row_in_the_same_state() {
+        let f = Rows::new();
+        let plan = Rows::plan(json!({}));
+        let mut state = State::default();
+        // the lines for the first row, then the execute order
+        assert_eq!(
+            f.step(&mut state, &plan, START).as_deref(),
+            Some("war front and offensive G -> state 842: ok")
+        );
+        let out = f.step(&mut state, &plan, START + 3).unwrap();
+        assert!(out.starts_with("war execute G -> state 842"), "{out}");
+        assert_eq!(f.lines(), [(842, 50)]);
+        // the row is not held yet: the line stands
+        assert_eq!(f.step(&mut state, &plan, START + DAY), None);
+        // the first row is held and the second lies in the same state: the target state does
+        // not change, so the line is drawn again at the new row's depth
+        f.held.borrow_mut().insert(50);
+        let out = f.step(&mut state, &plan, START + 2 * DAY).unwrap();
+        assert_eq!(
+            out,
+            "war offensive G -> state 842: line drawn again at province 51, the next row (it stood at province 50): true Verified"
+        );
+        assert_eq!(f.lines(), [(842, 50), (842, 51)]);
+        // the plan was not stopped and keeps executing: no stop order, no new planning wait
+        assert!(f.executing.get());
+        assert_eq!(state.war_stage.get("G"), Some(&3));
+        assert!(!f
+            .orders_sent()
+            .iter()
+            .any(|(n, a)| n == "hoi4_army_plan" && a["execute"] == json!(false)));
+        // once per row: nothing is drawn again while the row stands
+        for day in 3..8 {
+            assert_eq!(
+                f.step(&mut state, &plan, START + day * DAY),
+                None,
+                "day {day}"
+            );
+        }
+        assert_eq!(f.lines().len(), 2);
+        // the last row of the state is held: the next row's state is the new target, and the
+        // line goes there as before
+        f.held.borrow_mut().insert(51);
+        let out = f.step(&mut state, &plan, START + 8 * DAY).unwrap();
+        assert_eq!(out, "war offensive G -> state 841: ok");
+        assert_eq!(f.lines(), [(842, 50), (842, 51), (841, 60)]);
+    }
+
+    #[test]
+    fn a_refused_redraw_waits_a_day_and_leaves_the_plan_executing() {
+        let (f, mut state) = Rows::executing();
+        let plan = Rows::plan(json!({}));
+        f.held.borrow_mut().insert(50);
+        f.refuse.set(Some("hoi4_army_offensive"));
+        let out = f.step(&mut state, &plan, START).unwrap();
+        assert!(
+            out.starts_with("war offensive G -> state 842: line drawn again at province 51")
+                && out.contains(": false input_readback_failed"),
+            "{out}"
+        );
+        // not every tick: the refused line is left alone for a game day, the plan runs on
+        for hour in [13, 16, 20] {
+            assert_eq!(f.step(&mut state, &plan, START + hour), None, "hour {hour}");
+        }
+        assert_eq!(f.orders_sent().len(), 1);
+        assert!(f.executing.get());
+        // then it is tried again, and drawn once
+        f.refuse.set(None);
+        let out = f.step(&mut state, &plan, START + DAY + 1).unwrap();
+        assert!(
+            out.ends_with("(it stood at province 50): true Verified"),
+            "{out}"
+        );
+        assert_eq!(f.step(&mut state, &plan, START + 2 * DAY), None);
+        // the refused try and the one that worked
+        assert_eq!(f.lines(), [(842, 51), (842, 51)]);
+    }
+
+    #[test]
+    fn a_plan_the_game_stopped_at_the_redraw_executes_again_without_a_planning_wait() {
+        // the planning wait is on: a plan stopped for any other reason plans again first
+        let waits = Rows::plan(json!({"planning_wait": true}));
+        let (f, mut state) = Rows::executing();
+        f.stops_on_line.set(true);
+        f.held.borrow_mut().insert(50);
+        let out = f.step(&mut state, &waits, START).unwrap();
+        assert!(out.contains("line drawn again at province 51"), "{out}");
+        assert!(!f.executing.get(), "the fake game stopped the plan");
+        let out = f.step(&mut state, &waits, START + 13).unwrap();
+        assert_eq!(
+            out,
+            "war execute G -> state 842: the plan stopped when its line was drawn again, executed again without a planning wait: true Verified"
+        );
+        assert!(f.executing.get());
+        assert_eq!(state.war_stage.get("G"), Some(&3));
+        assert_eq!(f.step(&mut state, &waits, START + 2 * DAY), None);
+        // a plan found stopped with no redraw behind it goes back before its execute order
+        let (f, mut state) = Rows::executing();
+        f.executing.set(false);
+        assert_eq!(f.step(&mut state, &waits, START), None);
+        assert_eq!(state.war_stage.get("G"), Some(&2));
+        assert_eq!(f.step(&mut state, &waits, START + DAY), None);
+        assert!(f.orders_sent().is_empty(), "{:?}", f.orders_sent());
+    }
+
+    #[test]
+    fn the_row_of_a_line_survives_a_restart_and_an_unknown_row_is_the_current_one() {
+        let f = Rows::new();
+        let plan = Rows::plan(json!({}));
+        let mut state = State::default();
+        f.step(&mut state, &plan, START).unwrap();
+        f.step(&mut state, &plan, START + 3).unwrap();
+        let saved = state.memory(START + DAY);
+        assert_eq!(saved["war"]["rules"]["line"], json!({"G": [842, 50]}));
+        // a new server life: the stage, the target and the line's row come back
+        let mut again = State::default();
+        again.restore(&saved, START + DAY);
+        f.held.borrow_mut().insert(50);
+        let out = f.step(&mut again, &plan, START + 2 * DAY).unwrap();
+        assert!(out.contains("line drawn again at province 51"), "{out}");
+        // the memory follows a new name
+        again.army_renamed("G", "Gondar Group");
+        assert_eq!(
+            again.memory(START + 2 * DAY)["war"]["rules"]["line"],
+            json!({"Gondar Group": [842, 51]})
+        );
+        // lines that stand without a known row (drawn before this memory, or by the player)
+        // are taken as drawn for the current row: nothing is redrawn until the row changes
+        let f = Rows::new();
+        f.executing.set(true);
+        f.orders.set(2);
+        let mut state = State::default();
+        state.war_assign.insert("G".into(), 842);
+        state.war_stage.insert("G".into(), 3);
+        assert_eq!(f.step(&mut state, &plan, START), None);
+        assert!(f.lines().is_empty());
+        f.held.borrow_mut().insert(50);
+        let out = f.step(&mut state, &plan, START + DAY).unwrap();
+        assert!(out.contains("line drawn again at province 51"), "{out}");
     }
 
     /// A hold phase (`axes: []`) for the Field army, bound to a strike role with its own axis.

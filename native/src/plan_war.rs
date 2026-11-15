@@ -8,7 +8,8 @@
 //!
 //! Hooks in plan_run.rs: `war_step` reads [`Limits`] once per tick and feeds [`observe`] the
 //! armies' organisation; [`execution_step`] sets an army's execution mode and [`stall_rush`]
-//! answers a stall with it; [`drawn`] marks an offensive line, [`execute_gate`] holds its execute
+//! answers a stall with it; [`line_behind`] says when the offensive line must follow the plan's
+//! next row; [`drawn`] marks an offensive line, [`execute_gate`] holds its execute
 //! order; [`captured`] starts a bound when the army's target falls; [`relocation`] and
 //! [`second_direction`] are the stall response before the direct move; [`pocket_risk`] decides
 //! `pocket_fall_back`; `disband_step` keeps only divisions [`home_land`] reaches; `run` adds
@@ -129,6 +130,11 @@ pub(super) struct Memory {
     exec: HashMap<String, String>,
     /// armies a stall set to rush (kept in plan_state.json)
     rushed: HashSet<String>,
+    /// army -> (target state, row province) its offensive line was last drawn for (province 0:
+    /// through the middle of the state); kept in plan_state.json
+    line: HashMap<String, (i32, i64)>,
+    /// army -> game hour its line was drawn again for the next row while its plan executed
+    redrawn: HashMap<String, GameHour>,
 }
 
 /// One spell of an army below the supply floor: what the executor tried for it.
@@ -180,13 +186,20 @@ pub(super) fn army_renamed(memory: &mut Memory, old: &str, new: &str) {
     if memory.rushed.remove(old) {
         memory.rushed.insert(new.to_string());
     }
+    rekey(&mut memory.line, old, new);
+    rekey(&mut memory.redrawn, old, new);
 }
 
 /// What of these rules survives a server restart (plan_state.json `war.rules`).
 pub(super) fn memory(memory: &Memory) -> Value {
     let mut rushed: Vec<&String> = memory.rushed.iter().collect();
     rushed.sort();
-    json!({"execution": memory.exec, "rushed": rushed})
+    let line: HashMap<&String, [i64; 2]> = memory
+        .line
+        .iter()
+        .map(|(army, (target, province))| (army, [i64::from(*target), *province]))
+        .collect();
+    json!({"execution": memory.exec, "rushed": rushed, "line": line})
 }
 
 /// Take back a saved memory; what is already known for an army stands.
@@ -204,6 +217,17 @@ pub(super) fn restore(memory: &mut Memory, saved: &Value) {
     for army in list(saved, "rushed").iter().filter_map(Value::as_str) {
         memory.rushed.insert(army.to_string());
     }
+    if let Some(lines) = saved["line"].as_object() {
+        for (army, at) in lines {
+            let target = at[0].as_i64().and_then(|t| i32::try_from(t).ok());
+            if let (Some(target), Some(province)) = (target, at[1].as_i64()) {
+                memory
+                    .line
+                    .entry(army.clone())
+                    .or_insert((target, province));
+            }
+        }
+    }
 }
 
 /// Armies that no longer exist are forgotten: a new army that takes an old name starts afresh.
@@ -213,6 +237,14 @@ pub(super) fn forget_absent(state: &mut State, present: &HashSet<String>) {
         .exec
         .retain(|army, _| present.contains(army));
     state.war_rules.rushed.retain(|army| present.contains(army));
+    state
+        .war_rules
+        .line
+        .retain(|army, _| present.contains(army));
+    state
+        .war_rules
+        .redrawn
+        .retain(|army, _| present.contains(army));
 }
 
 /// The last status of each rule (the run result's `war`), or None when nothing was said.
@@ -607,6 +639,79 @@ pub(super) fn stall_rush(
             "war stalled {army} {days} days on state {target}: execution set to rush: {ok} {why}"
         ),
     )))
+}
+
+// ---------------------------------------------------------------------------------------------
+// The offensive line follows the plan's rows.
+
+/// Game hours a refused redraw of the offensive line is left alone (the ledger counts on top).
+pub(super) const LINE_RETRY: GameHour = DAY;
+/// Game hours after a redraw in which a plan found stopped is executed again at once.
+const REDRAW_RESUME: GameHour = 3 * DAY;
+
+/// The army's offensive line into `target` was drawn at the depth of `row` (the province of
+/// its victory-point row; None: through the middle of the state).
+pub(super) fn line_drawn(state: &mut State, army: &str, target: i32, row: Option<i64>) {
+    state
+        .war_rules
+        .line
+        .insert(army.to_string(), (target, row.unwrap_or(0)));
+}
+
+/// The row the army's offensive line into `target` stands at when the plan is after another
+/// row of the same state now (`row`): the line is to be drawn again for it. The offensive line
+/// is drawn across the target at the depth of one row, and the game holds the army on it: with
+/// the row held and the next one deeper in the same state the target state does not change,
+/// so nothing drew a new line and the plan went on executing with every division standing on
+/// the old one (live 15 Nov 2026: Aksum and Adwa held, Macalle in the same state never
+/// attacked; a line drawn by hand at Macalle's depth took it). None when the line stands at
+/// `row`. Lines whose row is not known (drawn before a restart without this memory, or by the
+/// player) are taken as drawn for the current row.
+pub(super) fn line_behind(state: &mut State, army: &str, target: i32, row: i64) -> Option<i64> {
+    match state.war_rules.line.get(army) {
+        Some((t, at)) if *t == target => (*at != row).then_some(*at),
+        _ => {
+            line_drawn(state, army, target, Some(row));
+            None
+        }
+    }
+}
+
+/// The line was drawn again for the next row. With the plan executing the front is the same
+/// and the game keeps executing; should it stop the plan, [`redrawn_lately`] lets the execute
+/// order go out again without a planning wait.
+pub(super) fn line_redrawn(
+    state: &mut State,
+    army: &str,
+    target: i32,
+    row: i64,
+    executing: bool,
+    now: GameHour,
+) {
+    line_drawn(state, army, target, Some(row));
+    if executing {
+        state.war_rules.redrawn.insert(army.to_string(), now);
+    } else {
+        state.war_rules.redrawn.remove(army);
+    }
+}
+
+/// The army's plan was executing when its line was drawn again less than REDRAW_RESUME ago.
+pub(super) fn redrawn_lately(state: &mut State, army: &str, now: GameHour) -> bool {
+    let rules = &mut state.war_rules;
+    if rules
+        .redrawn
+        .get(army)
+        .is_some_and(|at| now - at > REDRAW_RESUME)
+    {
+        rules.redrawn.remove(army);
+    }
+    rules.redrawn.contains_key(army)
+}
+
+/// The execute order after a redraw went out (or the plan is back before its planning wait).
+pub(super) fn redraw_settled(state: &mut State, army: &str) {
+    state.war_rules.redrawn.remove(army);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1901,9 +2006,10 @@ mod tests {
         // plan_state.json keeps it: after a restart nothing is sent again
         let saved = state.memory(START);
         assert_eq!(
-            saved["war"]["rules"],
-            json!({"execution": {"North": "careful", "Army 2": "careful"}, "rushed": ["Army 2"]})
+            saved["war"]["rules"]["execution"],
+            json!({"North": "careful", "Army 2": "careful"})
         );
+        assert_eq!(saved["war"]["rules"]["rushed"], json!(["Army 2"]));
         let mut again = State::default();
         again.restore(&saved, START);
         again.clock = START;

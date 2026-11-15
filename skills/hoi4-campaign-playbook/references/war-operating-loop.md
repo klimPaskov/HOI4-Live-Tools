@@ -136,7 +136,10 @@ the player decides strategy:
   as the state, through the depth of the army's victory-point province (`hoi4_army_offensive`
   `province_id`; without one, through the middle of the state). The game extends every
   offensive line to the edges of the enemy land, so a battle plan cannot gather an army on one
-  province: only the depth of the line is a choice.
+  province: only the depth of the line is a choice. An executing army advances to its line and
+  stands there: when the row the line was drawn for is held and the plan's next row lies in the
+  same state, the executor draws the line again at the new row's depth (the plan keeps
+  executing, no new planning wait). By hand: `hoi4_army_offensive` with the next `province_id`.
 - Encirclement takes an army only when it has no target of its own or its target lies in the
   pocket or its neck.
 - A hold phase (`"axes": []`) prepares the attack that follows it (`hold_prepares`, default on):
