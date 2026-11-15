@@ -1102,6 +1102,19 @@ class TacticsRules(unittest.TestCase):
         out = lint_plan.lint(plan, self.game)
         self.assertGreater(out["facts"]["equipment_balance"]["families"]["artillery_equipment"]["end_balance"], 0)
 
+    def test_equipment_balance_beyond_the_industry(self):
+        # Ethiopia has 2 military factories: no line can make the rifles its army starts short of and loses,
+        # so the gap is a force-sizing warning, not an error a strategist cannot fix
+        plan = copy.deepcopy(self.eth)
+        f = self.assertHit(plan, "production.balance", "warning", "infantry_equipment")
+        self.assertIn("more than all 2 military factories could make", f["message"])
+        self.assertNoHit(plan, "production.balance", "error", "infantry_equipment")
+        out = lint_plan.lint(plan, self.game)
+        row = out["facts"]["equipment_balance"]["families"]["infantry_equipment"]
+        self.assertLess(row["industry_ceiling"], row["start_shortfall"] + row["lost"])
+        # Italy's gap is within its industry: still an error
+        self.assertHit(self.plan(), "production.balance", "error", "infantry_equipment: the planned lines")
+
     def test_line_output_ramps_new_lines(self):
         plan = self.plan(production=[{"equipment": "infantry_equipment_1", "factories": 10},
                                      {"equipment": "artillery_equipment_1", "factories": 2}])
