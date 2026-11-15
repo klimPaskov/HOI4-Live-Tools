@@ -677,15 +677,28 @@ fn thin(
                 world.near(province, 2)
             }
         };
+        // The roomiest province takes as many of them as it feeds, the most worn first: when
+        // no province near an unfed stretch had room for the whole surplus, nobody left and
+        // ten divisions sat at a tenth of their supply until their equipment was gone (live
+        // 16 Nov 2026, Gojjam in July, the stockpile full behind them).
         let Some(to) = ring
             .into_iter()
             .filter_map(|p| world.supply.get(&p).map(|s| (p, s.0 - s.1)))
-            .filter(|(_, room)| *room >= wanted)
+            .filter(|(_, room)| *room >= need)
             .max_by(|a, b| a.1.total_cmp(&b.1))
         else {
             continue;
         };
-        return Some((province, out.iter().map(|d| d.id.clone()).collect(), to.0));
+        let fits = if to.1 >= wanted {
+            out.len()
+        } else {
+            ((to.1 / need).floor() as usize).clamp(1, out.len())
+        };
+        return Some((
+            province,
+            out[..fits].iter().map(|d| d.id.clone()).collect(),
+            to.0,
+        ));
     }
     None
 }
@@ -2416,6 +2429,28 @@ mod tests {
         let (_, args) = map.actions().last().cloned().unwrap();
         assert_eq!(args["province_id"], json!(11));
         assert!(args["divisions"].as_array().unwrap().contains(&json!("d0")));
+    }
+
+    #[test]
+    fn a_starving_stack_sends_what_the_fed_land_near_it_has_room_for() {
+        let map = Map::new(20);
+        map.taken.borrow_mut().push(20);
+        map.pct.set(12.0);
+        map.provinces.borrow_mut().extend([
+            json!({"province_id": 20, "supply": 0.5, "demand": 3.0}),
+            json!({"province_id": 11, "supply": 2.2, "demand": 1.0}),
+        ]);
+        map.divisions.borrow_mut()[0].3 = 5.0;
+        let mut state = State::default();
+        let on = plan(json!({"garrison": false}));
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(
+            line.contains("1 of its divisions out of province 20"),
+            "{line}"
+        );
+        let (_, args) = map.actions().last().cloned().unwrap();
+        assert_eq!(args["province_id"], json!(11));
+        assert_eq!(args["divisions"], json!(["d0"]));
     }
 
     #[test]
