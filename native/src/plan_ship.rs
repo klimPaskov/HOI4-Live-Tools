@@ -21,9 +21,18 @@
 //!               stays an army of its own, which the war step drives like the others
 //! One action a tick: loose divisions of a wanted template are first formed into an army
 //! (hoi4_army_assign), the wanted divisions of a mixed home army are detached into one of
-//! their own (hoi4_army_detach), an army made only of wanted divisions is ordered to
-//! `to_state` (hoi4_army_move state_id), and a landed army is merged into `join`
-//! (hoi4_army_merge). Divisions a route still wants are not disbanded (plan key `disband`).
+//! their own (hoi4_army_detach), an army made only of wanted divisions first marches to the
+//! naval base of its state (hoi4_army_move province_id) and, once every division stands in an
+//! own port, is ordered to `to_state` (hoi4_army_move state_id), and a landed army is merged
+//! into `join` (hoi4_army_merge). Divisions a route still wants are not disbanded (plan key
+//! `disband`).
+//!
+//! Why the port first: from an inland province the game offers no sea transfer at all (the
+//! hover reads "There is no available land route to this province." and a right click gives no
+//! order); from a port province the same order sails (live 15 Nov 2026, x3: a Piedmont
+//! division in province 611 never sailed, marched to its naval base 6788 it sailed at once;
+//! two Sicily divisions sailed from their island and landed in Massawa in 11 days). A state
+//! without a naval base, or a naval base list that cannot be read, sends the sea order as is.
 //! A layout formation and an army with any division outside the home land are never shipped.
 use super::{list, plan_war, strings, text, GameHour, State, Tools, DAY};
 use crate::error::Result;
@@ -140,6 +149,37 @@ struct Row {
     army: Option<String>,
     template: String,
     state: Option<i64>,
+    province: Option<i64>,
+}
+
+/// Own naval-base provinces (hoi4_convoys); empty when unreadable.
+fn own_ports(tools: &dyn Tools) -> HashSet<i64> {
+    tools
+        .call("hoi4_convoys", &json!({}))
+        .map(|v| {
+            list(&v, "naval_bases")
+                .iter()
+                .filter_map(|b| b["province"].as_i64())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The naval-base province of `state` (its provinces from hoi4_states), when it has one.
+fn state_port(tools: &dyn Tools, state: i64, ports: &HashSet<i64>) -> Option<i64> {
+    let read = tools
+        .call("hoi4_states", &json!({"query": state.to_string()}))
+        .ok()?;
+    let row = list(&read, "states")
+        .iter()
+        .find(|r| r["state_id"].as_i64() == Some(state))?;
+    let mut found: Vec<i64> = list(row, "provinces")
+        .iter()
+        .filter_map(|p| p["province"].as_i64())
+        .filter(|p| ports.contains(p))
+        .collect();
+    found.sort_unstable();
+    found.first().copied()
 }
 
 /// One action of the sea-transfer routes, or None when nothing is to be done.
@@ -174,6 +214,7 @@ pub(super) fn step(
                 army: d["army"].as_str().map(str::to_string),
                 template: text(&d["template"]).to_string(),
                 state: d["state_id"].as_i64(),
+                province: d["province_id"].as_i64(),
             })
         })
         .collect();
@@ -311,6 +352,8 @@ fn departures(
         .flat_map(|v| v.ids.iter().cloned())
         .collect();
     let formations: HashSet<String> = state.layout.values().cloned().collect();
+    // own naval bases, read once and only when an army is ready to sail
+    let mut ports: Option<HashSet<i64>> = None;
     for (i, route) in routes.iter().enumerate() {
         let shipped = state.ship.shipped.get(&i).copied().unwrap_or(0);
         if state.ship.done(i, route.count, now) || route.templates.is_empty() {
@@ -352,6 +395,27 @@ fn departures(
                 continue;
             }
             if all.len() == want.len() && want.len() <= left {
+                // Every division in an own port first: from inland the game offers no sea move.
+                let ports = ports.get_or_insert_with(|| own_ports(tools));
+                let ashore = all
+                    .iter()
+                    .find(|r| r.province.is_none_or(|p| !ports.contains(&p)));
+                if let Some(at) = ashore.and_then(|r| r.state) {
+                    if let Some(port) = state_port(tools, at, ports) {
+                        let (ok, why) = state.act(
+                            tools,
+                            lease,
+                            "hoi4_army_move",
+                            json!({"army": army, "state_id": at, "province_id": port}),
+                            "sp",
+                        )?;
+                        // the march takes days: the army is looked at again after one
+                        state.skip(now, "ship", army, if ok { DAY } else { 3 * DAY });
+                        return Ok(Some(format!(
+                            "sea transfer: {army} marches to its port {port} in state {at}: {ok} {why}"
+                        )));
+                    }
+                }
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -720,5 +784,77 @@ mod tests {
             step(&mut state, &game, &plan, "l", START + 25 * DAY).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn an_army_inland_marches_to_its_state_port_before_the_sea_order() {
+        // State 1 has its naval base in province 50; state 2 has no port.
+        struct Ported(Game);
+        impl Tools for Ported {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                match name {
+                    "hoi4_convoys" => {
+                        self.0.call(name, args)?;
+                        Ok(json!({"naval_bases": [{"province": 50, "level": 3}, {"province": 70}]}))
+                    }
+                    "hoi4_states" => {
+                        self.0.call(name, args)?;
+                        Ok(json!({"states": [{"state_id": 1, "provinces": [
+                            {"province": 40}, {"province": 50}]}]}))
+                    }
+                    _ => self.0.call(name, args),
+                }
+            }
+        }
+        let at = |id: &str, army: &str, state: i64, province: i64| {
+            json!({"id": id, "army": army, "template": "Infantry", "state_id": state,
+                "province_id": province})
+        };
+        let game = Ported(Game::new(json!([
+            at("a", "Army 6", 1, 40),
+            at("b", "Army 6", 1, 50)
+        ])));
+        let plan = plan(2);
+        let mut state = State::default();
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
+        // one division stands inland: the army marches to the port of its state
+        let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
+        assert!(
+            line.contains("Army 6 marches to its port 50 in state 1: true"),
+            "{line}"
+        );
+        let moves = game.0.sent("hoi4_army_move");
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0]["province_id"], 50);
+        assert_eq!(moves[0]["state_id"], 1);
+        // the march takes days: nothing while the army is skipped
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START + 1).unwrap(),
+            None
+        );
+        // both divisions in a port: the sea order to the theatre
+        *game.0.rows.borrow_mut() = json!([at("a", "Army 6", 1, 50), at("b", "Army 6", 1, 50)]);
+        let line = step(&mut state, &game, &plan, "l", START + DAY + 1)
+            .unwrap()
+            .unwrap();
+        assert!(
+            line.starts_with("sea transfer: Army 6 (2 division(s)) -> state 9: true"),
+            "{line}"
+        );
+        assert_eq!(game.0.sent("hoi4_army_move")[1]["state_id"], 9);
+        assert!(game.0.sent("hoi4_army_move")[1]
+            .get("province_id")
+            .is_none());
+
+        // a state without a naval base: the sea order goes out as is
+        let game = Ported(Game::new(json!([at("c", "Army 8", 2, 41)])));
+        let one = super::tests::plan(1);
+        let mut state = State::default();
+        step(&mut state, &game, &one, "l", START - 1).unwrap();
+        let line = step(&mut state, &game, &one, "l", START).unwrap().unwrap();
+        assert!(line.contains("Army 8 (1 division(s)) -> state 9"), "{line}");
     }
 }

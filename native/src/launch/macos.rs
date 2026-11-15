@@ -5601,6 +5601,11 @@ impl MacClock {
             // NotApplied). New headings on the divisions count as the move having started.
             let headings_before =
                 ui::read(process, |r, i| armies::headings(r, i, army)).unwrap_or_default();
+            // Where each division stood: a division that stood in a province and no longer does
+            // has started (live 15 Nov 2026, x3: a division ordered from its port to Eritrea was
+            // at sea before the receipt read it, so the in-port check below missed it).
+            let provinces_before =
+                ui::read(process, armies::division_provinces).unwrap_or_default();
             let mut settle = || {
                 let (now, total) = match heading() {
                     Ok(v) => v,
@@ -5613,13 +5618,26 @@ impl MacClock {
                     Err(e) => return Err(e),
                 };
                 let after = ui::read(process, |r, i| armies::headings(r, i, army))?;
-                let started = after.len() == headings_before.len()
+                let left_province = || {
+                    let at = ui::read(process, armies::division_provinces).unwrap_or_default();
+                    let ids = ui::read(process, |r, i| armies::army_division_ids(r, i, army))
+                        .unwrap_or_default();
+                    ids.iter().any(|id| {
+                        provinces_before
+                            .get(id)
+                            .copied()
+                            .flatten()
+                            .is_some_and(|p| at.get(id).copied().flatten() != Some(p))
+                    })
+                };
+                let started = (after.len() == headings_before.len()
                     && after
                         .iter()
                         .zip(&headings_before)
                         .filter(|(a, b)| **a != 0 && a != b)
                         .count()
-                        > 0;
+                        > 0)
+                    || (now == 0 && left_province());
                 // A sea transfer leaves a division standing in its port with its heading
                 // unchanged until it lands (live 6 Nov 2026: Sicily to Tripoli sailed while every
                 // read said nothing moved). With every division in an own port and the target

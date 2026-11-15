@@ -802,7 +802,8 @@ fn move_reason(tag: &str) -> &'static str {
         "wd" | "w2" => "second direction",
         "wj" => "route jump-off",
         "ws" => "objective strike",
-        "sh" => "sea transfer",
+        // the march to the home port and the sailing are one job: one may follow the other
+        "sh" | "sp" => "sea transfer",
         _ => "other",
     }
 }
