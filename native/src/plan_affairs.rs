@@ -2236,6 +2236,11 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
                         "upgrade_in_progress" => state.skip(now, "intelup", "x", 5 * DAY),
                         "agency_not_created" => state.skip(now, "intelup", "x", 15 * DAY),
                         "upgrade_unavailable" => state.skip(now, "intel", &key, 30 * DAY),
+                        // the game would only queue it: waits until the factories are free
+                        "upgrade_needs_factories" => {
+                            note(state, "intelligence", format!("{upgrade}: {why}"));
+                            state.skip(now, "intel", &key, 10 * DAY);
+                        }
                         "branch_unknown" | "upgrade_unknown" => {
                             note(state, "intelligence", format!("{upgrade}: {why}"));
                             state.skip(now, "intel", &key, 90 * DAY);
@@ -2301,6 +2306,33 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
             if let Some(id) = op["state_id"].as_u64() {
                 args["state_id"] = json!(id);
             }
+            // A network starts only in a state beside land the player controls (the game:
+            // "Not a suitable state to start the mission", live 16 Nov 2026): a state further in
+            // is replaced by the nearest one that is, and with none the mission waits.
+            if mission == "build_intel_network" {
+                if let Some(id) = op["state_id"].as_i64() {
+                    match network_state(tools, id) {
+                        Some(Some(s)) if s != id => {
+                            note(
+                                state,
+                                "intelligence",
+                                format!("operative {i}: state {id} is not beside own land; the network starts in {s}"),
+                            );
+                            args["state_id"] = json!(s);
+                        }
+                        Some(None) => {
+                            note(
+                                state,
+                                "intelligence",
+                                format!("operative {i}: no state of {id}'s country is beside own land yet; the network waits"),
+                            );
+                            state.skip(now, "intel", &key, 10 * DAY);
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
+            }
             let (ok, why) = state.act(tools, run.lease, "hoi4_operative_assign", args, "io")?;
             let c = code(&why);
             if ok || c == "operative_busy" {
@@ -2337,6 +2369,112 @@ fn intelligence_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>>
     }
     state.skip(now, "mintel", "x", DAY);
     Ok(None)
+}
+
+/// Where an intel network for `wanted` can start: `wanted` itself when one of its provinces
+/// touches a state the player controls, else the nearest state of the same controller that does
+/// (provinces apart over the map), `Some(None)` when none does; `None` when the map cannot be read
+/// (the order goes as written).
+fn network_state(tools: &dyn Tools, wanted: i64) -> Option<Option<i64>> {
+    let me = tools.call("hoi4_overview", &json!({})).ok()?["player"]
+        .as_str()?
+        .to_string();
+    let row = tools.call("hoi4_states", &json!({"query": wanted})).ok()?;
+    let tag = list(&row, "states")
+        .iter()
+        .find(|r| r["state_id"].as_i64() == Some(wanted))
+        .map(|r| text(&r["controller"]).to_string())?;
+    if tag.is_empty() || tag == me {
+        return None;
+    }
+    let mut theirs: Vec<i64> = Vec::new();
+    let mut mine: HashSet<i64> = HashSet::new();
+    for query in [tag.as_str(), me.as_str()] {
+        let read = tools.call("hoi4_states", &json!({"query": query})).ok()?;
+        for r in list(&read, "states") {
+            let Some(id) = r["state_id"].as_i64() else {
+                continue;
+            };
+            let controller = text(&r["controller"]);
+            if controller == me {
+                mine.insert(id);
+            } else if controller == tag && !theirs.contains(&id) {
+                theirs.push(id);
+            }
+        }
+    }
+    let mut states: Vec<i64> = theirs.iter().chain(mine.iter()).copied().collect();
+    states.sort_unstable();
+    states.dedup();
+    let graph = tools
+        .call("hoi4_province_graph", &json!({"states": states}))
+        .ok()?;
+    let mut state_of: HashMap<i64, i64> = HashMap::new();
+    let mut next: HashMap<i64, Vec<i64>> = HashMap::new();
+    for r in list(&graph, "provinces") {
+        let (Some(p), Some(st)) = (r["province"].as_i64(), r["state_id"].as_i64()) else {
+            continue;
+        };
+        state_of.insert(p, st);
+        next.insert(
+            p,
+            list(r, "neighbours")
+                .iter()
+                .filter_map(Value::as_i64)
+                .collect(),
+        );
+    }
+    if next.is_empty() {
+        return None;
+    }
+    let suitable = |st: i64| {
+        next.iter().any(|(p, ns)| {
+            state_of.get(p) == Some(&st)
+                && ns
+                    .iter()
+                    .any(|n| state_of.get(n).is_some_and(|o| mine.contains(o)))
+        })
+    };
+    if suitable(wanted) {
+        return Some(Some(wanted));
+    }
+    // provinces apart from `wanted`, over the mapped land
+    let mut dist: HashMap<i64, usize> = HashMap::new();
+    let mut ring: Vec<i64> = state_of
+        .iter()
+        .filter(|(_, st)| **st == wanted)
+        .map(|(p, _)| *p)
+        .collect();
+    for p in &ring {
+        dist.insert(*p, 0);
+    }
+    let mut step = 0;
+    while !ring.is_empty() && step < 200 {
+        step += 1;
+        let mut out = Vec::new();
+        for p in ring {
+            for n in next.get(&p).map(Vec::as_slice).unwrap_or(&[]) {
+                if state_of.contains_key(n) && !dist.contains_key(n) {
+                    dist.insert(*n, step);
+                    out.push(*n);
+                }
+            }
+        }
+        ring = out;
+    }
+    let best = theirs
+        .iter()
+        .copied()
+        .filter(|st| suitable(*st))
+        .filter_map(|st| {
+            dist.iter()
+                .filter(|(p, _)| state_of.get(p) == Some(&st))
+                .map(|(_, d)| *d)
+                .min()
+                .map(|d| (d, st))
+        })
+        .min();
+    Some(best.map(|(_, st)| st))
 }
 
 /// `intelligence.networks`: [{"target", "state_id"?, "operative"?, "until"?}] keeps an operative
@@ -3868,6 +4006,57 @@ mod tests {
     }
 
     // ----- intelligence
+
+    #[test]
+    fn a_network_starts_in_the_nearest_enemy_state_beside_own_land() {
+        let tools = fake(vec![
+            ("hoi4_overview", json!({"player": "ME"})),
+            (
+                "hoi4_states",
+                json!({"states": [
+                    {"state_id": 1, "controller": "ME"},
+                    {"state_id": 2, "controller": "ENE"},
+                    {"state_id": 3, "controller": "ENE"},
+                    {"state_id": 4, "controller": "ENE"}]}),
+            ),
+            (
+                "hoi4_province_graph",
+                json!({"provinces": [
+                    {"province": 10, "state_id": 1, "neighbours": [20]},
+                    {"province": 20, "state_id": 2, "neighbours": [10, 30]},
+                    {"province": 30, "state_id": 3, "neighbours": [20, 40]},
+                    {"province": 40, "state_id": 4, "neighbours": [30]}]}),
+            ),
+        ]);
+        assert_eq!(network_state(&tools, 2), Some(Some(2)));
+        assert_eq!(network_state(&tools, 4), Some(Some(2)));
+        // own state: nothing to choose
+        assert_eq!(network_state(&tools, 1), None);
+    }
+
+    #[test]
+    fn an_upgrade_the_game_would_only_queue_waits_for_free_factories() {
+        let tools = fake(vec![(
+            "hoi4_intelligence",
+            json!({
+            "upgrades": {"branches": [
+                {"branch": "branch_operative", "upgrades": [{"key": "upgrade_training_centers"}]}]},
+            "defines": {"AGENCY_CREATION_DAYS": 30.0, "AGENCY_UPGRADE_DAYS": 30.0}}),
+        )]);
+        let plan =
+            json!({"intelligence": {"agency": true, "upgrades": ["upgrade_training_centers"]}});
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        tools.refuse("hoi4_agency_upgrade", "upgrade_needs_factories");
+        let at = START + 30 * DAY;
+        let out = step(&mut state, &tools, &plan, "l", at).unwrap().unwrap();
+        assert!(out.contains("upgrade_needs_factories"), "{out}");
+        assert!(state.affairs.notes["intelligence"].contains("upgrade_training_centers"));
+        // not sent again for ten days
+        let sent = actions(&tools).len();
+        step(&mut state, &tools, &plan, "l", at + 9 * DAY).unwrap();
+        assert_eq!(actions(&tools).len(), sent);
+    }
 
     #[test]
     fn the_agency_is_made_then_upgrades_follow_in_order_when_none_runs() {

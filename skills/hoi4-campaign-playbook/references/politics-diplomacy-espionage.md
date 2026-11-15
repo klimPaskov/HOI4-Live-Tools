@@ -243,7 +243,8 @@ Democracies justify only on threat countries, cannot puppet, cannot declare on a
 ## 8. Intelligence agency and operatives (La Resistance)
 
 - **Agency**: 30 days and 5 civilian factories (`hoi4_agency_create`). Germany gets one automatically only in the 1939 start.
-- **Upgrades**: 30 days each, one at a time, 5-10 civilian factories while in progress. The agency starts with one operative slot; 5 upgrades give a second (`AGENCY_UPGRADE_PER_OPERATIVE_SLOT` 5, `MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES` 1: never more than two slots from the agency). More come only from advisors, spirits and the spymaster (PO29).
+- **Upgrades**: 30 days each, one at a time, 5-10 civilian factories while in progress. An upgrade needs that many factories free for projects when it starts; with fewer the game only queues it and nothing runs (Italy 1936 has 7 free for `upgrade_training_centers`' 10), so pick a cheap first upgrade or free factories first. The executor waits for the factories instead of clicking again. The agency starts with one operative slot; 5 upgrades give a second (`AGENCY_UPGRADE_PER_OPERATIVE_SLOT` 5, `MAX_OPERATIVE_SLOT_FROM_AGENCY_UPGRADES` 1: never more than two slots from the agency). More come only from advisors, spirits and the spymaster (PO29).
+- **Networks** start only in a state beside land you control (the game hatches the suitable states blue); a state further in is refused. In a war the network goes into the enemy state beside the front nearest the one the plan wants, and spreads from there.
 - **Recruitment**: a newly opened slot offers candidates after 30 days (`AGENCY_OPERATIVE_RECRUITMENT_TIME`); the pick itself is instant. A candidate of the target's nationality builds its network about 30% faster.
 - Upgrade order:
   1. `upgrade_training_centers` (one more candidate offered per slot, 3 to 4, not a slot; 10 civilian factories).
