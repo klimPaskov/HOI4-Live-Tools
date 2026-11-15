@@ -49,6 +49,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            no hub or port the plan builds there (the game runs a railway from a node; the
                            executor would move the start to the nearest node)
   construction.trigger_route  a province_controlled: trigger off every vp target route
+  construction.item_state  a construction_plan item whose province_controlled trigger has no state (or to_state)
+                           holding that province, or a railway item without from_state and to_state (the executor
+                           sends 0 and the railway tool refuses it)
   construction.hub         supply hub in a province or state an enemy still holds when it fires
   production.factories     production lines need more factories than the plan has, each pool on its own:
                            land and air lines against the military factories, naval lines (ships, convoys)
@@ -951,6 +954,33 @@ class Lint:
         return any(k in tree and not (fmeta.get(k) or {}).get("available") for k in later)
 
     # ------------------------------------------------------------------ construction
+    def construction_item_state(self, where, e, rail, w, pstate):
+        """construction.item_state: the executor reads a province_controlled trigger in the item's own state
+        (`state`, else `to_state`), and sends a railway's from_state / to_state (0 when absent, which the
+        railway tool refuses as invalid arguments and the executor then gives the item up)."""
+        sid = e.get("state", e.get("to_state"))
+        if w[0] == "province":
+            if not isinstance(sid, int):
+                self.add("error", "construction.item_state", where,
+                         f"trigger province_controlled:{w[1]} but the item has no state or to_state: the executor "
+                         f"looks the province up in that state, so the item never comes due")
+            elif pstate.get(w[1]) is not None and pstate.get(w[1]) != sid:
+                self.add("error", "construction.item_state", where,
+                         f"trigger province {w[1]} lies in state {pstate.get(w[1])}, not in the item's state {sid}: the "
+                         f"executor looks for it there and the item never comes due")
+        if rail:
+            missing = [k for k in ("from_state", "to_state") if not isinstance(e.get(k), int)
+                       and not isinstance(e.get("state"), int)]
+            if missing:
+                path = _ints(e.get("path") or [])
+                hint = ""
+                if path:
+                    hint = (f" (path {path[0]} is in state {pstate.get(path[0])}, {path[-1]} in state "
+                            f"{pstate.get(path[-1])})")
+                self.add("error", "construction.item_state", where,
+                         f"railway item without {' and '.join(missing)}: the executor sends 0 for it, the railway tool "
+                         f"refuses that and the item is given up; give both end states{hint}")
+
     def construction_lists(self):
         """(label prefix, construction_plan list) for the base plan and each override."""
         out = [("construction_plan", self.list_of("construction_plan"))]
@@ -1001,6 +1031,9 @@ class Lint:
                 if w[0] == "province" and route is not None and w[1] not in route:
                     self.add("error", "construction.trigger_route", where,
                              f"trigger province {w[1]} is on no vp target route")
+                if prefix == "construction_plan":
+                    self.construction_item_state(where, e, b in kinds["railway"] or b in ("rail_way", "railway"),
+                                                 w, pstate)
                 if b in kinds["railway"] and isinstance(e.get("path"), list):
                     path = _ints(e["path"])
                     nodes = self.rail_nodes()
