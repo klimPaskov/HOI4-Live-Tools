@@ -1123,6 +1123,22 @@ class TacticsRules(unittest.TestCase):
         # Italy's gap is within its industry: still an error
         self.assertHit(self.plan(), "production.balance", "error", "infantry_equipment: the planned lines")
 
+    def test_construction_item_state(self):
+        # a strategist plan wrote railway items with a path and a capture trigger but no states: the executor
+        # looked the trigger province up in state 0 (never due) and sent from_state 0 (refused, item given up)
+        plan = self.plan()
+        plan["construction_plan"] = [
+            {"id": "r1", "building": "rail_way", "path": [12766, 13250, 13238], "when": "province_controlled:13238"},
+            {"id": "r2", "building": "rail_way", "path": [12766, 13238], "from_state": 550, "to_state": 841,
+             "when": "province_controlled:13238"},
+            {"id": "r3", "building": "rail_way", "path": [12766, 13238], "from_state": 550, "to_state": 842,
+             "when": "province_controlled:13238"}]
+        f = self.assertHit(plan, "construction.item_state", "error", "construction_plan[0] r1 trigger")
+        self.assertIn("never comes due", f["message"])
+        self.assertHit(plan, "construction.item_state", "error", "construction_plan[0] r1 railway item without")
+        self.assertHit(plan, "construction.item_state", "error", "construction_plan[1] r2 trigger province 13238 lies")
+        self.assertNoHit(plan, "construction.item_state", "error", "construction_plan[2]")
+
     def test_line_output_ramps_new_lines(self):
         plan = self.plan(production=[{"equipment": "infantry_equipment_1", "factories": 10},
                                      {"equipment": "artillery_equipment_1", "factories": 2}])
