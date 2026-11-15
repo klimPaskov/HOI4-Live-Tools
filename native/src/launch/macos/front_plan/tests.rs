@@ -675,3 +675,94 @@ fn real_install_war_plans_print_for_manual_comparison() {
     assert!(map.info.len() > 800);
     assert!(map.capitals.contains_key("GER"));
 }
+
+/// Records `hoi4_encirclement_candidates` output over the install's own map for the executor's
+/// fixtures (native/tests/fixtures/encircle_*.json). Run by hand with HOI4_GAME_DIR set:
+/// `cargo test --lib record_encirclement_fixtures -- --ignored --nocapture`. Each scenario is the
+/// install's 1936 owners with the listed states handed to another controller.
+#[test]
+#[ignore]
+fn record_encirclement_fixtures() {
+    let Some(dir) = std::env::var_os("HOI4_GAME_DIR") else {
+        return;
+    };
+    let map = static_map(Path::new(&dir)).unwrap();
+    let spec = std::env::var("ENCIRCLE_SCENARIO").unwrap_or_default();
+    // "PLAYER:ENEMY[,ENEMY]:state=TAG,state=TAG:state=divisions,..."
+    let parts: Vec<&str> = spec.split(':').collect();
+    let player = parts.first().copied().unwrap_or("GER").to_string();
+    let enemies: BTreeSet<String> = parts
+        .get(1)
+        .copied()
+        .unwrap_or("POL")
+        .split(',')
+        .map(str::to_string)
+        .collect();
+    let mut controller: BTreeMap<i32, String> = map
+        .info
+        .iter()
+        .filter_map(|(id, i)| Some((*id, i.initial_owner.clone()?)))
+        .collect();
+    for kv in parts
+        .get(2)
+        .copied()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+    {
+        let (s, t) = kv.split_once('=').unwrap();
+        controller.insert(s.parse().unwrap(), t.to_string());
+    }
+    let divisions: BTreeMap<i32, usize> = parts
+        .get(3)
+        .copied()
+        .unwrap_or("")
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(|kv| {
+            let (s, n) = kv.split_once('=').unwrap();
+            (s.parse().unwrap(), n.parse().unwrap())
+        })
+        .collect();
+    let armies: Vec<ArmyRef> = divisions
+        .iter()
+        .enumerate()
+        .map(|(i, (s, n))| ArmyRef {
+            name: format!("Army {}", i + 1),
+            main_state: Some(*s),
+            divisions: *n,
+        })
+        .collect();
+    let g = StateGraph {
+        map,
+        player,
+        enemies,
+        owner: controller.clone(),
+        controller,
+        divisions,
+    };
+    if let Some(list) = std::env::var_os("ENCIRCLE_CENTERS") {
+        let centers = super::mapdata::state_centers(Path::new(&dir)).unwrap();
+        let mut out = serde_json::Map::new();
+        for s in list
+            .to_string_lossy()
+            .split(',')
+            .filter_map(|s| s.parse::<i32>().ok())
+        {
+            if let Some((x, z)) = centers.get(&s) {
+                out.insert(s.to_string(), json!([x.round(), z.round()]));
+            }
+        }
+        println!("{}", Value::Object(out));
+        return;
+    }
+    if std::env::var_os("ENCIRCLE_ADJ").is_some() {
+        for s in g.states_of(Side::Enemy) {
+            println!("ADJ {s} {} -> {:?}", g.name(s), g.neighbours(s));
+        }
+        return;
+    }
+    let mut out = encirclement_candidates(&g, &armies, 2, 6);
+    out["elapsed_ms"] = json!(0);
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+}

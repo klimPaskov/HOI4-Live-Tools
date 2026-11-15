@@ -1,0 +1,397 @@
+{
+  "calls_also_need": [
+    "request_id",
+    "lease_token"
+  ],
+  "elapsed_ms": 0,
+  "enemies": [
+    "ETH"
+  ],
+  "max_gap": 2,
+  "method": "A pocket is a group of enemy-controlled states that would be cut from the rest of the enemy by taking the neck states (at most max_gap of them); sea, impassable states and non-enemy neighbours (neutral, allied) count as walls. Arms are the two own states farthest apart that touch the neck. Score is pocket value (points, industry, manpower, resources, capital) per effort (terrain cost of the neck plus pocket size). Visible ownership only; vanilla map; sea evacuation and enemy reserves are not modelled.",
+  "player": "ITA",
+  "pockets": [
+    {
+      "already_cut_off": false,
+      "capital_inside": false,
+      "divisions_needed_per_arm": 10,
+      "effort": 6.7,
+      "gap": 2,
+      "industry": {
+        "civ": 1,
+        "dock": 0,
+        "mil": 2
+      },
+      "manpower": 3950000,
+      "neck_states": [
+        {
+          "category": "town",
+          "civ": 1,
+          "controller": "ETH",
+          "enter_cost": 3.3,
+          "mil": 2,
+          "name": "Shewa",
+          "owner": "ETH",
+          "state_id": 271,
+          "terrain": "mountain",
+          "victory_points": 6
+        },
+        {
+          "category": "pastoral",
+          "civ": 0,
+          "controller": "ETH",
+          "enter_cost": 2.8,
+          "mil": 0,
+          "name": "Welega",
+          "owner": "ETH",
+          "state_id": 839,
+          "terrain": "mountain",
+          "victory_points": 3
+        }
+      ],
+      "note": "Attack both arms into the neck states; the pocket closes when they are own-controlled.",
+      "pincer_arms": [
+        {
+          "army_candidate": {
+            "army": "Army 1",
+            "hops": 0
+          },
+          "divisions_available": 14,
+          "divisions_missing": 0,
+          "divisions_needed": 10,
+          "from_own_state": {
+            "category": "rural",
+            "civ": 1,
+            "controller": "ITA",
+            "enter_cost": 2.6,
+            "mil": 0,
+            "name": "Hararghe",
+            "owner": "ITA",
+            "state_id": 835,
+            "terrain": "desert",
+            "victory_points": 6
+          },
+          "into_neck_state": {
+            "category": "town",
+            "civ": 1,
+            "controller": "ETH",
+            "enter_cost": 3.3,
+            "mil": 2,
+            "name": "Shewa",
+            "owner": "ETH",
+            "state_id": 271,
+            "terrain": "mountain",
+            "victory_points": 6
+          }
+        },
+        {
+          "army_candidate": {
+            "army": "Army 2",
+            "hops": 0
+          },
+          "divisions_available": 14,
+          "divisions_missing": 0,
+          "divisions_needed": 10,
+          "from_own_state": {
+            "category": "pastoral",
+            "civ": 0,
+            "controller": "ITA",
+            "enter_cost": 1.7,
+            "mil": 0,
+            "name": "Bale",
+            "owner": "ITA",
+            "state_id": 836,
+            "terrain": "hills",
+            "victory_points": 1
+          },
+          "into_neck_state": {
+            "category": "town",
+            "civ": 1,
+            "controller": "ETH",
+            "enter_cost": 3.3,
+            "mil": 2,
+            "name": "Shewa",
+            "owner": "ETH",
+            "state_id": 271,
+            "terrain": "mountain",
+            "victory_points": 6
+          }
+        }
+      ],
+      "pincer_ready": true,
+      "pocket_states": [
+        {
+          "category": "rural",
+          "civ": 0,
+          "controller": "ETH",
+          "enter_cost": 2.3,
+          "mil": 0,
+          "name": "Sidamo",
+          "owner": "ETH",
+          "state_id": 837,
+          "terrain": "hills",
+          "victory_points": 4
+        },
+        {
+          "category": "pastoral",
+          "civ": 0,
+          "controller": "ETH",
+          "enter_cost": 2.8,
+          "mil": 0,
+          "name": "Illubabor-Kaffa",
+          "owner": "ETH",
+          "state_id": 838,
+          "terrain": "mountain",
+          "victory_points": 3
+        }
+      ],
+      "rank": 1,
+      "score": 12.0,
+      "sea_escape_possible": false,
+      "suggested_calls": [
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        },
+        {
+          "args": {
+            "army": "Army 2",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 2",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 2",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        }
+      ],
+      "third_party_neighbours": [
+        547,
+        884,
+        886,
+        903,
+        904,
+        908
+      ],
+      "value": 92.6,
+      "victory_points": 16
+    },
+    {
+      "already_cut_off": false,
+      "capital_inside": false,
+      "divisions_needed_per_arm": 10,
+      "effort": 6.6,
+      "gap": 2,
+      "industry": {
+        "civ": 1,
+        "dock": 0,
+        "mil": 2
+      },
+      "manpower": 4450000,
+      "neck_states": [
+        {
+          "category": "town",
+          "civ": 1,
+          "controller": "ETH",
+          "enter_cost": 3.3,
+          "mil": 2,
+          "name": "Shewa",
+          "owner": "ETH",
+          "state_id": 271,
+          "terrain": "mountain",
+          "victory_points": 6
+        },
+        {
+          "category": "pastoral",
+          "civ": 0,
+          "controller": "ETH",
+          "enter_cost": 2.7,
+          "mil": 0,
+          "name": "Gojjam",
+          "owner": "ETH",
+          "state_id": 840,
+          "terrain": "mountain",
+          "victory_points": 2
+        }
+      ],
+      "note": "Attack both arms into the neck states; the pocket closes when they are own-controlled.",
+      "pincer_arms": [
+        {
+          "army_candidate": {
+            "army": "Army 1",
+            "hops": 0
+          },
+          "divisions_available": 14,
+          "divisions_missing": 0,
+          "divisions_needed": 10,
+          "from_own_state": {
+            "category": "rural",
+            "civ": 1,
+            "controller": "ITA",
+            "enter_cost": 2.6,
+            "mil": 0,
+            "name": "Hararghe",
+            "owner": "ITA",
+            "state_id": 835,
+            "terrain": "desert",
+            "victory_points": 6
+          },
+          "into_neck_state": {
+            "category": "town",
+            "civ": 1,
+            "controller": "ETH",
+            "enter_cost": 3.3,
+            "mil": 2,
+            "name": "Shewa",
+            "owner": "ETH",
+            "state_id": 271,
+            "terrain": "mountain",
+            "victory_points": 6
+          }
+        },
+        {
+          "army_candidate": {
+            "army": "Army 2",
+            "hops": 0
+          },
+          "divisions_available": 14,
+          "divisions_missing": 0,
+          "divisions_needed": 10,
+          "from_own_state": {
+            "category": "pastoral",
+            "civ": 0,
+            "controller": "ITA",
+            "enter_cost": 1.7,
+            "mil": 0,
+            "name": "Bale",
+            "owner": "ITA",
+            "state_id": 836,
+            "terrain": "hills",
+            "victory_points": 1
+          },
+          "into_neck_state": {
+            "category": "town",
+            "civ": 1,
+            "controller": "ETH",
+            "enter_cost": 3.3,
+            "mil": 2,
+            "name": "Shewa",
+            "owner": "ETH",
+            "state_id": 271,
+            "terrain": "mountain",
+            "victory_points": 6
+          }
+        }
+      ],
+      "pincer_ready": true,
+      "pocket_states": [
+        {
+          "category": "pastoral",
+          "civ": 0,
+          "controller": "ETH",
+          "enter_cost": 2.7,
+          "mil": 0,
+          "name": "Begemder",
+          "owner": "ETH",
+          "state_id": 841,
+          "terrain": "mountain",
+          "victory_points": 2
+        },
+        {
+          "category": "pastoral",
+          "civ": 0,
+          "controller": "ETH",
+          "enter_cost": 2.7,
+          "mil": 0,
+          "name": "Wello",
+          "owner": "ETH",
+          "state_id": 843,
+          "terrain": "mountain",
+          "victory_points": 1
+        }
+      ],
+      "rank": 2,
+      "score": 11.0,
+      "sea_escape_possible": false,
+      "suggested_calls": [
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 1",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        },
+        {
+          "args": {
+            "army": "Army 2",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_front"
+        },
+        {
+          "args": {
+            "army": "Army 2",
+            "state_id": 271
+          },
+          "tool": "hoi4_army_offensive"
+        },
+        {
+          "args": {
+            "army": "Army 2",
+            "execute": true
+          },
+          "tool": "hoi4_army_plan"
+        }
+      ],
+      "third_party_neighbours": [
+        883,
+        886,
+        908
+      ],
+      "value": 83.8,
+      "victory_points": 11
+    }
+  ],
+  "pockets_found": 2
+}

@@ -207,6 +207,7 @@ class HandPlans(unittest.TestCase):
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[0] state 840"),
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 836"),
             ("supply.axis_reach", "war_by_phase.P3_gondar_afar.axes[2] state 837"),
+            ("war.encircle", "war.direct_moves"),  # direct moves switch encirclement off
             ("war.planning_wait", "war.direct_moves"),  # direct moves build no planning
             ("war.supply_floor", "war.supply_floor"),  # 30 is under the 35% attrition line
         ]))
@@ -263,6 +264,7 @@ class HandPlans(unittest.TestCase):
             ("supply.axis_reach", "war_by_phase.P3_eritrea.axes[0] state 550"),
             ("supply.axis_reach", "war_by_phase.P4_south.axes[0] state 559"),
             ("supply.axis_reach", "war_by_phase.P4_south.axes[0] state 844"),
+            ("war.encircle", "war.direct_moves"),
             ("war.planning_wait", "war.direct_moves"),
             ("war.supply_floor", "war.supply_floor"),  # 20 is under the 35% attrition line
         ]))
@@ -1152,6 +1154,29 @@ class TacticsRules(unittest.TestCase):
         schema = copy.deepcopy(lint_plan.load_schema())
         schema["definitions"]["war"]["properties"].update(props)
         return schema
+
+    def test_encircle(self):
+        plan = self.plan()
+        plan["war"]["direct_moves"] = False
+        plan["war"].pop("encircle", None)
+        self.assertHit(plan, "war.encircle", "info", "measured boldness")
+        plan["war"]["encircle"] = False
+        self.assertHit(plan, "war.encircle", "warning", "encirclement is off")
+        plan["war"]["encircle"] = {"boldness": "measured"}
+        self.assertNoHit(plan, "war.encircle")
+        strike = [e for e in plan.get("army_layout") or [] if e.get("role") != "guard"]
+        if len(strike) >= 2:
+            plan["war"]["encircle"] = {"keep_free": len(strike) - 1}
+            self.assertHit(plan, "war.encircle", "error", "keep_free")
+        plan["war"]["encircle"] = {"armies": ["Nowhere_strike"], "reach": 30}
+        if strike:
+            self.assertHit(plan, "war.encircle", "error", "'Nowhere_strike'")
+        self.assertHit(plan, "war.encircle", "error", "reach 30")
+        plan["war"]["encircle"] = {"boldness": "bold"}
+        plan["war"]["supply_floor"] = 30
+        self.assertHit(plan, "war.encircle", "warning", "attrition starts")
+        plan["war"]["direct_moves"] = True
+        self.assertHit(plan, "war.encircle", "warning", "direct moves switch encirclement off")
 
     def test_planning_wait(self):
         self.assertHit(self.ita, "war.planning_wait", "warning", "war.direct_moves")

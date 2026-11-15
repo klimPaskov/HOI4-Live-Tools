@@ -4638,7 +4638,11 @@
     "war-operating-loop.md#2. Encirclement procedure",
     "war-air-naval-peace.md#OP12"
    ],
-   "plan": [],
+   "plan": [
+    "war.encircle",
+    "war.encircle.boldness",
+    "war.encircle.armies"
+   ],
    "tools": [
     "hoi4_encirclement_candidates",
     "hoi4_army_front",
@@ -4647,8 +4651,8 @@
    ],
    "payoff": "high",
    "why": "encirclement destroys divisions outright; the main way to win land wars",
-   "closing": "both",
-   "owner": "offline: an executor step that reads hoi4_encirclement_candidates and orders the two pincers; live: validate the pocket read against the map",
+   "closing": "live",
+   "owner": "live: LIVE-QUEUE Q10 (the read against the map) and Q10b (the executor closes and reduces one pocket); the executor step is built (plan_encircle.rs, war.encircle)",
    "priority": 2
   },
   {
@@ -4659,15 +4663,17 @@
     "war-air-naval-peace.md#OP13",
     "procedure.md#18. Operations"
    ],
-   "plan": [],
+   "plan": [
+    "war.encircle.reduce"
+   ],
    "tools": [
     "hoi4_army_offensive",
     "hoi4_army_move"
    ],
    "payoff": "medium",
    "why": "an unreduced pocket ties up armies and keeps its VPs",
-   "closing": "both",
-   "owner": "offline: an executor step that orders offensives into every province of a closed pocket"
+   "closing": "live",
+   "owner": "live: LIVE-QUEUE Q10b (the anvil or the larger arm reduces the closed pocket, nearest state first, then the advance resumes)"
   },
   {
    "id": "orders.defensive_lines",

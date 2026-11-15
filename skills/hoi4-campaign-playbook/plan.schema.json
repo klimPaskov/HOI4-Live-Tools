@@ -4642,6 +4642,109 @@
           "x-owner": "executor",
           "description": "farthest distance (map units between state centres) a pocket fall-back goes; an army_layout role falls back only into its own state, axis or guard states"
         },
+        "encircle": {
+          "type": [
+            "boolean",
+            "object"
+          ],
+          "x-owner": "executor",
+          "description": "encirclement operations (default on; false switches them off): find an enemy pocket worth closing (hoi4_encirclement_candidates), commit two driven armies as pincers into its neck with a battle plan and the planning wait, launch both together, hold the ring with one arm and reduce the pocket with the other, then resume the advance; give up a pocket that would break supply or is not closed in time. Never in a hold phase (axes []) or with direct_moves",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "false: no encirclement operations"
+            },
+            "boldness": {
+              "type": "string",
+              "enum": [
+                "cautious",
+                "measured",
+                "bold"
+              ],
+              "default": "measured",
+              "description": "sets the defaults below: cautious (gap 1, score 4, reach 100, the full arm strength, supply 80+, abort at the supply floor, 20 days to close, one driven army kept free, no coastal pocket), measured (gap 2, score 2, reach 160, 75% of the arm strength, supply at supply_resume, abort at supply_hold, 30 days), bold (gap 3, score 1, reach 260, half the arm strength, supply at the floor, no supply abort, 45 days)"
+            },
+            "max_gap": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3,
+              "description": "neck states a pocket may need taken"
+            },
+            "min_score": {
+              "type": "number",
+              "minimum": 0,
+              "description": "the candidate read's score (pocket value per effort) a pocket needs; a pocket already cut off is always reduced"
+            },
+            "reach": {
+              "type": "number",
+              "minimum": 0,
+              "description": "map units from an army's state centre to its arm's own state; farther armies are not pulled across the theatre"
+            },
+            "need_share": {
+              "type": "number",
+              "minimum": 0,
+              "description": "share of an arm's divisions_needed the committed army must have"
+            },
+            "min_supply": {
+              "type": "number",
+              "minimum": 0,
+              "description": "supply percent (or share) an army needs to be committed"
+            },
+            "abort_supply": {
+              "type": [
+                "number",
+                "boolean"
+              ],
+              "description": "supply percent below which a closing arm ends the operation; false: no supply abort (the war step's rest rules still apply)"
+            },
+            "close_max_days": {
+              "type": "number",
+              "minimum": 0,
+              "description": "game days the neck may take to close before the pocket is given up"
+            },
+            "keep_free": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "driven armies never committed to an operation"
+            },
+            "sea_escape": {
+              "type": "boolean",
+              "description": "accept a pocket with a coast (the enemy may evacuate by sea)"
+            },
+            "sync_days": {
+              "type": "number",
+              "minimum": 0,
+              "default": 5,
+              "description": "game days a ready pincer waits for the other arm before it goes alone"
+            },
+            "reduce": {
+              "type": "boolean",
+              "default": true,
+              "description": "after the ring closes the larger arm attacks the pocket, nearest state first; false: both arms hold"
+            },
+            "retry_days": {
+              "type": "number",
+              "minimum": 0,
+              "default": 30,
+              "description": "game days a given-up pocket is not tried again"
+            },
+            "scan_days": {
+              "type": "number",
+              "minimum": 0,
+              "default": 2,
+              "description": "game days between candidate reads while no operation runs"
+            },
+            "armies": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "army names or army_layout name_hints that may be committed; empty or absent: any driven army"
+            }
+          }
+        },
         "second_direction": {
           "type": "boolean",
           "default": true,

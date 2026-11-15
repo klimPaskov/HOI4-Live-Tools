@@ -262,6 +262,11 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            war.direct_moves; (info) no such key in the schema yet
   war.pocket_threshold     pocket fall-back switched off (avoid_pockets false) or a pocket-share key above
                            50%; (info) the executor's 70% when no key exists
+  war.encircle             offensives with encirclement off (war.encircle false or enabled false) or turned off by
+                           war.direct_moves; keep_free leaving fewer than two strike roles of army_layout to
+                           commit; an `armies` entry that is neither an army_layout name_hint nor an army name
+                           the plan uses; a reach under one state's width (60 map units); (warning) bold with an
+                           abort line or a supply floor under the attrition line; (info) the measured default
   politics.pp_budget       the PP income over the whole run simulated the way the executor spends it (calc.pp_rates:
                            (base + gain) x (1 + factor + stability) minus the running focus's cost): politics,
                            decisions and decision_rules picks once due, affordable and open, every pick that could
@@ -399,7 +404,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              # tactics research rules
              "production.mature_switch", "production.cull", "production.day0", "production.in_progress",
              "production.naval_cap", "army.width_terrain", "war.supply_floor", "war.planning_wait",
-             "war.pocket_threshold", "politics.unneeded_conscription", "politics.pp_budget", "intelligence.operations", "politics.available", "research.ahead",
+             "war.pocket_threshold", "war.encircle", "politics.unneeded_conscription", "politics.pp_budget", "intelligence.operations", "politics.available", "research.ahead",
              "navy.invasion_prep", "navy.sea_control", "construction.war_civs", "navy.strike_without_patrol",
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
@@ -3692,6 +3697,55 @@ class Lint:
                      f"the executor falls back at the {EXECUTOR_POCKET_SHARE:.0%} hostile share of the armies read "
                      f"(no threshold key yet); {POCKET_SHARE:.0%} or a neck of 2 own provinces belongs in a brief line")
 
+    def war_encircle(self):
+        """Encirclement operations off, or set so they can never start."""
+        if not self.war or not self.offensives() or "encircle" not in self.war_schema():
+            return
+        why = ("a cut-off division loses supply and organisation and is destroyed when its last province falls; "
+               "pockets end land wars faster and cheaper than frontal pushes")
+        for label, w in self.war_blocks():
+            enc = w.get("encircle")
+            if enc is False or (isinstance(enc, dict) and enc.get("enabled") is False):
+                self.add("warning", "war.encircle", f"{label}.encircle",
+                         f"encirclement is off while the plan attacks: {why}; leave it on (boldness cautious if the "
+                         f"front is thin)")
+                continue
+            if w.get("direct_moves") is True:
+                self.add("warning", "war.encircle", f"{label}.direct_moves",
+                         f"direct moves switch encirclement off (pincers need battle plans and the planning wait): {why}")
+            if not isinstance(enc, dict):
+                continue
+            strike = [e for e in self.list_of("army_layout") if isinstance(e, dict) and e.get("role") != "guard"]
+            hints = {e.get("name_hint") for e in self.list_of("army_layout") if isinstance(e, dict)}
+            keep = enc.get("keep_free")
+            if isinstance(keep, int) and strike and len(strike) - keep < 2:
+                self.add("error", "war.encircle", f"{label}.encircle.keep_free",
+                         f"keep_free {keep} leaves {max(0, len(strike) - keep)} of {len(strike)} strike roles to "
+                         f"commit: a pocket needs two arms, so no operation can start")
+            known = hints | set((w.get("guards") or {}).keys()) | set(w.get("reserve") or [])
+            for a in enc.get("armies") or []:
+                if strike and isinstance(a, str) and a not in known and not re.match(r"^\D+ \d+$", a):
+                    self.add("error", "war.encircle", f"{label}.encircle.armies",
+                             f"{a!r} is no army_layout name_hint and no army name: it commits nothing")
+            reach = enc.get("reach")
+            if isinstance(reach, (int, float)) and not isinstance(reach, bool) and reach < 60:
+                self.add("error", "war.encircle", f"{label}.encircle.reach",
+                         f"reach {reach:g} map units is less than one state's width: no army stands near an arm")
+            if enc.get("boldness") == "bold":
+                attrition = self.define("SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION", 0.35) * 100
+                floor = w.get("supply_floor", 50)
+                abort = enc.get("abort_supply")
+                if isinstance(floor, (int, float)) and self.share(floor) * 100 < attrition or (
+                        isinstance(abort, (int, float)) and not isinstance(abort, bool)
+                        and (abort if abort > 1 else abort * 100) < attrition):
+                    self.add("warning", "war.encircle", f"{label}.encircle.boldness",
+                             f"bold pincers commit down to the supply floor and keep going below {attrition:.0f}% "
+                             f"supply, where attrition starts: the arms may starve before the neck closes")
+        if self.war.get("encircle") is None:
+            self.add("info", "war.encircle", "war",
+                     f"the executor looks for pockets at the measured boldness (gap 2, armies within 160 map units "
+                     f"at supply_resume): {why}; name war.encircle.boldness when the front calls for another")
+
     # ------------------------------------------------------------------ politics (tactics)
     def pp_cost(self, p):
         if isinstance(p.get("cost"), (int, float)) and not isinstance(p.get("cost"), bool):
@@ -4332,7 +4386,8 @@ class Lint:
                  self.production_mature_switch, self.production_cull, self.production_day0,
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
-                 self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.politics_pp_budget,
+                 self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
+                 self.politics_pp_budget,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
                  self.intelligence_operations]
