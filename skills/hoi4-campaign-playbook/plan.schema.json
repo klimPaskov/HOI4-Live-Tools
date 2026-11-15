@@ -3195,7 +3195,8 @@
           },
           "default": {},
           "description": "alert name -> why the plan leaves it open (strategist lint alerts.owner: every game alert has a plan key that owns it or is ignored here with a reason)",
-          "x-rule": "alerts"
+          "x-rule": "alerts",
+          "x-owner": "lint"
         }
       },
       "additionalProperties": false,

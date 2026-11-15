@@ -223,6 +223,9 @@ class HandPlans(unittest.TestCase):
         # the coverage-build rules report as warnings on a hand plan (_meta.source "hand")
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 7, 9, 14, 15, 17, 21, 22, 23, 24, 25, 27)]
         self.assertEqual(warnings, sorted(gaps + [
+            # six game alerts with no plan key and no alerts_ignore reason (training, decisions, dockyards,
+            # admiral, officer corps, garrison)
+            *[("alerts.owner", "manage.alerts_ignore")] * 6,
             # one army per guard task: three tiny guard armies and four formations in one theatre
             ("army.formations", "army_layout"),
             ("army.formations", "army_layout[4] 'South guard'"),
@@ -309,6 +312,7 @@ class HandPlans(unittest.TestCase):
         _, warnings = self.findings(load(ETH), "warning")
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
         self.assertEqual(warnings, sorted(gaps + [
+            *[("alerts.owner", "manage.alerts_ignore")] * 4,  # dockyards, admiral, officer corps, garrison
             ("army.width_terrain", "army_layout"),  # Mehal Sefari and Mountain Division are 8 wide (0.92)
             ("manage.thresholds", "manage"),
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
