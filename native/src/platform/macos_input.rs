@@ -522,6 +522,15 @@ impl<'p> MacKeys<'p> {
                 "Accessibility permission is required for ordinary input",
             ));
         }
+        if let Some(owner) = occlusion::system_prompt()? {
+            return Err(Error::new(
+                "system_dialog_open",
+                format!(
+                    "A system dialog ({owner}) is on screen: it takes the keyboard and clicks, and \
+                     only the machine's owner may answer it; no input is sent until it is gone"
+                ),
+            ));
+        }
         let current = macos::observe(self.process.get())?;
         current.require_profile()?;
         if !current.same_binding(&self.geometry) {

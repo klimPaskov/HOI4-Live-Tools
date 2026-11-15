@@ -112,3 +112,21 @@ fn unavailable_final_cursor_cannot_authorize_admission() {
     );
     assert_eq!(result.unwrap_err().code, "input_unavailable");
 }
+
+#[test]
+fn a_visible_system_prompt_is_named_and_hidden_ones_or_apps_are_not() {
+    let row = |o: &str, on: bool, a: f64| (Some(o.to_string()), on, a);
+    assert_eq!(
+        prompt_among(&[
+            row("Dock", true, 1.0),
+            row("UserNotificationCenter", true, 1.0)
+        ]),
+        Some("UserNotificationCenter".into())
+    );
+    assert_eq!(prompt_among(&[row("SecurityAgent", false, 1.0)]), None);
+    assert_eq!(prompt_among(&[row("CoreServicesUIAgent", true, 0.0)]), None);
+    assert_eq!(
+        prompt_among(&[row("hoi4", true, 1.0), (None, true, 1.0)]),
+        None
+    );
+}

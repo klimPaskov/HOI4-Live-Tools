@@ -31,8 +31,13 @@
 //!                 settings?}); once `until` holds it is deleted (the toolbar's delete order,
 //!                 btn_order_delete, key DEL: hoi4_army_orders_delete {army, order}). The war step
 //!                 still drives an army that is not in `war.reserve` (or a guard): the lint asks
-//!                 for that (orders.defense_reserve). One action per tick, judged once a game
-//!                 day. Done-memory `dl:<id>:on`, `dl:<id>:off`
+//!                 for that (orders.defense_reserve). A standing fallback line is manned when
+//!                 the front ahead breaks (the enemy holds land in a state the army stands in, or
+//!                 its supply is under war.supply_hold or its organisation under 25%): the army's
+//!                 plan is executed once (hoi4_army_plan execute; `fall_back: false` keeps it on
+//!                 its front). Built: the fallback and area tools; not yet: the area settings
+//!                 (UNBUILT_ARGS) and the delete tool. One action per tick, judged once a game
+//!                 day. Done-memory `dl:<id>:on`, `dl:<id>:back`, `dl:<id>:off`
 //!   garrison_template {"template"} (gap register occupation.garrison_template): the template the
 //!                 Occupied Territories view puts on garrison duty (its garrison_template_button,
 //!                 MAIN_GARRISON_TEMPLATE; the per-state garrison entries of the same view follow
@@ -330,6 +335,43 @@ fn resolve(state: &State, hint: &str) -> String {
         .unwrap_or_else(|| hint.to_string())
 }
 
+/// Why the front ahead of `army`'s fallback line is breaking, or None while it holds: the enemy
+/// controls land in a state the army stands in (hoi4_wars occupied_own_states), or the army's
+/// supply has fallen under war.supply_hold (35% by default) or its organisation under 25%
+/// (hoi4_supply). Reads only.
+fn front_breaking(tools: &dyn Tools, plan: &Value, army: &str) -> Option<String> {
+    let roster = tools.call("hoi4_armies", &json!({"threat": false})).ok()?;
+    let standing: Vec<i64> = list(&roster, "armies")
+        .iter()
+        .find(|a| text(&a["army"]) == army)
+        .and_then(|a| a["states"].as_object())
+        .map(|m| m.keys().filter_map(|k| k.parse().ok()).collect())
+        .unwrap_or_default();
+    if let Ok(wars) = tools.call("hoi4_wars", &json!({})) {
+        for row in list(&wars, "occupied_own_states") {
+            let id = row["state_id"].as_i64().or(row.as_i64());
+            if let Some(id) = id.filter(|id| standing.contains(id)) {
+                return Some(format!(
+                    "the enemy holds land in state {id}, where it stands"
+                ));
+            }
+        }
+    }
+    let hold = plan["war"]["supply_hold"].as_f64().unwrap_or(35.0);
+    let supply = tools.call("hoi4_supply", &json!({"summary": true})).ok()?;
+    let row = list(&supply, "armies")
+        .iter()
+        .find(|a| text(&a["army"]) == army)
+        .cloned()?;
+    if let Some(p) = row["supply_percent_mean"].as_f64().filter(|p| *p < hold) {
+        return Some(format!("supply {p:.0}% under {hold:.0}%"));
+    }
+    if let Some(o) = row["organisation_mean"].as_f64().filter(|o| *o < 25.0) {
+        return Some(format!("organisation {o:.0}% under 25%"));
+    }
+    None
+}
+
 /// The order kind of a defense_lines entry and its tool, None for an unknown kind.
 fn order_tool(kind: &str) -> Option<&'static str> {
     match kind {
@@ -383,6 +425,37 @@ fn defense_lines_step(
         let on = format!("dl:{id}:on");
         if state.done.contains_key(&on) {
             if !until_holds(state, tools, &entry["until"], now) {
+                // A fallback line is manned when the front ahead of it breaks or goes unfed: the
+                // army's plan is executed once and it falls back to the line.
+                let back = format!("dl:{id}:back");
+                if kind == "fallback"
+                    && entry["fall_back"] != json!(false)
+                    && !state.done.contains_key(&back)
+                {
+                    if let Some(why) = front_breaking(tools, plan, &army) {
+                        let (ok, res) = state.act(
+                            tools,
+                            lease,
+                            "hoi4_army_plan",
+                            json!({"army": army, "execute": true}),
+                            "dl",
+                        )?;
+                        if ok {
+                            state.done.insert(back, now);
+                        } else {
+                            state.skip(now, "dl", &id, DAY);
+                        }
+                        note(
+                            state,
+                            &key,
+                            format!("{army} falls back to the line ({why}): {ok} {res}"),
+                        );
+                        acted = Some(format!(
+                            "defense line {id}: {army} falls back ({why}): {ok} {res}"
+                        ));
+                        break;
+                    }
+                }
                 note(state, &key, format!("{kind} for {army} stands"));
                 continue;
             }
@@ -447,7 +520,16 @@ fn defense_lines_step(
                 .into_iter()
                 .filter(|s| AREA_SETTINGS.contains(&s.as_str()))
                 .collect();
-            if !settings.is_empty() {
+            if !settings.is_empty() && !super::arg_built(AREA_DEFENSE_TOOL, "settings") {
+                note(
+                    state,
+                    &format!("{key}:settings"),
+                    format!(
+                        "settings {settings:?} held back: the order's toggles are not built yet \
+                         (the game's defaults apply)"
+                    ),
+                );
+            } else if !settings.is_empty() {
                 args["settings"] = json!(settings);
             }
         }
@@ -533,41 +615,84 @@ mod tests {
     #[test]
     fn the_order_tools_are_not_built_yet_and_the_settings_match_the_window() {
         // The day the live build lists a tool in RECEIPT_TOOLS this test changes with it.
-        for tool in [FALLBACK_TOOL, AREA_DEFENSE_TOOL, DELETE_ORDER_TOOL] {
-            assert!(!built(tool), "{tool} is built: update the gap register row");
-        }
+        assert!(built(FALLBACK_TOOL) && built(AREA_DEFENSE_TOOL));
+        assert!(
+            !built(DELETE_ORDER_TOOL),
+            "delete is built: update the gap register row"
+        );
+        assert!(!super::super::arg_built(AREA_DEFENSE_TOOL, "settings"));
         assert!(built("hoi4_army_front"));
         assert_eq!(AREA_SETTINGS.len(), 8);
     }
 
     #[test]
-    fn an_unbuilt_order_tool_sends_nothing_and_the_digest_says_what_waits() {
+    fn the_defensive_orders_are_sent_once_and_area_settings_wait_for_their_toggles() {
         let f = game();
         let plan = json!({"defense_lines": [
-            {"id": "vistula", "army": "Armia Poznan", "kind": "fallback", "states": [10, 11],
-             "when": "at_war_with:GER"},
+            {"id": "vistula", "army": "Armia Poznan", "kind": "fallback", "states": [10, 11]},
             {"id": "coast", "army": "Armia Poznan", "kind": "area_defense", "states": [85],
              "settings": ["ports", "victory_points", "moats"]}]});
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
-        assert!(actions(&f).is_empty());
-        assert!(!state.done.contains_key("dl:vistula:on"));
-        let line = &state.seams.notes["defense_lines:vistula"];
+        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        assert!(out.contains("fallback for Armia Poznan: true"), "{out}");
+        assert!(state.done.contains_key("dl:vistula:on"));
+        let out = step(&mut state, &f, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("area_defense for Armia Poznan: true"), "{out}");
+        let sent = actions(&f);
+        assert_eq!(sent[0].0, "hoi4_army_fallback");
+        assert_eq!(sent[0].1["states"], json!([10, 11]));
+        assert_eq!(sent[1].0, "hoi4_army_area_defense");
         assert!(
-            line.contains("would order fallback for Armia Poznan")
-                && line.contains("hoi4_army_fallback")
-                && line.contains("not built yet"),
-            "{line}"
+            sent[1].1.get("settings").is_none(),
+            "settings are held back"
         );
-        let line = &state.seams.notes["defense_lines:coast"];
-        assert!(
-            line.contains("hoi4_army_area_defense")
-                && line.contains("\"settings\":[\"ports\",\"victory_points\"]"),
-            "{line}"
-        );
+        assert!(state.seams.notes["defense_lines:coast:settings"].contains("held back"));
         assert!(digest(&state).is_some());
-        // judged again only after a game day
-        assert!(state.skipped(START + 1, "sdl", "x"));
+    }
+
+    #[test]
+    fn an_army_falls_back_to_its_line_once_when_its_front_goes_unfed() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_armies",
+            json!({"armies": [{"army": "Armia Poznan", "states": {"10": 4}}]}),
+        );
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"armies": [{"army": "Armia Poznan", "supply_percent_mean": 20.0,
+                "organisation_mean": 60.0}]}),
+        );
+        let plan = json!({"defense_lines": [
+            {"id": "vistula", "army": "Armia Poznan", "kind": "fallback", "states": [11]}]});
+        let mut state = State::default();
+        step(&mut state, &f, &plan, "l", START).unwrap();
+        let out = step(&mut state, &f, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("falls back (supply 20% under 35%): true"),
+            "{out}"
+        );
+        let sent = actions(&f);
+        assert_eq!(sent[1].0, "hoi4_army_plan");
+        assert_eq!(sent[1].1["execute"], true);
+        // once only
+        step(&mut state, &f, &plan, "l", START + 2 * DAY).unwrap();
+        assert_eq!(actions(&f).len(), 2);
+        // fall_back:false keeps the army on its front
+        let mut state = State::default();
+        let f2 = {
+            let mut g = game();
+            g.replies = f.replies.clone();
+            g
+        };
+        let plan = json!({"defense_lines": [
+            {"id": "v", "army": "Armia Poznan", "kind": "fallback", "states": [11], "fall_back": false}]});
+        step(&mut state, &f2, &plan, "l", START).unwrap();
+        step(&mut state, &f2, &plan, "l", START + DAY).unwrap();
+        assert_eq!(actions(&f2).len(), 1);
     }
 
     #[test]

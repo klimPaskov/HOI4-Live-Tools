@@ -22,7 +22,7 @@
    "source": "--list-tools"
   },
   "hoi4_agency_upgrade": {
-   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.",
+   "description": "Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals before input: branch_unknown, upgrade_unknown (loaded database); agency_not_created, upgrade_in_progress, upgrade_maxed, upgrade_locked (missing required upgrade) from memory; upgrade_needs_factories when the upgrade's civilian factory use (scripts) is above the factories free for projects (the game would only queue it); upgrade_unavailable when the game disables the entry. Verified by memory (the running upgrade equals the request). Live-verified on 1.19.4.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -347,6 +347,57 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_army_area_defense": {
+   "description": "Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "settings": {
+      "items": {
+       "enum": [
+        "victory_points",
+        "ports",
+        "coastlines",
+        "airbases",
+        "borders",
+        "forts",
+        "rail",
+        "facility"
+       ],
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "states": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "army",
+     "states",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_army_assign": {
    "description": "Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there. Same refusals as hoi4_army_assign_plan, all before any input. Folding into a standing army uses the game's own control (box-select the divisions, RIGHT-click the army's card); it refuses with selection_mismatch, before the click, when the box also took divisions of another army. Without an army it picks the army standing in the same provinces as the unassigned divisions (hoi4_armies unassigned_by_state shared_with): a stack shared with an army can only go to that army; a refused selection names those armies. Creating a new army uses the verified new-army path.",
    "inputSchema": {
@@ -538,6 +589,42 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_army_fallback": {
+   "description": "Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "states": {
+      "description": "own states the line runs through, side by side",
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "type": "array"
+     }
+    },
+    "required": [
+     "army",
+     "states",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_army_front": {
    "description": "Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.",
    "inputSchema": {
@@ -657,12 +744,21 @@
    "source": "--list-tools"
   },
   "hoi4_army_move": {
-   "description": "Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province).",
+   "description": "Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool. With province_id the order goes to that one province (the whole army gathers on it: a strike on one objective); it is sent again while any division neither marches on it nor stands in it. halt:true (no state_id) cancels every march and attack order of the army with the unit panel's halt control (H): the divisions stay where they stand and recover; verified by the divisions no longer marching (hoi4_supply shows each division's heading_province). divisions (with province_id) orders only those divisions of the army, one at a time (each selected from the army's division list, then one right click); the rest keep their orders: a strike sized to what the province feeds, a garrison left behind.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "army": {
       "type": "string"
+     },
+     "divisions": {
+      "description": "Division ids as hoi4_armies or hoi4_supply list them; needs province_id",
+      "items": {
+       "type": "string"
+      },
+      "maxItems": 48,
+      "minItems": 1,
+      "type": "array"
      },
      "halt": {
       "type": "boolean"

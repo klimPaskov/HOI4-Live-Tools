@@ -340,6 +340,9 @@ pub const UNBUILT_ARGS: &[(&str, &str)] = &[
     ("hoi4_doctrine_adopt", "replace"),
     // the peace conference's force-government demand (gap register peace.force_government)
     ("hoi4_peace_take", "force_government"),
+    // the area defence order's settings toggles (gap register orders.defensive_lines): the game's
+    // defaults apply
+    ("hoi4_army_area_defense", "settings"),
 ];
 
 /// Whether the executor may send `arg` to `tool` (not held back in UNBUILT_ARGS).
@@ -355,6 +358,8 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// orders, shakedown sk2). `act` refuses any tool not listed here; a test checks every tool
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
 pub const RECEIPT_TOOLS: &[&str] = &[
+    "hoi4_army_fallback",
+    "hoi4_army_area_defense",
     "hoi4_agency_create",
     "hoi4_agency_upgrade",
     "hoi4_air_mission",
@@ -1019,6 +1024,9 @@ impl State {
             .unwrap_or_else(|| began.elapsed().as_secs());
         self.last_ok = Some(matches!(&result, Ok((true, _))));
         match &result {
+            // A system dialog held the input back before anything was sent: not the order's
+            // failure (the ledger would give it up while the owner has not answered yet).
+            Ok((false, why)) if why.starts_with("system_dialog_open") => {}
             Ok((false, _)) => {
                 self.failures
                     .entry(signature.clone())
@@ -9476,6 +9484,37 @@ mod tests {
         // then one more try
         send(&mut state, START + 2000 * DAY, 40_000 + 1800);
         assert_eq!(*tools.0.borrow(), 6);
+    }
+
+    #[test]
+    fn a_system_dialog_on_screen_is_not_the_orders_failure() {
+        struct Dialog;
+        impl Tools for Dialog {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                Err(Error::new(
+                    "system_dialog_open",
+                    "A system dialog is on screen",
+                ))
+            }
+        }
+        let mut state = State {
+            clock: START,
+            wall: Some(0),
+            ..State::default()
+        };
+        for _ in 0..5 {
+            let (ok, why) = state
+                .act(
+                    &Dialog,
+                    "l",
+                    "hoi4_army_create",
+                    json!({"state_id": 559}),
+                    "t",
+                )
+                .unwrap();
+            assert!(!ok && why.starts_with("system_dialog_open"), "{why}");
+        }
+        assert!(state.failures.is_empty() && state.failed_run.is_empty());
     }
 
     #[test]
