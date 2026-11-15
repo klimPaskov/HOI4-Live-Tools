@@ -15,6 +15,8 @@ import threading
 import unittest
 from unittest import mock
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 import helpers
 
 from hoi4_live.play import game, native, proxy, report, runs, start, supervisor
@@ -618,6 +620,59 @@ class SupervisorTests(Folder):
         self.clock.now += supervisor.SAMPLE_EVERY + 1
         s.tick()
         self.assertEqual(s.end_reason, "deadline")
+
+    def day_one(self):
+        with open(os.path.join(ROOT, "tests", "fixtures", "day_one_ita.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_day_one_matches_the_plans_names_to_the_live_game_before_the_executor_starts(self):
+        # The recorded day one of an Italy 1936 run: the plan selects wings as "<variant> at <state>"
+        fx = self.day_one()
+        s = self.supervisor()
+        plan = runs.read_json(os.path.join(self.run_dir, "plan.json"))
+        plan.update(fx["plan"])
+        runs.write_json(os.path.join(self.run_dir, "plan.json"), plan)
+        for tool, body in fx["reads"].items():
+            self.fake.handlers[tool] = lambda a, b=body: (False, b)
+        self.assertTrue(s.start())
+        names = self.fake.names()
+        self.assertLess(names.index("hoi4_air"), names.index("hoi4_autopilot"))
+        rec = runs.read_json(os.path.join(self.run_dir, "reconcile.json"))
+        self.assertTrue(rec["ok"])
+        self.assertEqual([(p["from"], p["to"]) for p in rec["patched"]],
+                         [("Ca.111 at 550", ["14\u00b0 Stormo"]), ("Ca.111 at 550", ["14\u00b0 Stormo"]),
+                          ("SM.81 at 550", ["13\u00b0 Stormo"]), ("CR.32 at 550", ["12\u00b0 Stormo"]),
+                          ("CR.32 at 550", ["12\u00b0 Stormo"])])
+        self.assertEqual(rec["research"]["not_yet_available"],
+                         ["concentrated_industry", "mechanical_computing", "radio", "excavation1"])
+        patched = runs.read_json(os.path.join(self.run_dir, "plan.json"))
+        self.assertEqual(patched["air_plan"][2]["wing"], "13\u00b0 Stormo")
+        self.assertTrue(os.path.exists(os.path.join(self.run_dir, "plan.pre-reconcile.json")))
+        self.assertTrue(any("matched to the live game" in n for n in s.notes))
+        self.assertTrue(any("not researchable yet" in n for n in s.notes))
+
+    def test_a_name_the_live_game_lacks_reaches_the_player_and_a_failed_read_leaves_the_plan(self):
+        fx = self.day_one()
+        s = self.supervisor()
+        plan = runs.read_json(os.path.join(self.run_dir, "plan.json"))
+        plan["army_layout"] = [{"role": "north", "general": "Pietro Badoglio", "templates": ["Divisione Fantasma"]}]
+        runs.write_json(os.path.join(self.run_dir, "plan.json"), plan)
+        for tool, body in fx["reads"].items():
+            self.fake.handlers[tool] = lambda a, b=body: (False, b)
+        self.assertTrue(s.start())
+        rec = runs.read_json(os.path.join(self.run_dir, "reconcile.json"))
+        self.assertEqual([u["name"] for u in rec["unresolved"]], ["Divisione Fantasma"])
+        self.assertTrue(any("does not have" in n and "Divisione Fantasma" in n for n in s.notes))
+        # a second start in the same run does not reconcile again
+        self.assertIsNone(s.reconcile_day_one())
+        # a read that fails: the plan runs as written, the executor still starts
+        s2 = self.supervisor()
+        self.fake.handlers["hoi4_commanders"] = lambda a: (True, {"error": {"code": "gui_unavailable"}})
+        before = runs.read_json(os.path.join(self.run_dir, "plan.json"))
+        self.assertTrue(s2.start())
+        self.assertEqual(runs.read_json(os.path.join(self.run_dir, "plan.json")), before)
+        self.assertTrue(any("runs as written" in n for n in s2.notes))
+        self.assertIn("hoi4_autopilot", self.fake.names())
 
     def test_the_lease_is_renewed_and_taken_again_when_lost(self):
         s = self.ready()

@@ -64,7 +64,7 @@ LITERAL_SOURCES = EXECUTOR_SOURCES + [os.path.join(ROOT, "native", "src", name)
 TOOL_SOURCES = [os.path.join(ROOT, "scripts", *parts) for parts in (
     ("hoi4facts", "lint_plan.py"), ("hoi4facts", "lint_fair.py"), ("hoi4facts", "lint_horizons.py"), ("hoi4facts", "validate.py"),
     ("hoi4facts", "plan_gates.py"), ("hoi4facts", "check_calls.py"), ("strategist", "eval_plan.py"),
-    ("strategist", "reconcile.py"), ("validate_plan.py",))]
+    ("validate_plan.py",))] + [os.path.join(ROOT, "hoi4_live", "play", "reconcile.py")]
 # The rolling planner: what reads a planner key.
 PLANNER_SOURCES = [os.path.join(ROOT, "hoi4_live", "planner", name) for name in (
     "targets.py", "triggers.py", "horizon.py", "patch.py", "packet.py", "menus.py")]
