@@ -11,7 +11,9 @@
 //! click on `btn_priority` when it is not shown, the wanted button is clicked and the three
 //! frames are read back: exactly the wanted button must show the frame the others do not. No
 //! memory field of the mode is known, so the frames are the only readback, and they can be read
-//! only while the army is selected. Built from the game's files, not yet seen live: every
+//! only while the army is selected. Confirmed live on 15 Nov 2026: balanced to rush read
+//! frames [2,1,2] then [2,2,1] (the chosen button shows frame 1 in memory, the others 2), the
+//! bar's icon went from 2 to 3 and the Execution window showed the third button lit. Every
 //! failure names what was found (bar, window, rectangles, frames before and after, the words
 //! of the widgets that changed with the click), so one live call says what to correct.
 use super::super::{
