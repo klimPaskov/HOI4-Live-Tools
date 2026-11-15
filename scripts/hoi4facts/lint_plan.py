@@ -63,7 +63,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            the start efficiency to the cap over 180 days) that leaves the family short at the
                            goal deadline or horizon, or covers the start shortfall and the losses (5% a month
                            of the theatre divisions' equipment assumed) only more than 120 days into the war
-                           (warning from 90 days); facts.equipment_balance has the numbers
+                           (warning from 90 days); facts.equipment_balance has the numbers. A gap larger than
+                           every military factory could close at full efficiency from day 0 is a warning (the
+                           army is larger than the industry can equip: a force-sizing decision, not a line)
   army.guards              own state bordering an enemy with no guard (layout guard role,
                            war.guard_states or war.guards); warning: a hold_targets post outside the guard
                            states of the layout guard it moves (that border loses the guard while the hold runs)
@@ -3427,6 +3429,8 @@ class Lint:
                          f"no production line builds {fam}, yet " + "; ".join(why) + ": every loss is permanent "
                          f"and the divisions fight under-equipped; give it a line from day 0 sized to the losses "
                          f"(or change the templates that use it)")
+            elif balance < 0 and self.beyond_industry(fam, cache, start, end, row):
+                pass
             elif balance < 0:
                 self.add("error", "production.balance", "production",
                          f"{fam}: the planned lines make about {row['made']} by "
@@ -3442,6 +3446,35 @@ class Lint:
                          f"until then; add factories to its line from day 0")
         self.facts["equipment_balance"] = {"loss_share_per_month": EQUIPMENT_LOSS_SHARE,
                                            "efficiency_ramp_days": EFFICIENCY_RAMP_DAYS, "families": rows}
+
+    def beyond_industry(self, fam, cache, start, end, row):
+        """True (and a warning) when every military factory the country has and plans, on the family's line at
+        the maximum efficiency from day 0, still could not make the start shortfall and the losses: no line
+        size closes that gap, so it is not a production error but a force the economy cannot equip (fewer or
+        smaller divisions, purchases, imports, captured equipment)."""
+        mils = self.facts.get("military_factories") or {}
+        total = (mils.get("start") or 0) + (mils.get("planned") or 0)
+        g = self.game
+        rows = derive.equipment_rows(g)
+        costs = [(rows.get(eq) or {}).get("cost") for out in cache.values() for eq in out
+                 if derive.equipment_family(g, eq) == fam]
+        costs = [c for c in costs if c]
+        if not total or not costs:
+            return False
+        speed = self.define("BASE_FACTORY_SPEED_MIL", 3.5)
+        cap = self.define("BASE_FACTORY_MAX_EFFICIENCY_FACTOR", 50)
+        ceiling = total * speed * cap / 100.0 / min(costs) * (end - start + 1)
+        need = row["start_shortfall"] + row["lost"]
+        if ceiling >= need:
+            return False
+        row["industry_ceiling"] = round(ceiling)
+        self.add("warning", "production.balance", "production",
+                 f"{fam}: {row['start_shortfall']} short at the start and about {row['lost']} lost at war, more than "
+                 f"all {total} military factories could make on it by {derive.fmt(derive.date_of(end))} "
+                 f"(about {round(ceiling)} at full efficiency from day 0); the plan's lines make about {row['made']}. "
+                 f"No line closes this: size the army to what the industry equips (disband or merge divisions, "
+                 f"lighter templates) and use purchases, imports and captured equipment; say how in plan.md")
+        return True
 
     def finishing_lines(self, d):
         """{equipment: finish day} of the start lines that on day d only complete a unit in progress: the
