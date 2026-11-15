@@ -17,6 +17,7 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(super) mod mode;
 mod select;
 
 #[derive(Clone, Copy)]

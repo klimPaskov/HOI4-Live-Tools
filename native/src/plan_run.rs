@@ -162,6 +162,12 @@
 //!                          "rest_max_days":20 resumes anyway above the hold; "pocket_share":0.5;
 //!                          the bound pause after a captured hub (plan_war.rs has every key);
 //!                          "motorization":2 sets every driven army's supply trucks once;
+//!                          "execution":"rush" sets how every driven army's battle plans are carried
+//!                          out ("careful" | "balanced" | "rush", hoi4_army_plan mode) once per army
+//!                          when it has its lines; absent: the game's default stands and nothing is
+//!                          sent. An executing plan that takes no ground for stall_days is first set
+//!                          to rush (it keeps executing; "stall_rush":false turns this off) and only
+//!                          the next stall stops it to plan again;
 //!                          supply relief: an army below supply_floor for "relief_after_days":2 gets
 //!                          a railway to the own node nearest where it starves, then one more
 //!                          motorization level; after "relief_report_days":10 the alarm
@@ -4247,6 +4253,7 @@ fn war_step(
         .map(|a| text(&a["army"]).to_string())
         .collect();
     state.war_guard.retain(|n, _| present.contains(n));
+    plan_war::forget_absent(state, &present);
     for (n, p) in &state.war_guard {
         guards.entry(n.clone()).or_insert(*p);
     }
@@ -4460,6 +4467,17 @@ fn war_step(
                 return Ok(Some(format!(
                     "war motorization {name} level {level}: {ok} {why}"
                 )));
+            }
+        }
+        // The plan's execution mode (`war.execution`), once per army: like the trucks after the
+        // lines, and before the army's first execute order (which comes further down this pass).
+        if !lines_only
+            && (state.war_stage.get(&name).copied().unwrap_or(0) >= 2
+                || army["battle_plan_orders"].as_u64().unwrap_or(0) >= 2
+                || army["plan_executing"] == json!(true))
+        {
+            if let Some(line) = plan_war::execution_step(state, tools, lease, plan, &name, now)? {
+                return Ok(Some(line));
             }
         }
         // An encirclement role: a holding arm draws its front against the outside of the ring
@@ -5032,6 +5050,26 @@ fn war_step(
                     state.war_since.insert(name.clone(), (target, here, now));
                     state.war_cool.insert(name.clone(), now + cooldown);
                     continue;
+                }
+            }
+            // The first answer to an executing plan that stands still is the rush mode: the
+            // plan keeps executing and the stall clock starts again (plan_war.rs stall_rush).
+            if executing && !direct && !liberate {
+                if let Some((ok, line)) = plan_war::stall_rush(
+                    state,
+                    tools,
+                    lease,
+                    plan,
+                    &name,
+                    target,
+                    (now - since) / DAY,
+                    now,
+                )? {
+                    if ok {
+                        state.war_since.insert(name.clone(), (target, here, now));
+                    }
+                    state.war_cool.insert(name.clone(), now + cooldown);
+                    return Ok(Some(line));
                 }
             }
             // A stalled offensive is planned again before anything else: the plan stops, the
@@ -6487,6 +6525,7 @@ impl State {
             self.layout.iter().filter(|(_, a)| !a.is_empty()).collect();
         // The war step's stage and target per army survive a restart (shakedown 10 Nov 2026:
         // after one, S_strike's front was drawn again, refused, and the offensive never came).
+        // So do the execution modes set (war.rules): they are sent once per army.
         let stage: HashMap<&String, &u8> = self
             .war_stage
             .iter()
@@ -6495,7 +6534,8 @@ impl State {
         json!({"done": self.done, "plan_built": self.plan_built,
             "plan_blocked": self.plan_blocked, "skips": skips,
             "failures": failures, "layout": layout, "strategy": self.strategy.memory(),
-            "war": {"stage": stage, "assign": self.war_assign}})
+            "war": {"stage": stage, "assign": self.war_assign,
+                "rules": plan_war::memory(&self.war_rules)}})
     }
     /// Take back a saved memory. Work dated after `now` is dropped (an earlier save was
     /// loaded: in that game it has not happened); after such a reload the timers and the
@@ -6551,6 +6591,7 @@ impl State {
                     }
                 }
             }
+            plan_war::restore(&mut self.war_rules, &saved["war"]["rules"]);
             if let Some(failures) = saved["failures"].as_object() {
                 for (signature, times) in failures {
                     let times: Vec<GameHour> = times
@@ -10519,7 +10560,10 @@ mod tests {
                     return Err(Error::new("input_readback_failed", "refused by the fake"));
                 }
                 match name {
-                    "hoi4_army_plan" => self.executing.set(args["execute"] == json!(true)),
+                    // a mode order alone leaves the plan as it is
+                    "hoi4_army_plan" if args.get("execute").is_some() => {
+                        self.executing.set(args["execute"] == json!(true))
+                    }
                     "hoi4_army_front" => self.orders.set(self.orders.get().max(1)),
                     "hoi4_army_offensive" => self.orders.set(2),
                     _ => {}
@@ -11085,7 +11129,7 @@ mod tests {
 
     #[test]
     fn ground_taken_in_a_state_beside_the_target_is_progress_not_a_stall() {
-        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8}});
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "stall_rush": false}});
         let attacking = |f: &Field| {
             f.executing.set(true);
             f.orders.set(2);
@@ -11200,7 +11244,7 @@ mod tests {
     fn a_stalled_plan_becomes_a_direct_move_into_the_target() {
         let w = War2::new();
         let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8, "planning_wait": false,
-            "replans": 0}});
+            "replans": 0, "stall_rush": false}});
         let mut state = State::default();
         let mut now = START;
         for _ in 0..3 {

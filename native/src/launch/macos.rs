@@ -750,7 +750,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_armies","description":"Own armies (name, division ids, threat: the share of the land around each army that others hold, encirclement_risk from 70%) and unassigned division ids. Per army `planning` {mean, min, max} is its divisions' planning bonus (0..1, 0.3 = 30%); it grows while the army holds a front or plan and stops at a cap the game computes from generals, technology and the HQ distance (not stored: a value that has stopped rising has reached it). threat:false skips the threat reads. Pure read; no lease needed. Every army tool takes an army by its name or by its plan role (army_layout name_hint such as \"North_strike\", the army the executor bound to it; the reply names it in army_resolved).","inputSchema":{"type":"object","properties":{"threat":{"type":"boolean"}},"additionalProperties":false}}),
         json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_move","description":"Order an own army to move to the centre of a state with one right click (army card, Find view, right click); a plain move attacks enemy units there. Verified by the army's divisions heading for the state or stopping short; use for mopping up, battle plans remain the main tool.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"One province of the state to move to (an enemy-held province inside an own state, a port); hoi4_states with the state ID lists each province and its controller"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked even if the front becomes longer: for a weak or broken enemy line, or an executing plan that stands still). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. The mode step is built from interface/battleplantools.gui and has not run live yet: a failure names the bar, the window, the rectangles and the frames it found.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean","description":"true executes the plan, false stops it; may be left out only when mode is given"},"mode":{"type":"string","enum":["careful","balanced","rush"],"description":"execution mode of the army's battle plans; alone it only sets the mode"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
         json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; surrender progress (wars[].enemy_surrender_progress, own_surrender_progress) and the naval intel against each enemy (wars[].own_naval_intel) are not yet built and always null with a reason; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended. capital_land: own-controlled states the capital reaches over own-controlled land (history capital, else the largest own area); a division elsewhere is overseas (disbanding it loses 75% of its equipment).","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
@@ -5464,26 +5464,89 @@ impl MacClock {
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_army_plan" {
-            allowed(args, &["army", "execute", "request_id", "lease_token"])?;
+            allowed(
+                args,
+                &["army", "execute", "mode", "request_id", "lease_token"],
+            )?;
             let army = string(args, "army")?;
             if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
                 return Err(Error::new("invalid_arguments", "Invalid army name"));
             }
-            let run = args
-                .get("execute")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| Error::new("invalid_arguments", "execute must be a boolean"))?;
+            // The execution mode of the army's battle plans (careful, balanced, rush).
+            let mode = match args.get("mode") {
+                None => None,
+                Some(v) => Some(v.as_str().and_then(armies::mode::index).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "mode must be \"careful\", \"balanced\" or \"rush\"",
+                    )
+                })?),
+            };
+            // With a mode, execute is optional: the mode alone only sets the mode.
+            let run = match args.get("execute") {
+                None if mode.is_some() => None,
+                v => Some(v.and_then(Value::as_bool).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "execute must be a boolean (it may be left out only when mode is given)",
+                    )
+                })?),
+            };
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
+            let keys = &self.keys;
+            let mut mode_receipt = None;
+            if let Some(wanted) = mode {
+                // The mode is its own journalled action, sent before the execute or stop order
+                // (request id <id>:mode when one follows). Only this dispatch's own readback
+                // says what happened: the mode shows on the bar's buttons while the army is
+                // selected, and no memory field of it is known.
+                let mode_id = if run.is_some() {
+                    format!("{id}:mode")
+                } else {
+                    id.to_string()
+                };
+                if !actions.receipt_exists(&mode_id) {
+                    self.keys.preflight()?;
+                }
+                let action =
+                    json!({"kind":"army_plan","army":army,"mode":armies::mode::MODES[wanted]});
+                let attempt: std::cell::RefCell<Option<armies::mode::Attempt>> =
+                    std::cell::RefCell::new(None);
+                let mut settle = || {
+                    Ok(match attempt.borrow().as_ref() {
+                        Some(done) => done.outcome(),
+                        None => journal::Outcome::Unobservable,
+                    })
+                };
+                let mut dispatch = || {
+                    authority.authorize(token, &epoch)?;
+                    let mut done = armies::mode::set(process, keys, army, wanted);
+                    let error = done.error.take();
+                    *attempt.borrow_mut() = Some(done);
+                    error.map_or(Ok(()), Err)
+                };
+                let receipt =
+                    actions.execute(&mode_id, &epoch, action, &mut settle, &mut dispatch)?;
+                if run.is_none() || receipt.status != journal::Status::Verified {
+                    return Ok(json!({"receipt":receipt}));
+                }
+                mode_receipt = Some(receipt);
+            }
+            let Some(run) = run else {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "execute or mode is required",
+                ));
+            };
             let state = || ui::read(process, |r, i| armies::executing(r, i, army));
             let retry = actions.receipt_exists(id);
             if !retry {
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"army_plan","army":army,"execute":run});
-            let keys = &self.keys;
             let mut settle = || {
                 let now = state()?;
                 let detail = json!({"army":army,"executing":now});
@@ -5500,7 +5563,10 @@ impl MacClock {
                 armies::execute(process, keys, army, run)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
-            return Ok(json!({"receipt":receipt}));
+            return Ok(match mode_receipt {
+                Some(mode) => json!({"receipt":receipt,"mode_receipt":mode}),
+                None => json!({"receipt":receipt}),
+            });
         }
         if name == "hoi4_army_front" {
             allowed(args, &["army", "state_id", "request_id", "lease_token"])?;

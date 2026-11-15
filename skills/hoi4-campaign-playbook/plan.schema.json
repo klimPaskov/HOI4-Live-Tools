@@ -4636,12 +4636,28 @@
           "x-owner": "executor",
           "description": "supply trucks level set once on every driven army"
         },
+        "execution": {
+          "type": "string",
+          "enum": [
+            "careful",
+            "balanced",
+            "rush"
+          ],
+          "x-owner": "executor",
+          "description": "how the driven armies' battle plans are carried out (hoi4_army_plan mode), set once per army when it has its lines and before its first execute order: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default), rush (every province of the plan is attacked even if the front becomes longer: for a weak or broken enemy line). Absent: the game's default stands and nothing is sent"
+        },
+        "stall_rush": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "the first answer to an executing plan that took no ground for stall_days is the rush execution mode (the plan keeps executing and keeps its planning bonus, the stall clock starts again); only the next stall goes on to replans, the second direction and the direct move. Not when execution is rush already; false goes straight to them"
+        },
         "stall_days": {
           "type": "integer",
           "default": 8,
           "minimum": 0,
           "x-owner": "executor",
-          "description": "game days without progress on a target (no new main state and no province taken in the target or the state the army stands in) before the stall response: the executing plan is stopped and planned again (replans), then a second direction, then a direct move with a back-off (default 8)"
+          "description": "game days without progress on a target (no new main state and no province taken in the target or the state the army stands in) before the stall response: first the rush execution mode (stall_rush), then the executing plan is stopped and planned again (replans), then a second direction, then a direct move with a back-off (default 8)"
         },
         "replans": {
           "type": "integer",

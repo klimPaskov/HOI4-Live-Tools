@@ -693,7 +693,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_offensive": {
-   "description": "Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.",
+   "description": "Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; execute the plan afterwards.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -702,6 +702,12 @@
      },
      "lease_token": {
       "type": "string"
+     },
+     "province_id": {
+      "description": "The objective inside the state: the line is drawn at its depth from the army",
+      "maximum": 29999,
+      "minimum": 1,
+      "type": "integer"
      },
      "request_id": {
       "type": "string"
@@ -723,7 +729,7 @@
    "source": "--list-tools"
   },
   "hoi4_army_plan": {
-   "description": "Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.",
+   "description": "Execute or stop an own army's battle plan with the army card's play or stop button (execute), and set how its battle plans are carried out (mode). Execute is verified by the card's executing state. mode sets the execution mode on the battle plan bar: careful (no attack on heavily fortified provinces, none that lengthens the front), balanced (the game's default) or rush (every province of the plan is attacked even if the front becomes longer: for a weak or broken enemy line, or an executing plan that stands still). The army is selected, the bar's execution button opens the three choices, the wanted one is clicked and verified by the three buttons' frames (detail: frames_before, frames_after); the selection is cleared afterwards. Give execute, mode or both: with both the mode is set first (journalled as <request_id>:mode, returned as mode_receipt) and the execute or stop order follows only when the mode is verified. The mode step is built from interface/battleplantools.gui and has not run live yet: a failure names the bar, the window, the rectangles and the frames it found.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -731,9 +737,19 @@
       "type": "string"
      },
      "execute": {
+      "description": "true executes the plan, false stops it; may be left out only when mode is given",
       "type": "boolean"
      },
      "lease_token": {
+      "type": "string"
+     },
+     "mode": {
+      "description": "execution mode of the army's battle plans; alone it only sets the mode",
+      "enum": [
+       "careful",
+       "balanced",
+       "rush"
+      ],
       "type": "string"
      },
      "request_id": {
@@ -742,7 +758,6 @@
     },
     "required": [
      "army",
-     "execute",
      "request_id",
      "lease_token"
     ],
@@ -4372,7 +4387,7 @@
    "source": "--list-tools"
   },
   "hoi4_time": {
-   "description": "Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.",
+   "description": "Set desired pause or internal speed 0..4 (the game's speeds 1 to 5: 2 is the game's speed 3) with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
