@@ -38,6 +38,24 @@ def receipts(run):
     return collections.Counter(last.values())
 
 
+def repeated_failures(run, least=2):
+    """Actions whose last receipt is NotApplied or Diverged, grouped by the action itself: (count, kind, action
+    text, statuses) for each action that failed at least `least` times, most first. The same order failing again
+    and again is a defect to look at, not bad luck."""
+    last, action = {}, {}
+    for row in _jsonl(os.path.join(run, "game-actions.jsonl")):
+        if row.get("id") and row.get("status") in RECEIPTS:
+            last[row["id"]] = row["status"]
+            action[row["id"]] = row.get("action") or {}
+    groups = collections.defaultdict(list)
+    for rid, status in last.items():
+        if status in ("NotApplied", "Diverged"):
+            groups[json.dumps(action[rid], sort_keys=True)].append(status)
+    rows = [(len(v), json.loads(k).get("kind", "?"), k, collections.Counter(v)) for k, v in groups.items()
+            if len(v) >= least]
+    return sorted(rows, key=lambda r: (-r[0], r[1], r[2]))
+
+
 def self_pauses(run):
     """(self-pauses, restored) from the runtime's [action] lines."""
     paused = restored = 0
@@ -140,6 +158,30 @@ def planner_section(run):
     return out
 
 
+def _day_number(text):
+    """Days since 1 Jan 1 of a game date "YYYY.MM.DD[.HH]" (the game has no leap years); None when unreadable."""
+    try:
+        parts = [int(x) for x in str(text).split(".")]
+        year, month, day = parts[0], parts[1], parts[2]
+        hour = parts[3] if len(parts) > 3 else 0
+    except (ValueError, IndexError):
+        return None
+    before = (0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334)
+    if not 1 <= month <= 12:
+        return None
+    return year * 365 + before[month - 1] + day + hour / 24.0
+
+
+def pace(start_date, end_date, ready_t, ended):
+    """Game days per wall minute from the run's start (the supervisor's ready event) to its end; None when either
+    is unknown. A machine short of memory runs the same campaign at half the pace or less, so a result is read
+    against it."""
+    a, b = _day_number(start_date), _day_number(end_date)
+    if a is None or b is None or ready_t is None or ended - ready_t < 60:
+        return None
+    return (b - a) / ((ended - ready_t) / 60.0)
+
+
 def build(run, reason, counts, final, started, ended):
     request = runs.read_json(os.path.join(run, "request.json")) or {}
     calls = _jsonl(os.path.join(run, "calls.jsonl"))
@@ -148,7 +190,9 @@ def build(run, reason, counts, final, started, ended):
     failed = collections.Counter(c.get("code") for c in calls if c.get("isError") and c.get("code"))
     got = receipts(run)
     paused, restored = self_pauses(run)
-    start_date = next((e.get("date") for e in events if e.get("event") == "ready"), None)
+    ready = next((e for e in events if e.get("event") == "ready"), {})
+    start_date = ready.get("date")
+    rate = pace(start_date, final.get("date"), ready.get("t"), ended)
     lines = [
         "# Run report: %s (%s)" % (request.get("country") or request.get("tag") or "campaign", request.get("tag", "?")),
         "",
@@ -157,6 +201,9 @@ def build(run, reason, counts, final, started, ended):
         "- Ended: %s" % reason,
         "- Wall time: %.1f minutes" % ((ended - started) / 60.0),
         "- Game dates: %s to %s" % (start_date or "?", final.get("date") or "?"),
+        "- Pace: %s" % ("%.1f game days per wall minute (paused time included; a machine short of memory "
+                        "plays at half its usual pace or less, so judge the result against it)" % rate
+                        if rate is not None else "unknown"),
         "",
         "## Calls",
         "",
@@ -181,6 +228,11 @@ def build(run, reason, counts, final, started, ended):
         lines += ["- %s: %d" % (name, got.get(name, 0)) for name in RECEIPTS]
     else:
         lines.append("- no action journal in the run folder")
+    repeats = repeated_failures(run)
+    if repeats:
+        lines += ["", "## Actions that failed more than once", ""]
+        lines += ["- %d x %s: %s (%s)" % (n, kind, text[:160], ", ".join("%s %d" % kv for kv in sorted(st.items())))
+                  for n, kind, text, st in repeats[:12]]
     if final.get("capitulation"):
         lines += ["", "## Capitulation", ""] + capitulation_lines(final["capitulation"])
     lines += planner_section(run)

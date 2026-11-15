@@ -818,6 +818,30 @@ class ReportTests(Folder):
                      "Verified: 1", "Self-pauses recorded by the runtime: 1"):
             self.assertIn(word, text)
 
+    def test_the_report_states_the_pace_from_the_start_to_the_end(self):
+        self.assertAlmostEqual(report.pace("1936.01.01.12", "1936.03.02.12", 100.0, 100.0 + 600), 6.0)
+        self.assertIsNone(report.pace(None, "1936.03.02", 0, 600))
+        self.assertIsNone(report.pace("1936.01.01", "1936.03.02", 0, 30))
+        run = self.make_run()
+        with open(os.path.join(run, "supervisor.log"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"t": 0, "event": "ready", "date": "1936.01.01.12"}) + "\n")
+        text = report.build(run, "stopped_by_player", {}, {"date": "1936.01.31.12"}, 0, 600)
+        self.assertIn("Pace: 3.0 game days per wall minute", text)
+
+    def test_the_report_lists_actions_that_failed_more_than_once(self):
+        run = self.make_run()
+        a = {"kind": "army_assign", "state_id": 550}
+        rows = [{"id": "1", "status": "NotApplied", "action": a}, {"id": "2", "status": "NotApplied", "action": a},
+                {"id": "3", "status": "Verified", "action": a}, {"id": "4", "status": "NotApplied",
+                                                                  "action": {"kind": "focus_start"}}]
+        with open(os.path.join(run, "game-actions.jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(r) + "\n" for r in rows))
+        got = report.repeated_failures(run)
+        self.assertEqual([(n, kind) for n, kind, _, _ in got], [(2, "army_assign")])
+        text = report.build(run, "stopped_by_player", {}, {}, 0, 60)
+        self.assertIn("2 x army_assign", text)
+        self.assertIn("NotApplied 2", text)
+
     def test_capitulation_progress_against_the_aim(self):
         plan = {"goal": {"predicates": ["capitulated:ETH", "capitulated:AFA"],
                          "capitulation": {"enemy": "ETH", "vp_needed": 22, "levers": []}}}
