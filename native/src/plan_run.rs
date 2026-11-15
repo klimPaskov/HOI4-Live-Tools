@@ -4339,6 +4339,7 @@ fn war_step(
                         supply: condition.get(&name).map(|c| c.1),
                         fill: fill.get(&name).copied(),
                         tired: state.moves.tired.contains(&name),
+                        target: state.war_assign.get(&name).copied(),
                         name,
                         state: here,
                         divisions,
@@ -8261,6 +8262,14 @@ mod tests {
                 "{line} on the province's state"
             );
         }
+        // the offensive line is drawn at the depth of the victory-point province; the front
+        // order names the state alone
+        assert!(calls
+            .iter()
+            .any(|(n, a)| n == "hoi4_army_offensive" && a["province_id"] == 50));
+        assert!(calls
+            .iter()
+            .any(|(n, a)| n == "hoi4_army_front" && a.get("province_id").is_none()));
         drop(calls);
         // with direct moves the province itself is the order
         let mut plan = plan;

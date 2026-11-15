@@ -2621,8 +2621,9 @@ pub(super) fn offensive(
 /// The two ends of an offensive line across a target, parallel to the army's front: of the
 /// third of the target's provinces nearest in depth to `pivot` (the objective; without one, the
 /// target's centre), the two farthest apart sideways (map points; `own` are the army's province
-/// positions, `target` the target's). None when the target has no width seen from the army
-/// (one province, or all in a row along the advance).
+/// positions, `target` the target's). The game extends the line to the edges of the enemy land
+/// whatever its length, so only its depth is chosen here. None when the target has no width
+/// seen from the army (one province, or all in a row along the advance).
 pub(super) fn offensive_span(
     own: &[(f64, f64)],
     target: &[(f64, f64)],
@@ -2647,7 +2648,10 @@ pub(super) fn offensive_span(
     let at = pivot.as_ref().map_or(0.0, depth);
     let mut band: Vec<&(f64, f64)> = target.iter().collect();
     band.sort_by(|x, y| (depth(x) - at).abs().total_cmp(&(depth(y) - at).abs()));
-    band.truncate((target.len() / 3).max(3));
+    // the third nearest in depth, and every province as near as the last of them
+    let last = (target.len() / 3).max(3).min(band.len()) - 1;
+    let reach = (depth(band[last]) - at).abs() + 1e-6;
+    band.retain(|p| (depth(p) - at).abs() <= reach);
     let a = band
         .iter()
         .copied()
@@ -3386,6 +3390,10 @@ mod tests {
         let (a, b) = super::offensive_span(&own, &target, Some((10.0, 30.0))).unwrap();
         assert_eq!((a.1, b.1), (30.0, 30.0));
         assert_eq!((a.0 - b.0).abs(), 20.0);
+        // provinces as near in depth as the last of the band all belong to it
+        let wide: Vec<(f64, f64)> = (0..9).map(|i| (f64::from(i) * 10.0, 40.0)).collect();
+        let (a, b) = super::offensive_span(&[(40.0, 0.0)], &wide, Some((40.0, 40.0))).unwrap();
+        assert_eq!((a.0 - b.0).abs(), 80.0);
         // and one in the far row
         let (a, b) = super::offensive_span(&own, &target, Some((0.0, 70.0))).unwrap();
         assert_eq!((a.1, b.1), (70.0, 70.0));

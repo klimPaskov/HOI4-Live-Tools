@@ -343,6 +343,27 @@ fn the_best_pocket_gets_two_pincers_into_its_neck() {
 }
 
 #[test]
+fn an_army_attacking_elsewhere_is_not_taken_for_the_pocket() {
+    let front = Front::poland(POLAND_MID, &[807, 98, 762, 88], mid_armies());
+    let plan = plan("POL", json!({}));
+    // Army 1 attacks a state that is neither in the pocket nor its neck: it keeps its target,
+    // and the arm it would have been goes to another army or the pocket is left alone
+    let mut state = State::default();
+    state.war_assign.insert("Army 1".into(), 9999);
+    step(&mut state, &front, &plan, START);
+    let n = note(&state, "encircle");
+    assert!(!n.contains("Army 1 from"), "{n}");
+    assert_eq!(state.war_assign.get("Army 1"), Some(&9999));
+    // an army already attacking the neck is taken as before
+    let front = Front::poland(POLAND_MID, &[807, 98, 762, 88], mid_armies());
+    let mut state = State::default();
+    state.war_assign.insert("Army 2".into(), 92);
+    step(&mut state, &front, &plan, START);
+    let n = note(&state, "encircle");
+    assert!(n.contains("Army 2 from 88 into Lublin (92)"), "{n}");
+}
+
+#[test]
 fn both_pincers_execute_together() {
     let front = Front::poland(POLAND_MID, &[807, 98, 762, 88], mid_armies());
     let mut state = State::default();

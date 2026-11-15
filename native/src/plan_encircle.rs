@@ -133,6 +133,8 @@ pub(super) struct Cand {
     pub fill: Option<f64>,
     /// below the rest line
     pub tired: bool,
+    /// the state the army attacks on its own (its war target), if any
+    pub target: Option<i32>,
 }
 
 /// What the war step knows this tick.
@@ -390,6 +392,14 @@ fn scan(state: &mut State, tools: &dyn Tools, cfg: &Cfg, ctx: &Ctx) -> Result<()
     for p in list(&read, "pockets") {
         let pocket = ids(p, "pocket_states");
         let neck = ids(p, "neck_states");
+        // An army attacking a target of its own is taken only for a pocket that holds that
+        // target or whose neck it is: the operation serves the advance, it does not replace it
+        // (live 15 Nov 2026: the main army, attacking in the north, was made the holding arm
+        // of a ring around a region on the other front and its plan was stopped).
+        let free = |c: &Cand| {
+            c.target
+                .is_none_or(|t| pocket.contains(&t) || neck.contains(&t))
+        };
         let key = key_of(&pocket);
         let score = p["score"].as_f64().unwrap_or(0.0);
         let cut_off = p["already_cut_off"] == json!(true) || neck.is_empty();
@@ -452,6 +462,7 @@ fn scan(state: &mut State, tools: &dyn Tools, cfg: &Cfg, ctx: &Ctx) -> Result<()
         for (from, into, need, suggested) in &wanted {
             let ok = |c: &&Cand| {
                 fit(c)
+                    && free(c)
                     && !arms.iter().any(|a| a.army == c.name)
                     && c.divisions as f64 >= (need * cfg.need_share).ceil()
                     && c.state.is_some_and(|s| {
@@ -511,7 +522,7 @@ fn scan(state: &mut State, tools: &dyn Tools, cfg: &Cfg, ctx: &Ctx) -> Result<()
             .then(|| {
                 ctx.armies
                     .iter()
-                    .filter(|c| fit(c) && !arms.iter().any(|a| a.army == c.name))
+                    .filter(|c| fit(c) && free(c) && !arms.iter().any(|a| a.army == c.name))
                     .filter_map(|c| {
                         let d = pocket
                             .iter()
