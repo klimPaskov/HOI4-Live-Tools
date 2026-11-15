@@ -422,8 +422,8 @@ fn start_rest(
 /// stopped is executed again.
 fn rest_step(
     state: &mut State,
-    tools: &dyn Tools,
-    lease: &str,
+    _tools: &dyn Tools,
+    _lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
     let rests: Vec<(String, String, String)> = state
@@ -437,7 +437,6 @@ fn rest_step(
     if rests.is_empty() {
         return Ok(None);
     }
-    let mut roster: Option<Value> = None;
     for (key, why, army) in rests {
         let until = state
             .bad
@@ -458,39 +457,16 @@ fn rest_step(
             note(state, "rest", format!("{army}: rest ({why}) over"));
             continue;
         }
-        if roster.is_none() {
-            roster = tools.call("hoi4_armies", &json!({"threat": false})).ok();
-        }
-        let row = roster.as_ref().and_then(|r| army_row(r, &army)).cloned();
-        let Some(row) = row else {
-            note(
-                state,
-                "rest",
-                format!("{army}: rest ({why}) over, army not found"),
-            );
-            continue;
-        };
-        if row["plan_executing"] == json!(true)
-            || row["battle_plan_orders"].as_u64().unwrap_or(0) == 0
-        {
-            note(
-                state,
-                "rest",
-                format!("{army}: rest ({why}) over, no plan to execute"),
-            );
-            continue;
-        }
-        let (ok, msg) = state.act(
-            tools,
-            lease,
-            "hoi4_army_plan",
-            json!({"army": army, "execute": true}),
-            "mr",
-        )?;
-        note(state, "rest", format!("{army}: rest ({why}) over: {ok}"));
-        return Ok(Some(format!(
-            "rest over ({why}): {army} executes its plan again: {ok} {msg}"
-        )));
+        // The plan stays stopped: the war step brings a stopped plan back through its own gates
+        // (planning, supply, organisation, equipment fill). An execute order from here went past
+        // them, and armies at a third of their equipment attacked again after every rest.
+        note(
+            state,
+            "rest",
+            format!(
+                "{army}: rest ({why}) over; the war step executes its plan again through its gates"
+            ),
+        );
     }
     Ok(None)
 }
@@ -3602,19 +3578,20 @@ mod tests {
             at + 7 * DAY,
             "held again after the restart"
         );
+        // the rest ends without an order of its own: the war step executes the stopped plan
+        // again through its gates (planning, supply, organisation, equipment fill)
         let out = rest_step(&mut fresh, &tools, "l", at + 7 * DAY).unwrap();
-        assert_eq!(
-            out.as_deref(),
-            Some("rest over (cas): 1. Armata executes its plan again: true Verified")
-        );
-        assert_eq!(actions(&tools)[1].1["execute"], true);
+        assert_eq!(out, None);
+        assert_eq!(actions(&tools).len(), 1, "no execute order from the rest");
+        assert!(!fresh.war_cool.contains_key("1. Armata"));
+        assert!(fresh.military.notes["rest"].contains("through its gates"));
         // judged again only a full window after it resumed
         tools.reply("hoi4_armies", roster(&[("1. Armata", None, true)], &[]));
         assert_eq!(
             casualty_rule(&mut fresh, &tools, &plan, "l", at + 8 * DAY).unwrap(),
             None
         );
-        assert_eq!(actions(&tools).len(), 2);
+        assert_eq!(actions(&tools).len(), 1);
     }
 
     #[test]
@@ -3757,9 +3734,10 @@ mod tests {
         );
         let out = rest_step(&mut state, &tools, "l", at).unwrap();
         assert_eq!(
-            out.as_deref(),
-            Some("rest over (air): 1. Armata executes its plan again: true Verified")
+            out, None,
+            "the war step executes it again through its gates"
         );
+        assert!(!state.war_cool.contains_key("1. Armata"));
     }
 
     // --- W2-11 naval invasions ---------------------------------------------------------------

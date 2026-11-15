@@ -2913,7 +2913,25 @@ fn disband_step(
         }
     }
     let mut by_army: Vec<(String, Vec<String>)> = Vec::new();
+    // Loose divisions (in no army) that the plan would disband, by the state they stand in. The
+    // tool disbands divisions of an army, so they are formed into one first (below).
+    let mut loose: Vec<(i64, Vec<String>)> = Vec::new();
     for d in list(&supply, "divisions") {
+        if d["army"].is_null() {
+            if let (Some(id), Some(at)) = (d["id"].as_str(), d["state_id"].as_i64()) {
+                if templates.iter().any(|t| t == text(&d["template"]))
+                    && own.contains(&at)
+                    && !keep.contains(&at)
+                    && home.contains(&at)
+                    && !state.skipped(now, "disband", &format!("loose:{at}"))
+                {
+                    match loose.iter_mut().find(|(s, _)| *s == at) {
+                        Some((_, ids)) => ids.push(id.to_string()),
+                        None => loose.push((at, vec![id.to_string()])),
+                    }
+                }
+            }
+        }
         let (Some(army), Some(id)) = (d["army"].as_str(), d["id"].as_str()) else {
             continue;
         };
@@ -2937,6 +2955,27 @@ fn disband_step(
     }
     plan_war::overseas_note(state, &overseas);
     let Some((army, mut ids)) = by_army.into_iter().next() else {
+        // No army to thin: the loose divisions of one state (the largest group first) are
+        // formed into an army, which the next tick disbands. Home divisions of a country that
+        // fights overseas stand in no army; left alone they keep the equipment the front lacks
+        // (live 15 Nov 2026: 21 loose home divisions, front armies at 0.0-0.4 fill).
+        loose.sort_by_key(|(_, ids)| std::cmp::Reverse(ids.len()));
+        if let Some((at, ids)) = loose.into_iter().next() {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_assign",
+                json!({"state_id": at}),
+                "db",
+            )?;
+            if !ok {
+                state.skip(now, "disband", &format!("loose:{at}"), 5 * DAY);
+            }
+            return Ok(Some(format!(
+                "disband: {} loose division(s) in state {at} formed into an army first: {ok} {why}",
+                ids.len()
+            )));
+        }
         state.skip(now, "disband", "all", 7 * DAY);
         return Ok(None);
     };
@@ -4282,7 +4321,11 @@ fn war_step(
             if let Some(&since_rest) = state.war_rest.get(&name) {
                 let recovered =
                     limits.fresh(state, &name, org) && limits.supplied(supply) && !underfilled;
-                let overdue = now - since_rest >= rest_max && !limits.held(supply);
+                // A rest for organisation or supply ends after rest_max_days whatever they read
+                // (they may never recover where the army stands). Equipment does recover, from
+                // the lines and from disbanded divisions, so an army under the fill floor stays
+                // at rest: sent back in at a third of its equipment it only loses the rest.
+                let overdue = now - since_rest >= rest_max && !limits.held(supply) && !underfilled;
                 if !recovered && !overdue {
                     if now - since_rest >= rest_max {
                         plan_war::held_note(
