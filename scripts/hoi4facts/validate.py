@@ -1402,6 +1402,12 @@ def check_coverage_keys(game, plan, meta, rep):
                 kind, rid = ref.split(":", 1)
                 if (kind == "template" and rid not in tids) or (kind == "doctrine" and rid not in dids):
                     rep.error(f"xp_budget.{branch}[{j}]: ref {ref} names no {kind}s[] id of this plan")
+        hints = layout_roles(plan)
+        for j, sp in _dicts(xb.get("army")):
+            if sp.get("armies") and sp.get("purpose") != "exercise":
+                rep.warn(f"xp_budget.army[{j}]: armies is read for purpose exercise only")
+            for a in sp.get("armies") or []:
+                _army_ref(rep, f"xp_budget.army[{j}].armies", a, hints)
     fp = plan.get("force_posture")
     if isinstance(fp, dict):
         phases = {str(p.get("id")) for p in plan.get("phases") or [] if isinstance(p, dict)} | {"base"}

@@ -81,10 +81,10 @@ class Reconcile(unittest.TestCase):
     def test_keys_a_plan_sets_that_the_executor_does_not_act_on(self):
         plan = {"vp_targets": [{"province": 1, "state": 2, "order": 1, "by": "1936.03.01", "path": [3, 1],
                                 "name": "A", "why": "w"}],
-                "garrison_template": {"template": "Garrison"}}
+                "sea_transfer": {"ports": [1]}}
         unread = plan_keys.unread_in(plan, self.schema)
         self.assertEqual(unread["lint"], ["vp_targets[].by", "vp_targets[].order"])
-        self.assertEqual(unread["planned"], ["garrison_template"])
+        self.assertEqual(unread["planned"], ["sea_transfer"])
         self.assertNotIn("vp_targets[].path", sum(unread.values(), []))
 
 

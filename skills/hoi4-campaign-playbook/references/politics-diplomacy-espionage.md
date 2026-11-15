@@ -344,7 +344,7 @@ Gaps:
 - Licence, lend-lease and volunteer dialogs (`hoi4_diplomacy_act` returns `dialog_unsupported`).
 - Faction goals, rules, initiative and influence: no read or set.
 - Per-state occupation law (only the default law is set); the ideology laws (autonomous occupation, liberated workers, Italian colonial police) are not in `hoi4_occupation_law`'s list.
-- Garrison template assignment (the plan's `garrison_template` has no action yet).
+- Garrison template assignment: the executor step for the plan's `garrison_template` exists and waits on the occupation view action (it says what it would set; gap register occupation.garrison_template).
 - Reads: balance of power, enemy industry ratio and surrender progress (law gates), an operation's phase and progress and the collaboration value, MIO size, funds and traits, foreign opinion and justification timers.
 
 ## 11. Tactics: political power, laws, stability and war support

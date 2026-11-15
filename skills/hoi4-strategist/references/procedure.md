@@ -26,7 +26,7 @@ Items 1, 2 and 29 are never "not applicable". Write every resolution into the co
 §25 (all 29 rows: resolution, where it lives, the facts command used, the check).
 
 **Key or atom not in the schema yet.** Some items name keys whose executor step a later build item adds
-(schema `x-executor-planned`: `xp_budget`, `sea_transfer`, `garrison_template`,
+(schema `x-executor-planned`: `xp_budget.*[].cost`, `sea_transfer`,
 `production[].remove` / `replace`, `manage.convoys_free`, `manage.fuel_floor`), keys that do not exist
 yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
 `var:<name>`, `mission_days:<id>`, `surrender_progress:<TAG>`, `naval_dominance:<region>`,
@@ -736,7 +736,8 @@ colonies can resist from day one), `F vp <ENEMY>` (VP states that will resist).
    at 80% compliance unless the plan needs that land's dockyards (OC06).
 3. Not applicable only when the plan conquers nothing and no own state resists (dossier §2).
 Resolution: player `occupation` (`law`, `when`, `call` `hoi4_occupation_law {law}`), `templates`
-(garrison); `garrison_template` (key pending); plan.md §22. Check: rubric row 15.
+(garrison); `garrison_template` (the executor step waits on its tool, gap register
+occupation.garrison_template); plan.md §22. Check: rubric row 15.
 
 ### 24. Intelligence
 Read: `politics-diplomacy-espionage.md` §8. Facts: dossier §0 (La Resistance active), dossier §1 (agency
