@@ -8,7 +8,8 @@ time with a single march order of the whole army, and orders the next objective 
 - Objectives per army: its next open `vp_targets` row (the first province of the row's path not yet held; from
   afar the army first assembles on the path's first province), else an enemy victory point with two fresh
   divisions beside it, else the nearest enemy victory point no other army strikes. A strike that wears its
-  divisions out or stands 18 days is halted and the army rests; an objective that holds is closed for 25 days.
+  divisions out or stands 18 days ends and the army turns to another objective (the first is closed for 10 or 25
+  days); a halt order is sent only with `war.strike.halt` (halted divisions walk back to their army's front line).
 - `hoi4_army_move`: `halt:true` cancels an army's march and attack orders (the unit panel's halt button); a march
   order on a province is sent while any division neither marches on it nor stands in it (it was skipped once half
   did). `hoi4_supply` rows carry `heading_province`. New read `hoi4_province_graph` (land provinces of states and
