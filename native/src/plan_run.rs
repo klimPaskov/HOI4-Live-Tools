@@ -2989,7 +2989,7 @@ fn disband_step(
     };
     let supply = tools.call("hoi4_supply", &json!({}))?;
     // Divisions a sea-transfer route still wants, and those at sea, are not disbanded.
-    let (shipping, sailing) = plan_ship::reserved(state, plan);
+    let (shipping, sailing) = plan_ship::reserved(state, plan, now);
     // Armies with a division in enemy-held land are fighting and left whole; a home army with
     // a few divisions already in the theatre is not. An army at encirclement risk is never
     // thinned (only 20% of the manpower would return).

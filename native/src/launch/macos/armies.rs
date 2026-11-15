@@ -2970,10 +2970,10 @@ pub(super) fn move_to(
     // for the embarkation port).
     if province.is_none() {
         if let Some(port) = state_port(process, state) {
-            let points = with_icon_offsets(
+            let points = twice(with_icon_offsets(
                 target_points(process, state, Some(port)).unwrap_or_default(),
                 Some(port),
-            );
+            ));
             if !points.is_empty() && order_at(process, keys, army, &before, points, false, None)? {
                 return Ok(());
             }
@@ -3011,6 +3011,11 @@ pub(super) fn move_to(
         }
     }
     let points = with_icon_offsets(points, province);
+    let points = if province.is_none() {
+        twice(points)
+    } else {
+        points
+    };
     if order_at(process, keys, army, &before, points, projected, province)? {
         return Ok(());
     }
@@ -3023,6 +3028,13 @@ pub(super) fn move_to(
         )),
         None => Ok(()),
     }
+}
+/// Each point twice: the game plans a long route (a sea transfer) while the cursor rests on the
+/// target and takes a right click only once the route shows; a click that arrives with the
+/// cursor is dropped (live 15 Nov 2026: the hover read "first division arrives in 19 days" and
+/// no order took), the second click on the same point lands on the planned route.
+fn twice(points: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    points.into_iter().flat_map(|p| [p, p]).collect()
 }
 /// The province of a naval base in `state`, when the state has one.
 fn state_port(process: &dyn Process, state: i32) -> Option<i32> {

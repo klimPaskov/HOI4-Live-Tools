@@ -34,6 +34,10 @@ use std::collections::{HashMap, HashSet};
 const ARMY_MAX: usize = 24;
 /// The most divisions one hoi4_army_detach call moves.
 const DETACH_MAX: usize = 18;
+/// Game days a route may fail every sea move before it gives up and frees its templates for
+/// the disband step (live 15 Nov 2026: moves that never took held the home divisions back
+/// while the front's equipment fell to a third).
+const GIVE_UP_DAYS: GameHour = 20;
 /// Game days after the order when a voyage that has not landed is reported.
 const LATE_DAYS: GameHour = 45;
 
@@ -56,6 +60,21 @@ pub(super) struct Memory {
     /// the game hour of the first call: the step acts only once game time runs (a sea move
     /// given in the paused setup shows no heading and reads NotApplied, live 15 Nov 2026)
     first: Option<GameHour>,
+    /// per route: the game hour of its first failed sea move since its last success
+    failing: HashMap<usize, GameHour>,
+}
+
+impl Memory {
+    /// The route has failed every sea move for GIVE_UP_DAYS.
+    fn given_up(&self, route: usize, now: GameHour) -> bool {
+        self.failing
+            .get(&route)
+            .is_some_and(|since| now - since >= GIVE_UP_DAYS * DAY)
+    }
+    /// The route ships no more: full, or given up.
+    fn done(&self, route: usize, count: usize, now: GameHour) -> bool {
+        self.shipped.get(&route).copied().unwrap_or(0) >= count || self.given_up(route, now)
+    }
 }
 
 /// One route of `sea_transfer.routes`.
@@ -84,10 +103,14 @@ fn routes(plan: &Value) -> Vec<Route> {
 }
 
 /// Templates a route still wants to ship and the divisions at sea: the disband step leaves both.
-pub(super) fn reserved(state: &State, plan: &Value) -> (HashSet<String>, HashSet<String>) {
+pub(super) fn reserved(
+    state: &State,
+    plan: &Value,
+    now: GameHour,
+) -> (HashSet<String>, HashSet<String>) {
     let mut templates = HashSet::new();
     for (i, route) in routes(plan).iter().enumerate() {
-        if state.ship.shipped.get(&i).copied().unwrap_or(0) < route.count {
+        if !state.ship.done(i, route.count, now) {
             templates.extend(route.templates.iter().cloned());
         }
     }
@@ -138,7 +161,7 @@ pub(super) fn step(
         && routes
             .iter()
             .enumerate()
-            .all(|(i, r)| state.ship.shipped.get(&i).copied().unwrap_or(0) >= r.count);
+            .all(|(i, r)| state.ship.done(i, r.count, now));
     if pending {
         return Ok(None);
     }
@@ -290,7 +313,7 @@ fn departures(
     let formations: HashSet<String> = state.layout.values().cloned().collect();
     for (i, route) in routes.iter().enumerate() {
         let shipped = state.ship.shipped.get(&i).copied().unwrap_or(0);
-        if shipped >= route.count || route.templates.is_empty() {
+        if state.ship.done(i, route.count, now) || route.templates.is_empty() {
             continue;
         }
         let left = route.count - shipped;
@@ -337,6 +360,7 @@ fn departures(
                     "sh",
                 )?;
                 if ok {
+                    state.ship.failing.remove(&i);
                     *state.ship.shipped.entry(i).or_insert(0) += want.len();
                     state.ship.voyages.push(Voyage {
                         route: i,
@@ -344,7 +368,19 @@ fn departures(
                         ordered: now,
                     });
                 } else {
+                    state.ship.failing.entry(i).or_insert(now);
                     state.skip(now, "ship", army, 3 * DAY);
+                    if state.ship.given_up(i, now) {
+                        plan_war::set_note(
+                            state,
+                            "ship",
+                            Some(format!(
+                                "sea transfer route {} gave up: no sea move to state {} took for {GIVE_UP_DAYS} game days; its divisions may be disbanded",
+                                i + 1,
+                                route.to_state
+                            )),
+                        );
+                    }
                 }
                 return Ok(Some(format!(
                     "sea transfer: {army} ({} division(s)) -> state {}: {ok} {why}",
@@ -508,7 +544,7 @@ mod tests {
             json!(["a", "b"])
         );
         // the disband step leaves the route's template alone while the route still wants it
-        let (templates, _) = reserved(&state, &plan);
+        let (templates, _) = reserved(&state, &plan, START + 1);
         assert!(templates.contains("Infantry"));
         *game.rows.borrow_mut() = json!([
             div("a", Some("Army 6"), "Infantry", Some(1)),
@@ -528,7 +564,7 @@ mod tests {
             json!({"army": "Army 6", "state_id": 9, "request_id": game.sent("hoi4_army_move")[0]["request_id"], "lease_token": "l"})
         );
         // the route is full: its template is free for the disband step; the sailors are not
-        let (templates, sailing) = reserved(&state, &plan);
+        let (templates, sailing) = reserved(&state, &plan, START + 1);
         assert!(templates.is_empty());
         assert!(sailing.contains("a") && sailing.contains("b"));
         // at sea (no state): nothing to do
@@ -646,5 +682,43 @@ mod tests {
             None
         );
         assert_eq!(game.sent("hoi4_army_detach").len(), 1);
+    }
+
+    #[test]
+    fn a_route_whose_sea_moves_never_take_gives_up_and_frees_its_template() {
+        struct Refuse(Game);
+        impl Tools for Refuse {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_army_move" {
+                    return Ok(json!({"receipt": {"status": "NotApplied"}}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let game = Refuse(Game::new(json!([div(
+            "a",
+            Some("Army 7"),
+            "Infantry",
+            Some(1)
+        )])));
+        let plan = plan(1);
+        let mut state = State::default();
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START - 1).unwrap(),
+            None
+        );
+        let line = step(&mut state, &game, &plan, "l", START).unwrap().unwrap();
+        assert!(line.contains("-> state 9: false"), "{line}");
+        assert!(reserved(&state, &plan, START + DAY).0.contains("Infantry"));
+        // a retry after the skip fails again; after GIVE_UP_DAYS the route frees its template
+        let line = step(&mut state, &game, &plan, "l", START + 4 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("false"), "{line}");
+        assert!(reserved(&state, &plan, START + 21 * DAY).0.is_empty());
+        assert_eq!(
+            step(&mut state, &game, &plan, "l", START + 25 * DAY).unwrap(),
+            None
+        );
     }
 }
