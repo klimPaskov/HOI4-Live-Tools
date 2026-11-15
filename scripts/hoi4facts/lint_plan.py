@@ -322,6 +322,13 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            intelligence.operatives than those slots, with or without operations
   peace.order              (info) peace.take ranks states the plan does not hold at the conference (no vp target
                            or axis there, not owned) ahead of a state it holds
+  force.home_divisions     a war plan accounts for every start division outside its theatre: disbanded
+                           (disband.templates outside disband.keep_states, up to disband.max) or kept by a
+                           disband.keep entry (states and/or templates, optional count, role home_defence |
+                           garrison | reserve | ship | training, and a why). Divisions neither disbanded nor
+                           kept are an error, as are a disband block without a why, a keep entry without a
+                           why and a keep entry that matches no start division; a `ship` entry also needs
+                           sea_transfer.ports (the ports the divisions land at)
 
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
 a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
@@ -425,6 +432,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
+NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -4526,6 +4534,87 @@ class Lint:
                 self.add("warning", "intelligence.operations", where,
                          f"{key} needs {need} operatives; intelligence.operatives recruits {recruited}")
 
+    def theatre_states(self):
+        """States the plan's land campaign stands in: war.theatre, war.guard_states, armies.states and the
+        states of its army_layout entries."""
+        out = set()
+        armies = self.plan.get("armies") if isinstance(self.plan.get("armies"), dict) else {}
+        for src in (self.war.get("theatre"), self.war.get("guard_states"), armies.get("states")):
+            out.update(s for s in src or [] if isinstance(s, int))
+        out.update(e["state"] for e in self.list_of("army_layout") if isinstance(e.get("state"), int))
+        return out
+
+    def force_home_divisions(self):
+        """force.home_divisions: what the plan does with each start division outside its theatre. Which
+        divisions a campaign needs is the plan's decision; the lint only asks that it is made and said
+        for every one of them, for the kept as for the disbanded."""
+        if not self.tag or not self.war.get("enemies"):
+            return
+        theatre = self.theatre_states()
+        if not theatre:
+            return
+        home = Counter()
+        for d in self.world.oob(self.tag)["divisions"]:
+            if d.get("template") and d.get("state") is not None and d["state"] not in theatre:
+                home[(d["state"], d["template"])] += 1
+        raw = self.plan.get("disband")
+        db = raw if isinstance(raw, dict) else {}
+        gone = {t for t in db.get("templates") or [] if isinstance(t, str)}
+        keep_states = {x for x in db.get("keep_states") or [] if isinstance(x, int)}
+        why = lambda x: isinstance(x.get("why"), str) and x["why"].strip()
+        if gone and not why(db):
+            self.add("error", "force.home_divisions", "disband",
+                     "disband names templates without a why: say what the campaign gains from the divisions it "
+                     "gives up (equipment and manpower freed, against their use at home or at the front)")
+        keeps = []
+        for i, k in enumerate(db.get("keep") if isinstance(db.get("keep"), list) else []):
+            if not isinstance(k, dict):
+                continue
+            where = f"disband.keep[{i}]"
+            if not why(k):
+                self.add("error", "force.home_divisions", where,
+                         "a kept group needs a why: the threat, garrison need or later use that is worth more "
+                         "than the equipment and manpower of these divisions")
+            if k.get("role") == "ship":
+                st = self.plan.get("sea_transfer")
+                if not (isinstance(st, dict) and st.get("ports")):
+                    self.add("error", "force.home_divisions", where,
+                             "role ship without sea_transfer.ports: name the ports these divisions land at")
+            keeps.append({"where": where, "states": {x for x in k.get("states") or [] if isinstance(x, int)},
+                          "templates": {t for t in k.get("templates") or [] if isinstance(t, str)},
+                          "left": k["count"] if isinstance(k.get("count"), int) else None, "used": 0})
+        left = db["max"] if isinstance(db.get("max"), int) else None
+        loose = Counter()
+        for (sid, t), n in sorted(home.items()):
+            if t in gone and sid not in keep_states:
+                d = n if left is None else min(n, left)
+                left = None if left is None else left - d
+                n -= d
+            for k in keeps:
+                if not n:
+                    break
+                if (k["states"] and sid not in k["states"]) or (k["templates"] and t not in k["templates"]):
+                    continue
+                take = n if k["left"] is None else min(n, k["left"])
+                k["left"] = None if k["left"] is None else k["left"] - take
+                k["used"] += take
+                n -= take
+            if n:
+                loose[(sid, t)] += n
+        for k in keeps:
+            if not k["used"]:
+                self.add("error", "force.home_divisions", k["where"],
+                         "matches no start division outside the theatre that the disband list leaves standing")
+        if loose:
+            per_state = defaultdict(list)
+            for (sid, t), n in sorted(loose.items()):
+                per_state[sid].append(f"{n} {t}")
+            rows = "; ".join(f"state {sid}: {', '.join(v)}" for sid, v in sorted(per_state.items()))
+            self.add("error", "force.home_divisions", "disband" if raw is not None else "plan",
+                     f"{sum(loose.values())} start division(s) outside the theatre are neither disbanded nor kept "
+                     f"with a reason ({rows}): disband them (disband.templates, keep_states, max) or name them in "
+                     f"disband.keep with a role and a why")
+
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
@@ -4543,7 +4632,7 @@ class Lint:
                  self.politics_pp_budget,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
-                 self.intelligence_operations]
+                 self.intelligence_operations, self.force_home_divisions]
         for step in steps:
             step()
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
