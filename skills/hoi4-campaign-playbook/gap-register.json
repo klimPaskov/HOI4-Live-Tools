@@ -4725,13 +4725,16 @@
     "defense_lines[].settings",
     "defense_lines[].until"
    ],
-   "tools": [],
+   "tools": [
+    "hoi4_army_fallback",
+    "hoi4_army_area_defense",
+    "hoi4_army_plan"
+   ],
    "payoff": "high",
    "why": "Poland and China survive only on fallback lines; area defence lets one general hold 72 divisions",
    "closing": "both",
-   "owner": "offline done: plan key defense_lines (executor, plan_seams.rs: when/until, army by name or layout role, digest says what waits), lint orders.defense_reserve, tests; live: build hoi4_army_fallback {army,states}, hoi4_army_area_defense {army,states,settings?}, hoi4_army_orders_delete {army,order} with receipts (battleplantools.gui btn_order_draw_fallback / btn_area_defense + battleplantools_area_defense_config_window / btn_order_delete), add them to RECEIPT_TOOLS, live-verify on Poland 1939",
-   "priority": 8,
-   "blocked": "no tool draws a fallback line, gives an area defence order or deletes an order: defense_lines is read by the executor (plan_seams.rs), which sends nothing until hoi4_army_fallback, hoi4_army_area_defense and hoi4_army_orders_delete are built"
+   "owner": "offline done: plan key defense_lines (executor, plan_seams.rs: when/until, army by name or layout role, fall_back: the plan is executed once when the front ahead breaks or goes unfed), tools hoi4_army_fallback {army,states} (key C, one stroke across the states perpendicular to the army's side) and hoi4_army_area_defense {army,states} (key V, a right-click per state), receipts by battle-plan order growth, tests; live: verify both on a defender (Ethiopia 1936 or Poland 1939); still to build: the area order's settings toggles (held back as not_yet_built) and hoi4_army_orders_delete {army,order} (btn_order_delete), so `until` cannot remove an order yet",
+   "priority": 8
   },
   {
    "id": "orders.spearhead_exec_mode",

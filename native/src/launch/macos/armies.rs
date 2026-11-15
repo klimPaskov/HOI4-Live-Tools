@@ -2899,6 +2899,203 @@ pub(super) fn offensive_span(
     // narrower than a tenth of the way there: no line across to speak of
     (side(a) - side(b) > (len * 0.1).max(1.0)).then_some((*a, *b))
 }
+/// The stroke of a defensive line through the provinces `line` (map positions) for an army
+/// standing at `army`: across the line's whole width, at its middle depth, perpendicular to the
+/// way from the line to the army (the army's front lies ahead of a fallback line). With the army
+/// inside the line (no way to speak of) the line's longest spread is used. None for fewer than
+/// two distinct positions.
+pub(super) fn defense_span(
+    army: &[(f64, f64)],
+    line: &[(f64, f64)],
+) -> Option<((f64, f64), (f64, f64))> {
+    if line.len() < 2 {
+        return None;
+    }
+    let n = line.len() as f64;
+    let c = line
+        .iter()
+        .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+    let toward = (!army.is_empty()).then(|| {
+        let m = army.len() as f64;
+        let a = army
+            .iter()
+            .fold((0.0, 0.0), |s, p| (s.0 + p.0 / m, s.1 + p.1 / m));
+        (a.0 - c.0, a.1 - c.1)
+    });
+    let spread = line
+        .iter()
+        .map(|p| ((p.0 - c.0).powi(2) + (p.1 - c.1).powi(2)).sqrt())
+        .fold(0.0, f64::max);
+    // the side axis: perpendicular to the army's side, else the main axis of the points
+    let axis = match toward {
+        Some((dx, dy)) if (dx * dx + dy * dy).sqrt() > spread * 0.25 => {
+            let len = (dx * dx + dy * dy).sqrt();
+            (-dy / len, dx / len)
+        }
+        _ => {
+            let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
+            for p in line {
+                let (x, y) = (p.0 - c.0, p.1 - c.1);
+                sxx += x * x;
+                syy += y * y;
+                sxy += x * y;
+            }
+            let angle = 0.5 * (2.0 * sxy).atan2(sxx - syy);
+            (angle.cos(), angle.sin())
+        }
+    };
+    let side = |p: &(f64, f64)| (p.0 - c.0) * axis.0 + (p.1 - c.1) * axis.1;
+    let lo = line.iter().map(side).fold(f64::MAX, f64::min);
+    let hi = line.iter().map(side).fold(f64::MIN, f64::max);
+    (hi - lo > 1e-6).then_some((
+        (c.0 + axis.0 * lo, c.1 + axis.1 * lo),
+        (c.0 + axis.0 * hi, c.1 + axis.1 * hi),
+    ))
+}
+
+/// Select `army` with its card (the battle-plan toolbar shows) and return the card's centre.
+fn select_for_orders(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<()> {
+    clear_notices(process, keys)?;
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))
+}
+
+/// Draw a fallback line for `army` through `states` (battle-plan toolbar fallback, key C): one
+/// right-button stroke across the states at their middle depth, perpendicular to the way to the
+/// army's front (see `defense_span`). Verified by new battle-plan orders on the army; the army
+/// moves to the line when its plan is executed.
+pub(super) fn fallback(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    game_dir: &std::path::Path,
+    army: &str,
+    states: &[i32],
+) -> Result<()> {
+    let pos = super::mapdata::positions(game_dir)?;
+    let mut line = Vec::new();
+    for state in states {
+        for p in super::mapdata::state_provinces(game_dir, *state)? {
+            if let Some(xz) = pos.get(&p) {
+                line.push(*xz);
+            }
+        }
+    }
+    let at: Vec<(f64, f64)> = read(process, |r, i| army_provinces(r, i, army))?
+        .iter()
+        .filter_map(|p| pos.get(p).copied())
+        .collect();
+    let Some((a, b)) = defense_span(&at, &line) else {
+        return Err(Error::new(
+            "invalid_target",
+            format!("The states {states:?} give no line to draw (fewer than two map positions)"),
+        ));
+    };
+    let before = read(process, |r, i| plan_nodes(r, i, army))?;
+    select_for_orders(process, keys, army)?;
+    let first = states.first().copied().unwrap_or(0);
+    let framed =
+        super::screenmap::frame_two(process, keys, a, b, (420.0, 140.0, 1700.0, 880.0), || {
+            find_state(process, keys, first)
+        })?;
+    let Some((from, to)) = framed else {
+        let _ = keys.press(Key::Escape);
+        return Err(Error::new(
+            "input_geometry_unverified",
+            format!(
+                "The fallback line's ends ({a:?} to {b:?} on the map) do not fit the screen together; \
+                 give fewer or nearer states"
+            ),
+        ));
+    };
+    select_for_orders(process, keys, army)?;
+    keys.press(Key::letter('c')?)?;
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    keys.right_drag(GAME, from, to)?;
+    let placed = wait(process, "fallback line placed", |r, i| {
+        Ok(plan_nodes(r, i, army)? > before)
+    });
+    let _ = keys.press(Key::Escape);
+    placed.map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            format!(
+                "A fallback stroke from {from:?} to {to:?} (screen) placed no new battle-plan order \
+                 for {army}"
+            ),
+        )
+    })
+}
+
+/// Give `army` an area defence order over `states` (battle-plan toolbar area defence, key V):
+/// one right-click on each state's centre (Find view first). Verified by new battle-plan orders on
+/// the army. The order's settings window is left at the game's defaults.
+pub(super) fn area_defense(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    game_dir: &std::path::Path,
+    army: &str,
+    states: &[i32],
+) -> Result<()> {
+    let pos = super::mapdata::positions(game_dir)?;
+    let before = read(process, |r, i| plan_nodes(r, i, army))?;
+    let mut clicked = 0;
+    for state in states {
+        let pts: Vec<(f64, f64)> = super::mapdata::state_provinces(game_dir, *state)?
+            .iter()
+            .filter_map(|p| pos.get(p).copied())
+            .collect();
+        if pts.is_empty() {
+            continue;
+        }
+        let n = pts.len() as f64;
+        let c = pts
+            .iter()
+            .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+        // the province nearest the centre, so the click lands inside the state
+        let inner = pts
+            .iter()
+            .copied()
+            .min_by(|x, y| {
+                let d = |p: &(f64, f64)| (p.0 - c.0).powi(2) + (p.1 - c.1).powi(2);
+                d(x).total_cmp(&d(y))
+            })
+            .unwrap_or(c);
+        find_state(process, keys, *state)?;
+        let Some((x, y)) = read(process, |r, i| {
+            super::screenmap::to_screen(r, i, inner.0, inner.1)
+        })?
+        else {
+            continue;
+        };
+        if !(420.0..1700.0).contains(&x) || !(140.0..880.0).contains(&y) {
+            continue;
+        }
+        select_for_orders(process, keys, army)?;
+        keys.press(Key::letter('v')?)?;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        keys.right_click(GAME, x, y)?;
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        clicked += 1;
+    }
+    let _ = keys.press(Key::Escape);
+    if clicked == 0 {
+        return Err(Error::new(
+            "input_geometry_unverified",
+            format!("No state of {states:?} could be put on screen for the area order"),
+        ));
+    }
+    wait(process, "area defence placed", |r, i| {
+        Ok(plan_nodes(r, i, army)? > before)
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            format!("{clicked} area-defence click(s) placed no new battle-plan order for {army}"),
+        )
+    })
+}
 /// Divisions of `army` whose movement target (province id at +0x2ac of the
 /// division, mapped live on 24 July 1941 by diffing a right-click move order)
 /// lies in the provinces `wanted`, and the army's division count.
@@ -3969,6 +4166,19 @@ mod tests {
         // absorbing into a standing army is executable (right-click on the army card)
         assert!(assign_preflight(&plan).is_ok());
         assert_eq!(plan.target_here, 6);
+    }
+    #[test]
+    fn a_defensive_line_runs_across_the_states_facing_the_army() {
+        // the army stands north (smaller z is up the screen? only the geometry matters here)
+        let line = [(0.0, 0.0), (10.0, 1.0), (20.0, 0.0), (10.0, -1.0)];
+        let (a, b) = defense_span(&[(10.0, 50.0)], &line).unwrap();
+        // perpendicular to the way north: the stroke runs east-west across the whole width
+        assert!((a.1 - b.1).abs() < 1e-6, "{a:?} {b:?}");
+        assert!(((a.0 - b.0).abs() - 20.0).abs() < 1e-6);
+        // the army inside the line: the main spread of the points
+        let (a, b) = defense_span(&[(10.0, 0.0)], &line).unwrap();
+        assert!(((a.0 - b.0).abs() - 20.0).abs() < 1e-6, "{a:?} {b:?}");
+        assert!(defense_span(&[], &[(1.0, 1.0)]).is_none());
     }
     #[test]
     fn unassigned_divisions_sharing_a_province_go_to_the_army_standing_with_them() {

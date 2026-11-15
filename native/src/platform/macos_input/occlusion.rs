@@ -295,5 +295,72 @@ pub(super) fn require(target: Window, point: Point) -> Result<()> {
     )
 }
 
+/// Owners of the system's modal prompts (permission requests, keychain and security prompts,
+/// alerts posted through CFUserNotification). One on screen takes the keyboard focus and clicks
+/// meant for the game; only the machine's owner may answer it.
+pub(super) const SYSTEM_PROMPTS: &[&str] = &[
+    "UserNotificationCenter",
+    "CoreServicesUIAgent",
+    "SecurityAgent",
+];
+
+/// The first visible system prompt among `windows` (owner name), if any.
+pub(super) fn prompt_among(windows: &[(Option<String>, bool, f64)]) -> Option<String> {
+    windows
+        .iter()
+        .find(|(owner, onscreen, alpha)| {
+            *onscreen
+                && *alpha > 0.0
+                && owner
+                    .as_deref()
+                    .is_some_and(|o| SYSTEM_PROMPTS.contains(&o))
+        })
+        .and_then(|(owner, _, _)| owner.clone())
+}
+
+/// A visible system prompt on screen (its owner), read from window owner names only, at most
+/// once a second.
+pub(super) fn system_prompt() -> Result<Option<String>> {
+    use std::sync::Mutex;
+    static RECENT: Mutex<Option<(Instant, Option<String>)>> = Mutex::new(None);
+    if let Ok(cache) = RECENT.lock() {
+        if let Some((at, found)) = cache.as_ref() {
+            if at.elapsed() < Duration::from_secs(1) {
+                return Ok(found.clone());
+            }
+        }
+    }
+    let list = Owned(unsafe { super::CGWindowListCopyWindowInfo(1, 0) });
+    if list.0.is_null() || unsafe { CFGetTypeID(list.0) != CFArrayGetTypeID() } {
+        return Err(invalid());
+    }
+    let count = unsafe { super::CFArrayGetCount(list.0) }.clamp(0, 4096);
+    let mut rows = Vec::with_capacity(count as usize);
+    for index in 0..count {
+        unsafe {
+            let item = super::CFArrayGetValueAtIndex(list.0, index);
+            if item.is_null() || CFGetTypeID(item) != CFDictionaryGetTypeID() {
+                continue;
+            }
+            let owner = optional_text(item, kCGWindowOwnerName).unwrap_or(None);
+            let onscreen = super::CFDictionaryGetValue(item, kCGWindowIsOnscreen);
+            let onscreen = !onscreen.is_null()
+                && CFGetTypeID(onscreen) == CFBooleanGetTypeID()
+                && CFBooleanGetValue(onscreen);
+            let mut alpha = 1f64;
+            let a = super::CFDictionaryGetValue(item, kCGWindowAlpha);
+            if !a.is_null() && CFGetTypeID(a) == CFNumberGetTypeID() {
+                super::CFNumberGetValue(a, 6, (&mut alpha as *mut f64).cast::<c_void>());
+            }
+            rows.push((owner, onscreen, alpha));
+        }
+    }
+    let found = prompt_among(&rows);
+    if let Ok(mut cache) = RECENT.lock() {
+        *cache = Some((Instant::now(), found.clone()));
+    }
+    Ok(found)
+}
+
 #[cfg(test)]
 mod tests;

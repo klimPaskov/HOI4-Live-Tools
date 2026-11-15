@@ -985,8 +985,8 @@ class TacticsRules(unittest.TestCase):
         self.assertHit(plan, "orders.defense_reserve", "warning", "ignores them")
         plan["defense_lines"][0]["kind"] = "area_defense"
         self.assertNoHit(plan, "orders.defense_reserve")
-        # the plan key relies on a lever no tool carries yet: the gap shows in the lint
-        self.assertTrue(self.hits(plan, "gap.blocked", "warning", "defense_lines"))
+        # the fallback and area-defence tools are built: no gap shows for the plan key
+        self.assertFalse(self.hits(plan, "gap.blocked", "warning", "defense_lines"))
 
     # -------------------------------------------------------------- capitulation aim and vp selection
     SK_TARGETS = [  # the 1114e pass-2 strategist list: every target in the order the plan took them, 26 VP
