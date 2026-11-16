@@ -16,7 +16,8 @@ you                         hoi4-live play ITA "conquer Ethiopia"           your
 start HOI4 from Steam  -->  4. waits for the game (or --launch asks Steam)
 start Italy 1936, paused    5. attaches to that game (no restart, no menus)
                             6. starts the supervisor in the background:
-                               native runtime, input lease, executor on
+                               native runtime, input lease, the plan's names
+                               checked against the live game, executor on
                             7. prints one instruction                  -->  "Read <run>/BRIEF.txt and follow it"
                                                                             plays through the hoi4-live-play tools
                             supervisor: duplicate guard, idle guard,
@@ -65,6 +66,11 @@ coding client. After `play` the agent has, in one step:
   purpose. `play` prints that note when no shipped plan matches.
 - **the brief** (`BRIEF.txt`), rendered from the playbook's player template with the plan's notes and the MCP tool
   names the agent has (no shell commands);
+- **the plan checked against the live game** once, before the executor starts (reads only): a template,
+  general, air wing or production name that differs from the game's only in spelling is patched in `plan.json`
+  (the original kept as `plan.pre-reconcile.json`), wings named "<variant> at <state>" become the live wings,
+  and what the game does not have, or a first research block not researchable yet, reaches the player as a
+  note; `reconcile.json` holds the result. A failed read leaves the plan as written;
 - **the executor switched on** by the supervisor once it holds the input lease;
 - **one instruction** to paste: `Read <run>/BRIEF.txt and follow it word for word.` It is also in `prompt.txt`.
 

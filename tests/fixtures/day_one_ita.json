@@ -1,0 +1,907 @@
+{
+"_about": "Day-one reads of a recorded Italy 1936 run (names only) and the parts of its plan that reconcile reads; the expected result is what that run's reconcile wrote.",
+"reads": {
+"hoi4_division_templates": {
+"templates": [
+{
+"template": "Divisione di Fanteria"
+},
+{
+"template": "Divisione Alpina"
+},
+{
+"template": "Camicie Nere"
+},
+{
+"template": "Divisione Celere"
+},
+{
+"template": "Reggimento di Cavalleria"
+},
+{
+"template": "Divisione Coloniale"
+},
+{
+"template": "Divisione Ascari Libica"
+},
+{
+"template": "Divisione Ascari Eritrea"
+},
+{
+"template": "Divisione Ascari Somala"
+},
+{
+"template": "Banda Indigena Irregolare"
+},
+{
+"template": "Truppe Irregolari a Cavallo"
+},
+{
+"template": "Banda Irregolare Libica"
+},
+{
+"template": "Banda Irregolare Eritrea"
+},
+{
+"template": "Banda Irregolare Somala"
+}
+]
+},
+"hoi4_commanders": {
+"commanders": [
+{
+"name": "Abba Jofir"
+},
+{
+"name": "Ada Gobetti"
+},
+{
+"name": "Alessandro Pirzio Biroli"
+},
+{
+"name": "Alfredo Guzzoni"
+},
+{
+"name": "Amedeo Guillet"
+},
+{
+"name": "Annibale Bergonzoli"
+},
+{
+"name": "Benito Mussolini"
+},
+{
+"name": "Carlo Geloso"
+},
+{
+"name": "Carlo Vecchiarelli"
+},
+{
+"name": "Emilio De Bono"
+},
+{
+"name": "Ettore Baldassarre"
+},
+{
+"name": "Ettore Bastico"
+},
+{
+"name": "Ezio Rosi"
+},
+{
+"name": "Francesco Zingales"
+},
+{
+"name": "Giovanni Duca"
+},
+{
+"name": "Giovanni Messe"
+},
+{
+"name": "Giuseppe de Stefanis"
+},
+{
+"name": "Giuseppe Pièche"
+},
+{
+"name": "Giuseppe Tellera"
+},
+{
+"name": "Haile Selassie Gugsa"
+},
+{
+"name": "Hailu Tekle Haymanot"
+},
+{
+"name": "Hamid Idris Awate"
+},
+{
+"name": "Ibrahim Farag Mohammed"
+},
+{
+"name": "Italo Balbo"
+},
+{
+"name": "Italo Gariboldi"
+},
+{
+"name": "Luigi Longo"
+},
+{
+"name": "Mario Berti"
+},
+{
+"name": "Mario Ricci"
+},
+{
+"name": "Mario Roatta"
+},
+{
+"name": "Mario Robotti"
+},
+{
+"name": "Mario Vercellino"
+},
+{
+"name": "Norma Barbolini"
+},
+{
+"name": "Pietro Badoglio"
+},
+{
+"name": "Pietro Pintor"
+},
+{
+"name": "Pompeo Colajanni"
+},
+{
+"name": "Prince Adalberto"
+},
+{
+"name": "Prince Filiberto"
+},
+{
+"name": "Prince Umberto"
+},
+{
+"name": "Randolfo Pacciardi"
+},
+{
+"name": "Rodolfo Graziani"
+},
+{
+"name": "Sebastiano Visconti Prasca"
+},
+{
+"name": "Seyoum Mengesha"
+},
+{
+"name": "Ubaldo Soddu"
+},
+{
+"name": "Ugo Cavallero"
+},
+{
+"name": "Ugo Luca"
+},
+{
+"name": "Vittorio Ambrosio"
+}
+]
+},
+"hoi4_air_wings": {
+"wings": [
+{
+"wing": "1° Stormo"
+},
+{
+"wing": "5° Stormo"
+},
+{
+"wing": "6° Stormo"
+},
+{
+"wing": "10° Stormo"
+},
+{
+"wing": "12° Stormo"
+},
+{
+"wing": "2° Stormo"
+},
+{
+"wing": "14° Stormo"
+},
+{
+"wing": "3° Stormo"
+},
+{
+"wing": "4° Stormo"
+},
+{
+"wing": "7° Stormo"
+},
+{
+"wing": "11° Stormo"
+},
+{
+"wing": "8° Stormo"
+},
+{
+"wing": "9° Stormo"
+},
+{
+"wing": "13° Stormo"
+}
+]
+},
+"hoi4_air": {
+"air_bases": [
+{
+"state_id": 2,
+"wings": [
+"4° Stormo",
+"5° Stormo"
+]
+},
+{
+"state_id": 114,
+"wings": [
+"9° Stormo"
+]
+},
+{
+"state_id": 115,
+"wings": [
+"6° Stormo",
+"7° Stormo"
+]
+},
+{
+"state_id": 158,
+"wings": [
+"1° Stormo",
+"2° Stormo",
+"3° Stormo"
+]
+},
+{
+"state_id": 448,
+"wings": [
+"10° Stormo",
+"11° Stormo"
+]
+},
+{
+"state_id": 550,
+"wings": [
+"12° Stormo",
+"13° Stormo",
+"14° Stormo"
+]
+},
+{
+"state_id": 849,
+"wings": [
+"8° Stormo"
+]
+}
+],
+"wings": [
+{
+"wing": "4° Stormo",
+"variant": "Ca.133",
+"aircraft_type": "medium_plane_airframe_0"
+},
+{
+"wing": "5° Stormo",
+"variant": "CR.32",
+"aircraft_type": "small_plane_airframe_0"
+},
+{
+"wing": "9° Stormo",
+"variant": "SM.79",
+"aircraft_type": "medium_plane_airframe_1"
+},
+{
+"wing": "6° Stormo",
+"variant": "CR.32",
+"aircraft_type": "small_plane_airframe_0"
+},
+{
+"wing": "7° Stormo",
+"variant": "Ca.133",
+"aircraft_type": "medium_plane_airframe_0"
+},
+{
+"wing": "1° Stormo",
+"variant": "CR.32",
+"aircraft_type": "small_plane_airframe_0"
+},
+{
+"wing": "2° Stormo",
+"variant": "Ca.101",
+"aircraft_type": "medium_plane_airframe_0"
+},
+{
+"wing": "3° Stormo",
+"variant": "Ca.133",
+"aircraft_type": "medium_plane_airframe_0"
+},
+{
+"wing": "10° Stormo",
+"variant": "CR.32",
+"aircraft_type": "small_plane_airframe_0"
+},
+{
+"wing": "11° Stormo",
+"variant": "Ca.133",
+"aircraft_type": "medium_plane_airframe_0"
+},
+{
+"wing": "12° Stormo",
+"variant": "CR.32",
+"aircraft_type": "small_plane_airframe_0"
+},
+{
+"wing": "13° Stormo",
+"variant": "SM.81",
+"aircraft_type": "medium_plane_airframe_1"
+},
+{
+"wing": "14° Stormo",
+"variant": "Ca.111",
+"aircraft_type": "small_plane_cas_airframe_0"
+},
+{
+"wing": "8° Stormo",
+"variant": "SM.79",
+"aircraft_type": "medium_plane_airframe_1"
+}
+]
+},
+"hoi4_production_lines": {
+"lines": [
+{
+"equipment_id": "infantry_equipment_1",
+"factory_counters": {
+"active_factories_raw_signed": 4
+}
+},
+{
+"equipment_id": "support_equipment_1",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "light_tank_chassis_1",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "motorized_equipment_1",
+"factory_counters": {
+"active_factories_raw_signed": 2
+}
+},
+{
+"equipment_id": "ship_hull_heavy_1",
+"factory_counters": {
+"active_factories_raw_signed": 2
+}
+},
+{
+"equipment_id": "ship_hull_heavy_1",
+"factory_counters": {
+"active_factories_raw_signed": 2
+}
+},
+{
+"equipment_id": "ship_hull_heavy_2",
+"factory_counters": {
+"active_factories_raw_signed": 2
+}
+},
+{
+"equipment_id": "ship_hull_heavy_2",
+"factory_counters": {
+"active_factories_raw_signed": 2
+}
+},
+{
+"equipment_id": "ship_hull_cruiser_2",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "ship_hull_cruiser_2",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "ship_hull_cruiser_2",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "ship_hull_light_1",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "ship_hull_light_1",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "ship_hull_submarine_2",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "small_plane_cas_airframe_1",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+},
+{
+"equipment_id": "small_plane_cas_airframe_0",
+"factory_counters": {
+"active_factories_raw_signed": 1
+}
+}
+]
+},
+"hoi4_technology_list": {
+"technologies": [
+"improved_ship_hull_light",
+"smoke_generator",
+"improved_depth_charges",
+"sonar",
+"improved_ship_hull_cruiser",
+"improved_ship_hull_heavy",
+"improved_heavy_armor_scheme",
+"early_ship_hull_carrier",
+"improved_ship_hull_submarine",
+"basic_light_shell",
+"basic_heavy_shell",
+"improved_ship_torpedo_launcher",
+"damage_control_1",
+"fire_control_methods_1",
+"improved_submarine_mine_laying",
+"improved_naval_mines",
+"mtg_landing_craft",
+"improved_light_tank_chassis",
+"basic_medium_tank_chassis",
+"basic_heavy_tank_chassis",
+"armor_tech_1",
+"engine_tech_1",
+"early_transport_plane",
+"early_fighter",
+"cv_early_fighter",
+"cv_fighter1",
+"cv_fighter2",
+"cv_fighter3",
+"cv_CAS1",
+"cv_CAS2",
+"cv_CAS3",
+"cv_naval_bomber1",
+"cv_naval_bomber2",
+"cv_naval_bomber3",
+"early_bomber",
+"strategic_bomber1",
+"gwtank",
+"basic_light_td",
+"basic_light_art",
+"basic_light_spaa",
+"improved_light_td",
+"improved_light_art",
+"improved_light_spaa",
+"advanced_light_td",
+"advanced_light_art",
+"advanced_light_spaa",
+"basic_medium_td",
+"basic_medium_art",
+"basic_medium_spaa",
+"improved_medium_td",
+"improved_medium_art",
+"improved_medium_spaa",
+"advanced_medium_td",
+"advanced_medium_art",
+"advanced_medium_spaa",
+"modern_td",
+"modern_art",
+"modern_spaa",
+"basic_heavy_td",
+"basic_heavy_art",
+"basic_heavy_spaa",
+"improved_heavy_td",
+"improved_heavy_art",
+"improved_heavy_spaa",
+"advanced_heavy_td",
+"advanced_heavy_art",
+"advanced_heavy_spaa",
+"super_heavy_td",
+"super_heavy_art",
+"super_heavy_spaa",
+"interwar_artillery",
+"antiair1",
+"interwar_antitank",
+"the_thunder_at_our_gates_artillery",
+"bba_improved_transport_plane",
+"improved_small_airframe",
+"improved_medium_airframe",
+"iw_large_airframe",
+"heavy_bombs",
+"armor_piercing_bombs",
+"air_torpedoe_2",
+"survivability_studies",
+"aa_hmg",
+"aa_cannon_1",
+"engines_3",
+"range_improvements",
+"electronic_mechanical_engineering",
+"basic_fortification_tech",
+"experimental_rockets",
+"rocket_engines",
+"improved_rocket_engines",
+"advanced_rocket_engines",
+"jet_engines",
+"atomic_research",
+"nuclear_reactor",
+"nuclear_reactor_heavy_water",
+"nukes",
+"basic_machine_tools",
+"fuel_refining2",
+"synth_oil_experiments",
+"construction1",
+"infantry_weapons2",
+"paratroopers",
+"marines",
+"tech_mountaineers2",
+"night_vision",
+"support_weapons",
+"armored_car2",
+"armored_car_at_upgrade",
+"mechanised_infantry",
+"revolutionary_mass_assault",
+"early_destroyer",
+"early_light_cruiser",
+"early_heavy_cruiser",
+"early_battlecruiser",
+"early_battleship",
+"transport",
+"early_carrier",
+"early_submarine",
+"fleet_submarines",
+"isotope_separation_centrifugal",
+"thermonuclear_bombs",
+"tech_engineers2",
+"tech_recon",
+"tech_military_police",
+"tech_maintenance_company",
+"tech_field_hospital",
+"tech_logistics_company",
+"wartime_train"
+]
+}
+},
+"plan": {
+"air_plan": [
+{
+"id": "ap01a_cas_ca111",
+"wing": "Ca.111 at 550",
+"base_state": 550,
+"mission": "cas",
+"region": "Danakil",
+"count": 48,
+"why": "48 Ca.111 stay at Asmara until Shewa is Italian: CAS over Tigray (the Gondar Group's front) and the Danakil region (Danakil holds Asmara, Tigray, Wello and Afar [V facts province]); the Ca.111 airframe's range is not printed by the facts CLI (tool gap 9), so the plan treats it like the CR.32's 400 km [H] and does not count on it for the Highlands",
+"when": {
+"not": "state_controller:271=ITA"
+}
+},
+{
+"id": "ap01b_cas_ca111_addis",
+"wing": "Ca.111 at 550",
+"base_state": 271,
+"mission": "cas",
+"region": "17",
+"count": 48,
+"when": "state_controller:271=ITA",
+"why": "critic F4: once state 271 is Italian the 48 Ca.111 rebase to its air base (state 271 has air base 1, 200 planes [V facts state 271; 00_defines.lua:746]) and fly CAS over the Highlands, where Asella, Gaba, Irgalem and the October legs are 1-3 provinces from Addis; executor rebase_target: the wing stays where it is if the base is not listed [V native/src/plan_manage.rs:1405-1416]"
+},
+{
+"id": "ap02_cas_sm81",
+"wing": "SM.81 at 550",
+"base_state": 550,
+"mission": "cas",
+"region": "17",
+"then_region": "17",
+"switch_when": "province_controlled:1984",
+"count": 32,
+"why": "staging change 15 Nov: the SM.81 has the range for the Highlands from Asmara; the Ca.111 and the CR.32 stay over Danakil (Tigray, Wello)"
+},
+{
+"id": "ap03a_fighters_cr32",
+"wing": "CR.32 at 550",
+"base_state": 550,
+"mission": "air_superiority",
+"region": "Danakil",
+"count": 40,
+"why": "40 CR.32 (400 km, small_plane_airframe_0 [V plane_airframes.txt:221]) keep air superiority over Danakil from Asmara, over Tigray; 120 planes in total, under the 299-plane escalation trigger [V 08_bba_on_actions.txt:763]",
+"when": {
+"not": "state_controller:271=ITA"
+}
+},
+{
+"id": "ap03b_fighters_cr32_addis",
+"wing": "CR.32 at 550",
+"base_state": 271,
+"mission": "air_superiority",
+"region": "17",
+"count": 40,
+"when": "state_controller:271=ITA",
+"why": "the 40 CR.32 follow the Ca.111 to Addis (400 km class: from Asmara the Highlands are out of reach); 88 planes on a base of 200"
+},
+{
+"id": "ap04_cas_highlands_8",
+"wing": "8° Stormo",
+"base_state": 550,
+"mission": "cas",
+"region": "17",
+"count": 48,
+"why": "staging change 15 Nov: no wing flew over the Ethiopian Highlands (Gondar, Debre Markos) or the Ogaden; 588 of 708 aircraft stood in Italy and Libya while the armies attacked a mountain line. The cap of 299 aircraft in the three regions leaves room for 179 more; Asmara holds 600"
+},
+{
+"id": "ap05_fighters_highlands_1",
+"wing": "1° Stormo",
+"base_state": 550,
+"mission": "air_superiority",
+"region": "17",
+"count": 80,
+"why": "air superiority over the Gondar road (Ethiopia has no aircraft): the defenders fight under enemy air superiority"
+},
+{
+"id": "ap06_cas_ogaden_9",
+"wing": "9° Stormo",
+"base_state": 559,
+"mission": "cas",
+"region": "Ogaden",
+"count": 24,
+"why": "the South Force's road to Dire Dawa and Harar had no air support; Mogadiscio holds 200"
+},
+{
+"id": "ap07_fighters_ogaden_10",
+"wing": "10° Stormo",
+"base_state": 559,
+"mission": "air_superiority",
+"region": "Ogaden",
+"count": 20,
+"why": "air superiority over the Ogaden"
+}
+],
+"army_layout": [
+{
+"id": "fm_north_strike",
+"name_hint": "North Strike",
+"state": 550,
+"templates": [
+"Divisione di Fanteria"
+],
+"count": 4,
+"role": "strike",
+"general": "Giovanni Messe",
+"axis": [
+841,
+840,
+271,
+837,
+836,
+835,
+839,
+838
+],
+"why": "4 Fanteria (12766 x2, 13250, 8043) under Messe (skill 4, attack 4, logistics 4); the Ascari Eritrea divisions in the same provinces join it by armies.absorb; the main thrust, one road: Gondar, Debre Markos, Addis, then Asella, Irgalem, Gaba and Harar from the Addis hub in that row order, then the reserve rows in the west (axis in the order of its vp rows)"
+},
+{
+"id": "fm_gondar",
+"name_hint": "Gondar Group",
+"state": 550,
+"templates": [
+"Divisione di Fanteria",
+"Divisione Alpina"
+],
+"count": 3,
+"role": "strike",
+"general": "Carlo Vecchiarelli",
+"axis": [
+842,
+843
+],
+"why": "the two Fanteria of 13251 and the Alpine division of 12723 under the mountaineer Vecchiarelli: Aksum first (the supply link of the north-west road), Adwa, Macalle and Dessie on the Wello road are its four rows; Tigray and Wello are cheap rows by the lint's FAIR cost model (2.25-5.0), so they are main rows, and the fighting there feeds the casualty lever and the north mission. After Dessie it has no row, so it follows the phase axes as a second echelon [V native/src/plan_run.rs:4024-4046]: [271] in P4 and P5 (13239, one river step from Dessie, which touches Addis; after the planning wait, so after cp05 joins the Addis hub), [835] only in P6, which starts when state 271 is whole. Harar is NOT its row (critic F26): a row would send it from Dessie onto 13239 and Harar weeks before the hub feeds them (-1.8 from Asmara)"
+},
+{
+"id": "fm_north_guard",
+"name_hint": "North Guard",
+"state": 550,
+"templates": [
+"Camicie Nere"
+],
+"count": 5,
+"role": "guard",
+"covers": [
+550,
+841,
+840
+],
+"guard_states_in_order": [
+550,
+841,
+840
+],
+"why": "staging change 15 Nov: its own formation (the fourth, armies.max_per_group 4): the strike army's short offensive line gathers it on Gondar, and the border behind it must stay held"
+},
+{
+"id": "fm_south",
+"name_hint": "South Force",
+"state": 559,
+"templates": [
+"Divisione Ascari Libica",
+"Divisione Ascari Somala",
+"Camicie Nere",
+"Banda Irregolare Somala"
+],
+"count": 6,
+"role": "strike",
+"general": "Ettore Baldassarre",
+"covers": [
+559,
+844
+],
+"why": "staging change 15 Nov (t1): every division in Somaliland is one formation under Baldassarre; its front along the whole border is the guard, and all of it attacks toward Wal Wal and Harar. As 3 strike divisions and 3 guards (sk16, t1) the southern front took nothing in three months while the stock AI held Dire Dawa by 30 March",
+"axis": [
+835
+]
+},
+{
+"id": "fm_jubaland_guard",
+"name_hint": "Jubaland Guard",
+"state": 844,
+"templates": [
+"Divisione di Fanteria"
+],
+"count": 1,
+"role": "guard",
+"task_of": "South Force",
+"covers": [
+844
+],
+"guard_states_in_order": [
+844
+],
+"why": "the only division in Jubaland stays in 11014 (Kismaayo's flank) as a task of the Somali Guard, whose front covers 844; a push into 844 is answered by contingency c08 and the South Force (covers 844)"
+}
+],
+"armies": {
+"states": [
+550,
+559,
+844
+],
+"max": 24,
+"min_for_general": 3,
+"absorb": "assign",
+"concentrate": true,
+"max_per_group": 4,
+"min_divisions": 3,
+"generals": [
+"Giovanni Messe",
+"Carlo Vecchiarelli",
+"Ettore Baldassarre",
+"Alessandro Pirzio Biroli",
+"Ezio Rosi",
+"Mario Berti"
+]
+},
+"army_group": [
+{
+"id": "ag_aoi",
+"name": "Africa Orientale",
+"armies": [
+"North Strike",
+"Gondar Group",
+"South Force",
+"North Guard"
+],
+"marshal": [
+"Rodolfo Graziani",
+"Pietro Badoglio"
+],
+"why": "one marshal over the four formations (L25); Graziani offensive_doctrine and desert_fox, Badoglio organizer as fallback"
+}
+],
+"production": [
+{
+"equipment": "support_equipment_1",
+"factories": 3,
+"from": "1936.01.01",
+"why": "start line 1 + 2 of the 10 free factories on day 0 (listed first so the day-0 step serves it before infantry; the executor adds up to each entry's `factories` on day 0 [V native/src/plan_manage.rs:2297-2370]); 3 factories = 1.3 a day against about 0.7 lost; the 60 short at the start are covered 03-05 (63 days) with the 21 returned by the early disband (2 divisions, plan.md section 5), 04-08 (97 days) on the factories alone [D RUN/disband_calc.py; lint production.balance]"
+},
+{
+"equipment": "infantry_equipment_1",
+"factories": 12,
+"from": "1936.01.01",
+"why": "start 4 + the other 8 of the 10 free factories on day 0 = 12, the number the executor really delivers (the earlier 14 listed two seats that do not exist); they join at the start line's efficiency (L19). Factories that fall idle later (the L3/35 factory on 01-17, Army Primacy +1 on 03-12, the first filler arms factory about 05-12: 03-22 on `calc build-order arms_factory:2` plus about 52 days for the rail jobs cp01-cp02 and the agency's 450 civilian-factory-days ahead of it) go to the line the divisions lack most through the executor's rebalance [V native/src/plan_manage.rs:2133-2200]; the lint cannot see them (a second entry for the line is a duplicate key)"
+},
+{
+"equipment": "motorized_equipment_1",
+"factories": 2,
+"from": "1936.01.01",
+"why": "the 2 start factories stay (no add): 150 trucks in stock against the divisions' need, 1.4 trucks a day [V history/countries/ITA - Italy.txt:942]; manage.trucks_ratio 1.5 raises the line from idle factories if the stock falls under 1.5 x the fielded need"
+},
+{
+"equipment": "convoy_1",
+"factories": 1,
+"from": "1936.01.01",
+"why": "the one free dockyard builds convoys for the sea supply of Massaua, Mogadiscio and Kismaayo (0.25 convoys per supply point)"
+},
+{
+"equipment": "small_plane_cas_airframe_0",
+"remove": true,
+"from": "1936.01.02",
+"why": "Ca.111 line: 48 Ca.111 already stand at Asmara (L18); closed on 01-02, after the day-0 step, so the executor's free factories on day 0 are the 10 idle ones and the lint's day-0 pool matches (tool gap 14)"
+},
+{
+"equipment": "small_plane_cas_airframe_1",
+"remove": true,
+"from": "1936.01.02",
+"why": "Ba.65 line: no wing flies it (L18); closed on 01-02 with the Ca.111 line"
+},
+{
+"equipment": "artillery_equipment_1",
+"factories": 2,
+"from": "1936.01.02",
+"why": "the Fanteria and Alpina templates carry an artillery support company (12 each, 96 in the 8 theatre divisions) and no start line builds it. 2 factories (critic F3: 3 made 424 against about 160 needed); on 01-02 the two air lines have freed exactly 2 factories and the executor adds the line with them. During P1 production_priority names artillery alone so the rebalance (it runs before the plan's own lines [V native/src/plan_run.rs:1731]) cannot hand the freed factories to infantry first; made about 283 by year end against 14 short + about 49 lost, covered 03-14 (72 days) [D lint production.balance]; the 2-division disband returns 8 more, covered 02-14 (44 days) [D RUN/disband_calc.py]"
+},
+{
+"equipment": "light_tank_chassis_1",
+"remove": true,
+"from": "1936.01.17",
+"why": "L3/35: no tank template, the theatre is mountains and desert (L18); closed on 01-17, after the P1 priority override, so its factory is idle for the rebalance (infantry) instead of the artillery line, which keeps the 2 factories the two air lines free"
+}
+],
+"research_path": [
+{
+"year": 1936,
+"not_before": "1936.01.01",
+"techs": [
+"basic_machine_tools",
+"construction1",
+"interwar_artillery",
+"electronic_mechanical_engineering",
+"tech_logistics_company",
+"concentrated_industry",
+"synth_oil_experiments",
+"tech_maintenance_company",
+"mechanical_computing",
+"radio",
+"support_weapons",
+"tech_recon",
+"excavation1",
+"tech_field_hospital",
+"engine_tech_1",
+"tech_military_police"
+],
+"why": "industry and construction first (basic_machine_tools, construction1, then concentrated_industry as soon as basic_machine_tools is done); interwar_artillery starts on day 1 (slot 3, done 06-15): it gives artillery soft attack +5% and artillery brigade +10% for the artillery support companies [V common/technologies/artillery.txt:88-104], not an equipment unlock (gw_artillery already enables artillery_equipment_1 [V artillery.txt:6-9]); electronics for radios; tech_logistics_company and tech_maintenance_company are filler: no template fields a company, so they act only as slot-days; tech_logistics_company (category motorized_equipment [V support.txt:1466-1471]) starts 04-21 so that it is running on 05-21, when A Bandit's War gives motorized_equipment 0.5x2 [V facts focus ITA_a_bandits_war]; the 11-12 artillery bonus (Increase Artillery Production, artillery 0.5x2) has no tech to act on: interwar_artillery is the only in-year artillery-category tech [V artillery.txt:125-129] and it is worth more done on 06-15 than sped up in November; synth_oil_experiments opens only the 1937 techs oil_processing and rubber_processing [V dossier section 6], so it is a 330-day slot filler; the rest keep every slot busy with in-year techs (lint research.idle)"
+}
+]
+}
+}

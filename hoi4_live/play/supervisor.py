@@ -4,7 +4,9 @@
 closes or the run is stopped:
 
     start       start the native runtime on the run's session, retrying while the user is still in the menus;
-                take the input lease, check the country, switch the executor on
+                take the input lease, check the country, reconcile the plan's names with the live game
+                (play/reconcile.py: templates, generals, wings, production, first research; reads only), switch
+                the executor on
     serve       answer the `hoi4-live-play` proxy on a private endpoint (authenticated, this user only)
     each call   add the lease token and a request id where the tool takes them; refuse an identical action that
                 succeeded within DUPLICATE_WINDOW seconds with its earlier result (`already_done`); bring the
@@ -37,7 +39,7 @@ import tempfile
 import threading
 import time
 
-from . import game, report, runs
+from . import game, reconcile, report, runs
 from .native import Native
 
 IDLE_PAUSE_MINUTES = runs.IDLE_PAUSE_MINUTES
@@ -301,6 +303,7 @@ class Supervisor:
                                   "again" % (overview["player"], tag, tag))
             self.release()
             return False
+        self.reconcile_day_one()
         err, body = self.native_call("hoi4_autopilot", {"enabled": True, "interval_ms": 1000})
         if err:
             self.note("the executor could not be switched on (%s); the plan's routine work is yours until it is"
@@ -311,6 +314,43 @@ class Supervisor:
         # The status turns "ready" once the endpoint exists (main), so nobody is told to play before it can.
         self.state = "ready"
         return True
+
+    def reconcile_day_one(self):
+        """The plan's names against the live game, once per run, before the executor starts: a name that
+        differs only in spelling is patched in plan.json; the rest reaches the player as a note. A failed read
+        leaves the plan as written."""
+        if not os.path.exists(os.path.join(self.run, "plan.json")) or \
+                os.path.exists(os.path.join(self.run, "reconcile.json")):
+            return None
+
+        def read(tool, args):
+            err, body = self.native.call(tool, args)
+            if err:
+                raise RuntimeError("%s: %s" % (tool, error_code(body) or json.dumps(body)[:200]))
+            return body if isinstance(body, dict) else {}
+        try:
+            with self.plan_lock:
+                rec = reconcile.run(self.run, read)
+        except (RuntimeError, ValueError, OSError) as exc:
+            self.event("reconcile_failed", error=str(exc)[:300])
+            self.note("the plan could not be checked against the live game (%s); it runs as written" % str(exc)[:200])
+            return None
+        self.event("reconcile", patched=len(rec["patched"]), unresolved=len(rec["unresolved"]),
+                   research_not_yet=len(rec["research"]["not_yet_available"]))
+        if rec["patched"]:
+            self.note("the plan's names were matched to the live game: %s" % "; ".join(
+                "%s %s -> %s" % (p["kind"], p["from"], p["to"]) for p in rec["patched"][:8]))
+        if rec["unresolved"]:
+            self.note("the plan names what the live game does not have, so the executor cannot act on them; what "
+                      "the plan asks of them is yours to do by hand (reconcile.json in the run folder): %s" % "; ".join(
+                          "%s %r at %s (nearest: %s)" % (u["kind"], u["name"], u["path"],
+                                                          ", ".join(map(str, u["candidates"][:3])) or "none")
+                          for u in rec["unresolved"][:8]))
+        late = rec["research"]["not_yet_available"]
+        if late:
+            self.note("first research block: %d of %d not researchable yet (%s); the executor takes the next "
+                      "available ones" % (len(late), len(rec["research"]["first_block"]), ", ".join(late[:6])))
+        return rec
 
     # ------------------------------------------------------------------------------------------ calls
     def handle(self, name, args, source="player"):
