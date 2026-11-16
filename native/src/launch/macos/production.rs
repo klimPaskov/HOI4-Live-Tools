@@ -331,6 +331,109 @@ pub(super) fn reveal_named(
     ))
 }
 
+/// Line handles in the order the production view shows them (its `item_grid`): the priority
+/// order, highest first (a line higher in the list gets resources and factories first).
+pub(super) fn shown_order(r: &Reader<'_>, image: u64) -> Result<Vec<u64>> {
+    let u = ui(r)?;
+    let lines = window(r, image, military_tab(r, image)?, "production_lines")?;
+    let grid = gui_tree::child(r, image, lines, "item_grid")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Line grid not found"))?;
+    let (_, data, count) = r.array_header(grid + u.grid_items)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(2048) as u64 {
+        let item = r.u64(data + index * 8)?;
+        let kind = r.u64(item)?;
+        if kind != image + u.military_row_vtable && kind != image + u.naval_row_vtable {
+            continue;
+        }
+        out.push(r.u64(item + u.row_handle)?);
+    }
+    Ok(out)
+}
+
+/// Where a line goes: `Top`/`Bottom` (the arrow with Shift: highest or lowest priority) or one
+/// place `Up`/`Down` (the arrow alone).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Move {
+    Top,
+    Up,
+    Down,
+    Bottom,
+}
+impl Move {
+    pub(super) fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "top" => Self::Top,
+            "up" => Self::Up,
+            "down" => Self::Down,
+            "bottom" => Self::Bottom,
+            _ => return None,
+        })
+    }
+    /// The place the line should show at after the move, from its place `at` among `count`.
+    pub(super) fn target(self, at: usize, count: usize) -> usize {
+        match self {
+            Self::Top => 0,
+            Self::Up => at.saturating_sub(1),
+            Self::Down => (at + 1).min(count.saturating_sub(1)),
+            Self::Bottom => count.saturating_sub(1),
+        }
+    }
+}
+
+/// Move the line `handle` in the production view's priority order with its row's arrows
+/// (increase_priority / decrease_priority; Shift+click goes to the top or the bottom). Verified by
+/// the line's place in the view's list. A line already where it is asked to go is left alone.
+pub(super) fn prioritize(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    handle: u64,
+    to: Move,
+) -> Result<()> {
+    ensure_open(process, keys)?;
+    let place = |r: &Reader<'_>, i: u64| -> Result<(usize, usize)> {
+        let order = shown_order(r, i)?;
+        let at = order.iter().position(|h| *h == handle).ok_or_else(|| {
+            Error::new(
+                "input_readback_failed",
+                "The line is not in the production list",
+            )
+        })?;
+        Ok((at, order.len()))
+    };
+    let (at, count) = settled(process, "production list", place)?;
+    let target = to.target(at, count);
+    if at == target {
+        return Ok(());
+    }
+    let name = if target < at {
+        "increase_priority"
+    } else {
+        "decrease_priority"
+    };
+    reveal_named(process, keys, handle, name, 20)?;
+    let rect = settled(process, "priority arrow", |r, i| {
+        button(r, i, handle, name)?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Priority arrow not found"))
+    })?;
+    clear_notices(process, keys)?;
+    let (x, y) = rect.center();
+    if matches!(to, Move::Top | Move::Bottom) {
+        keys.shift_click(GAME, x, y)?;
+    } else {
+        keys.click(GAME, x, y)?;
+    }
+    wait(process, "line moved", |r, i| Ok(place(r, i)?.0 == target)).map_err(|_| {
+        let now = read(process, place).map(|p| p.0).ok();
+        Error::new(
+            "action_not_applied",
+            format!(
+                "The {name} click left the line at place {now:?} of {count} (asked: {target}, was {at})"
+            ),
+        )
+    })
+}
+
 /// Adjust the line's requested factories to `target` with single +/- clicks.
 fn adjust(process: &dyn Process, keys: &dyn GameInput, handle: u64, target: i32) -> Result<()> {
     for _ in 0..120 {

@@ -474,7 +474,6 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 
 - Equipment stockpile read (stock, daily production and use per item): days of cover are estimated.
 - Per-line efficiency and unit-progress read.
-- Production line reorder (line priority, PR11).
 - Naval line quantity (ships per line).
 - Regimental-support argument in the template tools.
 - International Market (sell or buy equipment, PR22-PR23).
@@ -497,7 +496,7 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR08 | Cull unused lines | Each military factory makes 4.5 IC a day. At the start and at every phase change remove every line no template, air wing, fleet or stockpile target uses (Germany: the light-tank, fighter and He 111 start lines in a land-first plan; Italy: L3 tankettes and interwar CAS; USSR: light tanks, naval and air lines; Japan: tank lines). Switch an air line inside its airframe family (90%) rather than removing it when the plane is still wanted | Day 0 and each phase change | FAIR |
 | PR09 | No factory shuffling | A moved factory restarts at 10%. Move factories only from a line with more than 90 days of cover to a line under 7 days, at most one pull per line per 30 days and never more than 20% of a line | Any rebalance | FAIR |
 | PR10 | Idle factories by deficit | Give idle or new factories to the line with the fewest days of cover, in chunks of max(2, 20% of that line), not all to one line | A factory finishes, a line is removed | FAIR |
-| PR11 | Line order is priority | Lines at the top get factories and resources first; shortages, bombing and lost factories hit the bottom first; a new line joins the bottom. Keep rifles, support, artillery, trucks and fighters on top | Shortages, bombing | FAIR |
+| PR11 | Line order is priority | Lines at the top get factories and resources first; shortages, bombing and lost factories hit the bottom first; a new line joins the bottom. Keep rifles, support, artillery, trucks and fighters on top: `production_priority` in the plan (the executor moves those lines to the top with `hoi4_production_priority`, again when a line is added), or the tool by hand. The move itself costs nothing | Shortages, bombing | FAIR |
 | PR12 | Fix resources before adding factories | Each missing resource unit costs -5% on a factory, lowest lines first. Buy or auto-import first; a 1-2 unit deficit on a minor line costs less than a civilian factory, so accept it | Any red line | FAIR |
 | PR13 | Efficiency buff order | Daily growth = 0.001 x cap^2 / current; pick cap first, then cost, then output, growth last; +10% cap overtakes +10% output after about 150-200 days | MIO traits, techs, advisors | FAIR |
 | PR14 | Machine tools on time | Six industry techs each add +10 points of cap (50% to 110%); the first four also +20% conversion speed; flexible line +0.2 retention, streamlined line +0.1 growth | Research plan | FAIR |

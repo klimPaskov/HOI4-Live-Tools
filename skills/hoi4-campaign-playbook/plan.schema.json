@@ -745,6 +745,7 @@
       "items": {
         "type": "string"
       },
+      "description": "equipment keys (base or variant) whose lines come first: idle factories go to them, and the executor keeps their lines on top of the production view's priority order in this order (hoi4_production_priority, a new round when a matching line is added or removed; gap register production.line_priority_order)",
       "x-owner": "executor"
     },
     "production_min_idle": {

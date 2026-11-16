@@ -360,6 +360,7 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_army_fallback",
     "hoi4_army_exercise",
+    "hoi4_production_priority",
     "hoi4_army_area_defense",
     "hoi4_agency_create",
     "hoi4_agency_upgrade",

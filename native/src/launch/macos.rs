@@ -739,6 +739,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; every request ends in a terminal receipt (action_unconfirmed: the effect was not observed and the request is closed; read the state again before sending a fresh one).","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id or design name from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options. The line gets no military-industrial organisation (the design is Shift+clicked past the organisation chooser); `organization` (the organisation's script key, as hoi4_mios lists it) is not yet built: it is refused with not_yet_built before any input.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"anyOf":[{"type":"integer","minimum":1},{"type":"string","maxLength":128}]},"organization":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_production_priority","description":"Move an own production line in the production view's priority order (a line higher in the list gets resources and factories first, so shortages and lost factories hit the bottom lines): the line's arrows (increase_priority, decrease_priority), Shift+click for to:top or to:bottom. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Verified by the line's place in the view's list (receipt detail: place before and after, the shown order).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"to":{"type":"string","enum":["top","up","down","bottom"]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","to","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... Province buildings (supply_node = supply hub, naval_base, bunker, coastal_bunker) are clicked on a province: pass province_id, or the tool tries the state's provinces nearest the centre in turn until the game accepts one (a supply hub needs a province the game allows, usually on a railway). Railways (rail_way) are not supported.","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":99999},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (slots 0 tank, 1 naval, 2 aircraft and 3 materiel designer, 4 industrial concern, 5 theorist; with Arms Against Tyranny the designer slots hold Military Industrial Organizations: hoi4_mio_* tools) or military_staff (slots 0 chief of army, 1 chief of navy, 2 chief of air force, 3-5 high command). A slot index is the slot's position in its category, the order of the slot lines in the game's common/idea_tags (a mod can change it); an advisor is hired from a slot of its own kind, so a high command advisor needs slot 3, 4 or 5. Returns each idea key with the game's enabled state, the slot's current idea, and slots: every slot of the category with its index and what it holds now.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
@@ -856,6 +857,7 @@ impl Commands for MacClock {
                     | "hoi4_focus_start"
                     | "hoi4_production_add"
                     | "hoi4_production_set"
+                    | "hoi4_production_priority"
                     | "hoi4_construction_add"
                     | "hoi4_construction_open"
                     | "hoi4_construction_select"
@@ -2972,6 +2974,77 @@ impl MacClock {
             };
             let receipt =
                 actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_production_priority" {
+            allowed(
+                args,
+                &["line", "equipment", "to", "request_id", "lease_token"],
+            )?;
+            let key = string(args, "equipment")?;
+            let to = args
+                .get("to")
+                .and_then(Value::as_str)
+                .and_then(production::Move::parse)
+                .ok_or_else(|| {
+                    Error::new("invalid_arguments", "to must be top, up, down or bottom")
+                })?;
+            let index = args
+                .get("line")
+                .and_then(Value::as_u64)
+                .filter(|v| *v < 2048)
+                .ok_or_else(|| Error::new("invalid_arguments", "line must be 0..2047"))?
+                as usize;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let handle = production::lines(process)?
+                .get(index)
+                .filter(|l| l.key.as_deref() == Some(key))
+                .map(|l| l.handle)
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_target",
+                        "No own line with this index and equipment",
+                    )
+                })?;
+            let order = || ui::read(process, production::shown_order);
+            let before = order().ok();
+            let place =
+                |o: &Option<Vec<u64>>| o.as_ref().and_then(|o| o.iter().position(|h| *h == handle));
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"production_priority","line":index,"equipment":key,
+                "handle":format!("0x{handle:016x}"),"to":args["to"]});
+            let mut settle = || {
+                let now = order().ok();
+                let (was, at) = (place(&before), place(&now));
+                let count = now.as_ref().map_or(0, Vec::len);
+                let wanted = was.map(|w| to.target(w, count));
+                let detail = json!({"place_before":was,"place_after":at,"lines_shown":count});
+                Ok(match (at, wanted) {
+                    (Some(a), Some(w)) if a == w => journal::Outcome::Reached(detail),
+                    (Some(a), _)
+                        if retry
+                            && (to == production::Move::Top && a == 0
+                                || to == production::Move::Bottom && a + 1 == count) =>
+                    {
+                        journal::Outcome::Reached(detail)
+                    }
+                    (Some(a), Some(_)) if Some(a) != was => journal::Outcome::Diverged(detail),
+                    _ if retry => journal::Outcome::Diverged(detail),
+                    _ => journal::Outcome::Unchanged(detail),
+                })
+            };
+            let keys = &self.keys;
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                production::prioritize(process, keys, handle, to)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_production_add" || name == "hoi4_production_set" {
