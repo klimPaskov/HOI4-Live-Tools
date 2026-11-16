@@ -141,6 +141,19 @@ pub(super) fn plan(stacks: &[Stack], area: Area) -> Plan {
             && bottom >= by0 - GUARD_Y
             && top <= by1 + GUARD_Y
     };
+    // One stack holding only wanted divisions is clicked, not boxed: a box's corner can press on
+    // a city or victory-point model beside it (e5-e7, 16 Nov 2026: the boxes around single stacks
+    // in Shewa and Wello, by Addis Ababa and Dessie, selected one map object of another type
+    // both ways, 8 refusals a run), and a click on the stack takes the same divisions.
+    if shown.len() == 1 && shown[0].others == 0 && !others.iter().any(threatens) {
+        if let Some(p) = shown[0].at {
+            return Plan {
+                pick: Some(Pick::Clicks(vec![p])),
+                covered: shown[0].wanted.len(),
+                left_out: wanted_total - shown[0].wanted.len(),
+            };
+        }
+    }
     if !others.iter().any(threatens) {
         let covered: usize = shown.iter().map(|s| s.wanted.len()).sum();
         return Plan {
@@ -684,11 +697,20 @@ mod tests {
         );
         assert_eq!((p.covered, p.left_out), (6, 0));
         // a stack of three draws three rows: the box reaches the last one
-        let stacks = vec![stack(1, (800.0, 400.0), &["a", "b", "c"], 0)];
+        let stacks = vec![
+            stack(1, (800.0, 400.0), &["a", "b", "c"], 0),
+            stack(2, (700.0, 380.0), &["d"], 0),
+        ];
         let Some(Pick::Box(_, (_, bottom))) = plan(&stacks, AREA).pick else {
             panic!("box expected")
         };
         assert_eq!(bottom, 400.0 + COUNTER_DROP + 2.0 * COUNTER_ROW);
+        // one stack alone is clicked: a box corner can press on a city model beside it
+        let stacks = vec![stack(1, (800.0, 400.0), &["a", "b", "c"], 0)];
+        assert_eq!(
+            plan(&stacks, AREA).pick,
+            Some(Pick::Clicks(vec![(800.0, 400.0)]))
+        );
     }
     #[test]
     fn an_army_inside_the_box_turns_it_into_clicks_on_the_clean_stacks() {
@@ -724,8 +746,9 @@ mod tests {
                 stack(1, (800.0, 400.0), &["a"], 0),
                 stack(2, (820.0, y), &[], 2),
             ];
-            assert!(
-                matches!(plan(&stacks, AREA).pick, Some(Pick::Box(..))),
+            assert_eq!(
+                plan(&stacks, AREA).pick,
+                Some(Pick::Clicks(vec![(800.0, 400.0)])),
                 "{y}"
             );
         }
@@ -753,7 +776,7 @@ mod tests {
             },
         ];
         let p = plan(&stacks, AREA);
-        assert!(matches!(p.pick, Some(Pick::Box(..))));
+        assert_eq!(p.pick, Some(Pick::Clicks(vec![(800.0, 400.0)])));
         assert_eq!((p.covered, p.left_out), (1, 2));
         let p = plan(&stacks[1..], AREA);
         assert_eq!(p.pick, None);
