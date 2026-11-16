@@ -37,6 +37,8 @@ struct Ui {
     portrait_group: u64,
     group_handle: u64,
     group_orders: u64,
+    /// The two order lists a fallback stroke fills (one order in each), where the build maps them.
+    group_fallback_lists: [Option<u64>; 2],
     division_location: u64,
     province_id: u64,
     order_vtable: u64,
@@ -75,6 +77,9 @@ const MACOS: Ui = Ui {
     portrait_group: 0x30,
     group_handle: 0x8,
     group_orders: 0x98,
+    // A fallback stroke left +0x98 empty and added one COrderInstance to each of these lists
+    // (live 16 Nov 2026, 1.19.4.1, two armies; the line was drawn on the map).
+    group_fallback_lists: [Some(0xb0), Some(0xc8)],
     division_location: 0x1f0,
     province_id: 0x9c,
     order_vtable: 0x3512bf0,
@@ -147,6 +152,10 @@ fn ui(r: &Reader<'_>) -> Result<Ui> {
         portrait_group: f(&PORTRAIT, m.portrait_group)?,
         group_handle: f(&GROUP, m.group_handle)?,
         group_orders: f(&GROUP, m.group_orders)?,
+        // Unmapped in a build: those orders go uncounted, the other army tools keep working.
+        group_fallback_lists: m
+            .group_fallback_lists
+            .map(|o| o.and_then(|o| f(&GROUP, o).ok())),
         division_location: f(&DIVISION, m.division_location)?,
         // Province id: the per-build province layout.
         province_id: crate::construction::layout(r).province_id,
@@ -2622,14 +2631,17 @@ fn army_provinces(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i32>> {
     }
     Ok(out)
 }
-/// All battle-plan order nodes of `army` (top orders and their sub-orders).
+/// All battle-plan order nodes of `army` (top orders, fallback orders and their sub-orders).
 pub(super) fn plan_nodes(r: &Reader<'_>, image: u64, army: &str) -> Result<usize> {
     let u = ui(r)?;
     let group = group_named(r, image, army)?;
     let mut stack = vec![];
-    let (_, data, count) = r.array_header(group + u.group_orders)?;
-    for index in 0..count.min(64) as u64 {
-        stack.push((r.u64(data + index * 8)?, 0));
+    let lists = std::iter::once(u.group_orders).chain(u.group_fallback_lists.into_iter().flatten());
+    for list in lists {
+        let (_, data, count) = r.array_header(group + list)?;
+        for index in 0..count.min(64) as u64 {
+            stack.push((r.u64(data + index * 8)?, 0));
+        }
     }
     let mut seen = 0;
     while let Some((order, depth)) = stack.pop() {
