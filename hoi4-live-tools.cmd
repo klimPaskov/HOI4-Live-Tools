@@ -27,4 +27,6 @@ if exist "%HERE%..\install.json" (
 set "PYTHONPATH=%HERE%;%PYTHONPATH%"
 set "PYTHONIOENCODING=utf-8"
 set "PYTHONUNBUFFERED=1"
-"%PY%" %PYARGS% -m hoi4_live %*
+rem -c without the current folder on sys.path: `python -m` puts it first, so a hoi4_live folder there
+rem (an older checkout the client starts in) was imported instead of this copy.
+"%PY%" %PYARGS% -c "import runpy, sys; del sys.path[0]; runpy.run_module('hoi4_live', run_name='__main__', alter_sys=True)" %*
