@@ -121,6 +121,15 @@ ALERTS = {
     "admiral_assignable": ([], "fleets"),
     "insufficient_energy": (["auto_import"], "trade"),
     "insufficient_resources": (["auto_import"], "trade"),
+    # frames the alert reader names from the management pass on (an alert the reader does not name yet is
+    # harmless here; one it names that is missing here fails tests/test_manage_inventory.py)
+    "research_slot_available": (None, None),
+    "free_civilian_factories": (["construction"], "construction"),
+    "free_military_factories": (["production", "production_priority"], "military_lines"),
+    "outdated_equipment_in_production": ([], "military_lines"),
+    "operative_recruitable": (["intelligence"], "operatives"),
+    "special_project_available": (["special_projects"], "special_projects"),
+    "scientist_unassigned": (["special_projects"], "special_projects"),
 }
 
 
