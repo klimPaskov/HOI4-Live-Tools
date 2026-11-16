@@ -207,7 +207,9 @@ class PayloadAndReleaseTests(unittest.TestCase):
     def test_payload_contents(self):
         names = [n for n, _ in install.payload_files(helpers.ROOT)]
         for expected in ("install.py", "hoi4-live-tools.cmd", "hoi4-live-tools", "requirements.txt", "LICENSE", "hoi4_live/__init__.py",
-                         "hoi4_live/ocr/ocr_host.ps1", "skills/hoi4-live-campaign/SKILL.md"):
+                         "hoi4_live/ocr/ocr_host.ps1", "skills/hoi4-live-campaign/SKILL.md",
+                         # the planning tools the rolling planner binds and gates with
+                         "scripts/hoi4facts/lint_plan.py", "scripts/hoi4facts/derive.py", "scripts/validate_plan.py"):
             self.assertIn(expected, names)
         self.assertFalse([n for n in names if "__pycache__" in n or n.endswith(".pyc") or n.startswith("tests/")
                           or n.startswith("docs/evidence") or n.startswith("artifacts")])

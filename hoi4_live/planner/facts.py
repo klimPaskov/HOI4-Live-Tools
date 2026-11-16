@@ -1,7 +1,7 @@
 """The game files' numbers for the planner, through the repository's planning tools (scripts/hoi4facts).
 
-The planning tools are found next to the package (a repository checkout) or at HOI4_LIVE_TOOLS_DIR. Without
-them, or without the game files, `load` returns None and the planner works with flat estimates and the live
+The planning tools are found next to the package (a repository checkout or an install, which ships them) or at
+HOI4_LIVE_TOOLS_DIR. Without them, or without the game files, `load` returns None and the planner works with flat estimates and the live
 reads alone (its gates then say `partial`). Nothing is country specific: costs, years, folders, prerequisites
 and focus trees all come from the effective game content (install plus mods).
 """
