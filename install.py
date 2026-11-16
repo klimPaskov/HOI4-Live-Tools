@@ -104,11 +104,13 @@ CLIENTS = ("claude", "codex", "cursor", "opencode")
 TOOL_TIMEOUT_SEC = 1800
 
 # What an install (and a release archive) contains, relative to the source folder.
-PAYLOAD_DIRS = ("hoi4_live", "skills")
+# scripts/hoi4facts and validate_plan.py are the planning tools: the rolling planner binds the game files' facts
+# and gates every plan revision with them (hoi4_live/planner/facts.py, gates.py)
+PAYLOAD_DIRS = ("hoi4_live", "skills", "scripts/hoi4facts")
 PAYLOAD_DOCS = ("docs/tools.md", "docs/integration.md", "docs/STATUS.md", "docs/PLAN.md",
                 "docs/OWNED_LINUX_LAUNCHER.md", "docs/PLAY_FLOW.md")
 PAYLOAD_FILES = ("README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "config.json", "requirements.txt",
-                 "pyproject.toml", "hoi4-live-tools.cmd", "hoi4-live-tools", "install.py")
+                 "pyproject.toml", "hoi4-live-tools.cmd", "hoi4-live-tools", "install.py", "scripts/validate_plan.py")
 SKIP_NAMES = {"__pycache__", ".pytest_cache"}
 SKIP_SUFFIXES = (".pyc", ".pyo")
 
@@ -175,7 +177,7 @@ def payload_files(src):
         if os.path.isfile(path):
             found.append((name, path))
     for top in PAYLOAD_DIRS:
-        root = os.path.join(src, top)
+        root = os.path.join(src, *top.split("/"))
         for folder, dirs, files in os.walk(root):
             dirs[:] = sorted(d for d in dirs if d not in SKIP_NAMES)
             for file in sorted(files):
