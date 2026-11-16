@@ -1552,8 +1552,15 @@ pub(super) fn step(
                     .into_iter()
                     .map(|(p, _)| p)
                     .find(|p| world.memory.had.contains(p) && !world.held(*p));
+                // Only own land the army may strike now: a province closed for it is passed over
+                // by the choice too, so dropping the order for it re-sent the same order every
+                // few hours (live 16 Nov 2026: an assembly march re-sent 41 times in 3 weeks
+                // while a lost own province beside the army was closed for it).
                 let own_beside = world.lost_own.iter().any(|p| {
-                    *p != objective && !world.beside(&members, *p, knobs.resume).1.is_empty()
+                    *p != objective
+                        && Some(*p) != turned
+                        && army.closed.get(p).is_none_or(|until| *until <= now)
+                        && !world.beside(&members, *p, knobs.resume).1.is_empty()
                 });
                 if lost.is_some_and(|p| p != objective)
                     || (own_beside && !world.lost_own.contains(&objective))
@@ -2555,6 +2562,33 @@ mod tests {
             line.contains("on province 10") && line.contains("own land"),
             "{line}"
         );
+    }
+
+    #[test]
+    fn own_land_closed_for_the_army_does_not_drop_its_running_order() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let p = plan(json!(true));
+        let line = run(&mut state, &map, &p, START).unwrap().unwrap();
+        assert!(line.contains("on province 20"), "{line}");
+        // the enemy takes own province 10 beside the army, but a strike on it stood its whole
+        // time and closed it: the strike on 20 runs on, it is not re-sent every tick
+        map.lost_own.set(true);
+        map.set(40.0, Some(20));
+        state
+            .strike
+            .armies
+            .get_mut("Army 1")
+            .unwrap()
+            .closed
+            .insert(10, START + 20 * DAY);
+        for hours in [6, 12, 18, 24] {
+            let line = run(&mut state, &map, &p, START + hours)
+                .and_then(|l| l)
+                .unwrap_or_default();
+            assert!(!line.contains("on province 20"), "{line}");
+        }
+        assert_eq!(state.strike.armies["Army 1"].objective, 20);
     }
 
     #[test]
