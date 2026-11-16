@@ -7,7 +7,8 @@ read tools only (no lease, no input) this checks, against the names the plan use
                         vs hoi4_division_templates
   * generals            (army_layout[].general, armies.generals, army_group[].marshal) vs hoi4_commanders
   * air wings           (air_plan[].wing: a live name, or "<variant> at <state id>", which expands to one
-                        entry per matching wing from hoi4_air) vs hoi4_air_wings
+                        entry per matching wing) vs hoi4_air (the memory read; hoi4_air_wings opens a panel
+                        and needs a lease)
   * production targets  (production[].remove / replace) vs hoi4_production_lines
   * first research block (research_path, earliest year) vs hoi4_technology_list {available: true}
 A name that differs from exactly one live name only in case, accents, punctuation or the degree sign is
@@ -36,11 +37,12 @@ def live_names(call):
     names["template"] = [r.get("template") for r in t.get("templates") or [] if r.get("template")]
     c = call("hoi4_commanders", {})
     names["general"] = [r.get("name") for r in c.get("commanders") or [] if r.get("name")]
-    w = call("hoi4_air_wings", {})
-    names["wing"] = [r.get("wing") for r in w.get("wings") or [] if r.get("wing")]
-    # Wing names are made at runtime, so plans may select wings as "<variant> at <state id>"
-    # (the dossier knows the start OOB's variants and bases); resolve that from hoi4_air.
+    # Wing names come from hoi4_air, the memory read: hoi4_air_wings opens the Air Forces Overview and takes
+    # a lease, so the supervisor's lease-free reconcile failed on it (invalid_arguments) and checked nothing.
+    # Wing names are made at runtime, so plans may also select wings as "<variant> at <state id>"
+    # (the dossier knows the start OOB's variants and bases).
     air = call("hoi4_air", {})
+    names["wing"] = [r.get("wing") for r in air.get("wings") or [] if r.get("wing")]
     base_state = {}
     for b in air.get("air_bases") or []:
         for name in b.get("wings") or []:

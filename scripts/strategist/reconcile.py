@@ -15,7 +15,7 @@ pre-start setup. What it checks, against the names the plan uses:
   * generals            (army_layout[].general, armies.generals, army_group[].marshal) vs
                         hoi4_commanders
   * air wings           (air_plan[].wing: a live name, or "<variant> at <state id>", which expands
-                        to one entry per matching wing from hoi4_air) vs hoi4_air_wings
+                        to one entry per matching wing) vs hoi4_air
   * production targets  (production[].remove / replace) vs hoi4_production_lines
   * first research block (research_path, earliest year) vs hoi4_technology_list {available: true}
 A plan name that differs from exactly one live name only in case, accents, punctuation or the degree

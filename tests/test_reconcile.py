@@ -20,7 +20,6 @@ FAKE = textwrap.dedent('''
         "hoi4_division_templates": {"templates": [{"template": "Divisione di Fanteria"},
                                                   {"template": "Camicie Nere"}]},
         "hoi4_commanders": {"commanders": [{"name": "Giovanni Messe"}, {"name": "Rodolfo Graziani"}]},
-        "hoi4_air_wings": {"wings": [{"wing": "12° Stormo"}, {"wing": "14° Stormo"}]},
         "hoi4_air": {"air_bases": [{"state_id": 550, "wings": ["12\u00b0 Stormo", "14\u00b0 Stormo"]}],
                      "wings": [{"wing": "12\u00b0 Stormo", "variant": "CR.32"},
                                {"wing": "14\u00b0 Stormo", "variant": "Ca.111",
@@ -96,6 +95,20 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(reconcile.norm("12° Stormo"), reconcile.norm("12 stormo"))
         self.assertEqual(reconcile.norm("Divisione Ascari Libica"), "divisione ascari libica")
         self.assertNotEqual(reconcile.norm("1 Stormo"), reconcile.norm("12 Stormo"))
+
+    def test_only_memory_reads_are_called(self):
+        # The supervisor reconciles without a lease: a tool that opens a panel (hoi4_air_wings) refuses
+        # with invalid_arguments and the whole day-one check was lost (Part C run, 16 Nov 2026).
+        called = []
+
+        def call(tool, args):
+            called.append(tool)
+            return {"wings": [{"wing": "12\u00b0 Stormo"}]} if tool == "hoi4_air" else {}
+
+        names, _info = reconcile.live_names(call)
+        self.assertEqual(names["wing"], ["12\u00b0 Stormo"])
+        self.assertEqual(set(called), {"hoi4_division_templates", "hoi4_commanders", "hoi4_air",
+                                       "hoi4_production_lines", "hoi4_technology_list"})
 
 
 if __name__ == "__main__":
