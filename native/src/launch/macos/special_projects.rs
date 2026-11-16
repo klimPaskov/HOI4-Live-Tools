@@ -1672,10 +1672,9 @@ fn confirm_in(r: &Reader<'_>, image: u64, window: u64) -> Result<Option<(String,
         gui_tree::rect(r, image, decline, GAME)?,
     )))
 }
-/// The open confirmation: the game's popup list holds the Stop project one;
-/// the recruit confirmation is only reachable through the Recruit Scientist
-/// window (+0x980, seen live), which created it.
-fn confirm(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect, Rect)>> {
+/// A visible generic confirmation in the game's popup list (title, accept and decline
+/// rectangles): the Stop project dialog, the army exercise Start/Stop Exercise dialogs.
+pub(super) fn popup_confirm(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect, Rect)>> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let gui = r.u64(idler + at(r, &IDLER, GUI_FROM_IDLER)?)?;
     let (_, data, count) = r.array_header(gui + at(r, &GAME_GUI, POPUP_LIST)?)?;
@@ -1683,6 +1682,15 @@ fn confirm(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect, Rect)>> {
         if let Some(found) = confirm_in(r, image, r.u64(data + index * 8)?)? {
             return Ok(Some(found));
         }
+    }
+    Ok(None)
+}
+/// The open confirmation: the game's popup list holds the Stop project one;
+/// the recruit confirmation is only reachable through the Recruit Scientist
+/// window (+0x980, seen live), which created it.
+fn confirm(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect, Rect)>> {
+    if let Some(found) = popup_confirm(r, image)? {
+        return Ok(Some(found));
     }
     let tab = tab_view(r, image)?;
     let roster = r.u64(tab + at(r, &TAB, TAB_ROSTER)?)?;
