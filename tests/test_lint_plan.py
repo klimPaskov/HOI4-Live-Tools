@@ -359,6 +359,7 @@ class HandPlans(unittest.TestCase):
             ("army.generals", "army_group[0].marshal[0]"),  # Ethiopia's marshals are hidden at the start
             ("army.generals", "army_group[0].marshal[1]"),
             ("army.generals", "army_group[1].marshal"),
+            ("construction.idle", "construction"),  # listed states only, no fallback
             ("army.width_terrain", "army_layout"),  # Mehal Sefari and Mountain Division are 8 wide (0.92)
             ("manage.thresholds", "manage"),
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
@@ -1541,6 +1542,19 @@ class TacticsRules(unittest.TestCase):
         at = plan["focus_path"].index("GER_the_four_year_plan") + 1
         plan["focus_path"][at:at] = ["GER_autarky_efforts", "GER_institute_price_controls"]
         self.assertNoHit(plan, "decision.unreachable")
+
+    def test_idle_capacity_warnings(self):
+        plan = copy.deepcopy(self.ita)
+        plan["construction"] = [{"building": "industrial_complex", "count": 2, "states": [2, 158]}]
+        plan.pop("construction_fallback_any_own_state", None)
+        plan["politics_auto"] = {"enabled": True, "order": [
+            {"category": "government", "slot": 4, "ideas": ["ITA_italo_balbo"], "cost": 150}]}
+        self.assertHit(plan, "construction.idle", "warning", "158")
+        self.assertHit(plan, "politics.open_seat", "warning")
+        plan["construction_fallback_any_own_state"] = True
+        plan["politics_auto"]["order"].append({"category": "research_production", "slot": 3, "cost": 150})
+        self.assertNoHit(plan, "construction.idle")
+        self.assertNoHit(plan, "politics.open_seat")
 
     def test_contingency_at_start(self):
         # the fixture country's history sets its stability: a contingency already true on day one is named

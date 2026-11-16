@@ -47,6 +47,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   construction.front       factory in a state within K province steps of an enemy-held province
   construction.infrastructure  factory in a state with infrastructure <= 2 and no infrastructure
                            queued before it there
+  construction.idle        (warning) the executor `construction` list names states but
+                           construction_fallback_any_own_state is not true: once they are full the civilian
+                           factories stand idle
   construction.railway     railway path provinces not touching, or not controlled when the
                            trigger fires (start control plus the vp_targets taken by then)
   construction.railway_node  a railway whose start province is no supply hub, naval base or capital and
@@ -311,6 +314,8 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            and its threshold; a pick the income cannot pay by the horizon; projected PP above
                            100 (or above the next pick that can still be bought) with nothing bought for more
                            than 60 days in a row; (warning) a dated buy affordable more than 30 days late
+  politics.open_seat       (warning) every politics_auto.order entry names its ideas: when the game disables
+                           them all, power piles up; add entries without `ideas` for seats worth filling
   politics.available       a politics pick or every idea of a politics_auto.order entry whose `available` gate
                            (advisor or law, game files) stays closed to the horizon under the plan's facts: the
                            focuses the focus slot walk completes, the date, the war (plan_gates); the executor
@@ -993,6 +998,33 @@ class Lint:
                 self.add("error", "construction.item_state", where,
                          f"railway item without {' and '.join(missing)}: the executor sends 0 for it, the railway tool "
                          f"refuses that and the item is given up; give both end states{hint}")
+
+    def construction_idle(self):
+        """construction.idle: the executor `construction` list (built while civilian factories are idle) names states
+        and construction_fallback_any_own_state is not true. When those states are full the factories stand idle for
+        the rest of the run (Germany 1939: 48 of about 80 civilian factories idle by August)."""
+        items = [e for e in self.list_of("construction") if isinstance(e.get("states"), list) and e["states"]]
+        if not items or self.plan.get("construction_fallback_any_own_state") is True:
+            return
+        states = sorted({s for e in items for s in e["states"] if isinstance(s, int)})
+        self.add("warning", "construction.idle", "construction",
+                 f"construction builds only in states {', '.join(map(str, states))} and "
+                 "construction_fallback_any_own_state is not true: once they are full, civilian factories stand idle; "
+                 "set it, or list enough states for every factory the plan builds to the horizon")
+
+    def politics_open_seat(self):
+        """politics.open_seat: every politics_auto.order entry names its ideas. The game can disable all of them
+        (another advisor of the same character holds a seat, a focus closed them), and then political power piles up
+        (Germany 1937-1939: 570 PP idle while every named idea read disabled)."""
+        auto = self.plan.get("politics_auto")
+        if not isinstance(auto, dict) or auto.get("enabled") is False or not isinstance(auto.get("order"), list):
+            return
+        order = [e for e in auto["order"] if isinstance(e, dict)]
+        if order and all(e.get("ideas") for e in order):
+            self.add("warning", "politics.open_seat", "politics_auto.order",
+                     "every entry names its ideas: when the game disables them all the power piles up; add entries "
+                     "without `ideas` (a vacant seat takes the first enabled idea) for the seats worth filling, such "
+                     "as the designers and the political advisors")
 
     def construction_lists(self):
         """(label prefix, construction_plan list) for the base plan and each override."""
@@ -5356,7 +5388,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.decision_reach, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.decision_reach, self.construction_idle, self.politics_open_seat, self.alert_owners,
                  self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
