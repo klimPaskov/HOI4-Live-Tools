@@ -37,7 +37,7 @@ FACTS = os.path.join(ROOT, "scripts", "hoi4facts", "facts.py")
 CALC = os.path.join(ROOT, "scripts", "hoi4facts", "calc.py")
 INVENTORY = os.path.join(ROOT, "scripts", "hoi4facts", "manage_inventory.py")
 LINT_SOURCES = [os.path.join(ROOT, "scripts", "hoi4facts", n) for n in
-                ("lint_plan.py", "lint_fair.py", "lint_horizons.py", "lint_gaps.py", "lint_conditions.py", "lint_manage.py", "check_calls.py",
+                ("lint_plan.py", "lint_fair.py", "lint_horizons.py", "lint_gaps.py", "lint_conditions.py", "lint_manage.py", "lint_economy.py", "check_calls.py",
                  os.path.join("..", "validate_plan.py"))]
 VERSION = 1
 DESC_CHARS = 240  # one schema description in a key file

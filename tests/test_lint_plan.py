@@ -68,7 +68,7 @@ THIS_PASS = {"focus.condition", "focus.condition_unchecked", "decision.condition
              "politics.visible", "politics.exclusive", "politics.dual_role", "diplomacy.borders_unheld",
              "plan.stop_date", "manage.owner", "production.start_lines", "production.duplicate_line",
              "production.priority_all", "production.missing_line", "production.need_balance",
-             "production.parked_request", "construction.capacity", "plan.ai_baseline"}
+             "production.parked_request", "production.need_cap", "construction.capacity", "plan.ai_baseline"}
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",

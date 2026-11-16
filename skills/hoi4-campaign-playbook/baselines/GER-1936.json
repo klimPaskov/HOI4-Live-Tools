@@ -1,0 +1,395 @@
+{
+ "tag": "GER",
+ "start_date": "1936.1.1",
+ "game_version": "1.19.4.1",
+ "difficulty": "regular",
+ "ai": "historical",
+ "dlcs": "the ten DLCs of the project's macOS install",
+ "how": "the game's own AI played the country from the start (an observer seat, no orders); its own saves at each date were loaded as the country and read with the read-only tools (factories, divisions, lines, techs, focuses). A floor for a plan of the same country, start and rules: a plan that schedules less than the stock AI reaches by a date says why.",
+ "notes": {
+  "focus_marks": "key focuses completed by then: rhine (Rhineland), anschluss, sudeten, danzig (Danzig or War), molotov (pact)",
+  "wars": "at peace until 1 September 1939 (Poland and the Allies); Poland beaten by 1 January 1940; Belgium and Luxembourg by 1 July 1940; the Soviet war by 1 July 1941",
+  "divisions": "the AI fields under-equipped divisions of its own cheaper templates: its count is a floor for divisions, not for equipped strength"
+ },
+ "rows": [
+  {
+   "date": "1936.07.01",
+   "civilian_factories": 43,
+   "military_factories": 28,
+   "naval_factories": 10,
+   "divisions": 37,
+   "armies": 12,
+   "templates": 6,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 0,
+     "factories": 10
+    },
+    "artillery_equipment": {
+     "stock": 51,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 0,
+     "factories": 3
+    }
+   },
+   "techs": 58,
+   "focuses": 5,
+   "stability": 0.75,
+   "war_support": 0.46,
+   "political_power": 72,
+   "manpower": 1160000,
+   "focus_marks": [
+    "rhine"
+   ]
+  },
+  {
+   "date": "1937.03.01",
+   "civilian_factories": 51,
+   "military_factories": 30,
+   "naval_factories": 10,
+   "divisions": 51,
+   "armies": 13,
+   "templates": 9,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 486,
+     "factories": 9
+    },
+    "artillery_equipment": {
+     "stock": 407,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 0,
+     "factories": 3
+    }
+   },
+   "techs": 65,
+   "focuses": 12,
+   "stability": 0.77,
+   "war_support": 0.47,
+   "political_power": 150,
+   "manpower": 1050000,
+   "focus_marks": [
+    "rhine"
+   ]
+  },
+  {
+   "date": "1938.01.01",
+   "civilian_factories": 64,
+   "military_factories": 34,
+   "naval_factories": 10,
+   "divisions": 66,
+   "armies": 14,
+   "templates": 10,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 3678,
+     "factories": 11
+    },
+    "artillery_equipment": {
+     "stock": 1125,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 0,
+     "factories": 3
+    }
+   },
+   "techs": 73,
+   "focuses": 24,
+   "stability": 0.8,
+   "war_support": 0.57,
+   "political_power": 17,
+   "manpower": 867710,
+   "focus_marks": [
+    "rhine"
+   ]
+  },
+  {
+   "date": "1938.10.01",
+   "civilian_factories": 88,
+   "military_factories": 46,
+   "naval_factories": 10,
+   "divisions": 96,
+   "armies": 14,
+   "templates": 14,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 15304,
+     "factories": 15
+    },
+    "artillery_equipment": {
+     "stock": 1770,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 259,
+     "factories": 6
+    }
+   },
+   "techs": 81,
+   "focuses": 32,
+   "stability": 1.0,
+   "war_support": 0.76,
+   "political_power": 28,
+   "manpower": 790720,
+   "focus_marks": [
+    "rhine",
+    "anschluss"
+   ]
+  },
+  {
+   "date": "1939.01.01",
+   "civilian_factories": 93,
+   "military_factories": 51,
+   "naval_factories": 10,
+   "divisions": 97,
+   "armies": 15,
+   "templates": 13,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 14676,
+     "factories": 14
+    },
+    "artillery_equipment": {
+     "stock": 1804,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 299,
+     "factories": 5
+    }
+   },
+   "techs": 86,
+   "focuses": 34,
+   "stability": 1.0,
+   "war_support": 0.87,
+   "political_power": 39,
+   "manpower": 932300,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten"
+   ]
+  },
+  {
+   "date": "1939.09.01",
+   "civilian_factories": 104,
+   "military_factories": 67,
+   "naval_factories": 10,
+   "divisions": 129,
+   "armies": 15,
+   "templates": 10,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 25791,
+     "factories": 19
+    },
+    "artillery_equipment": {
+     "stock": 2780,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 592,
+     "factories": 5
+    }
+   },
+   "techs": 94,
+   "focuses": 43,
+   "stability": 1.0,
+   "war_support": 0.92,
+   "political_power": 15,
+   "manpower": 2520000,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten",
+    "danzig",
+    "molotov"
+   ]
+  },
+  {
+   "date": "1940.01.01",
+   "civilian_factories": 114,
+   "military_factories": 82,
+   "naval_factories": 21,
+   "divisions": 143,
+   "armies": 15,
+   "templates": 10,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 31568,
+     "factories": 24
+    },
+    "artillery_equipment": {
+     "stock": 2538,
+     "factories": 4
+    },
+    "support_equipment": {
+     "stock": 1126,
+     "factories": 5
+    }
+   },
+   "techs": 96,
+   "focuses": 46,
+   "stability": 1.0,
+   "war_support": 0.9,
+   "political_power": 33,
+   "manpower": 2250000,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten",
+    "danzig",
+    "molotov"
+   ]
+  },
+  {
+   "date": "1940.07.01",
+   "civilian_factories": 143,
+   "military_factories": 103,
+   "naval_factories": 32,
+   "divisions": 179,
+   "armies": 21,
+   "templates": 12,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 103570,
+     "factories": 29
+    },
+    "artillery_equipment": {
+     "stock": 481,
+     "factories": 25
+    },
+    "support_equipment": {
+     "stock": 1931,
+     "factories": 12
+    }
+   },
+   "techs": 106,
+   "focuses": 55,
+   "stability": 1.0,
+   "war_support": 1.0,
+   "political_power": 20,
+   "manpower": 1410000,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten",
+    "danzig",
+    "molotov"
+   ]
+  },
+  {
+   "date": "1941.01.01",
+   "civilian_factories": 178,
+   "military_factories": 133,
+   "naval_factories": 39,
+   "divisions": 222,
+   "armies": 18,
+   "templates": 12,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 85927,
+     "factories": 41
+    },
+    "artillery_equipment": {
+     "stock": 944,
+     "factories": 24
+    },
+    "support_equipment": {
+     "stock": 1381,
+     "factories": 15
+    }
+   },
+   "techs": 113,
+   "focuses": 61,
+   "stability": 1.0,
+   "war_support": 1.0,
+   "political_power": 73,
+   "manpower": 618940,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten",
+    "danzig",
+    "molotov"
+   ]
+  },
+  {
+   "date": "1941.07.01",
+   "civilian_factories": 192,
+   "military_factories": 160,
+   "naval_factories": 40,
+   "divisions": 276,
+   "armies": 19,
+   "templates": 16,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 71724,
+     "factories": 53
+    },
+    "artillery_equipment": {
+     "stock": 2615,
+     "factories": 23
+    },
+    "support_equipment": {
+     "stock": 824,
+     "factories": 18
+    }
+   },
+   "techs": 120,
+   "focuses": 66,
+   "stability": 1.0,
+   "war_support": 1.0,
+   "political_power": 23,
+   "manpower": 1330000,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten",
+    "danzig",
+    "molotov"
+   ]
+  },
+  {
+   "date": "1942.01.01",
+   "civilian_factories": 185,
+   "military_factories": 170,
+   "naval_factories": 34,
+   "divisions": 343,
+   "armies": 22,
+   "templates": 21,
+   "lines": {
+    "infantry_equipment": {
+     "stock": 2194,
+     "factories": 56
+    },
+    "artillery_equipment": {
+     "stock": 0,
+     "factories": 26
+    },
+    "support_equipment": {
+     "stock": 0,
+     "factories": 21
+    }
+   },
+   "techs": 130,
+   "focuses": 69,
+   "stability": 1.0,
+   "war_support": 1.0,
+   "political_power": 8,
+   "manpower": 1370000,
+   "focus_marks": [
+    "rhine",
+    "anschluss",
+    "sudeten",
+    "danzig",
+    "molotov"
+   ]
+  }
+ ]
+}

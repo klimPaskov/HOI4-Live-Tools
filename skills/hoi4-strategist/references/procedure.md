@@ -254,10 +254,36 @@ Read: `templates-equipment-production.md` §5-§8; `strategy.md` "Production and
    30 days; priority lines on top of the list (PR09-PR11, L20).
 10. **Stockpile cover targets** per item: critical under 7 days, warning under 30, 30+ days before a
     declaration (PR28, CP01); spare trucks 1.5x, trains 1.2x, convoys 0.25 per sea supply (PR29).
+11. **Production starts from the lines the country already has.** The start lines come from the history
+    order-of-battle files (`F oob <TAG>`, lint `facts` start lines); `production` is a factory target per
+    equipment over all lines, the start ones and the new ones, never a list of lines to append at the bottom.
+    A start line is kept with a target, switched with `replace` (a tier change keeps part of its efficiency)
+    or removed on a date; one equipment never gets a second add entry or a new tier beside a running line
+    of its family (lint `production.start_lines`, `production.duplicate_line`). `production_priority` orders
+    every military line, start and new, by what the plan needs first: it is the line order, and the top line
+    gets new factories and resources first while a new line joins the bottom (production view text; live
+    check 17 Nov) (lint `production.priority_all`). `production[].factories` is a line's starting size; it
+    is the target only for equipment no division needs (planes, ships). Army equipment follows the need: the
+    executor sizes it from `training[].cap` (the planned force) x each template's equipment, less stock and
+    fielded, so name a cap on every training entry (lint `production.need_cap`). `manage.balance_pull_days`
+    sets how long a shortfall waits before factories come from a line with twice its need.
+12. **Divide the factories by the need, at every date.** Size each family to what the planned divisions,
+    wings and losses need by date (lint `facts.production_need`: start shortfall, the divisions the training
+    lines add within their caps, losses at war, against the start stockpile and the planned output), as a
+    share of the military factories that exist on that date, and re-divide the shares in a phase override
+    when the factory count grows. Never park a large request on one line: a line takes up to 150 military
+    factories (`NProduction.MAX_MIL_FACTORIES_PER_LINE`), and new factories that land on a large unfilled
+    request near the top of the list starve the lines below it for months (seen live: rifles on 44
+    factories, artillery and support on 2 each). Lint `production.need_balance` refuses a plan where one
+    family is stocked far above its need while another sits far below; `production.parked_request` warns
+    when one line holds a factory share far above its share of the need; `production.missing_line` when a
+    trained template needs a family no line makes.
 Resolution: executor `production`, `production_priority`, `production_min_idle`, `training`; player
 `training_rules`; `stockpile_targets`; plan.md §5. Check: lint `production.factories`,
 `production.equipment`, `production.trucks`, `production.day0`, `production.cull`, `production.mature_switch`,
-`production.balance`; rubric row 6.
+`production.balance`, `production.start_lines`, `production.duplicate_line`, `production.priority_all`,
+`production.need_balance`, `production.parked_request`, `production.missing_line`, `production.need_cap`;
+rubric row 6.
 
 ### 9. MIOs
 Read: `research-doctrines-projects.md` §6.1; `politics-diplomacy-espionage.md` "Designers and MIOs".
@@ -321,9 +347,20 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
     that closes a branch also closes the decisions behind it. Every decision the plan takes must be one
     the path makes visible (its own and its category's `visible`/`allowed`/`available` focuses on a focus
     list; lint `decision.unreachable`). A construction-company advisor while civilian factories are built.
+    Lint `facts.economy` prints the start share with the dynamic modifiers the history adds (their variables
+    resolved) and names the scripts that change it later (info `economy.consumer_goods`): copy the share by
+    quarter into plan.md §4 and plan what lowers it.
+13. **Slots for every factory the targets need.** The free slots of the states the construction list names
+    cover every civilian and military factory the horizon targets add, or `construction_fallback_any_own_state`
+    is true (lint `construction.capacity`, error).
+14. **The game's own AI is the floor.** Where `skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json`
+    exists (the AI playing the same country and start, read from its own saves), factory and division targets
+    and the training forecast at or above its marks, or `goal.ai_baseline_why` says why (lint
+    `plan.ai_baseline`).
 Resolution: executor `construction`, `construction_plan` (stable `id`s), `construction_min_idle`,
 `construction_queue_depth`, `auto_import`, `trade`; plan.md §4. Check: lint `construction.front`,
-`construction.infrastructure`, `decision.unreachable`; rubric row 4.
+`construction.infrastructure`, `construction.capacity`, `decision.unreachable`, `plan.ai_baseline`; rubric
+row 4.
 
 ### 11. Research
 Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
