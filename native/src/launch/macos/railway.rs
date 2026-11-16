@@ -600,8 +600,9 @@ pub(super) fn resolve(
     let mut replaced = None;
     let (from_p, from_s) = match (asked, from_ok) {
         (Some((p, s)), Some((true, true))) if cut.is_none() => (p, s),
-        (Some((p, s)), Some((true, true))) if !from_nearest => {
+        (Some((p, s)), Some((true, true))) if !from_nearest || found.is_none() => {
             let mut states: Vec<i32> = cut
+                .clone()
                 .unwrap_or_default()
                 .iter()
                 .filter_map(|q| state_of(&dir, *q).ok())
