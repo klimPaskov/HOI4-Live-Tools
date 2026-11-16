@@ -22,6 +22,14 @@ Steps, each gated; the script owns the order so no step can be skipped or self-r
   6. freeze     plan.json _meta (version, dossier hash, models, created, lint summary, review)
                 and RUN/strategize-report.json; on failure RUN/strategist-blocked.md
 
+Reuse: when a reviewed plan in the library (`--library DIR`, HOI4_LIVE_PLAN_LIBRARY, then
+skills/hoi4-campaign-playbook/plans/reviewed/) was made for the same request (tag, start date, mode, goal,
+clarifications, horizon, difficulty, AI, and the same resolved DLCs and mods), it is copied into RUN and
+the run starts at the gates: when they pass unchanged the plan ships with its stored review (no model call);
+when they fail, the fix and review steps run as usual. `--no-reuse` always plans afresh; `--publish DIR`
+copies a passed run into a library folder. A library entry is a folder with run_spec.json,
+dossier-manifest.json, plan.json, plan.md, plan.brief.md, tool-gaps.md and review/.
+
 Exit status 0 only when the plan passed every gate and the review. Models and effort come from
 config.json `agents` (run.py); nothing here is provider-specific. Stdlib only, Python 3.9+.
 """
@@ -253,19 +261,109 @@ def freeze(run_dir, report):
     manifest = os.path.join(run_dir, "dossier", "manifest.json")
     agents = read_json(os.path.join(run_dir, "agents-manifest.json"), {}).get("roles", {})
     meta = dict(plan.get("_meta") or {})
+    reused = next((st.get("from") for st in report.get("steps") or [] if st.get("step") == "reuse"), None)
+    if reused:
+        meta["reused_from"] = reused
     meta.update({
         "version": meta.get("version", 1),
         "parent": meta.get("parent"),
         "dossier_hash": sha256(manifest) if os.path.exists(manifest) else None,
         "models": {r: {"provider": a.get("provider"),
                        "model": a.get("resolved_model") or a.get("model_alias") or a.get("model"),
-                       "effort": a.get("effort_applied") or a.get("effort")} for r, a in agents.items()},
+                       "effort": a.get("effort_applied") or a.get("effort")} for r, a in agents.items()}
+        or meta.get("models"),
         "created": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "lint_summary": report.get("lint_summary"),
         "review": report.get("review"),
     })
     plan["_meta"] = meta
     write_json(plan_path, plan)
+
+
+LIBRARY = os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plans", "reviewed")
+PLAN_FILES = ("plan.json", "plan.md", "plan.brief.md", "tool-gaps.md", "plan.timelines.md")
+
+
+def _norm(text):
+    return " ".join(str(text or "").split()).casefold()
+
+
+def request_key(spec):
+    """What makes two requests the same plan: the user's words and the scenario settings."""
+    return (spec.get("tag"), _norm(spec.get("start_date")).replace("-", "."), _norm(spec.get("mode") or "fair"),
+            _norm(spec.get("goal")), tuple(_norm(c) for c in spec.get("goal_clarifications") or []),
+            _norm(spec.get("horizon")), _norm(spec.get("difficulty") or "normal"),
+            _norm(spec.get("ai") or "historical"))
+
+
+def _content(manifest):
+    """(DLCs, mods) a dossier manifest resolved, as sets; None for a part it does not record."""
+    manifest = manifest or {}
+    dlcs = manifest.get("dlcs")
+    mods = manifest.get("mods")
+    return (frozenset(dlcs) if isinstance(dlcs, list) else None,
+            frozenset(m if isinstance(m, str) else json.dumps(m, sort_keys=True) for m in mods)
+            if isinstance(mods, list) else None)
+
+
+def libraries(args):
+    out = list(getattr(args, "library", None) or [])
+    out += [p for p in (os.environ.get("HOI4_LIVE_PLAN_LIBRARY") or "").split(os.pathsep) if p]
+    out.append(LIBRARY)
+    return out
+
+
+def find_reusable(spec, manifest, dirs):
+    """The first library entry made for this request with a passed review and the same DLCs and mods, or None."""
+    want, (dlcs, mods) = request_key(spec), _content(manifest)
+    for lib in dirs:
+        if not os.path.isdir(lib):
+            continue
+        for name in sorted(os.listdir(lib)):
+            entry = os.path.join(lib, name)
+            plan = read_json(os.path.join(entry, "plan.json"))
+            espec = read_json(os.path.join(entry, "run_spec.json"))
+            if not isinstance(plan, dict) or not isinstance(espec, dict) or request_key(espec) != want:
+                continue
+            if not ((plan.get("_meta") or {}).get("review") or {}).get("pass"):
+                continue
+            edlcs, emods = _content(read_json(os.path.join(entry, "dossier-manifest.json")))
+            if (dlcs is not None and edlcs is not None and dlcs != edlcs) or \
+                    (mods is not None and emods is not None and mods != emods):
+                continue
+            return entry
+    return None
+
+
+def copy_entry(entry, run_dir):
+    import shutil
+    for name in PLAN_FILES:
+        if os.path.exists(os.path.join(entry, name)):
+            shutil.copyfile(os.path.join(entry, name), os.path.join(run_dir, name))
+    review = os.path.join(entry, "review")
+    if os.path.isdir(review):
+        for name in os.listdir(review):
+            if name.endswith(".json"):
+                shutil.copyfile(os.path.join(review, name), os.path.join(run_dir, "review", name))
+
+
+def publish(run_dir, dest):
+    """Copy a passed run (plan files, run spec, dossier manifest, review) into a library folder."""
+    import shutil
+    run_dir = os.path.abspath(run_dir)
+    plan = read_json(os.path.join(run_dir, "plan.json"), {})
+    if not ((plan.get("_meta") or {}).get("review") or {}).get("pass"):
+        raise SystemExit("publish: RUN/plan.json has no passed review in _meta (run strategize to the end first)")
+    os.makedirs(os.path.join(dest, "review"), exist_ok=True)
+    for name in PLAN_FILES + ("run_spec.json",):
+        if os.path.exists(os.path.join(run_dir, name)):
+            shutil.copyfile(os.path.join(run_dir, name), os.path.join(dest, name))
+    if os.path.exists(os.path.join(run_dir, "dossier", "manifest.json")):
+        shutil.copyfile(os.path.join(run_dir, "dossier", "manifest.json"), os.path.join(dest, "dossier-manifest.json"))
+    for name in os.listdir(os.path.join(run_dir, "review")):
+        if name.endswith(".json"):
+            shutil.copyfile(os.path.join(run_dir, "review", name), os.path.join(dest, "review", name))
+    return dest
 
 
 def strategize(args, runner=None):
@@ -290,8 +388,6 @@ def strategize(args, runner=None):
 
     # The levers no tool carries yet, from the gap register: the strategist plans and reports them, never drops them.
     write_blocked_levers(run_dir)
-    if not runner.dry:
-        seed_tool_gaps(run_dir)
 
     # 1b. work pack (deterministic, cached): the facts every plan needs, the schema digest and the lint rules,
     # computed once by code so no model call spends turns fetching them (scripts/strategist/pack.py)
@@ -301,16 +397,31 @@ def strategize(args, runner=None):
     if code != 0:
         log("work pack failed (the models fetch the facts themselves): %s" % out[-500:])
 
-    # 2. strategist (skipped when resuming from the gates or the critic)
+    # Reuse a reviewed plan made for the same request: the gates decide whether it still holds on this install.
+    reused = None
+    if start_at == "dossier" and not getattr(args, "no_reuse", False) and not runner.dry \
+            and not os.path.exists(os.path.join(run_dir, "plan.json")):
+        reused = find_reusable(spec, read_json(os.path.join(dossier, "manifest.json")), libraries(args))
+        if reused:
+            copy_entry(reused, run_dir)
+            log("reusing the reviewed plan %s" % reused)
+            report["steps"].append({"step": "reuse", "from": os.path.basename(reused)})
+            start_at = "gates"
+
+    if not runner.dry:
+        seed_tool_gaps(run_dir)  # after a reuse: a reviewed plan brings its answered table
+
+    # 2. strategist (skipped when resuming from the gates or the critic, or reusing a plan)
     if start_at == "dossier":
         code, _, secs = agent(runner, "strategist", run_dir, "strategist.md", args)
         report["steps"].append({"step": "strategist", "exit": code, "seconds": round(secs)})
         if code != 0:
             return finish(run_dir, report, "strategist exited %s" % code, started)
-    else:
+    elif not reused:
         report["steps"].append({"step": "resume", "from": start_at})
 
     # 3-5. gates, critic, answers
+    changed = False
     for review_round in range(1, REVIEW_ROUNDS + 1):
         for fix in range(0 if (start_at == "critic" and review_round == 1) else FIX_ROUNDS + 1):
             ok, text, lint = gates(runner, run_dir, args)
@@ -325,8 +436,14 @@ def strategize(args, runner=None):
             with open(gate_file, "w", encoding="utf-8") as f:
                 f.write(text)
             code, _, secs = agent(runner, "strategist", run_dir, "fix.md", args)
+            changed = True
             report["steps"].append({"step": "fix", "file": os.path.basename(gate_file), "exit": code,
                                     "seconds": round(secs)})
+        if reused and not changed:
+            # the reviewed plan passes the gates on this install unchanged: its stored review stands
+            stored = (read_json(os.path.join(run_dir, "plan.json"), {}).get("_meta") or {}).get("review") or {}
+            report["review"] = dict(stored, reused_from=os.path.basename(reused))
+            break
         before = latest(run_dir, "critic-*.json")
         code, _, secs = agent(runner, "critic", run_dir, "critic.md", args)
         critic_path = latest(run_dir, "critic-*.json")
@@ -504,9 +621,15 @@ def main(argv=None):
     ap.add_argument("--from", dest="from_step", choices=["dossier", "gates", "critic"], default="dossier",
                     help="resume an existing run: gates (validate, lint, calls, then review) or critic")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--library", action="append", help="folder of reviewed plans to reuse (repeat; see Reuse)")
+    ap.add_argument("--no-reuse", action="store_true", help="always plan afresh")
+    ap.add_argument("--publish", metavar="DIR", help="copy the passed run in --run into a library folder and exit")
     ap.add_argument("--gaps-check", action="store_true",
                     help="only list the blocked levers RUN/tool-gaps.md leaves unanswered (exit 1 when any)")
     args = ap.parse_args(argv)
+    if args.publish:
+        print(publish(args.run, args.publish))
+        return 0
     if args.gaps_check:
         left = tool_gaps_unanswered(os.path.abspath(args.run))
         print("\n".join(left) if left else "every blocked lever answered")
