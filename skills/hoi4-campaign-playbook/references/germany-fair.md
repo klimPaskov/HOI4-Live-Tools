@@ -44,7 +44,7 @@ needs a design created in game first (they exist ready-made only in the 1939 boo
 | 1938-09/10 | Sudetenland done (states 69, 972, 74 resolved); army manpower above 725k at start of the focus, above 750k for Fate of Czechoslovakia. |
 | 1939-03 (+/-1 mo) | Czechoslovakia resolved (Fate of Czechoslovakia or Integrate); Reassert Eastern Claims done by 1939-05. |
 | 1939-06-15 | Army manpower above 950k; Westwall decision (GER_construct_the_westwall) finished; 30+ equipped divisions already on the western border; fronts drawn for every neighbor; Danzig or War started. |
-| 1939-08/09 | Danzig or War complete, Poland refused, war goal vs POL exists (event germany.88); declare within 30 days; speed 1 during the declaration. |
+| 1939-08/09 | Danzig or War complete, Poland refused, war goal vs POL exists (event germany.88); declare within 30 days; the fronts, the Westwall garrison and the reserve stand before the declaration, so the game keeps speed 3 through it. |
 | 1939-10 | Poland capitulated (target 4-8 weeks); West group untouched or holding; nothing lost on German soil. |
 | 1940-05/06 | Low Countries and France attacked after Around the Maginot line; France capitulated by 1940-07; Greater Reich NOT yet formable. |
 | 1940-12 | No German-owned state occupied; air force building toward Channel superiority; Sea Lion prerequisites tracked (1M manpower, 90k infantry equipment in armies). |
@@ -56,7 +56,7 @@ needs a design created in game first (they exist ready-made only in the 1939 boo
 | Failure | Standing countermeasure |
 |---|---|
 | Poland war goal took 11 months to justify; ~250 divisions with 14-20 rifle factories; armies of 43/169 divisions; no army groups. | Use the Danzig or War war goal (no justification); divisions only as fast as rifles (section 6); armies of 24 or fewer. |
-| War declared with ~55 divisions; France took 24 of 41 German states; speed 3 unattended. | Hold 30+ equipped divisions west before declaring; speed 1 around declarations. |
+| War declared with ~55 divisions; France took 24 of 41 German states; speed 3 unattended. | Hold 30+ equipped divisions west and a front on every border before declaring; readiness comes from those gates, not from slowing the game. |
 | War goal usable only in 1941; completed goal expired after 60 days; no coverage north/coast; supply 22%. | Start the war in 1939; poll the goal daily; fronts for every border and coast. |
 | MEFO uncancelled, consumer goods 46 of 46 factories; Anschluss gated on 50k rifles; fronts only toward France; move orders left stacks in place. | Watch the Consumer Goods row; draw fronts for NL, BEL, DEN, SWI and coast; check positions, not orders. |
 | Started 1939; army all in France while the heartland was invaded. | Always start 1936; home-defence fronts. |
@@ -166,7 +166,7 @@ cost); it gives up the 100% industry bonus and the rearmament focuses.
 - Do not declare before Danzig or War is complete, before July 1939 (FAIR), or with fewer than 30 equipped divisions west.
 - Do not leave the MEFO factor unwatched; do not take Reichswerke-chain focuses at 90%+ factor.
 - No mixed leg-infantry/tank divisions, no console, no event firing, no reload (FAIR).
-- No unattended game speed above 1 near declarations, capitulations, or Yalta-class events.
+- Speed 3 all campaign, no pause after the start (the owner's run rule): before declarations, capitulations and Yalta-class events the gates (fronts on every border, reserve, events answered by rule) are met in advance; the game is never slowed to make up for a missing gate.
 - Do not train divisions without a deployment state or beyond what rifle stock supports.
 
 ## 6. Laws, decisions, politics, advisors, research, production, army
@@ -216,7 +216,7 @@ Hamburg, Bremerhaven, Stettin, Konigsberg). Minimum: West 30+ divisions in two a
 Warsaw/Lodz first. Planning needs about 15 days (2% a day to the 30% cap). After capitulation reassign east armies at once, check for UK/France attacks, and check unit positions
 rather than orders (move orders can leave stacks in place).
 
-The Allies join through the guarantee chain; expect France to attack within days. Do not run speed above 1 until the first week is stable.
+The Allies join through the guarantee chain; expect France to attack within days. Every border has its front and reserve before the declaration, so the first week runs at speed 3 like the rest of the war.
 
 ## 8. West
 
