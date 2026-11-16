@@ -4305,6 +4305,61 @@ class Lint:
                  "points far apart set war.strike {after_vp, stack, widen, cover} (objective strikes); against a "
                  "continuous line set war.strike false and say why in war.why")
 
+    def strike_posts(self):
+        """war.strike_posts: with objective strikes on, each strike formation keeps posts on the states it covers
+        while they touch enemy land (plan_strike.rs covers, plan_formations.rs cover_counts): `strike.cover` per own
+        covered state (guard_states_in_order and covers), and on a task's states (state, guard_states_in_order,
+        covers) the task's count. What is left strikes. Reported per formation as a fact, and as a warning when
+        the divisions left are fewer than `strike.stack` (the plan counts a stack it cannot field)."""
+        layout = self.list_of("army_layout")
+        if not layout:
+            return
+        wars = [("war", self.war)]
+        wars += [("phases[%s].overrides.war" % (p.get("id") or i), (p.get("overrides") or {}).get("war") or {})
+                 for i, p in enumerate(self.list_of("phases"))]
+        wars += [("contingencies[%s].overrides.war" % (c.get("id") or i), (c.get("overrides") or {}).get("war") or {})
+                 for i, c in enumerate(self.list_of("contingencies"))]
+        names = {e.get("name_hint") for e in layout if isinstance(e.get("name_hint"), str)}
+        heads = [e for e in layout if e.get("role") == "strike" and e.get("task_of") not in names]
+        rows = []
+        for where, w in wars:
+            strike = w.get("strike") if isinstance(w, dict) else None
+            if not strike:
+                continue
+            knob = strike.get("cover", 1) if isinstance(strike, dict) else 1
+            knob = knob if isinstance(knob, int) and knob >= 0 else 1
+            stack = strike.get("stack") if isinstance(strike, dict) else None
+            for head in heads:
+                name = head.get("name_hint")
+                size = head.get("count") if isinstance(head.get("count"), int) else 0
+                states = [x for k in ("guard_states_in_order", "covers") for x in _ints(head.get(k))]
+                counts = {}
+                for task in layout:
+                    if task is head or task.get("task_of") != name:
+                        continue
+                    n = task.get("count") if isinstance(task.get("count"), int) else 0
+                    size += n
+                    for x in _ints([task.get("state")]) + _ints(task.get("guard_states_in_order")) + \
+                            _ints(task.get("covers")):
+                        states.append(x)
+                        if n > 0:
+                            counts[x] = max(counts.get(x, 0), n)
+                posts = {x: counts.get(x, knob) for x in states}
+                kept = sum(v for v in posts.values() if v > 0)
+                left = max(0, size - kept)
+                rows.append({"where": where, "formation": name, "divisions": size, "posts": kept,
+                             "posts_by_state": {str(k): v for k, v in posts.items() if v > 0}, "strike": left})
+                if isinstance(stack, int) and left < stack:
+                    self.add("warning", "war.strike_posts", where + ".strike",
+                             "%s strikes with %d of its %d divisions while every state it covers touches enemy land: "
+                             "it keeps %s (strike.cover %d on its own covered states, a task's count on the task's "
+                             "states), under strike.stack %d. Give the strike more divisions, lower the task counts "
+                             "or the cover, take states out of covers/guard_states_in_order, or plan on %d"
+                             % (name, left, size, ", ".join("%s: %d" % kv for kv in sorted(
+                                 rows[-1]["posts_by_state"].items())), knob, stack, left))
+        if rows:
+            self.facts["strike_posts"] = rows
+
     def politics_conscription(self):
         """A conscription law above what the plan's divisions need, or a manpower rule free to climb the
         whole ladder (manage.conscription_laws unset) into laws that cost factory output."""
@@ -4840,7 +4895,7 @@ class Lint:
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
                  self.politics_pp_budget, self.stability_owner, self.alert_owners, self.idle_wings,
-                 self.strike_choice,
+                 self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
                  self.intelligence_operations, self.force_home_divisions]
