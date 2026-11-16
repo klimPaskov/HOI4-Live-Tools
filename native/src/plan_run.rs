@@ -574,6 +574,9 @@ pub struct State {
     moves: Moves,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
+    /// Divisions the game refused to disband (a template the history locks: "Units cannot be
+    /// disbanded"): consolidation passes over them.
+    undisbandable: HashSet<String>,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
     pol_fails: HashMap<String, u32>,
     /// Political power when a pick was last refused: it is not tried again until the
@@ -740,6 +743,7 @@ impl Default for State {
             encircle: Default::default(),
             moves: Moves::default(),
             disbanded: 0,
+            undisbandable: HashSet::new(),
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
@@ -3032,6 +3036,11 @@ fn disband_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let cfg = &plan["disband"];
+    if cfg["consolidate"].is_object() {
+        if let Some(step) = consolidate_step(state, tools, plan, lease, now)? {
+            return Ok(Some(step));
+        }
+    }
     let templates = strings(cfg, "templates");
     if templates.is_empty() {
         return Ok(None);
@@ -3157,6 +3166,133 @@ fn disband_step(
         state.skip(now, "disband", &army, 3 * DAY);
     }
     Ok(Some(format!("disband {count} from {army}: {ok} {why}")))
+}
+
+/// The divisions to disband so the rest come near full: the weakest first, as few as bring the
+/// mean equipment fill (their equipment returns to the pool and refills the others) to
+/// `until`, never below `keep` divisions. `fills` are (id, fill) of every division counted.
+pub(super) fn consolidation(fills: &[(String, f64)], until: f64, keep: usize) -> Vec<String> {
+    let n = fills.len();
+    if n <= keep {
+        return Vec::new();
+    }
+    let total: f64 = fills.iter().map(|f| f.1.clamp(0.0, 1.0)).sum();
+    let mut weakest: Vec<&(String, f64)> = fills.iter().collect();
+    weakest.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+    let mut out = Vec::new();
+    for (m, d) in weakest.into_iter().enumerate() {
+        let left = n - m;
+        if left <= keep || total / left as f64 >= until {
+            break;
+        }
+        out.push(d.0.clone());
+    }
+    out
+}
+
+/// `disband.consolidate` {"until_fill": 0.85, "keep": 14, "when": predicate}: a country whose
+/// divisions all stand short of equipment (Ethiopia 1936: rifles at zero all war, fill 0.5 and
+/// less) disbands its weakest divisions on own-controlled land, as few as bring the mean fill of
+/// the rest to `until_fill`, never below `keep`; the equipment of the disbanded divisions refills
+/// the others. Never a division of an army in enemy-held land or at encirclement risk.
+fn consolidate_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &plan["disband"]["consolidate"];
+    if state.skipped(now, "disband", "consolidate") {
+        return Ok(None);
+    }
+    if cfg.get("when").is_some_and(|w| !w.is_null())
+        && judge(state, tools, &cfg["when"], now) != Truth::True
+    {
+        state.skip(now, "disband", "consolidate", DAY);
+        return Ok(None);
+    }
+    let until = cfg["until_fill"].as_f64().unwrap_or(0.85).clamp(0.1, 1.0);
+    let Some(keep) = cfg["keep"].as_u64() else {
+        return Ok(None);
+    };
+    let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
+    let own: HashSet<i64> = list(&tools.call("hoi4_states", &json!({"query": me}))?, "states")
+        .iter()
+        .filter(|row| text(&row["controller"]) == me)
+        .filter_map(|row| row["state_id"].as_i64())
+        .collect();
+    let supply = tools.call("hoi4_supply", &json!({}))?;
+    let mut fighting: HashSet<String> = plan_war::encircled(tools);
+    for d in list(&supply, "divisions") {
+        if let (Some(army), Some(at)) = (d["army"].as_str(), d["state_id"].as_i64()) {
+            if !own.contains(&at) {
+                fighting.insert(army.to_string());
+            }
+        }
+    }
+    let divisions = list(&supply, "divisions");
+    // a division the game refused is neither cut nor counted among those to fill
+    let fills: Vec<(String, f64)> = divisions
+        .iter()
+        .filter(|d| {
+            !d["id"]
+                .as_str()
+                .is_some_and(|i| state.undisbandable.contains(i))
+        })
+        .filter_map(|d| {
+            Some((
+                d["id"].as_str()?.to_string(),
+                d["equipment_fill_min"].as_f64()?,
+            ))
+        })
+        .collect();
+    let cut = consolidation(&fills, until, keep as usize);
+    // one army's share per tick: the tool disbands divisions of one army
+    let mut by_army: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for d in divisions {
+        let (Some(id), Some(army), Some(at)) =
+            (d["id"].as_str(), d["army"].as_str(), d["state_id"].as_i64())
+        else {
+            continue;
+        };
+        if cut.iter().any(|c| c == id) && own.contains(&at) && !fighting.contains(army) {
+            by_army
+                .entry(army.to_string())
+                .or_default()
+                .push(id.to_string());
+        }
+    }
+    let Some((army, ids)) = by_army.into_iter().next() else {
+        state.skip(now, "disband", "consolidate", 3 * DAY);
+        return Ok(None);
+    };
+    // one division per order: a refusal then names its division (e11: the start divisions of
+    // a locked template refused every press, and the run never learned which)
+    let ids = vec![ids[0].clone()];
+    let count = ids.len();
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_division_disband",
+        json!({"army": army, "divisions": ids}),
+        "dc",
+    )?;
+    if ok {
+        state.disbanded += count as u64;
+    } else {
+        state.undisbandable.insert(ids[0].clone());
+    }
+    // the pool refills the rest over some days before the next count
+    state.skip(
+        now,
+        "disband",
+        "consolidate",
+        if ok { DAY } else { DAY / 4 },
+    );
+    Ok(Some(format!(
+        "disband (consolidate to {until:.2} fill, keep {keep}) {count} from {army}: {ok} {why}"
+    )))
 }
 
 /// Buildings that share a state's building slots: one state is "full" for all.
@@ -7499,6 +7635,26 @@ mod tests {
         assert_eq!(war_mission("small_plane_naval_bomber_airframe_1"), None);
     }
     use super::*;
+    #[test]
+    fn consolidation_disbands_the_weakest_until_the_rest_are_near_full() {
+        let f = |v: &[(&str, f64)]| -> Vec<(String, f64)> {
+            v.iter().map(|(a, b)| (a.to_string(), *b)).collect()
+        };
+        // 6 divisions at 0.5 mean: 3.0 of equipment fills 3.5 at 0.85, so three go
+        let six = f(&[
+            ("a", 0.3),
+            ("b", 0.4),
+            ("c", 0.5),
+            ("d", 0.5),
+            ("e", 0.6),
+            ("f", 0.7),
+        ]);
+        assert_eq!(consolidation(&six, 0.85, 1), vec!["a", "b", "c"]);
+        // never below keep
+        assert_eq!(consolidation(&six, 0.85, 5), vec!["a"]);
+        // already near full: nothing
+        assert!(consolidation(&f(&[("a", 0.9), ("b", 0.95)]), 0.85, 1).is_empty());
+    }
     use std::cell::{Cell, RefCell};
 
     const START: GameHour = 1_000_000;
@@ -7546,6 +7702,51 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    #[test]
+    fn consolidation_disbands_one_division_at_a_time_and_passes_over_refused_ones() {
+        let f = fake(vec![
+            ("hoi4_overview", json!({"player": "ETH"})),
+            (
+                "hoi4_states",
+                json!({"states": [{"state_id": 1, "controller": "ETH"}]}),
+            ),
+            (
+                "hoi4_supply",
+                json!({"divisions": [
+                    {"id": "a", "army": "A", "state_id": 1, "equipment_fill_min": 0.2},
+                    {"id": "b", "army": "A", "state_id": 1, "equipment_fill_min": 0.3},
+                    {"id": "c", "army": "A", "state_id": 1, "equipment_fill_min": 1.0},
+                    {"id": "d", "army": "A", "state_id": 1, "equipment_fill_min": 1.0}]}),
+            ),
+        ]);
+        let plan = json!({"disband": {"consolidate": {"until_fill": 0.85, "keep": 2}}});
+        let mut state = State::default();
+        f.refuse_with(
+            "hoi4_division_disband",
+            "input_readback_failed",
+            "divisions disbanded: expected game change not observed",
+        );
+        let out = disband_step(&mut state, &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("1 from A: false"), "{out}");
+        assert!(state.undisbandable.contains("a"));
+        // refused once: the next count leaves "a" out and takes "b" alone
+        f.refuse.borrow_mut().clear();
+        let out = disband_step(&mut state, &f, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("1 from A: true"), "{out}");
+        let sent: Vec<Value> = f
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_division_disband" && a.get("request_id").is_some())
+            .map(|(_, a)| a["divisions"].clone())
+            .collect();
+        assert_eq!(sent, vec![json!(["a"]), json!(["b"])]);
+    }
+
     #[test]
     fn a_line_organisation_is_held_back_until_the_chooser_is_built() {
         let f = fake(vec![("hoi4_production_lines", json!({"lines": []}))]);

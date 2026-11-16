@@ -166,12 +166,14 @@ the player decides strategy:
   therefore runs during the hold, not after it.
 - A defender sets `"posture": "defend"`: its hold phases draw no line on enemy land and retake
   nothing (a retake front is an attack). The armies stand on the ground the layout, the guards and
-  the defence lines give them and entrench; the attack waits for the phase with axes. Every other
-  theatre army keeps one front on the contact line: toward the nearest hostile-held state touching
-  own-controlled land, spread so no stretch takes more than `defend_per_state` (4) divisions per own
-  state touching it while another stretch is thinner, and drawn again when the enemy pushes past
-  that state or the army loses its order (a front drawn on day one toward a border the enemy has
-  since crossed holds nothing). The counter-attack phase is entered by measurable conditions: a
+  the defence lines give them and entrench; the attack waits for the phase with axes. The game
+  draws one front order along the border with one hostile-held state, so the contact line is shared
+  out: every hostile-held state touching own-controlled land goes to the nearest theatre army
+  (weighed by `defend_per_state`, 4 divisions per own state touching it), every army takes at least
+  its nearest stretch, and each army holds one front toward each of its stretches (at most three).
+  A front whose state the enemy has pushed past is drawn again toward the line as it runs, and an
+  army that lost its orders draws its fronts again (live: a front toward Tigray covered Begemder and
+  Wello, then only Wello's one province once Begemder fell, and the army stood stacked there). The counter-attack phase is entered by measurable conditions: a
   date, `casualty_ratio:<enemy>` (the attacker's losses over the defender's), the defender's own
   surrender progress, or a focus the chosen branch reaches.
 - `"stall_days": 8` (default): an ordered army that took no province of its target, or of any

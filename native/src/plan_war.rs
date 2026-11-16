@@ -119,7 +119,7 @@
 use super::{list, text, GameHour, State, Tools, DAY};
 use crate::error::Result;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// What these rules keep (this server life).
 #[derive(Default)]
@@ -153,8 +153,8 @@ pub(super) struct Memory {
     line: HashMap<String, (i32, i64)>,
     /// army -> game hour its line was drawn again for the next row while its plan executed
     redrawn: HashMap<String, GameHour>,
-    /// army -> the hostile-held state its defender front was drawn toward (defender_front)
-    fronts: HashMap<String, i32>,
+    /// army -> the hostile-held states its defender fronts were drawn toward (defender_front)
+    fronts: HashMap<String, BTreeSet<i32>>,
 }
 
 /// One theatre army a defender's hold may give a front: name, map position, divisions and
@@ -176,18 +176,19 @@ pub(super) struct Contact {
     pub touching: usize,
 }
 
-/// A defender's front: the army that needs a front now and the hostile-held state to draw it
-/// toward, or None when every army holds a front on the contact line.
+/// A defender's fronts: the army that needs a front now and the hostile-held state to draw it
+/// toward, or None when the armies' fronts cover the whole contact line.
 ///
-/// The contact line moves as the attacker advances: a front drawn on day one toward a border
-/// state that the enemy has since pushed past holds nothing, and the divisions that fell back
-/// from it stood stacked in the rear with no order (e7, 16 Nov 2026: 7-9 divisions in one
-/// province while the game's AI as the same country kept 2-4 a province over 11-13 provinces,
-/// each army with one front). So an army keeps its front only while that front's state is still
-/// on the contact line and the army still holds an order; otherwise it gets a front toward the
-/// nearest contact state, weighed against the divisions already fronting each state so that the
-/// armies spread along the whole line (`per_state` divisions for each own state touching that
-/// stretch before the next army is better sent elsewhere).
+/// The game draws one front order along the border with one hostile-held state (live 16 Nov
+/// 2026, Ethiopia: a front toward Tigray ran along Begemder and Wello while Tigray's border was
+/// held, and shrank to Wello's single province 7944 once Begemder fell, where the army's five
+/// divisions then stood stacked). The game's AI as the same country kept 2-4 divisions a province
+/// over 11-13 provinces. So the contact line is shared out: every contact state goes to the
+/// nearest army (weighed by `per_state` divisions for each own state touching it, so a crowded
+/// army leaves the next stretch to its neighbour), every army takes at least its nearest
+/// stretch, and each army holds one front toward each of its stretches (at most
+/// [`FRONTS_PER_ARMY`]). A front whose state left the contact line is forgotten; an army whose
+/// orders are gone draws its fronts again.
 pub(super) fn defender_front(
     memory: &mut Memory,
     armies: &[Holder],
@@ -195,43 +196,111 @@ pub(super) fn defender_front(
     per_state: f64,
     cooling: &HashSet<String>,
 ) -> Option<(String, i32)> {
-    if contact.is_empty() {
+    if contact.is_empty() || armies.is_empty() {
         return None;
     }
     let on_line: HashSet<i32> = contact.iter().map(|c| c.state).collect();
-    let mut load: HashMap<i32, f64> = HashMap::new();
-    let mut needs: Vec<&Holder> = Vec::new();
     for a in armies {
-        match memory.fronts.get(&a.name) {
-            Some(t) if on_line.contains(t) && a.orders > 0 => {
-                *load.entry(*t).or_default() += a.divisions as f64;
-            }
-            _ => needs.push(a),
+        let kept = memory.fronts.entry(a.name.clone()).or_default();
+        if a.orders == 0 {
+            kept.clear();
+        }
+        kept.retain(|s| on_line.contains(s));
+    }
+    let shares = share_contact(armies, contact, per_state);
+    // the largest army first: it spreads furthest and matters most
+    let mut order: Vec<&Holder> = armies.iter().collect();
+    order.sort_by(|a, b| b.divisions.cmp(&a.divisions).then(a.name.cmp(&b.name)));
+    for army in order {
+        if cooling.contains(&army.name) {
+            continue;
+        }
+        let kept = memory.fronts.get(&army.name).cloned().unwrap_or_default();
+        if kept.len() >= FRONTS_PER_ARMY {
+            continue;
+        }
+        if let Some(state) = shares
+            .get(&army.name)
+            .and_then(|mine| mine.iter().find(|s| !kept.contains(s)))
+        {
+            return Some((army.name.clone(), *state));
         }
     }
-    // the largest army first: it spreads furthest and matters most
-    needs.sort_by(|a, b| b.divisions.cmp(&a.divisions).then(a.name.cmp(&b.name)));
-    let army = needs.into_iter().find(|a| !cooling.contains(&a.name))?;
-    let target = contact
-        .iter()
-        .map(|c| {
-            let dist = (c.at.0 - army.at.0).hypot(c.at.1 - army.at.1).max(1.0);
-            let room = per_state.max(1.0) * c.touching.max(1) as f64;
-            let crowd = if army.anchored {
-                0.0
-            } else {
-                load.get(&c.state).copied().unwrap_or(0.0) / room
-            };
-            (c.state, dist * (1.0 + crowd))
-        })
-        .min_by(|a, b| a.1.total_cmp(&b.1))?
-        .0;
-    Some((army.name.clone(), target))
+    None
 }
 
-/// The defender front was drawn: remember its state for the army.
+/// Most front orders the defender gives one army (one per hostile-held state it faces).
+pub(super) const FRONTS_PER_ARMY: usize = 3;
+
+/// The contact states each army fronts, nearest first (see [`defender_front`]).
+fn share_contact(
+    armies: &[Holder],
+    contact: &[Contact],
+    per_state: f64,
+) -> HashMap<String, Vec<i32>> {
+    let dist = |a: &Holder, c: &Contact| (c.at.0 - a.at.0).hypot(c.at.1 - a.at.1).max(1.0);
+    let mut load: HashMap<&str, f64> = HashMap::new();
+    let mut out: HashMap<String, Vec<(usize, i32)>> = HashMap::new();
+    // longest stretches first, so they go to the nearest army before it fills up
+    let mut stretches: Vec<&Contact> = contact.iter().collect();
+    stretches.sort_by(|a, b| b.touching.cmp(&a.touching).then(a.state.cmp(&b.state)));
+    for c in stretches {
+        let room = per_state.max(1.0) * c.touching.max(1) as f64;
+        let Some(best) = armies.iter().min_by(|a, b| {
+            let cost = |h: &Holder| {
+                let have = load.get(h.name.as_str()).copied().unwrap_or(0.0);
+                // an army already fronting stretches as long as its divisions cover costs more
+                let full = if h.anchored {
+                    0.0
+                } else {
+                    (have / (h.divisions.max(1) as f64)).max(0.0)
+                };
+                dist(h, c) * (1.0 + full)
+            };
+            cost(a).total_cmp(&cost(b)).then(a.name.cmp(&b.name))
+        }) else {
+            continue;
+        };
+        *load.entry(best.name.as_str()).or_default() += room;
+        out.entry(best.name.clone())
+            .or_default()
+            .push((c.touching, c.state));
+    }
+    // every army fronts at least its nearest stretch
+    for a in armies {
+        if out.contains_key(&a.name) {
+            continue;
+        }
+        if let Some(c) = contact.iter().min_by(|x, y| {
+            dist(a, x)
+                .total_cmp(&dist(a, y))
+                .then(x.state.cmp(&y.state))
+        }) {
+            out.insert(a.name.clone(), vec![(c.touching, c.state)]);
+        }
+    }
+    // each army fronts its nearest stretch first
+    let at: HashMap<i32, &Contact> = contact.iter().map(|c| (c.state, c)).collect();
+    armies
+        .iter()
+        .filter_map(|a| {
+            let mut v: Vec<i32> = out.remove(&a.name)?.into_iter().map(|x| x.1).collect();
+            v.sort_by(|x, y| {
+                let d = |s: &i32| at.get(s).map_or(f64::MAX, |c| dist(a, c));
+                d(x).total_cmp(&d(y)).then(x.cmp(y))
+            });
+            Some((a.name.clone(), v))
+        })
+        .collect()
+}
+
+/// A defender front was drawn: remember its state for the army.
 pub(super) fn front_drawn(memory: &mut Memory, army: &str, target: i32) {
-    memory.fronts.insert(army.to_string(), target);
+    memory
+        .fronts
+        .entry(army.to_string())
+        .or_default()
+        .insert(target);
 }
 
 /// One spell of an army below the supply floor: what the executor tried for it.
@@ -1547,46 +1616,52 @@ mod tests {
                 .collect()
         };
         let none = HashSet::new();
-        // two armies side by side at x=0: the first takes the nearest stretch, the second is
-        // sent to the next stretch once the first holds 6 of the 4 room
-        let contact = line(&[(1, 10.0), (2, 20.0)]);
-        let mut armies = vec![holder("A", (0.0, 0.0), 6, 0), holder("B", (0.0, 0.0), 5, 0)];
-        assert_eq!(
-            defender_front(&mut m, &armies, &contact, 4.0, &none),
-            Some(("A".into(), 1))
-        );
-        front_drawn(&mut m, "A", 1);
-        armies[0].orders = 1;
-        assert_eq!(
-            defender_front(&mut m, &armies, &contact, 4.0, &none),
-            Some(("B".into(), 2))
-        );
-        front_drawn(&mut m, "B", 2);
-        armies[1].orders = 1;
-        // both hold a front on the line: nothing to do
+        // A at the west end, B at the east end of a line of three stretches: each fronts the
+        // stretches nearest it, the whole line is covered
+        let contact = line(&[(1, 0.0), (2, 10.0), (3, 30.0)]);
+        let mut armies = vec![
+            holder("A", (0.0, 0.0), 6, 0),
+            holder("B", (30.0, 0.0), 5, 0),
+        ];
+        let mut drawn: Vec<(String, i32)> = Vec::new();
+        while let Some((army, state)) = defender_front(&mut m, &armies, &contact, 4.0, &none) {
+            front_drawn(&mut m, &army, state);
+            for a in armies.iter_mut().filter(|a| a.name == army) {
+                a.orders += 1;
+            }
+            drawn.push((army, state));
+            assert!(drawn.len() < 10, "{drawn:?}");
+        }
+        let states: BTreeSet<i32> = drawn.iter().map(|d| d.1).collect();
+        assert_eq!(states, [1, 2, 3].into(), "{drawn:?}");
+        assert!(drawn.contains(&("A".into(), 1)) && drawn.contains(&("B".into(), 3)));
+        // nothing more while the line stands
         assert_eq!(defender_front(&mut m, &armies, &contact, 4.0, &none), None);
-        // the enemy pushed past state 1: A's front is drawn again toward the line as it runs
-        let moved = line(&[(3, 5.0), (2, 20.0)]);
+        // the enemy pushed past state 1 to state 4 beside it: the stretch 4 is fronted next
+        let moved = line(&[(4, 2.0), (2, 10.0), (3, 30.0)]);
         assert_eq!(
             defender_front(&mut m, &armies, &moved, 4.0, &none),
-            Some(("A".into(), 3))
+            Some(("A".into(), 4))
         );
-        // an army that lost its order gets a front again, unless it is cooling down
+        // an army whose orders are gone draws its fronts again, unless it is cooling down
         armies[1].orders = 0;
         let cool: HashSet<String> = ["A".to_string()].into();
-        assert_eq!(
-            defender_front(&mut m, &armies, &contact, 4.0, &cool),
-            Some(("B".into(), 2))
-        );
+        let again = defender_front(&mut m, &armies, &contact, 4.0, &cool).unwrap();
+        assert_eq!(again.0, "B");
         // no contact line: no front
         assert_eq!(defender_front(&mut m, &armies, &[], 4.0, &none), None);
-        // a guard at its post takes the stretch nearest the post, however crowded
-        let mut guard = holder("G", (0.0, 0.0), 3, 0);
-        guard.anchored = true;
-        assert_eq!(
-            defender_front(&mut m, &[guard], &contact, 4.0, &none),
-            Some(("G".into(), 1))
-        );
+        // a lone guard fronts every stretch up to the cap
+        let mut solo = Memory::default();
+        let mut guard = vec![holder("G", (0.0, 0.0), 3, 0)];
+        let four = line(&[(1, 0.0), (2, 1.0), (3, 2.0), (5, 3.0)]);
+        let mut n = 0;
+        while let Some((army, state)) = defender_front(&mut solo, &guard, &four, 4.0, &none) {
+            front_drawn(&mut solo, &army, state);
+            guard[0].orders += 1;
+            n += 1;
+            assert!(n < 10);
+        }
+        assert_eq!(n, FRONTS_PER_ARMY);
     }
 
     /// One driven army (Army 1 in own state 42) against FRA (states 28 and 18); Army 2 idles in

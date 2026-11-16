@@ -2302,13 +2302,18 @@ fn controlled_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
 /// Map point on the border between an own-controlled state and the target state, nearest the
 /// army: midpoint of the closest province pair across that border (fronts can only be drawn on
 /// the highlighted borders, 1.19.4.1).
-fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<Option<(f64, f64)>> {
+/// A map point with its height: (x, height, z).
+type MapPoint = (f64, f64, f64);
+
+fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<Option<MapPoint>> {
     let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
         .exe;
     let dir = super::mapdata::game_dir(exe)?;
     let positions = super::mapdata::positions(&dir)?;
+    let heights = super::mapdata::unit_heights(&dir)?;
+    let height = |p: &i32| heights.get(p).copied().unwrap_or(super::screenmap::GROUND);
     let map = super::front_plan::static_map(&dir)?;
     let mine = read(process, controlled_states)?;
     let army_at = read(process, |r, i| army_provinces(r, i, army))?;
@@ -2324,23 +2329,28 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
             pts.iter().map(|p| p.1).sum::<f64>() / pts.len() as f64,
         ))
     };
-    let target: Vec<(f64, f64)> = super::mapdata::state_provinces(&dir, state)?
+    // the border lies between the two provinces' unit positions, at about their mean height (on
+    // the Ethiopian highlands the flat-map point fell tens of pixels off the drawn border)
+    let target: Vec<((f64, f64), f64)> = super::mapdata::state_provinces(&dir, state)?
         .iter()
-        .filter_map(|p| positions.get(p).copied())
+        .filter_map(|p| Some((positions.get(p).copied()?, height(p))))
         .collect();
     let neighbours = map.adj.get(&state).cloned().unwrap_or_default();
-    let mut best: Option<(f64, (f64, f64))> = None;
+    let mut best: Option<(f64, MapPoint)> = None;
     for n in neighbours.iter().filter(|n| mine.contains(n)) {
-        for p in super::mapdata::state_provinces(&dir, *n)?
+        for (p, hp) in super::mapdata::state_provinces(&dir, *n)?
             .iter()
-            .filter_map(|p| positions.get(p).copied())
+            .filter_map(|p| Some((positions.get(p).copied()?, height(p))))
         {
-            for q in &target {
+            for (q, hq) in &target {
                 let gap = (p.0 - q.0).hypot(p.1 - q.1);
                 let near_army = centre.map(|c| (q.0 - c.0).hypot(q.1 - c.1)).unwrap_or(0.0);
                 let score = gap + 0.3 * near_army;
                 if best.is_none_or(|b| score < b.0) {
-                    best = Some((score, ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0)));
+                    best = Some((
+                        score,
+                        ((p.0 + q.0) / 2.0, (hp + hq) / 2.0, (p.1 + q.1) / 2.0),
+                    ));
                 }
             }
         }
@@ -2348,11 +2358,7 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
     Ok(best.map(|b| b.1))
 }
 #[allow(dead_code)]
-fn front_point_province(
-    process: &dyn Process,
-    army: &str,
-    state: i32,
-) -> Result<Option<(f64, f64)>> {
+fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result<Option<MapPoint>> {
     let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
@@ -2369,12 +2375,17 @@ fn front_point_province(
     }
     let cx = pts.iter().map(|p| p.0).sum::<f64>() / pts.len() as f64;
     let cz = pts.iter().map(|p| p.1).sum::<f64>() / pts.len() as f64;
+    let heights = super::mapdata::unit_heights(&dir)?;
     Ok(super::mapdata::state_provinces(&dir, state)?
         .iter()
-        .filter_map(|p| positions.get(p).copied())
+        .filter_map(|p| {
+            let (x, z) = positions.get(p).copied()?;
+            let y = heights.get(p).copied().unwrap_or(super::screenmap::GROUND);
+            Some((x, y, z))
+        })
         .min_by(|a, b| {
-            let da = (a.0 - cx).powi(2) + (a.1 - cz).powi(2);
-            let db = (b.0 - cx).powi(2) + (b.1 - cz).powi(2);
+            let da = (a.0 - cx).powi(2) + (a.2 - cz).powi(2);
+            let db = (b.0 - cx).powi(2) + (b.2 - cz).powi(2);
             da.total_cmp(&db)
         }))
 }
@@ -2411,25 +2422,27 @@ pub(super) fn front(
         .or_else(|| front_point_province(process, army, state).ok().flatten());
     // The Find view is only needed when the border point is not already in the usable area.
     let visible = super::screenmap::front_height_ok(process)
-        && near.is_some_and(|(x, z)| {
-            read(process, |r, i| super::screenmap::to_screen(r, i, x, z))
-                .ok()
-                .flatten()
-                .is_some_and(|(sx, sy)| {
-                    (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy)
-                })
+        && near.is_some_and(|(x, y, z)| {
+            read(process, |r, i| {
+                super::screenmap::to_screen_at(r, i, x, y, z)
+            })
+            .ok()
+            .flatten()
+            .is_some_and(|(sx, sy)| (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy))
         });
     super::ui::trace("front: border point", t0);
     if !visible {
         find_state(process, keys, state)?;
     }
     super::ui::trace("front: find", t0);
-    if let Some((x, z)) = near {
+    if let Some((x, y, z)) = near {
         // Zoom out (at most four wheel steps, as before) until the point lies in the usable
         // area: the steps it needs, sized from its screen offset, go in one smooth flick.
         let mut left = 4;
         for _ in 0..2 {
-            let events = match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+            let events = match read(process, |r, i| {
+                super::screenmap::to_screen_at(r, i, x, y, z)
+            })? {
                 Some(p) => super::glide::zoom_out_events(p, (520.0, 160.0, 1500.0, 800.0), left),
                 None => left.min(2),
             };
@@ -2450,12 +2463,14 @@ pub(super) fn front(
     // cover its highlight while another border's highlight (a neutral neighbour's) is in full
     // view (live 14 Nov 2026: fronts toward Hararghe from Somaliland failed two times in
     // three). The arrow keys bring the border point into the middle of the map area.
-    if let Some((x, z)) = near {
+    if let Some((x, y, z)) = near {
         use crate::platform::game_input::vk;
         let (x0, x1, y0, y1) = (640.0, 1280.0, 260.0, 640.0);
         let (mx, my) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
         for _ in 0..FRONT_PAN_TAPS {
-            let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))?
+            let Some((sx, sy)) = read(process, |r, i| {
+                super::screenmap::to_screen_at(r, i, x, y, z)
+            })?
             else {
                 break;
             };
@@ -2480,7 +2495,9 @@ pub(super) fn front(
         }
         super::ui::trace_text(&format!(
             "front: border point on screen at {:?}",
-            read(process, |r, i| super::screenmap::to_screen(r, i, x, z))?
+            read(process, |r, i| super::screenmap::to_screen_at(
+                r, i, x, y, z
+            ))?
         ));
     }
     // The fronts this army can take are highlighted only in front-line
@@ -2542,8 +2559,10 @@ pub(super) fn front(
         }
     }
     // Highlighted border pixels nearest the projected border point first (thin dashed lines).
-    if let Some((x, z)) = near {
-        if let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+    if let Some((x, y, z)) = near {
+        if let Some((sx, sy)) = read(process, |r, i| {
+            super::screenmap::to_screen_at(r, i, x, y, z)
+        })? {
             let mut nearby: Vec<(f64, f64)> =
                 highlighted_near(&plain, &drawing, &tooltip, 3, (sx, sy), 3)
                     .into_iter()

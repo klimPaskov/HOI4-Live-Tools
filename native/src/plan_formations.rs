@@ -20,7 +20,8 @@
 //!     A theatre is the whole layout when the plan has at most one army group, else each group;
 //!   - one army group over the theatre's formations: the plan's single group is widened to every
 //!     formation, a plan without one gets `ag_theatre` (marshal: the best free field marshal);
-//!   - `armies.concentrate: false` keeps the plan as written.
+//!   - `armies.concentrate: false` keeps the plan as written, and so does a defender's hold
+//!     (`war.posture` "defend", no axes): its guard posts stay armies of their own.
 //!
 //! [`command_step`] then brings the game in line, one verified action at a time:
 //!   1. an army bound to a task, and any other army standing in the theatre that no formation
@@ -71,6 +72,16 @@ fn push_unique(target: &mut Value, key: &str, ids: &[i64]) {
 pub(super) fn concentrate(plan: &Value) -> Option<Value> {
     let cfg = &plan["armies"];
     if cfg["concentrate"] == json!(false) {
+        return None;
+    }
+    // A defender's guard posts stand where they are: folded into a formation they went with it
+    // when it marched to its own post (e11, 16 Nov 2026: Gondar's two divisions and Addis
+    // Ababa's one became part of the Army of Hararghe, which marched south-east; Italy walked
+    // through the empty west to the capital by 28 March). Concentration resumes with the
+    // counter-attack phase.
+    if plan["war"]["posture"] == json!("defend")
+        && plan["war"]["axes"].as_array().is_none_or(|a| a.is_empty())
+    {
         return None;
     }
     let layout = plan["army_layout"].as_array()?;
@@ -752,6 +763,12 @@ mod tests {
         let mut plan = layout_plan();
         plan["armies"]["concentrate"] = json!(false);
         assert!(concentrate(&plan).is_none());
+        // a defender's hold keeps its guard posts as armies; its counter-attack concentrates
+        let mut plan = layout_plan();
+        plan["war"] = json!({"posture": "defend", "axes": []});
+        assert!(concentrate(&plan).is_none());
+        plan["war"]["axes"] = json!([[842]]);
+        assert!(concentrate(&plan).is_some());
         let mut plan = layout_plan();
         plan["armies"]["max_per_group"] = json!(4);
         plan["armies"]["min_divisions"] = json!(1);
