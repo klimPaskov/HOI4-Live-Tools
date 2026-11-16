@@ -330,6 +330,22 @@ pub(super) fn system_prompt() -> Result<Option<String>> {
             }
         }
     }
+    let rows: Vec<_> = owner_rows()?
+        .into_iter()
+        .map(|(owner, onscreen, alpha, _)| (owner, onscreen, alpha))
+        .collect();
+    let found = prompt_among(&rows);
+    if let Ok(mut cache) = RECENT.lock() {
+        *cache = Some((Instant::now(), found.clone()));
+    }
+    Ok(found)
+}
+
+/// Owner name, on-screen flag, alpha and level of one window.
+pub(super) type OwnerRow = (Option<String>, bool, f64, i32);
+
+/// Every window's row, front to back. Metadata only.
+fn owner_rows() -> Result<Vec<OwnerRow>> {
     let list = Owned(unsafe { super::CGWindowListCopyWindowInfo(1, 0) });
     if list.0.is_null() || unsafe { CFGetTypeID(list.0) != CFArrayGetTypeID() } {
         return Err(invalid());
@@ -352,14 +368,28 @@ pub(super) fn system_prompt() -> Result<Option<String>> {
             if !a.is_null() && CFGetTypeID(a) == CFNumberGetTypeID() {
                 super::CFNumberGetValue(a, 6, (&mut alpha as *mut f64).cast::<c_void>());
             }
-            rows.push((owner, onscreen, alpha));
+            let level = integer(item, super::kCGWindowLayer).unwrap_or(0);
+            rows.push((owner, onscreen, alpha, level));
         }
     }
-    let found = prompt_among(&rows);
-    if let Ok(mut cache) = RECENT.lock() {
-        *cache = Some((Instant::now(), found.clone()));
-    }
-    Ok(found)
+    Ok(rows)
+}
+
+/// Whether the Dock is shown. The Dock draws through one display-sized window at the Dock
+/// level, on screen only while the Dock shows; with automatic hiding it shows whenever the
+/// pointer has rested at the Dock's screen edge. The occlusion check then refuses every point
+/// of the game window (live 16 Nov 2026: 40 refusals in one run, "Window 11 owned by" the
+/// Dock "at level 20").
+pub(super) fn dock_shown() -> Result<bool> {
+    // Public kCGDockWindowLevelKey ordinal 7.
+    let level = unsafe { CGWindowLevelForKey(7) };
+    Ok(dock_among(&owner_rows()?, level))
+}
+
+pub(super) fn dock_among(rows: &[OwnerRow], dock_level: i32) -> bool {
+    rows.iter().any(|(owner, onscreen, alpha, level)| {
+        *onscreen && *alpha > 0.0 && *level == dock_level && owner.as_deref() == Some("Dock")
+    })
 }
 
 #[cfg(test)]

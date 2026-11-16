@@ -377,6 +377,52 @@ fn click_sequence_checked(
     dispatched.and(released)
 }
 
+/// A Dock that hides automatically stays shown while the pointer rests at its screen edge, and
+/// its display-sized window then covers every point of the game. When the Dock is what refuses
+/// the point: move the pointer (no button) to the middle of the game window, give the Dock up to
+/// 1.5 s to hide, move back to the target and check again. A Dock that stays keeps the refusal,
+/// so no click is ever sent while the Dock may take it.
+fn dock_retry(
+    first: Result<()>,
+    mut dock_shown: impl FnMut() -> Result<bool>,
+    mut move_to: impl FnMut(Point) -> Result<()>,
+    mut pause: impl FnMut(std::time::Duration),
+    (rest, point): (Point, Point),
+    check: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    let Err(refused) = first else {
+        return Ok(());
+    };
+    if refused.code != "input_point_occluded" || !matches!(dock_shown(), Ok(true)) {
+        return Err(refused);
+    }
+    move_to(rest)?;
+    for _ in 0..30 {
+        pause(std::time::Duration::from_millis(50));
+        if matches!(dock_shown(), Ok(false)) {
+            move_to(point)?;
+            pause(std::time::Duration::from_millis(35));
+            return check();
+        }
+    }
+    Err(refused)
+}
+
+/// One pointer move with no button and no modifier.
+fn post_move(point: Point) -> Result<()> {
+    // SAFETY: a null source is allowed; the event is released after posting.
+    unsafe {
+        let moved = CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON);
+        if moved.is_null() {
+            return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+        }
+        CGEventSetFlags(moved, 0);
+        CGEventPost(HID_EVENT_TAP, moved);
+        CFRelease(moved);
+    }
+    Ok(())
+}
+
 /// Allocate the complete ordinary mouse sequence before any event is posted.
 /// The final target/deadline check therefore follows down-event allocation,
 /// and cleanup never needs a new allocation after possible delivery.
@@ -556,7 +602,22 @@ impl<'p> MacKeys<'p> {
     /// independently typed; a game GUI hit beneath an OS overlay is insufficient.
     fn point_preflight(&self, point: Point) -> Result<()> {
         self.preflight()?;
-        occlusion::require(self.window, point)?;
+        let b = self.window.bounds;
+        let rest = Point {
+            x: b.origin.x + b.size.x / 2.0,
+            y: b.origin.y + b.size.y / 2.0,
+        };
+        dock_retry(
+            occlusion::require(self.window, point),
+            occlusion::dock_shown,
+            post_move,
+            std::thread::sleep,
+            (rest, point),
+            || {
+                self.preflight()?;
+                occlusion::require(self.window, point)
+            },
+        )?;
         self.process.get().check()?;
         for check in &self.input_guards {
             check()?;
@@ -1095,6 +1156,62 @@ impl MacKeys<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_shown_dock_is_waited_out_from_the_window_middle_and_other_refusals_stay() {
+        use std::cell::RefCell;
+        let rest = Point { x: 960.0, y: 600.0 };
+        let point = Point { x: 5.0, y: 900.0 };
+        let occluded = || Err(Error::new("input_point_occluded", "Dock"));
+        // The Dock hides on the third look: the pointer rests in the middle, returns, checks.
+        let moves = RefCell::new(Vec::new());
+        let mut looks = vec![true, true, false].into_iter();
+        let result = dock_retry(
+            occluded(),
+            || Ok(looks.next().unwrap_or(false)),
+            |p| {
+                moves.borrow_mut().push((p.x, p.y));
+                Ok(())
+            },
+            |_| {},
+            (rest, point),
+            || Ok(()),
+        );
+        assert!(result.is_ok());
+        assert_eq!(*moves.borrow(), vec![(960.0, 600.0), (5.0, 900.0)]);
+        // A Dock that never hides keeps the refusal and the pointer is not sent back.
+        let moves = RefCell::new(Vec::new());
+        let result = dock_retry(
+            occluded(),
+            || Ok(true),
+            |p| {
+                moves.borrow_mut().push((p.x, p.y));
+                Ok(())
+            },
+            |_| {},
+            (rest, point),
+            || Ok(()),
+        );
+        assert_eq!(result.unwrap_err().code, "input_point_occluded");
+        assert_eq!(moves.borrow().len(), 1);
+        // Another window, or another refusal, moves nothing.
+        for first in [
+            occluded(),
+            Err(Error::new("input_target_not_frontmost", "x")),
+        ] {
+            let dock = first
+                .as_ref()
+                .is_err_and(|e| e.code == "input_target_not_frontmost");
+            let result = dock_retry(
+                first,
+                || Ok(dock),
+                |_| panic!("no move"),
+                |_| {},
+                (rest, point),
+                || Ok(()),
+            );
+            assert!(result.is_err());
+        }
+    }
     #[test]
     fn drag_cancellation_releases_at_last_point_and_sends_no_further_motion() {
         use std::cell::RefCell;
