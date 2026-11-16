@@ -359,6 +359,7 @@ pub fn arg_built(tool: &str, arg: &str) -> bool {
 /// named at an `act` call is listed. Add a tool only once its handler journals a receipt.
 pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_army_fallback",
+    "hoi4_army_exercise",
     "hoi4_army_area_defense",
     "hoi4_agency_create",
     "hoi4_agency_upgrade",

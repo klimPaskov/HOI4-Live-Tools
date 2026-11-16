@@ -4061,15 +4061,14 @@
     "xp_budget.army[].when",
     "xp_budget.army[].armies"
    ],
-   "tools": [],
-   "blocked": "no tool starts or stops army exercises (the battle-plan toolbar's btn_exercise is not driven); the executor step for xp_budget.army purpose exercise (plan_seams.rs) waits on that tool and says what it would send",
-   "blocked_terms": [
-    "exercise"
+   "tools": [
+    "hoi4_army_exercise",
+    "hoi4_armies"
    ],
    "payoff": "medium",
    "why": "Regular is +25% over Trained; XP pays for templates and doctrines",
    "closing": "both",
-   "owner": "offline done: executor step in plan_seams.rs (start at peace once when holds, stop at war, armies from names or army_layout roles), EXERCISE_TOOL hoi4_army_exercise {armies, on, stop_at_max}; live: build that tool (select the army, btn_exercise / Shift+K, read the exercise state back) with receipts, list it in RECEIPT_TOOLS, then live-verify"
+   "owner": "offline done: hoi4_army_exercise {armies,on,stop_at_max} (start: the card selects the army, the battle plan bar btn_exercise, Shift+click for the stop at the maximum; stop: the card btn_stop_training), receipt per army from the card training_marker and icn_exercise_stop_at_max (hoi4_armies exercising, exercise_stop_at_max), in RECEIPT_TOOLS; the executor step for xp_budget.army purpose exercise sends it (start at peace, stop at war), tests; live: exercise_test.py on a fresh Germany 1936 game: both readbacks flip and army XP grows over a few days"
   },
   {
    "id": "training.early_deploy_cancel",

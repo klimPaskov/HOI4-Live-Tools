@@ -755,6 +755,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, offensive-line drawing (X), one right-button drag across the state, parallel to the army's front, so the whole front advances to it. With province_id (a province of the state, e.g. its victory point) the line runs through that province's depth; without it through the middle of the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"province_id":{"type":"integer","minimum":1,"maximum":29999,"description":"The objective inside the state: the line is drawn at its depth from the army"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_fallback","description":"Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8,"description":"own states the line runs through, side by side"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_area_defense","description":"Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"settings":{"type":"array","items":{"type":"string","enum":["victory_points","ports","coastlines","airbases","borders","forts","rail","facility"]}},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_exercise","description":"Start or stop army exercises for own armies: the divisions train toward the game's training maximum and the country earns army experience (doctrines, templates and designs are paid with it), at the cost of extra attrition (equipment) and fuel. Start: the army's card selects it and the battle plan bar's exercise button (btn_exercise) is clicked; stop_at_max (default true) Shift+clicks it so each army stops by itself at the maximum. Stop (on:false): the card's stop-training button. Verified per army by its card: training_marker shown while it exercises, icn_exercise_stop_at_max with the stop at the maximum (hoi4_armies reports both as exercising and exercise_stop_at_max). An army already as asked is left alone. A disabled button (no division that can train, all at the maximum) is refused with exercise_unavailable for that army; the receipt's detail lists every army's card state.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128},"minItems":1,"maxItems":24},"on":{"type":"boolean"},"stop_at_max":{"type":"boolean","description":"start only: stop each army at the training maximum (default true)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","on","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
         json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; surrender progress (wars[].enemy_surrender_progress, own_surrender_progress) and the naval intel against each enemy (wars[].own_naval_intel) are not yet built and always null with a reason; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended. capital_land: own-controlled states the capital reaches over own-controlled land (history capital, else the largest own area); a division elsewhere is overseas (disbanding it loses 75% of its equipment).","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
         json!({"name":"hoi4_province_graph","description":"Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours. Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":128}},"required":["states"],"additionalProperties":false}}),
@@ -915,6 +916,7 @@ impl Commands for MacClock {
                     | "hoi4_army_offensive"
                     | "hoi4_army_fallback"
                     | "hoi4_army_area_defense"
+                    | "hoi4_army_exercise"
                     | "hoi4_army_move"
                     | "hoi4_army_commander"
                     | "hoi4_commanders"
@@ -5324,6 +5326,117 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 armies::assign_commander(process, keys, army, general)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_exercise" {
+            allowed(
+                args,
+                &["armies", "on", "stop_at_max", "request_id", "lease_token"],
+            )?;
+            let names: Vec<String> = args
+                .get("armies")
+                .and_then(Value::as_array)
+                .filter(|a| (1..=24).contains(&a.len()))
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .filter(|v: &Vec<String>| {
+                    (1..=24).contains(&v.len())
+                        && v.iter().all(|n| {
+                            !n.is_empty() && n.len() <= 128 && !n.chars().any(char::is_control)
+                        })
+                })
+                .ok_or_else(|| {
+                    Error::new("invalid_arguments", "armies must be 1..24 army names")
+                })?;
+            let on = args
+                .get("on")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| Error::new("invalid_arguments", "on must be a boolean"))?;
+            let at_max = on
+                && match args.get("stop_at_max") {
+                    None => true,
+                    Some(v) => v.as_bool().ok_or_else(|| {
+                        Error::new("invalid_arguments", "stop_at_max must be a boolean")
+                    })?,
+                };
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let cards = || -> Value {
+                names
+                    .iter()
+                    .map(|a| {
+                        let s = ui::read(process, |r, i| armies::exercise::state(r, i, a));
+                        (
+                            a.clone(),
+                            s.map(|s| s.json())
+                                .unwrap_or_else(|e| json!({"unreadable":e.code})),
+                        )
+                    })
+                    .collect::<serde_json::Map<String, Value>>()
+                    .into()
+            };
+            let reached = |cards: &Value| -> usize {
+                names
+                    .iter()
+                    .filter(|a| {
+                        let c = &cards[a.as_str()];
+                        c["exercising"].as_bool().is_some_and(|x| {
+                            armies::exercise::reached(
+                                armies::exercise::Shown {
+                                    exercising: x,
+                                    stop_at_max: c["stop_at_max"].as_bool().unwrap_or(false),
+                                },
+                                on,
+                                at_max,
+                            )
+                        })
+                    })
+                    .count()
+            };
+            let before = cards();
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action =
+                json!({"kind":"army_exercise","armies":names,"on":on,"stop_at_max":at_max});
+            let refused: std::cell::RefCell<Vec<Value>> = std::cell::RefCell::new(Vec::new());
+            let mut settle = || {
+                let now = cards();
+                let done = reached(&now);
+                let detail = json!({"before":before,"after":now,"refused":*refused.borrow()});
+                Ok(if done == names.len() {
+                    journal::Outcome::Reached(detail)
+                } else if done > reached(&before) || retry {
+                    journal::Outcome::Diverged(detail)
+                } else {
+                    journal::Outcome::Unchanged(detail)
+                })
+            };
+            let keys = &self.keys;
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let mut last = None;
+                for army in &names {
+                    if let Err(e) = armies::exercise::set(process, keys, army, on, at_max) {
+                        refused
+                            .borrow_mut()
+                            .push(json!({"army":army,"code":e.code,"message":e.message}));
+                        last = Some(e);
+                    }
+                }
+                match last {
+                    Some(e) if refused.borrow().len() == names.len() => Err(e),
+                    _ => Ok(()),
+                }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));

@@ -589,6 +589,45 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_army_exercise": {
+   "description": "Start or stop army exercises for own armies: the divisions train toward the game's training maximum and the country earns army experience (doctrines, templates and designs are paid with it), at the cost of extra attrition (equipment) and fuel. Start: the army's card selects it and the battle plan bar's exercise button (btn_exercise) is clicked; stop_at_max (default true) Shift+clicks it so each army stops by itself at the maximum. Stop (on:false): the card's stop-training button. Verified per army by its card: training_marker shown while it exercises, icn_exercise_stop_at_max with the stop at the maximum (hoi4_armies reports both as exercising and exercise_stop_at_max). An army already as asked is left alone. A disabled button (no division that can train, all at the maximum) is refused with exercise_unavailable for that army; the receipt's detail lists every army's card state.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "armies": {
+      "items": {
+       "maxLength": 128,
+       "minLength": 1,
+       "type": "string"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "type": "array"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "on": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "stop_at_max": {
+      "description": "start only: stop each army at the training maximum (default true)",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "armies",
+     "on",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_army_fallback": {
    "description": "Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.",
    "inputSchema": {
