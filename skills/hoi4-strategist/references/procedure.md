@@ -383,6 +383,17 @@ Read: the country section of `economy-build-orders.md` §10 when it exists; doss
    (`available` `always = no`) is listed nowhere. Read each gate with `F focus <id>`; lint
    `focus.available`, `focus.idle` and `focus.unconfirmed` walk the slot day by day and name every
    blocked focus with the line that blocks it.
+   **Every gate against the plan's own timeline** (lint `focus.condition`, `focus.condition_unchecked`). The
+   lint reads each scheduled focus's `available` gate (if/else branches, scopes) under what the plan says:
+   the land its dated checkpoints expect to hold, the first war it dates, the start government and ideas, and
+   the army its training lines can field by each day (`facts.army_forecast`, an upper bound). Army gates become
+   numbers by date: `has_army_manpower` is army manpower; an army-strength ratio over another country
+   (`fighting_army_strength_ratio`, its ratio often a global variable the game sets at start) is that ratio
+   times the other country's start army manpower, about N of the plan's divisions. Date the focus when the
+   training reaches it, or size the training lines (queue, caps, rifles behind them) so it does, and count
+   only equipped divisions. A gate line the plan cannot decide offline (another country's state, a flag,
+   stability, a factory count) needs a dated checkpoint: `focus_completed:<id>` by the date the plan counts
+   on, or an atom on the same quantity (`stability`, `war_support`, `factories`) by the focus's start.
 2. Balance of power, when the tag has one at the start date or a planned focus creates one: the side
    the plan wants, the range edges that matter, and the focuses and decisions that move it; consistent
    with the focus path. Not applicable: `F bop <TAG>` (until available `F grep <TAG> --folder common/bop`)
@@ -469,8 +480,16 @@ Read: `politics-diplomacy-espionage.md` §4. Facts: `F characters <TAG> --role a
 2. The chief of army among the first three hires of a land power; each advisor passes the payback test
    (cost / daily gain under half the horizon); officer-corps spirits bought before the hires they discount
    (PO07, PO08, PO10).
+3. **Only advisors the game will show.** Read each role's `visible`, `available` and `allowed`
+   (`F characters <TAG> --role advisor`, the character file): a role with `visible = { always = no }` is never
+   offered, a role gated on a focus is offered only after that focus, and `<character> = { is_hired_as_advisor
+   = no }` makes two advisors exclusive (lint `politics.visible`, `politics.exclusive`). A character the plan
+   also commands with (general or marshal) holds one role: choose it (lint `politics.dual_role`). Name the idea
+   by its `idea_token` when the character has more than one advisor role. Every `politics_auto.order` entry
+   that names ideas has a fallback: an alternative idea, or an entry without `ideas` for the same seat.
 Resolution: executor `politics`; the remaining hires in buy order in `politics_auto.order`. Check: validate_plan
-(each entry's slot index holds the idea's slot kind); lint `politics.pp_budget`; rubric row 10.
+(each entry's slot index holds the idea's slot kind); lint `politics.pp_budget`, `politics.visible`,
+`politics.exclusive`, `politics.dual_role`; rubric row 10.
 
 ## F. Army organisation and manpower
 
@@ -816,6 +835,12 @@ gates, war goals), `F factions <TAG>` (templates), `F defines TENSION_CB_WAR` an
    item (`when` with `world_tension`); justify on claims and cores (Conquer expires 60 days after completion);
    one justification at a time; no AI allies called into the plan's wars (DI01-DI03, DI08).
 5. Attaché, volunteer and lend-lease routes with their costs and recall dates (PO19, DI07, DI09).
+6. **Every border a declaration waits on is held.** Before declaring, the executor reads `hoi4_war_risk`: an own
+   border state with the target or an accepted joiner that is empty, or fewer than 2 divisions per border
+   state, holds the declaration (`borders_not_held`) unless `accept_widening` is true. Land the plan gains by
+   then (an annexation, a partition) moves the border: list the states each gain brings in a dated checkpoint
+   (`owner:<state>=<TAG>`) and put the ones next to the target, or one foreign state away from it, in
+   `war.guard_states` or an army's `covers` (lint `diplomacy.borders_unheld`).
 Resolution: executor `diplomacy`, in list order, once per `id`: [{`id`, `action` (justify, declare,
 guarantee, nap, access, offer_access, docking, improve_relations, send_attache, invite_to_faction, or a
 hoi4_diplomacy row), `target` (tag), `when`, `world_tension_max`; justify: `war_goal` (the type as
@@ -914,6 +939,10 @@ the army survives".
    VP or states held), never item lists. The goal, phases, checkpoints and war axes still cover the
    whole run. In a supervised campaign the rolling planner extends the detail from the live state
    before each horizon ends and raises a deviation when one ends behind its targets (docs/ROLLING_PLAN.md).
+   The detail horizon's end is `_validator.stop_date` only: never write `stop_on_date` before the run's end,
+   because the executor pauses the game there and a campaign run never pauses itself (lint `plan.stop_date`).
+6. A dated checkpoint for every focus gate the plan cannot decide offline (item 12) and one `owner:` atom per
+   state each annexation or partition is expected to bring (item 22): the lints read the plan's land from them.
 Resolution: `checkpoints`, `contingencies`, `phases`, `horizons` (player keys; executor evaluation is build item
 15). Check: rubric row 9.
 
@@ -976,9 +1005,22 @@ decide, per country: every start air wing (outside the theatre the default war m
 high-command seats (`modify_officer_corps`: `politics_auto.order` entries for the free `military_staff` slots).
 The last three only wake the player: give each a key or a brief line.
 
+**Every inventory item has an owner (lint `manage.owner`).** `python3 scripts/hoi4facts/manage_inventory.py show
+--tag <TAG> --game <dir> [--plan RUN/plan.json]` lists everything this country must spend or manage, built from
+the game content and its start (political power, command power, army, navy and air experience, research slots,
+construction, consumer goods, trade, military and naval lines, manpower, training, industrial organisations,
+special projects and scientists, operatives, decisions, government and military seats, doctrines, the officer
+corps, laws, faction membership and requests, calling allies, war goals, the focus slot, armies, air wings,
+fleets, convoys, stockpile, fuel, occupation, designs, stability) and every game alert the alert reader names,
+each with the plan keys the executor reads for it, the standing rule that runs it, and the gap rows of the parts
+no tool carries yet. Give each one a key, keep its rule on, or write `manage.unowned_why.<item>` with what
+happens instead (a brief line with the exact call for a lever without a tool, or why the country does without
+it). Silence is never a resolution: faction invitations, allies to call, organisation traits and command power
+are decided like everything else.
+
 Resolution: executor `alarms`, `war` thresholds, `training_rules`, `manage`, `navy`, `diplomacy`,
-`intelligence`; brief lines for what no key runs yet; plan.md §24. Check: lint `manage.thresholds`; rubric
-row 16.
+`intelligence`; brief lines for what no key runs yet; `manage.unowned_why`; plan.md §24. Check: lint
+`manage.thresholds`, `manage.owner`; rubric row 16.
 
 ### 29. FAIR boundary
 Read: `rules-and-modes.md`. SKILL.md hard rule 3. Every enemy fact used in items 2, 3, 6, 18 and 20-22

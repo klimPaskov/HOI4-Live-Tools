@@ -1157,6 +1157,7 @@ class World:
                             vis = get1(rv, "visible")
                             if isinstance(vis, list):
                                 r["visible"] = render(vis, 120)
+                                r["visible_block"] = vis
                             roles.append(r)
                     if want and not any(r["role"] in want for r in roles):
                         continue

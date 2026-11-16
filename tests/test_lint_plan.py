@@ -64,6 +64,11 @@ class CalendarAndHelpers(unittest.TestCase):
 # Lint rules and executor standing rules that lessons L13-L23 name and that other build items add. A lesson may
 # name a rule from these lists before lint_plan.py or the executor has it; drop a name here once it lands.
 PENDING_LINT_RULES = set()  # every lesson's lint rule is in lint_plan.py now
+THIS_PASS = {"focus.condition", "focus.condition_unchecked", "decision.condition", "decision.condition_unchecked",
+             "politics.visible", "politics.exclusive", "politics.dual_role", "diplomacy.borders_unheld",
+             "plan.stop_date", "manage.owner", "production.start_lines", "production.duplicate_line",
+             "production.priority_all", "production.missing_line", "production.need_balance",
+             "production.parked_request", "construction.capacity", "plan.ai_baseline"}
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
@@ -258,6 +263,9 @@ class HandPlans(unittest.TestCase):
             ("win.goal", "goal"),  # only the deprecated surrender_goal
         ])
         _, warnings = self.findings(load(ITA), "warning")
+        # the condition, inventory and production rules have their own tests (test_lint_conditions,
+        # test_manage_inventory, test_lint_economy)
+        warnings = [w for w in warnings if w[0] not in THIS_PASS]
         # the coverage-build rules report as warnings on a hand plan (_meta.source "hand")
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 7, 9, 14, 15, 17, 21, 22, 23, 24, 25, 27)]
         self.assertEqual(warnings, sorted(gaps + [
@@ -376,6 +384,16 @@ class HandPlans(unittest.TestCase):
             ("war.encircle", "war.direct_moves"),
             ("war.planning_wait", "war.direct_moves"),
             ("war.supply_floor", "war.supply_floor"),  # 20 is under the 35% attrition line
+            # with By Blood Alone the category of ETH_defeat_italy is never visible
+            ("decision.condition", "decisions[0]"),
+            # leader, war-escalation and Italian civil-war gates no offline timeline decides
+            *[("focus.condition_unchecked", "focus_path")] * 5,
+            ("focus.condition_unchecked", "focus_fallback"),
+            # the management inventory: items and alerts with neither a plan key nor a reason
+            ("manage.owner", "manage.alerts_ignore"),
+            *[("manage.owner", f"manage.unowned_why.{i}") for i in (
+                "call_allies", "designs", "faction", "faction_requests", "industrial_organisations", "occupation",
+                "officer_corps", "operatives", "special_projects", "war_goals")],
         ]))
         self.assertEqual(out["facts"]["overseas_states"], [])  # landlocked: no navy rules
         # the decision ETH_defeat_italy gives the states the goal must hold
