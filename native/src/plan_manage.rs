@@ -3476,15 +3476,30 @@ fn overdrawn_rule(
             "so",
         )?;
         state.skip(now, "spread", &pid.to_string(), 5 * DAY);
+        // The new army is the one that now holds the detached divisions. A name missing from the
+        // day-old supply read is no proof: e2 (16 Nov 2026) took an older group for the new one,
+        // so the real new group was never marked as resting and the consolidation merged it back
+        // seconds later, eight times over (detach, merge, detach...).
         let new = if ok {
             tools
                 .call("hoi4_armies", &json!({"threat": false}))
                 .ok()
                 .and_then(|after| {
-                    list(&after, "armies")
+                    let rows = list(&after, "armies");
+                    let holder = rows
                         .iter()
-                        .map(|a| text(&a["army"]).to_string())
-                        .find(|n| !n.is_empty() && !present.contains(n))
+                        .find(|a| {
+                            text(&a["army"]) != army
+                                && list(a, "divisions")
+                                    .iter()
+                                    .any(|d| division_id(d).is_some_and(|d| ids.contains(&d)))
+                        })
+                        .map(|a| text(&a["army"]).to_string());
+                    holder.or_else(|| {
+                        rows.iter()
+                            .map(|a| text(&a["army"]).to_string())
+                            .find(|n| !n.is_empty() && !present.contains(n))
+                    })
                 })
         } else {
             None
@@ -5771,6 +5786,27 @@ mod tests {
         );
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn the_new_group_is_the_army_holding_the_detached_divisions() {
+        // the day-old supply read knows only A; Army 2 is an older group, Army 1 the new one
+        let tools = fake(vec![
+            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
+            (
+                "hoi4_armies",
+                json!({"armies": [{"army": "A", "divisions": ["1", "3"]},
+                    {"army": "Army 2", "divisions": ["9"]},
+                    {"army": "Army 1", "divisions": ["2", "5", "4"]}]}),
+            ),
+        ]);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("out into Army 1 for state 10"), "{out}");
+        assert!(super::spread_out(&state, "Army 1") && !super::spread_out(&state, "Army 2"));
     }
 
     #[test]
