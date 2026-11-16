@@ -9,7 +9,8 @@ Usage:
 RUN/run_spec.json is written from the options when it does not exist yet (an existing spec wins).
 Steps, each gated; the script owns the order so no step can be skipped or self-reviewed:
 
-  1. dossier    facts.py dossier build -> RUN/dossier/ (deterministic, cached by its manifest)
+  1. dossier    facts.py dossier build -> RUN/dossier/ (deterministic, cached by its manifest), then
+                pack.py -> RUN/pack/ (the facts every plan needs, the schema digest, the lint rules)
   2. strategist run.py --role strategist, prompt skills/hoi4-strategist/prompts/strategist.md
                 (procedure steps 1-7; it stops before the critic)
   3. gates      validate_plan.py --strict, lint_plan.py --json -> RUN/lint.json, and check_calls.py
@@ -246,6 +247,14 @@ def strategize(args, runner=None):
 
     # The levers no tool carries yet, from the gap register: the strategist plans and reports them, never drops them.
     write_blocked_levers(run_dir)
+
+    # 1b. work pack (deterministic, cached): the facts every plan needs, the schema digest and the lint rules,
+    # computed once by code so no model call spends turns fetching them (scripts/strategist/pack.py)
+    t0 = time.time()
+    code, out = runner.run([sys.executable, os.path.join(HERE, "pack.py"), "--run", run_dir] + game_args(args))
+    report["steps"].append({"step": "pack", "exit": code, "seconds": round(time.time() - t0)})
+    if code != 0:
+        log("work pack failed (the models fetch the facts themselves): %s" % out[-500:])
 
     # 2. strategist (skipped when resuming from the gates or the critic)
     if start_at == "dossier":

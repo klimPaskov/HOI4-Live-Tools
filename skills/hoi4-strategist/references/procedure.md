@@ -42,6 +42,11 @@ write them in the shapes below (the schema descriptions and `native/src/plan_mil
 
 ## Commands
 
+The work pack `RUN/pack/index.md` already holds the output of the commands every plan needs (laws,
+decisions, missions, hooks, characters, resources, states, OOB and VPs of the tag and its opponents, research
+calendar, PP and XP forecasts, ...): read those files instead of running the commands again, and cite them
+with the command the index shows.
+
 | Command | Answers |
 |---|---|
 | `F dossier build --tag T --date D --dlc auto --mods auto --out RUN/dossier` / `F dossier show <section>` | builds the dossier / prints one digest section (0 run context ... 9 theatres) |

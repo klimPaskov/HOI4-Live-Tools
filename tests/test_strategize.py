@@ -28,6 +28,8 @@ class Fake(strategize.Runner):
                 with open(os.path.join(self.run_dir, "dossier", name), "w") as f:
                     f.write("{}")
             return 0, "built"
+        if "pack.py" in joined:
+            return 0, "{}"
         if "validate_plan.py" in joined:
             if self.validate_fails:
                 self.validate_fails -= 1
