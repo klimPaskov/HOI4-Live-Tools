@@ -288,6 +288,27 @@ pub(super) fn dismiss_notices(process: &dyn Process, keys: &dyn GameInput) -> Re
         }
         let shown = settled(process, "notice", notices)?;
         let Some(&target) = shown.iter().rev().nth(misses) else {
+            // Every OK button missed: the notice's own shortcut (Enter, shown on its OK) closes
+            // the one on top (one press per round of misses), only with no event open (an event would take the key
+            // as its first option). Live 16 Nov 2026: a peace summary ("Treaty of Hotan") whose
+            // OK took no click blocked every save until one plain click closed it.
+            if !shown.is_empty()
+                && read(process, super::events::open_ids)
+                    .unwrap_or_default()
+                    .is_empty()
+            {
+                let before = shown.len();
+                keys.press(crate::platform::game_input::Key::Return)?;
+                if wait(process, "dismiss notice", |r, i| {
+                    Ok(notices(r, i)?.len() < before)
+                })
+                .is_ok()
+                {
+                    cleared += 1;
+                    misses = 0;
+                    continue;
+                }
+            }
             return if shown.is_empty() {
                 Ok(cleared)
             } else {
