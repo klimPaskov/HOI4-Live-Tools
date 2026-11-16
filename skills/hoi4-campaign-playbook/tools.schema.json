@@ -2856,6 +2856,25 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_map_daynight": {
+   "description": "Turn the map's day/night shading off (on:false, the default) or on: the game starts every session with it on, and at night the map is dark, so units, fronts and state colours are hard to read. One click on the toggle in the bottom-right map controls; the result is read back from the map's brightness (shading off brightens a map in night). In daylight nothing changes on screen: the result says no_visible_change, and the call is best made when the map shows night. A view change only.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "on": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_map_mode": {
    "description": "Switch the map mode with the game's own F-key shortcut, as a human checks the map: political (F1, default; armies and fronts), naval (F2), air (F3, air regions and superiority), supply (F4), terrain (F5), resistance (F6), compliance (F7), resources (F8), air_raids (F9), factions (F10). A view change only (no game state changes, nothing to read back): switch to political again before giving army orders. Look at a mode when its domain matters: supply before an offensive, resistance and compliance for occupied states, air for superiority, naval for sea lanes.",
    "inputSchema": {
