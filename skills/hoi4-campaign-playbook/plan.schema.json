@@ -2178,7 +2178,7 @@
         ]
       },
       "x-owner": "executor",
-      "description": "defensive orders (plan_seams.rs): once `when` holds and the army exists, a fallback line (hoi4_army_fallback) or area defence order (hoi4_army_area_defense) for it, sent once; a fallback army falls back to its line (its plan executed once) when the front ahead breaks: the enemy holds land in a state it stands in, or its supply is under war.supply_hold or its organisation under 25%. Deleting an order once `until` holds and the area order's settings toggles are not built yet (the digest `seams` says so); list the army in war.reserve (lint orders.defense_reserve) so the war step does not drive it"
+      "description": "defensive orders (plan_seams.rs): once `when` holds and the army exists, a fallback line (hoi4_army_fallback) or area defence order (hoi4_army_area_defense) for it, sent once; a fallback army falls back to its line (its plan executed once) when the front ahead breaks: the enemy holds land in a state it stands in, or its supply is under war.supply_hold or its organisation under a quarter of its best. Deleting an order once `until` holds and the area order's settings toggles are not built yet (the digest `seams` says so); list the army in war.reserve (lint orders.defense_reserve) so the war step does not drive it"
     },
     "retake_rules": {
       "type": "array",

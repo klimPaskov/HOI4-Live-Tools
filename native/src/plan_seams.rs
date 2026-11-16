@@ -33,7 +33,7 @@
 //!                 still drives an army that is not in `war.reserve` (or a guard): the lint asks
 //!                 for that (orders.defense_reserve). A standing fallback line is manned when
 //!                 the front ahead breaks (the enemy holds land in a state the army stands in, or
-//!                 its supply is under war.supply_hold or its organisation under 25%): the army's
+//!                 its supply is under war.supply_hold or its organisation under a quarter of its best): the army's
 //!                 plan is executed once (hoi4_army_plan execute; `fall_back: false` keeps it on
 //!                 its front). Built: the fallback and area tools; not yet: the area settings
 //!                 (UNBUILT_ARGS) and the delete tool. One action per tick, judged once a game
@@ -67,6 +67,9 @@ use std::collections::BTreeMap;
 pub(super) struct Memory {
     /// The last status line per step and item (the run result's `seams`).
     notes: BTreeMap<String, String>,
+    /// army -> the highest organisation_mean seen (organisation is absolute, not a percent: the
+    /// fall-back compares against the army's own best)
+    org_peak: std::collections::HashMap<String, f64>,
 }
 
 /// The fallback-line order (battle-plan toolbar).
@@ -337,9 +340,14 @@ fn resolve(state: &State, hint: &str) -> String {
 
 /// Why the front ahead of `army`'s fallback line is breaking, or None while it holds: the enemy
 /// controls land in a state the army stands in (hoi4_wars occupied_own_states), or the army's
-/// supply has fallen under war.supply_hold (35% by default) or its organisation under 25%
+/// supply has fallen under war.supply_hold (35% by default) or its organisation under a quarter of its best
 /// (hoi4_supply). Reads only.
-fn front_breaking(tools: &dyn Tools, plan: &Value, army: &str) -> Option<String> {
+fn front_breaking(
+    memory: &mut Memory,
+    tools: &dyn Tools,
+    plan: &Value,
+    army: &str,
+) -> Option<String> {
     let roster = tools.call("hoi4_armies", &json!({"threat": false})).ok()?;
     let standing: Vec<i64> = list(&roster, "armies")
         .iter()
@@ -357,7 +365,11 @@ fn front_breaking(tools: &dyn Tools, plan: &Value, army: &str) -> Option<String>
             }
         }
     }
-    let hold = plan["war"]["supply_hold"].as_f64().unwrap_or(35.0);
+    // a percent, or a fraction as plan_war reads it (0.35 is 35%)
+    let hold =
+        plan["war"]["supply_hold"]
+            .as_f64()
+            .map_or(35.0, |f| if f <= 1.0 { f * 100.0 } else { f });
     let supply = tools.call("hoi4_supply", &json!({"summary": true})).ok()?;
     let row = list(&supply, "armies")
         .iter()
@@ -366,8 +378,15 @@ fn front_breaking(tools: &dyn Tools, plan: &Value, army: &str) -> Option<String>
     if let Some(p) = row["supply_percent_mean"].as_f64().filter(|p| *p < hold) {
         return Some(format!("supply {p:.0}% under {hold:.0}%"));
     }
-    if let Some(o) = row["organisation_mean"].as_f64().filter(|o| *o < 25.0) {
-        return Some(format!("organisation {o:.0}% under 25%"));
+    if let Some(o) = row["organisation_mean"].as_f64() {
+        let peak = memory.org_peak.entry(army.to_string()).or_insert(o);
+        *peak = peak.max(o);
+        if *peak > 0.0 && o < 0.25 * *peak {
+            return Some(format!(
+                "organisation {o:.1} under a quarter of its best {:.1}",
+                *peak
+            ));
+        }
     }
     None
 }
@@ -432,7 +451,7 @@ fn defense_lines_step(
                     && entry["fall_back"] != json!(false)
                     && !state.done.contains_key(&back)
                 {
-                    if let Some(why) = front_breaking(tools, plan, &army) {
+                    if let Some(why) = front_breaking(&mut state.seams, tools, plan, &army) {
                         let (ok, res) = state.act(
                             tools,
                             lease,
@@ -650,6 +669,49 @@ mod tests {
         );
         assert!(state.seams.notes["defense_lines:coast:settings"].contains("held back"));
         assert!(digest(&state).is_some());
+    }
+
+    #[test]
+    fn organisation_is_judged_against_the_armys_best_and_a_fractional_supply_hold_is_a_percent() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_armies",
+            json!({"armies": [{"army": "Armia Poznan", "states": {"10": 4}}]}),
+        );
+        // militia: 20 organisation at full strength is not a broken front
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"armies": [{"army": "Armia Poznan", "supply_percent_mean": 60.0,
+                "organisation_mean": 20.0}]}),
+        );
+        let plan = json!({"war": {"supply_hold": 0.5}, "defense_lines": [
+            {"id": "v", "army": "Armia Poznan", "kind": "fallback", "states": [11]}]});
+        let mut state = State::default();
+        step(&mut state, &f, &plan, "l", START).unwrap();
+        step(&mut state, &f, &plan, "l", START + DAY).unwrap();
+        assert_eq!(actions(&f).len(), 1, "only the line itself");
+        // worn to 4 of its best 20: it falls back
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"armies": [{"army": "Armia Poznan", "supply_percent_mean": 60.0,
+                "organisation_mean": 4.0}]}),
+        );
+        let out = step(&mut state, &f, &plan, "l", START + 2 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("under a quarter of its best 20.0"), "{out}");
+        // supply_hold 0.5 reads as 50%: 40% supply falls back
+        let mut state = State::default();
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"armies": [{"army": "Armia Poznan", "supply_percent_mean": 40.0,
+                "organisation_mean": 20.0}]}),
+        );
+        step(&mut state, &f, &plan, "l", START).unwrap();
+        let out = step(&mut state, &f, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("supply 40% under 50%"), "{out}");
     }
 
     #[test]

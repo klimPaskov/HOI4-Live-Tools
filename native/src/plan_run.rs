@@ -1024,9 +1024,6 @@ impl State {
             .unwrap_or_else(|| began.elapsed().as_secs());
         self.last_ok = Some(matches!(&result, Ok((true, _))));
         match &result {
-            // A system dialog held the input back before anything was sent: not the order's
-            // failure (the ledger would give it up while the owner has not answered yet).
-            Ok((false, why)) if why.starts_with("system_dialog_open") => {}
             // Refused before input because the land is not held yet (railway ends or the land
             // between): the step waits for it on game time; the ledger would give the order up
             // and wake the player over a wait.
@@ -1163,6 +1160,10 @@ impl State {
         let result = tools.call(name, &args);
         match result {
             Err(e) if e.code == "action_uncertain" => Err(e),
+            // A system dialog held the input back before anything was sent: the whole step ends
+            // (the executor backs off and tries again), so no rule counts it as its order's
+            // failure (a politics back-off, a strike wait, a construction try).
+            Err(e) if e.code == "system_dialog_open" => Err(e),
             Err(e) if self.stop_on_failure => Err(e),
             Err(e) => {
                 let mut text = format!("{}: {}", e.code, e.message);
@@ -1969,8 +1970,13 @@ fn politics_step(
                     .pol_pp_at_fail
                     .get(&key)
                     .map_or(f64::MIN, |p| p + 15.0);
-                if pp < need + held_back || pp < since {
+                if pp < need + held_back {
                     held_back += need;
+                    continue;
+                }
+                // Waiting only for 15 points since its last refusal (a refusal that was not the
+                // price: a focus or a law first): it holds no power back for later picks.
+                if pp < since {
                     continue;
                 }
             }
@@ -2888,13 +2894,31 @@ fn construction_plan_step(
             // The item's purpose is railway supply to its target: a start that is no own
             // railway node (no hub, port or capital) is replaced by the nearest own node over
             // own land, since the game re-uses existing track on the way.
-            let mut a = json!({
-                "from_state": item["from_state"].as_i64().unwrap_or(home),
-                "to_state": item["to_state"].as_i64().unwrap_or(home),
-                "from_nearest_node": true});
+            // An end is sent only when the item names it (a province of its path, else a
+            // state id); state 0 is no state and the tool refuses it. A missing start is the
+            // nearest own node (from_nearest_node); a missing target cannot be guessed.
+            let state_of = |k: &str| item[k].as_i64().filter(|s| *s > 0);
+            let mut a = json!({"from_nearest_node": true});
             if let (Some(f), Some(t)) = (path.first(), path.last()) {
                 a["from_province"] = json!(f);
                 a["to_province"] = json!(t);
+            } else {
+                // no start named: the tool takes the own node nearest the target (a start in
+                // the target's own state would be a line of no length)
+                if let Some(s) = state_of("from_state") {
+                    a["from_state"] = json!(s);
+                }
+                if let Some(s) = state_of("to_state").or(Some(home).filter(|s| *s > 0)) {
+                    a["to_state"] = json!(s);
+                }
+            }
+            if a.get("to_province").is_none() && a.get("to_state").is_none() {
+                let why = "invalid_arguments: the railway item names no target (no path, no \
+                           to_state, no state): add the target state or the path's provinces";
+                item_failed(state, item, &key, &label, why, now);
+                return Ok(Some(format!(
+                    "construction plan {label} rail_way: false {why}"
+                )));
             }
             ("hoi4_railway_build", a)
         } else {
@@ -3974,7 +3998,27 @@ fn extras_step(
                     .and_then(|t| t.split_whitespace().next())
                     .and_then(|n| n.parse::<f64>().ok())
                     .filter(|_| why.contains(" short;") && why.contains("Unlock disabled"));
-                if let Some(price) = priced {
+                // The tool's own shortfall refusal ("<held> ... held, about <N> needed"): a wait
+                // for experience, never counted toward dropping the entry. It refuses below 75% of
+                // N, so the entry comes back at that much.
+                let needed = why
+                    .strip_prefix("insufficient_experience")
+                    .and_then(|t| t.split(" about ").nth(1))
+                    .and_then(|t| t.split_whitespace().next())
+                    .and_then(|n| n.parse::<f64>().ok());
+                if let Some(n) = needed {
+                    let more = (cost * 0.2).max(10.0);
+                    state
+                        .doc_xp
+                        .insert(part_key.clone(), (n * 0.75 - more).max(xp));
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: about {n:.0} experience needed ({xp:.0} held); waits for it"
+                        ),
+                    );
+                } else if let Some(price) = priced {
                     let more = (cost * 0.2).max(10.0);
                     state
                         .doc_xp
@@ -3987,10 +4031,7 @@ fn extras_step(
                              waits for it (the plan's xp {cost:.0} is below the game's price)"
                         ),
                     );
-                } else if why.contains("doctrine_unavailable")
-                    || why.contains("insufficient_experience")
-                    || why.contains("Unlock")
-                {
+                } else if why.contains("doctrine_unavailable") || why.contains("Unlock") {
                     // Refused a third time, or with twice the experience the entry costs: what
                     // the game wants is not experience (already adopted, another track, a
                     // prerequisite), so the entry is dropped and said, not retried all year
@@ -9511,7 +9552,7 @@ mod tests {
             ..State::default()
         };
         for _ in 0..5 {
-            let (ok, why) = state
+            let e = state
                 .act(
                     &Dialog,
                     "l",
@@ -9519,8 +9560,8 @@ mod tests {
                     json!({"state_id": 559}),
                     "t",
                 )
-                .unwrap();
-            assert!(!ok && why.starts_with("system_dialog_open"), "{why}");
+                .unwrap_err();
+            assert_eq!(e.code, "system_dialog_open");
         }
         assert!(state.failures.is_empty() && state.failed_run.is_empty());
     }
@@ -10083,6 +10124,38 @@ mod tests {
         assert_eq!(*tools.0.borrow(), 6);
         assert!(state.plan_blocked.is_empty() && state.plan_tries.is_empty());
         assert!(state.failed_run.is_empty() && state.gave_up.is_empty());
+    }
+
+    #[test]
+    fn a_railway_item_sends_only_the_ends_it_names_and_one_without_a_target_is_reported() {
+        let tools = fake(vec![("hoi4_overview", json!({"player": "ETH"}))]);
+        let plan = json!({"construction_plan": [
+            {"id": "to", "building": "rail_way", "to_state": 841, "when": ""},
+            {"id": "none", "building": "rail_way", "when": ""}]});
+        let mut state = State::default();
+        construction_plan_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let sent: Vec<Value> = actions(&tools)
+            .into_iter()
+            .filter(|(n, _)| n == "hoi4_railway_build")
+            .map(|(_, a)| a)
+            .collect();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0]["to_state"], 841);
+        assert!(sent[0].get("from_state").is_none(), "{}", sent[0]);
+        assert_eq!(sent[0]["from_nearest_node"], true);
+        // the item with no target is never sent: reported once, at once
+        let out = construction_plan_step(&mut state, &tools, &plan, "l", START + 3 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("names no target"), "{out}");
+        assert!(state.plan_blocked.contains_key("id:none"));
+        assert_eq!(
+            actions(&tools)
+                .iter()
+                .filter(|(n, _)| n == "hoi4_railway_build")
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -13175,6 +13248,27 @@ mod tests {
     }
 
     #[test]
+    fn a_doctrine_short_of_experience_waits_and_is_never_dropped() {
+        let plan = json!({"doctrines": [
+            {"id": "inf", "folder": "land", "track": "infantry", "subdoctrine": "great_war_infantry", "xp": 55}]});
+        let tools = doctrine_tools();
+        tools.refuse_with(
+            "hoi4_doctrine_adopt",
+            "insufficient_experience",
+            "150 army experience held, about 400 needed for great_war_infantry",
+        );
+        let mut state = State::default();
+        for week in 0..10 {
+            doctrine_pass(&mut state, &tools, &plan, week * 3);
+        }
+        // tried once, waits at 150 for 300 (75% of 400): never counted, never dropped
+        assert_eq!(adopted(&tools).len(), 1);
+        assert!(!state.done.contains_key("doc:id:inf"));
+        assert!(!state.doc_refused.contains_key("doc:id:inf"));
+        assert_eq!(state.doc_xp.get("doc:id:inf").copied(), Some(289.0)); // retried at 289 + 11 = 300
+    }
+
+    #[test]
     fn a_doctrine_replace_is_held_back_until_the_swap_is_built() {
         let plan = json!({"doctrines": [
             {"id": "swap", "folder": "land", "track": "infantry", "subdoctrine": "mobile_infantry",
@@ -13778,6 +13872,15 @@ mod tests {
         let enough = power(160.0);
         tick(&mut state, &enough, &plan, "l", START + 2 * DAY).unwrap();
         assert_eq!(chosen(&enough).first(), Some(&json!("big")));
+        // a pick waiting only for 15 points after a refusal that was not its price (paid for,
+        // refused for a missing focus) holds no power back: the cheap pick goes
+        let mut state = State::default();
+        state
+            .pol_pp_at_fail
+            .insert(politics_key(0, &plan["politics"][0]), 160.0);
+        let some = power(165.0);
+        tick(&mut state, &some, &plan, "l", START + 3 * DAY).unwrap();
+        assert_eq!(chosen(&some), vec![json!("small")]);
     }
 
     #[test]
