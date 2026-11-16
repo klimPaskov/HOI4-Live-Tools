@@ -127,8 +127,16 @@ def main(argv=None):
             folder = os.path.join(planner_dir, "update-%s" % j["update"])
             patch = (runs.read_json(os.path.join(folder, "applied.json")) or {}).get("ops") or []
             for op in patch:
-                for item in op.get("items") or []:
-                    added += item.get("techs") or [] if isinstance(item, dict) else [item]
+                # appended items, or a whole list set at once (the default politics pick sets politics_auto.order)
+                listed = op.get("items") or (op.get("value") if isinstance(op.get("value"), list) else [])
+                for item in listed:
+                    if not isinstance(item, dict):
+                        added.append(item)
+                    elif item.get("techs"):
+                        added += item["techs"]
+                    elif item.get("category"):
+                        # a politics slot: the executor's pick names the idea it found, so match the category
+                        added.append(item.get("idea") or item["category"])
                 if isinstance(op.get("item"), dict):
                     added.append(op["item"].get("equipment"))
         hits = [a for a in actions if any(x and x in json.dumps(a) for x in added)]
@@ -138,7 +146,9 @@ def main(argv=None):
     paused = [s for s in samples if s.get("paused")]
     check("no_pause", not paused, {"paused_samples": len(paused), "samples": len(samples)})
     pace = []
-    for a, b in zip(samples, samples[1:]):
+    # Over a minute (four samples), not 15 s: dates read in whole days put +-1 day (17% at speed 3) on a
+    # 15-second pair, more than the 15% the check allows (Part C, 16 Nov 2026: min 20 vs median 24 d/min).
+    for a, b in zip(samples, samples[4:]):
         if a.get("date") and b.get("date") and b["t"] > a["t"]:
             pace.append((day(b["date"]) - day(a["date"])) / ((b["t"] - a["t"]) / 60.0))
     if pace:
