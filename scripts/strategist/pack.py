@@ -35,8 +35,9 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 SCHEMA = os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plan.schema.json")
 FACTS = os.path.join(ROOT, "scripts", "hoi4facts", "facts.py")
 CALC = os.path.join(ROOT, "scripts", "hoi4facts", "calc.py")
+INVENTORY = os.path.join(ROOT, "scripts", "hoi4facts", "manage_inventory.py")
 LINT_SOURCES = [os.path.join(ROOT, "scripts", "hoi4facts", n) for n in
-                ("lint_plan.py", "lint_fair.py", "lint_horizons.py", "lint_gaps.py", "check_calls.py",
+                ("lint_plan.py", "lint_fair.py", "lint_horizons.py", "lint_gaps.py", "lint_conditions.py", "lint_manage.py", "lint_economy.py", "check_calls.py",
                  os.path.join("..", "validate_plan.py"))]
 VERSION = 1
 DESC_CHARS = 240  # one schema description in a key file
@@ -397,6 +398,8 @@ def jobs(spec, opponents, game_args):
          "startable techs by year (item 11)"),
         ("pp", c + ["pp", "--tag", tag, "--date", date, "--mode", mode, "--until", _add_years(date, 1)],
          "political power timeline, first year (items 13-15)"),
+        ("manage_inventory", [sys.executable, INVENTORY, "show"] + game_args + ["--tag", tag, "--date", date],
+         "everything the country must spend or manage, with its plan keys, rules and gaps (item 28, manage.owner)"),
         ("xp_army", c + ["xp", "--tag", tag, "--date", date, "--mode", mode, "--branch", "army",
                          "--until", _add_years(date, 1)], "army XP forecast, first year (item 5)"),
     ]

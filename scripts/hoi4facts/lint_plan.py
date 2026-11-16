@@ -360,6 +360,22 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            why and a keep entry that matches no start division; a `ship` entry also needs
                            sea_transfer.ports (the ports the divisions land at)
 
+The plan against the game's own conditions (lint_conditions.py), the management inventory (lint_manage.py) and
+production and economy by arithmetic (lint_economy.py); each module's docstring has the detail:
+  focus.condition          a planned focus whose available/bypass gate the plan's own timeline keeps closed
+  focus.condition_unchecked  a planned focus gate the plan cannot decide offline, with no dated checkpoint
+  decision.condition       a planned decision closed (or opening late) under the plan's timeline
+  politics.visible         an advisor or law the game never shows or allows the plan country
+  diplomacy.borders_unheld  a declaration whose border states (gained ones included) no army covers
+  plan.stop_date           stop_on_date before the run's end in a no-pause run
+  manage.owner             an inventory item or alert with neither owner nor written reason
+  production.start_lines   a start line no production entry names
+  production.duplicate_line  a second add, or a new tier beside a running line of the family
+  production.priority_all  production_priority leaves military lines unordered
+  production.missing_line  a family the planned divisions need that no line makes or stocks
+  production.need_balance  one family far above its need while another sits far below
+  construction.capacity    the factory targets need more slots than the listed states have, no fallback
+
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
 a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
 unchanged.
@@ -463,6 +479,11 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
+# the plan against the game's own conditions, the management inventory, production over all lines
+NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",
+              "diplomacy.borders_unheld", "plan.stop_date", "manage.owner", "production.start_lines",
+              "production.duplicate_line", "production.priority_all", "production.missing_line",
+              "production.need_balance", "construction.capacity"}
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -5445,6 +5466,11 @@ class Lint:
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
         __import__((__package__ or "hoi4facts") + ".lint_horizons", fromlist=["check"]).check(self)  # plan.horizons
         __import__((__package__ or "hoi4facts") + ".lint_gaps", fromlist=["check"]).check(self)  # gap.blocked
+        # focus/decision/politics conditions, declaration borders, stop date
+        __import__((__package__ or "hoi4facts") + ".lint_conditions", fromlist=["check"]).check(self)
+        __import__((__package__ or "hoi4facts") + ".lint_manage", fromlist=["check"]).check(self)  # manage.owner
+        # production over all lines sized to the need, construction capacity, the AI baseline
+        __import__((__package__ or "hoi4facts") + ".lint_economy", fromlist=["check"]).check(self)
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self

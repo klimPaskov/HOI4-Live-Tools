@@ -338,6 +338,19 @@ time only when a template is waiting for the tech.
 5. **Queue sanity**: when `hoi4_production_lines` shows damaged or requested factories above active, or
    `hoi4_production_shortages` shows a deficit, fix the shortage (resource, energy, bombed factories) before
    adding lines.
+6. **Start from the lines already running.** A plan's production is one factory target per equipment over
+   every line, the start lines (history order-of-battle files) and the new ones, with one priority order over
+   all of them. More factories on an existing line beat a new line of the same equipment: the new line starts
+   at the base efficiency and splits the requests. A line the plan does not name is still a decision: keep,
+   switch or remove it.
+7. **Balance by shares, re-divided as factories grow.** Give each family a share of the military factories
+   that exist on each date, sized to what the planned divisions, wings and losses need by then, and re-divide
+   the shares when the factory count grows. A large request parked on one line near the top absorbs new
+   factories while the lines below it starve (a line takes up to 150 military factories,
+   `NProduction.MAX_MIL_FACTORIES_PER_LINE`; seen live: rifles on 44 factories with artillery and support
+   on 2 each). The game files do not state the order in which new factories go to lines; the production
+   view says a higher line gets resources before a lower one, and the live check of 17 Nov saw the top line
+   take new factories first while a new line joins the bottom.
 
 ## 6. Equipment per division and per 100 divisions
 

@@ -1406,6 +1406,11 @@
           },
           "x-owner": "text"
         },
+        "ai_baseline_why": {
+          "type": "string",
+          "description": "why the plan schedules fewer factories or divisions on a date than the game's own AI reaches as the same country (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json; lint plan.ai_baseline)",
+          "x-owner": "lint"
+        },
         "capitulation": {
           "type": "object",
           "x-owner": "lint",
@@ -3239,6 +3244,15 @@
           "default": "convoys",
           "description": "dockyards no naval line uses: \"convoys\" puts them on the convoy line (a new line of the newest convoy design when none) even when convoys are not short; \"keep\" leaves them for the player",
           "x-rule": "convoys"
+        },
+        "unowned_why": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "management inventory item id (manage_inventory.py show: political_power, command_power, officer_corps, ...) -> what happens to it instead of a plan key or executor rule, e.g. a brief line for a lever no tool carries yet (lint manage.owner: every item and alert has an owner or a reason)",
+          "x-owner": "lint"
         },
         "alerts_ignore_why": {
           "type": "object",
