@@ -9,8 +9,10 @@ map is the identity; a provider config can narrow `effort_levels` (then the leve
 levels with `effort_map`. `--output-format json` returns one result object whose `modelUsage` keys are
 the resolved model ids. Provider config keys: binary, effort_levels, effort_map, permission_mode,
 extra_args (e.g. ["--dangerously-skip-permissions"] in a sandbox), env (e.g. {"CLAUDE_CONFIG_DIR": ...}),
-unset_env (e.g. ["ANTHROPIC_API_KEY"] to use the subscription login). Role keys: model, effort, tools,
-mcp_config.
+unset_env (e.g. ["ANTHROPIC_API_KEY"] to use the subscription login), isolate (default true for the
+planning roles: `--tools`, `--disable-slash-commands`, `--strict-mcp-config`, no auto-memory and no CLAUDE.md
+files; see ISOLATION_ENV).
+Role keys: model, effort, tools, mcp_config.
 """
 
 import json
@@ -37,6 +39,39 @@ def scoped_tools(tools, run_dir):
     return out
 
 
+# A planning role sees only what its prompt and skill give it (provider key `isolate`, default true for
+# them): the user's own MCP servers, skills, CLAUDE.md files and auto-memory stay out of its context. Measured with Claude
+# Code 2.1.325: the first request carries about 7k tokens instead of about 30k, and every later turn re-reads
+# that start, so a 150-turn strategist call reads about 3M fewer tokens. Auto-memory off also keeps a
+# planning model from writing notes into the user's memory folder, which the run folder rule cannot stop.
+ISOLATED_ROLES = ("strategist", "critic", "planner")  # the player keeps its MCP registration and skills
+ISOLATION_ENV = {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1", "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1"}
+BUILTIN_TOOLS = ("Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "Bash", "NotebookEdit", "WebFetch",
+                 "WebSearch", "TodoWrite")
+
+
+def isolation_args(tools, mcp_config=None):
+    """--tools (the built-in tools the role names, so no other tool is described to the model),
+    --disable-slash-commands, and --strict-mcp-config unless the role uses an MCP tool from the user's own
+    registration (an `mcp__` tool and no `mcp_config` of its own)."""
+    names = []
+    for t in tools or []:
+        base = str(t).split("(", 1)[0]
+        if base in BUILTIN_TOOLS and base not in names:
+            names.append(base)
+    # The scoped Edit rule also governs Write, so a role allowed to edit may create files.
+    if "Edit" in names and "Write" not in names:
+        names.append("Write")
+    out = []
+    if names:
+        out += ["--tools", ",".join(names)]
+    out.append("--disable-slash-commands")
+    uses_user_mcp = any(str(t).startswith("mcp__") for t in tools or []) and not mcp_config
+    if not uses_user_mcp:
+        out.append("--strict-mcp-config")
+    return out
+
+
 class ClaudeCode(Adapter):
     name = "claude-code"
     default_binary = "claude"
@@ -55,11 +90,15 @@ class ClaudeCode(Adapter):
             argv += ["--permission-mode", self.pconf["permission_mode"]]
         if conf.get("mcp_config"):
             argv += ["--mcp-config", conf["mcp_config"]]
+        isolate = self.pconf.get("isolate", role in ISOLATED_ROLES)
+        if isolate:
+            argv += isolation_args(tools, conf.get("mcp_config"))
         argv += list(self.pconf.get("extra_args") or [])
         notes = []
         if level != effort:
             notes.append("effort %s clamped to %s (effort_levels %s)" % (effort, level, list(self.supported_levels())))
-        env = dict(self.pconf.get("env") or {})
+        env = dict(ISOLATION_ENV) if isolate else {}
+        env.update(self.pconf.get("env") or {})
         for name in self.pconf.get("unset_env") or []:
             env[name] = None
         return Invocation(argv, stdin_path=prompt_file, env=env, cwd=cwd, notes=notes)
