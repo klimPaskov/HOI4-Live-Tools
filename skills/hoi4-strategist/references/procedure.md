@@ -397,7 +397,11 @@ atom `bop:<id>`); plan.md §6 and §16. Check: lint `focus.exclusive`, `focus.or
 the projected balance never sits above about 100 PP with no planned buy for more than 60 days (lint
 `politics.pp_budget`). The plan's `politics` picks are the dated buys; `politics_auto` is the standing order for
 what they leave unspent (default: every vacant military staff seat; laws and political advisors only when the
-order names them). The executor holds back the cost of each `politics` pick that could be bought now (its `when`
+order names them). After the order, the executor fills every vacant advisor seat with the first advisor the game
+enables there, political advisors first (`politics_auto.fill_vacant`, default true; `never` holds), and an order
+entry whose seat holds what it does not rank takes its idea at another vacant seat that offers it. Every idea the
+plan names must be an idea or an advisor's idea_token or character id (lint `politics.unknown_idea`: 'raeder' or
+'manstein' are never offered, GER_erich_von_manstein is). The executor holds back the cost of each `politics` pick that could be bought now (its `when`
 holds and the game has not just refused it) and lets `politics_auto` spend only above that; a gated or refused
 pick holds nothing back and is paid for once it opens, from the power there is then. So bank for a gated law
 with `politics_auto.threshold`, not with the pick. Inside `politics_auto.order` an entry with a `when` that holds (a stability advisor under
