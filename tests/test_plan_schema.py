@@ -441,7 +441,8 @@ class CoverageKeys(unittest.TestCase):
             if k not in ("why", "note"):
                 self.assertIn("default", node, k)  # every rule has a default
                 self.assertTrue(node.get("x-executor-planned") or k in want or k in
-                                ("off", "alerts_ignore", "alerts_ignore_why", "conscription_laws", "air_front_regions"), k)
+                                ("off", "alerts_ignore", "alerts_ignore_why", "unowned_why", "conscription_laws",
+                                 "air_front_regions"), k)
                 if node.get("x-rule"):
                     self.assertIn(node["x-rule"], m["off"]["items"]["enum"], k)
 
