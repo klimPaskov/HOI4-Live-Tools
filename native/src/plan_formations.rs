@@ -560,6 +560,16 @@ fn merge_and_lead(
             if target == name || size(&target) + n > max {
                 continue;
             }
+            // Never into an army that holds a standing order of its own: a reserve the war step
+            // leaves alone, or an army with a fallback line or area defence. Joining divisions
+            // cost the Army of Wello its area order (e2, 16 Nov 2026: Verified, then 0 orders
+            // after two merges); the group waits for a formation that can take it.
+            let defended = armies.iter().any(|x| {
+                text(&x["army"]) == target && x["defensive_orders"].as_u64().unwrap_or(0) > 0
+            });
+            if reserve.contains(&target) || defended {
+                continue;
+            }
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -890,6 +900,34 @@ mod tests {
             .borrow()
             .iter()
             .any(|(n, a)| n == "hoi4_army_merge" && a["source"] == "Army 7"));
+    }
+
+    #[test]
+    fn no_army_is_merged_into_one_holding_a_defensive_order() {
+        let plan = concentrate(&layout_plan()).unwrap();
+        // Army 3 (S1) holds an area defence: the stray Army 7 beside it is not merged into it
+        let tools = game(vec![(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Army 1", "division_count": 6, "commander": "Messe", "main_state": 550},
+                {"army": "Army 2", "division_count": 3, "commander": "Vecchiarelli", "main_state": 550},
+                {"army": "Army 3", "division_count": 2, "commander": "Baldassarre", "main_state": 559,
+                    "battle_plan_orders": 1, "defensive_orders": 1},
+                {"army": "Army 7", "division_count": 2, "commander": null, "main_state": 559}]}),
+        )]);
+        let mut state = State::default();
+        for (h, a) in [("N1", "Army 1"), ("N2", "Army 2"), ("S1", "Army 3")] {
+            state.layout.insert(h.into(), a.into());
+        }
+        let out = command_step(&mut state, &tools, &plan, "l", 1000).unwrap();
+        assert!(
+            !tools
+                .actions
+                .borrow()
+                .iter()
+                .any(|(n, a)| n == "hoi4_army_merge" && a["target"] == "Army 3"),
+            "{out:?}"
+        );
     }
 
     #[test]
