@@ -1445,6 +1445,27 @@ class TacticsRules(unittest.TestCase):
         self.assertNoHit(plan, "war.defend_posture")
         self.assertNoHit(self.ita, "war.defend_posture")  # Italy attacks: its hold prepares
 
+    def test_focus_gate_reach_and_counter_attack(self):
+        # the defensive branch excludes Renewed Offensive, so the Northern Thrust behind it can never come
+        plan = copy.deepcopy(self.eth)
+        plan["focus_path"] = ["ETH_the_second_italo-ethiopian_war", "ETH_falling_back"]
+        plan["war"] = dict(plan.get("war") or {}, axes=[], posture="defend")
+        plan["phases"] = [{"id": "hold", "enter": "1936.01.01", "overrides": {"war": {"axes": []}}},
+                          {"id": "strike", "enter": "focus_done:ETH_northern_thrust",
+                           "overrides": {"war": {"axes": [[550]]}}}]
+        plan["contingencies"] = []
+        f = self.assertHit(plan, "focus.unreachable_gate", "error", "phases[1].enter")
+        self.assertIn("ETH_falling_back", f["message"])
+        self.assertHit(plan, "war.counter_attack", "warning", "phases")
+        # a measurable entry instead: the counter-attack can come
+        plan["phases"][1]["enter"] = {"any": ["1936.09.01", "casualty_ratio:ITA >= 2"]}
+        self.assertNoHit(plan, "focus.unreachable_gate")
+        self.assertNoHit(plan, "war.counter_attack")
+        # the offensive branch reaches it
+        plan["focus_path"][1] = "ETH_renewed_offensive"
+        plan["phases"][1]["enter"] = "focus_done:ETH_northern_thrust"
+        self.assertNoHit(plan, "focus.unreachable_gate")
+
     def test_contingency_at_start(self):
         # the fixture country's history sets its stability: a contingency already true on day one is named
         plan = self.plan()

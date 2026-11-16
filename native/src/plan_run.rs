@@ -4203,7 +4203,8 @@ fn war_step(
     // The plan's enemies count only while at war with them (live 8 Nov 2026: after the peace
     // the executor still sent "stalled" moves into Ethiopia). Best effort: without a validated
     // war list the plan's names stand.
-    if let Ok(wars) = tools.call("hoi4_wars", &json!({})) {
+    let wars_read = tools.call("hoi4_wars", &json!({})).ok();
+    if let Some(wars) = &wars_read {
         let w = &wars["wars"];
         if w["validated"] == json!(true) {
             let at_war: HashSet<String> = list(w, "enemies")
@@ -4482,22 +4483,79 @@ fn war_step(
     // offensive, never executed). The game then spreads its divisions along the border and they
     // entrench (the game's AI as Ethiopia, study 16 Nov 2026: three to four armies, one front each,
     // two to four divisions a province; ours, with no order, stood ten divisions in one province).
+    // The front follows the contact line (plan_war::defender_front): a front drawn toward a
+    // state the enemy has since pushed past is drawn again toward the line as it now runs.
     if hold_only && defend {
         let reserve: HashSet<String> = strings(cfg, "reserve").into_iter().collect();
-        for a in list(&roster, "armies") {
-            let n = text(&a["army"]).to_string();
-            let Some(here) = a["main_state"].as_i64().map(|s| s as i32) else {
-                continue;
-            };
-            if guards.contains_key(&n)
-                || reserve.contains(&n)
-                || (!theatre.is_empty() && !theatre.contains(&here))
-                || a["battle_plan_orders"].as_u64().unwrap_or(0) > 0
-                || plan_military::holding(state, &n)
-            {
-                continue;
+        let contact: Vec<plan_war::Contact> = wars_read
+            .as_ref()
+            .map(|w| list(w, "enemy_held_adjacent_states"))
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|s| {
+                let id = s["state_id"].as_i64()? as i32;
+                Some(plan_war::Contact {
+                    state: id,
+                    at: state.centers.get(&id).copied()?,
+                    touching: list(s, "adjacent_own_states").len(),
+                })
+            })
+            .collect();
+        let holders: Vec<plan_war::Holder> = list(&roster, "armies")
+            .iter()
+            .filter_map(|a| {
+                let n = text(&a["army"]).to_string();
+                let here = a["main_state"].as_i64().map(|s| s as i32)?;
+                // a guard still on its way to its post gets its front there (the guard step)
+                let post = guards.get(&n).copied();
+                if post.is_some_and(|p| p != here)
+                    || reserve.contains(&n)
+                    || (!theatre.is_empty() && !theatre.contains(&here))
+                    || plan_military::holding(state, &n)
+                {
+                    return None;
+                }
+                Some(plan_war::Holder {
+                    at: state.centers.get(&here).copied()?,
+                    divisions: a["division_count"].as_u64().unwrap_or(0),
+                    orders: a["battle_plan_orders"].as_u64().unwrap_or(0),
+                    anchored: post.is_some(),
+                    name: n,
+                })
+            })
+            .collect();
+        let cooling: HashSet<String> = state
+            .war_cool
+            .iter()
+            .filter(|(_, until)| **until > now)
+            .map(|(n, _)| n.clone())
+            .collect();
+        let per_state = cfg["defend_per_state"].as_f64().unwrap_or(4.0);
+        if let Some((army, target)) = plan_war::defender_front(
+            &mut state.war_rules,
+            &holders,
+            &contact,
+            per_state,
+            &cooling,
+        ) {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_front",
+                json!({"army": army, "state_id": target}),
+                "wd",
+            )?;
+            if ok {
+                plan_war::front_drawn(&mut state.war_rules, &army, target);
             }
-            guards.insert(n, here);
+            state
+                .war_cool
+                .insert(army.clone(), now + if ok { cooldown * 2 } else { cooldown });
+            if !held_back(&why) {
+                return Ok(Some(format!(
+                    "war defender front {army} -> state {target}: {ok} {why}"
+                )));
+            }
         }
     }
     for army in list(&roster, "armies") {
@@ -4531,6 +4589,10 @@ fn war_step(
                 1,
             )
         } else if stage < 2 {
+            // a defender's hold: the guard's front follows the contact line (defender_front)
+            if hold_only && defend {
+                continue;
+            }
             // The front tool takes an enemy-held state: the one nearest the post (the game
             // refuses an own, own-controlled state as a front target, live w16).
             let facing = state.centers.get(&post).copied().and_then(|(px, pz)| {
@@ -9198,6 +9260,14 @@ mod tests {
                     "input_readback_failed",
                     "No front line was placed",
                 )),
+                // the contact line as the war step reads it (no caller enemies)
+                "hoi4_wars" if args.get("enemies").is_none() => {
+                    let mut contact = vec![json!({"state_id": 18, "adjacent_own_states": [42]})];
+                    if self.liberate {
+                        contact.push(json!({"state_id": 5, "adjacent_own_states": [42]}));
+                    }
+                    Ok(json!({"enemy_held_adjacent_states": contact}))
+                }
                 _ if args.get("request_id").is_some() => {
                     Ok(json!({"receipt": {"status": "Verified"}}))
                 }
@@ -10625,12 +10695,12 @@ mod tests {
             .cloned()
             .collect();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war guard front Army 1")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war defender front Army 1 -> state 18")),
             "{step:?} {sent:?}"
         );
-        // a front only, toward an enemy-owned state: no move, no offensive, no retake
+        // a front only, toward the nearest state on the contact line: no move, no offensive
         assert!(sent.iter().all(|(n, _)| n == "hoi4_army_front"), "{sent:?}");
-        assert!(sent.iter().all(|(_, a)| a["state_id"] != 5), "{sent:?}");
+        assert!(sent.iter().all(|(_, a)| a["state_id"] == 18), "{sent:?}");
     }
 
     #[test]
