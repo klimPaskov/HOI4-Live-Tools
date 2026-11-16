@@ -106,7 +106,7 @@ fn bar_button(r: &Reader<'_>, image: u64) -> Result<Option<(gui_tree::Rect, bool
 
 /// Accept the Start/Stop Exercise confirmation the click opens (up to ~2 s for it to show; none
 /// shown is left to the card readback). Another confirmation is declined and refused.
-fn accept_exercise_confirm(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+fn accept_exercise_confirm(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
     let mut found = None;
     for _ in 0..20 {
         found = read(process, popup_confirm)?;
@@ -116,7 +116,7 @@ fn accept_exercise_confirm(process: &dyn Process, keys: &dyn GameInput) -> Resul
         thread::sleep(Duration::from_millis(100));
     }
     let Some((title, accept, decline)) = found else {
-        return Ok(());
+        return Ok(false);
     };
     if !confirm_is_exercise(&title) {
         let (x, y) = decline.center();
@@ -130,7 +130,8 @@ fn accept_exercise_confirm(process: &dyn Process, keys: &dyn GameInput) -> Resul
     keys.click(GAME, x, y)?;
     wait(process, "exercise confirmation closed", |r, i| {
         Ok(popup_confirm(r, i)?.is_none())
-    })
+    })?;
+    Ok(true)
 }
 /// The exercise dialogs' titles (CONFIRM_START_TRAINING "Start Exercise", CONFIRM_STOP_TRAINING
 /// "Stop Exercise"; a localised game says it in its own words, so "exercise" or "training").
@@ -139,18 +140,21 @@ pub(in super::super) fn confirm_is_exercise(title: &str) -> bool {
     t.contains("exercise") || t.contains("training")
 }
 /// Start (`on`) or stop exercises of `army` and wait for its card to say so. A start with
-/// `stop_at_max` uses the bar's Shift+click. An army already in the asked state is left alone.
+/// `stop_at_max` uses the bar's Shift+click; when that opens nothing (gp1, 16 Nov 2026: neither
+/// Shift+click nor Shift+K started an exercise or showed a dialog, the plain click did) the army
+/// is started with the plain click and `Ok(true)` says the stop at the maximum is not set (the
+/// exercise then runs until it is stopped). An army already in the asked state is left alone.
 pub(in super::super) fn set(
     process: &dyn Process,
     keys: &dyn GameInput,
     army: &str,
     on: bool,
     stop_at_max: bool,
-) -> Result<()> {
+) -> Result<bool> {
     clear_notices(process, keys)?;
     let before = read(process, |r, i| state(r, i, army))?;
     if reached(before, on, stop_at_max) {
-        return Ok(());
+        return Ok(false);
     }
     if !on || before.exercising {
         // stop from the card (also the first half of switching to stop at the maximum)
@@ -166,7 +170,7 @@ pub(in super::super) fn set(
         })?;
         let (x, y) = rect.center();
         keys.click(GAME, x, y)?;
-        accept_exercise_confirm(process, keys)?;
+        let _ = accept_exercise_confirm(process, keys)?;
         wait(process, "exercise stopped", |r, i| {
             Ok(!state(r, i, army)?.exercising)
         })
@@ -177,7 +181,7 @@ pub(in super::super) fn set(
             )
         })?;
         if !on {
-            return Ok(());
+            return Ok(false);
         }
     }
     select_army_quick(process, keys, army)?;
@@ -203,20 +207,34 @@ pub(in super::super) fn set(
         ));
     }
     let (x, y) = rect.center();
+    let mut plain = false;
     if stop_at_max {
         keys.shift_click(GAME, x, y)?;
+        let opened = match accept_exercise_confirm(process, keys) {
+            Ok(opened) => opened,
+            Err(e) => {
+                let _ = clear_selection(process, keys);
+                return Err(e);
+            }
+        };
+        if !opened && !read(process, |r, i| state(r, i, army))?.exercising {
+            keys.click(GAME, x, y)?;
+            plain = true;
+        }
     } else {
         keys.click(GAME, x, y)?;
     }
-    if let Err(e) = accept_exercise_confirm(process, keys) {
-        let _ = clear_selection(process, keys);
-        return Err(e);
+    if !stop_at_max || plain {
+        if let Err(e) = accept_exercise_confirm(process, keys) {
+            let _ = clear_selection(process, keys);
+            return Err(e);
+        }
     }
     let done = wait(process, "exercise started", |r, i| {
-        Ok(reached(state(r, i, army)?, true, stop_at_max))
+        Ok(reached(state(r, i, army)?, true, stop_at_max && !plain))
     });
     let _ = clear_selection(process, keys);
-    done.map_err(|_| {
+    done.map(|_| plain).map_err(|_| {
         let now = read(process, |r, i| state(r, i, army)).ok();
         Error::new(
             "action_not_applied",

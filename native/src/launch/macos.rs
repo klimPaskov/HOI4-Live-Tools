@@ -5456,21 +5456,27 @@ impl MacClock {
                     .collect::<serde_json::Map<String, Value>>()
                     .into()
             };
+            // armies started without the stop at the maximum (the game ignored the Shift variant)
+            let plain: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
             let reached = |cards: &Value| -> usize {
                 names
                     .iter()
                     .filter(|a| {
                         let c = &cards[a.as_str()];
-                        c["exercising"].as_bool().is_some_and(|x| {
-                            armies::exercise::reached(
-                                armies::exercise::Shown {
-                                    exercising: x,
-                                    stop_at_max: c["stop_at_max"].as_bool().unwrap_or(false),
-                                },
-                                on,
-                                at_max,
-                            )
-                        })
+                        let plain_ok = on
+                            && c["exercising"] == json!(true)
+                            && plain.borrow().iter().any(|p| p == a.as_str());
+                        plain_ok
+                            || c["exercising"].as_bool().is_some_and(|x| {
+                                armies::exercise::reached(
+                                    armies::exercise::Shown {
+                                        exercising: x,
+                                        stop_at_max: c["stop_at_max"].as_bool().unwrap_or(false),
+                                    },
+                                    on,
+                                    at_max,
+                                )
+                            })
                     })
                     .count()
             };
@@ -5485,7 +5491,8 @@ impl MacClock {
             let mut settle = || {
                 let now = cards();
                 let done = reached(&now);
-                let detail = json!({"before":before,"after":now,"refused":*refused.borrow()});
+                let detail = json!({"before":before,"after":now,"refused":*refused.borrow(),
+                    "stop_at_max_unavailable":*plain.borrow()});
                 Ok(if done == names.len() {
                     journal::Outcome::Reached(detail)
                 } else if done > reached(&before) || retry {
@@ -5499,11 +5506,15 @@ impl MacClock {
                 authority.authorize(token, &epoch)?;
                 let mut last = None;
                 for army in &names {
-                    if let Err(e) = armies::exercise::set(process, keys, army, on, at_max) {
-                        refused
-                            .borrow_mut()
-                            .push(json!({"army":army,"code":e.code,"message":e.message}));
-                        last = Some(e);
+                    match armies::exercise::set(process, keys, army, on, at_max) {
+                        Ok(true) => plain.borrow_mut().push(army.clone()),
+                        Ok(false) => {}
+                        Err(e) => {
+                            refused
+                                .borrow_mut()
+                                .push(json!({"army":army,"code":e.code,"message":e.message}));
+                            last = Some(e);
+                        }
                     }
                 }
                 match last {
