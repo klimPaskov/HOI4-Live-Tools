@@ -446,6 +446,20 @@ fn start_inner(process: &dyn Process, keys: &dyn GameInput, key: &str, slot: usi
             "Technology tile could not be scrolled into the tree area",
         ));
     }
+    // A folder wider than the screen puts some tiles left or right of the client area (BBA air
+    // folder: range_improvements at folder x -2, live 17 Nov 2026); the tree has no horizontal
+    // glide yet, and a click there is refused by the input layer after the tree was opened.
+    if tile.x < 0 || tile.x + tile.w > GAME.0 as i32 {
+        dismiss(process, keys, |r, i| Ok(!open(r, i, ui(r)?.tree_view)?));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!(
+                "Technology tile lies outside the tree area horizontally (x {} of {}); the tree is not scrolled sideways yet",
+                tile.x,
+                GAME.0
+            ),
+        ));
+    }
     click(tile)?;
     wait(process, "open technology detail", |r, i| {
         Ok(info(r, i, key)?.is_some())

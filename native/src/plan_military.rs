@@ -1703,9 +1703,10 @@ pub(super) fn army_group_step(
                 "commander_unavailable" | "unknown_commander" => {
                     state.skip(now, "agfmc", &format!("{id}|{general}"), 30 * DAY)
                 }
-                "insufficient_command_power" | "promotion_unavailable" => {
-                    state.skip(now, "agrp", &id, 7 * DAY)
+                "insufficient_command_power" => {
+                    state.skip(now, "agrp", &id, cp_wait_days(&why) * DAY)
                 }
+                "promotion_unavailable" => state.skip(now, "agrp", &id, 7 * DAY),
                 _ => state.skip(now, "agrp", &id, 2 * DAY),
             }
         }
@@ -4435,5 +4436,35 @@ mod tests {
             .any(|(n, a)| a["army"] == "Guardia"
                 && a.get("request_id").is_some()
                 && n != "hoi4_army_move"));
+    }
+}
+
+/// Game days until a refused promotion can be paid: the refusal names the cost and the command
+/// power held ("costs 40 command power and 2 are held"); command power grows by about 0.4 a day
+/// (BASE_COMMAND_POWER_GAIN). At least 7 days, and 7 when the refusal names no numbers. A 7-day
+/// retry repeated the refusal five times a field marshal (pm1, 17 Nov 2026).
+pub(super) fn cp_wait_days(why: &str) -> i64 {
+    let numbers: Vec<f64> = why
+        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .filter_map(|w| w.trim_matches('.').parse::<f64>().ok())
+        .collect();
+    match (numbers.first(), numbers.get(1)) {
+        (Some(cost), Some(held)) if cost > held => (((cost - held) / 0.4).ceil() as i64).max(7),
+        _ => 7,
+    }
+}
+
+#[cfg(test)]
+mod cp_wait_tests {
+    #[test]
+    fn a_refused_promotion_waits_until_the_power_has_grown() {
+        assert_eq!(super::cp_wait_days("insufficient_command_power: Promoting Fedor von Bock to field marshal costs 40 command power and 2 are held; nothing was changed"), 95);
+        assert_eq!(
+            super::cp_wait_days(
+                "insufficient_command_power: costs 40 command power and 39.5 are held"
+            ),
+            7
+        );
+        assert_eq!(super::cp_wait_days("insufficient_command_power"), 7);
     }
 }

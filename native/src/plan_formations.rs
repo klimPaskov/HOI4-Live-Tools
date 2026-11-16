@@ -694,10 +694,10 @@ fn merge_and_lead(
             state.skip(now, "cgen", &army, DAY);
             // A name the commander list does not offer is not a general of this country now:
             // asking again next month only repeats the refusal.
-            let wait = if plan_military::code(&why) == "unknown_commander" {
-                365
-            } else {
-                30
+            let wait = match plan_military::code(&why) {
+                "unknown_commander" => 365,
+                "insufficient_command_power" => plan_military::cp_wait_days(&why),
+                _ => 30,
             };
             state.skip(now, "cgenx", &general, wait * DAY);
         }

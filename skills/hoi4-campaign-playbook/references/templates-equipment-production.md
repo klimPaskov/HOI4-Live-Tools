@@ -449,7 +449,21 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 ### (a) Automatable standing rules
 
 1. Keep every line non-empty; give idle military factories to the line with the fewest days of cover
-   (PR10); never leave factories idle more than 3 days.
+   (PR10); never leave factories idle more than 3 days. One line per equipment: a planned equipment
+   whose family already has a line is that line (a tier change is a `replace` entry, never a second
+   line), and a later duplicate that holds nothing worth keeping is closed.
+1a. No line asks for factories that do not exist. A line whose requested factories stand above its
+   active ones takes each new factory before any other line gets one, so one large request turns a
+   year of new factories into one equipment (gr1-gr3, 1937-39: rifles 37 requested and 21 active,
+   200k in stock, artillery and support at two factories). Trimming a request moves no factory and
+   costs no efficiency; new and idle factories then go by need. The executor's balance rule
+   (`manage.off` "balance" turns it off) does this: the need is what the fielded divisions lack plus
+   what the active `training` entries still add up to their `cap` (each template's equipment from
+   `hoi4_template_get`), less the stock; idle factories go in chunks of max(2, a fifth of the line) to
+   the equipment with the most days of production still missing; a shortfall of more than
+   `manage.balance_pull_days` (120) days pulls a fifth of a line whose stock covers twice its need,
+   once in 30 days per line (PR09). Lines no division needs (planes, ships) keep `production[].factories`
+   as their target.
 2. Hold the line mix within ±5 points of the dated target table (§7); adjust upward on the binding item of
    the template in production.
 3. Move factories only from a line with more than 90 days of cover to one under 7 days (PR09).

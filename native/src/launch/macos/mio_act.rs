@@ -583,27 +583,49 @@ fn row_by_details(
     display: &str,
 ) -> std::result::Result<usize, Fail> {
     let list = read(process, list_rect)?;
-    let mut seen = Vec::new();
-    for k in 0..12 {
-        let top = list.y + ROW_HEIGHT * k;
-        if top + 70 > list.y + list.h {
+    let mut seen: Vec<String> = Vec::new();
+    // The list shows about five rows; a roster holds up to a dozen or more (the materiel
+    // roster of Germany lists Carl Walther seventh, live 17 Nov 2026). Each page is read row by
+    // row through the detail window, then the list is wheeled down three rows, until a page
+    // brings no new name (its end).
+    let mut index = 0usize;
+    for page in 0..8 {
+        let mut fresh = 0;
+        for k in 0..12 {
+            let top = list.y + ROW_HEIGHT * k;
+            if top + 70 > list.y + list.h {
+                break;
+            }
+            close_detail(process, keys);
+            keys.click(pk::GAME, f64::from(list.x + 445), f64::from(top + 62))?;
+            let opened = wait(process, "organisation detail", |r, i| {
+                pk::is_open(r, i, &pk::MIO_DETAIL)
+            })
+            .is_ok();
+            if !opened {
+                break; // no row there
+            }
+            pause(250);
+            let name = read(process, detail_name).unwrap_or_default();
+            if loc::same(&name, display) {
+                return Ok(index + k as usize);
+            }
+            if !name.is_empty() && !seen.contains(&name) {
+                seen.push(name);
+                fresh += 1;
+            }
+        }
+        if fresh == 0 || (page > 0 && fresh < 1) {
             break;
         }
         close_detail(process, keys);
-        keys.click(pk::GAME, f64::from(list.x + 445), f64::from(top + 62))?;
-        let opened = wait(process, "organisation detail", |r, i| {
-            pk::is_open(r, i, &pk::MIO_DETAIL)
-        })
-        .is_ok();
-        if !opened {
-            break; // no row there
-        }
-        pause(250);
-        let name = read(process, detail_name).unwrap_or_default();
-        if loc::same(&name, display) {
-            return Ok(k as usize);
-        }
-        seen.push(name);
+        let centre = (
+            f64::from(list.x + list.w / 2),
+            f64::from(list.y + list.h / 2),
+        );
+        keys.scroll(pk::GAME, centre, -(ROW_HEIGHT * 3))?;
+        pause(400);
+        index += 3;
     }
     close_detail(process, keys);
     Err(refuse(
@@ -650,7 +672,12 @@ fn open_detail(
         pause(300);
         return Ok(());
     }
-    require_row(process, display)?;
+    if require_row(process, display).is_err() {
+        // the readable rows are only the ones drawn: the rest of the roster lies below
+        row_by_details(process, keys, display)?;
+        pause(300);
+        return Ok(());
+    }
     pk::click(process, keys, "organisation details", |r, i| {
         row_rect(r, i, display, "details_button")
     })?;
@@ -659,6 +686,39 @@ fn open_detail(
     })?;
     pause(400);
     Ok(())
+}
+
+/// Open the organisation's detail window from the roster of `slot`, else from the roster of any
+/// other organisation slot: each slot opens the roster of one kind (tanks, ships, planes,
+/// materiel), and which kind holds an organisation is the game's business, not the plan's.
+fn open_org(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    slot: usize,
+    display: &str,
+) -> std::result::Result<usize, Fail> {
+    open_system(process, keys, slot)?;
+    let count = read(process, org_entries)
+        .map(|e| e.len())
+        .unwrap_or(1)
+        .max(slot + 1);
+    let mut first: Option<Fail> = None;
+    for s in std::iter::once(slot).chain((0..count).filter(|s| *s != slot)) {
+        if s != slot {
+            leave(process, keys);
+            open_system(process, keys, s)?;
+        }
+        open_roster(process, keys, s)?;
+        match open_detail(process, keys, display) {
+            Ok(()) => return Ok(s),
+            Err(Fail::Refused(e)) if e.code == "organization_not_offered" => {
+                first.get_or_insert(Fail::Refused(e));
+            }
+            Err(other) => return Err(other),
+        }
+    }
+    Err(first
+        .unwrap_or_else(|| refuse("organization_not_offered", "No organisation slot offers it")))
 }
 
 fn leave(process: &dyn Process, keys: &dyn GameInput) {
@@ -735,9 +795,7 @@ fn policy(
     policy_name: &str,
 ) -> Driven {
     let result: Driven = (|| {
-        open_system(process, keys, slot)?;
-        open_roster(process, keys, slot)?;
-        open_detail(process, keys, display)?;
+        open_org(process, keys, slot, display)?;
         pk::click(process, keys, "open policies", |r, i| {
             let root = pk::open_root(r, i, &pk::MIO_DETAIL)?;
             pk::rect_of(r, i, root, "open_policies", 4)
@@ -904,9 +962,7 @@ fn mio_trait(
     index: Option<usize>,
 ) -> Driven {
     let result: Driven = (|| {
-        open_system(process, keys, slot)?;
-        open_roster(process, keys, slot)?;
-        open_detail(process, keys, display)?;
+        open_org(process, keys, slot, display)?;
         let entries = settled(process, "trait entries", trait_entries)?;
         let summary = |entries: &[TraitEntry]| -> Vec<Value> {
             entries
