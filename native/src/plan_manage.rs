@@ -144,7 +144,8 @@
 //!                    the weakest divisions of the army with most divisions there (at most
 //!                    "overdrawn_share":0.5 of them) are detached until their supply need covers the
 //!                    shortfall and moved to a province with room; their army rests
-//!                    "overdrawn_rest_days":10 before the war step or consolidation take it back.
+//!                    "overdrawn_rest_days":10 before the war step or consolidation take it back;
+//!                    never in a defender's hold (war.posture "defend", no axes): it stands.
 //!                    These keys act whether or not the plan has `manage` (defaults shown):
 //!                    "rebalance_step":3 idle military factories per action to a priority line (tick
 //!                    step 6b, `production_priority` in plan_run.rs: the line whose equipment the
@@ -302,6 +303,12 @@ pub(super) fn digest(state: &State) -> Option<Value> {
 /// The rule's status line in the run result's `manage` digest (the last one per rule).
 pub(super) fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.manage.notes.insert(rule.to_string(), line.into());
+}
+
+/// The war is a defender's hold: `war.posture` "defend" and no axes in force.
+fn defending(plan: &Value) -> bool {
+    plan["war"]["posture"] == json!("defend")
+        && plan["war"]["axes"].as_array().is_none_or(|a| a.is_empty())
 }
 
 fn off(plan: &Value, rule: &str) -> bool {
@@ -1773,6 +1780,7 @@ fn resources_step(
 /// the factories the deficit costs (one civilian factory buys about 8 units), up to the factories
 /// the game offers and `auto_import.budget_max` (the plan's budget + 2 by default); at most once
 /// every 14 game days. None when there is nothing to raise (the player is woken instead).
+#[allow(clippy::too_many_arguments)]
 fn raise_import_budget(
     state: &mut State,
     tools: &dyn Tools,
@@ -3383,6 +3391,13 @@ fn overdrawn_rule(
     let m = &plan["manage"];
     // An army on an objective strike is one order: taking divisions out of it undoes the strike.
     if !m.is_object() || off(plan, "overdrawn") || super::plan_strike::owns_armies(state, plan) {
+        return Ok(None);
+    }
+    // A defender in its hold stands and entrenches: splitting stacks into new armies sent to
+    // provinces with room scattered its line (e11, 16 Nov 2026: Tigray's armies broke into
+    // Army 1-3, which marched into Wello's 7944 while Italy walked through the west to the
+    // capital; the game's AI as Ethiopia never moves and held months longer).
+    if defending(plan) {
         return Ok(None);
     }
     let rest = m["overdrawn_rest_days"]
@@ -5800,6 +5815,26 @@ mod tests {
         );
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_defender_in_its_hold_keeps_its_overdrawn_stack() {
+        let tools = fake(vec![
+            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
+            (
+                "hoi4_armies",
+                json!({"armies": [{"army": "A"}, {"army": "Army 9"}]}),
+            ),
+        ]);
+        let plan = json!({"manage": {}, "war": {"posture": "defend", "axes": []}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.is_none_or(|s| !s.starts_with("overdrawn")));
+        assert!(actions(&tools).is_empty());
+        // its counter-attack phase (axes) splits again
+        let plan = json!({"manage": {}, "war": {"posture": "defend", "axes": [[10]]}});
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.is_some_and(|s| s.starts_with("overdrawn")));
     }
 
     #[test]
