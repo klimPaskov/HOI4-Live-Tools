@@ -577,6 +577,10 @@ pub struct State {
     /// Divisions the game refused to disband (a template the history locks: "Units cannot be
     /// disbanded"): consolidation passes over them.
     undisbandable: HashSet<String>,
+    /// Divisions a consolidation order named whose disband the tool did not see (the game,
+    /// paused, removes them on its next day; e13): gone by the next count, they were disbanded;
+    /// still there a day later, the game refused them.
+    disband_pending: HashMap<String, GameHour>,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
     pol_fails: HashMap<String, u32>,
     /// Political power when a pick was last refused: it is not tried again until the
@@ -744,6 +748,7 @@ impl Default for State {
             moves: Moves::default(),
             disbanded: 0,
             undisbandable: HashSet::new(),
+            disband_pending: HashMap::new(),
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
@@ -3238,6 +3243,17 @@ fn consolidate_step(
         }
     }
     let divisions = list(&supply, "divisions");
+    let present: HashSet<&str> = divisions.iter().filter_map(|d| d["id"].as_str()).collect();
+    let pending: Vec<(String, GameHour)> = state.disband_pending.drain().collect();
+    for (id, at) in pending {
+        if !present.contains(id.as_str()) {
+            state.disbanded += 1;
+        } else if now >= at + DAY {
+            state.undisbandable.insert(id);
+        } else {
+            state.disband_pending.insert(id, at);
+        }
+    }
     let fills: Vec<(String, f64)> = divisions
         .iter()
         .filter_map(|d| {
@@ -3257,8 +3273,11 @@ fn consolidate_step(
                 d["army"].as_str()?,
                 d["state_id"].as_i64()?,
             );
-            (own.contains(&at) && !fighting.contains(army) && !state.undisbandable.contains(id))
-                .then(|| (id.to_string(), army.to_string()))
+            (own.contains(&at)
+                && !fighting.contains(army)
+                && !state.undisbandable.contains(id)
+                && !state.disband_pending.contains_key(id))
+            .then(|| (id.to_string(), army.to_string()))
         })
         .collect();
     let cut = consolidation(&fills, until, keep as usize, &|id| army_of.contains_key(id));
@@ -3282,7 +3301,7 @@ fn consolidate_step(
     if ok {
         state.disbanded += count as u64;
     } else {
-        state.undisbandable.insert(ids[0].clone());
+        state.disband_pending.insert(ids[0].clone(), now);
     }
     // the pool refills the rest over some days before the next count
     state.skip(
@@ -7740,13 +7759,21 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(out.contains("1 from A: false"), "{out}");
-        assert!(state.undisbandable.contains("a"));
-        // refused once: the next count leaves "a" out and takes "b" alone
+        assert!(state.disband_pending.contains_key("a"));
+        // still there a day on: the game refused it; the count leaves "a" out and takes "b"
         f.refuse.borrow_mut().clear();
         let out = disband_step(&mut state, &f, &plan, "l", START + DAY)
             .unwrap()
             .unwrap();
         assert!(out.contains("1 from A: true"), "{out}");
+        assert!(state.undisbandable.contains("a") && state.disbanded == 1);
+        // a division gone by the next count was disbanded (the game removes it on its next day)
+        let mut later = State::default();
+        later.disband_pending.insert("x".into(), START);
+        let _ = disband_step(&mut later, &f, &plan, "l", START + DAY / 2);
+        assert!(later.disband_pending.is_empty() && later.undisbandable.is_empty());
+        // "x" counted, then this count's own order ("a", which the fake disbands)
+        assert_eq!(later.disbanded, 2);
         let sent: Vec<Value> = f
             .calls
             .borrow()
@@ -7754,7 +7781,7 @@ mod tests {
             .filter(|(n, a)| n == "hoi4_division_disband" && a.get("request_id").is_some())
             .map(|(_, a)| a["divisions"].clone())
             .collect();
-        assert_eq!(sent, vec![json!(["a"]), json!(["b"])]);
+        assert_eq!(sent[..2], [json!(["a"]), json!(["b"])]);
     }
 
     #[test]

@@ -1800,17 +1800,43 @@ fn raise_import_budget(
         .as_i64()
         .or(budget.map(|b| b + 2))
         .unwrap_or(i64::MAX);
-    let Ok(read) = tools.call("hoi4_auto_import", &json!({"lease_token": lease})) else {
-        return Ok(None);
+    // every way out says why in the digest (e13: the budget stayed 1 for 46 days of steel
+    // deficit and nothing said what stopped the raise)
+    let read = match tools.call("hoi4_auto_import", &json!({"lease_token": lease})) {
+        Ok(read) => read,
+        Err(e) => {
+            note(
+                state,
+                "resources",
+                format!(
+                    "deficit {deficit}: import budget not raised: hoi4_auto_import unreadable ({})",
+                    e.message
+                ),
+            );
+            return Ok(None);
+        }
     };
     let auto = &read["auto_import"];
     let (Some(have), Some(available)) = (
         auto["budget_factories"].as_i64(),
         auto["available_factories"].as_i64(),
     ) else {
+        note(
+            state,
+            "resources",
+            format!("deficit {deficit}: import budget not raised: budget or available factories unread ({auto})"),
+        );
         return Ok(None);
     };
     if auto["enabled"] != json!(true) {
+        note(
+            state,
+            "resources",
+            format!(
+                "deficit {deficit}: import budget not raised: automatic importing reads {}",
+                auto["enabled"]
+            ),
+        );
         return Ok(None);
     }
     let need = ((units / 8.0).ceil() as i64).max(1);
