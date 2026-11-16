@@ -87,8 +87,11 @@ impl Ui {
     }
 }
 const GAME: (u32, u32) = (1920, 1080);
-/// Production line list area (rows fully inside are clickable).
-const LIST: (i32, i32) = (360, 1040);
+/// Production line list area (rows fully inside are clickable). At 1920x1080 the list runs past the
+/// bottom of the screen and cannot scroll its last row higher than about 1050-1066 for that row's
+/// priority arrow (Germany, 16 Nov 2026: 21 lines, to:top of the last line refused "could not be
+/// scrolled into view" with a bottom of 1040), so the bottom is the screen's edge.
+const LIST: (i32, i32) = (360, 1078);
 const CATEGORIES: [&str; 3] = ["infantry_button", "tank_button", "aircraft_button"];
 /// Ships and convoys: the Production panel's naval category button opens the ship selection
 /// window (view +0x1cd8), whose rows `design_ui::rows` reads.
