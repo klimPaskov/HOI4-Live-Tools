@@ -253,6 +253,7 @@ class HandPlans(unittest.TestCase):
             ("conquest.adjacency", "vp_targets[16] 13244"),  # Gambella is two steps past Yabello
             ("construction.railway", "construction_plan[5] cp08_rail_way_843"),  # 7944 not on Dessie's route
             ("construction.railway", "construction_plan[6] cp09_rail_way_835"),  # whole line queued at Wal Wal
+            ("disband.locked", "disband.templates[2]"),  # Camicie Nere is is_locked: the game refuses
             ("schema.player_call", "retake_rules"),  # army_group is an executor key (plan_military.rs)
             ("win.goal", "goal"),  # only the deprecated surrender_goal
         ])
@@ -1479,6 +1480,17 @@ class TacticsRules(unittest.TestCase):
         plan["war"]["guard_states"] = [842, 271]
         self.assertNoHit(plan, "war.capital_open")
         self.assertNoHit(self.ita, "war.capital_open")  # Italy is not attacked on the first day
+
+    def test_disband_locked(self):
+        # Ethiopia 1936 (By Blood Alone): Chitet Sefari and Kebur Zabagna are is_locked
+        plan = copy.deepcopy(self.eth)
+        plan["disband"] = {"templates": ["Chitet Sefari"]}
+        self.assertHit(plan, "disband.locked", "error", "disband.templates[0]")
+        plan["disband"] = {"templates": ["Mehal Sefari"], "consolidate": {"until_fill": 0.85, "keep": 15}}
+        f = self.assertHit(plan, "disband.locked", "info", "disband.consolidate")
+        self.assertIn("11 of 21", f["message"])
+        plan["disband"] = {"templates": []}
+        self.assertNoHit(plan, "disband.locked")
 
     def test_open_path(self):
         # only Tigray held: Italian land reaches Addis Ababa's state (271) over unheld own states

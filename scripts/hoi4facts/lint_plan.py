@@ -281,6 +281,8 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            width fills the theatre's battles (terrain mix of war.theatre, axes and target
                            states; over-width and stacking penalties) 0.05 below the best width (error at 0.10)
   war.counter_attack       (warning) a defender (war.posture defend) with no reachable phase that has axes
+  disband.locked           a disband template the history locks (is_locked), or disband.consolidate when every start
+                           division uses a locked template: the game refuses to disband them
   war.open_path            (warning) a country attacked on the first day where enemy land reaches the capital or a
                            hold_targets province over own land through no state the day-one layout holds
   war.capital_open         (warning) a country attacked on the first day whose capital state no guard holds (a
@@ -4286,6 +4288,37 @@ class Lint:
         self.capital_open(war, first, at_war)
         self.open_paths(war, first, at_war)
 
+    def disband_locked(self):
+        """disband.locked: disband names a template whose divisions the game refuses to disband (is_locked in the
+        history: "Units cannot be disbanded"), or disband.consolidate in a country whose start divisions all use
+        locked templates (Ethiopia 1936 with By Blood Alone: every consolidation press refused, e11)."""
+        d = self.plan.get("disband")
+        if not isinstance(d, dict):
+            return
+        locked = {k for k, v in (self.game.locked_templates() or {}).items() if v == "locked"}
+        for i, name in enumerate(d.get("templates") or []):
+            if name in locked:
+                self.add("error", "disband.locked", f"disband.templates[{i}]",
+                         f"{name!r} is is_locked in the history: the game refuses to disband its divisions")
+        if isinstance(d.get("consolidate"), dict):
+            used = Counter()
+            for o in start_oobs(self.game, self.meta):
+                for div in self.game.oob(o, self.ctx)["divisions"]:
+                    if div.get("template"):
+                        used[div["template"]] += 1
+            free = sum(n for t, n in used.items() if t not in locked)
+            held = sum(used.values()) - free
+            if used and free and held:
+                self.add("info", "disband.locked", "disband.consolidate",
+                         f"{held} of {sum(used.values())} start divisions use locked templates "
+                         f"({', '.join(sorted(t for t in used if t in locked))}): the game refuses to disband them, "
+                         "so consolidation takes only the others")
+            if used and free == 0:
+                self.add("error", "disband.locked", "disband.consolidate",
+                         f"every start division uses a locked template ({', '.join(sorted(used))}): the game refuses "
+                         "to disband them (\"Units cannot be disbanded\"); consolidation can only take divisions trained "
+                         "later from unlocked templates")
+
     def covered_states(self, war, first):
         """States the day-one layout holds: guard_states and guards (first phase over the base), guard and task
         army_layout entries and their guard_states_in_order, every other non-reserve layout army's own state, and
@@ -5252,7 +5285,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.focus_reach, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.alert_owners,
                  self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,

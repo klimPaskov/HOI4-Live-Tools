@@ -515,7 +515,8 @@ dossier §9.
    equipment and manpower to the stockpile, which reinforces the rest, so fewer, fuller divisions
    fight better than many empty ones. Name the weakest templates to go and the fill the rest must
    reach (`disband.consolidate` {until_fill, keep}: the weakest divisions on own land go, as few as
-   bring the rest to that fill), and train nothing that draws that item while the front is short
+   bring the rest to that fill; the game refuses to disband a template the history locks, which
+   `disband.locked` names), and train nothing that draws that item while the front is short
    (`training.only_if_stockpile`). Set `production_priority` to that item: a resource its lines lack
    raises the import budget at once (`auto_import.budget_max` caps it).
 5b. A defender (the target of a war that runs on the first day) until its counter-attack phase:
