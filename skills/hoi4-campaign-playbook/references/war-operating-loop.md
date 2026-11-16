@@ -164,6 +164,9 @@ the player decides strategy:
   the armies draw their lines toward their next target and plan on them, the execute order waits
   for a phase with axes, and a plan still executing on enemy land is stopped. The planning wait
   therefore runs during the hold, not after it.
+- A defender sets `"posture": "defend"`: its hold phases draw no line on enemy land and retake
+  nothing (a retake front is an attack). The armies stand on the ground the layout, the guards and
+  the defence lines give them and entrench; the attack waits for the phase with axes.
 - `"stall_days": 8` (default): an ordered army that took no province of its target, or of any
   state its divisions stand in, for that long
   first has its plan stopped and planned again (`replans`, default 2 per target: it stands on its

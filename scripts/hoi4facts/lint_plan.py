@@ -4165,6 +4165,31 @@ class Lint:
                          f"{label} is affordable only on {derive.fmt(derive.date_of(d))}, {d - due} days after its "
                          f"date {derive.fmt(derive.date_of(due))}: {how}")
 
+    def defend_posture(self):
+        """war.defend_posture: a country attacked in a war that runs on the first day, whose war starts in a hold (axes: [] in the base
+        war or the first phase) is a defender: without war.posture "defend" its hold phase still draws fronts and
+        offensive lines on enemy land and retakes lost states, which are attacks (Ethiopia 1936 ordered ten retake
+        fronts and two offensives in its hold and lost 3-5 men for each Italian)."""
+        if self.world is None or not self.tag:
+            return
+        try:
+            # the war's target is the defender (the attacker of a start war holds too, to prepare)
+            at_war = {w["attacker"] for w in self.world.wars() if w.get("target") == self.tag and w.get("attacker")}
+        except Exception:
+            return
+        if not at_war:
+            return
+        war = self.plan.get("war") if isinstance(self.plan.get("war"), dict) else {}
+        phases = self.list_of("phases")
+        first = ((phases[0].get("overrides") or {}).get("war") or {}) if phases else {}
+        axes = first.get("axes", war.get("axes"))
+        posture = first.get("posture", war.get("posture"))
+        if axes == [] and posture != "defend":
+            self.add("warning", "war.defend_posture", "war.posture",
+                     f"{self.tag} is attacked by {', '.join(sorted(at_war))} on the first day and its war starts in a "
+                     "hold (axes: []): set war.posture \"defend\" so the hold draws no line on enemy land and retakes "
+                     "nothing (a retake is an attack) until the phase with axes")
+
     START_CMP = re.compile(r"^\s*stability\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*$")
 
     def contingency_at_start(self):
@@ -4932,7 +4957,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.alert_owners,
                  self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,

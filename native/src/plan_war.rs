@@ -51,6 +51,9 @@
 //!                      (live 15 Nov 2026: an army executing on rush stood three weeks with a flat
 //!                      planning bonus, and thirteen divisions ended in one province without
 //!                      supply), so the step costs a stall period only where the plan asks for it
+//!   posture            "defend": a hold phase draws no line on enemy land and retakes no lost own
+//!                      state (a retake is an attack); the armies stand and entrench until a phase
+//!                      with axes. Default "attack".
 //!   hold_prepares      false: a hold phase (`axes: []`) draws no line on enemy land (the old hold).
 //!                      Default: in a hold phase the armies still draw their front and offensive
 //!                      line toward their next target and plan on them; the execute order waits for

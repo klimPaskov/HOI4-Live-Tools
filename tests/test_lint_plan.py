@@ -1434,6 +1434,17 @@ class TacticsRules(unittest.TestCase):
         plan["manage"] = {"stability_floor": 0.01}
         self.assertNoHit(plan, "manage.stability_owner")
 
+    def test_defend_posture(self):
+        # Ethiopia is attacked by Italy on the first day: a war that starts in a hold is a defender's
+        plan = copy.deepcopy(self.eth)
+        plan["war"] = dict(plan.get("war") or {}, axes=[])
+        plan["war"].pop("posture", None)
+        plan["phases"] = []
+        self.assertHit(plan, "war.defend_posture", "warning", "war.posture")
+        plan["war"]["posture"] = "defend"
+        self.assertNoHit(plan, "war.defend_posture")
+        self.assertNoHit(self.ita, "war.defend_posture")  # Italy attacks: its hold prepares
+
     def test_contingency_at_start(self):
         # the fixture country's history sets its stability: a contingency already true on day one is named
         plan = self.plan()
