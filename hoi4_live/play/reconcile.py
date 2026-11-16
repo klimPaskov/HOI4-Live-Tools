@@ -105,7 +105,10 @@ def references(plan):
             for key in ("remove", "replace"):
                 if isinstance(e.get(key), str):
                     add("equipment", e, key, "production[%d].%s" % (i, key))
-    return refs
+    # a template the plan itself creates (templates[].name) does not exist on day one: the executor
+    # makes it on its date, so a layout or training line naming it is not a dangling reference
+    planned = {e.get("name") for e in plan.get("templates") or [] if isinstance(e, dict)}
+    return [r for r in refs if not (r[0] == "template" and r[2] in planned)]
 
 
 def first_block(plan):

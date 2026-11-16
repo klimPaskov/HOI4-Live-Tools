@@ -62,6 +62,16 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(report["research"]["not_yet_available"], ["tech_engineers"])
         self.assertTrue(os.path.exists(os.path.join(d, "plan.pre-reconcile.json")))
 
+    def test_a_template_the_plan_creates_is_not_a_dangling_reference(self):
+        # gp1, 16 Nov: Germany's training line for "Panzer-Division 36" (templates[], created on
+        # 1937.04.01) stopped the launch on day one as unresolved
+        plan = {"templates": [{"name": "Panzer-Division 36", "base": "Divisione di Fanteria"}],
+                "training": [{"template": "Panzer-Division 36"}, {"template": "Divisione di Fanteria"}],
+                "army_layout": [{"templates": ["Panzer-Division 36"]}]}
+        code, report, patched, d = self.run_it(plan)
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report.get("unresolved") or [], [])
+
     def test_clean_plan_exits_zero_and_dry_run_does_not_write(self):
         plan = {"army_layout": [{"templates": ["Camicie Nere"], "general": "rodolfo graziani"}]}
         code, report, patched, d = self.run_it(plan, ["--dry-run"])
