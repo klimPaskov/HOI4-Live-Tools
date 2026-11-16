@@ -3170,14 +3170,20 @@ fn disband_step(
 
 /// The divisions to disband so the rest come near full: the weakest first, as few as bring the
 /// mean equipment fill (their equipment returns to the pool and refills the others) to
-/// `until`, never below `keep` divisions. `fills` are (id, fill) of every division counted.
-pub(super) fn consolidation(fills: &[(String, f64)], until: f64, keep: usize) -> Vec<String> {
+/// `until`, never below `keep` divisions. `fills` are (id, fill) of every division counted;
+/// only those `may_go` are cut (one on own land, out of a fight, the game not refusing it).
+pub(super) fn consolidation(
+    fills: &[(String, f64)],
+    until: f64,
+    keep: usize,
+    may_go: &dyn Fn(&str) -> bool,
+) -> Vec<String> {
     let n = fills.len();
     if n <= keep {
         return Vec::new();
     }
     let total: f64 = fills.iter().map(|f| f.1.clamp(0.0, 1.0)).sum();
-    let mut weakest: Vec<&(String, f64)> = fills.iter().collect();
+    let mut weakest: Vec<&(String, f64)> = fills.iter().filter(|f| may_go(&f.0)).collect();
     weakest.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
     let mut out = Vec::new();
     for (m, d) in weakest.into_iter().enumerate() {
@@ -3232,14 +3238,8 @@ fn consolidate_step(
         }
     }
     let divisions = list(&supply, "divisions");
-    // a division the game refused is neither cut nor counted among those to fill
     let fills: Vec<(String, f64)> = divisions
         .iter()
-        .filter(|d| {
-            !d["id"]
-                .as_str()
-                .is_some_and(|i| state.undisbandable.contains(i))
-        })
         .filter_map(|d| {
             Some((
                 d["id"].as_str()?.to_string(),
@@ -3247,29 +3247,30 @@ fn consolidate_step(
             ))
         })
         .collect();
-    let cut = consolidation(&fills, until, keep as usize);
-    // one army's share per tick: the tool disbands divisions of one army
-    let mut by_army: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for d in divisions {
-        let (Some(id), Some(army), Some(at)) =
-            (d["id"].as_str(), d["army"].as_str(), d["state_id"].as_i64())
-        else {
-            continue;
-        };
-        if cut.iter().any(|c| c == id) && own.contains(&at) && !fighting.contains(army) {
-            by_army
-                .entry(army.to_string())
-                .or_default()
-                .push(id.to_string());
-        }
-    }
-    let Some((army, ids)) = by_army.into_iter().next() else {
+    // the divisions that may go: on own land, not in a fight, not refused by the game before
+    // (all of them count toward the fill and toward `keep`)
+    let army_of: HashMap<String, String> = divisions
+        .iter()
+        .filter_map(|d| {
+            let (id, army, at) = (
+                d["id"].as_str()?,
+                d["army"].as_str()?,
+                d["state_id"].as_i64()?,
+            );
+            (own.contains(&at) && !fighting.contains(army) && !state.undisbandable.contains(id))
+                .then(|| (id.to_string(), army.to_string()))
+        })
+        .collect();
+    let cut = consolidation(&fills, until, keep as usize, &|id| army_of.contains_key(id));
+    let Some((army, ids)) = cut
+        .first()
+        .and_then(|id| Some((army_of.get(id)?.clone(), vec![id.clone()])))
+    else {
         state.skip(now, "disband", "consolidate", 3 * DAY);
         return Ok(None);
     };
     // one division per order: a refusal then names its division (e11: the start divisions of
     // a locked template refused every press, and the run never learned which)
-    let ids = vec![ids[0].clone()];
     let count = ids.len();
     let (ok, why) = state.act(
         tools,
@@ -4634,6 +4635,10 @@ fn war_step(
                     state: id,
                     at: state.centers.get(&id).copied()?,
                     touching: list(s, "adjacent_own_states").len(),
+                    adjacent: list(s, "adjacent_own_states")
+                        .iter()
+                        .filter_map(|x| x.as_i64().map(|v| v as i32))
+                        .collect(),
                 })
             })
             .collect();
@@ -4655,7 +4660,7 @@ fn war_step(
                     at: state.centers.get(&here).copied()?,
                     divisions: a["division_count"].as_u64().unwrap_or(0),
                     orders: a["battle_plan_orders"].as_u64().unwrap_or(0),
-                    anchored: post.is_some(),
+                    post,
                     name: n,
                 })
             })
@@ -7649,11 +7654,16 @@ mod tests {
             ("e", 0.6),
             ("f", 0.7),
         ]);
-        assert_eq!(consolidation(&six, 0.85, 1), vec!["a", "b", "c"]);
+        assert_eq!(consolidation(&six, 0.85, 1, &|_| true), vec!["a", "b", "c"]);
+        // one that may not go (at the front, or the game refused it) still counts toward the fill
+        assert_eq!(
+            consolidation(&six, 0.85, 1, &|id| id != "a"),
+            vec!["b", "c", "d"]
+        );
         // never below keep
-        assert_eq!(consolidation(&six, 0.85, 5), vec!["a"]);
+        assert_eq!(consolidation(&six, 0.85, 5, &|_| true), vec!["a"]);
         // already near full: nothing
-        assert!(consolidation(&f(&[("a", 0.9), ("b", 0.95)]), 0.85, 1).is_empty());
+        assert!(consolidation(&f(&[("a", 0.9), ("b", 0.95)]), 0.85, 1, &|_| true).is_empty());
     }
     use std::cell::{Cell, RefCell};
 
