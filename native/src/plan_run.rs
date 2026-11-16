@@ -672,6 +672,8 @@ struct ConState {
     cap: HashMap<i64, i64>,
     /// consecutive transient failures per state
     fails: HashMap<i64, u32>,
+    /// consecutive "full" refusals per building and state: each doubles the rest
+    full_streak: HashMap<String, u32>,
     /// state name -> id, from hoi4_states
     names: HashMap<String, i64>,
     /// own states (hour read, ids), for the optional fallback
@@ -3694,7 +3696,17 @@ fn construction_step(
             "co",
         )?;
         state.con.rr += 1;
+        if !ok && why.starts_with("skipped") {
+            // the order rests on its own failure memory and sent no input: it does not take
+            // this tick's turn from the jobs after it (live 16 Nov 2026: an infrastructure job
+            // in three states the game always refused held the stage while 62 civilian
+            // factories stood idle for two months)
+            state.skip(now, "con", &format!("{building}:{id}"), 6);
+            skipped.push(format!("{id}:resting"));
+            continue;
+        }
         if ok {
+            state.con.full_streak.remove(&full_key(&building, id));
             state.con.fails.remove(&id);
             state.con.queued_total += count as u64;
             state.con.last_queue = Some(now);
@@ -3714,7 +3726,16 @@ fn construction_step(
                     skipped.push(format!("{id}:one_at_a_time"));
                 }
                 Refusal::Full => {
-                    state.skip(now, "confull", &full_key(&building, id), full_days * DAY);
+                    // a state the game keeps refusing rests twice as long each time, so a job the
+                    // game never allows there stops costing the stage its turns
+                    let streak = state
+                        .con
+                        .full_streak
+                        .entry(full_key(&building, id))
+                        .or_insert(0);
+                    let days = (full_days << (*streak).min(5)).min(365);
+                    *streak += 1;
+                    state.skip(now, "confull", &full_key(&building, id), days * DAY);
                     state.con.free.insert(id, (0, now));
                     skipped.push(format!("{id}:full"));
                 }
@@ -8630,6 +8651,31 @@ mod tests {
             again.starts_with("construct arms_factory 4: true"),
             "{again}"
         );
+    }
+
+    #[test]
+    fn a_state_refused_again_rests_twice_as_long() {
+        let mut b = Builder::new();
+        b.full = vec![4];
+        let plan = json!({"construction": [{"building": "arms_factory", "states": [4]}],
+            "construction_probe_slots": false, "construction_full_days": 10});
+        let mut state = State::default();
+        acted(tick(&mut state, &b, &plan, "l", START).unwrap());
+        acted(tick(&mut state, &b, &plan, "l", START + 1).unwrap());
+        // first rest 10 days; refused again after it: 20 days
+        let again = acted(tick(&mut state, &b, &plan, "l", START + 10 * DAY + 2).unwrap());
+        assert!(again.contains("construct arms_factory 4: false"), "{again}");
+        assert_eq!(
+            tick(&mut state, &b, &plan, "l", START + 25 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        b.full.clear();
+        let later = acted(tick(&mut state, &b, &plan, "l", START + 31 * DAY).unwrap());
+        assert!(
+            later.starts_with("construct arms_factory 4: true"),
+            "{later}"
+        );
+        assert!(state.con.full_streak.is_empty());
     }
 
     #[test]
