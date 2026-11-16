@@ -81,7 +81,9 @@ pub(super) fn snapshot(
         }
         let key = r.string_bounded(focus + 0x18, 256)?;
         if key.is_empty()
-            || !key.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            || !key
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
             || !keys.insert(key.clone())
         {
             return Err(Error::new(

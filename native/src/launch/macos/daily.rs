@@ -996,7 +996,7 @@ mod tests {
         s.plan(scope(), false, false, true).unwrap();
         let mut s = spec();
         s.entries[0].intent = core::Intent::Focus {
-            focus_id: "GER-bad".into(),
+            focus_id: "GER bad".into(),
         };
         assert!(s.plan(scope(), false, false, true).is_err());
         let c: Config =

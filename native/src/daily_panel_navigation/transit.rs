@@ -149,7 +149,7 @@ impl Goal {
             Intent::Focus { focus_id }
                 if focus_id
                     .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || c == b'_') => {}
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-') => {}
             Intent::Economy {
                 target:
                     EconomyTarget::Production {
