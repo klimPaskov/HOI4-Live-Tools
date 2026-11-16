@@ -207,6 +207,8 @@ pub(super) struct Memory {
     convoys_low_since: Option<GameHour>,
     /// Civilian factories (hoi4_economy) at the last auto-import budget check.
     import_civs: Option<i64>,
+    /// Why the last raise of the auto-import budget could not happen (the wake says it).
+    import_capped: Option<String>,
     /// Divisions pulled out of overdrawn provinces: their new army and where it goes.
     spread: Vec<Spread>,
 }
@@ -1652,6 +1654,10 @@ fn resources_step(
     // deficit_wake_days (e8, 16 Nov 2026: the two rifle lines ran short of steel ~70 game days
     // on a budget of one while every division stood at half its rifles)
     let mut urgent = false;
+    // the country's deficit of each short resource (hoi4_resources): the units a raise must buy,
+    // for the resources the lines draw too (a priority line short of 30 rubber needs four
+    // factories, not one: one civilian factory buys about 8 units)
+    let mut deficits: BTreeMap<String, f64> = BTreeMap::new();
     if let Ok(read) = tools.call("hoi4_production_shortages", &json!({})) {
         // A resource short for the whole country that no line draws (coal for energy in 1.19)
         // has no priority line to show it, yet it slows every factory: it counts too (n1, 16 Nov
@@ -1664,9 +1670,14 @@ fn resources_step(
         if let Ok(country) = tools.call("hoi4_resources", &json!({})) {
             if let Some(map) = country["resources"].as_object() {
                 for (name, r) in map {
+                    if r["shortage"]["short"] == json!(true) {
+                        deficits.insert(
+                            name.clone(),
+                            r["shortage"]["deficit"].as_f64().unwrap_or(0.0),
+                        );
+                    }
                     if r["shortage"]["short"] == json!(true) && !drawn.contains(name) {
                         let deficit = r["shortage"]["deficit"].as_f64().unwrap_or(0.0);
-                        units += deficit;
                         lines.push(format!(
                             "{name} short {deficit:.0} (country demand, no line draws it)"
                         ));
@@ -1704,8 +1715,10 @@ fn resources_step(
         );
         return Ok(None);
     }
+    units += short.iter().filter_map(|r| deficits.get(r)).sum::<f64>();
     if short.is_empty() {
         state.manage.deficit_since = None;
+        state.manage.import_capped = None;
         note(state, "resources", "no deficit on a priority line");
         return Ok(None);
     }
@@ -1762,15 +1775,26 @@ fn resources_step(
         }
     }
     if lasting {
-        wake(
-            state,
-            plan,
-            now,
-            16,
-            "resource_deficit",
-            format!("resource deficit ({deficit}) has lasted {} game days with auto-import on (budget {shown})", (now - since) / DAY),
-            evidence,
-        );
+        let days = (now - since) / DAY;
+        let (message, evidence) = match state.manage.import_capped.clone() {
+            Some(cap) => {
+                let mut evidence = evidence;
+                evidence["import_capped"] = json!(cap);
+                (
+                    format!(
+                        "resource deficit ({deficit}) has lasted {days} game days and imports cannot \
+                         grow: {cap}; free civilian factories (an economy law with fewer consumer \
+                         goods) or move the lines off the short resource"
+                    ),
+                    evidence,
+                )
+            }
+            None => (
+                format!("resource deficit ({deficit}) has lasted {days} game days with auto-import on (budget {shown})"),
+                evidence,
+            ),
+        };
+        wake(state, plan, now, 16, "resource_deficit", message, evidence);
     }
     Ok(None)
 }
@@ -1842,16 +1866,26 @@ fn raise_import_budget(
     let need = ((units / 8.0).ceil() as i64).max(1);
     let to = (have + need).min(available).min(cap);
     if to <= have {
+        // e14, 16 Nov 2026: Ethiopia lost one of its two civilian factories in April; consumer
+        // goods took the other, the Trade view offered 0 for trade and the game set the budget to
+        // 0, so no steel came for the rest of the war while the wake said "budget 1"
+        let why = if available <= have {
+            format!(
+                "budget {have} of {available} civilian factories the game offers for trade (the rest \
+                 serve consumer goods or there are none)"
+            )
+        } else {
+            format!("budget {have} at the plan's cap {cap}")
+        };
         note(
             state,
             "resources",
-            format!(
-                "deficit {deficit}: import budget {have} cannot grow (available {available}, cap {})",
-                if cap == i64::MAX { "none".to_string() } else { cap.to_string() }
-            ),
+            format!("deficit {deficit}: import budget cannot grow: {why}"),
         );
+        state.manage.import_capped = Some(why);
         return Ok(None);
     }
+    state.manage.import_capped = None;
     let (ok, why) = state.act(
         tools,
         lease,
@@ -5218,6 +5252,66 @@ mod tests {
         assert_eq!(
             wakes(&mut state).last().unwrap()["reason"],
             "resource_deficit"
+        );
+    }
+
+    #[test]
+    fn a_priority_line_raise_buys_the_country_deficit_and_a_capped_budget_says_why() {
+        // a priority line short of 30 rubber: one civilian factory buys about 8 units, so +4
+        let tools = fake(vec![
+            (
+                "hoi4_production_shortages",
+                json!({"lines": [{"equipment": "motorized_equipment_1", "short_of": ["rubber"],
+                    "resources": [{"resource": "rubber"}]}]}),
+            ),
+            (
+                "hoi4_resources",
+                json!({"resources": {"rubber": {"shortage": {"short": true, "deficit": 30.0}}}}),
+            ),
+            (
+                "hoi4_auto_import",
+                json!({"auto_import": {"enabled": true, "budget_factories": 3, "available_factories": 20}}),
+            ),
+        ]);
+        let plan = json!({"auto_import": {"budget": 3, "budget_max": 12},
+            "production_priority": ["motorized_equipment"],
+            "manage": {"off": ["manpower", "stability", "equipment_fill", "stockpile", "trucks"]}});
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = step(&mut state, &tools, &plan, "l", START + 7 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("auto_import budget 3 -> 7 for rubber: true Verified")
+        );
+        // e14: the game offers no civilian factory for trade (consumer goods take the last one)
+        let tools = fake(vec![
+            (
+                "hoi4_production_shortages",
+                json!({"lines": [{"equipment": "infantry_equipment_0", "short_of": ["steel"],
+                    "resources": [{"resource": "steel"}]}]}),
+            ),
+            (
+                "hoi4_resources",
+                json!({"resources": {"steel": {"shortage": {"short": true, "deficit": 4.0}}}}),
+            ),
+            (
+                "hoi4_auto_import",
+                json!({"auto_import": {"enabled": true, "budget_factories": 0, "available_factories": 0}}),
+            ),
+        ]);
+        let plan = json!({"auto_import": {"budget": 1}, "production_priority": ["infantry_equipment"],
+            "manage": {"off": ["manpower", "stability", "equipment_fill", "stockpile", "trucks"]}});
+        let mut state = State::default();
+        for d in [0, 7, 14] {
+            step(&mut state, &tools, &plan, "l", START + d * DAY).unwrap();
+        }
+        let last = wakes(&mut state).pop().unwrap();
+        assert_eq!(last["reason"], "resource_deficit");
+        let message = last["message"].as_str().unwrap();
+        assert!(message.contains("imports cannot grow"), "{message}");
+        assert!(
+            message.contains("budget 0 of 0 civilian factories"),
+            "{message}"
         );
     }
 
