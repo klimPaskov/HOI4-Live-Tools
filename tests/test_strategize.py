@@ -45,6 +45,13 @@ class Fake(strategize.Runner):
             if role == "strategist" and prompt == "strategist.md":
                 with open(os.path.join(self.run_dir, "plan.json"), "w") as f:
                     json.dump({"focus_path": []}, f)
+            if role == "strategist" and not getattr(self, "leave_gaps", False):
+                gaps = os.path.join(self.run_dir, "tool-gaps.md")
+                if os.path.exists(gaps):
+                    with open(gaps) as f:
+                        text = f.read()
+                    with open(gaps, "w") as f:
+                        f.write(text.replace("| ? |", "| not used: no such war |"))
             if role == "critic" and getattr(self, "silent_critic", False):
                 return 0, ""
             if role == "critic":
@@ -189,3 +196,56 @@ class LintToolGaps(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GapTableAndTimelines(unittest.TestCase):
+    def test_seeded_table_must_be_answered_before_the_critic(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            fake.leave_gaps = True
+            report = strategize.strategize(args(d), fake)
+            self.assertFalse(report["ok"])
+            self.assertNotIn("critic", [r[0] for r in roles(fake)])
+            with open(os.path.join(d, "gates-1-1.txt")) as f:
+                self.assertIn("error tool-gaps.unanswered", f.read())
+
+    def test_seed_and_check(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "tool-gaps.md"), "w") as f:
+                f.write("# My gaps\n\n- one gap found while planning\n")
+            strategize.seed_tool_gaps(d)
+            with open(os.path.join(d, "tool-gaps.md")) as f:
+                text = f.read()
+            self.assertIn("- one gap found while planning", text)  # the strategist's own notes stay
+            self.assertIn(strategize.GAP_TABLE_HEAD, text)
+            left = strategize.tool_gaps_unanswered(d)
+            self.assertTrue(left)
+            first = left[0]
+            text = text.replace("| `%s` |" % first, "| `%s` |" % first, 1)
+            lines = [ln.replace("| ? |", "| used: war.x; workaround: none |") if "`%s`" % first in ln else ln
+                     for ln in text.splitlines()]
+            with open(os.path.join(d, "tool-gaps.md"), "w") as f:
+                f.write("\n".join(lines))
+            self.assertNotIn(first, strategize.tool_gaps_unanswered(d))
+            self.assertEqual(len(strategize.tool_gaps_unanswered(d)), len(left) - 1)
+            # seeding again keeps the answers
+            strategize.seed_tool_gaps(d)
+            self.assertNotIn(first, strategize.tool_gaps_unanswered(d))
+            # a deleted row counts as unanswered
+            with open(os.path.join(d, "tool-gaps.md"), "w") as f:
+                f.write("\n".join(ln for ln in lines if "`%s`" % first not in ln))
+            self.assertIn(first, strategize.tool_gaps_unanswered(d))
+
+    def test_no_table_no_check(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(strategize.tool_gaps_unanswered(d), [])
+
+    def test_gates_write_the_timelines(self):
+        with tempfile.TemporaryDirectory() as d:
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertTrue(any("research-timeline" in c for c in fake.commands))
+            with open(os.path.join(d, strategize.TIMELINES)) as f:
+                self.assertIn("## Research", f.read())
+

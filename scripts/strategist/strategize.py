@@ -31,6 +31,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -144,16 +145,58 @@ def gates(runner, run_dir, args):
                               plan, "--json"] + lint_args(args))
     ccode, cout = runner.run([sys.executable, os.path.join(ROOT, "scripts", "hoi4facts", "check_calls.py"), run_dir])
     lint = {}
+    unanswered = []
     if not runner.dry:
         try:
             lint = json.loads(lout[lout.index("{"):]) if "{" in lout else {}
         except ValueError:
             lint = {"unparsed": lout[-2000:]}
         write_json(os.path.join(run_dir, "lint.json"), lint)
+        # the lint's gap findings reach tool-gaps.md before the critic reads it
+        lint_tool_gaps(run_dir)
+        unanswered = tool_gaps_unanswered(run_dir)
+    write_timelines(runner, run_dir, args)
     text = ("## validate_plan --strict (exit %s)\n%s\n## lint_plan (exit %s)\n%s\n"
             "## check_calls: player tool calls against the tool catalogue (exit %s)\n%s\n"
-            % (vcode, vout, lcode, lout, ccode, cout))
-    return vcode == 0 and lcode == 0 and ccode == 0, text, lint
+            "## tool-gaps.md: every blocked lever answered for this plan (%d unanswered)\n%s\n"
+            % (vcode, vout, lcode, lout, ccode, cout, len(unanswered),
+               "\n".join("error tool-gaps.unanswered %s: answer it in the table (used: <key>, workaround; or not "
+                         "used: <reason>)" % g for g in unanswered)))
+    return vcode == 0 and lcode == 0 and ccode == 0 and not unanswered, text, lint
+
+
+TIMELINES = "plan.timelines.md"
+
+
+def write_timelines(runner, run_dir, args):
+    """RUN/plan.timelines.md: the research and focus timelines of the current plan, computed by the facts CLI
+    at every gate, so the strategist never copies dates by hand and the critic checks against the same
+    output."""
+    spec = read_json(os.path.join(run_dir, "run_spec.json"), {}) or {}
+    plan_path = os.path.join(run_dir, "plan.json")
+    plan = read_json(plan_path, {}) or {}
+    tag, date, mode = spec.get("tag"), spec.get("start_date"), spec.get("mode", "fair")
+    if not tag or not date:
+        return None
+    facts = [sys.executable, os.path.join(ROOT, "scripts", "hoi4facts", "facts.py")] + game_args(args) + [
+        "--date", date, "--mode", mode, "--tag", tag]
+    parts = ["# Timelines of the current plan (written by the gates; do not edit)", "",
+             "Computed from RUN/plan.json by the facts CLI at every gate run. Cite these dates as "
+             "[D research-timeline] and [D focus-timeline]; they replace hand-copied tables.", ""]
+    rcode, rout = runner.run(facts + ["research-timeline", plan_path])
+    parts += ["## Research (`facts.py research-timeline RUN/plan.json`, exit %s)" % rcode, "", "```",
+              rout.rstrip(), "```", ""]
+    focus = [f for f in plan.get("focus_path") or [] if isinstance(f, str)]
+    if focus:
+        fcode, fout = runner.run(facts + ["focus-timeline", tag, "--date", date] + focus)
+        parts += ["## Focus (`facts.py focus-timeline %s --date %s <focus_path>`, exit %s)" % (tag, date, fcode),
+                  "", "```", fout.rstrip(), "```", ""]
+    if runner.dry:
+        return None
+    path = os.path.join(run_dir, TIMELINES)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+    return path
 
 
 def max_total(critic, scores):
@@ -247,6 +290,8 @@ def strategize(args, runner=None):
 
     # The levers no tool carries yet, from the gap register: the strategist plans and reports them, never drops them.
     write_blocked_levers(run_dir)
+    if not runner.dry:
+        seed_tool_gaps(run_dir)
 
     # 1b. work pack (deterministic, cached): the facts every plan needs, the schema digest and the lint rules,
     # computed once by code so no model call spends turns fetching them (scripts/strategist/pack.py)
@@ -335,6 +380,72 @@ def write_blocked_levers(run_dir):
 
 
 GAP_RULES = ("conquest.tool_gap", "gap.blocked")
+GAP_TABLE = "## Blocked levers: the answer for this plan"
+GAP_TABLE_HEAD = "| lever | area | payoff | this plan |"
+
+
+def seed_tool_gaps(run_dir):
+    """Start RUN/tool-gaps.md with one row per blocked lever of the gap register and `?` in the answer column.
+    The strategist answers every row (used, with the key and the workaround, or not used, with the reason)
+    and the gates fail while one is open: in both 16 Nov runs the critic's round 1 raised a major finding for
+    blocked levers neither planned nor answered, and each such finding cost a 17 to 25 minute answer round."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    try:
+        from hoi4facts import gap_register
+        rows = gap_register.blocked()
+        domains = gap_register.DOMAINS
+    except Exception as e:  # noqa: BLE001 - without the register there is nothing to answer
+        log("gap register unreadable (%s): no blocked-lever table in tool-gaps.md" % e)
+        return None
+    finally:
+        sys.path.pop(0)
+    path = os.path.join(run_dir, "tool-gaps.md")
+    old = ""
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            old = f.read()
+    if GAP_TABLE in old:
+        return path
+    table = [GAP_TABLE, "",
+             "Seeded by strategize.py from RUN/blocked-levers.md (the descriptions are there). Replace each `?` with",
+             "`used: <plan key>; <payoff for this goal>; workaround: <what the tools do carry>` or `not used: <why this",
+             "goal does not need it>`. Edit the rows in place; the gates fail while a row is `?` or missing.", "",
+             GAP_TABLE_HEAD, "|---|---|---|---|"]
+    order = getattr(gap_register, "PAYOFFS", ())
+    for r in sorted(rows, key=lambda r: (order.index(r["payoff"]) if r.get("payoff") in order else 9,
+                                         r.get("domain", ""), r["id"])):
+        table.append("| `%s` | %s | %s | ? |" % (r["id"], domains.get(r.get("domain"), r.get("domain")),
+                                                r.get("payoff")))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write((old.rstrip() + "\n\n" if old.strip() else "# Tool gaps\n\n") + "\n".join(table) + "\n")
+    return path
+
+
+def tool_gaps_unanswered(run_dir):
+    """Lever ids of the seeded table still `?` (or empty), plus seeded ids whose row is gone. [] when the table
+    was never seeded."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    try:
+        from hoi4facts import gap_register
+        ids = [r["id"] for r in gap_register.blocked()]
+    except Exception:  # noqa: BLE001
+        ids = []
+    finally:
+        sys.path.pop(0)
+    try:
+        with open(os.path.join(run_dir, "tool-gaps.md"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return []
+    if GAP_TABLE not in text:
+        return []
+    answers = {}
+    for line in text[text.index(GAP_TABLE):].splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.startswith("|") else []
+        if len(cells) >= 2:
+            for lever in re.findall(r"`([a-z_]+\.[a-z0-9_.]+)`", cells[0]):
+                answers[lever] = cells[-1]
+    return [i for i in ids if answers.get(i, "").strip("` ") in ("", "?")]
 
 
 def lint_tool_gaps(run_dir):
@@ -393,7 +504,13 @@ def main(argv=None):
     ap.add_argument("--from", dest="from_step", choices=["dossier", "gates", "critic"], default="dossier",
                     help="resume an existing run: gates (validate, lint, calls, then review) or critic")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--gaps-check", action="store_true",
+                    help="only list the blocked levers RUN/tool-gaps.md leaves unanswered (exit 1 when any)")
     args = ap.parse_args(argv)
+    if args.gaps_check:
+        left = tool_gaps_unanswered(os.path.abspath(args.run))
+        print("\n".join(left) if left else "every blocked lever answered")
+        return 1 if left else 0
     report = strategize(args)
     if args.dry_run:
         print(json.dumps(report.get("steps"), indent=1))

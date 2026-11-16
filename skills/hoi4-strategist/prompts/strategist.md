@@ -19,9 +19,11 @@ Inputs:
   references the skill names.
 * `skills/hoi4-campaign-playbook/references/lessons.jsonl`.
 * `RUN/blocked-levers.md`: the levers the project knows but no tool carries yet (the gap register's
-  not-executable rows). Never drop one the goal would use because no tool carries it: plan it, write it in
-  `RUN/tool-gaps.md` with its payoff for this goal, and plan the best workaround the tools do carry (lint
-  `gap.blocked` and `conquest.tool_gap` name each one the plan relies on).
+  not-executable rows). Never drop one the goal would use because no tool carries it: plan it, and plan the
+  best workaround the tools do carry (lint `gap.blocked` and `conquest.tool_gap` name each one the plan
+  relies on). `RUN/tool-gaps.md` starts with a table of every blocked lever and `?` as the answer: replace
+  each `?` (edit in place) with `used: <key>; <payoff for this goal>; workaround: ...` or `not used:
+  <reason>`. The gates fail while a row is open (`strategize.py --run RUN --gaps-check` lists them).
 
 Do steps 1 to 7 of the procedure, then stop. Step 5 is the 29-item checklist of
 `skills/hoi4-strategist/references/procedure.md`: decide every item, including the ones the goal's words
