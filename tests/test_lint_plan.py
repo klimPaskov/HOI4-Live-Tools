@@ -253,6 +253,7 @@ class HandPlans(unittest.TestCase):
             ("conquest.adjacency", "vp_targets[16] 13244"),  # Gambella is two steps past Yabello
             ("construction.railway", "construction_plan[5] cp08_rail_way_843"),  # 7944 not on Dessie's route
             ("construction.railway", "construction_plan[6] cp09_rail_way_835"),  # whole line queued at Wal Wal
+            ("disband.locked", "disband.templates[2]"),  # Camicie Nere is is_locked: the game refuses
             ("schema.player_call", "retake_rules"),  # army_group is an executor key (plan_military.rs)
             ("win.goal", "goal"),  # only the deprecated surrender_goal
         ])
@@ -268,6 +269,7 @@ class HandPlans(unittest.TestCase):
             ("army.formations", "army_layout[4] 'South guard'"),
             ("army.formations", "army_layout[5] 'Jubaland guard'"),
             ("army.formations", "army_layout[6] 'Afar guard'"),
+            ("army.generals", "army_layout[3]"),  # Amedeo Guillet shows only after ITA_comandante_diavolo
             # 6-8 wide colonial and irregular divisions fill the highland battles at 0.86-0.92, width 14 at 0.99
             ("army.width_terrain", "army_layout"),
             # the Dessie and Addis Ababa legs take the Afar road, Aussa's land at the start
@@ -354,6 +356,9 @@ class HandPlans(unittest.TestCase):
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
         self.assertEqual(warnings, sorted(gaps + [
             *[("alerts.owner", "manage.alerts_ignore")] * 4,  # dockyards, admiral, officer corps, garrison
+            ("army.generals", "army_group[0].marshal[0]"),  # Ethiopia's marshals are hidden at the start
+            ("army.generals", "army_group[0].marshal[1]"),
+            ("army.generals", "army_group[1].marshal"),
             ("army.width_terrain", "army_layout"),  # Mehal Sefari and Mountain Division are 8 wide (0.92)
             ("manage.thresholds", "manage"),
             ("occupation.required", "occupation"),  # Eritrea, Somaliland, Jubaland are conquered
@@ -956,7 +961,8 @@ class CoverageBuildRules(unittest.TestCase):
     # -------------------------------------------------------------- wave-2 executor keys
     def test_army_group_marshals_and_navy_admirals(self):
         plan = copy.deepcopy(self.ita)
-        self.assertNoHit(plan, "army.generals")  # Graziani and Badoglio are field marshals of ITA
+        # Graziani and Badoglio are field marshals of ITA (Guillet commands before his focus shows him)
+        self.assertEqual([f["where"] for f in self.hits(plan, "army.generals", "warning")], ["army_layout[3]"])
         plan["army_group"] = [{"id": "ao", "armies": ["North strike (Army 1)", "North guard"],
                                "marshal": ["Nobody Atall", "Ettore Bastico"]},
                               {"id": "south", "armies": ["South (Army 2)", "South guard"], "marshal": "Giovanni Messe"}]
@@ -1444,6 +1450,60 @@ class TacticsRules(unittest.TestCase):
         plan["war"]["posture"] = "defend"
         self.assertNoHit(plan, "war.defend_posture")
         self.assertNoHit(self.ita, "war.defend_posture")  # Italy attacks: its hold prepares
+
+    def test_marshal_hidden_at_start(self):
+        # Ethiopia's field marshals show only under their own rule (Hailu, Abba Jofir) or after Rally Around the
+        # Emperor (Haile Selassie): the commander tool does not know them at the start
+        plan = copy.deepcopy(self.eth)
+        names = [e.get("name_hint") for e in plan.get("army_layout") or [] if isinstance(e, dict)][:1]
+        plan["army_group"] = [{"id": "g", "name": "North", "armies": names, "marshal": "Haile Selassie"}]
+        f = self.assertHit(plan, "army.generals", "warning", "army_group[0].marshal")
+        self.assertIn("visible trigger", f["message"])
+        self.assertIn("ETH_rally_around_the_emperor", f["message"])
+        plan["army_group"][0]["marshal"] = "Hailu Tekle Haymanot"
+        self.assertHit(plan, "army.generals", "warning", "army_group[0].marshal")
+
+    def test_capital_open(self):
+        # Ethiopia's capital state is Shewa 271: a reserve army there does not hold it
+        plan = copy.deepcopy(self.eth)
+        plan["phases"] = []
+        plan["hold_targets"] = []
+        plan["war"] = dict(plan.get("war") or {}, guard_states=[842], reserve=["Imperial reserve"])
+        plan["war"].pop("guards", None)
+        plan["army_layout"] = [{"name_hint": "Imperial reserve", "role": "guard", "state": 271, "count": 1},
+                               {"name_hint": "North", "role": "guard", "state": 842, "count": 7}]
+        f = self.assertHit(plan, "war.capital_open", "warning", "war.guard_states")
+        self.assertIn("271", f["message"])
+        plan["war"]["reserve"] = []
+        self.assertNoHit(plan, "war.capital_open")
+        plan["war"]["reserve"] = ["Imperial reserve"]
+        plan["war"]["guard_states"] = [842, 271]
+        self.assertNoHit(plan, "war.capital_open")
+        self.assertNoHit(self.ita, "war.capital_open")  # Italy is not attacked on the first day
+
+    def test_disband_locked(self):
+        # Ethiopia 1936 (By Blood Alone): Chitet Sefari and Kebur Zabagna are is_locked
+        plan = copy.deepcopy(self.eth)
+        plan["disband"] = {"templates": ["Chitet Sefari"]}
+        self.assertHit(plan, "disband.locked", "error", "disband.templates[0]")
+        plan["disband"] = {"templates": ["Mehal Sefari"], "consolidate": {"until_fill": 0.85, "keep": 15}}
+        f = self.assertHit(plan, "disband.locked", "info", "disband.consolidate")
+        self.assertIn("11 of 21", f["message"])
+        plan["disband"] = {"templates": []}
+        self.assertNoHit(plan, "disband.locked")
+
+    def test_open_path(self):
+        # only Tigray held: Italian land reaches Addis Ababa's state (271) over unheld own states
+        plan = copy.deepcopy(self.eth)
+        plan["phases"] = []
+        plan["hold_targets"] = []
+        plan["war"] = dict(plan.get("war") or {}, guard_states=[842], reserve=[])
+        plan["war"].pop("guards", None)
+        plan["army_layout"] = [{"name_hint": "North", "role": "guard", "state": 842, "count": 7}]
+        f = self.assertHit(plan, "war.open_path", "warning", "war.guard_states")
+        self.assertIn("capital state 271", f["message"])
+        plan["war"]["guard_states"] = [842, 271]
+        self.assertNoHit(plan, "war.open_path")
 
     def test_focus_gate_reach_and_counter_attack(self):
         # the defensive branch excludes Renewed Offensive, so the Northern Thrust behind it can never come
