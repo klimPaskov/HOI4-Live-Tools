@@ -157,6 +157,36 @@ class CommandLines(unittest.TestCase):
         self.assertEqual(inv.env["HOI4_LIVE_AGENT_ROLE"], "strategist")
         self.assertEqual(inv.env["HOI4_LIVE_RUN"], self.run_dir)
 
+    def test_planning_roles_are_isolated(self):
+        """A planning role gets only its own built-in tools, no user MCP servers, skills, CLAUDE.md or
+        auto-memory; the player keeps the user's MCP registration; `isolate: false` turns it off."""
+        env = {"HOI4_LIVE_AGENT_BINARY": "/bin/claude"}
+        for role in ("strategist", "critic", "planner"):
+            inv = run.plan(self.args(role), env, OK_PROBE)[-1]
+            a = inv.argv
+            self.assertIn("--strict-mcp-config", a, role)
+            self.assertIn("--disable-slash-commands", a, role)
+            self.assertEqual(inv.env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"], "1", role)
+            self.assertEqual(inv.env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1", role)
+        a = run.plan(self.args("strategist"), env, OK_PROBE)[-1].argv
+        self.assertEqual(a[a.index("--tools") + 1], "Read,Write,Edit,Glob,Grep,Bash")
+        a = run.plan(self.args("critic"), env, OK_PROBE)[-1].argv
+        self.assertEqual(a[a.index("--tools") + 1], "Read,Write,Glob,Grep,Bash")
+        player = run.plan(self.args("player"), env, OK_PROBE)[-1]
+        self.assertNotIn("--strict-mcp-config", player.argv)
+        self.assertNotIn("--tools", player.argv)
+        self.assertNotIn("CLAUDE_CODE_DISABLE_AUTO_MEMORY", player.env)
+        path = _write(os.path.join(self.tmp.name, "off.json"), {"agents": {"providers": {"claude": {"isolate": False}}}})
+        inv = run.plan(self.args("strategist", config=path), env, OK_PROBE)[-1]
+        self.assertNotIn("--strict-mcp-config", inv.argv)
+        self.assertNotIn("CLAUDE_CODE_DISABLE_AUTO_MEMORY", inv.env)
+
+    def test_isolation_keeps_a_role_mcp_config_and_user_registration(self):
+        from strategist.adapters.claude_code import isolation_args
+        self.assertIn("--strict-mcp-config", isolation_args(["Read", "mcp__hoi4-live"], "/mcp.json"))
+        self.assertNotIn("--strict-mcp-config", isolation_args(["Read", "mcp__hoi4-live"]))
+        self.assertEqual(isolation_args(["Read", "Edit(//x/**)"])[:2], ["--tools", "Read,Edit,Write"])
+
     def test_claude_player_and_provider_options(self):
         path = _write(os.path.join(self.tmp.name, "c.json"), {"agents": {"providers": {"claude": {
             "binary": "/bin/claude", "permission_mode": "dontAsk", "extra_args": ["--bare"],
