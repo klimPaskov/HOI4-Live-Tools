@@ -57,6 +57,14 @@
 //!                 (hoi4_army_exercise {armies, on: true, stop_at_max: true}); when a war starts
 //!                 they stop (on: false). Built: hoi4_army_exercise (card readback). Done-memory
 //!                 `ex:<id>:on`, `ex:<id>:off`
+//!   production_priority [equipment keys] (gap register production.line_priority_order): the lines
+//!                 whose equipment starts with these keys go to the top of the production view's
+//!                 priority order, in the plan's order (a higher line gets resources and factories
+//!                 first; shortages and lost factories hit the bottom lines). Once a week the
+//!                 matching lines (hoi4_production_lines) are compared with the last round; when
+//!                 the set changed (a line added or gone) a round sends hoi4_production_priority
+//!                 {line, equipment, to: top} for each, last first, one per tick, so the first
+//!                 key ends on top. Done-memory `po:<handles>` (the round), `po:<handles>:<n>`
 use super::{item_id, list, strings, text, GameHour, State, Tools, DAY, RECEIPT_TOOLS};
 use crate::error::Result;
 use crate::plan_predicate::Truth;
@@ -81,6 +89,8 @@ pub(super) const AREA_DEFENSE_TOOL: &str = "hoi4_army_area_defense";
 pub(super) const DELETE_ORDER_TOOL: &str = "hoi4_army_orders_delete";
 /// Sets the default garrison template (Occupied Territories view).
 pub(super) const GARRISON_TOOL: &str = "hoi4_occupation_garrison";
+/// Moves a production line in the priority order (production view arrows).
+pub(super) const PRIORITY_TOOL: &str = "hoi4_production_priority";
 /// Starts or stops army exercises (battle-plan toolbar exercise button).
 pub(super) const EXERCISE_TOOL: &str = "hoi4_army_exercise";
 /// The area-defence settings the order's window offers (its toggle buttons, btn_setting_<name>).
@@ -123,7 +133,100 @@ pub(super) fn step(
     if let Some(done) = garrison_step(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
-    exercise_step(state, tools, plan, lease, now)
+    if let Some(done) = exercise_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    production_order_step(state, tools, plan, lease, now)
+}
+
+/// The lines that go on top, in order: for each `production_priority` key, the own lines whose
+/// equipment starts with it, in the read's order (entry_index, handle, equipment).
+pub(super) fn priority_round(lines: &[Value], keys: &[String]) -> Vec<(u64, String, String)> {
+    let mut out: Vec<(u64, String, String)> = Vec::new();
+    for key in keys {
+        for l in lines {
+            let equipment = text(&l["equipment_id"]);
+            let handle = text(&l["line_handle"]);
+            if equipment.is_empty() || !equipment.starts_with(key.as_str()) {
+                continue;
+            }
+            if out.iter().any(|(_, h, _)| h == handle) {
+                continue;
+            }
+            if let Some(index) = l["entry_index"].as_u64() {
+                out.push((index, handle.to_string(), equipment.to_string()));
+            }
+        }
+    }
+    out
+}
+
+fn production_order_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let keys = strings(plan, "production_priority");
+    if keys.is_empty() || state.skipped(now, "spo", "x") {
+        return Ok(None);
+    }
+    let key = "production_priority";
+    let lines = match tools.call("hoi4_production_lines", &json!({"limit": 128})) {
+        Ok(read) => list(&read, "lines").to_vec(),
+        Err(e) => {
+            note(state, key, format!("hoi4_production_lines unreadable: {e}"));
+            state.skip(now, "spo", "x", DAY);
+            return Ok(None);
+        }
+    };
+    let round = priority_round(&lines, &keys);
+    if round.is_empty() {
+        note(state, key, "no own line of the priority equipment yet");
+        state.skip(now, "spo", "x", 7 * DAY);
+        return Ok(None);
+    }
+    let mut handles: Vec<&str> = round.iter().map(|(_, h, _)| h.as_str()).collect();
+    handles.sort_unstable();
+    let sig = format!("po:{}", handles.join(","));
+    if state.done.contains_key(&sig) {
+        note(
+            state,
+            key,
+            format!("{} lines on top in the plan's order", round.len()),
+        );
+        state.skip(now, "spo", "x", 7 * DAY);
+        return Ok(None);
+    }
+    // the next line of the round: the last one not yet moved
+    let Some(n) = (0..round.len()).find(|n| !state.done.contains_key(&format!("{sig}:{n}"))) else {
+        state.done.insert(sig, now);
+        return Ok(None);
+    };
+    let (index, _, equipment) = &round[round.len() - 1 - n];
+    let args = json!({"line": index, "equipment": equipment, "to": "top"});
+    if !built(PRIORITY_TOOL) {
+        note(
+            state,
+            key,
+            unbuilt(PRIORITY_TOOL, &args, "production.line_priority_order"),
+        );
+        state.skip(now, "spo", "x", 7 * DAY);
+        return Ok(None);
+    }
+    let (ok, why) = state.act(tools, lease, PRIORITY_TOOL, args, "po")?;
+    if ok {
+        state.done.insert(format!("{sig}:{n}"), now);
+        if n + 1 == round.len() {
+            state.done.insert(sig, now);
+        }
+    } else {
+        state.skip(now, "spo", "x", 2 * DAY);
+    }
+    let line = format!("priority {equipment} (line {index}) to the top: {ok} {why}");
+    note(state, key, line.clone());
+    Ok(Some(line))
 }
 
 /// The line a seam writes when its tool is still to be built: what it would send.
@@ -871,6 +974,57 @@ mod tests {
             state.seams.notes["xp_budget.army:later"],
             "at war: no exercise started"
         );
+    }
+
+    #[test]
+    fn priority_lines_go_to_the_top_last_first_and_a_new_line_starts_a_new_round() {
+        let mut f = game();
+        let lines = |extra: bool| {
+            let mut l = vec![
+                json!({"entry_index": 0, "line_handle": "0xa", "equipment_id": "fighter_equipment_0"}),
+                json!({"entry_index": 1, "line_handle": "0xb", "equipment_id": "artillery_equipment_1"}),
+                json!({"entry_index": 2, "line_handle": "0xc", "equipment_id": "infantry_equipment_1"}),
+            ];
+            if extra {
+                l.push(json!({"entry_index": 3, "line_handle": "0xd", "equipment_id": "infantry_equipment_2"}));
+            }
+            json!({"lines": l})
+        };
+        f.replies.insert("hoi4_production_lines", lines(false));
+        let plan = json!({"production_priority": ["infantry_equipment", "artillery_equipment"]});
+        let round = priority_round(
+            list(&lines(true), "lines"),
+            &strings(&plan, "production_priority"),
+        );
+        let order: Vec<&str> = round.iter().map(|(_, h, _)| h.as_str()).collect();
+        assert_eq!(order, ["0xc", "0xd", "0xb"]);
+        let mut state = State::default();
+        let mut t = START;
+        let mut out = Vec::new();
+        for _ in 0..4 {
+            if let Some(line) = step(&mut state, &f, &plan, "l", t).unwrap() {
+                out.push(line);
+            }
+            t += DAY;
+        }
+        let sent = actions(&f);
+        assert_eq!(sent.len(), 2, "{out:?}");
+        assert!(sent
+            .iter()
+            .all(|(n, a)| n == "hoi4_production_priority" && a["to"] == "top"));
+        // the last of the round first, so the first key ends on top
+        assert_eq!(sent[0].1["equipment"], "artillery_equipment_1");
+        assert_eq!(sent[1].1["equipment"], "infantry_equipment_1");
+        assert!(state.seams.notes["production_priority"].contains("on top"));
+        // a new rifle line: a new round of three
+        f.replies.insert("hoi4_production_lines", lines(true));
+        for _ in 0..12 {
+            step(&mut state, &f, &plan, "l", t).unwrap();
+            t += DAY;
+        }
+        let sent = actions(&f);
+        assert_eq!(sent.len(), 5);
+        assert_eq!(sent[4].1["line"], json!(2));
     }
 
     #[test]

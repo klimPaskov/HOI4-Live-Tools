@@ -3777,6 +3777,47 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_production_priority": {
+   "description": "Move an own production line in the production view's priority order (a line higher in the list gets resources and factories first, so shortages and lost factories hit the bottom lines): the line's arrows (increase_priority, decrease_priority), Shift+click for to:top or to:bottom. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Verified by the line's place in the view's list (receipt detail: place before and after, the shown order).",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "equipment": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "line": {
+      "maximum": 2047,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "to": {
+      "enum": [
+       "top",
+       "up",
+       "down",
+       "bottom"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "line",
+     "equipment",
+     "to",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_production_set": {
    "description": "factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.",
    "inputSchema": {

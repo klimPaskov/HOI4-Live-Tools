@@ -2847,12 +2847,17 @@
     "templates-equipment-production.md#10 Tactics (PR11)",
     "templates-equipment-production.md#9 (c) Gaps (Production line reorder)"
    ],
-   "plan": [],
-   "tools": [],
+   "plan": [
+    "production_priority"
+   ],
+   "tools": [
+    "hoi4_production_priority",
+    "hoi4_production_lines"
+   ],
    "payoff": "medium",
    "why": "shortages, bombing and lost factories hit the bottom lines first",
    "closing": "both",
-   "owner": "line reorder tool (production view arrows) and a plan key"
+   "owner": "offline done: hoi4_production_priority {line,equipment,to: top|up|down|bottom} (the line row arrows increase_priority / decrease_priority, Shift+click for top and bottom), receipt by the line place in the production view list (item_grid order), in RECEIPT_TOOLS; executor step (plan_seams.rs) keeps the production_priority lines on top in the plan order, a new round when a matching line is added or removed; tests; live: priority_test.py on a fresh 1936 game: a bottom line goes to the top and back, place read from the list"
   },
   {
    "id": "production.efficiency_read",
