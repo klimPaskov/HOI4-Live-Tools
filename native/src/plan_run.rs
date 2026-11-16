@@ -511,6 +511,8 @@ pub struct State {
     war_lines_only: bool,
     /// The first tick with nothing left to do in a paused game was noted (`setup_complete`).
     setup_noted: bool,
+    /// Runs that ended on a failed order while the opening was not yet noted as set up.
+    setup_failed_runs: u32,
     war_cool: HashMap<String, GameHour>,
     /// per army: (target, main state, game hour) of the last progress seen
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
@@ -708,6 +710,7 @@ impl Default for State {
             war_stage: HashMap::new(),
             war_lines_only: false,
             setup_noted: false,
+            setup_failed_runs: 0,
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             cheap_first_spent: None,
@@ -4508,9 +4511,15 @@ fn war_step(
                     .min_by(|a, b| a.1.total_cmp(&b.1))
                     .map(|(id, _)| id)
             });
+            // With no enemy-held state placed yet there is no front to draw: the post itself is
+            // own and own-controlled, which the tool refuses (e2/e5, 16 Nov 2026: ten refused
+            // guard fronts to own states 835, 836, 842 counted against the order).
+            let Some(facing) = facing else {
+                continue;
+            };
             (
                 "hoi4_army_front",
-                json!({"army": name, "state_id": facing.unwrap_or(post)}),
+                json!({"army": name, "state_id": facing}),
                 "guard front",
                 2,
             )
@@ -6304,6 +6313,30 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
     });
 }
 
+/// Runs ending on a failed order, while paused at the opening, after which the opening is set up.
+const SETUP_FAILED_RUNS: u32 = 8;
+
+/// Notes once that the opening is set up (`setup_complete`) when the game is paused: nothing is
+/// left to order, or (`failing`) what is left only keeps failing.
+fn note_setup(state: &mut State, tools: &dyn Tools, actions: usize, failing: Option<String>) {
+    state.setup_noted = true;
+    let paused = tools
+        .call("hoi4_overview", &json!({}))
+        .is_ok_and(|overview| overview["paused"] == json!(true));
+    if !paused {
+        return;
+    }
+    let mut detail = json!({"game_hour": state.last_hour, "actions": actions,
+        "next": "the executor has nothing left to order while paused: unpause"});
+    if let Some(order) = failing {
+        detail["still_failing"] = json!(order);
+        detail["next"] = json!(
+            "the orders left keep failing while paused; the executor retries them in game time: unpause"
+        );
+    }
+    crate::watch::feed().note(crate::watch::SETUP_COMPLETE, true, detail);
+}
+
 /// The plan with the active phase's and the active contingencies' overrides merged over it
 /// (None when nothing is overridden).
 fn strategy_overrides(state: &State, plan: &Value) -> Option<Value> {
@@ -7030,6 +7063,18 @@ pub fn run(
                 let failed = what.contains(": false");
                 actions.push(what);
                 if failed {
+                    // Orders that keep failing in a paused game never leave a tick with nothing
+                    // to do, so the opening was never noted as set up and the player waited for
+                    // ever (e5, 16 Nov 2026: about 145 polls on day one, an area defence and two
+                    // garrison assignments retried). After SETUP_FAILED_RUNS such runs the
+                    // opening is set up as far as it goes: the feed says so, with what still fails.
+                    if !state.setup_noted {
+                        state.setup_failed_runs += 1;
+                        if state.setup_failed_runs >= SETUP_FAILED_RUNS {
+                            let last = actions.last().cloned().unwrap_or_default();
+                            note_setup(state, tools, actions.len(), Some(last));
+                        }
+                    }
                     break json!("action failed");
                 }
                 // Never sleep while holding the game: the player's calls wait behind a run
@@ -7059,18 +7104,7 @@ pub fn run(
                 // opening is set up: the feed says so once, and a player waiting to unpause
                 // need not guess from the army list when the executor is done.
                 if !state.setup_noted {
-                    state.setup_noted = true;
-                    let paused = tools
-                        .call("hoi4_overview", &json!({}))
-                        .is_ok_and(|overview| overview["paused"] == json!(true));
-                    if paused {
-                        crate::watch::feed().note(
-                            crate::watch::SETUP_COMPLETE,
-                            true,
-                            json!({"game_hour": state.last_hour, "actions": actions.len(),
-                                "next": "the executor has nothing left to order while paused: unpause"}),
-                        );
-                    }
+                    note_setup(state, tools, actions.len(), None);
                 }
                 Duration::from_secs(12)
             }
@@ -11916,6 +11950,41 @@ mod tests {
             .iter()
             .filter(|c| c["detail"]["game_hour"] == json!(at))
             .count()
+    }
+
+    #[test]
+    fn orders_that_only_fail_while_paused_still_end_the_opening() {
+        let at = hour("1936.01.01") + 11;
+        let tools = fake(vec![(
+            "hoi4_overview",
+            json!({"paused": true, "date": {"raw": at}}),
+        )]);
+        let mut state = State {
+            last_hour: at,
+            ..State::default()
+        };
+        note_setup(
+            &mut state,
+            &tools,
+            3,
+            Some("area_defense for Army 2: false".into()),
+        );
+        assert!(state.setup_noted);
+        let feed = crate::watch::feed().observe(
+            0,
+            &[crate::watch::SETUP_COMPLETE.to_string()],
+            false,
+            2000,
+        );
+        let mine: Vec<&Value> = list(&feed, "changes")
+            .iter()
+            .filter(|c| c["detail"]["game_hour"] == json!(at))
+            .collect();
+        assert_eq!(mine.len(), 1);
+        assert_eq!(
+            mine[0]["detail"]["still_failing"],
+            "area_defense for Army 2: false"
+        );
     }
 
     #[test]
