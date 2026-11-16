@@ -12,6 +12,9 @@ Inputs:
 * `RUN/dossier/dossier.md`, and `scripts/hoi4facts/facts.py` / `calc.py` for any check (pass
   `--date` and `--mode` from the run spec; in fair mode no per-division enemy positions and no AI
   strategy files);
+* `RUN/pack/index.md`: facts and calc outputs computed for this run by code (the same commands the plan
+  cites), `RUN/pack/schema/<key>.md` and `RUN/pack/lint-rules.md`; read them instead of re-running those
+  commands, and run `facts.py` for anything else you check;
 * `RUN/plan.json`, `RUN/plan.md`, `RUN/plan.brief.md`, `RUN/lint.json`;
 * `RUN/blocked-levers.md` (levers no tool carries yet) and `RUN/tool-gaps.md`: a blocked lever the goal
   would use that is neither planned with its gap reported nor answered with why not is a major finding;

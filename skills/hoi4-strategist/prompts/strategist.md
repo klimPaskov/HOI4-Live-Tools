@@ -9,7 +9,14 @@ Inputs:
 * `RUN/run_spec.json`: tag, start date, the user's goal in their words, clarifications, mode
   (fair|meta), DLC and mods, horizon.
 * The dossier you build in step 1 under `RUN/dossier/`.
-* `skills/hoi4-campaign-playbook/plan.schema.json` and the playbook references the skill names.
+* `RUN/pack/index.md`, the work pack the orchestrator computed before you started: the outputs of the
+  facts and calc commands every plan needs (laws, decisions, missions, hooks, advisors, OOB and VPs of the
+  tag and its opponents, research calendar, PP and XP forecasts, ...), `RUN/pack/schema/` (every plan key
+  with its owner and fields) and `RUN/pack/lint-rules.md` (what each lint rule checks). Read from the pack
+  instead of re-running those commands, several files per read; read the schema file and the lint source
+  only when the pack does not answer.
+* `skills/hoi4-campaign-playbook/plan.schema.json` (the contract the pack digests) and the playbook
+  references the skill names.
 * `skills/hoi4-campaign-playbook/references/lessons.jsonl`.
 * `RUN/blocked-levers.md`: the levers the project knows but no tool carries yet (the gap register's
   not-executable rows). Never drop one the goal would use because no tool carries it: plan it, write it in
@@ -32,7 +39,12 @@ Outputs in RUN:
 * `plan.brief.md` (60 lines or fewer; one exact call per player item);
 * `lint.json`.
 
-Rules: facts only from the dossier or `scripts/hoi4facts/facts.py`, never from memory; in fair mode no
+Work in few, large steps: every turn re-reads everything before it, so batch reads and fact queries into
+one command each, and write plan.json in a few large parts rather than many small patches. Read nothing
+outside the repository and RUN (other run folders are not references; `skills/hoi4-strategist/examples/`
+lists the reference plans).
+
+Rules: facts only from the dossier, the pack or `scripts/hoi4facts/facts.py`, never from memory; in fair mode no
 per-division enemy positions and no AI strategy files; plan keys only from the schema; never touch the
 game; never ask for input. If a gate cannot pass, write `RUN/strategist-blocked.md` and stop.
 

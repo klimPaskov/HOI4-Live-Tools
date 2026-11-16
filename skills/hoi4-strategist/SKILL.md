@@ -66,9 +66,12 @@ timed duplicate. `check_calls.py` fails any brief call that duplicates the execu
 * `RUN/run_spec.json` (shape: [templates/run_spec.json](templates/run_spec.json)).
 * The dossier (built in step 1): `RUN/dossier/dossier.md` (read in full), `dossier.json` (never read
   whole; query it through `facts.py`), `graph.json.gz`, `manifest.json`.
-* The executor capability list: the `x-owner` tag of every key in
-  `skills/hoi4-campaign-playbook/plan.schema.json`. Print it with
-  `python3 -c "import json;s=json.load(open('skills/hoi4-campaign-playbook/plan.schema.json'));[print(k,v.get('x-owner'),v.get('description','')) for k,v in s['properties'].items()]"`.
+* The work pack `RUN/pack/` (built by `scripts/strategist/pack.py` after the dossier; `strategize.py` runs
+  it): `index.md` lists the facts and calc outputs every plan needs, already computed for the tag and its
+  opponents, each with the command that made it (cite it as that command); `schema/INDEX.md` is the
+  executor capability list (every plan key with its `x-owner` and one line) and `schema/<key>.md` the fields
+  of one key; `lint-rules.md` says what each lint rule checks. Read these instead of re-running the
+  commands, the schema file or the lint source; several files in one read.
 * Strategy knowledge: the playbook references listed in [references/procedure.md](references/procedure.md),
   the tactic index `skills/hoi4-campaign-playbook/references/tactics.md` (every tactic in one line; scan it
   before step 5), the tag's entry in `skills/hoi4-campaign-playbook/references/nation-openers.md`, and a
@@ -167,7 +170,9 @@ name), `dossier_hash` from the manifest, `models` from `RUN/agents-manifest.json
 (`errors`, `warnings`). Re-run step 7 once more. *Gate:* 0 errors. The operator then loads the plan
 with `hoi4_plan` and starts the autopilot; you do not.
 
-Time budget: steps 1 to 8 in about 30 minutes of wall time.
+Time budget: steps 1 to 8 in about 30 minutes of wall time. Every turn re-reads the whole conversation, so
+the cost of a step grows with everything before it: batch reads and fact queries, write plan.json in a few
+large parts, and do not re-read what the pack or an earlier read already gave you.
 
 ## Output contract
 
