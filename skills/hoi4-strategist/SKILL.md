@@ -141,10 +141,13 @@ applicable".
 **7. Validate and lint.**
 `python3 scripts/validate_plan.py RUN/plan.json --strict` (add `--userdir` / `--mod` when mods are
 active), `python3 scripts/hoi4facts/lint_plan.py RUN/plan.json --json > RUN/lint.json` and
-`python3 scripts/hoi4facts/check_calls.py RUN` (every player call against the tool catalogue). Fix and
-re-run. Also `python3 scripts/hoi4facts/facts.py research-timeline RUN/plan.json` and
-`facts.py focus-timeline <TAG> --date <start_date> <focus_path ids...>` and copy their dates into
-plan.md. *Gate:* 0 errors from all three; every remaining warning is in plan.md §11 with a reason.
+`python3 scripts/hoi4facts/check_calls.py RUN` (every player call against the tool catalogue), and
+`python3 scripts/strategist/strategize.py --run RUN --gaps-check` (every row of the blocked-lever table in
+`RUN/tool-gaps.md` answered: `used: <key>; payoff; workaround: ...` or `not used: <reason>`; edit the
+seeded rows in place). Fix and re-run. Check dates with `facts.py research-timeline RUN/plan.json` and
+`facts.py focus-timeline <TAG> --date <start_date> <focus_path ids...>`, but do not copy their tables: the
+orchestrator's gates write both for the final plan to `RUN/plan.timelines.md`, which plan.md cites.
+*Gate:* 0 errors from all four; every remaining warning is in plan.md §11 with a reason.
 
 **8. Critic pass.** Normally `scripts/strategist/strategize.py` runs steps 1-10 in order and starts the
 critic itself (prompts `strategist.md`, `fix.md`, `critic.md`, `answer.md`). Run standalone, start the

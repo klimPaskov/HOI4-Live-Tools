@@ -323,8 +323,9 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
    construction first (one slot on them until the next tier is done), then what the war plan needs
    (support companies, artillery, logistics). Nothing with `start_year` after its block year.
 2. `F tech <id>` for any tech with several parents; order the path so the ALL reading holds.
-3. `F research-timeline RUN/plan.json`; every block finishes before the next block year. Copy finish
-   dates into plan.md §3 as `[D research-timeline]`.
+3. `F research-timeline RUN/plan.json`; every block finishes before the next block year. Do not copy the
+   timeline into plan.md: the gates write it for the final plan to `RUN/plan.timelines.md`; plan.md §3
+   cites it (`[D research-timeline]`) and names only the dates its argument rests on.
 4. **Every slot busy, all the time (user rule).** Research serves the whole campaign, not only the current
    war: the game goes on after the goal, and the economy compounds. List enough techs that no slot waits
    until the horizon. When a block runs out before the next block year, fill the slots first with in-year
@@ -363,8 +364,9 @@ Read: the country section of `economy-build-orders.md` §10 when it exists; doss
 `F focus-tree <TAG> --depth 3`, `F focus <id>`, `F focus-timeline <TAG> --date <start> <ids...>`,
 `F bop <TAG>`.
 1. `focus_path` in order: no exclusive pair; each focus after its prerequisites; every runtime
-   `available` gate true in the phase that reaches it. Copy dates into plan.md §6 as
-   `[D focus-timeline]`. `focus_fallback` for a blocked focus.
+   `available` gate true in the phase that reaches it. The gates write the focus timeline of the final plan
+   to `RUN/plan.timelines.md`; plan.md §6 cites it (`[D focus-timeline]`) with the dates the phases rest on,
+   not a copied table. `focus_fallback` for a blocked focus.
    **The focus slot never idles:** the two lists together keep it busy from the start to the horizon
    under the plan's own conditions. A focus that waits for something (peace, a flag, land not yet held)
    has focuses that can start meanwhile listed after it, and the fallback list holds focuses whose

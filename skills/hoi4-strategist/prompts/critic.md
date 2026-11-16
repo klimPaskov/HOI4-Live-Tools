@@ -16,8 +16,11 @@ Inputs:
   cites), `RUN/pack/schema/<key>.md` and `RUN/pack/lint-rules.md`; read them instead of re-running those
   commands, and run `facts.py` for anything else you check;
 * `RUN/plan.json`, `RUN/plan.md`, `RUN/plan.brief.md`, `RUN/lint.json`;
-* `RUN/blocked-levers.md` (levers no tool carries yet) and `RUN/tool-gaps.md`: a blocked lever the goal
-  would use that is neither planned with its gap reported nor answered with why not is a major finding;
+* `RUN/blocked-levers.md` (levers no tool carries yet) and `RUN/tool-gaps.md`, whose table answers every
+  blocked lever for this plan (used with key and workaround, or not used with a reason): an answer that
+  does not hold for this goal (a lever it would use marked not used, a workaround the plan does not carry)
+  is a major finding;
+* `RUN/plan.timelines.md`: the research and focus timelines of the current plan, written by the gates;
 * in round 2: the earlier `RUN/review/critic-*.json` and `RUN/review/answers-*.json`.
 
 Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan files.
@@ -25,7 +28,7 @@ Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan fi
 Check every rubric row (16 rows, 0-2 each) against evidence: run the facts commands, `python3
 scripts/hoi4facts/lint_plan.py RUN/plan.json --json` and `python3 scripts/hoi4facts/check_calls.py RUN`
 (every player call against the tool catalogue; each invalid call is a blocker finding under row 10),
-and compare plan dates with `facts.py focus-timeline` and `research-timeline`. Check the goal reading against the user's words first. Then
+and compare plan dates with `RUN/plan.timelines.md` (re-run the timelines only after a change). Check the goal reading against the user's words first. Then
 walk the coverage table (plan.md §25) against `skills/hoi4-strategist/references/procedure.md`: all 29
 items present; each resolved by an executor key, a player item with an exact call that is also in the
 brief, or "not applicable" with a reason you can confirm with a facts command. A missing or unresolved
