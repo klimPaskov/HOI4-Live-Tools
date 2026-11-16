@@ -574,6 +574,9 @@ pub struct State {
     moves: Moves,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
+    /// Divisions the game refused to disband (a template the history locks: "Units cannot be
+    /// disbanded"): consolidation passes over them.
+    undisbandable: HashSet<String>,
     /// Refusals per politics pick (its done key): each refusal doubles the wait.
     pol_fails: HashMap<String, u32>,
     /// Political power when a pick was last refused: it is not tried again until the
@@ -740,6 +743,7 @@ impl Default for State {
             encircle: Default::default(),
             moves: Moves::default(),
             disbanded: 0,
+            undisbandable: HashSet::new(),
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
@@ -3228,8 +3232,14 @@ fn consolidate_step(
         }
     }
     let divisions = list(&supply, "divisions");
+    // a division the game refused is neither cut nor counted among those to fill
     let fills: Vec<(String, f64)> = divisions
         .iter()
+        .filter(|d| {
+            !d["id"]
+                .as_str()
+                .is_some_and(|i| state.undisbandable.contains(i))
+        })
         .filter_map(|d| {
             Some((
                 d["id"].as_str()?.to_string(),
@@ -3257,6 +3267,9 @@ fn consolidate_step(
         state.skip(now, "disband", "consolidate", 3 * DAY);
         return Ok(None);
     };
+    // one division per order: a refusal then names its division (e11: the start divisions of
+    // a locked template refused every press, and the run never learned which)
+    let ids = vec![ids[0].clone()];
     let count = ids.len();
     let (ok, why) = state.act(
         tools,
@@ -3267,13 +3280,15 @@ fn consolidate_step(
     )?;
     if ok {
         state.disbanded += count as u64;
+    } else {
+        state.undisbandable.insert(ids[0].clone());
     }
     // the pool refills the rest over some days before the next count
     state.skip(
         now,
         "disband",
         "consolidate",
-        if ok { 5 * DAY } else { 3 * DAY },
+        if ok { DAY } else { DAY / 4 },
     );
     Ok(Some(format!(
         "disband (consolidate to {until:.2} fill, keep {keep}) {count} from {army}: {ok} {why}"
@@ -7687,6 +7702,51 @@ mod tests {
             refuse_text: RefCell::new(HashMap::new()),
         }
     }
+    #[test]
+    fn consolidation_disbands_one_division_at_a_time_and_passes_over_refused_ones() {
+        let f = fake(vec![
+            ("hoi4_overview", json!({"player": "ETH"})),
+            (
+                "hoi4_states",
+                json!({"states": [{"state_id": 1, "controller": "ETH"}]}),
+            ),
+            (
+                "hoi4_supply",
+                json!({"divisions": [
+                    {"id": "a", "army": "A", "state_id": 1, "equipment_fill_min": 0.2},
+                    {"id": "b", "army": "A", "state_id": 1, "equipment_fill_min": 0.3},
+                    {"id": "c", "army": "A", "state_id": 1, "equipment_fill_min": 1.0},
+                    {"id": "d", "army": "A", "state_id": 1, "equipment_fill_min": 1.0}]}),
+            ),
+        ]);
+        let plan = json!({"disband": {"consolidate": {"until_fill": 0.85, "keep": 2}}});
+        let mut state = State::default();
+        f.refuse_with(
+            "hoi4_division_disband",
+            "input_readback_failed",
+            "divisions disbanded: expected game change not observed",
+        );
+        let out = disband_step(&mut state, &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("1 from A: false"), "{out}");
+        assert!(state.undisbandable.contains("a"));
+        // refused once: the next count leaves "a" out and takes "b" alone
+        f.refuse.borrow_mut().clear();
+        let out = disband_step(&mut state, &f, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("1 from A: true"), "{out}");
+        let sent: Vec<Value> = f
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n == "hoi4_division_disband" && a.get("request_id").is_some())
+            .map(|(_, a)| a["divisions"].clone())
+            .collect();
+        assert_eq!(sent, vec![json!(["a"]), json!(["b"])]);
+    }
+
     #[test]
     fn a_line_organisation_is_held_back_until_the_chooser_is_built() {
         let f = fake(vec![("hoi4_production_lines", json!({"lines": []}))]);
