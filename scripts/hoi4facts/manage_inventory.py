@@ -104,9 +104,9 @@ ITEMS = [
 ALERTS = {
     "no_national_focus": (["focus_path", "focus_fallback"], "focus"),
     "at_war": (None, None),
-    "free_dockyards": ([], "naval_lines"),
+    "free_dockyards": (["production"], "naval_lines"),
     "missing_equipment_production": (["production", "production_priority"], "military_lines"),
-    "modify_government": (["politics"], "government_seats"),
+    "modify_government": (["politics", "politics_auto"], "government_seats"),
     "unfulfilled_import_requests": (["auto_import"], "trade"),
     "air_wings_without_mission": (["air", "air_plan"], "air_wings"),
     "no_divisions_in_training": (["training"], "training"),
@@ -116,11 +116,18 @@ ALERTS = {
     "events_or_decisions_timeout": ([], "decisions"),
     "not_enough_garrison": ([], "occupation"),
     "doctrines_available": (["doctrines"], "doctrines"),
-    "modify_officer_corps": ([], "military_seats"),
-    "mio_traits": ([], "industrial_organisations"),
-    "admiral_assignable": ([], "fleets"),
+    "modify_officer_corps": (["politics_auto"], "military_seats"),
+    "mio_traits": (["mio"], "industrial_organisations"),
+    "admiral_assignable": (["navy"], "fleets"),
     "insufficient_energy": (["auto_import"], "trade"),
     "insufficient_resources": (["auto_import"], "trade"),
+    "outdated_equipment_in_production": ([], "military_lines"),
+    "research_slot_available": (None, "research_slots"),
+    "free_civilian_factories": (["construction"], "construction"),
+    "free_military_factories": (["production", "production_priority"], "military_lines"),
+    "operative_recruitable": (["intelligence"], "operatives"),
+    "special_project_available": (["special_projects"], "special_projects"),
+    "scientist_unassigned": (["special_projects"], "special_projects"),
 }
 
 
