@@ -236,6 +236,8 @@ class SupervisorTests(Folder):
         runs.record_user_files(self.user_dir, self.run_dir)
         self.fake = fake or FakeNative()
         self.clock = clock or Clock()
+        options.setdefault("swap", lambda: None)
+        options.setdefault("game_memory", lambda: None)
         s = supervisor.Supervisor(self.run_dir, self.prefix, lambda: self.fake, clock=self.clock,
                                   sleep=self.clock.sleep, front=front, **options)
         self.addCleanup(s.close_records)
@@ -673,6 +675,42 @@ class SupervisorTests(Folder):
         self.assertEqual(runs.read_json(os.path.join(self.run_dir, "plan.json")), before)
         self.assertTrue(any("runs as written" in n for n in s2.notes))
         self.assertIn("hoi4_autopilot", self.fake.names())
+    def test_a_short_machine_is_noted_at_the_start_and_reported(self):
+        s = self.ready(swap=lambda: (5.6, 7.0))
+        self.assertTrue(any("short of memory (5.6 of 7.0 GB swap" in n for n in s.notes))
+        s.stop("stopped_by_player")
+        with open(os.path.join(self.run_dir, "report.md"), encoding="utf-8") as f:
+            self.assertIn("swap 5.6 of 7.0 GB in use", f.read())
+
+    def test_the_run_ends_when_the_game_passes_its_memory_limit(self):
+        memory = [9.0]
+        s = self.ready(game_memory=lambda: memory[0])
+        self.clock.now += supervisor.SAMPLE_EVERY + 1
+        s.tick()
+        self.assertFalse(s.finished.is_set())
+        memory[0] = 10.6
+        self.clock.now += supervisor.SAMPLE_EVERY + 1
+        s.tick()
+        self.assertEqual(s.end_reason, "game_memory")
+        with open(os.path.join(self.run_dir, "report.md"), encoding="utf-8") as f:
+            self.assertIn("Ended: game_memory (the game uses 10.6 GB", f.read())
+
+    def test_a_date_that_stands_still_while_the_game_runs_ends_the_run_and_a_pause_does_not(self):
+        s = self.ready()
+        self.fake.paused = True
+        for _ in range(8):                                                # paused: the date may stand
+            self.clock.now += supervisor.SAMPLE_EVERY + 1
+            s.tick()
+        self.assertFalse(s.finished.is_set())
+        self.fake.paused = False
+        for _ in range(5):                                                # running, 5 minutes on one date
+            self.clock.now += supervisor.SAMPLE_EVERY + 1
+            s.tick()
+        self.assertFalse(s.finished.is_set())
+        self.clock.now += supervisor.SAMPLE_EVERY + 1
+        s.tick()
+        self.assertEqual(s.end_reason, "game_stalled")
+        self.assertTrue(any("has hung" in n for n in s.notes))
 
     def test_the_lease_is_renewed_and_taken_again_when_lost(self):
         s = self.ready()

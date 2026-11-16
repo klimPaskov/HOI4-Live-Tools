@@ -20,6 +20,9 @@ closes or the run is stopped:
     health      the game or the runtime gone: stop
     end         the plan's goal reached (the executor's goal_reached change) or its goal.deadline passed in the
                 game: stop with that reason (HOI4_LIVE_END=off keeps the run going)
+    limits      the machine's swap and load noted at the start; the run ends with a plain message when the game's
+                memory passes HOI4_LIVE_GAME_MEMORY_GB (default 10; 0 off) or its date stands still while it runs
+                for HOI4_LIVE_STALL_MINUTES (default 5; 0 off)
     watch       every SAMPLE_EVERY seconds one line in watch.jsonl: game date, war stats, each army's supply and
                 organisation (reads only), for the report and for looking back at how the war went
     stop        executor off, lease released, runtime closed, report.md written, the active-run pointer removed;
@@ -34,6 +37,7 @@ import json
 import os
 import re
 import secrets
+import subprocess
 import sys
 import tempfile
 import threading
@@ -51,6 +55,8 @@ RETRY_EVERY = 5
 TICK = 5
 HEALTH_EVERY = 15
 SAMPLE_EVERY = 60
+GAME_MEMORY_GB = 10.0
+STALL_MINUTES = 5.0
 HOLDER = "hoi4-live-play"
 # Actions whose repeat is meaningful (a clock change, a plan step) or that the supervisor owns.
 NOT_DEDUPED = {"hoi4_time", "hoi4_army_plan", "hoi4_plan_run", "hoi4_autopilot", "hoi4_input_lease"}
@@ -162,12 +168,15 @@ def shrink(value, budget):
 class Supervisor:
     def __init__(self, run, prefix, start_native, clock=time.time, sleep=time.sleep, front=None,
                  idle_pause=None, duplicate_window=DUPLICATE_WINDOW, campaign_wait=CAMPAIGN_WAIT,
-                 retry_every=RETRY_EVERY):
+                 retry_every=RETRY_EVERY, swap=None, game_memory=None):
         self.run, self.prefix = run, prefix
         self.start_native, self.clock, self.sleep, self.front = start_native, clock, sleep, front
         # Seconds; None reads the run's settings file (and follows a change made to it during the run).
         self.idle_pause_override, self.duplicate_window = idle_pause, duplicate_window
         self.campaign_wait, self.retry_every = campaign_wait, retry_every
+        # The machine readers (tests pass their own): swap (used, total) GB and the game's memory in GB.
+        self.swap = swap or machine_swap
+        self.read_game_memory = game_memory or self.game_memory_gb
         self.request = runs.read_json(os.path.join(run, "request.json")) or {}
         self.session = runs.read_json(os.path.join(run, "session.json")) or {}
         self.native = None
@@ -183,6 +192,7 @@ class Supervisor:
         self.last_health = self.started
         self.last_sample = self.started
         self.goal_reached = None
+        self.last_date, self.date_since, self.last_paused = None, None, None
         self.idle_paused = False
         self.idle_paused_game = False
         self.idle_woken = False
@@ -310,6 +320,7 @@ class Supervisor:
                       % error_code(body))
         self.start_date = (overview.get("date") or {}).get("text") if isinstance(overview, dict) else None
         self.event("ready", date=self.start_date, executor=not err)
+        self.note_machine()
         self.last_player = self.clock()
         # The status turns "ready" once the endpoint exists (main), so nobody is told to play before it can.
         self.state = "ready"
@@ -609,6 +620,12 @@ class Supervisor:
             if date and self.ends() and self.past_deadline(date):
                 self.stop("deadline")
                 return
+            limit = self.over_limit(now, date)
+            if limit:
+                self.event("limit", reason=limit[0], message=limit[1])
+                self.note(limit[1])
+                self.stop(limit[0])
+                return
         if self.planner is not None:
             try:
                 self.planner.tick()
@@ -628,12 +645,71 @@ class Supervisor:
         deadline = report._day_number(goal.get("deadline"))  # noqa: SLF001
         return day is not None and deadline is not None and int(day) > int(deadline)
 
+    # ------------------------------------------------------------------------------------------ limits
+    @staticmethod
+    def env_number(name, default):
+        try:
+            return float(os.environ.get(name, default))
+        except ValueError:
+            return default
+
+    def game_memory_gb(self):
+        """The game's resident memory in GB (ps), None where it cannot be read."""
+        pid = (self.session.get("game") or {}).get("pid")
+        if not pid or os.name == "nt":
+            return None
+        try:
+            out = subprocess.run(["ps", "-o", "rss=", "-p", str(int(pid))], capture_output=True, text=True,
+                                 timeout=10).stdout.strip()
+            return int(out.split()[0]) / (1024.0 * 1024.0) if out else None
+        except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+            return None
+
+    def note_machine(self):
+        """Swap and load at the start: a machine short of memory plays at half its pace or less."""
+        info = {}
+        try:
+            info["load"] = [round(x, 2) for x in os.getloadavg()]
+        except (AttributeError, OSError):
+            pass
+        info["cpus"] = os.cpu_count()
+        swap = self.swap()
+        if swap:
+            info["swap_used_gb"], info["swap_total_gb"] = swap
+        self.event("machine", **info)
+        used, total = swap or (0, 0)
+        if total and used / total > 0.5:
+            self.note("the machine is short of memory (%.1f of %.1f GB swap in use): the game runs slower and the "
+                      "campaign falls behind its plan; close other programs" % (used, total))
+        return info
+
+    def over_limit(self, now, date):
+        """(reason, message) when the game's memory passed the limit or its date stood still while it ran."""
+        limit = self.env_number("HOI4_LIVE_GAME_MEMORY_GB", GAME_MEMORY_GB)
+        if limit > 0:
+            gb = self.read_game_memory()
+            if gb is not None and gb > limit:
+                return ("game_memory", "the game uses %.1f GB of memory, over the %.0f GB limit: the run ends before "
+                        "the machine stalls; save, restart the game and run hoi4-live play again" % (gb, limit))
+        stall = self.env_number("HOI4_LIVE_STALL_MINUTES", STALL_MINUTES)
+        if date is None or self.last_paused is not False:
+            self.last_date, self.date_since = date, None
+            return None
+        if date != self.last_date or self.date_since is None:
+            self.last_date, self.date_since = date, now
+            return None
+        if stall > 0 and now - self.date_since >= stall * 60:
+            return ("game_stalled", "the game date has stood at %s for %d minutes while the game runs: the game has "
+                    "hung; close it, start it again and run hoi4-live play" % (date, (now - self.date_since) // 60))
+        return None
+
     def sample(self, now):
         """One watch.jsonl line (reads only); the game date, or None when it could not be read."""
         err, overview = self.native.call("hoi4_overview", {})
         if err or not isinstance(overview, dict):
             return None
         date = (overview.get("date") or {}).get("text")
+        self.last_paused = overview.get("paused")
         line = {"t": round(now, 3), "date": date, "paused": overview.get("paused")}
         err, stats = self.native.call("hoi4_war_stats", {})
         if not err and isinstance(stats, dict):
@@ -736,6 +812,27 @@ class Supervisor:
 
 # ---------------------------------------------------------------------------------------------------------------
 # endpoint
+
+
+def machine_swap():
+    """(used GB, total GB) of swap, None where it cannot be read (macOS sysctl, Linux /proc/meminfo)."""
+    try:
+        if sys.platform == "darwin":
+            out = subprocess.run(["sysctl", "-n", "vm.swapusage"], capture_output=True, text=True,
+                                 timeout=10).stdout
+            total = re.search(r"total = ([\d.]+)M", out)
+            used = re.search(r"used = ([\d.]+)M", out)
+            if total and used:
+                return float(used.group(1)) / 1024.0, float(total.group(1)) / 1024.0
+        elif os.path.exists("/proc/meminfo"):
+            with open("/proc/meminfo", encoding="utf-8") as f:
+                kb = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f if ":" in line)
+                      if v.split() and v.split()[0].isdigit()}
+            if kb.get("SwapTotal"):
+                return (kb["SwapTotal"] - kb.get("SwapFree", 0)) / 1048576.0, kb["SwapTotal"] / 1048576.0
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return None
 
 
 def endpoint_address(system=None):

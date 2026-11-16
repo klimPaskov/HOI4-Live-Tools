@@ -182,6 +182,19 @@ def pace(start_date, end_date, ready_t, ended):
     return (b - a) / ((ended - ready_t) / 60.0)
 
 
+def machine_line(events):
+    """Load and swap when the run started (the supervisor's machine event)."""
+    m = next((e for e in events if e.get("event") == "machine"), None)
+    if not m:
+        return "unknown"
+    parts = []
+    if m.get("load"):
+        parts.append("load %s on %s CPUs" % (" / ".join(map(str, m["load"])), m.get("cpus") or "?"))
+    if m.get("swap_total_gb"):
+        parts.append("swap %.1f of %.1f GB in use" % (m.get("swap_used_gb") or 0, m["swap_total_gb"]))
+    return ", ".join(parts) or "unknown"
+
+
 def build(run, reason, counts, final, started, ended):
     request = runs.read_json(os.path.join(run, "request.json")) or {}
     calls = _jsonl(os.path.join(run, "calls.jsonl"))
@@ -198,8 +211,10 @@ def build(run, reason, counts, final, started, ended):
         "",
         "- Goal: %s" % request.get("goal", "?"),
         "- Plan: %s, %s mode" % (request.get("plan", "?"), str(request.get("mode", "fair")).upper()),
-        "- Ended: %s" % reason,
+        "- Ended: %s%s" % (reason, "".join(" (%s)" % e.get("message") for e in events
+                                           if e.get("event") == "limit" and e.get("message"))[:400]),
         "- Wall time: %.1f minutes" % ((ended - started) / 60.0),
+        "- Machine at the start: %s" % machine_line(events),
         "- Game dates: %s to %s" % (start_date or "?", final.get("date") or "?"),
         "- Pace: %s" % ("%.1f game days per wall minute (paused time included; a machine short of memory "
                         "plays at half its usual pace or less, so judge the result against it)" % rate
