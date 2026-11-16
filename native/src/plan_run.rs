@@ -11959,8 +11959,10 @@ mod tests {
             "hoi4_overview",
             json!({"paused": true, "date": {"raw": at}}),
         )]);
-        let mut state = State::default();
-        state.last_hour = at;
+        let mut state = State {
+            last_hour: at,
+            ..State::default()
+        };
         note_setup(
             &mut state,
             &tools,
@@ -11975,7 +11977,7 @@ mod tests {
             2000,
         );
         let mine: Vec<&Value> = list(&feed, "changes")
-            .into_iter()
+            .iter()
             .filter(|c| c["detail"]["game_hour"] == json!(at))
             .collect();
         assert_eq!(mine.len(), 1);
