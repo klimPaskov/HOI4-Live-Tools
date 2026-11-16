@@ -102,6 +102,43 @@ class Lessons(unittest.TestCase):
         self.assertEqual(EXECUTOR_RULES - named, set())
 
 
+class StrikePosts(unittest.TestCase):
+    """war.strike_posts without a game: what a strike formation keeps on its covered states (the executor's
+    plan_strike.rs covers and plan_formations.rs cover_counts) and what is left to strike."""
+
+    def run_rule(self, plan):
+        lint = lint_plan.Lint.__new__(lint_plan.Lint)
+        lint.plan, lint.war, lint.hand, lint.findings, lint.facts = plan, plan.get("war") or {}, False, [], {}
+        lint.strike_posts()
+        return lint
+
+    def plan(self, strike):
+        return {"war": {"strike": False}, "army_layout": [
+            {"name_hint": "South", "role": "strike", "count": 3, "state": 835, "covers": [835],
+             "guard_states_in_order": [835]},
+            {"name_hint": "Bale watch", "role": "guard", "task_of": "South", "count": 2, "state": 836,
+             "guard_states_in_order": [836]},
+            {"name_hint": "Sidamo watch", "role": "guard", "task_of": "South", "count": 1, "state": 837},
+            {"name_hint": "Capital", "role": "guard", "count": 1, "state": 271}],
+            "phases": [{"id": "P3", "overrides": {"war": {"strike": strike}}}]}
+
+    def test_task_counts_and_the_cover_knob_are_kept_back(self):
+        lint = self.run_rule(self.plan({"stack": 4, "cover": 1}))
+        row = lint.facts["strike_posts"][0]
+        self.assertEqual((row["formation"], row["divisions"], row["posts"], row["strike"]), ("South", 6, 4, 2))
+        self.assertEqual(row["posts_by_state"], {"835": 1, "836": 2, "837": 1})
+        self.assertEqual([f["rule"] for f in lint.findings], ["war.strike_posts"])
+        self.assertIn("phases[P3]", lint.findings[0]["where"])
+        self.assertIn("2 of its 6 divisions", lint.findings[0]["message"])
+
+    def test_enough_left_or_no_strike(self):
+        self.assertEqual(self.run_rule(self.plan({"stack": 2, "cover": 1})).findings, [])
+        self.assertEqual(self.run_rule(self.plan({"stack": 5, "cover": 0}))
+                         .facts["strike_posts"][0]["strike"], 3)  # cover 0: no own post, tasks still keep theirs
+        lint = self.run_rule(self.plan(False))
+        self.assertEqual((lint.findings, lint.facts), ([], {}))
+
+
 class EvalWithoutGame(unittest.TestCase):
     def test_reference_against_itself_is_perfect(self):
         for name in (ITA, ETH):

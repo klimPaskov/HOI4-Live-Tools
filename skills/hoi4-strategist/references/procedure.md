@@ -612,7 +612,9 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
    rows (`army` = its layout name_hint) in the order its road opens, the first `path` province on fed land, and
    state capitals early (holding half the enemy's states can start a scripted surrender clock). Against a
    continuous line keep battle plans and encirclement and set `war.strike` false with the reason in `war.why`.
-   A phase may switch it (`phases[].overrides.war.strike`). Lint `war.strike_choice`.
+   A phase may switch it (`phases[].overrides.war.strike`). Lint `war.strike_choice`. A strike formation
+   keeps `strike.cover` on each own covered state and a task's `count` on that task's states while they touch
+   enemy land; only the rest strike. Count the stack from lint fact `strike_posts` (lint `war.strike_posts`).
 8. **Defence first** (a defender, or every front the plan does not attack on):
    a. Per enemy front, the line on the best ground: rivers, mountains, forests and hills from `F province` and
       `F route --avoid-rivers`, as short as the force can man. `defense_lines` {`id`, `army`, `kind`: `fallback`
