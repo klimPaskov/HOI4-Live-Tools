@@ -1401,6 +1401,11 @@
           },
           "x-owner": "text"
         },
+        "ai_baseline_why": {
+          "type": "string",
+          "description": "why the plan schedules fewer factories or divisions on a date than the game's own AI reaches as the same country (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json; lint plan.ai_baseline)",
+          "x-owner": "lint"
+        },
         "capitulation": {
           "type": "object",
           "x-owner": "lint",
