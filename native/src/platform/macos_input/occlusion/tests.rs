@@ -130,3 +130,22 @@ fn a_visible_system_prompt_is_named_and_hidden_ones_or_apps_are_not() {
         None
     );
 }
+
+#[test]
+fn the_dock_counts_as_shown_only_on_screen_at_the_dock_level() {
+    let row = |o: &str, on: bool, a: f64, l: i32| (Some(o.to_string()), on, a, l);
+    assert!(dock_among(
+        &[row("hoi4", true, 1.0, 0), row("Dock", true, 1.0, 20)],
+        20
+    ));
+    assert!(!dock_among(&[row("Dock", false, 1.0, 20)], 20));
+    assert!(!dock_among(&[row("Dock", true, 1.0, -2147483624)], 20));
+    assert!(!dock_among(&[row("Dock", true, 0.0, 20)], 20));
+    assert!(!dock_among(
+        &[
+            row("Notification Center", true, 1.0, 20),
+            (None, true, 1.0, 20)
+        ],
+        20
+    ));
+}
