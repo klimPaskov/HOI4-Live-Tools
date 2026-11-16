@@ -310,7 +310,7 @@ fn key(value: &str) -> Result<()> {
         || value.len() > 256
         || !value
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
     {
         return Err(error(
             "invalid_arguments",

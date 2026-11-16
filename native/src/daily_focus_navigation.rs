@@ -570,7 +570,7 @@ impl Navigator {
                 || !w
                     .active
                     .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
                 || crate::calendar::decode(w.date_raw).is_err()
                 || w.observed_unix_ms == 0
                 || w.checksum != wait_hash(w)?
@@ -748,7 +748,7 @@ impl Navigator {
             || active.len() > 256
             || !active
                 .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             || crate::calendar::decode(date_raw).is_err()
         {
             return Err(invalid());

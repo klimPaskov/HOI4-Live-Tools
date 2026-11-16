@@ -161,7 +161,9 @@ pub fn observe(process: &dyn Process) -> Result<ProgressSnapshot> {
         }
         let key = r.string_bounded(pointer + 0x18, 256)?;
         if key.is_empty()
-            || !key.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            || !key
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
             || !distinct_keys.insert(key.clone())
         {
             return Err(Error::new(

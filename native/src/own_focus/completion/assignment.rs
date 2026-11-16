@@ -244,7 +244,9 @@ pub(crate) fn snapshot(
         }
         let name = r.string_bounded(focus + 0x18, 256)?;
         if name.is_empty()
-            || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             || keys.insert(name.clone(), focus).is_some()
         {
             return Err(Error::new(

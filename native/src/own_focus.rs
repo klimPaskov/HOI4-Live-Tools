@@ -274,7 +274,10 @@ fn snapshot_model(
         || limit > 100
         || offset > 4096
         || prefix.is_some_and(|s| {
-            s.len() > 128 || !s.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            s.len() > 128
+                || !s
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
         })
     {
         return Err(Error::new(
@@ -385,7 +388,9 @@ fn snapshot_model(
         }
         let key = r.string_bounded(focus + 0x18, 256)?;
         if key.is_empty()
-            || !key.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            || !key
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
             || !key_set.insert(key.clone())
         {
             return Err(Error::new(
@@ -654,7 +659,9 @@ pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
 pub(crate) fn validate_key(key: &str) -> Result<()> {
     if key.is_empty()
         || key.len() > 128
-        || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        || !key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
     {
         return Err(Error::new(
             "invalid_argument",
@@ -860,4 +867,17 @@ pub fn command_selected_detail(
         true,
     )?;
     Ok((body, context.expect("Command focus context requested")))
+}
+
+#[cfg(test)]
+mod key_tests {
+    /// Vanilla keys carry a hyphen (ETH_the_second_italo-ethiopian_war): refusing it stopped
+    /// the focus step of an Ethiopia run on every tick once that focus was active (e4, 16 Nov).
+    #[test]
+    fn a_focus_key_with_a_hyphen_is_valid() {
+        assert!(super::validate_key("ETH_the_second_italo-ethiopian_war").is_ok());
+        assert!(super::validate_key("GER_rhineland").is_ok());
+        assert!(super::validate_key("GER rhineland").is_err());
+        assert!(super::validate_key("").is_err());
+    }
 }
