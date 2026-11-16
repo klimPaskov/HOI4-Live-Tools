@@ -222,7 +222,8 @@
 //!   contingencies          [{"id","when" (or "trigger"),"then":{"phase"?,"overrides"?} (or "phase" and
 //!                          "overrides" beside "when"),"revise"?}]: when the trigger holds the contingency
 //!                          becomes active (feed and alarm `contingency_triggered`; its phase is switched to
-//!                          once) and its overrides apply over the phase's while it is active; it clears when
+//!                          once) and its overrides apply over the phase's while it is active (its
+//!                          `focus_path` goes in front of the path in force, it never replaces it); it clears when
 //!                          the trigger is false again (unknown leaves it as it is; one triggered by a missed
 //!                          checkpoint stays)
 //!   politics[].when        a gated pick (a law behind war support, ...) waits until its predicate holds
@@ -6306,30 +6307,59 @@ fn judge_strategy(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameH
 /// The plan with the active phase's and the active contingencies' overrides merged over it
 /// (None when nothing is overridden).
 fn strategy_overrides(state: &State, plan: &Value) -> Option<Value> {
-    let mut layers: Vec<&Value> = Vec::new();
+    // (overrides, from a contingency)
+    let mut layers: Vec<(&Value, bool)> = Vec::new();
     if let Some((phase, _)) = &state.strategy.phase {
         if let Some((_, p)) = phase_list(plan).into_iter().find(|(id, _)| id == phase) {
-            layers.push(&p["overrides"]);
+            layers.push((&p["overrides"], false));
         }
     }
     for c in list(plan, "contingencies") {
         if item_id(c).is_some_and(|id| state.strategy.contingencies.contains_key(&id)) {
-            layers.push(then_field(c, "overrides"));
+            layers.push((then_field(c, "overrides"), true));
         }
     }
-    let layers: Vec<&Map<String, Value>> = layers
+    let layers: Vec<(&Map<String, Value>, bool)> = layers
         .into_iter()
-        .filter_map(Value::as_object)
-        .filter(|o| !o.is_empty())
+        .filter_map(|(v, c)| v.as_object().map(|o| (o, c)))
+        .filter(|(o, _)| !o.is_empty())
         .collect();
     if layers.is_empty() {
         return None;
     }
     let mut merged = plan.clone();
-    for layer in layers {
-        apply_overrides(&mut merged, layer);
+    for (layer, contingency) in layers {
+        if contingency {
+            prepend_focus_path(&mut merged, layer);
+        } else {
+            apply_overrides(&mut merged, layer);
+        }
     }
     Some(merged)
+}
+
+/// A contingency's overrides, except that its `focus_path` goes in front of the path in force
+/// instead of replacing it: a contingency adds urgent focuses, it does not cancel the plan's own.
+/// e3, 16 Nov 2026: a stability contingency already true on the first day replaced Ethiopia's
+/// whole path (the war focus, the army branch, the counter-attack) for the entire war. A phase
+/// still replaces the path, since a phase is a change of course.
+fn prepend_focus_path(plan: &mut Value, overrides: &Map<String, Value>) {
+    let Some(Value::Array(first)) = overrides.get("focus_path") else {
+        apply_overrides(plan, overrides);
+        return;
+    };
+    let mut path: Vec<Value> = first.clone();
+    for key in plan["focus_path"].as_array().cloned().unwrap_or_default() {
+        if !path.contains(&key) {
+            path.push(key);
+        }
+    }
+    let mut rest = overrides.clone();
+    rest.remove("focus_path");
+    apply_overrides(plan, &rest);
+    if let Some(object) = plan.as_object_mut() {
+        object.insert("focus_path".into(), Value::Array(path));
+    }
 }
 
 /// Overrides over a plan: top-level keys are replaced (null removes one), `war` and `alarms` are
@@ -13613,6 +13643,35 @@ mod tests {
             .iter()
             .filter_map(|a| a["code"].as_str().map(str::to_string))
             .collect()
+    }
+
+    #[test]
+    fn a_contingency_focus_path_goes_in_front_of_the_plan_path() {
+        let plan = json!({
+            "focus_path": ["war_focus", "army", "counter_attack"],
+            "contingencies": [{"id": "c_low_stability", "when": "stability < 0.4",
+                "overrides": {"focus_path": ["rally", "army"], "stance": "x"}}],
+            "phases": [{"id": "p2", "overrides": {"focus_path": ["other"]}}]
+        });
+        let mut state = State::default();
+        assert!(strategy_overrides(&state, &plan).is_none());
+        state
+            .strategy
+            .contingencies
+            .insert("c_low_stability".into(), (0, false));
+        let merged = strategy_overrides(&state, &plan).unwrap();
+        assert_eq!(
+            merged["focus_path"],
+            json!(["rally", "army", "war_focus", "counter_attack"])
+        );
+        assert_eq!(merged["stance"], "x");
+        // a phase still replaces the path
+        let mut over = plan.clone();
+        apply_overrides(
+            &mut over,
+            plan["phases"][0]["overrides"].as_object().unwrap(),
+        );
+        assert_eq!(over["focus_path"], json!(["other"]));
     }
 
     #[test]

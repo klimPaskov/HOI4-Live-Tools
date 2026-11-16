@@ -1434,6 +1434,16 @@ class TacticsRules(unittest.TestCase):
         plan["manage"] = {"stability_floor": 0.01}
         self.assertNoHit(plan, "manage.stability_owner")
 
+    def test_contingency_at_start(self):
+        # the fixture country's history sets its stability: a contingency already true on day one is named
+        plan = self.plan()
+        plan["contingencies"] = [{"id": "c_low", "when": "stability < 0.99",
+                                  "overrides": {"focus_path": ["ITA_a"]}}]
+        f = self.assertHit(plan, "contingency.at_start", "warning", "contingencies[c_low].when")
+        self.assertIn("in front of the main path", f["message"])
+        plan["contingencies"][0]["when"] = "stability < 0.01"
+        self.assertNoHit(plan, "contingency.at_start")
+
     def test_stability_first(self):
         # an owner only in politics_auto waits behind the priced dated picks
         plan = self.plan()

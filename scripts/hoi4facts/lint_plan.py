@@ -4165,6 +4165,44 @@ class Lint:
                          f"{label} is affordable only on {derive.fmt(derive.date_of(d))}, {d - due} days after its "
                          f"date {derive.fmt(derive.date_of(due))}: {how}")
 
+    START_CMP = re.compile(r"^\s*stability\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*$")
+
+    def contingency_at_start(self):
+        """contingency.at_start: a contingency whose `when` already holds on the first day is active from the first
+        tick, so its overrides apply from day one (a stability contingency at 0.4 for a country starting at 0.29
+        replaced the war focus and the whole army branch for the entire war, before contingency focus paths were
+        put in front of the main path). Judged on the start stability the history sets."""
+        # only a start the history sets: the 0.5 default is not what a country without set_stability shows
+        f = self.world.country(self.tag).get("stability") if self.world is not None and self.tag else None
+        start = f.get("v") if isinstance(f, dict) else None
+        if not isinstance(start, (int, float)):
+            return
+        ops = {"<": lambda a, b: a < b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b,
+               ">=": lambda a, b: a >= b}
+
+        def holds(when):
+            if isinstance(when, str):
+                m = self.START_CMP.match(when)
+                return bool(m) and ops[m.group(1)](start, float(m.group(2)))
+            if isinstance(when, dict) and isinstance(when.get("all"), list) and when["all"]:
+                return all(holds(w) for w in when["all"])
+            if isinstance(when, dict) and isinstance(when.get("any"), list):
+                return any(holds(w) for w in when["any"])
+            return False
+        for i, c in enumerate(self.list_of("contingencies")):
+            over = c.get("overrides") if isinstance(c.get("overrides"), dict) else {}
+            if not over or not holds(c.get("when")):
+                continue
+            keys = sorted(over)
+            self.add("warning", "contingency.at_start", f"contingencies[{c.get('id') or i}].when",
+                     f"`{c.get('when')}` already holds at the start ({self.tag} starts at stability {start:g}), so "
+                     f"this contingency is active from the first tick and its overrides {keys} apply from day one "
+                     f"for as long as it holds"
+                     + (" (its focus_path goes in front of the main path, delaying every focus of it)"
+                        if "focus_path" in over else "")
+                     + ". Put the lever in the main plan (a politics pick, a focus in focus_path) or give `when` a "
+                       "condition that is false at the start")
+
     def stability_owner(self):
         """A country that starts under the plan's stability floor needs something that raises it: a politics,
         politics_auto.order or decision_rules entry whose `when` reads stability.
@@ -4894,7 +4932,8 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.alert_owners, self.idle_wings,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.alert_owners,
+                 self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,
                  self.navy_strike_without_patrol, self.peace_order, self.defense_lines,
