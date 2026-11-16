@@ -213,6 +213,9 @@ class Supervisor:
     # ------------------------------------------------------------------------------------------ records
     def event(self, kind, **detail):
         with self.lock:
+            # the run may have ended on another thread (hoi4_run stop, the game closing): no record after it
+            if self._events.closed:
+                return
             self._events.write(json.dumps({"t": round(self.clock(), 3), "event": kind, **detail}) + "\n")
             self._events.flush()
 
@@ -235,6 +238,10 @@ class Supervisor:
     def _record_call(self, name, args, out, ms, source):
         shown = {k: v for k, v in (args or {}).items() if k != "lease_token"}
         with self.lock:
+            # a call answered while the run ends (hoi4_run stop closes the records) is not recorded; it
+            # must not turn its own answer into an error
+            if self._log.closed:
+                return
             self._log.write(json.dumps({"t": round(self.clock(), 3), "source": source, "tool": name, "args": shown,
                                         "ms": ms, "isError": out["isError"], "code": error_code(out["body"]),
                                         "already_done": bool(isinstance(out["body"], dict)
@@ -760,9 +767,10 @@ class Supervisor:
 
     # ------------------------------------------------------------------------------------------ stop
     def close_records(self):
-        for record in (self._log, self._events):
-            if not record.closed:
-                record.close()
+        with self.lock:
+            for record in (self._log, self._events):
+                if not record.closed:
+                    record.close()
 
     def release(self):
         if self.native and self.native.alive() and self.token:
