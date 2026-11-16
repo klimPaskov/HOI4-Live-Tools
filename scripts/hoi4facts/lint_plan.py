@@ -38,6 +38,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            war), or the lists run out more than 30 days before the horizon
   focus.unreachable_gate   a phase, contingency or checkpoint gate on focus_done:K while the focus path takes a
                            focus that rules K out (mutually exclusive with it or with a whole prerequisite group)
+  decision.unreachable     a decision in decisions or decision_rules whose visible/allowed/available trigger (or
+                           its category's) needs a focus that no focus list of the plan takes
   focus.unconfirmed        (warning) the slot rests on a focus whose gate cannot be decided from the plan
                            (ownership, control, variables) while no focus that is certainly available is
                            listed for that time; or a listed focus waits for a prerequisite only the game
@@ -4518,6 +4520,75 @@ class Lint:
                      "add a phase with axes entered by measurable conditions (a date, casualty_ratio:<enemy>, "
                      "own_surrender_progress, a focus the focus path reaches)")
 
+    @staticmethod
+    def _needed_focuses(block):
+        """Focus keys a trigger block requires outright: has_completed_focus at its top level or under AND
+        (an OR, NOT, if or scope change is left out, so nothing found there is a requirement)."""
+        out = []
+        for k, v in block if isinstance(block, list) else []:
+            kl = (k or "").lower()
+            if kl == "has_completed_focus" and isinstance(v, str):
+                out.append(v)
+            elif kl == "and":
+                out += Lint._needed_focuses(v)
+        return out
+
+    def decision_reach(self):
+        """decision.unreachable: a decision in `decisions` or `decision_rules` (not "never") whose own visible,
+        allowed or available trigger, or its category's, needs a focus that no focus list of the plan takes
+        (focus_path, focus_fallback, a phase or contingency override) and the country has not completed at the
+        start. The game never shows it, so the executor waits forever and the plan's sums count a gain that never
+        comes (Germany 1937: six price-control decisions, 135 PP for -0.55 consumer goods, were planned while the
+        category needs Institute Price Controls, which the path never took; consumer goods held 27 of 43
+        civilian factories against the AI's 19 of 51)."""
+        if self.world is None:
+            return
+        wanted = []
+        for i, d in enumerate(self.plan.get("decisions") or []):
+            key = d if isinstance(d, str) else (d.get("decision") or d.get("id") if isinstance(d, dict) else None)
+            if key:
+                wanted.append((f"decisions[{i}]", key))
+        for i, r in enumerate(self.list_of("decision_rules")):
+            if r.get("decision") and not r.get("never"):
+                wanted.append((f"decision_rules[{i}]", r["decision"]))
+        if not wanted:
+            return
+        planned = set()
+        for key in ("focus_path", "focus_fallback"):
+            planned.update(x for x in self.plan.get(key) or [] if isinstance(x, str))
+        for src in list(self.list_of("phases")) + list(self.list_of("contingencies")):
+            over = src.get("overrides") if isinstance(src.get("overrides"), dict) else {}
+            for key in ("focus_path", "focus_fallback"):
+                planned.update(x for x in over.get(key) or [] if isinstance(x, str))
+        country = self.world.country(self.tag) if self.tag else {}
+        planned.update((f.get("v") if isinstance(f, dict) else f) for f in country.get("completed_focuses") or [])
+        planned.update(self.meta.get("completed_focuses", []))
+        known = set()
+        for tree in self.game.focus_trees().values():
+            known.update(tree)
+        index = {}
+        for d in self.world.decision_index():
+            index.setdefault(d["id"], d)
+        cats = self.world.decision_categories()
+        for where, key in wanted:
+            d = index.get(key)
+            if d is None:
+                continue
+            cat = cats.get(d["category"]) or {}
+            needs = []
+            for block, whose in ((cat.get("visible"), f"category {d['category']} visible"),
+                                 (cat.get("allowed"), f"category {d['category']} allowed"),
+                                 (derive.get1(d["block"], "visible"), "visible"),
+                                 (derive.get1(d["block"], "allowed"), "allowed"),
+                                 (derive.get1(d["block"], "available"), "available")):
+                needs += [(f, whose) for f in self._needed_focuses(block) if f in known and f not in planned]
+            if needs:
+                text = "; ".join(f"{f} ({whose})" for f, whose in needs)
+                self.add("error", "decision.unreachable", where,
+                         f"{key} needs {text}, which no focus list of the plan takes: the game never offers it. "
+                         "Put the focus on the path before the decision's date (with what that branch costs: "
+                         "exclusive focuses, laws it sets), or drop the decision and the gain the plan counts on")
+
     START_CMP = re.compile(r"^\s*stability\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*$")
 
     def contingency_at_start(self):
@@ -5285,7 +5356,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.decision_reach, self.alert_owners,
                  self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,

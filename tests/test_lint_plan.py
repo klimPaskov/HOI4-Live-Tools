@@ -1526,6 +1526,22 @@ class TacticsRules(unittest.TestCase):
         plan["phases"][1]["enter"] = "focus_done:ETH_northern_thrust"
         self.assertNoHit(plan, "focus.unreachable_gate")
 
+    def test_decision_needs_focus_off_the_path(self):
+        # the price-control decisions are shown only after Institute Price Controls (needs Autarky Efforts)
+        plan = strategist(load("germany-fair-1936-1938.plan.json"))
+        plan["decision_rules"] = [{"id": "dr_tariffs", "decision": "GER_import_tariffs", "when": "date >= 1936.12.15"},
+                                  {"id": "dr_never", "decision": "GER_implement_rations", "never": True}]
+        plan["focus_path"] = [k for k in plan["focus_path"]
+                              if k not in ("GER_autarky_efforts", "GER_institute_price_controls")]
+        plan["focus_fallback"] = [k for k in plan.get("focus_fallback") or []
+                                  if k not in ("GER_autarky_efforts", "GER_institute_price_controls")]
+        f = self.assertHit(plan, "decision.unreachable", "error", "decision_rules[0]")
+        self.assertIn("GER_institute_price_controls", f["message"])
+        self.assertNoHit(plan, "decision.unreachable", text="decision_rules[1]")
+        at = plan["focus_path"].index("GER_the_four_year_plan") + 1
+        plan["focus_path"][at:at] = ["GER_autarky_efforts", "GER_institute_price_controls"]
+        self.assertNoHit(plan, "decision.unreachable")
+
     def test_contingency_at_start(self):
         # the fixture country's history sets its stability: a contingency already true on day one is named
         plan = self.plan()
