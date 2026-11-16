@@ -694,8 +694,11 @@ fn merge_and_lead(
             state.skip(now, "cgen", &army, DAY);
             // A name the commander list does not offer is not a general of this country now:
             // asking again next month only repeats the refusal.
+            // A general whose role the game hides until a focus (Guderian and Hoth until
+            // GER_adopt_new_panzer_doctrine) shows up later: look again in 60 days, not a year
+            // (lint army.generals warns of the visible trigger).
             let wait = match plan_military::code(&why) {
-                "unknown_commander" => 365,
+                "unknown_commander" => 60,
                 "insufficient_command_power" => plan_military::cp_wait_days(&why),
                 _ => 30,
             };

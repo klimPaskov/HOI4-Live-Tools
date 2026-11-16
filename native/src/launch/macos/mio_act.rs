@@ -682,10 +682,15 @@ fn open_detail(
             f64::from(list.x + list.w / 2),
             f64::from(list.y + list.h / 2),
         );
-        let mut all: Vec<String> = Vec::new();
+        // the rows drawn before the wheel: a page that shows only these brought nothing new
+        let (mut all, _) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
+        let shown_first = all.len();
         let mut found = false;
-        for _ in 0..8 {
-            keys.scroll(pk::GAME, centre, -(ROW_HEIGHT * 3))?;
+        // the wheel's sign is not yet confirmed on this list (pm3: one direction brought no new
+        // row): try down, and if the first page brings nothing new, the other way
+        let mut step = -(ROW_HEIGHT * 3);
+        for page in 0..8 {
+            keys.scroll(pk::GAME, centre, step)?;
             pause(300);
             let (seen, at) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
             if at.is_some() {
@@ -694,14 +699,22 @@ fn open_detail(
             }
             let fresh: Vec<String> = seen.into_iter().filter(|n| !all.contains(n)).collect();
             if fresh.is_empty() {
+                if page == 0 && step < 0 {
+                    step = -step;
+                    continue;
+                }
                 break;
             }
             all.extend(fresh);
         }
         if !found {
             return Err(match first {
-                Fail::Refused(mut e) if !all.is_empty() => {
-                    e.message = format!("{} (further down: {})", e.message, all.join(" | "));
+                Fail::Refused(mut e) if all.len() > shown_first => {
+                    e.message = format!(
+                        "{} (further down: {})",
+                        e.message,
+                        all[shown_first..].join(" | ")
+                    );
                     Fail::Refused(e)
                 }
                 other => other,
