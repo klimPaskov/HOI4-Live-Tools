@@ -4922,6 +4922,13 @@
           "x-owner": "executor",
           "description": "false: do not pull encircled armies back"
         },
+        "posture": {
+          "type": "string",
+          "enum": ["attack", "defend"],
+          "default": "attack",
+          "x-owner": "executor",
+          "description": "defend: a defender until its counter-attack phase. In a hold phase (axes: []) no army draws a line on enemy land and none retakes a lost own state (a retake is an attack); the armies stand where the layout, the guards and the defence lines put them and entrench. Phases with axes attack as usual"
+        },
         "hold_prepares": {
           "type": "boolean",
           "default": true,

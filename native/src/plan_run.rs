@@ -4350,8 +4350,17 @@ fn war_step(
     // "hold_prepares": false keeps the old hold (no line on enemy land). So does a plan that
     // attacks with direct moves: it has no lines to prepare, and a target kept for it in the
     // hold was attacked with moves.
-    let prepare =
-        hold_only && cfg["hold_prepares"] != json!(false) && cfg["direct_moves"] != json!(true);
+    // `posture: "defend"` (a defender until its counter-attack phase): a hold phase draws no
+    // line on enemy land and retakes nothing either; a retake is an attack. The armies stand on
+    // the ground the layout, the guards and the defence lines give them and entrench there
+    // (Ethiopia e2/e5, 16 Nov 2026: retake fronts to three lost states and fronts with
+    // offensive lines toward Eritrea and Somaliland in the hold phase, casualties 3-5 to 1
+    // against an AI that lasted months longer with the same rifles).
+    let defend = cfg["posture"] == json!("defend");
+    let prepare = hold_only
+        && !defend
+        && cfg["hold_prepares"] != json!(false)
+        && cfg["direct_moves"] != json!(true);
     // Theatre: own states armies must stand in to be driven (armies in enemy land always are);
     // keeps home armies that can never reach the war out of it.
     let theatre: HashSet<i32> = list(cfg, "theatre")
@@ -4792,7 +4801,7 @@ fn war_step(
             forced == Some(*t)
                 || (open(*t) || vp_state == Some(*t))
                     && !behind(*t)
-                    && (!hold_only || prepare || own(*t))
+                    && (!hold_only || prepare || (own(*t) && !defend))
         });
         if target.is_none() {
             if let Some(old) = state.war_assign.remove(&name) {
@@ -4847,7 +4856,7 @@ fn war_step(
             } else {
                 targets
                     .iter()
-                    .filter(|(_, liberate)| !hold_only || *liberate)
+                    .filter(|(_, liberate)| !hold_only || (*liberate && !defend))
                     .filter(|(id, liberate)| !*liberate || layout_allows(state, plan, &name, *id))
                     .filter(|(id, _)| load.get(id).copied().unwrap_or(0) < per_target)
                     .filter_map(|(id, liberate)| {
@@ -10024,6 +10033,21 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")),
             "{step:?}"
         );
+        // a defender's hold retakes nothing and prepares nothing on enemy land
+        let mut defend = prepared.clone();
+        defend["war"] = json!({"enemies": ["FRA"], "axes": [], "posture": "defend"});
+        for liberate in [false, true] {
+            let w = war(liberate);
+            let mut state = State::default();
+            for day in 0..3 {
+                assert_eq!(
+                    tick(&mut state, &w, &defend, "l", START + day * DAY).unwrap(),
+                    Tick::Nothing,
+                    "liberate {liberate} day {day}"
+                );
+            }
+            assert!(orders(&w).is_empty(), "{:?}", w.calls.borrow());
+        }
     }
 
     #[test]

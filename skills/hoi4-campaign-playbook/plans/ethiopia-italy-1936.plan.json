@@ -381,6 +381,7 @@
     "per_target": 2,
     "cooldown_hours": 12,
     "reserve": [],
+    "posture": "defend",
     "axes": [],
     "theatre": [
       842,

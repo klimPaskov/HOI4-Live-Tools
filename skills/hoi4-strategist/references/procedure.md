@@ -510,6 +510,21 @@ dossier §9.
    is named in `disband.keep` with a `role` (home_defence, garrison, reserve, ship, training) and a
    `why`. Never divisions overseas (75% of their equipment is lost) or in a pocket. Lint
    `force.home_divisions` refuses a division with neither.
+   A defender short of the item every template needs (fielded need above fielded have, stockpile at
+   zero) also decides the theatre's own divisions: a division disbanded on own land returns its
+   equipment and manpower to the stockpile, which reinforces the rest, so fewer, fuller divisions
+   fight better than many empty ones. Name the weakest templates to go and the fill the rest must
+   reach (`disband`, `why` with `calc equipment`), and train nothing that draws that item while the
+   front is short (`training.only_if_stockpile`).
+5b. A defender (the target of a war that runs on the first day) until its counter-attack phase:
+   `war.posture` "defend" (no line on enemy land, no retake of lost states in a hold; a retake is an
+   attack; lint `war.defend_posture`); the defensive branch of mutually exclusive focuses before the
+   offensive one when the attack comes later (Ethiopia: falling_back, -15% attack and -25% speed for
+   the attacker in seven border states for 60 days, against renewed_offensive); armies stand on
+   mountains, hills and behind rivers on front lines (`guard_states`, `defense_lines`) and are not
+   moved, so entrenchment builds; every factory on the item the divisions lack from day one; and every
+   decision that brings arms or a general the layout names in `decision_rules` with its date (a
+   general a decision recalls is refused as unknown until it is taken).
 6. One deployed HQ per strike army close to its front (no HQ costs 20% planning cap and speed); generals
    chosen once, divisions swapped between generals rather than unassigned (GN03, GN04); no HQ tool yet:
    plan.md and a brief line.
