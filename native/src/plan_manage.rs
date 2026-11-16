@@ -3801,7 +3801,10 @@ pub(super) fn rebalance_step(
     economy: &Value,
 ) -> Result<Option<String>> {
     let (military, idle) = military_lines(tools, economy)?;
-    if idle < plan["production_min_idle"].as_i64().unwrap_or(2)
+    // at least one idle factory whatever the plan's minimum: with `production_min_idle` 0 and
+    // none idle the step "gave" +0 to a line every tick, a Verified order that changes nothing
+    // (e1, 16 Nov 2026: 266 times in the paused setup, so the setup never completed)
+    if idle < plan["production_min_idle"].as_i64().unwrap_or(2).max(1)
         || state.skipped(now, "prodset", "x")
     {
         return Ok(None);
@@ -6638,5 +6641,15 @@ mod tests {
             out.starts_with("production_set infantry_equipment_1 12+3"),
             "{out}"
         );
+    }
+
+    #[test]
+    fn no_idle_factory_is_no_order_even_with_a_zero_minimum() {
+        let tools = fake(lines_with(0));
+        let plan = json!({"production_priority": ["infantry_equipment"], "production_min_idle": 0});
+        let mut state = State::default();
+        let economy = tools.call("hoi4_economy", &json!({})).unwrap();
+        let out = rebalance_step(&mut state, &tools, &plan, "l", START, &economy).unwrap();
+        assert!(out.is_none(), "{out:?}");
     }
 }
