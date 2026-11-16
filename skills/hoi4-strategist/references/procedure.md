@@ -313,9 +313,17 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 10. Trades in blocks of 8 from several sellers, never from a planned enemy; auto-import budget, priority and
     accepted shortages; obsolete gear sold on the market when a tool exists (EC14, EC15, PR22).
 11. Under bombing: repair order and factory spread (EC08, EC21, PR33).
+12. Free civilian factories by quarter: civilian factories minus consumer goods minus trade. Consumer goods
+    come from the economy law and every scripted factor of the country (a variable that rises each month, a
+    national spirit); `F laws <TAG>`, `F idea <id>`, `F focus <key>` and `F decisions <TAG>` give the
+    numbers. Compare each trade and economy law route, and each focus branch that changes them, by free
+    factories x construction speed over the months to the war, not by the law's own bonus: a law or focus
+    that closes a branch also closes the decisions behind it. Every decision the plan takes must be one
+    the path makes visible (its own and its category's `visible`/`allowed`/`available` focuses on a focus
+    list; lint `decision.unreachable`). A construction-company advisor while civilian factories are built.
 Resolution: executor `construction`, `construction_plan` (stable `id`s), `construction_min_idle`,
 `construction_queue_depth`, `auto_import`, `trade`; plan.md §4. Check: lint `construction.front`,
-`construction.infrastructure`; rubric row 4.
+`construction.infrastructure`, `decision.unreachable`; rubric row 4.
 
 ### 11. Research
 Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.

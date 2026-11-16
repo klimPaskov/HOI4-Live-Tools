@@ -38,7 +38,7 @@ needs a design created in game first (they exist ready-made only in the 1939 boo
 |---|---|
 | 1936-01-01 | Start: 35 civilian / 28 military / 10 naval factories, 4 research slots, ~30 divisions, laws limited_exports + limited_conscription + partial_economic_mobilisation, MEFO Bills mission running. 20 military factories have lines (10 rifles, 2 support, 1 artillery, 2 Panzer II, 2 trucks, 1 each Bf 109 D, Ju 87, He 111). Before the first unpause (day-0 grace: factories added to an existing line come in at its efficiency): put the 8 free military factories on existing start lines; cull start lines the plan does not use by moving their factories onto lines it does use; naval queue: finish the four Type II subs, the two Z1934 destroyers and Deutschland, remove Hipper and both Scharnhorst unless the plan wants capitals. Focus started on day one. |
 | 1936-03-11 | Four Year Plan and Remilitarize the Rhineland done; PP spent (trade-law change, advisors); no idle research slot; every unit assigned to an army (24 or fewer). |
-| 1936-12-31 | 10 focuses done (section 4); trade law changed to export_focus or free_trade; at least 35 divisions with set deployment states; 25+ factories on military lines; civilian queue never empty. |
+| 1936-12-31 | 10 focuses done (section 4); Autarky Efforts and Institute Price Controls done (price-control decisions open); at least 35 divisions with set deployment states; 25+ factories on military lines; civilian queue never empty. |
 | 1937-12-31 | 5th research slot (Heraeus) or a recorded reason; 50+ civilian, 35+ military factories; 60+ fully equipped divisions; Anschluss tooltip "we estimate we have X" checked monthly. |
 | 1938-03 (+/-2 mo) | Anschluss done: states 4, 152, 153, 848, 975, 976 owned. Army manpower trending to 725k. |
 | 1938-09/10 | Sudetenland done (states 69, 972, 74 resolved); army manpower above 725k at start of the focus, above 750k for Fate of Czechoslovakia. |
@@ -64,6 +64,11 @@ needs a design created in game first (they exist ready-made only in the 1939 boo
 | PP unspent (414-670), 31 divisions unassigned, Anschluss refused, no naval production. | Spend PP weekly; assign every division; keep the checkpoint table. |
 
 ## 3. Hard gates and traps
+
+**Anschluss army gate** (Gotterdammerung): `GER_anschluss` is available only while the fighting army is more than
+`global.deployed_manpower_ratio_needed_for_anschluss` times Austria's (24, set on game start in
+`common/on_actions/12_wuw_on_actions.txt`; Austrian focuses can raise or lower it). 52 divisions were refused in
+1938; the AI had it done by October 1938 with about 96. Size the training queue and caps for that count before the planned date.
 
 **Army-manpower gates** (`has_army_manpower`, counts manpower in army units): Befriend/Fate of
 Czechoslovakia 750k (Sudetenland 725k), Anti-Soviet Pact 850k, MR Pact 850k for a human player,
@@ -173,7 +178,10 @@ cost); it gives up the 100% industry bonus and the rearmament focuses.
 
 **Laws** (150 PP each): trade law `limited_exports` -> `export_focus` (+10% factory output, +10% construction speed,
 +5% research) or `free_trade` (+15/+15/+10%), Free Trade available until `GER_autarky_efforts` is completed (then
-blocked); economy `partial_economic_mobilisation` -> `war_economy` (+20% arms speed, needs war support above 0.5 and
+blocked). Free Trade costs the price-control branch: Institute Price Controls needs Autarky Efforts (which sets
+`autarkic_economy`), and the six price-control decisions (135 PP, consumer-goods factor -0.55) are shown only after
+it; without them the MEFO factor took 27 of 43 civilian factories by mid-1937 (AI with them: 19 of 51), so take
+Autarky Efforts and Institute Price Controls in 1936 and skip Free Trade. Economy `partial_economic_mobilisation` -> `war_economy` (+20% arms speed, needs war support above 0.5 and
 fascism) when the war is within ~6 months; conscription `limited` -> `extensive` when the pool, not rifles, is the
 limit. Late war: `totaler_krieg_economy`, `tot_economic_mobilisation`.
 
