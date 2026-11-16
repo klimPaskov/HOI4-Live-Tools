@@ -1027,6 +1027,12 @@ impl State {
             // A system dialog held the input back before anything was sent: not the order's
             // failure (the ledger would give it up while the owner has not answered yet).
             Ok((false, why)) if why.starts_with("system_dialog_open") => {}
+            // Refused before input because the land is not held yet (railway ends or the land
+            // between): the step waits for it on game time; the ledger would give the order up
+            // and wake the player over a wait.
+            Ok((false, why))
+                if why.starts_with("end_not_controlled")
+                    || why.starts_with("route_not_controlled") => {}
             Ok((false, _)) => {
                 self.failures
                     .entry(signature.clone())
@@ -2917,14 +2923,16 @@ fn construction_plan_step(
 const PLAN_ITEM_TRIES: u32 = 3;
 
 /// A `construction_plan` order failed. A wait the game will lift by itself (the order held by
-/// the failure ledger, an end not controlled yet) costs nothing; a refusal that no retry can
+/// the failure ledger, an end or the land between not controlled yet) costs nothing; a refusal that no retry can
 /// change gives the item up at once; any other failure counts, and the third gives it up. A
 /// given-up item is reported (urgent feed change and alarm `construction_item_blocked`) so the
 /// player or a plan revision picks another way to the same purpose, and is never sent again
 /// until the plan's item changes.
 fn item_failed(state: &mut State, item: &Value, key: &str, label: &str, why: &str, now: GameHour) {
     let code = why.split(':').next().unwrap_or("").trim();
-    if why.starts_with("skipped:") || code == "end_not_controlled" {
+    // the land between is not held yet: the item waits for it, the tries are not spent
+    if why.starts_with("skipped:") || matches!(code, "end_not_controlled" | "route_not_controlled")
+    {
         return;
     }
     let hopeless = matches!(
@@ -10039,6 +10047,42 @@ mod tests {
         );
         assert_eq!(built(&tools), 1);
         assert_eq!(rail.1["from_nearest_node"], true);
+    }
+
+    #[test]
+    fn a_railway_across_land_not_held_yet_waits_without_spending_its_tries() {
+        struct Cut(RefCell<u32>);
+        impl Tools for Cut {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                Ok(match name {
+                    "hoi4_overview" => json!({"player": "ITA"}),
+                    "hoi4_railway_build" => {
+                        *self.0.borrow_mut() += 1;
+                        return Err(Error::new(
+                            "route_not_controlled",
+                            "Own-controlled land does not join start 13250 and target 1984",
+                        ));
+                    }
+                    _ if args.get("request_id").is_some() => {
+                        json!({"receipt": {"status": "Verified"}})
+                    }
+                    _ => json!({}),
+                })
+            }
+        }
+        let plan = json!({"construction_plan": [{"id": "r1", "building": "rail_way",
+            "from_state": 550, "to_state": 841, "path": [13250, 1984], "when": ""}]});
+        let tools = Cut(RefCell::new(0));
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..6 {
+            construction_plan_step(&mut state, &tools, &plan, "l", now).unwrap();
+            now += 3 * DAY;
+        }
+        // tried each time it came round (no ledger give-up), never blocked, no tries spent
+        assert_eq!(*tools.0.borrow(), 6);
+        assert!(state.plan_blocked.is_empty() && state.plan_tries.is_empty());
+        assert!(state.failed_run.is_empty() && state.gave_up.is_empty());
     }
 
     #[test]
