@@ -4264,6 +4264,9 @@ class Lint:
         oob = self.world.oob(self.tag) if self.world is not None and self.tag else {}
         if not self.enemies() or not oob.get("air"):
             return
+        air = self.plan.get("air") if isinstance(self.plan.get("air"), dict) else {}
+        if isinstance(air.get("why"), str) and air["why"].strip():
+            return  # the plan says why its wings stay idle
         near = set(_ints(self.war.get("theatre"))) | set(_ints(self.war.get("guard_states"))) | self.axis_states()
         named = set()
         frames = []

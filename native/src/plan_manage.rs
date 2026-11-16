@@ -4039,15 +4039,15 @@ fn stockpile_rule(
         "stockpile_days",
         format!("cover (days/wanted): {}", seen.join("; ")),
     );
+    // A shortage resting on its skip timer steps aside: the lowest cover among the rest is
+    // worked (an equipment no line can make must not hold back every other target).
     let Some((equipment, archetype, days, why)) = low
         .into_iter()
+        .filter(|l| !state.skipped(now, "mstockline", &l.1))
         .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
     else {
         return Ok(None);
     };
-    if state.skipped(now, "mstockline", &archetype) {
-        return Ok(None);
-    }
     let economy = tools.call("hoi4_economy", &json!({}))?;
     let (military, idle) = military_lines(tools, &economy)?;
     let step = m["rebalance_step"].as_i64().filter(|n| *n > 0).unwrap_or(3);
@@ -6574,6 +6574,25 @@ mod tests {
         let off = json!({"manage": {"off": ["stockpile", "trucks"]}});
         assert_eq!(step(&mut state, &tools, &off, "l", START).unwrap(), None);
         assert_eq!(reads(&tools, "hoi4_stockpile"), 0);
+    }
+
+    #[test]
+    fn a_shortage_resting_on_its_skip_does_not_hold_back_the_next_one() {
+        let mut replies = lines_with(5);
+        let mut rows = stock_rows(json!(12.0), 500.0, 100.0);
+        rows["equipment"].as_array_mut().unwrap().push(json!({
+            "archetype": "anti_air_equipment", "stockpile": 0.0, "fielded_short": 50.0,
+            "days_of_cover": null, "depleting": false, "variants": []}));
+        replies.push(("hoi4_stockpile", rows));
+        let tools = fake(replies);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        // anti-air (no cover at all) has failed and rests: infantry is worked meanwhile
+        state.skip(START, "mstockline", "anti_air_equipment", 7 * DAY);
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(out.starts_with("stockpile infantry_equipment low"), "{out}");
     }
 
     #[test]

@@ -1423,6 +1423,9 @@ class TacticsRules(unittest.TestCase):
         plan = self.plan()
         f = self.assertHit(plan, "air.idle_wings", "warning", "air_plan")
         self.assertIn("state 158", f["message"])
+        # a reason in air.why clears it
+        reasoned = dict(plan, air=dict(plan.get("air") or {}, why="home wings guard the capital"))
+        self.assertNoHit(reasoned, "air.idle_wings")
         # the medium_plane_airframe_0 wings at home are the idle ones: a selector for each clears them
         plan["air_plan"] = list(plan["air_plan"]) + [
             {"id": f"home_{sid}", "airframe": "medium_plane_airframe_0", "base_state": sid, "mission": "naval_bomber"}

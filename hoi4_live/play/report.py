@@ -9,6 +9,7 @@
 import collections
 import json
 import os
+import re
 
 from . import runs
 
@@ -159,9 +160,10 @@ def planner_section(run):
 
 
 def _day_number(text):
-    """Days since 1 Jan 1 of a game date "YYYY.MM.DD[.HH]" (the game has no leap years); None when unreadable."""
+    """Days since 1 Jan 1 of a game date "YYYY.MM.DD[.HH]" or "YYYY-MM-DD" (the game has no leap years); None
+    when unreadable."""
     try:
-        parts = [int(x) for x in str(text).split(".")]
+        parts = [int(x) for x in re.split(r"[.-]", str(text))]
         year, month, day = parts[0], parts[1], parts[2]
         hour = parts[3] if len(parts) > 3 else 0
     except (ValueError, IndexError):

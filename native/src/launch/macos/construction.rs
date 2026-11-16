@@ -200,9 +200,13 @@ fn click_building(process: &dyn Process, keys: &dyn GameInput, key: &str) -> Res
         }) {
             Ok(()) => return Ok(()),
             Err(e) if e.code == "input_readback_failed" => {
-                let nothing = read(process, selection).is_ok_and(|(_, k)| k.is_none());
+                let now = read(process, selection).map(|(_, k)| k);
+                // named just after the wait ended: the click worked
+                if now.as_ref().is_ok_and(|k| k.as_deref() == Some(key)) {
+                    return Ok(());
+                }
                 last = Some(e);
-                if !nothing {
+                if !now.is_ok_and(|k| k.is_none()) {
                     break;
                 }
             }

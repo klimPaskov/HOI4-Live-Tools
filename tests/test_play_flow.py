@@ -937,6 +937,11 @@ class StartTests(Folder):
 
 
 class ReportTests(Folder):
+    def test_game_dates_read_with_dots_or_dashes(self):
+        self.assertEqual(report._day_number("1936-06-01"), report._day_number("1936.06.01"))
+        self.assertEqual(report._day_number("1936.06.01.12") - report._day_number("1936.06.01"), 0.5)
+        self.assertIsNone(report._day_number("June 1936"))
+
     def test_receipts_count_the_last_status_of_each_action(self):
         run = self.make_run()
         rows = [{"id": "a", "status": "Dispatching"}, {"id": "a", "status": "Verified"},

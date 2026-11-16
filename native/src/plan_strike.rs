@@ -1898,10 +1898,14 @@ pub(super) fn step(
                     .insert((a.army.clone(), post_state), now + 2 * DAY);
             }
         } else {
-            state
-                .strike
-                .post_wait
-                .insert((a.army.clone(), post_state), now + 2 * DAY);
+            // A refused retake waits too (its own timer: the retake path reads only
+            // retake_wait), or the same refused order takes every tick's one order slot.
+            let wait = if kind == PostKind::Retake {
+                &mut state.strike.retake_wait
+            } else {
+                &mut state.strike.post_wait
+            };
+            wait.insert((a.army.clone(), post_state), now + 2 * DAY);
         }
         return Ok(Some(Some(format!("{}: {ok} {why}", a.line))));
     }
@@ -2698,6 +2702,29 @@ mod tests {
         let (_, args) = map.actions().last().cloned().unwrap();
         assert_eq!(args["province_id"], json!(10));
         // sent, they are left to fight for it: the next order is not the same retake
+        let line = run(&mut state, &map, &covered("strike"), START + DAY)
+            .unwrap()
+            .unwrap_or_default();
+        assert!(!line.contains("retake"), "{line}");
+    }
+
+    #[test]
+    fn a_refused_retake_waits_two_days_and_does_not_take_every_tick() {
+        let map = Map::new(11);
+        map.lost_own.set(true);
+        map.refuse.set(true);
+        let mut state = State::default();
+        state.layout.insert("Army 1".into(), "Army 1".into());
+        let line = run(&mut state, &map, &covered("strike"), START)
+            .unwrap()
+            .unwrap();
+        assert!(line.contains("retake") && line.contains("false"), "{line}");
+        assert!(state
+            .strike
+            .retake_wait
+            .get(&("Army 1".to_string(), 1))
+            .is_some_and(|until| *until == START + 2 * DAY));
+        // the next tick does not send the same retake again
         let line = run(&mut state, &map, &covered("strike"), START + DAY)
             .unwrap()
             .unwrap_or_default();

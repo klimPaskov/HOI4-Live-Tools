@@ -165,7 +165,7 @@ toolbar key C, drawn with `hoi4_army_fallback`; kind `area_defense`: own states 
 `hoi4_army_area_defense`). The executor sends each order once when its `when` holds. A defender
 holds its front on rivers, mountains and forts and draws the fallback line on the next such line
 behind it; when the front ahead breaks (the enemy holds land in a state the army stands in, or its
-supply falls under `war.supply_hold` or its organisation under 25%) the army's plan is executed
+supply falls under `war.supply_hold` or its organisation under a quarter of its best) the army's plan is executed
 once and it falls back to the line (`fall_back: false` keeps it on the front). A counter-attack is
 the war step's, and only where the attacker is worn (low organisation, out of supply) and the
 counter-attacking army is fed. Not built yet: the area order's settings toggles (the game's
