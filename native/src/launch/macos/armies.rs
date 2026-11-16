@@ -17,6 +17,7 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(super) mod exercise;
 pub(super) mod mode;
 mod select;
 
@@ -638,6 +639,7 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 };
                 let orders = r.array_header(group + ui(r)?.group_orders)?.2;
                 let executing = executing(r, image, &name).ok();
+                let exercise = exercise::state(r, image, &name).ok();
                 let parent = r.u64(group + ui(r)?.army_group)?;
                 let army_group = if parent == 0 {
                     None
@@ -646,7 +648,8 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 };
                 Ok(
                     json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
-                    "plan_executing":executing,"planning":planning_of(&planning, &ids),
+                    "plan_executing":executing,"exercising":exercise.map(|e| e.exercising),
+                    "exercise_stop_at_max":exercise.map(|e| e.stop_at_max),"planning":planning_of(&planning, &ids),
                     "division_count":ids.len(),"divisions":ids,
                     "states":standing,"main_state":main_state,
                     "motorization":(r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff}),

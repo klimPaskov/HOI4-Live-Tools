@@ -55,7 +55,8 @@
 //!                 XP). Once `when` holds at peace the entry's `armies` (names or army_layout
 //!                 roles; none = every own army) start exercising, stopping at the maximum
 //!                 (hoi4_army_exercise {armies, on: true, stop_at_max: true}); when a war starts
-//!                 they stop (on: false). Done-memory `ex:<id>:on`, `ex:<id>:off`
+//!                 they stop (on: false). Built: hoi4_army_exercise (card readback). Done-memory
+//!                 `ex:<id>:on`, `ex:<id>:off`
 use super::{item_id, list, strings, text, GameHour, State, Tools, DAY, RECEIPT_TOOLS};
 use crate::error::Result;
 use crate::plan_predicate::Truth;
@@ -780,10 +781,12 @@ mod tests {
     }
 
     #[test]
-    fn garrison_and_exercise_tools_are_not_built_yet() {
-        for tool in [GARRISON_TOOL, EXERCISE_TOOL] {
-            assert!(!built(tool), "{tool} is built: update the gap register row");
-        }
+    fn the_exercise_tool_is_built_and_the_garrison_tool_not_yet() {
+        assert!(built(EXERCISE_TOOL));
+        assert!(
+            !built(GARRISON_TOOL),
+            "{GARRISON_TOOL} is built: update the gap register row"
+        );
     }
 
     #[test]
@@ -819,7 +822,7 @@ mod tests {
     }
 
     #[test]
-    fn exercises_start_at_peace_for_the_named_armies_and_wait_otherwise() {
+    fn exercises_start_at_peace_for_the_named_armies_and_stop_when_a_war_starts() {
         let mut f = game();
         f.replies.insert(
             "hoi4_wars",
@@ -833,27 +836,39 @@ mod tests {
         state
             .layout
             .insert("west_guard".into(), "Armia Poznan".into());
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
-        let line = &state.seams.notes["xp_budget.army:drill"];
-        assert!(
-            line.contains("hoi4_army_exercise")
-                && line.contains("\"armies\":[\"Armia Poznan\"]")
-                && line.contains("\"stop_at_max\":true")
-                && line.contains("training.exercises"),
-            "{line}"
-        );
+        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        assert!(out.contains("exercise drill: start: true"), "{out}");
+        assert!(state.done.contains_key("ex:drill:on"));
+        let sent = actions(&f);
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].0, "hoi4_army_exercise");
+        assert_eq!(sent[0].1["armies"], json!(["Armia Poznan"]));
+        assert_eq!(sent[0].1["on"], json!(true));
+        assert_eq!(sent[0].1["stop_at_max"], json!(true));
+        // the next day: the running entry is left alone, the other still waits
+        step(&mut state, &f, &plan, "l", START + DAY).unwrap();
         assert!(state.seams.notes["xp_budget.army:later"].starts_with("waits, when"));
         assert!(!state.seams.notes.contains_key("xp_budget.army:t"));
-        assert!(actions(&f).is_empty());
-        // at war nothing starts
+        assert_eq!(actions(&f).len(), 1);
+        // a war starts: the running entry stops once
         f.replies.insert(
             "hoi4_wars",
             json!({"wars": {"at_war": true, "enemies": ["GER"]}}),
         );
+        let out = step(&mut state, &f, &plan, "l", START + 3 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("exercise drill: stop: true"), "{out}");
+        let sent = actions(&f);
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1].1["on"], json!(false));
+        assert!(sent[1].1.get("stop_at_max").is_none());
+        assert!(state.done.contains_key("ex:drill:off"));
+        // at war nothing new starts
         let mut state = State::default();
         step(&mut state, &f, &plan, "l", START).unwrap();
         assert_eq!(
-            state.seams.notes["xp_budget.army:drill"],
+            state.seams.notes["xp_budget.army:later"],
             "at war: no exercise started"
         );
     }

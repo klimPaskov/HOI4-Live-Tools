@@ -411,7 +411,16 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
   template need). Every queued division draws its equipment on completion, and manpower is held during
   training. Up to 75% of field manpower may be in training, and at least 100,000.
 - Training adds 0.0015 experience a day; a division deploys at most Trained, and exercises raise it to
-  Regular (AR15); level thresholds 0.1 / 0.3 / 0.75 / 0.9. Divisions train for the template's training time
+  Regular (AR15); level thresholds 0.1 / 0.3 / 0.75 / 0.9.
+- Exercises (`hoi4_army_exercise {armies, on, stop_at_max}`; `hoi4_armies` shows `exercising` per army), from
+  the game's NMilitary values: the country earns at most 0.08 army XP a day from all training together
+  (TRAINING_MAX_DAILY_COUNTRY_EXP, about 29 a year), so a few armies earn as much as all of them; divisions stop
+  at Regular (TRAINING_MAX_LEVEL 2). The price: 0.05 extra attrition while exercising (TRAINING_ATTRITION, paid in
+  equipment), fuel at the normal rate (ARMY_TRAINING_FUEL_MULT 1.0) and no XP at all without fuel
+  (OUT_OF_FUEL_TRAINING_XP_GAIN_MULT 0); a division under 10% strength pauses (TRAINING_MIN_STRENGTH). It pays
+  when army XP is the scarce pool before a war (doctrines, template edits, designs) and equipment stocks can
+  absorb the attrition; it costs when rifles are short or fuel is imported. Use `stop_at_max: true` and stop
+  before the war (the executor stops a plan entry when a war starts). Divisions train for the template's training time
   (§3) and suffer attrition meanwhile.
 - Deploy to a **front-adjacent own state**, not the capital, to avoid strategic redeployment. Group arrivals
   with `hoi4_army_create`; armies of 24 divisions.

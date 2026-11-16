@@ -2877,7 +2877,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp). The executor runs army entries with purpose exercise (plan_seams.rs: start at peace once `when` holds, stop at war; the exercise tool is not built yet, so the digest `seams` says what waits, gap register training.exercises); the XP spends themselves are the player's (cost)",
+      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp). The executor runs army entries with purpose exercise (plan_seams.rs: start at peace once `when` holds with hoi4_army_exercise, stop at war; gap register training.exercises); the XP spends themselves are the player's (cost)",
       "x-owner": "executor"
     },
     "stockpile_targets": {
