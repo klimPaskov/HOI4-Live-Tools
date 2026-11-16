@@ -3125,6 +3125,12 @@
           "maximum": 1,
           "x-rule": "fuel"
         },
+        "balance_pull_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 120,
+          "description": "production balance rule: a shortfall of at least this many days of production may pull a fifth of a line whose stock covers twice its need (once in 30 days per line); idle factories always go by need first. manage.off \"balance\" turns the rule off"
+        },
         "rebalance_step": {
           "type": "integer",
           "minimum": 1,
