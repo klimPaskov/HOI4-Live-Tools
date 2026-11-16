@@ -56,6 +56,44 @@ fn parse_positions(text: &str) -> Positions {
     out
 }
 
+/// Parse the type-0 (standing unit) height of every province from unitstacks lines: the terrain
+/// under the unit model, which the camera sees raised above the flat map (Ethiopia's highlands stand
+/// 7-9 units above the plains, 80-140 px on screen at the close zoom).
+fn parse_heights(text: &str) -> HashMap<i32, f64> {
+    let mut out = HashMap::new();
+    for line in text.lines() {
+        let mut f = line.split(';');
+        let (Some(p), Some(t), Some(_), Some(y)) = (f.next(), f.next(), f.next(), f.next()) else {
+            continue;
+        };
+        if t.trim() != "0" {
+            continue;
+        }
+        if let (Ok(p), Ok(y)) = (p.trim().parse(), y.trim().parse()) {
+            out.entry(p).or_insert(y);
+        }
+    }
+    out
+}
+
+/// Unit model heights by province (map/unitstacks.txt, cached per content folder).
+pub(super) fn unit_heights(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, f64>>> {
+    type Heights = std::sync::Arc<HashMap<i32, f64>>;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Heights>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let text = std::fs::read_to_string(dir.join("map/unitstacks.txt"))
+        .map_err(|_| Error::new("map_data_unavailable", "Province positions unreadable"))?;
+    let parsed = std::sync::Arc::new(parse_heights(&text));
+    cache
+        .lock()
+        .unwrap()
+        .insert(dir.to_path_buf(), parsed.clone());
+    Ok(parsed)
+}
+
 pub(super) fn positions(dir: &Path) -> Result<std::sync::Arc<Positions>> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<Positions>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
@@ -530,6 +568,9 @@ mod tests {
         let p = parse_positions("2;0;3429.00;9.85;1699.00;0.00;0.30\n2;1;1;1;1;0;0\nbad\n");
         assert_eq!(p.get(&2), Some(&(3429.0, 1699.0)));
         assert_eq!(p.len(), 1);
+        let h = parse_heights("2;0;3429.00;9.85;1699.00;0.00;0.30\n7944;0;3417.00;16.87;849.00;0.00;0.40\n2;1;1;5;1;0;0\n");
+        assert_eq!(h.get(&2), Some(&9.85));
+        assert_eq!(h.get(&7944), Some(&16.87));
         let s =
             "state={\n id=86\n history={ victory_points = { 1 2 } }\n provinces={\n 3 4 5\n }\n}";
         assert_eq!(parse_state_provinces(s), vec![3, 4, 5]);

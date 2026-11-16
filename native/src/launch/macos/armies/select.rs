@@ -57,6 +57,44 @@ const CLICK_CLEAR: f64 = 34.0;
 const MAX_HEIGHT: f64 = 160.0;
 /// A camera above this has passed into the state-level grouping and comes back in.
 const GROUP_STATE: f64 = 175.0;
+/// The first counter row hangs below a stack's unit position by a fixed distance on the map, so
+/// on screen by about this much over the camera height (live: 23 px at height 123 in Bale, 16 Nov
+/// 2026; 45-57 px at the closest Find zoom over Sicily, 9 Nov 2026). A click is sent to the
+/// counter: at a far camera no unit model is drawn and the position itself is bare map, whose
+/// click selects the province (object 0x357f0a0, live 16 Nov 2026 in Bale and Wello).
+const COUNTER_NEAR: f64 = 12.5;
+const COUNTER_AT_HEIGHT: f64 = 1270.0;
+/// Counter rows are screen sized: the next row hangs this much lower (live 16 Nov 2026, height 50).
+const COUNTER_STEP: f64 = 24.0;
+/// Vertical shifts of the counter clicks, tried in turn until a click selects divisions.
+const CLICK_RETRY: [f64; 3] = [0.0, 10.0, -10.0];
+
+/// Where a stack's first counter row is drawn for a camera at `height` (live 16 Nov 2026: 38 px
+/// at height 50 in Gondar, 23 px at height 123 in Bale).
+pub(super) fn counter_point(at: Point, height: f64) -> Point {
+    let drop = (COUNTER_NEAR + COUNTER_AT_HEIGHT / height.max(1.0)).clamp(14.0, 60.0);
+    (at.0, at.1 + drop)
+}
+
+/// Every counter row of the stacks at `points` (a click selects one counter: an army's or the
+/// unassigned divisions' row, live 16 Nov 2026 in Gondar where a click on the army's row left the
+/// unassigned division out). Only stacks without divisions to avoid are clicked, so every row of
+/// such a stack may be taken.
+pub(super) fn counter_clicks(points: &[Point], stacks: &[Stack], height: f64) -> Vec<Point> {
+    let mut out = Vec::new();
+    for p in points {
+        let rows = stacks
+            .iter()
+            .find(|s| s.at == Some(*p))
+            .map_or(1, |s| s.rows.clamp(1, ROWS_MAX));
+        let first = counter_point(*p, height);
+        for k in 0..rows {
+            out.push((first.0, first.1 + COUNTER_STEP * k as f64));
+        }
+    }
+    out
+}
+
 /// Wanted stacks are framed with this much room to spare.
 const FRAME_SLACK: f64 = 1.08;
 
@@ -70,6 +108,8 @@ pub(super) struct Stack {
     pub wanted: Vec<String>,
     /// Own divisions standing there that the action must not take.
     pub others: usize,
+    /// Counter rows the stack draws: one per orders group (an army, or unassigned divisions).
+    pub rows: usize,
 }
 
 /// How the wanted divisions are picked.
@@ -352,18 +392,29 @@ fn standing(r: &Reader<'_>, image: u64) -> Result<Vec<(String, u64, i32)>> {
 fn project(
     process: &dyn Process,
     positions: &super::super::mapdata::Positions,
+    heights: &std::collections::HashMap<i32, f64>,
     wanted: &BTreeSet<String>,
     allowed: &BTreeSet<String>,
 ) -> Result<(Vec<Stack>, f64)> {
     super::read(process, |r, i| {
         let rows = standing(r, i)?;
         let mut by: BTreeMap<i32, Stack> = BTreeMap::new();
-        for (id, _, p) in rows {
+        // counters: one per army, and one per unassigned division (group 0; live 16 Nov 2026,
+        // two unassigned divisions in Gondar drew two counters)
+        let mut groups: BTreeMap<i32, BTreeSet<u64>> = BTreeMap::new();
+        let mut loose: BTreeMap<i32, usize> = BTreeMap::new();
+        for (id, g, p) in rows {
+            if g == 0 {
+                *loose.entry(p).or_default() += 1;
+            } else {
+                groups.entry(p).or_default().insert(g);
+            }
             let s = by.entry(p).or_insert_with(|| Stack {
                 province: p,
                 at: None,
                 wanted: Vec::new(),
                 others: 0,
+                rows: 0,
             });
             if wanted.contains(&id) {
                 s.wanted.push(id);
@@ -373,8 +424,17 @@ fn project(
         }
         let mut out = Vec::with_capacity(by.len());
         for (p, mut s) in by {
+            s.rows = (groups.get(&p).map_or(0, BTreeSet::len)
+                + loose.get(&p).copied().unwrap_or(0))
+            .max(1);
             if let Some(&(x, z)) = positions.get(&p) {
-                s.at = super::super::screenmap::to_screen(r, i, x, z)?;
+                // at the unit's own height: on high ground the model and its counters stand well
+                // above the flat-map projection (live 16 Nov 2026, Wello 7944 at height 16.9: the
+                // flat point fell ~90 px below the counter and the click took the province)
+                s.at = match heights.get(&p) {
+                    Some(&y) => super::super::screenmap::to_screen_at(r, i, x, y, z)?,
+                    None => super::super::screenmap::to_screen(r, i, x, z)?,
+                };
             }
             out.push(s);
         }
@@ -430,6 +490,7 @@ pub(super) fn select(
         .exe;
     let dir = super::super::mapdata::game_dir(exe)?;
     let positions = super::super::mapdata::positions(&dir)?;
+    let heights = super::super::mapdata::unit_heights(&dir)?;
     let want: BTreeSet<String> = wanted.iter().cloned().collect();
     let ok: BTreeSet<String> = allowed.iter().cloned().collect();
     let points = |stacks: &[Stack]| -> Vec<Point> {
@@ -441,7 +502,7 @@ pub(super) fn select(
     };
     let t0 = std::time::Instant::now();
     super::clear_selection(process, keys)?;
-    let (mut stacks, mut height) = project(process, &positions, &want, &ok)?;
+    let (mut stacks, mut height) = project(process, &positions, &heights, &want, &ok)?;
     // The camera already shows every wanted stack at counter height: no camera movement at all.
     let on_screen = |stacks: &[Stack]| {
         stacks
@@ -452,7 +513,7 @@ pub(super) fn select(
     let found = !(height <= MAX_HEIGHT && on_screen(&stacks));
     if found {
         super::super::ui::find_state(process, keys, state)?;
-        (stacks, height) = project(process, &positions, &want, &ok)?;
+        (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
     }
     // Framing: one wheel event measures how far an event zooms here, one burst goes most of the
     // way to the height that fits, and one correction at most (never above MAX_HEIGHT).
@@ -479,7 +540,7 @@ pub(super) fn select(
         keys.scroll_burst(GAME, (960.0, 540.0), -120, k as u32)?;
         std::thread::sleep(std::time::Duration::from_millis(60));
         super::super::screenmap::wait_camera_still(process, 900);
-        (stacks, height) = project(process, &positions, &want, &ok)?;
+        (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
         zoom_events += k as u32;
         if height <= before * 1.001 {
             break;
@@ -493,7 +554,7 @@ pub(super) fn select(
             keys.scroll_burst(GAME, (960.0, 540.0), 120, k as u32)?;
             std::thread::sleep(std::time::Duration::from_millis(60));
             super::super::screenmap::wait_camera_still(process, 900);
-            (stacks, height) = project(process, &positions, &want, &ok)?;
+            (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
         }
     }
     // A state larger than the screen at the highest framing leaves wanted stacks outside the
@@ -506,7 +567,7 @@ pub(super) fn select(
         keys.press_code(key)?;
         std::thread::sleep(std::time::Duration::from_millis(220));
         super::super::screenmap::wait_camera_still(process, 900);
-        (stacks, height) = project(process, &positions, &want, &ok)?;
+        (stacks, height) = project(process, &positions, &heights, &want, &ok)?;
     }
     let plan = plan(&stacks, AREA);
     super::super::ui::trace_text(&format!(
@@ -549,14 +610,29 @@ pub(super) fn select(
             }
         }
         Pick::Clicks(points) => {
-            for (k, (x, y)) in points.iter().enumerate() {
-                if k == 0 {
-                    keys.click(GAME, *x, *y)?;
-                } else {
-                    keys.shift_click(GAME, *x, *y)?;
+            // The counter's place is estimated (the unit model stands on the terrain mesh, not
+            // exactly at the unitstacks height: 0-12 px off, live 16 Nov 2026), and a counter row
+            // is ~19 px tall: a click that selected no division is tried once more a little lower,
+            // then a little higher (a plain click replaces the province selection).
+            let clicks = counter_clicks(points, &stacks, height);
+            let mut tries = 0;
+            for dy in CLICK_RETRY {
+                tries += 1;
+                for (k, (x, y)) in clicks.iter().enumerate() {
+                    if k == 0 {
+                        keys.click(GAME, *x, y + dy)?;
+                    } else {
+                        keys.shift_click(GAME, *x, y + dy)?;
+                    }
+                }
+                let now = rested_selection(process)?;
+                let took = now.as_ref().is_some_and(|ids| !ids.is_empty());
+                rested = Some(now);
+                if took {
+                    break;
                 }
             }
-            format!("clicks:{}", points.len())
+            format!("clicks:{} (try {tries})", points.len())
         }
     };
     let judge_now = |selection: Option<Vec<String>>, how: &str| -> Result<Verdict> {
@@ -593,7 +669,7 @@ pub(super) fn select(
     // the port, an air wing): the selection is then not a division list. A plain click on a
     // wanted stack replaces that selection, Shift+click adds the other stacks.
     if first.is_none() && matches!(pick, Pick::Box(..)) {
-        let points = corrections(&stacks, wanted, AREA);
+        let points = counter_clicks(&corrections(&stacks, wanted, AREA), &stacks, height);
         if !points.is_empty() {
             for (k, (x, y)) in points.iter().enumerate() {
                 if k == 0 {
@@ -610,8 +686,8 @@ pub(super) fn select(
     if !verdict.missing.is_empty() {
         let fix = corrections(&stacks, &verdict.missing, AREA);
         if !fix.is_empty() {
-            for (x, y) in &fix {
-                keys.shift_click(GAME, *x, *y)?;
+            for (x, y) in counter_clicks(&fix, &stacks, height) {
+                keys.shift_click(GAME, x, y)?;
             }
             how.push_str("+fix");
             verdict = judge_now(rested_selection(process)?, &how)?;
@@ -646,6 +722,27 @@ pub(super) fn select(
 mod tests {
     use super::*;
     #[test]
+    fn a_click_goes_to_the_counter_below_the_unit_position() {
+        // live: 23 px at height 123 (Bale), 38 px at height 50 (Gondar); bounded both ways
+        let (x, y) = counter_point((1123.0, 745.0), 123.0);
+        assert_eq!(x, 1123.0);
+        assert!((y - 768.0).abs() < 1.5, "{y}");
+        assert!((counter_point((0.0, 0.0), 50.0).1 - 38.0).abs() < 1.0);
+        assert_eq!(counter_point((0.0, 0.0), 5.0).1, 60.0);
+        assert_eq!(counter_point((0.0, 0.0), 9000.0).1, 14.0);
+    }
+    #[test]
+    fn every_counter_row_of_a_clicked_stack_is_clicked() {
+        let mut two = stack(1, (500.0, 300.0), &["a", "b"], 0);
+        two.rows = 2;
+        let one = stack(2, (900.0, 300.0), &["c"], 0);
+        let clicks = counter_clicks(&[(500.0, 300.0), (900.0, 300.0)], &[two, one], 50.0);
+        assert_eq!(clicks.len(), 3);
+        assert_eq!(clicks[0].0, 500.0);
+        assert!((clicks[1].1 - clicks[0].1 - COUNTER_STEP).abs() < 1e-9);
+        assert_eq!(clicks[2].0, 900.0);
+    }
+    #[test]
     fn a_wanted_stack_below_the_area_pans_the_camera_down_and_none_when_all_are_inside() {
         use crate::platform::game_input::vk;
         // Somaliland, shakedown 10 Nov 2026: the wanted stack at (544, 827) below the area
@@ -661,6 +758,7 @@ mod tests {
             at: None,
             wanted: vec!["a".into()],
             others: 0,
+            rows: 1,
         }];
         assert_eq!(pan_key(&behind, AREA), Some(vk::DOWN));
         let inside = vec![
@@ -675,6 +773,7 @@ mod tests {
             at: Some(at),
             wanted: wanted.iter().map(|s| s.to_string()).collect(),
             others,
+            rows: 1,
         }
     }
     #[test]
@@ -773,6 +872,7 @@ mod tests {
                 at: None,
                 wanted: vec!["c".into()],
                 others: 0,
+                rows: 1,
             },
         ];
         let p = plan(&stacks, AREA);
