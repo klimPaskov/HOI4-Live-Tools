@@ -4477,6 +4477,29 @@ fn war_step(
     for (n, p) in &state.war_guard {
         guards.entry(n.clone()).or_insert(*p);
     }
+    // A defender's hold: every theatre army without a battle-plan order holds where it stands
+    // with a front line toward the nearest enemy-held state, as a guard does (no move, no
+    // offensive, never executed). The game then spreads its divisions along the border and they
+    // entrench (the game's AI as Ethiopia, study 16 Nov 2026: three to four armies, one front each,
+    // two to four divisions a province; ours, with no order, stood ten divisions in one province).
+    if hold_only && defend {
+        let reserve: HashSet<String> = strings(cfg, "reserve").into_iter().collect();
+        for a in list(&roster, "armies") {
+            let n = text(&a["army"]).to_string();
+            let Some(here) = a["main_state"].as_i64().map(|s| s as i32) else {
+                continue;
+            };
+            if guards.contains_key(&n)
+                || reserve.contains(&n)
+                || (!theatre.is_empty() && !theatre.contains(&here))
+                || a["battle_plan_orders"].as_u64().unwrap_or(0) > 0
+                || plan_military::holding(state, &n)
+            {
+                continue;
+            }
+            guards.insert(n, here);
+        }
+    }
     for army in list(&roster, "armies") {
         let name = text(&army["army"]).to_string();
         let Some(&post) = guards.get(&name) else {
@@ -4511,8 +4534,12 @@ fn war_step(
             // The front tool takes an enemy-held state: the one nearest the post (the game
             // refuses an own, own-controlled state as a front target, live w16).
             let facing = state.centers.get(&post).copied().and_then(|(px, pz)| {
+                // only an enemy-owned state: an own state the enemy holds part of is still own
+                // and own-controlled to the front tool (e6, 16 Nov 2026: ten refused guard fronts
+                // to the half-occupied 835 and 842)
                 targets
                     .iter()
+                    .filter(|(_, liberate)| !*liberate)
                     .filter_map(|(id, _)| {
                         let (x, z) = state.centers.get(id).copied()?;
                         Some((*id, (x - px).powi(2) + (z - pz).powi(2)))
@@ -10033,20 +10060,21 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")),
             "{step:?}"
         );
-        // a defender's hold retakes nothing and prepares nothing on enemy land
+        // a defender's hold retakes nothing and prepares nothing on enemy land: its armies only
+        // hold with a front line where they stand
         let mut defend = prepared.clone();
         defend["war"] = json!({"enemies": ["FRA"], "axes": [], "posture": "defend"});
         for liberate in [false, true] {
             let w = war(liberate);
             let mut state = State::default();
             for day in 0..3 {
-                assert_eq!(
-                    tick(&mut state, &w, &defend, "l", START + day * DAY).unwrap(),
-                    Tick::Nothing,
-                    "liberate {liberate} day {day}"
-                );
+                tick(&mut state, &w, &defend, "l", START + day * DAY).unwrap();
             }
-            assert!(orders(&w).is_empty(), "{:?}", w.calls.borrow());
+            let sent = orders(&w);
+            assert!(
+                !sent.is_empty() && sent.iter().all(|n| n == "hoi4_army_front"),
+                "liberate {liberate}: {sent:?}"
+            );
         }
     }
 
@@ -10577,6 +10605,32 @@ mod tests {
             "{:?}",
             w.0.calls.borrow()
         );
+    }
+
+    #[test]
+    fn a_defenders_hold_gives_every_theatre_army_a_front_where_it_stands() {
+        let w = War {
+            liberate: true,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [], "posture": "defend"}});
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        let sent: Vec<(String, Value)> = w
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(n, a)| n.starts_with("hoi4_army_") && a.get("request_id").is_some())
+            .cloned()
+            .collect();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war guard front Army 1")),
+            "{step:?} {sent:?}"
+        );
+        // a front only, toward an enemy-owned state: no move, no offensive, no retake
+        assert!(sent.iter().all(|(n, _)| n == "hoi4_army_front"), "{sent:?}");
+        assert!(sent.iter().all(|(_, a)| a["state_id"] != 5), "{sent:?}");
     }
 
     #[test]
