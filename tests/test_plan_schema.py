@@ -227,7 +227,7 @@ PRED_OK = [
     "mission_days:ITA_missiolini_conquer_ethiopia < 15", "surrender_progress:ETH >= 0.6", "surrender_progress:POL > 50%",
     "naval_dominance:42 >= 0.6", "naval_intel:ENG > 40%",
     "own_surrender_progress > 25%", "own_surrender_progress >= 0.1", "factories:ETH > 10", "industry_ratio:GER > 0.4",
-    "industry_ratio:SOV >= 1.5",
+    "industry_ratio:SOV >= 1.5", "casualty_ratio:ITA >= 1.5",
     # the spellings native/src/plan_predicate.rs reads today
     "at_war_with:ETH", "controls_state:550", "controller:550 == ITA", "focus_done:ITA_paris", "tech_done:radio",
     "war_support >= 25", "war_support >= 25%", "stability<50%", "date:1936.6.1", "xp:land > 5", "xp:naval < 9",

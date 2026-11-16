@@ -36,6 +36,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   focus.idle               the focus slot has nothing it can start for more than 7 days (every listed
                            focus is blocked then, e.g. the fallbacks all need peace while the plan is at
                            war), or the lists run out more than 30 days before the horizon
+  focus.unreachable_gate   a phase, contingency or checkpoint gate on focus_done:K while the focus path takes a
+                           focus that rules K out (mutually exclusive with it or with a whole prerequisite group)
   focus.unconfirmed        (warning) the slot rests on a focus whose gate cannot be decided from the plan
                            (ownership, control, variables) while no focus that is certainly available is
                            listed for that time; or a listed focus waits for a prerequisite only the game
@@ -277,6 +279,7 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
   army.width_terrain       a plan template (not garrison), or the start templates army_layout fields, whose
                            width fills the theatre's battles (terrain mix of war.theatre, axes and target
                            states; over-width and stacking penalties) 0.05 below the best width (error at 0.10)
+  war.counter_attack       (warning) a defender (war.posture defend) with no reachable phase that has axes
   war.supply_floor         war.supply_floor (base, war_by_phase, overrides) below the supply where attrition
                            starts (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION, 35%); (warning) the attack threshold
                            (supply_floor, or an attack-supply key) below 50%
@@ -4190,6 +4193,100 @@ class Lint:
                      "hold (axes: []): set war.posture \"defend\" so the hold draws no line on enemy land and retakes "
                      "nothing (a retake is an attack) until the phase with axes")
 
+    FOCUS_ATOM = re.compile(r"\bfocus_(?:done|completed):([A-Za-z0-9_.\-]+)")
+
+    @staticmethod
+    def _atoms(pred):
+        """Every string atom of a plan predicate (a string, a list or {"all"/"any"/"not": ..})."""
+        if isinstance(pred, str):
+            yield pred
+        elif isinstance(pred, list):
+            for p in pred:
+                yield from Lint._atoms(p)
+        elif isinstance(pred, dict):
+            for p in pred.values():
+                yield from Lint._atoms(p)
+
+    def focus_reach(self):
+        """focus.unreachable_gate: a phase, contingency or checkpoint that waits for focus_done:K while the plan's
+        focus_path takes a focus that excludes K (directly, or by excluding every focus of one of K's prerequisite
+        groups) can never fire (Ethiopia 1936: the counter-attack phase waited for the Northern Thrust, which needs
+        Renewed Offensive, after the focus path had switched to Falling Back; the counter-attack never came).
+        war.counter_attack: a defender (war.posture "defend") whose plan has no later phase with axes, or only ones
+        whose entry is such an unreachable focus, never attacks again; give it a counter-attack phase entered by
+        measurable conditions (a date, casualty_ratio:<enemy>, own_surrender_progress, a reachable focus)."""
+        path = [x for x in self.plan.get("focus_path") or [] if isinstance(x, str)]
+        trees = self.game.focus_trees()
+        tid = self.game.loaded_tree(self.ctx) if self.ctx else None
+        if not tid:
+            tid = max(trees, key=lambda t: sum(1 for k in path if k in trees[t]), default=None)
+        tree = trees.get(tid, {})
+        excluded = {}
+        for k in path:
+            for other in (tree.get(k) or {}).get("exclusive", ()):
+                if other not in path:
+                    excluded.setdefault(other, k)
+        memo = {}
+
+        def blocked(k, seen=()):
+            """None when k can still be taken, else the path focus that rules it out."""
+            if k in memo:
+                return memo[k]
+            if k in excluded:
+                memo[k] = excluded[k]
+                return memo[k]
+            info = tree.get(k)
+            why = None
+            if info and k not in seen:
+                for group in info.get("prereq") or []:
+                    reasons = [blocked(g, seen + (k,)) for g in group if g in tree]
+                    if reasons and all(reasons):
+                        why = reasons[0]
+                        break
+            memo[k] = why
+            return why
+
+        sources = []
+        for i, ph in enumerate(self.list_of("phases")):
+            for key in ("enter", "when", "exit"):
+                if key in ph:
+                    sources.append((f"phases[{i}].{key}", ph.get("id"), ph[key], key != "exit"))
+        for i, c in enumerate(self.list_of("contingencies")):
+            if "when" in c:
+                sources.append((f"contingencies[{i}].when", c.get("id"), c["when"], True))
+        unreachable_entry = set()
+        for where, ident, pred, entry in sources:
+            for atom in self._atoms(pred):
+                for k in self.FOCUS_ATOM.findall(atom):
+                    if not tree or k not in tree:
+                        continue
+                    by = blocked(k)
+                    if by:
+                        if entry and where.startswith("phases"):
+                            unreachable_entry.add(where.split(".")[0])
+                        self.add("error", "focus.unreachable_gate", where,
+                                 f"{ident or where} waits for focus_done:{k}, but focus_path takes {by}, which rules "
+                                 f"{k} out (mutually exclusive with it or with every focus of one of its prerequisite "
+                                 "groups): it can never hold; choose one branch for the focus path and the gates")
+        war = self.plan.get("war") if isinstance(self.plan.get("war"), dict) else {}
+        phases = self.list_of("phases")
+        posture = war.get("posture")
+        if phases:
+            posture = ((phases[0].get("overrides") or {}).get("war") or {}).get("posture", posture)
+        if posture != "defend":
+            return
+        by_phase = self.plan.get("war_by_phase") if isinstance(self.plan.get("war_by_phase"), dict) else {}
+        attacks = [f"phases[{i}]" for i, ph in enumerate(phases)
+                   if (((ph.get("overrides") or {}).get("war") or {}).get("axes", war.get("axes")) or [])
+                   or ((by_phase.get(ph.get("id")) or {}).get("axes") if isinstance(by_phase.get(ph.get("id")), dict)
+                       else None)]
+        reachable = [a for a in attacks if a not in unreachable_entry]
+        if not reachable:
+            self.add("warning", "war.counter_attack", "phases",
+                     "a defender (war.posture \"defend\") with no reachable phase that has axes never counter-attacks: "
+                     "add a phase with axes entered by measurable conditions (a date, casualty_ratio:<enemy>, "
+                     "own_surrender_progress, a focus the focus path reaches)")
+
     START_CMP = re.compile(r"^\s*stability\s*(<=|>=|<|>)\s*([0-9]*\.?[0-9]+)\s*$")
 
     def contingency_at_start(self):
@@ -4957,7 +5054,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.focus_reach, self.alert_owners,
                  self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,

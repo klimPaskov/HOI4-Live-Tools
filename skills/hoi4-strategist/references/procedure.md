@@ -525,6 +525,18 @@ dossier §9.
    moved, so entrenchment builds; every factory on the item the divisions lack from day one; and every
    decision that brings arms or a general the layout names in `decision_rules` with its date (a
    general a decision recalls is refused as unknown until it is taken).
+   Before anything else, list every way the war can end from the defender's side, from the game files
+   (peace events, decisions of either side with their AI weights and dates, focuses that offer peace,
+   escalation or war-weariness counters and what each level does, mission timers): what each needs and by
+   when, and choose the route the goal is reached by; the phases follow its milestones (for example: hold
+   the provinces a mission counts until its timer ends, survive past the date the attacker's withdrawal
+   decision opens, take what the peace transfers before it fires). A defender's hold leaves the line to
+   the executor: every theatre army keeps one front on the contact line as it moves (`war.posture`
+   "defend", `war.defend_per_state`); contingencies do not pull every army onto the capital (one reserve
+   formation guards it, the rest stay on the line). The counter-attack is a later phase with axes entered
+   by measurable conditions (a date, `casualty_ratio:<enemy>`, `own_surrender_progress`, a focus the focus
+   path reaches), never by a focus the chosen branch excludes: the focus path and every gate take one
+   branch of each mutually exclusive pair (lint `focus.unreachable_gate`, `war.counter_attack`).
 6. One deployed HQ per strike army close to its front (no HQ costs 20% planning cap and speed); generals
    chosen once, divisions swapped between generals rather than unassigned (GN03, GN04); no HQ tool yet:
    plan.md and a brief line.

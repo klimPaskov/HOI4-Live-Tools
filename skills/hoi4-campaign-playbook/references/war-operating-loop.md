@@ -166,7 +166,14 @@ the player decides strategy:
   therefore runs during the hold, not after it.
 - A defender sets `"posture": "defend"`: its hold phases draw no line on enemy land and retake
   nothing (a retake front is an attack). The armies stand on the ground the layout, the guards and
-  the defence lines give them and entrench; the attack waits for the phase with axes.
+  the defence lines give them and entrench; the attack waits for the phase with axes. Every other
+  theatre army keeps one front on the contact line: toward the nearest hostile-held state touching
+  own-controlled land, spread so no stretch takes more than `defend_per_state` (4) divisions per own
+  state touching it while another stretch is thinner, and drawn again when the enemy pushes past
+  that state or the army loses its order (a front drawn on day one toward a border the enemy has
+  since crossed holds nothing). The counter-attack phase is entered by measurable conditions: a
+  date, `casualty_ratio:<enemy>` (the attacker's losses over the defender's), the defender's own
+  surrender progress, or a focus the chosen branch reaches.
 - `"stall_days": 8` (default): an ordered army that took no province of its target, or of any
   state its divisions stand in, for that long
   first has its plan stopped and planned again (`replans`, default 2 per target: it stands on its

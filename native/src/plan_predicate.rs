@@ -54,6 +54,9 @@
 //!   industry_ratio:<TAG>        factories:<TAG> / the player's factories (the game's ic_ratio
 //!                               gate of war laws, e.g. "an enemy above 40% of yours"; a plain
 //!                               number, 1 is equal industry)                         readable
+//!   casualty_ratio:<TAG>        men TAG lost in its war relation with the player over the
+//!                               men the player lost in it (hoi4_war_stats); unknown until
+//!                               both sides have losses                               readable
 //!   exists:<TAG>                TAG owns a state (hoi4_states{query:TAG})            readable
 //!   focus_done:<key>            hoi4_focus_completed completed (all pages)           readable
 //!   tech_done:<key>             hoi4_research researched[].id (all pages)            readable
@@ -224,6 +227,7 @@ const ATOMS: &[(&str, Kind, bool)] = &[
     ("surrender_progress", Kind::Ratio, true),
     ("factories", Kind::Number, true),
     ("industry_ratio", Kind::Number, true),
+    ("casualty_ratio", Kind::Number, true),
     ("equipment_fill", Kind::Ratio, true),
     ("resistance", Kind::Ratio, true),
     ("compliance", Kind::Ratio, true),
@@ -838,6 +842,43 @@ fn enemies(ctx: &mut Ctx) -> Read<Vec<String>> {
 /// The surrender progress of enemy `tag` (0..1) from its row in hoi4_wars `wars.wars[]`
 /// (`enemy_surrender_progress`; a value above 1 is read as a percent). A null value is unknown with
 /// the tool's own reason: the read is a seam the tool fills once the value is located in memory.
+/// `casualty_ratio:<TAG>`: the men TAG lost in its war relation with the player over the men
+/// the player lost in it (hoi4_war_stats; 2 is "they lost twice as many"). A measure of an
+/// attacker worn down by a defence; unknown until both sides have losses.
+fn casualty_ratio(ctx: &mut Ctx, tag: &str) -> Read<f64> {
+    let me = ctx.me()?;
+    let read = ctx
+        .read("hoi4_war_stats", &json!({}))
+        .ok_or("hoi4_war_stats unreadable")?;
+    let losses = |who: &str| -> f64 {
+        read["wars"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|w| w["relations"].as_array().into_iter().flatten())
+            .filter(|r| {
+                let tags: Vec<&str> = r["countries"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|c| c["tag"].as_str())
+                    .collect();
+                tags.contains(&me.as_str()) && tags.contains(&tag)
+            })
+            .flat_map(|r| r["countries"].as_array().into_iter().flatten())
+            .filter(|c| c["tag"].as_str() == Some(who))
+            .filter_map(|c| c["casualties"].as_f64())
+            .sum()
+    };
+    let (theirs, ours) = (losses(tag), losses(&me));
+    if ours <= 0.0 || theirs <= 0.0 {
+        return Err(format!(
+            "hoi4_war_stats has no losses on both sides between {me} and {tag} yet"
+        ));
+    }
+    Ok(theirs / ours)
+}
+
 pub(crate) fn surrender_progress(ctx: &mut Ctx, tag: &str) -> Read<f64> {
     war_ratio(
         ctx,
@@ -1170,6 +1211,7 @@ fn reading(atom: &Atom, ctx: &mut Ctx) -> Read<Reading> {
             }
         }
         "factories" => factories(ctx, &tag_arg(atom)?).map(Reading::Number),
+        "casualty_ratio" => casualty_ratio(ctx, &tag_arg(atom)?).map(Reading::Number),
         "industry_ratio" => {
             let tag = tag_arg(atom)?;
             let me = ctx.me()?;
@@ -1449,6 +1491,20 @@ mod tests {
                 {"enemy": {"tag": "ENG"}, "own_naval_intel": 35}]}}),
         );
         assert_eq!(eval(&f, json!("naval_intel:ENG >= 0.4")), Truth::False);
+    }
+    #[test]
+    fn casualty_ratio_reads_the_losses_of_the_war_relation() {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_war_stats",
+            json!({"wars": [{"relations": [
+                {"countries": [{"tag": "ETH", "casualties": 3000}, {"tag": "ITA", "casualties": 2000}]},
+                {"countries": [{"tag": "ITA", "casualties": 500}, {"tag": "FRA", "casualties": 9000}]}]}]}),
+        );
+        assert_eq!(eval(&f, json!("casualty_ratio:ETH >= 1.5")), Truth::True);
+        assert_eq!(eval(&f, json!("casualty_ratio:ETH > 1.6")), Truth::False);
+        // no losses yet with that enemy: unknown, never true
+        assert_eq!(eval(&f, json!("casualty_ratio:GER > 0")), Truth::Unknown);
     }
     #[test]
     fn law_gates_read_the_enemy_industry_and_the_own_surrender_progress() {

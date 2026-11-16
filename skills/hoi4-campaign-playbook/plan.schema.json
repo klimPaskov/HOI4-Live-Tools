@@ -4409,6 +4409,14 @@
           "read": "hoi4_economy factory_trigger_count (own), hoi4_states{query:TAG} factories_start.controlled (others)",
           "readable": true
         },
+        "casualty_ratio": {
+          "kind": "number",
+          "arg": "tag",
+          "min": 0,
+          "unit": "men TAG lost in its war relation with the player / men the player lost in it, a plain number (2 = they lost twice as many): an attacker worn down by the defence",
+          "read": "hoi4_war_stats wars[].relations[].countries[].casualties",
+          "readable": true
+        },
         "industry_ratio": {
           "kind": "number",
           "arg": "tag",
@@ -4601,7 +4609,7 @@
         "array",
         "boolean"
       ],
-      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|own_surrender_progress|xp:(army|air|navy|land|naval)|(vp_share|factories|industry_ratio):[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+|surrender_progress:[A-Z][A-Z0-9]{2}|naval_dominance:\\d+|naval_intel:[A-Z][A-Z0-9]{2})\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
+      "pattern": "^(|true|false|(date:)?\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|date\\s*(<=|>=|==|!=|<|>)\\s*\\d{4}[.-]\\d{1,2}[.-]\\d{1,2}|(province_controlled|state_fully_controlled|controls_state):\\d+|(at_war_with|at_war|not_at_war|capitulated|exists|not_exists):[A-Z][A-Z0-9]{2}|(focus_done|tech_done|focus_completed|tech_researched):[A-Za-z0-9_.-]+|phase:[A-Za-z0-9_]+|at_peace_conference|(owner|controller|state_controller|province_controller):\\d+\\s*(==|!=|=)\\s*[A-Z][A-Z0-9]{2}|(stability|war_support|pp|manpower|fuel_ratio|convoys_free|world_tension|own_surrender_progress|xp:(army|air|navy|land|naval)|(vp_share|factories|industry_ratio|casualty_ratio):[A-Z][A-Z0-9]{2}|(resistance|compliance):\\d+|equipment_fill:[^<>=!\\s]([^<>=!]*[^<>=!\\s])?|stockpile_days:[A-Za-z0-9_]+|var:[A-Za-z0-9_.@^:]+|bop:[A-Za-z0-9_]+|mission_days:[A-Za-z0-9_.-]+|surrender_progress:[A-Z][A-Z0-9]{2}|naval_dominance:\\d+|naval_intel:[A-Z][A-Z0-9]{2})\\s*(<=|>=|==|!=|<|>)\\s*-?\\d+(\\.\\d+)?%?)$",
       "items": {
         "$ref": "#/definitions/predicate"
       },
@@ -4927,7 +4935,14 @@
           "enum": ["attack", "defend"],
           "default": "attack",
           "x-owner": "executor",
-          "description": "defend: a defender until its counter-attack phase. In a hold phase (axes: []) no army draws a line on enemy land and none retakes a lost own state (a retake is an attack); the armies stand where the layout, the guards and the defence lines put them and entrench. Phases with axes attack as usual"
+          "description": "defend: a defender until its counter-attack phase. In a hold phase (axes: []) no army draws a line on enemy land and none retakes a lost own state (a retake is an attack); the armies stand where the layout, the guards and the defence lines put them and entrench; every other theatre army keeps one front on the contact line (the nearest hostile-held state touching own-controlled land, weighed against the divisions already fronting it), drawn again when that state leaves the contact line or the army loses its order. Phases with axes attack as usual"
+        },
+        "defend_per_state": {
+          "type": "number",
+          "minimum": 1,
+          "default": 4,
+          "x-owner": "executor",
+          "description": "posture defend: divisions one stretch of the contact line takes per own state touching it before the next army is sent to a less crowded stretch (the game's own defenders hold two to four a province)"
         },
         "hold_prepares": {
           "type": "boolean",
