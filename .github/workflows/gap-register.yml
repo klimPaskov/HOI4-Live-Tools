@@ -12,7 +12,8 @@ permissions:
   contents: read
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # ubuntu-latest (26.04) has no Python 3.9 build; 24.04 still does.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4

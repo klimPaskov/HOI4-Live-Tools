@@ -19,6 +19,13 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
         python: ['3.9', '3.13']
+        # ubuntu-latest (26.04) has no Python 3.9 build; the 3.9 job runs on 24.04.
+        exclude:
+          - os: ubuntu-latest
+            python: '3.9'
+        include:
+          - os: ubuntu-24.04
+            python: '3.9'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     env:
