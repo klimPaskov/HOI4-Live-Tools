@@ -413,7 +413,7 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 - Training adds 0.0015 experience a day; a division deploys at most Trained, and exercises raise it to
   Regular (AR15); level thresholds 0.1 / 0.3 / 0.75 / 0.9.
 - Exercises (`hoi4_army_exercise {armies, on, stop_at_max}`; `hoi4_armies` shows `exercising` per army), from
-  `common/defines` (NMilitary): the country earns at most 0.08 army XP a day from all training together
+  the game's NMilitary values: the country earns at most 0.08 army XP a day from all training together
   (TRAINING_MAX_DAILY_COUNTRY_EXP, about 29 a year), so a few armies earn as much as all of them; divisions stop
   at Regular (TRAINING_MAX_LEVEL 2). The price: 0.05 extra attrition while exercising (TRAINING_ATTRITION, paid in
   equipment), fuel at the normal rate (ARMY_TRAINING_FUEL_MULT 1.0) and no XP at all without fuel
