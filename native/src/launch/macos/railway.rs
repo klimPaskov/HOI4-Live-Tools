@@ -24,7 +24,7 @@ const GAME: (u32, u32) = (1920, 1080);
 const MAP_LEFT: f64 = 740.0;
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_railway_build","description":"Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends are checked live before any input: the start must be an own railway node now (a supply hub or naval base read from the game, or the capital) and both ends own-controlled. `from_nearest_node:true` replaces a missing start, or one that is no own node, with the own railway node the network already feeds (capital, port, hub with a railway) nearest to the target over own-controlled land (the game re-uses existing railways, so the line is the same); the result says start_replaced. `to_nearest_node:true` makes the target the own railway node nearest to the given province (a railway feeds a hub, the hub feeds the provinces around it; a railway to a plain province only helps as part of the way to a hub); the result says target_node_for_province. The receipt is journaled under request_id (Verified when the own construction queue holds one more line or one more railway level; a retry of the same id settles, it never clicks again). Typed refusals before input: not_a_railway_node and end_not_controlled (both name the nearest own node), no_node_reachable (no own node reaches the target over own land: use a port, trucks or a hub), no_node_in_state, province_not_in_state, unknown_state. railway_not_queued after the clicks means the game refused the path (often: it already stands or is queued at its highest level). Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.","inputSchema":{"type":"object","properties":{"from_province":{"type":"integer","minimum":1,"maximum":99999},"from_state":{"type":"integer","minimum":1,"maximum":4095},"to_province":{"type":"integer","minimum":1,"maximum":99999},"to_state":{"type":"integer","minimum":1,"maximum":4095},"from_nearest_node":{"type":"boolean"},"to_nearest_node":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_railway_build","description":"Queue ONE railway with the game's railway construction mode: Shift+Click on a start node (a supply hub, naval base or the capital; the game builds the shortest path re-using existing railways) and a click on the target province. Give the start as `from_province` or `from_state` (its supply hub or naval base from the map files) and the target as `to_province` or `to_state` (its supply hub, else its largest victory point). Both ends are checked live before any input: the start must be an own railway node now (a supply hub or naval base read from the game, or the capital) and both ends own-controlled. `from_nearest_node:true` replaces a missing start, or one that is no own node, with the own railway node the network already feeds (capital, port, hub with a railway) nearest to the target over own-controlled land (the game re-uses existing railways, so the line is the same); the result says start_replaced. `to_nearest_node:true` makes the target the own railway node nearest to the given province (a railway feeds a hub, the hub feeds the provinces around it; a railway to a plain province only helps as part of the way to a hub); the result says target_node_for_province. The receipt is journaled under request_id (Verified when the own construction queue holds one more line or one more railway level; a retry of the same id settles, it never clicks again). Typed refusals before input: not_a_railway_node and end_not_controlled (both name the nearest own node), route_not_controlled (own-controlled land does not join the start and the target: names the states on the way the player does not control; with from_nearest_node:true the start is replaced by an own node the target reaches instead), no_node_reachable (no own node reaches the target over own land: use a port, trucks or a hub), no_node_in_state, province_not_in_state, unknown_state. railway_not_queued after the clicks means the game refused the path (often: it already stands or is queued at its highest level). Railways cost 170 per level (+130 per existing level) and are the way to carry supply from the capital to far fronts.","inputSchema":{"type":"object","properties":{"from_province":{"type":"integer","minimum":1,"maximum":99999},"from_state":{"type":"integer","minimum":1,"maximum":4095},"to_province":{"type":"integer","minimum":1,"maximum":99999},"to_state":{"type":"integer","minimum":1,"maximum":4095},"from_nearest_node":{"type":"boolean"},"to_nearest_node":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
 }
 
 /// Supply hub provinces listed in `map/supply_nodes.txt` (`level province` per line).
@@ -392,6 +392,40 @@ pub(super) fn nearest_node(
     Ok(None)
 }
 
+/// The shortest way in land steps from `from` to `to` over any land (both ends included), at most
+/// `limit` provinces looked at; None when `to` is not reached.
+pub(super) fn land_path(
+    neighbours: &HashMap<i32, Vec<i32>>,
+    from: i32,
+    to: i32,
+    limit: usize,
+) -> Option<Vec<i32>> {
+    let mut back: HashMap<i32, i32> = HashMap::from([(from, from)]);
+    let mut queue: VecDeque<i32> = VecDeque::from([from]);
+    while let Some(p) = queue.pop_front() {
+        if p == to {
+            let mut way = vec![p];
+            let mut at = p;
+            while at != from {
+                at = back[&at];
+                way.push(at);
+            }
+            way.reverse();
+            return Some(way);
+        }
+        if back.len() >= limit {
+            continue;
+        }
+        for &q in neighbours.get(&p).map(Vec::as_slice).unwrap_or(&[]) {
+            if let std::collections::hash_map::Entry::Vacant(e) = back.entry(q) {
+                e.insert(p);
+                queue.push_back(q);
+            }
+        }
+    }
+    None
+}
+
 /// Provinces looked at when searching the nearest own railway node.
 const NODE_SEARCH_LIMIT: usize = 4000;
 
@@ -485,9 +519,9 @@ pub(super) fn resolve(
         },
     };
     let neighbours = super::wars::province_neighbours(&dir)?;
-    let (to_p, to_own, from_ok, found) = live(process, &dir, |l| {
+    let (to_p, to_own, from_ok, found, cut) = live(process, &dir, |l| {
         if !l.own(asked_p)? {
-            return Ok((asked_p, false, None, None));
+            return Ok((asked_p, false, None, None, None));
         }
         let to_p = if to_node && !l.node(asked_p)? {
             nearest_node(
@@ -512,7 +546,32 @@ pub(super) fn resolve(
             |p| l.fed(p),
             NODE_SEARCH_LIMIT,
         )?;
-        Ok((to_p, true, from_ok, found))
+        // An own start node the target does not reach over own-controlled land: the game lays
+        // track only through own land, so it queues nothing (n1, 16 Nov: 13250 -> 1984 three
+        // times). The uncontrolled provinces on the shortest way over any land say what to take.
+        let cut = match (asked, from_ok) {
+            (Some((p, _)), Some((true, true)))
+                if nearest_node(
+                    &neighbours,
+                    to_p,
+                    |q| l.own(q),
+                    |q| Ok(q == p),
+                    NODE_SEARCH_LIMIT,
+                )?
+                .is_none() =>
+            {
+                let way = land_path(&neighbours, to_p, p, NODE_SEARCH_LIMIT).unwrap_or_default();
+                let mut foreign = Vec::new();
+                for q in way {
+                    if !l.own(q)? {
+                        foreign.push(q);
+                    }
+                }
+                Some(foreign)
+            }
+            _ => None,
+        };
+        Ok((to_p, true, from_ok, found, cut))
     })?;
     let to_s = if to_p == asked_p {
         asked_s
@@ -540,7 +599,26 @@ pub(super) fn resolve(
     );
     let mut replaced = None;
     let (from_p, from_s) = match (asked, from_ok) {
-        (Some((p, s)), Some((true, true))) => (p, s),
+        (Some((p, s)), Some((true, true))) if cut.is_none() => (p, s),
+        (Some((p, s)), Some((true, true))) if !from_nearest => {
+            let mut states: Vec<i32> = cut
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|q| state_of(&dir, *q).ok())
+                .collect();
+            states.sort_unstable();
+            states.dedup();
+            return Err(Error::new(
+                "route_not_controlled",
+                format!(
+                    "Own-controlled land does not join start province {p} (state {s}) and target \
+                     province {to_p} (state {to_s}): the game lays a railway only through own land. \
+                     The way runs through states the player does not control: {states:?}; the \
+                     railway can be queued once they are held, or start from a node on this side \
+                     ({hint}). Nothing was clicked"
+                ),
+            ));
+        }
         (Some((p, s)), Some((own, _))) if !from_nearest => {
             let (code, why) = if own {
                 (
@@ -723,6 +801,14 @@ mod tests {
         // nothing reachable over own land
         let enemy = |p: i32| Ok(p == 1);
         assert_eq!(nearest_node(&n, 1, enemy, node, 100).unwrap(), None);
+        // 5 is no own-land neighbour of 3 (4 is held by the enemy): the start does not join the
+        // target over own land, and the way over any land names 4
+        assert_eq!(nearest_node(&n, 3, own, |q| Ok(q == 5), 100).unwrap(), None);
+        let way = land_path(&n, 3, 5, 100).unwrap();
+        assert_eq!(way, vec![3, 2, 1, 4, 5]);
+        let foreign: Vec<i32> = way.into_iter().filter(|q| !own(*q).unwrap()).collect();
+        assert_eq!(foreign, vec![4]);
+        assert_eq!(land_path(&n, 3, 9, 100), None);
     }
     #[test]
     fn supply_nodes_file_lines_give_provinces() {
