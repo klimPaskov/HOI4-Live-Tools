@@ -12,7 +12,7 @@ use crate::{
 
 const GAME: (f64, f64) = (1920.0, 1080.0);
 /// Height of the map plane used for province points (the camera look-at height).
-const GROUND: f64 = 9.5;
+pub(super) const GROUND: f64 = 9.5;
 /// Owners of the camera fields (macOS 1.19.4.1; no reviewed camera vtable).
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
 const CAMERA: xlayout::Class = xlayout::Class::new("idler.camera", 0);
@@ -35,12 +35,24 @@ fn floats<const N: usize>(r: &Reader<'_>, at: u64) -> Result<[f64; N]> {
 
 /// Screen point (game pixels) of map point (x, z), or None behind the camera.
 pub(super) fn to_screen(r: &Reader<'_>, image: u64, x: f64, z: f64) -> Result<Option<(f64, f64)>> {
+    to_screen_at(r, image, x, GROUND, z)
+}
+
+/// Like [`to_screen`], for a point at height `y` above the map plane (a unit model on high ground:
+/// map/unitstacks.txt gives the height of every province's unit position).
+pub(super) fn to_screen_at(
+    r: &Reader<'_>,
+    image: u64,
+    x: f64,
+    y: f64,
+    z: f64,
+) -> Result<Option<(f64, f64)>> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let abi = r.string_abi();
     let camera = r.u64(idler + fld(abi, &IDLER, 0x718)?)?;
     let proj: [f64; 16] = floats(r, camera + fld(abi, &CAMERA, 0x110)?)?;
     let view: [f64; 16] = floats(r, camera + fld(abi, &CAMERA, 0xd0)?)?;
-    Ok(project(&proj, &view, x, z))
+    Ok(project_at(&proj, &view, x, y, z))
 }
 
 /// The camera's view matrix (moves while the camera pans or zooms).
@@ -215,12 +227,24 @@ pub(super) fn frame_two(
     Ok(both(pa, pb))
 }
 
+#[cfg(test)]
 pub(super) fn project(proj: &[f64; 16], view: &[f64; 16], x: f64, z: f64) -> Option<(f64, f64)> {
+    project_at(proj, view, x, GROUND, z)
+}
+
+/// [`project`] for a point at height `y`.
+pub(super) fn project_at(
+    proj: &[f64; 16],
+    view: &[f64; 16],
+    x: f64,
+    y: f64,
+    z: f64,
+) -> Option<(f64, f64)> {
     let (tx, ty) = (proj[0], proj[5]);
     if tx <= 0.0 || ty <= 0.0 {
         return None;
     }
-    let v = [x - view[12], GROUND - view[13], z - view[14]];
+    let v = [x - view[12], y - view[13], z - view[14]];
     let col = |k: usize| [view[4 * k], view[4 * k + 1], view[4 * k + 2]];
     let dot = |a: [f64; 3]| a[0] * v[0] + a[1] * v[1] + a[2] * v[2];
     let (cx, cy, cz) = (dot(col(0)), dot(col(1)), dot(col(2)));
@@ -252,5 +276,12 @@ mod tests {
         // East (larger x) is to the right; north (larger z) is up the screen.
         assert!(project(&proj, &view, 3114.0, 1607.0).unwrap().0 > x);
         assert!(project(&proj, &view, 3104.0, 1617.0).unwrap().1 < y);
+        // a unit on high ground stands higher on the screen than the flat-map point under it
+        assert!(
+            project_at(&proj, &view, 3104.0, GROUND + 7.0, 1607.0)
+                .unwrap()
+                .1
+                < y
+        );
     }
 }

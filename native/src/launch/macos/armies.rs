@@ -451,6 +451,7 @@ fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<ScreenB
         .exe;
     let dir = super::mapdata::game_dir(exe)?;
     let positions = super::mapdata::positions(&dir)?;
+    let heights = super::mapdata::unit_heights(&dir)?;
     read(process, |r, i| {
         let provinces = division_provinces(r, i)?;
         let mut pts = Vec::new();
@@ -461,7 +462,8 @@ fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<ScreenB
             let Some((x, z)) = positions.get(p).copied() else {
                 return Ok(None);
             };
-            let Some(s) = super::screenmap::to_screen(r, i, x, z)? else {
+            let y = heights.get(p).copied().unwrap_or(super::screenmap::GROUND);
+            let Some(s) = super::screenmap::to_screen_at(r, i, x, y, z)? else {
                 return Ok(None);
             };
             pts.push(s);
@@ -514,6 +516,7 @@ fn counter_select_with(
     let Ok(positions) = super::mapdata::positions(&dir) else {
         return Ok(None);
     };
+    let heights = super::mapdata::unit_heights(&dir).unwrap_or_default();
     let wanted_set: BTreeSet<&str> = wanted.iter().map(String::as_str).collect();
     // Large states put some provinces off screen around the state's centre: pan the camera with
     // the arrow keys toward the provinces still off screen (projected again after every tap), at
@@ -547,7 +550,8 @@ fn counter_select_with(
                 let Some(&(x, z)) = positions.get(&p) else {
                     continue;
                 };
-                match super::screenmap::to_screen(r, i, x, z)? {
+                let y = heights.get(&p).copied().unwrap_or(super::screenmap::GROUND);
+                match super::screenmap::to_screen_at(r, i, x, y, z)? {
                     Some(s) if (470.0..1700.0).contains(&s.0) && (120.0..900.0).contains(&s.1) => {
                         pts.push(s)
                     }
