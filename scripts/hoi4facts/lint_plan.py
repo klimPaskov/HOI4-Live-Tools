@@ -82,7 +82,8 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            when the entries of one state together need more than it has)
   army.generals            general, army_group marshal or navy admiral unknown or not a commander of the tag; a
                            marshal with no land role, an admiral with no navy_leader role; one person in two
-                           posts (info: a marshal who is a general is promoted by hoi4_army_commander)
+                           posts (info: a marshal who is a general is promoted by hoi4_army_commander); (warning)
+                           a marshal whose field_marshal role has a visible trigger not met at the start
   army.strike_size         strike entry above 24 divisions
   army.formations          (warning) command not concentrated: an army_layout entry below MIN_FORMATION divisions
                            without a general that is not a task (task_of), or more than MAX_FORMATIONS formations
@@ -280,6 +281,11 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            width fills the theatre's battles (terrain mix of war.theatre, axes and target
                            states; over-width and stacking penalties) 0.05 below the best width (error at 0.10)
   war.counter_attack       (warning) a defender (war.posture defend) with no reachable phase that has axes
+  war.open_path            (warning) a country attacked on the first day where enemy land reaches the capital or a
+                           hold_targets province over own land through no state the day-one layout holds
+  war.capital_open         (warning) a country attacked on the first day whose capital state no guard holds (a
+                           guard or task army_layout entry there that is not a war.reserve army, war.guard_states,
+                           war.guards, or a hold_targets province in it)
   war.supply_floor         war.supply_floor (base, war_by_phase, overrides) below the supply where attrition
                            starts (SUPPLY_THRESHOLD_FOR_ARMY_ATTRITION, 35%); (warning) the attack threshold
                            (supply_floor, or an attack-supply key) below 50%
@@ -1392,6 +1398,82 @@ class Lint:
             uses.append((f"navy.admirals[{fleet}]", name, "admiral", "command"))
         return uses
 
+    def start_leader(self, table):
+        """The character id of the country leader on the start date when the history makes it plain: the one
+        recruited character with a country_leader role of the ruling party's ideology group; else None."""
+        if self.world is None or not self.tag:
+            return None
+        try:
+            ruling = (self.world.country(self.tag).get("politics") or {}).get("ruling_party")
+            ruling = ruling.get("v") if isinstance(ruling, dict) else ruling
+            types = set((self.world.ideologies().get(ruling) or {}).get("types") or [])
+        except Exception:
+            return None
+        if not types:
+            return None
+        found = [cid for cid, c in table.items()
+                 if c["recruited"] and (c.get("visible") or {}).get("_leader_ideology") in types]
+        return found[0] if len(found) == 1 else None
+
+    def start_trigger(self, block, table):
+        """A character role's visible trigger on the start date: True, False or None (cannot tell). Knows
+        has_country_leader (character), has_completed_focus, has_government, ROOT/THIS scopes, AND/OR/NOT, and
+        what script.trigger evaluates (tags, DLC, dates)."""
+        country = self.world.country(self.tag) if self.world is not None and self.tag else {}
+        done = {(f.get("v") if isinstance(f, dict) else f) for f in country.get("completed_focuses") or []}
+        ruling = (country.get("politics") or {}).get("ruling_party")
+        ruling = ruling.get("v") if isinstance(ruling, dict) else ruling
+        leader = self.start_leader(table)
+
+        def one(k, v):
+            kl = (k or "").lower()
+            if kl in ("and", "root", "this"):
+                return block_of(v)
+            if kl == "or":
+                rs = [one(a, b) for a, b in v] if isinstance(v, list) else [None]
+                return True if True in rs else (None if None in rs else False)
+            if kl == "not":
+                rs = [one(a, b) for a, b in v] if isinstance(v, list) else [None]
+                return False if True in rs else (None if None in rs else True)
+            if kl == "has_completed_focus" and isinstance(v, str):
+                return v in done
+            if kl == "has_government" and isinstance(v, str) and ruling:
+                return v == ruling
+            if kl == "has_country_leader" and isinstance(v, list):
+                ch = derive.get1(v, "character")
+                if isinstance(ch, str) and leader:
+                    return ch == leader
+                return None
+            if kl == "has_country_leader_with_trait":
+                return None
+            if kl == "has_character_flag" and isinstance(v, str):
+                # set by events in play (Balcho Safo's safo_active_flag); at the start only what history sets
+                return v in history_flags()
+            return derive.trigger([(k, v)], self.ctx) if self.ctx else None
+
+        def history_flags():
+            if not hasattr(self, "_history_flags"):
+                flags = set()
+                try:
+                    for f in self.game.files("history/countries"):
+                        with open(f, encoding="utf-8-sig", errors="replace") as fh:
+                            flags.update(re.findall(r"set_character_flag\s*=\s*([A-Za-z0-9_.]+)", fh.read()))
+                except Exception:
+                    pass
+                self._history_flags = flags
+            return self._history_flags
+
+        def block_of(items):
+            if not isinstance(items, list):
+                return None
+            rs = [one(a, b) for a, b in items]
+            return False if False in rs else (None if None in rs else True)
+
+        try:
+            return block_of(block)
+        except Exception:
+            return None
+
     def generals(self, layout, armies):
         table = derive.commanders(self.game, self.tag, self.ctx, self.start, self.meta.get("history_file"))
         commands = defaultdict(list)
@@ -1414,6 +1496,15 @@ class Lint:
                 else:
                     self.add("error", "army.generals", where, f"{name!r} ({cid}) has no field_marshal or "
                                                               f"corps_commander role")
+            role = {"marshal": "field_marshal", "general": "corps_commander"}.get(post)
+            if role in c["roles"] and role in c.get("visible", {}):
+                vis = c["visible"][role]
+                if self.start_trigger(vis, table) is False:
+                    # a pool name is only skipped while hidden; a command or fallback goes unfilled
+                    self.add("info" if kind == "pool" else "warning", "army.generals", where,
+                             f"{name!r} ({cid}) is a {role} only while his role's visible trigger holds: "
+                             f"{derive.render(vis)[:200]}; before that hoi4_army_commander does not know him (Ethiopia "
+                             "1936: no marshal all war); name a commander shown from the start")
             if post == "admiral" and "navy_leader" not in c["roles"]:
                 self.add("error", "army.generals", where, f"{name!r} ({cid}) has no navy_leader role")
             if kind == "command":
@@ -4192,6 +4283,113 @@ class Lint:
                      f"{self.tag} is attacked by {', '.join(sorted(at_war))} on the first day and its war starts in a "
                      "hold (axes: []): set war.posture \"defend\" so the hold draws no line on enemy land and retakes "
                      "nothing (a retake is an attack) until the phase with axes")
+        self.capital_open(war, first, at_war)
+        self.open_paths(war, first, at_war)
+
+    def covered_states(self, war, first):
+        """States the day-one layout holds: guard_states and guards (first phase over the base), guard and task
+        army_layout entries and their guard_states_in_order, every other non-reserve layout army's own state, and
+        the states of hold_targets provinces. A war.reserve army holds nothing (it leaves for the fronts)."""
+        reserve = set(x for x in (first.get("reserve", war.get("reserve")) or []) if isinstance(x, str))
+        held = set(_ints(first.get("guard_states", war.get("guard_states"))))
+        g = first.get("guards", war.get("guards"))
+        if isinstance(g, dict):
+            held.update(v for v in g.values() if isinstance(v, int))
+        for e in self.list_of("army_layout"):
+            if e.get("name_hint") in reserve:
+                continue
+            held.update(_ints(e.get("guard_states_in_order")))
+            if isinstance(e.get("state"), int):
+                held.add(e["state"])
+        pstate = self.game.province_state()
+        for h in self.list_of("hold_targets"):
+            held.update(pstate.get(p) for p in _ints(h.get("provinces")))
+        held.discard(None)
+        return held
+
+    def open_paths(self, war, first, at_war):
+        """war.open_path: a country attacked on the first day where enemy land reaches its capital or a
+        hold_targets province over own land through no state the day-one layout holds (covered_states): the
+        attacker walks that road (Ethiopia 1936, e10: Italy went Begemder -> Gojjam -> Shewa to Addis Ababa while
+        the armies held two northern posts)."""
+        try:
+            cap = derive.capital_state(self.game, self.tag, self.ctx, self.start)
+            ctl = derive.province_controllers(self.game, self.ctx, self.start)
+            adj = derive.land_adjacency(self.game) or {}
+        except Exception:
+            return
+        pstate = self.game.province_state()
+        held = self.covered_states(war, first)
+        targets = {}
+        if isinstance(cap, int):
+            for p in self.game.states().get(cap, {}).get("provinces", []):
+                targets[p] = f"capital state {cap}"
+        for h in self.list_of("hold_targets"):
+            for p in _ints(h.get("provinces")):
+                targets.setdefault(p, f"hold_targets {h.get('id') or h.get('army')} province {p}")
+        if not targets:
+            return
+        enemies = set(at_war)
+        start = [p for p, c in ctl.items() if c in enemies]
+        prev = {p: None for p in start}
+        queue = deque(start)
+        hit = None
+        while queue and hit is None:
+            p = queue.popleft()
+            for n in adj.get(p, ()):
+                if n in prev or ctl.get(n) != self.tag:
+                    continue
+                prev[n] = p
+                if pstate.get(n) in held:
+                    continue
+                if n in targets:
+                    hit = n
+                    break
+                queue.append(n)
+        if hit is None:
+            return
+        road, p = [], hit
+        while p is not None:
+            s = pstate.get(p)
+            if not road or road[-1] != s:
+                road.append(s)
+            p = prev[p]
+        road = [s for s in reversed(road) if s is not None]
+        self.add("warning", "war.open_path", "war.guard_states",
+                 f"enemy land reaches {targets[hit]} through states no day-one army holds: "
+                 f"{' -> '.join(map(str, road))}; put a guard (or a hold) on that road")
+
+    def capital_open(self, war, first, at_war):
+        """war.capital_open: a country attacked on the first day whose capital state nothing holds. A reserve army
+        standing there does not count (the executor sends reserves to the fronts): Ethiopia 1936 put its one
+        division at Addis Ababa in war.reserve and fourteen more on two hold posts in the north; the reserve left,
+        Italy walked in through Gojjam and took the capital on 7 March, four months before the AI loses it."""
+        try:
+            cap = derive.capital_state(self.game, self.tag, self.ctx, self.start)
+        except Exception:
+            return
+        if not isinstance(cap, int):
+            return
+        reserve = set(x for x in (first.get("reserve", war.get("reserve")) or []) if isinstance(x, str))
+        held = set(_ints(first.get("guard_states", war.get("guard_states"))))
+        g = first.get("guards", war.get("guards"))
+        if isinstance(g, dict):
+            held.update(v for v in g.values() if isinstance(v, int))
+        for e in self.list_of("army_layout"):
+            if e.get("name_hint") in reserve or not (e.get("role") == "guard" or e.get("task_of")):
+                continue
+            held.update(_ints(e.get("guard_states_in_order")))
+            if isinstance(e.get("state"), int):
+                held.add(e["state"])
+        pstate = self.game.province_state()
+        for h in self.list_of("hold_targets"):
+            held.update(pstate.get(p) for p in _ints(h.get("provinces")))
+        if cap not in held:
+            self.add("warning", "war.capital_open", "war.guard_states",
+                     f"{self.tag} is attacked by {', '.join(sorted(at_war))} on the first day and nothing holds its "
+                     f"capital state {cap}: no guard or task army there outside war.reserve (a reserve leaves for the "
+                     "fronts), not in war.guard_states or war.guards, no hold_targets province in it; losing the "
+                     "capital moves the surrender fast, so keep a guard there")
 
     FOCUS_ATOM = re.compile(r"\bfocus_(?:done|completed):([A-Za-z0-9_.\-]+)")
 

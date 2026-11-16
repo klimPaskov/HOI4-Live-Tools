@@ -514,8 +514,10 @@ dossier §9.
    zero) also decides the theatre's own divisions: a division disbanded on own land returns its
    equipment and manpower to the stockpile, which reinforces the rest, so fewer, fuller divisions
    fight better than many empty ones. Name the weakest templates to go and the fill the rest must
-   reach (`disband`, `why` with `calc equipment`), and train nothing that draws that item while the
-   front is short (`training.only_if_stockpile`).
+   reach (`disband.consolidate` {until_fill, keep}: the weakest divisions on own land go, as few as
+   bring the rest to that fill), and train nothing that draws that item while the front is short
+   (`training.only_if_stockpile`). Set `production_priority` to that item: a resource its lines lack
+   raises the import budget at once (`auto_import.budget_max` caps it).
 5b. A defender (the target of a war that runs on the first day) until its counter-attack phase:
    `war.posture` "defend" (no line on enemy land, no retake of lost states in a hold; a retake is an
    attack; lint `war.defend_posture`); the defensive branch of mutually exclusive focuses before the
@@ -532,8 +534,12 @@ dossier §9.
    the provinces a mission counts until its timer ends, survive past the date the attacker's withdrawal
    decision opens, take what the peace transfers before it fires). A defender's hold leaves the line to
    the executor: every theatre army keeps one front on the contact line as it moves (`war.posture`
-   "defend", `war.defend_per_state`); contingencies do not pull every army onto the capital (one reserve
-   formation guards it, the rest stay on the line). The counter-attack is a later phase with axes entered
+   "defend", `war.defend_per_state`); contingencies do not pull every army onto the capital (one guard
+   formation holds it, not a `war.reserve` army, which leaves for the fronts: lint `war.capital_open`;
+   no road from enemy land to the capital or a hold post through states no day-one army holds: lint
+   `war.open_path`). Commanders and marshals are ones the game shows on the first day: a role with a
+   `visible` trigger (a focus, a ruler, a character flag set by an event) is unknown to the commander
+   tool until it holds (lint `army.generals`). The counter-attack is a later phase with axes entered
    by measurable conditions (a date, `casualty_ratio:<enemy>`, `own_surrender_progress`, a focus the focus
    path reaches), never by a focus the chosen branch excludes: the focus path and every gate take one
    branch of each mutually exclusive pair (lint `focus.unreachable_gate`, `war.counter_attack`).

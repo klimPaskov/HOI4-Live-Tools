@@ -632,7 +632,9 @@ COMMANDER_ROLES = ("corps_commander", "field_marshal", "navy_leader")
 
 
 def characters(game, ctx=None):
-    """{id: {"names": set(display names), "roles": set, "file"}} with role blocks allowed for ctx."""
+    """{id: {"names": set(display names), "roles": set, "file", "visible": {role: trigger block}}} with role blocks
+    allowed for ctx; "visible" keeps the `visible` trigger of a role that has one (the role is hidden while it fails:
+    Ethiopia's field marshals show only under their own rule or after Rally Around the Emperor)."""
 
     def load():
         out = {}
@@ -647,7 +649,7 @@ def characters(game, ctx=None):
                     for inst in get(body, "instance"):
                         if isinstance(inst, list) and not (ctx and trigger(get1(inst, "allowed", []), ctx) is False):
                             blocks.append(inst)
-                    roles, names = set(), set()
+                    roles, names, visible = set(), set(), {}
                     for b in blocks:
                         n = get1(b, "name")
                         if isinstance(n, str):
@@ -656,9 +658,17 @@ def characters(game, ctx=None):
                             for rb in get(b, r):
                                 if isinstance(rb, list) and not (ctx and trigger(get1(rb, "allowed", []), ctx) is False):
                                     roles.add(r)
-                    row = out.setdefault(cid, {"names": set(), "roles": set(), "file": os.path.basename(f)})
+                                    vis = get1(rb, "visible")
+                                    if isinstance(vis, list):
+                                        visible[r] = vis
+                                    ideo = get1(rb, "ideology") if r == "country_leader" else None
+                                    if isinstance(ideo, str):
+                                        visible.setdefault("_leader_ideology", ideo)
+                    row = out.setdefault(cid, {"names": set(), "roles": set(), "file": os.path.basename(f),
+                                               "visible": {}})
                     row["names"] |= names
                     row["roles"] |= roles
+                    row["visible"].update(visible)
         return out
 
     key = "derive:chars" if ctx is None else "derive:chars:" + _ctxkey(ctx, "")
@@ -696,7 +706,8 @@ def commanders(game, tag, ctx, date=DEFAULT_START, history_file=None):
             display = loc(game, n)
             if display:
                 break
-        out[cid] = {"display": display or cid, "roles": c["roles"], "recruited": cid in recruited}
+        out[cid] = {"display": display or cid, "roles": c["roles"], "recruited": cid in recruited,
+                    "visible": c.get("visible") or {}}
     return out
 
 
