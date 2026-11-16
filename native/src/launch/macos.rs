@@ -1040,8 +1040,11 @@ impl MacClock {
         // changes the pause state through its own input gets the starting state put back (see
         // pause_guard; Ethiopia run 11: the game stood paused for 100 s after a plan-runner
         // tick with a focus and a front).
+        // A read that drives the interface (hoi4_politics_options opens the seat's window) can
+        // pause the game as surely as an action: every call is guarded, a memory read only costs
+        // two clock reads (pm2, 17 Nov 2026: the game stood paused for four minutes after a
+        // politics read sent without a request id).
         let guard_pause = !journaled
-            && arguments.get("request_id").is_some()
             && name != "hoi4_time"
             && !name.starts_with("hoi4_peace")
             && process.identity() == self.process.identity();

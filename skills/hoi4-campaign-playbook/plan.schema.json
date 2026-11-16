@@ -652,6 +652,11 @@
           "minimum": 1,
           "description": "game days before an entry that found nothing to buy reads its slot again"
         },
+        "fill_vacant": {
+          "type": "boolean",
+          "default": true,
+          "description": "after the order, every vacant advisor seat (political advisors, then theorists and designers, then the military staff) takes the first advisor the game enables there (never respected); an entry whose seat holds what it does not rank takes its idea at another vacant seat of the category that offers it"
+        },
         "recheck_pp": {
           "type": "number",
           "default": 25,

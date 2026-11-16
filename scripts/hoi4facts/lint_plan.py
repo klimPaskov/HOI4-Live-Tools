@@ -314,6 +314,9 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            and its threshold; a pick the income cannot pay by the horizon; projected PP above
                            100 (or above the next pick that can still be bought) with nothing bought for more
                            than 60 days in a row; (warning) a dated buy affordable more than 30 days late
+  templates.column_height  a template column with more battalions than the designer opens (MIN_DIVISION_BRIGADE_HEIGHT)
+  politics.unknown_idea    an idea named by politics or politics_auto.order that is neither in common/ideas nor
+                           an advisor (character id or idea_token) of the tag
   politics.open_seat       (warning) every politics_auto.order entry names its ideas: when the game disables
                            them all, power piles up; add entries without `ideas` for seats worth filling
   politics.available       a politics pick or every idea of a politics_auto.order entry whose `available` gate
@@ -1025,6 +1028,37 @@ class Lint:
                      "every entry names its ideas: when the game disables them all the power piles up; add entries "
                      "without `ideas` (a vacant seat takes the first enabled idea) for the seats worth filling, such "
                      "as the designers and the political advisors")
+
+    def politics_known_ideas(self):
+        """politics.unknown_idea (error): every idea a politics pick or a politics_auto.order entry names is a
+        law or idea in common/ideas or an advisor of the tag (character id or idea_token) in common/characters.
+        A name the game does not know is never offered, and the entry stands there all campaign (gr3 16 Nov 2026:
+        'raeder', 'manstein', 'werner_von_fritsch_high_command' and 'ferdinand_schorner' kept four seats empty)."""
+        if self.world is None or not self.tag:
+            return
+        advisors = set()
+        for ch in self.world.characters(self.tag, "advisor"):
+            for r in ch["roles"]:
+                if r["role"] == "advisor":
+                    advisors.add(ch["id"])
+                    if r.get("idea_token"):
+                        advisors.add(r["idea_token"])
+        known = set(self.world.ideas()) | advisors
+
+        def check(where, idea):
+            if isinstance(idea, str) and idea and idea not in known:
+                self.add("error", "politics.unknown_idea", where,
+                         f"{idea!r} is neither an idea in common/ideas nor an advisor of {self.tag} in common/characters "
+                         f"(advisors are named by their idea_token or character id, e.g. TAG_first_last)")
+
+        for i, p in enumerate(self.plan.get("politics") or []):
+            if isinstance(p, dict):
+                check(f"politics[{i}]", p.get("idea"))
+        auto = self.plan.get("politics_auto")
+        if isinstance(auto, dict):
+            for j, e in enumerate(auto.get("order") or []):
+                for idea in (e.get("ideas") or []) if isinstance(e, dict) else []:
+                    check(f"politics_auto.order[{j}]", idea)
 
     def construction_lists(self):
         """(label prefix, construction_plan list) for the base plan and each override."""
@@ -2876,6 +2910,18 @@ class Lint:
                 self.add("error", "templates.locked", where,
                          f"base {base!r} is {locked[base]}: the game offers no Edit for it; create a new template")
             cols = template_columns(t.get("regiments")) or []
+            # templates.column_height: the designer opens MIN_DIVISION_BRIGADE_HEIGHT rows per column; the rows up
+            # to MAX_DIVISION_BRIGADE_HEIGHT open only with a modifier (additional_brigade_column_size, given by
+            # grand-doctrine milestones reached through mastery). A taller column is refused slot_locked on every
+            # try (gr1-gr6: Panzer-Division 36 with five tanks in one column, 0 of 9 creates).
+            rows = int(self.define("MIN_DIVISION_BRIGADE_HEIGHT", 4))
+            tall = [k for k, c in enumerate(cols) if len(c) > rows]
+            if tall:
+                self.add("error", "templates.column_height", where,
+                         f"column {tall[0] + 1} holds {len(cols[tall[0]])} battalions; the designer opens {rows} rows "
+                         f"(MIN_DIVISION_BRIGADE_HEIGHT) until a doctrine milestone with additional_brigade_column_size is "
+                         f"reached, so the template cannot be saved: use at most {rows} per column (spread the battalions "
+                         f"over more columns)")
             dates = predicate_dates(t["when"], self.table) if t.get("when") is not None else []
             year = max(dates)[0] if dates else start_year
             flat = [u for c in cols for u in c] + list(t.get("support") or []) + list(t.get("regimental_support") or [])
@@ -5388,7 +5434,7 @@ class Lint:
                  self.production_in_progress, self.production_naval_cap, self.production_balance,
                  self.army_width_terrain,
                  self.war_supply_floor, self.war_planning_wait, self.war_pocket_threshold, self.war_encircle,
-                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.decision_reach, self.construction_idle, self.politics_open_seat, self.alert_owners,
+                 self.politics_pp_budget, self.stability_owner, self.contingency_at_start, self.defend_posture, self.disband_locked, self.focus_reach, self.decision_reach, self.construction_idle, self.politics_open_seat, self.politics_known_ideas, self.alert_owners,
                  self.idle_wings,
                  self.strike_choice, self.strike_posts,
                  self.politics_conscription, self.research_ahead, self.navy_invasions, self.construction_war_civs,

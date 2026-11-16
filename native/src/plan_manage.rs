@@ -1084,7 +1084,19 @@ fn templates_step(
         if ok || why.contains("nothing_to_change") || why.contains("name_taken") {
             state.done.insert(key, now);
         } else {
-            state.skip(now, "tpl", &key, 7 * DAY);
+            // A slot the designer does not open (a fifth row before a doctrine milestone) or a
+            // unit not yet researched does not change in a week: rest 90 days and say so (gr1-gr6:
+            // Panzer-Division 36 refused slot_locked 9 times). Lint: templates.column_height.
+            let days = match super::plan_military::code(&why) {
+                "slot_locked" | "unit_not_unlocked" | "template_too_wide" => {
+                    extra.push(format!(
+                        "refused {why}: rests 90 days, the plan must change it"
+                    ));
+                    90
+                }
+                _ => 7,
+            };
+            state.skip(now, "tpl", &key, days * DAY);
         }
         if !extra.is_empty() {
             note(state, "templates", format!("{name}: {}", extra.join("; ")));
@@ -2949,6 +2961,34 @@ fn politics_auto_default(state: &State, now: GameHour, recheck: GameHour) -> Val
     )
 }
 
+/// The vacancy fill that follows the plan's own `politics_auto.order` (off with
+/// `politics_auto.fill_vacant: false`): every seat a read showed vacant, political advisors
+/// first, then theorists and designers, then the military staff, takes the first advisor the
+/// game enables there (`never` respected). Until a category has been read, one seat stands for
+/// it (its read lists the seats). Without it a plan whose order named keys the game does not
+/// offer let the power pile up beside six vacant seats (gr3 16 Nov, pm2 17 Nov 2026: 165 PP,
+/// every seat vacant, nothing bought).
+fn politics_auto_fill(state: &State, now: GameHour, recheck: GameHour) -> Vec<Value> {
+    let mut out = Vec::new();
+    for (category, seed, cost) in [
+        ("government", 0, 150),
+        ("research_production", 5, 100),
+        ("military_staff", 0, 50),
+    ] {
+        let seats = match state.manage.pp_vacant.get(category) {
+            Some((at, seats)) if now.saturating_sub(*at) < recheck => seats.clone(),
+            _ => vec![seed],
+        };
+        for slot in seats {
+            out.push(
+                json!({"category": category, "slot": slot, "cost": cost, "fill": true,
+                "why": "a vacant seat: the first advisor the game enables"}),
+            );
+        }
+    }
+    out
+}
+
 /// Political power now (hoi4_economy).
 pub(super) fn political_power(tools: &dyn Tools) -> Option<f64> {
     tools
@@ -3130,11 +3170,24 @@ pub(super) fn politics_auto_step(
         .filter(|p| *p > 0.0)
         .unwrap_or(25.0);
     let default_order = politics_auto_default(state, now, recheck);
-    let order = if cfg["order"].is_array() {
-        &cfg["order"]
+    let mut order = if cfg["order"].is_array() {
+        cfg["order"].clone()
     } else {
-        &default_order
+        default_order
     };
+    if cfg["fill_vacant"] != json!(false) {
+        if let Some(entries) = order.as_array_mut() {
+            for fill in politics_auto_fill(state, now, recheck) {
+                let taken = entries
+                    .iter()
+                    .any(|e| e["category"] == fill["category"] && e["slot"] == fill["slot"]);
+                if !taken {
+                    entries.push(fill);
+                }
+            }
+        }
+    }
+    let order = &order;
     let never = strings(cfg, "never");
     let conscription = strings(&plan["manage"], "conscription_laws");
     let mut seen: Vec<String> = Vec::new();
@@ -3239,7 +3292,7 @@ pub(super) fn politics_auto_step(
                 .pp_vacant
                 .insert(category.clone(), (now, vacant));
         }
-        let current = options["current"]
+        let mut current = options["current"]
             .as_str()
             .or(options["current"]["idea"].as_str())
             .unwrap_or("")
@@ -3248,7 +3301,42 @@ pub(super) fn politics_auto_step(
             .iter()
             .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
             .collect();
-        let idea = match politics_auto_choice(entry, &current, &offered, &never, &conscription) {
+        let mut slot = slot.clone();
+        let mut choice = politics_auto_choice(entry, &current, &offered, &never, &conscription);
+        // The order names advisors, not seats: an entry whose seat holds what the order does not
+        // rank (or holds anything, for a vacancy fill) takes its idea at another vacant seat of
+        // the category that offers it (gr3 16 Nov 2026: Ribbentrop held seat 4, the order's
+        // Göring entry stopped there while seat 5 stood vacant all year).
+        if choice.is_err() && !current.is_empty() {
+            let vacant = state
+                .manage
+                .pp_vacant
+                .get(&category)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
+            for seat in vacant.into_iter().filter(|v| json!(v) != slot) {
+                let Ok(other) = tools.call(
+                    "hoi4_politics_options",
+                    &json!({"category": category, "slot": seat, "lease_token": lease}),
+                ) else {
+                    continue;
+                };
+                let offered: Vec<(String, bool)> = list(&other, "options")
+                    .iter()
+                    .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
+                    .collect();
+                let mut moved = entry.clone();
+                moved["slot"] = json!(seat);
+                if let Ok(idea) = politics_auto_choice(&moved, "", &offered, &never, &conscription)
+                {
+                    slot = json!(seat);
+                    current.clear();
+                    choice = Ok(idea);
+                    break;
+                }
+            }
+        }
+        let idea = match choice {
             Ok(idea) => idea,
             Err((why, disabled)) => {
                 state.skip(now, "pauto", &slot_key, recheck);
@@ -3296,8 +3384,9 @@ pub(super) fn politics_auto_step(
         } else {
             current.as_str()
         };
-        let line =
-            format!("PP {pp_text} ({reserve_text}): {slot_key} {from} -> {idea} ({reason}): {ok}");
+        let line = format!(
+            "PP {pp_text} ({reserve_text}): {category}:{slot} {from} -> {idea} ({reason}): {ok}"
+        );
         let picks = state
             .manage
             .notes
@@ -4135,10 +4224,13 @@ fn stockpile_rule(
                         days.unwrap_or(0.0)
                     )
                 };
+                // an unmeasured cover (no consumption in peace) is no critical cover: the
+                // trucks get idle factories, never factories pulled from another line (pm2,
+                // 17 Nov 2026: rifles 14 -> 10 for trucks in the first January)
                 low.push((
                     "motorized_equipment".into(),
                     "motorized_equipment".into(),
-                    days.unwrap_or(0.0),
+                    days.unwrap_or(f64::MAX),
                     why,
                 ));
             }
@@ -4188,9 +4280,25 @@ fn stockpile_rule(
     // at a sixth of its equipment, the missing-production alert open all year).
     let felt = short_of(&read, &archetype) > 0.0 || days < critical;
     if give <= 0 && felt && m["shift_factories"] != json!(false) {
+        let recent: HashSet<String> = state
+            .manage
+            .pulled
+            .iter()
+            .filter(|(_, at)| now - **at < 30 * DAY)
+            .map(|(e, _)| e.clone())
+            .collect();
+        let candidates: Vec<MilLine> = military
+            .iter()
+            .filter(|l| !recent.contains(&l.1))
+            .cloned()
+            .collect();
         if let Some(((index, have, factories, _), take)) =
-            donor_line(&read, plan, &military, &archetype, warning, step)
+            donor_line(&read, plan, &candidates, &archetype, warning, step)
         {
+            // PR09: a moved factory restarts at the start efficiency: a line gives at most a
+            // fifth of itself and once in 30 days
+            let take = take.min((factories / 5).max(1));
+            state.manage.pulled.insert(have.clone(), now);
             let (ok, result) = state.act(
                 tools,
                 lease,
@@ -6936,7 +7044,7 @@ mod tests {
                     {"idea": "partial_economic_mobilisation", "enabled": true}]}),
             ),
         ]);
-        let plan = json!({"politics_auto": {"order": [{"category": "government", "slot": 2,
+        let plan = json!({"politics_auto": {"fill_vacant": false, "order": [{"category": "government", "slot": 2,
             "ideas": ["war_economy", "partial_economic_mobilisation"], "cost": 100}]}});
         let mut state = State::default();
         assert_eq!(
@@ -7010,13 +7118,22 @@ mod tests {
                         {"slot": 4, "current": "X_hc"}, {"slot": 5, "current": null}]}),
             ),
         ]);
-        let plan = json!({});
+        let plan = json!({"politics_auto": {"fill_vacant": false}});
         let mut state = State::default();
-        assert_eq!(
-            politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap(),
-            None
+        // the seat read first holds the chief: the read lists seats 3 and 5 vacant, and the
+        // first advisor enabled at seat 3 is bought at once
+        let out = politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            out.as_deref()
+                .unwrap_or("")
+                .contains("military_staff:3 vacant -> X_a"),
+            "{out:?}"
         );
-        assert!(state.manage.notes["politics_auto"].contains("military_staff:0 holds X_chief"));
+        tools.calls.borrow_mut().clear();
+        state
+            .manage
+            .pp_vacant
+            .insert("military_staff".into(), (START, vec![3]));
         tools.replies.borrow_mut().insert(
             "hoi4_politics_options".into(),
             json!({"current": null, "options": [{"idea": "X_b", "enabled": false},
@@ -7038,6 +7155,36 @@ mod tests {
             .borrow()
             .iter()
             .all(|(_, a)| a["category"] != json!("government")));
+    }
+
+    #[test]
+    fn power_the_order_cannot_spend_fills_a_vacant_advisor_seat() {
+        // the order names a key the game does not offer; seat 5 of the government is vacant
+        let tools = fake(vec![
+            ("hoi4_economy", pp(200.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": null, "options": [{"idea": "X_minister", "enabled": true}],
+                    "slots": [{"slot": 0, "current": "law"}, {"slot": 5, "current": null}]}),
+            ),
+        ]);
+        let plan = json!({"politics_auto": {"threshold": 60, "order": [
+            {"category": "government", "slot": 4, "ideas": ["not_a_key"], "cost": 150}]}});
+        let mut state = State::default();
+        let mut bought = None;
+        for day in 0..4 {
+            if let Some(out) =
+                politics_auto_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap()
+            {
+                bought = Some(out);
+                break;
+            }
+        }
+        let out = bought.expect("the vacancy fill buys an advisor");
+        assert!(out.contains("-> X_minister"), "{out}");
+        let acts = actions(&tools);
+        assert_eq!(acts.len(), 1);
+        assert_eq!(acts[0].1["idea"], "X_minister");
     }
 
     #[test]
@@ -7339,13 +7486,14 @@ mod tests {
         assert!(out.contains("no idle factory"), "{out}");
         let sent = actions(&tools);
         assert_eq!(sent.len(), 2, "{sent:?}");
+        // PR09: a line gives at most a fifth of itself (12 -> 10)
         assert_eq!(
             (sent[0].1["line"].clone(), sent[0].1["factories"].clone()),
-            (json!(0), json!(9))
+            (json!(0), json!(10))
         );
         assert_eq!(
             (sent[1].1["line"].clone(), sent[1].1["factories"].clone()),
-            (json!(1), json!(11))
+            (json!(1), json!(10))
         );
         // switched off by the plan: the player is woken instead
         let mut replies = lines_with(0);

@@ -672,11 +672,41 @@ fn open_detail(
         pause(300);
         return Ok(());
     }
-    if require_row(process, display).is_err() {
-        // the readable rows are only the ones drawn: the rest of the roster lies below
-        row_by_details(process, keys, display)?;
-        pause(300);
-        return Ok(());
+    if let Err(first) = require_row(process, display) {
+        // The readable rows are only the ones drawn (about five): the rest of the roster lies
+        // below. Wheel the list a page at a time and read the drawn rows again, until the row
+        // shows or a page brings no new name (the end). Opening every row's details instead
+        // took longer than the action's time (pm2, 17 Nov 2026).
+        let list = read(process, list_rect)?;
+        let centre = (
+            f64::from(list.x + list.w / 2),
+            f64::from(list.y + list.h / 2),
+        );
+        let mut all: Vec<String> = Vec::new();
+        let mut found = false;
+        for _ in 0..8 {
+            keys.scroll(pk::GAME, centre, -(ROW_HEIGHT * 3))?;
+            pause(300);
+            let (seen, at) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
+            if at.is_some() {
+                found = true;
+                break;
+            }
+            let fresh: Vec<String> = seen.into_iter().filter(|n| !all.contains(n)).collect();
+            if fresh.is_empty() {
+                break;
+            }
+            all.extend(fresh);
+        }
+        if !found {
+            return Err(match first {
+                Fail::Refused(mut e) if !all.is_empty() => {
+                    e.message = format!("{} (further down: {})", e.message, all.join(" | "));
+                    Fail::Refused(e)
+                }
+                other => other,
+            });
+        }
     }
     pk::click(process, keys, "organisation details", |r, i| {
         row_rect(r, i, display, "details_button")
@@ -1117,7 +1147,7 @@ pub(super) fn call(
                     ))
                 }),
             };
-            ui_action::run(job, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 40, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_trait" => {
             super::allowed(
@@ -1177,7 +1207,7 @@ pub(super) fn call(
                     )
                 }),
             };
-            ui_action::run(job, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 40, id, token, process, keys, guard, authority, actions)
         }
         _ => Err(Error::new(
             "capability_unavailable",
