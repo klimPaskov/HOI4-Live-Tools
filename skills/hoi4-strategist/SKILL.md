@@ -173,6 +173,13 @@ name), `dossier_hash` from the manifest, `models` from `RUN/agents-manifest.json
 (`errors`, `warnings`). Re-run step 7 once more. *Gate:* 0 errors. The operator then loads the plan
 with `hoi4_plan` and starts the autopilot; you do not.
 
+**Reuse.** `strategize.py` first looks for a reviewed plan made for the same request (tag, start date,
+mode, goal and clarifications in the same words, horizon, difficulty, AI, and the same DLCs and mods) in
+`--library` folders, `HOI4_LIVE_PLAN_LIBRARY` and `skills/hoi4-campaign-playbook/plans/reviewed/`. A match
+is copied into RUN and starts at step 7: if the gates pass unchanged on this install it ships with its
+stored review and no model call; otherwise the fix and review steps run. `--no-reuse` plans afresh;
+`strategize.py --run RUN --publish DIR` puts a passed run into a library.
+
 Time budget: steps 1 to 8 in about 30 minutes of wall time. Every turn re-reads the whole conversation, so
 the cost of a step grows with everything before it: batch reads and fact queries, write plan.json in a few
 large parts, and do not re-read what the pack or an earlier read already gave you.

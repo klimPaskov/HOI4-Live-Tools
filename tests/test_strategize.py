@@ -60,7 +60,8 @@ class Fake(strategize.Runner):
                 critic = {"round": self.critics, "total": 25 if ok else 12, "max": 32, "pass": ok,
                           "scores": {"1": 2, "2": 2, "7": 2 if ok else 0, "13": 2},
                           "findings": [] if ok else [{"id": "F1", "severity": "blocker"}]}
-                with open(os.path.join(self.run_dir, "review", "critic-%d.json" % self.critics), "w") as f:
+                n = 1 + len([x for x in os.listdir(os.path.join(self.run_dir, "review")) if x.startswith("critic-")])
+                with open(os.path.join(self.run_dir, "review", "critic-%d.json" % n), "w") as f:
                     json.dump(critic, f)
             return 0, ""
         raise AssertionError("unexpected command " + joined)
@@ -68,7 +69,8 @@ class Fake(strategize.Runner):
 
 def args(run_dir, **kw):
     base = dict(run=run_dir, tag="ITA", date="1936.1.1", goal="Conquer Ethiopia", mode="fair", horizon=None,
-                game=None, userdir=None, mod=None, provider=None, dry_run=False, from_step="dossier")
+                game=None, userdir=None, mod=None, provider=None, dry_run=False, from_step="dossier", library=None,
+                no_reuse=False)
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -248,4 +250,89 @@ class GapTableAndTimelines(unittest.TestCase):
             self.assertTrue(any("research-timeline" in c for c in fake.commands))
             with open(os.path.join(d, strategize.TIMELINES)) as f:
                 self.assertIn("## Research", f.read())
+
+
+class Reuse(unittest.TestCase):
+    def library_entry(self, lib, goal="Conquer Ethiopia", passed=True, dlcs=("By Blood Alone",)):
+        entry = os.path.join(lib, "ita-eth")
+        os.makedirs(os.path.join(entry, "review"))
+        spec = {"tag": "ITA", "start_date": "1936.1.1", "goal": goal, "mode": "fair", "horizon": "1937.1.1"}
+        with open(os.path.join(entry, "run_spec.json"), "w") as f:
+            json.dump(spec, f)
+        with open(os.path.join(entry, "dossier-manifest.json"), "w") as f:
+            json.dump({"dlcs": list(dlcs), "mods": []}, f)
+        with open(os.path.join(entry, "plan.json"), "w") as f:
+            json.dump({"focus_path": [], "_meta": {"models": {"strategist": {"model": "m"}},
+                                                    "review": {"pass": passed, "detail": "total 28/32"}}}, f)
+        for name in ("plan.md", "plan.brief.md"):
+            with open(os.path.join(entry, name), "w") as f:
+                f.write("x")
+        with open(os.path.join(entry, "review", "critic-1.json"), "w") as f:
+            json.dump({"total": 28}, f)
+        strategize.seed_tool_gaps(entry)
+        with open(os.path.join(entry, "tool-gaps.md")) as f:
+            text = f.read()
+        with open(os.path.join(entry, "tool-gaps.md"), "w") as f:
+            f.write(text.replace("| ? |", "| not used: no such war |"))
+        return entry
+
+    def manifest(self, d, dlcs=("By Blood Alone",)):
+        os.makedirs(os.path.join(d, "dossier"), exist_ok=True)
+        for name in ("dossier.md", "manifest.json"):
+            with open(os.path.join(d, "dossier", name), "w") as f:
+                json.dump({"dlcs": list(dlcs), "mods": []}, f)
+
+    def test_matching_reviewed_plan_ships_without_a_model_call(self):
+        with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d:
+            self.library_entry(lib)
+            self.manifest(d)
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d, goal="conquer  ethiopia", library=[lib]), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(roles(fake), [])
+            self.assertIn({"step": "reuse", "from": "ita-eth"}, report["steps"])
+            with open(os.path.join(d, "plan.json")) as f:
+                plan = json.load(f)
+            self.assertEqual(plan["_meta"]["reused_from"], "ita-eth")
+            self.assertEqual(plan["_meta"]["models"], {"strategist": {"model": "m"}})
+            self.assertTrue(plan["_meta"]["review"]["pass"])
+            self.assertTrue(os.path.exists(os.path.join(d, "review", "critic-1.json")))
+
+    def test_reused_plan_that_fails_the_gates_is_fixed_and_reviewed(self):
+        with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d:
+            self.library_entry(lib)
+            self.manifest(d)
+            fake = Fake(d, validate_fails=1, critic_fails=0)
+            report = strategize.strategize(args(d, library=[lib]), fake)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(roles(fake), [("strategist", "fix.md"), ("critic", "critic.md")])
+
+    def test_no_match_plans_afresh(self):
+        for kw in ({"goal": "Conquer Greece"}, {"passed": False}, {"dlcs": ("Other DLC",)}):
+            with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d:
+                self.library_entry(lib, **kw)
+                self.manifest(d)
+                fake = Fake(d, validate_fails=0, critic_fails=0)
+                strategize.strategize(args(d, library=[lib]), fake)
+                self.assertEqual(roles(fake)[0], ("strategist", "strategist.md"), kw)
+        with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d:
+            self.library_entry(lib)
+            self.manifest(d)
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            strategize.strategize(args(d, library=[lib], no_reuse=True), fake)
+            self.assertEqual(roles(fake)[0], ("strategist", "strategist.md"))
+
+    def test_publish_then_reuse(self):
+        with tempfile.TemporaryDirectory() as lib, tempfile.TemporaryDirectory() as d, \
+                tempfile.TemporaryDirectory() as d2:
+            fake = Fake(d, validate_fails=0, critic_fails=0)
+            self.assertTrue(strategize.strategize(args(d, no_reuse=True), fake)["ok"])
+            with open(os.path.join(d, "dossier", "manifest.json"), "w") as f:
+                json.dump({"dlcs": ["A"], "mods": []}, f)
+            strategize.publish(d, os.path.join(lib, "first"))
+            self.manifest(d2, dlcs=("A",))
+            fake2 = Fake(d2, validate_fails=0, critic_fails=0)
+            report = strategize.strategize(args(d2, library=[lib]), fake2)
+            self.assertTrue(report["ok"], report.get("failure"))
+            self.assertEqual(roles(fake2), [])
 
