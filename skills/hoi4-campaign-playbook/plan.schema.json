@@ -652,6 +652,11 @@
           "minimum": 1,
           "description": "game days before an entry that found nothing to buy reads its slot again"
         },
+        "fill_vacant": {
+          "type": "boolean",
+          "default": true,
+          "description": "after the order, every vacant advisor seat (political advisors, then theorists and designers, then the military staff) takes the first advisor the game enables there (never respected); an entry whose seat holds what it does not rank takes its idea at another vacant seat of the category that offers it"
+        },
         "recheck_pp": {
           "type": "number",
           "default": 25,
@@ -2956,7 +2961,7 @@
               "air_superiority",
               "overdrawn",
               "convoys",
-              "fuel"
+              "fuel", "balance", "dockyards"
             ]
           }
         },
@@ -3129,6 +3134,18 @@
           "minimum": 0,
           "maximum": 1,
           "x-rule": "fuel"
+        },
+        "balance_reserve": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.8,
+          "description": "production balance rule: the stock kept in reserve per equipment, as a share of what the fielded divisions use (the game's AI keeps 0.8, PRODUCTION_EQUIPMENT_SURPLUS_FACTOR); it counts as need for idle factories and is never pulled from"
+        },
+        "balance_pull_days": {
+          "type": "number",
+          "minimum": 1,
+          "default": 120,
+          "description": "production balance rule: a shortfall of at least this many days of production may pull a fifth of a line whose stock covers twice its need (once in 30 days per line); idle factories always go by need first. manage.off \"balance\" turns the rule off"
         },
         "rebalance_step": {
           "type": "integer",

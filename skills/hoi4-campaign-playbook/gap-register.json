@@ -6048,6 +6048,55 @@
    "closing": "both",
    "owner": "live: validate both tools on a throwaway task force; offline: a plan key if ever needed",
    "plan_na": "task-force shape is planned explicitly (navy.fleets[].task_forces, merge, task_force_max, navy.reserve); the game's automatic rebalance would undo it, and destroying ships is never a standing order (navy.reserve keeps old hulls)"
+  },
+  {
+   "id": "air.retire_obsolete_wings",
+   "domain": "air",
+   "capability": "Disband or re-equip air wings flying obsolete planes, so the planes return to the stockpile for conversion or sale",
+   "playbook": [
+    "templates-equipment-production.md#10 Tactics (PR24)"
+   ],
+   "plan": [],
+   "tools": [],
+   "payoff": "low",
+   "why": "conversion takes only stockpiled planes; old wings also draw fuel",
+   "closing": "both",
+   "owner": "air wing disband/re-equip tool (air view) and a plan key; then designers.equipment_conversion"
+  },
+  {
+   "id": "states.bulk_read",
+   "domain": "construction",
+   "capability": "One memory read of every owned and controlled state (slots, building levels, infrastructure, resources, compliance, resistance, supply, cores, controller) with filters and sorting, cached per tick, so no tool walks states one by one through the interface",
+   "playbook": [
+    "economy-build-orders.md#14 (c) Tools (No tool yet: per-state bulk read)"
+   ],
+   "plan": [
+    "construction_probe_slots"
+   ],
+   "tools": [
+    "hoi4_state_slots",
+    "hoi4_states"
+   ],
+   "payoff": "high",
+   "why": "hoi4_state_slots opens each state's view (up to 12 per call, 7-39 s each; gr1 18 calls 178 s); a large country (USSR, USA) multiplies it; building levels are already read in bulk from memory (units::state_buildings)",
+   "closing": "both",
+   "owner": "hoi4_state_table (memory, all states, filters) replacing the interface probe; max slots need the state category and slot modifiers"
+  },
+  {
+   "id": "research.horizontal_scroll",
+   "domain": "research",
+   "capability": "Research a technology whose tile lies left or right of the visible tree area",
+   "playbook": [
+    "research-doctrines-projects.md#10 Tactics"
+   ],
+   "plan": [],
+   "tools": [
+    "hoi4_research_start"
+   ],
+   "payoff": "medium",
+   "why": "wide trees (air, 1.19.4) put tiles outside the client area; the tool refuses them by name and the executor rests them 180 days",
+   "closing": "both",
+   "owner": "drag or wheel the tree sideways before the click (research.rs)"
   }
  ]
 }

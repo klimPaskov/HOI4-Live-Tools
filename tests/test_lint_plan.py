@@ -1574,6 +1574,21 @@ class TacticsRules(unittest.TestCase):
         self.assertNoHit(plan, "construction.idle")
         self.assertNoHit(plan, "politics.open_seat")
 
+    def test_politics_ideas_are_known_to_the_game(self):
+        plan = copy.deepcopy(self.ita)
+        plan["politics_auto"] = {"enabled": True, "order": [
+            {"category": "government", "slot": 4, "ideas": ["ITA_italo_balbo", "balbo"], "cost": 150}]}
+        self.assertHit(plan, "politics.unknown_idea", "error", "balbo")
+        plan["politics_auto"]["order"][0]["ideas"] = ["ITA_italo_balbo"]
+        self.assertNoHit(plan, "politics.unknown_idea")
+
+    def test_a_column_taller_than_the_designer_opens_is_an_error(self):
+        plan = copy.deepcopy(self.ita)
+        plan["templates"] = [{"id": "tall", "name": "Tall", "regiments": [["infantry"] * 5], "support": []}]
+        self.assertHit(plan, "templates.column_height", "error", "5 battalions")
+        plan["templates"][0]["regiments"] = [["infantry"] * 4, ["infantry"]]
+        self.assertNoHit(plan, "templates.column_height")
+
     def test_contingency_at_start(self):
         # the fixture country's history sets its stability: a contingency already true on day one is named
         plan = self.plan()

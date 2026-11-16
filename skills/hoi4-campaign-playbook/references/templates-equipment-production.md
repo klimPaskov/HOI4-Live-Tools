@@ -459,10 +459,40 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | Inputs | `hoi4_industry`, `hoi4_resources`, `hoi4_trade`, `hoi4_trade_set`, `hoi4_auto_import`, `hoi4_convoys`, `hoi4_mios`, `hoi4_mio_design_team`, `hoi4_mio_trait`, `hoi4_mio_policy` |
 | Forces | `hoi4_train`, `hoi4_deploy_locations`, `hoi4_army_create`, `hoi4_division_disband`, `hoi4_army_motorization`, `hoi4_alerts` (missing_equipment_production, no_divisions_in_training, free_dockyards) |
 
+### Executor conformance (17 Nov 2026)
+
+What the executor's production steps do against the tactics below. Followed: PR01 (day0_step puts idle factories
+on start lines before the first unpause), PR09 (a pull takes at most a fifth of a line, once in 30 days, only from
+a stock that covers twice its need), PR10 (balance rule: idle factories by days of production missing, chunks of
+max(2, a fifth)), PR11 (`production_priority` with hoi4_production_priority; line order sets which line gets new
+factories and resources first, and a new line joins the bottom; the game's own text: "A Production Line with
+higher priority will be given access to resources before Production Lines with a lower priority", and
+Shift+Click on the arrow gives highest or lowest priority; where the Shift+Click leaves the line in place the
+tool steps it one place per click), PR12 (auto-import and trade), PR28 (stockpile
+rule critical/warning cover), PR29 (trucks at 1.5x need, from idle factories only while the cover is unmeasured).
+Partly: PR03-PR05 (`production[].replace` and `switch_at_cover_days` switch a line; not live-validated), PR08
+(`production[].remove`; not live-validated), PR07 (start naval lines are removed only when the plan names them).
+Not followed: PR06 (a removal or switch does not read the unit in progress), PR19 (line caps not checked).
+No tool: PR22 market sales, PR24/PR25/PR40 conversion, PR26 refits, retiring obsolete air wings (gap register).
+
 ### (a) Automatable standing rules
 
 1. Keep every line non-empty; give idle military factories to the line with the fewest days of cover
-   (PR10); never leave factories idle more than 3 days.
+   (PR10); never leave factories idle more than 3 days. One line per equipment: a planned equipment
+   whose family already has a line is that line (a tier change is a `replace` entry, never a second
+   line), and a later duplicate that holds nothing worth keeping is closed.
+1a. No line asks for factories that do not exist. A line whose requested factories stand above its
+   active ones takes each new factory before any other line gets one, so one large request turns a
+   year of new factories into one equipment (gr1-gr3, 1937-39: rifles 37 requested and 21 active,
+   200k in stock, artillery and support at two factories). Trimming a request moves no factory and
+   costs no efficiency; new and idle factories then go by need. The executor's balance rule
+   (`manage.off` "balance" turns it off) does this: the need is what the fielded divisions lack plus
+   what the active `training` entries still add up to their `cap` (each template's equipment from
+   `hoi4_template_get`), less the stock; idle factories go in chunks of max(2, a fifth of the line) to
+   the equipment with the most days of production still missing; a shortfall of more than
+   `manage.balance_pull_days` (120) days pulls a fifth of a line whose stock covers twice its need,
+   once in 30 days per line (PR09). Lines no division needs (planes, ships) keep `production[].factories`
+   as their target.
 2. Hold the line mix within ±5 points of the dated target table (§7); adjust upward on the binding item of
    the template in production.
 3. Move factories only from a line with more than 90 days of cover to one under 7 days (PR09).
@@ -506,7 +536,7 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 | PR05 | Variants are nearly free | A variant switch keeps 90%: keep one chassis or airframe per role and change modules. Never change chassis, engine type, armour type or suspension on a line of 20+ factories | Tank, plane and ship designs | FAIR |
 | PR06 | Finish the unit in progress | A switch or removal cancels the unit in progress; a ship loses all its progress. Wait while an expensive unit (slower than one a week) is over 10% done or a cheap one over 75% | Every switch or removal | FAIR |
 | PR07 | Start naval queue | Finish ships that are nearly done, then remove the line; remove hulls under about 50% the plan does not need. Germany: keep the four Type II subs, two Z1934 destroyers and Deutschland; remove Hipper and both Scharnhorst unless the plan wants capitals. Italy: finish Montecuccoli, the two Cavour rebuilds, the Maestrale destroyers, the Abruzzi cruisers and the Calvi sub; remove the two Littorio in an Ethiopia-only plan. The executor removes a naval line only from an explicit `from` date | Day 0, every naval country | FAIR |
-| PR08 | Cull unused lines | Each military factory makes 4.5 IC a day. At the start and at every phase change remove every line no template, air wing, fleet or stockpile target uses (Germany: the light-tank, fighter and He 111 start lines in a land-first plan; Italy: L3 tankettes and interwar CAS; USSR: light tanks, naval and air lines; Japan: tank lines). Switch an air line inside its airframe family (90%) rather than removing it when the plane is still wanted | Day 0 and each phase change | FAIR |
+| PR08 | Cull unused lines | Each military factory makes 3.5 IC a day at full efficiency before modifiers (BASE_FACTORY_SPEED_MIL). At the start and at every phase change remove every line no template, air wing, fleet or stockpile target uses (Germany: the light-tank, fighter and He 111 start lines in a land-first plan; Italy: L3 tankettes and interwar CAS; USSR: light tanks, naval and air lines; Japan: tank lines). Switch an air line inside its airframe family (90%) rather than removing it when the plane is still wanted | Day 0 and each phase change | FAIR |
 | PR09 | No factory shuffling | A moved factory restarts at 10%. Move factories only from a line with more than 90 days of cover to a line under 7 days, at most one pull per line per 30 days and never more than 20% of a line | Any rebalance | FAIR |
 | PR10 | Idle factories by deficit | Give idle or new factories to the line with the fewest days of cover, in chunks of max(2, 20% of that line), not all to one line | A factory finishes, a line is removed | FAIR |
 | PR11 | Line order is priority | Lines at the top get factories and resources first; shortages, bombing and lost factories hit the bottom first; a new line joins the bottom. Keep rifles, support, artillery, trucks and fighters on top: `production_priority` in the plan (the executor moves those lines to the top with `hoi4_production_priority`, again when a line is added), or the tool by hand. The move itself costs nothing | Shortages, bombing | FAIR |

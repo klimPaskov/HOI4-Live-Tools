@@ -423,6 +423,25 @@ pub(super) fn prioritize(
     let (x, y) = rect.center();
     if matches!(to, Move::Top | Move::Bottom) {
         keys.shift_click(GAME, x, y)?;
+        // The Shift+click left the line in place on 1.19.4 (pm1 24 -> 24, pr1 3 -> 3, 17 Nov
+        // 2026): step it with single clicks on the same arrow, one place per click.
+        if wait(process, "line moved", |r, i| Ok(place(r, i)?.0 != at)).is_err() {
+            for _ in 0..at.abs_diff(target).min(64) {
+                let now = read(process, place)?.0;
+                if now == target {
+                    break;
+                }
+                reveal_named(process, keys, handle, name, 20)?;
+                let rect = settled(process, "priority arrow", |r, i| {
+                    button(r, i, handle, name)?.ok_or_else(|| {
+                        Error::new("gui_target_unavailable", "Priority arrow not found")
+                    })
+                })?;
+                let (x, y) = rect.center();
+                keys.click(GAME, x, y)?;
+                let _ = wait(process, "line stepped", |r, i| Ok(place(r, i)?.0 != now));
+            }
+        }
     } else {
         keys.click(GAME, x, y)?;
     }

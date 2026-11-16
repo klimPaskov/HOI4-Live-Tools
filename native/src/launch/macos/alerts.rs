@@ -97,6 +97,35 @@ pub(super) fn label(frame: u32) -> Option<(&'static str, &'static str)> {
             "insufficient_resources",
             "resources missing for production (the tooltip names them): hoi4_trade / hoi4_trade_set or hoi4_auto_import",
         ),
+        // Read from the hovered tooltip (17 Nov 2026, Germany 1936): "Outdated equipment in
+        // production" over the start naval queue's Type II and Z1934 lines.
+        34 => (
+            "outdated_equipment_in_production",
+            "a line makes an older model than the newest the country has: switch it (hoi4_design_set_production, variant 90%) or let it finish and remove it (start naval queue), per the plan's production entries",
+        ),
+        // The frames below are named from the sprite strip (gfx/interface/alerts/
+        // global_alert_icons.dds) against the game's alert texts; hover to confirm a doubtful one.
+        0 => ("research_slot_available", "a research slot is free: hoi4_research_start"),
+        5 => (
+            "free_civilian_factories",
+            "civilian factories build nothing: hoi4_construction_add (or trade)",
+        ),
+        6 => (
+            "free_military_factories",
+            "military factories are on no line: hoi4_production_set on a short line (by need)",
+        ),
+        52 => (
+            "operative_recruitable",
+            "an operative can be recruited: hoi4_operative_recruit",
+        ),
+        59 => (
+            "special_project_available",
+            "a special project can start: hoi4_special_projects, hoi4_special_project_assign",
+        ),
+        63 => (
+            "scientist_unassigned",
+            "a facility has no scientist: hoi4_special_project_recruit / hoi4_special_project_assign",
+        ),
         _ => return None,
     })
 }

@@ -1060,6 +1060,14 @@ fn assign(
                 .is_some_and(|s| s.on_mission))
         })
         .unwrap_or(false);
+        if !on_mission {
+            // The click did not start the mission: the map still waits for a target (pm1/gr6:
+            // the executor stood in the intelligence map pick and every later map click went
+            // to it). Escape leaves the pick; the pause guard closes the game menu if the
+            // Escape found nothing else to close.
+            let _ = keys.press(crate::platform::game_input::Key::Escape);
+            pause(300);
+        }
         Ok(json!({
             "on_mission": on_mission,
             "replaced_running_mission": was_on_mission,

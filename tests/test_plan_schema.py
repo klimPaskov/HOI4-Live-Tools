@@ -412,7 +412,8 @@ class CoverageKeys(unittest.TestCase):
         m = self.props["manage"]["properties"]
         self.assertEqual(set(m["off"]["items"]["enum"]), {"alerts", "ledger", "manpower", "stability",
                                                           "equipment_fill", "resources", "stockpile", "trucks",
-                                                          "casualties", "air_superiority", "overdrawn", "convoys", "fuel"})
+                                                          "casualties", "air_superiority", "overdrawn", "convoys", "fuel",
+                                                          "balance", "dockyards"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
@@ -424,7 +425,7 @@ class CoverageKeys(unittest.TestCase):
                 # plan_manage.rs: convoys (rule 20) and fuel (rule 26)
                 "convoys_free": 0.1, "fuel_floor": 0.25,
                 # executor rules that act with or without `manage` (production, templates, invasions)
-                "rebalance_step": 3, "day0_production": True, "war_priority": True, "war_civs": False,
+                "rebalance_step": 3, "balance_pull_days": 120, "balance_reserve": 0.8, "day0_production": True, "war_priority": True, "war_civs": False,
                 "mature_line_days": 30, "mature_line_efficiency": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
                 "invasion_techs": {},
                 # plan_manage.rs: a felt shortage takes factories (rule 11), idle dockyards go to convoys (rule 20)

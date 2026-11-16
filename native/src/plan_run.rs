@@ -2060,11 +2060,15 @@ fn production_step(
         })
         .collect();
     if !removals.is_empty() {
-        let read = tools
-            .call("hoi4_production_lines", &json!({"limit": 200}))
-            .unwrap_or(Value::Null);
+        let Ok(rows) = plan_manage::all_lines(tools) else {
+            // never act on a line list that was not read
+            for equipment in &removals {
+                state.skip(now, "prodrm", equipment, DAY);
+            }
+            return Ok(None);
+        };
         for equipment in &removals {
-            let live = list(&read, "lines")
+            let live = rows
                 .iter()
                 .find(|l| text(&l["equipment_id"]) == equipment.as_str())
                 .cloned();
@@ -2113,22 +2117,60 @@ fn production_step(
             continue;
         }
         if existing.is_none() {
-            let read = tools
-                .call("hoi4_production_lines", &json!({"limit": 200}))
-                .unwrap_or(Value::Null);
+            // An unread list is no empty list: nothing is added blind (a bad page size made
+            // every read fail and each plan line was added a second time, live 17 Nov 2026).
+            let Ok(rows) = plan_manage::all_lines(tools) else {
+                state.skip(now, "prod", &equipment, DAY);
+                continue;
+            };
+            // naval lines are one ship each: only an exact match counts there
             existing = Some(
-                list(&read, "lines")
-                    .iter()
-                    .filter_map(|l| l["equipment_id"].as_str().map(str::to_string))
+                rows.iter()
+                    .filter_map(|l| {
+                        let e = l["equipment_id"].as_str()?;
+                        Some(if l["line_kind"] == json!("naval") {
+                            format!("={e}")
+                        } else {
+                            e.to_string()
+                        })
+                    })
                     .collect(),
             );
         }
-        if existing.as_ref().is_some_and(|e| e.contains(&equipment)) {
+        // A line of the same family already runs (another variant or tier): the plan's entry
+        // is that line. A tier switch is a `replace` entry (plan_affairs.rs), never a second line;
+        // the balance rule sizes it.
+        if existing.as_ref().is_some_and(|e| {
+            e.contains(&equipment)
+                || e.contains(&format!("={equipment}"))
+                || e.iter().any(|have| {
+                    !have.starts_with('=')
+                        && plan_manage::family(have) == plan_manage::family(&equipment)
+                })
+        }) {
             state.done.insert(format!("prod:{equipment}"), now);
             continue;
         }
-        let mut args =
-            json!({"equipment": equipment, "factories": line["factories"].as_u64().unwrap_or(5)});
+        // A new line asks only for the factories that are free now (at least one): a request
+        // above that takes every factory built later before any other line gets one.
+        let free = tools
+            .call("hoi4_economy", &json!({}))
+            .ok()
+            .and_then(|e| e["factory_trigger_count"]["military"].as_i64())
+            .zip(plan_manage::all_lines(tools).ok().map(|rows| {
+                rows.iter()
+                    .filter(|l| l["line_kind"] == json!("military"))
+                    .map(|l| {
+                        l["factory_counters"]["requested_factories_raw_signed"]
+                            .as_i64()
+                            .unwrap_or(0)
+                    })
+                    .sum::<i64>()
+            }))
+            .map(|(total, used)| total - used);
+        let want = line["factories"].as_i64().unwrap_or(5).max(1);
+        let factories = free.map_or(want, |f| want.min(f.max(1)));
+        let mut args = json!({"equipment": equipment, "factories": factories});
         // The organisation the line is made with (MIO traits apply to it, its funds grow from
         // it). Sent only once the tool can choose it; until then the line is added without one
         // and the receipt line says so.
@@ -2484,6 +2526,10 @@ fn tech_skip(why: &str, default: GameHour) -> GameHour {
     ];
     if never.iter().any(|w| why.contains(w)) {
         365 * DAY * 20
+    } else if why.contains("outside the tree area") || why.contains("could not be scrolled") {
+        // the tool cannot reach the tile: other techs take the slot (gr1-gr3: the same tech
+        // refused 16 times while slots stood idle)
+        180 * DAY
     } else {
         default
     }
@@ -3578,7 +3624,8 @@ fn construction_step(
             }
         }
         let usable = |state: &State, id: i64| {
-            !state.skipped(now, "confull", &full_key(&building, id))
+            !state.done.contains_key(&format!("conmax:{building}:{id}"))
+                && !state.skipped(now, "confull", &full_key(&building, id))
                 && !state.skipped(now, "con", &format!("{building}:{id}"))
         };
         let mut eligible: Vec<i64> = ids
@@ -3724,6 +3771,14 @@ fn construction_step(
                     // maybe only some slots were free: take them one at a time
                     state.con.cap.insert(id, 1);
                     skipped.push(format!("{id}:one_at_a_time"));
+                }
+                Refusal::Full if !SHARED_SLOT_BUILDINGS.contains(&building.as_str()) => {
+                    // A level building (infrastructure, air base, radar, ...) refused one more
+                    // level: the state is at its maximum with what is built and queued (the
+                    // refusals of gr1-gr6 and pm1 read 3 built + 2 queued of 5). It is done for
+                    // this job; asking again only repeated the refusal.
+                    state.done.insert(format!("conmax:{building}:{id}"), now);
+                    skipped.push(format!("{id}:at_max"));
                 }
                 Refusal::Full => {
                     // a state the game keeps refusing rests twice as long each time, so a job the
@@ -8319,7 +8374,14 @@ mod tests {
         ]);
         let mut state = State::default();
         // 6 idle, no shortage known: 3 to the first priority line, then the next in turn
-        let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        let step = tick(
+            &mut state,
+            &tools,
+            &json!({"manage": {"off": ["balance"]}}),
+            "l",
+            START,
+        )
+        .unwrap();
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("production_set infantry_equipment_2 12+3")),
             "{step:?}"
@@ -8329,7 +8391,14 @@ mod tests {
             json!(15)
         );
         tools.replies.insert("hoi4_production_lines", lines(15, 4));
-        let step = tick(&mut state, &tools, &json!({}), "l", START + 1).unwrap();
+        let step = tick(
+            &mut state,
+            &tools,
+            &json!({"manage": {"off": ["balance"]}}),
+            "l",
+            START + 1,
+        )
+        .unwrap();
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+3")),
             "{step:?}"
@@ -8342,7 +8411,7 @@ mod tests {
                 {"archetype": "infantry_equipment", "have": 90, "need": 100},
                 {"archetype": "support_equipment", "have": 0, "need": 30}]}]}),
         );
-        let plan = json!({"manage": {"rebalance_step": 2}, "production": [
+        let plan = json!({"manage": {"rebalance_step": 2, "off": ["balance"]}, "production": [
             {"equipment": "infantry_equipment_2", "remove": true}]});
         let mut state = State::default();
         let step = tick(&mut state, &tools, &plan, "l", START).unwrap();

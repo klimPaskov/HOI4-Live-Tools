@@ -174,6 +174,9 @@ use crate::error::Result;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+/// A template's equipment need per division and the variant of each archetype, with the hour read.
+type TemplateNeed = (GameHour, HashMap<String, f64>, HashMap<String, String>);
+
 /// What the runner keeps for these rules besides `done` and the skip timers.
 #[derive(Default)]
 pub(super) struct Memory {
@@ -209,6 +212,11 @@ pub(super) struct Memory {
     import_civs: Option<i64>,
     /// Why the last raise of the auto-import budget could not happen (the wake says it).
     import_capped: Option<String>,
+    /// Production balance: each template's equipment need per division (hoi4_template_get),
+    /// read at most every 30 game days.
+    tpl_need: HashMap<String, TemplateNeed>,
+    /// Production balance: when a line last gave factories away (PR09: once per 30 days).
+    pulled: HashMap<String, GameHour>,
     /// Divisions pulled out of overdrawn provinces: their new army and where it goes.
     spread: Vec<Spread>,
 }
@@ -445,7 +453,14 @@ pub fn step(
     if let Some(done) = country_rules(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
+    // the stockpile rule first: a shortage the front feels (or a cover target) is the war's
     if let Some(done) = stockpile_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = balance_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = dockyard_rule(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
     if let Some(done) = overdrawn_rule(state, tools, plan, lease, now)? {
@@ -516,7 +531,9 @@ fn route(alert: &str) -> Route {
             &["prod", "prodset"],
             &["production", "production_priority"],
         ),
-        "modify_government" => Route::Step("politics", &["pol"], &["politics"]),
+        // a vacant political advisor seat: the plan's dated picks, then the standing order's
+        // vacancy fill (politics_auto.fill_vacant) owns it
+        "modify_government" => Route::Step("politics", &["pol", "pauto"], &["politics", "politics_auto"]),
         "unfulfilled_import_requests" | "insufficient_resources" | "insufficient_energy" => {
             Route::Step("resources", &["mres"], &["auto_import"])
         }
@@ -533,11 +550,21 @@ fn route(alert: &str) -> Route {
         "not_enough_garrison" => Route::Wake(
             "garrisons are short of manpower or equipment; no garrison-template action exists yet",
         ),
-        "free_dockyards" => Route::Wake("dockyards are idle: which ships to build is a decision"),
+        "free_dockyards" => Route::Step("dockyards", &["mdock"], &["production", "manage"]),
         "events_or_decisions_timeout" => Route::Wake("an event or decision is about to time out"),
-        "modify_officer_corps" => Route::Wake("a high command or military advisor can be picked"),
-        "mio_traits" => Route::Wake("military industrial organisation traits can be unlocked"),
-        "admiral_assignable" => Route::Wake("an admiral can be assigned to a naval headquarters"),
+        "modify_officer_corps" => Route::Step("politics_auto", &["pauto"], &["politics_auto"]),
+        "mio_traits" => Route::Step("mio", &[], &["mio"]),
+        "research_slot_available" => Route::Info,
+        "free_civilian_factories" => Route::Step("construction", &["con", "confull"], &["construction"]),
+        "free_military_factories" => Route::Step("production", &["mbal", "prodset"], &["production", "production_priority"]),
+        "outdated_equipment_in_production" => Route::Wake(
+            "a line makes an outdated model: a `production` entry with `replace` (switch the line, variant 90% kept) or `remove` (after its unit is done) decides it",
+        ),
+        "operative_recruitable" => Route::Step("intelligence", &[], &["intelligence"]),
+        "special_project_available" | "scientist_unassigned" => {
+            Route::Step("special_projects", &[], &["special_projects"])
+        }
+        "admiral_assignable" => Route::Step("navy", &["nadm"], &["navy"]),
         _ => Route::Wake("an alert the executor does not know"),
     }
 }
@@ -1062,7 +1089,19 @@ fn templates_step(
         if ok || why.contains("nothing_to_change") || why.contains("name_taken") {
             state.done.insert(key, now);
         } else {
-            state.skip(now, "tpl", &key, 7 * DAY);
+            // A slot the designer does not open (a fifth row before a doctrine milestone) or a
+            // unit not yet researched does not change in a week: rest 90 days and say so (gr1-gr6:
+            // Panzer-Division 36 refused slot_locked 9 times). Lint: templates.column_height.
+            let days = match super::plan_military::code(&why) {
+                "slot_locked" | "unit_not_unlocked" | "template_too_wide" => {
+                    extra.push(format!(
+                        "refused {why}: rests 90 days, the plan must change it"
+                    ));
+                    90
+                }
+                _ => 7,
+            };
+            state.skip(now, "tpl", &key, days * DAY);
         }
         if !extra.is_empty() {
             note(state, "templates", format!("{name}: {}", extra.join("; ")));
@@ -2927,6 +2966,34 @@ fn politics_auto_default(state: &State, now: GameHour, recheck: GameHour) -> Val
     )
 }
 
+/// The vacancy fill that follows the plan's own `politics_auto.order` (off with
+/// `politics_auto.fill_vacant: false`): every seat a read showed vacant, political advisors
+/// first, then theorists and designers, then the military staff, takes the first advisor the
+/// game enables there (`never` respected). Until a category has been read, one seat stands for
+/// it (its read lists the seats). Without it a plan whose order named keys the game does not
+/// offer let the power pile up beside six vacant seats (gr3 16 Nov, pm2 17 Nov 2026: 165 PP,
+/// every seat vacant, nothing bought).
+fn politics_auto_fill(state: &State, now: GameHour, recheck: GameHour) -> Vec<Value> {
+    let mut out = Vec::new();
+    for (category, seed, cost) in [
+        ("government", 0, 150),
+        ("research_production", 5, 100),
+        ("military_staff", 0, 50),
+    ] {
+        let seats = match state.manage.pp_vacant.get(category) {
+            Some((at, seats)) if now.saturating_sub(*at) < recheck => seats.clone(),
+            _ => vec![seed],
+        };
+        for slot in seats {
+            out.push(
+                json!({"category": category, "slot": slot, "cost": cost, "fill": true,
+                "why": "a vacant seat: the first advisor the game enables"}),
+            );
+        }
+    }
+    out
+}
+
 /// Political power now (hoi4_economy).
 pub(super) fn political_power(tools: &dyn Tools) -> Option<f64> {
     tools
@@ -3108,11 +3175,24 @@ pub(super) fn politics_auto_step(
         .filter(|p| *p > 0.0)
         .unwrap_or(25.0);
     let default_order = politics_auto_default(state, now, recheck);
-    let order = if cfg["order"].is_array() {
-        &cfg["order"]
+    let mut order = if cfg["order"].is_array() {
+        cfg["order"].clone()
     } else {
-        &default_order
+        default_order
     };
+    if cfg["fill_vacant"] != json!(false) {
+        if let Some(entries) = order.as_array_mut() {
+            for fill in politics_auto_fill(state, now, recheck) {
+                let taken = entries
+                    .iter()
+                    .any(|e| e["category"] == fill["category"] && e["slot"] == fill["slot"]);
+                if !taken {
+                    entries.push(fill);
+                }
+            }
+        }
+    }
+    let order = &order;
     let never = strings(cfg, "never");
     let conscription = strings(&plan["manage"], "conscription_laws");
     let mut seen: Vec<String> = Vec::new();
@@ -3217,7 +3297,7 @@ pub(super) fn politics_auto_step(
                 .pp_vacant
                 .insert(category.clone(), (now, vacant));
         }
-        let current = options["current"]
+        let mut current = options["current"]
             .as_str()
             .or(options["current"]["idea"].as_str())
             .unwrap_or("")
@@ -3226,7 +3306,42 @@ pub(super) fn politics_auto_step(
             .iter()
             .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
             .collect();
-        let idea = match politics_auto_choice(entry, &current, &offered, &never, &conscription) {
+        let mut slot = slot.clone();
+        let mut choice = politics_auto_choice(entry, &current, &offered, &never, &conscription);
+        // The order names advisors, not seats: an entry whose seat holds what the order does not
+        // rank (or holds anything, for a vacancy fill) takes its idea at another vacant seat of
+        // the category that offers it (gr3 16 Nov 2026: Ribbentrop held seat 4, the order's
+        // Göring entry stopped there while seat 5 stood vacant all year).
+        if choice.is_err() && !current.is_empty() {
+            let vacant = state
+                .manage
+                .pp_vacant
+                .get(&category)
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
+            for seat in vacant.into_iter().filter(|v| json!(v) != slot) {
+                let Ok(other) = tools.call(
+                    "hoi4_politics_options",
+                    &json!({"category": category, "slot": seat, "lease_token": lease}),
+                ) else {
+                    continue;
+                };
+                let offered: Vec<(String, bool)> = list(&other, "options")
+                    .iter()
+                    .map(|i| (text(&i["idea"]).to_string(), i["enabled"] == json!(true)))
+                    .collect();
+                let mut moved = entry.clone();
+                moved["slot"] = json!(seat);
+                if let Ok(idea) = politics_auto_choice(&moved, "", &offered, &never, &conscription)
+                {
+                    slot = json!(seat);
+                    current.clear();
+                    choice = Ok(idea);
+                    break;
+                }
+            }
+        }
+        let idea = match choice {
             Ok(idea) => idea,
             Err((why, disabled)) => {
                 state.skip(now, "pauto", &slot_key, recheck);
@@ -3274,8 +3389,9 @@ pub(super) fn politics_auto_step(
         } else {
             current.as_str()
         };
-        let line =
-            format!("PP {pp_text} ({reserve_text}): {slot_key} {from} -> {idea} ({reason}): {ok}");
+        let line = format!(
+            "PP {pp_text} ({reserve_text}): {category}:{slot} {from} -> {idea} ({reason}): {ok}"
+        );
         let picks = state
             .manage
             .notes
@@ -3908,7 +4024,11 @@ pub(super) fn rebalance_step(
     // at least one idle factory whatever the plan's minimum: with `production_min_idle` 0 and
     // none idle the step "gave" +0 to a line every tick, a Verified order that changes nothing
     // (e1, 16 Nov 2026: 266 times in the paused setup, so the setup never completed)
-    if idle < plan["production_min_idle"].as_i64().unwrap_or(2).max(1)
+    // the balance rule owns idle factories while it is on: two owners fought over the same
+    // factories (pr1: +2 by the feed, -1 by the balance, again and again)
+    let balance_on = !off(plan, "balance") && !off(plan, "stockpile");
+    if balance_on
+        || idle < plan["production_min_idle"].as_i64().unwrap_or(2).max(1)
         || state.skipped(now, "prodset", "x")
     {
         return Ok(None);
@@ -4113,10 +4233,13 @@ fn stockpile_rule(
                         days.unwrap_or(0.0)
                     )
                 };
+                // an unmeasured cover (no consumption in peace) is no critical cover: the
+                // trucks get idle factories, never factories pulled from another line (pm2,
+                // 17 Nov 2026: rifles 14 -> 10 for trucks in the first January)
                 low.push((
                     "motorized_equipment".into(),
                     "motorized_equipment".into(),
-                    days.unwrap_or(0.0),
+                    days.unwrap_or(f64::MAX),
                     why,
                 ));
             }
@@ -4166,9 +4289,25 @@ fn stockpile_rule(
     // at a sixth of its equipment, the missing-production alert open all year).
     let felt = short_of(&read, &archetype) > 0.0 || days < critical;
     if give <= 0 && felt && m["shift_factories"] != json!(false) {
+        let recent: HashSet<String> = state
+            .manage
+            .pulled
+            .iter()
+            .filter(|(_, at)| now - **at < 30 * DAY)
+            .map(|(e, _)| e.clone())
+            .collect();
+        let candidates: Vec<MilLine> = military
+            .iter()
+            .filter(|l| !recent.contains(&l.1))
+            .cloned()
+            .collect();
         if let Some(((index, have, factories, _), take)) =
-            donor_line(&read, plan, &military, &archetype, warning, step)
+            donor_line(&read, plan, &candidates, &archetype, warning, step)
         {
+            // PR09: a moved factory restarts at the start efficiency: a line gives at most a
+            // fifth of itself and once in 30 days
+            let take = take.min((factories / 5).max(1));
+            state.manage.pulled.insert(have.clone(), now);
             let (ok, result) = state.act(
                 tools,
                 lease,
@@ -4322,6 +4461,724 @@ fn archetype_row(read: &Value, key: &str) -> Option<String> {
                 || list(r, "variants").iter().any(|v| text(&v["type"]) == key)
         })
         .map(|r| text(&r["archetype"]).to_string())
+}
+
+// ---------------------------------------------------------------------------------------------
+// Production balance (playbook PR02, PR09, PR10, PR11): one line per equipment, no line asking for
+// factories that do not exist, new and idle factories by need, pulls only from a large surplus.
+
+/// Every own production line (all pages of hoi4_production_lines, 128 a page). Err when any page
+/// is unreadable: a caller must never take "no line read" for "no line exists" (a limit above
+/// the tool's bound made every read fail and the plan's lines were added again at the bottom,
+/// live 17 Nov 2026).
+/// The game's dockyard cap of a naval line (00_defines NProduction: capital ships 5, convoys 15,
+/// the rest 10), from the hull's equipment key.
+fn dockyard_cap(equipment: &str) -> i64 {
+    if equipment.starts_with("convoy") {
+        15
+    } else if equipment.contains("heavy") || equipment.contains("carrier") {
+        5
+    } else {
+        10
+    }
+}
+
+/// What the dockyard rule does with idle dockyards.
+#[derive(Debug, PartialEq)]
+enum DockAct {
+    /// Raise a naval line (entry index, equipment, new requested dockyards).
+    Set(i64, String, i64),
+    /// Start a line of this equipment with this many dockyards.
+    Add(String, i64),
+}
+
+/// Idle dockyards (`naval` total minus what the naval lines request) go to the naval lines the
+/// plan names (`production[]` with a ship or convoy equipment), the least-manned first, up to the
+/// game's cap per line; a planned equipment without a line gets one. What no planned line takes
+/// is the convoy rule's (convoys, or `manage.idle_dockyards: "keep"`). Free dockyards stood open
+/// 300+ days in gr1-gr6 while the plan's own ship lines ran on one dockyard each.
+fn dockyard_decide(lines: &[(i64, String, i64)], planned: &[String], idle: i64) -> Option<DockAct> {
+    if idle <= 0 || planned.is_empty() {
+        return None;
+    }
+    let pick = lines
+        .iter()
+        .filter(|l| l.2 < dockyard_cap(&l.1))
+        .filter(|l| planned.iter().any(|p| l.1.starts_with(family(p))))
+        .min_by_key(|l| l.2);
+    if let Some((index, equipment, have)) = pick {
+        let to = (have + idle).min(dockyard_cap(equipment));
+        return Some(DockAct::Set(*index, equipment.clone(), to));
+    }
+    let missing = planned
+        .iter()
+        .find(|p| !lines.iter().any(|l| l.1.starts_with(family(p))))?;
+    Some(DockAct::Add(
+        missing.clone(),
+        idle.min(dockyard_cap(missing)),
+    ))
+}
+
+/// Rule: no idle dockyard (manage.off "dockyards").
+fn dockyard_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if off(plan, "dockyards") || state.skipped(now, "mdock", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mdock", "x", 3 * DAY);
+    let economy = tools.call("hoi4_economy", &json!({}))?;
+    let Some(total) = economy["factory_trigger_count"]["naval"].as_i64() else {
+        return Ok(None);
+    };
+    let Ok(read) = all_lines(tools) else {
+        return Ok(None);
+    };
+    let naval: Vec<(i64, String, i64)> = read
+        .iter()
+        .filter(|l| l["line_kind"] == json!("naval"))
+        .map(|l| {
+            (
+                l["entry_index"].as_i64().unwrap_or(-1),
+                text(&l["equipment_id"]).to_string(),
+                l["factory_counters"]["requested_factories_raw_signed"]
+                    .as_i64()
+                    .unwrap_or(0),
+            )
+        })
+        .collect();
+    let idle = total - naval.iter().map(|l| l.2).sum::<i64>();
+    let planned: Vec<String> = list(plan, "production")
+        .iter()
+        .map(|e| text(&e["equipment"]).to_string())
+        .filter(|e| e.starts_with("ship_hull") || e.starts_with("convoy"))
+        .collect();
+    let Some(act) = dockyard_decide(&naval, &planned, idle) else {
+        if idle > 0 {
+            note(
+                state,
+                "dockyards",
+                format!("{idle} idle dockyards; every planned ship line is at its cap: the convoy rule's"),
+            );
+        }
+        return Ok(None);
+    };
+    let (ok, why, line) = match &act {
+        DockAct::Set(index, equipment, to) => {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_production_set",
+                json!({"line": index, "equipment": equipment, "factories": to}),
+                "dk",
+            )?;
+            (
+                ok,
+                why,
+                format!("{equipment} line {index} -> {to} dockyards"),
+            )
+        }
+        DockAct::Add(equipment, n) => {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_production_add",
+                json!({"equipment": equipment, "factories": n}),
+                "dk",
+            )?;
+            (ok, why, format!("new {equipment} line with {n} dockyards"))
+        }
+    };
+    if !ok {
+        state.skip(now, "mdock", "x", 14 * DAY);
+    }
+    note(state, "dockyards", format!("{idle} idle: {line}: {ok}"));
+    Ok(Some(format!("dockyards {idle} idle: {line}: {ok} {why}")))
+}
+
+pub(super) fn all_lines(tools: &dyn Tools) -> Result<Vec<Value>> {
+    const PAGE: usize = 128;
+    let mut out: Vec<Value> = Vec::new();
+    loop {
+        let read = tools.call(
+            "hoi4_production_lines",
+            &json!({"offset": out.len(), "limit": PAGE}),
+        )?;
+        let page = list(&read, "lines");
+        let n = page.len();
+        out.extend(page.iter().cloned());
+        if n < PAGE || out.len() >= 2048 {
+            return Ok(out);
+        }
+    }
+}
+
+/// The equipment family of a key: the key without a trailing `_<number>` (infantry_equipment_1
+/// and infantry_equipment_2 are one family).
+pub(super) fn family(key: &str) -> &str {
+    match key.rsplit_once('_') {
+        Some((head, tail)) if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) => head,
+        _ => key,
+    }
+}
+
+/// A military production line as the balance rule sees it.
+#[derive(Clone, Debug, PartialEq)]
+struct ProdLine {
+    index: i64,
+    equipment: String,
+    archetype: String,
+    requested: i64,
+    active: i64,
+    efficiency: f64,
+    start: f64,
+}
+
+/// What the balance rule asks for (one action per tick).
+#[derive(Clone, Debug, PartialEq)]
+enum BalanceAct {
+    /// Close a duplicate line that holds nothing worth keeping (young, or no active factory).
+    Remove {
+        index: i64,
+        equipment: String,
+        why: String,
+    },
+    /// Set a line's requested factories.
+    Set {
+        index: i64,
+        equipment: String,
+        factories: i64,
+        why: String,
+    },
+    /// A new line for equipment the divisions need and no line makes.
+    Add {
+        equipment: String,
+        factories: i64,
+        why: String,
+    },
+}
+
+/// The inputs of one balance decision (pure, for tests).
+#[derive(Default)]
+struct BalanceIn {
+    lines: Vec<ProdLine>,
+    /// Military factories the country has.
+    total: i64,
+    /// Equipment the planned and fielded divisions still need, by archetype (units).
+    need: HashMap<String, f64>,
+    stock: HashMap<String, f64>,
+    per_day: HashMap<String, f64>,
+    /// `production[].factories` by archetype: the target of a line no division needs.
+    targets: HashMap<String, i64>,
+    /// The variant a new line of an archetype makes (from the templates' equipment).
+    variant: HashMap<String, String>,
+    /// `production_priority` archetypes, top first (ties go to the higher one).
+    priority: Vec<String>,
+    /// Lines (equipment) that gave factories away within the last 30 days.
+    pulled: HashSet<String>,
+    /// A shortfall this many days of production long or longer may pull from a surplus line.
+    pull_days: f64,
+}
+
+/// Days of production the archetype's shortfall stands for (0 when its stock covers the need,
+/// infinite when nothing makes it).
+fn fill_days(b: &BalanceIn, arche: &str) -> f64 {
+    let short =
+        b.need.get(arche).copied().unwrap_or(0.0) - b.stock.get(arche).copied().unwrap_or(0.0);
+    if short <= 0.0 {
+        return 0.0;
+    }
+    let rate = b.per_day.get(arche).copied().unwrap_or(0.0);
+    if rate <= 0.0 {
+        f64::INFINITY
+    } else {
+        short / rate
+    }
+}
+
+fn priority_rank(b: &BalanceIn, arche: &str) -> usize {
+    b.priority
+        .iter()
+        .position(|p| p == arche || family(p) == arche || p.starts_with(arche))
+        .unwrap_or(b.priority.len())
+}
+
+fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
+    // 1. one line per equipment: a later duplicate that holds nothing worth keeping is closed
+    //    (its factories are free again and go by need); a mature duplicate is kept (PR02).
+    let mut seen: HashMap<&str, &ProdLine> = HashMap::new();
+    for line in &b.lines {
+        match seen.get(line.equipment.as_str()) {
+            None => {
+                seen.insert(&line.equipment, line);
+            }
+            Some(first) => {
+                // keep the more efficient line (the older on a tie)
+                let (keep, drop) = if line.efficiency > first.efficiency {
+                    (line, *first)
+                } else {
+                    (*first, line)
+                };
+                if drop.active == 0 || drop.efficiency <= drop.start + 5.0 {
+                    return Some(BalanceAct::Remove {
+                        index: drop.index,
+                        equipment: drop.equipment.clone(),
+                        why: format!(
+                            "a second {} line (line {} at {:.0}%, {} active) beside line {}: one line per equipment",
+                            drop.equipment, drop.index, drop.efficiency, drop.active, keep.index
+                        ),
+                    });
+                }
+            }
+        }
+    }
+    // 2. no line asks for factories that do not exist: the game gives each new factory to the
+    //    first line with an unfilled request, so a large request funnels a year of new
+    //    factories into one line (gr1-gr3: rifles 37 requested, 21 active, 200k in stock).
+    //    Trimming a request moves no factory and costs no efficiency.
+    // Only requests the factories cannot fill are trimmed: a line just given idle factories
+    // reads them active a little later, and trimming it then fought the feed (pr1).
+    let asked: i64 = b.lines.iter().map(|l| l.requested).sum();
+    if let Some(line) = b
+        .lines
+        .iter()
+        .filter(|_| asked > b.total)
+        .filter(|l| l.requested > l.active.max(1) + 1)
+        .max_by_key(|l| l.requested - l.active)
+    {
+        return Some(BalanceAct::Set {
+            index: line.index,
+            equipment: line.equipment.clone(),
+            factories: line.active.max(1),
+            why: format!(
+                "{} asks for {} factories and has {}: the request is trimmed to what exists, new factories go by need",
+                line.equipment, line.requested, line.active
+            ),
+        });
+    }
+    let requested: i64 = b.lines.iter().map(|l| l.requested).sum();
+    let idle = b.total - requested;
+    let line_of = |arche: &str| {
+        b.lines
+            .iter()
+            .filter(|l| l.archetype == arche)
+            .max_by(|x, y| {
+                x.efficiency
+                    .partial_cmp(&y.efficiency)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(y.index.cmp(&x.index))
+            })
+    };
+    // the archetypes short of what the divisions need, longest shortfall first
+    let mut short: Vec<(String, f64)> = b
+        .need
+        .keys()
+        .map(|a| (a.clone(), fill_days(b, a)))
+        .filter(|(_, d)| *d > 0.0)
+        .collect();
+    short.sort_by(|x, y| {
+        y.1.partial_cmp(&x.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(priority_rank(b, &x.0).cmp(&priority_rank(b, &y.0)))
+            .then(x.0.cmp(&y.0))
+    });
+    if idle > 0 {
+        // 3. idle and new factories by need, in chunks of max(2, a fifth of the line) (PR10)
+        for (arche, days) in &short {
+            let shown = if days.is_finite() {
+                format!("{days:.0} days of production")
+            } else {
+                "nothing makes it".into()
+            };
+            match line_of(arche) {
+                Some(line) => {
+                    let give = idle.min((line.requested / 5).max(2));
+                    return Some(BalanceAct::Set {
+                        index: line.index,
+                        equipment: line.equipment.clone(),
+                        factories: line.requested + give,
+                        why: format!(
+                            "{idle} idle: +{give} to {} ({arche} short by {shown})",
+                            line.equipment
+                        ),
+                    });
+                }
+                None => {
+                    if let Some(variant) = b.variant.get(arche) {
+                        return Some(BalanceAct::Add {
+                            equipment: variant.clone(),
+                            factories: idle.min(2.max(idle / 4)),
+                            why: format!(
+                                "{idle} idle: a {variant} line ({arche} short, no line makes it)"
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+        // no division is short: lines the plan sizes (planes, trucks for later) up to their target
+        let mut planned: Vec<(&ProdLine, i64)> = b
+            .targets
+            .iter()
+            .filter_map(|(a, t)| {
+                let have: i64 = b
+                    .lines
+                    .iter()
+                    .filter(|l| &l.archetype == a)
+                    .map(|l| l.requested)
+                    .sum();
+                line_of(a).filter(|_| have < *t).map(|l| (l, *t - have))
+            })
+            .collect();
+        planned.sort_by_key(|(l, gap)| (priority_rank(b, &l.archetype), -gap, l.index));
+        if let Some((line, gap)) = planned.first() {
+            let give = idle.min(*gap).min((line.requested / 5).max(2));
+            return Some(BalanceAct::Set {
+                index: line.index,
+                equipment: line.equipment.clone(),
+                factories: line.requested + give,
+                why: format!(
+                    "{idle} idle, no division short: +{give} to {} (plan target {})",
+                    line.equipment,
+                    line.requested + gap
+                ),
+            });
+        }
+        return None;
+    }
+    // 4. no idle factory: a long shortfall may pull from a line with a large surplus, at most a
+    //    fifth of it and once in 30 days per line (PR09: a moved factory restarts at the start
+    //    efficiency, so pulls are rare and small). The freed factories go by need next tick.
+    let (needy, days) = short.first()?;
+    if *days < b.pull_days {
+        return None;
+    }
+    let donor = b
+        .lines
+        .iter()
+        .filter(|l| l.requested >= 5 && l.archetype != *needy && !b.pulled.contains(&l.equipment))
+        .filter(|l| {
+            let stock = b.stock.get(&l.archetype).copied().unwrap_or(0.0);
+            let need = b.need.get(&l.archetype).copied().unwrap_or(0.0);
+            let planned = b.targets.get(&l.archetype).copied().unwrap_or(0);
+            stock > 0.0 && stock >= 2.0 * need && l.requested > planned
+        })
+        .max_by_key(|l| (l.requested, -l.index))?;
+    let take = (donor.requested / 5).max(1);
+    let shown = if days.is_finite() {
+        format!("{days:.0} days")
+    } else {
+        "no line".into()
+    };
+    Some(BalanceAct::Set {
+        index: donor.index,
+        equipment: donor.equipment.clone(),
+        factories: donor.requested - take,
+        why: format!(
+            "{needy} short by {shown}, no idle factory: {take} of {} factories leave {} (stock {:.0} covers twice its need {:.0})",
+            donor.requested,
+            donor.equipment,
+            b.stock.get(&donor.archetype).copied().unwrap_or(0.0),
+            b.need.get(&donor.archetype).copied().unwrap_or(0.0)
+        ),
+    })
+}
+
+/// The training entries whose `when` holds now (the planned force the equipment is for).
+fn active_training(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    now: GameHour,
+) -> Vec<(String, Option<u64>)> {
+    let entries: Vec<Value> = match &plan["training"] {
+        entry @ Value::Object(_) => vec![entry.clone()],
+        Value::Array(items) => items.iter().filter(|v| v.is_object()).cloned().collect(),
+        _ => Vec::new(),
+    };
+    let mut out: Vec<(String, Option<u64>)> = Vec::new();
+    for e in entries {
+        let template = text(&e["template"]).to_string();
+        if template.is_empty() || when_holds(state, tools, &e["when"], now) != Truth::True {
+            continue;
+        }
+        let cap = e["cap"].as_u64();
+        match out.iter_mut().find(|(t, _)| *t == template) {
+            Some(slot) => slot.1 = slot.1.max(cap),
+            None => out.push((template, cap)),
+        }
+    }
+    out
+}
+
+/// Rule: production balance (manage.off "balance" or "stockpile" turns it off). Once a game day, or every
+/// tick while it acts.
+fn balance_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    // it works from the stockpile read: off with the stockpile rules too
+    if off(plan, "balance") || off(plan, "stockpile") || state.skipped(now, "mbal", "x") {
+        return Ok(None);
+    }
+    let rest = |state: &mut State, why: String| {
+        note(state, "production_balance", why);
+        state.skip(now, "mbal", "x", DAY);
+        Ok(None)
+    };
+    let Ok(economy) = tools.call("hoi4_economy", &json!({})) else {
+        return rest(state, "unknown: hoi4_economy unreadable".into());
+    };
+    let Some(total) = economy["factory_trigger_count"]["military"].as_i64() else {
+        return rest(state, "unknown: no military factory count".into());
+    };
+    let Ok(rows) = all_lines(tools) else {
+        return rest(state, "unknown: hoi4_production_lines unreadable".into());
+    };
+    let Some(stock) = stockpile(state, tools, now) else {
+        return rest(state, "unknown: hoi4_stockpile unreadable".into());
+    };
+    let mut b = BalanceIn {
+        total,
+        pull_days: plan["manage"]["balance_pull_days"]
+            .as_f64()
+            .unwrap_or(120.0),
+        ..Default::default()
+    };
+    for line in rows.iter().filter(|l| l["line_kind"] == json!("military")) {
+        let equipment = text(&line["equipment_id"]).to_string();
+        if equipment.is_empty() {
+            continue;
+        }
+        let archetype =
+            archetype_row(&stock, &equipment).unwrap_or_else(|| family(&equipment).to_string());
+        b.lines.push(ProdLine {
+            index: line["entry_index"].as_i64().unwrap_or(-1),
+            equipment,
+            archetype,
+            requested: line["factory_counters"]["requested_factories_raw_signed"]
+                .as_i64()
+                .unwrap_or(0),
+            // an unread active count is no evidence of an unfilled request
+            active: line["factory_counters"]["active_factories_raw_signed"]
+                .as_i64()
+                .unwrap_or_else(|| {
+                    line["factory_counters"]["requested_factories_raw_signed"]
+                        .as_i64()
+                        .unwrap_or(0)
+                }),
+            efficiency: line["output"]["efficiency"].as_f64().unwrap_or(0.0),
+            start: line["output"]["efficiency_start"].as_f64().unwrap_or(10.0),
+        });
+    }
+    let reserve_share = plan["manage"]["balance_reserve"]
+        .as_f64()
+        .filter(|r| *r >= 0.0)
+        .unwrap_or(0.8);
+    for row in list(&stock, "equipment") {
+        let a = text(&row["archetype"]).to_string();
+        if a.is_empty() {
+            continue;
+        }
+        b.stock
+            .insert(a.clone(), row["stockpile"].as_f64().unwrap_or(0.0));
+        b.per_day
+            .insert(a.clone(), row["produced_per_day"].as_f64().unwrap_or(0.0));
+        let short = row["fielded_short"].as_f64().unwrap_or(0.0);
+        // a reserve in stock against attrition and new divisions: the game's own AI keeps 0.8 of
+        // the equipment in use (PRODUCTION_EQUIPMENT_SURPLUS_FACTOR); without it a line whose
+        // planned force was complete counted as surplus and gave its factories away (pr1,
+        // 17 Nov 2026: rifles 14 -> 11 and the worst-covered equipment by 1938)
+        let reserve = reserve_share * row["fielded_need"].as_f64().unwrap_or(0.0);
+        if short + reserve > 0.0 {
+            *b.need.entry(a).or_insert(0.0) += short + reserve;
+        }
+    }
+    // the planned force: divisions the active training entries still add, times each template's need
+    let training = active_training(state, tools, plan, now);
+    if !training.is_empty() {
+        let fielded: HashMap<String, u64> = supply(state, tools, now)
+            .map(|s| {
+                let mut m = HashMap::new();
+                for d in list(&s, "divisions") {
+                    *m.entry(text(&d["template"]).to_string()).or_insert(0) += 1;
+                }
+                m
+            })
+            .unwrap_or_default();
+        for (template, cap) in training {
+            let fresh = state
+                .manage
+                .tpl_need
+                .get(&template)
+                .is_some_and(|(at, _, _)| now - *at < 30 * DAY);
+            if !fresh {
+                if let Ok(read) = tools.call("hoi4_template_get", &json!({"template": template})) {
+                    let t = &list(&read, "templates")
+                        .first()
+                        .cloned()
+                        .unwrap_or(Value::Null);
+                    let need: HashMap<String, f64> = t["totals"]["equipment_need"]
+                        .as_object()
+                        .map(|m| {
+                            m.iter()
+                                .filter_map(|(k, v)| v.as_f64().map(|n| (k.clone(), n)))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let variants: HashMap<String, String> = list(t, "equipment_variants")
+                        .iter()
+                        .filter_map(|v| {
+                            let (a, k) = (text(&v["archetype"]), text(&v["variant"]));
+                            (!a.is_empty() && !k.is_empty()).then(|| (a.to_string(), k.to_string()))
+                        })
+                        .collect();
+                    state
+                        .manage
+                        .tpl_need
+                        .insert(template.clone(), (now, need, variants));
+                }
+            }
+            let Some((_, per_div, variants)) = state.manage.tpl_need.get(&template) else {
+                continue;
+            };
+            let have = fielded.get(&template).copied().unwrap_or(0);
+            // without a cap the next queue of divisions stands for the plan (no endless need)
+            let more = match cap {
+                Some(cap) => cap.saturating_sub(have),
+                None => 8,
+            } as f64;
+            for (a, n) in per_div {
+                *b.need.entry(a.clone()).or_insert(0.0) += more * n;
+            }
+            for (a, v) in variants {
+                b.variant.entry(a.clone()).or_insert_with(|| v.clone());
+            }
+        }
+    }
+    for entry in list(plan, "production") {
+        let equipment = text(&entry["equipment"]);
+        if equipment.is_empty() || entry["remove"] == json!(true) {
+            continue;
+        }
+        let a = archetype_row(&stock, equipment).unwrap_or_else(|| family(equipment).to_string());
+        if let Some(f) = entry["factories"].as_i64() {
+            if !b.need.contains_key(&a) {
+                b.targets.insert(a, f);
+            }
+        }
+    }
+    b.priority = strings(plan, "production_priority")
+        .iter()
+        .map(|k| archetype_row(&stock, k).unwrap_or_else(|| family(k).to_string()))
+        .collect();
+    b.pulled = state
+        .manage
+        .pulled
+        .iter()
+        .filter(|(_, at)| now - **at < 30 * DAY)
+        .map(|(e, _)| e.clone())
+        .collect();
+    let mut needs: Vec<String> = b
+        .need
+        .keys()
+        .map(|a| {
+            let d = fill_days(&b, a);
+            format!(
+                "{a} {}",
+                if d.is_finite() {
+                    format!("{d:.0}d")
+                } else {
+                    "no line".into()
+                }
+            )
+        })
+        .collect();
+    needs.sort();
+    let Some(act) = balance_decide(&b) else {
+        return rest(
+            state,
+            format!(
+                "{} military lines, {} factories, {} requested; shortfall in production days: {}",
+                b.lines.len(),
+                total,
+                b.lines.iter().map(|l| l.requested).sum::<i64>(),
+                if needs.is_empty() {
+                    "none".into()
+                } else {
+                    needs.join(", ")
+                }
+            ),
+        );
+    };
+    let (ok, why, what) = match &act {
+        BalanceAct::Remove {
+            index,
+            equipment,
+            why,
+        } => {
+            let (ok, r) = state.act(
+                tools,
+                lease,
+                "hoi4_production_set",
+                json!({"line": index, "equipment": equipment, "factories": 0}),
+                "bl",
+            )?;
+            (ok, r, why.clone())
+        }
+        BalanceAct::Set {
+            index,
+            equipment,
+            factories,
+            why,
+        } => {
+            let before = b
+                .lines
+                .iter()
+                .find(|l| l.index == *index)
+                .map_or(0, |l| l.requested);
+            let (ok, r) = state.act(
+                tools,
+                lease,
+                "hoi4_production_set",
+                json!({"line": index, "equipment": equipment, "factories": factories}),
+                "bl",
+            )?;
+            if ok && *factories < before && why.contains("leave") {
+                state.manage.pulled.insert(equipment.clone(), now);
+            }
+            (ok, r, why.clone())
+        }
+        BalanceAct::Add {
+            equipment,
+            factories,
+            why,
+        } => {
+            let (ok, r) = state.act(
+                tools,
+                lease,
+                "hoi4_production_add",
+                json!({"equipment": equipment, "factories": factories}),
+                "bl",
+            )?;
+            if ok {
+                state.done.insert(format!("prod:{equipment}"), now);
+            }
+            (ok, r, why.clone())
+        }
+    };
+    if !ok {
+        state.skip(now, "mbal", "x", 2 * DAY);
+    }
+    note(state, "production_balance", format!("{what}: {ok}"));
+    Ok(Some(format!("production balance: {what}: {ok} {why}")))
 }
 
 #[cfg(test)]
@@ -6338,7 +7195,7 @@ mod tests {
                     {"idea": "partial_economic_mobilisation", "enabled": true}]}),
             ),
         ]);
-        let plan = json!({"politics_auto": {"order": [{"category": "government", "slot": 2,
+        let plan = json!({"politics_auto": {"fill_vacant": false, "order": [{"category": "government", "slot": 2,
             "ideas": ["war_economy", "partial_economic_mobilisation"], "cost": 100}]}});
         let mut state = State::default();
         assert_eq!(
@@ -6412,13 +7269,22 @@ mod tests {
                         {"slot": 4, "current": "X_hc"}, {"slot": 5, "current": null}]}),
             ),
         ]);
-        let plan = json!({});
+        let plan = json!({"politics_auto": {"fill_vacant": false}});
         let mut state = State::default();
-        assert_eq!(
-            politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap(),
-            None
+        // the seat read first holds the chief: the read lists seats 3 and 5 vacant, and the
+        // first advisor enabled at seat 3 is bought at once
+        let out = politics_auto_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            out.as_deref()
+                .unwrap_or("")
+                .contains("military_staff:3 vacant -> X_a"),
+            "{out:?}"
         );
-        assert!(state.manage.notes["politics_auto"].contains("military_staff:0 holds X_chief"));
+        tools.calls.borrow_mut().clear();
+        state
+            .manage
+            .pp_vacant
+            .insert("military_staff".into(), (START, vec![3]));
         tools.replies.borrow_mut().insert(
             "hoi4_politics_options".into(),
             json!({"current": null, "options": [{"idea": "X_b", "enabled": false},
@@ -6440,6 +7306,36 @@ mod tests {
             .borrow()
             .iter()
             .all(|(_, a)| a["category"] != json!("government")));
+    }
+
+    #[test]
+    fn power_the_order_cannot_spend_fills_a_vacant_advisor_seat() {
+        // the order names a key the game does not offer; seat 5 of the government is vacant
+        let tools = fake(vec![
+            ("hoi4_economy", pp(200.0)),
+            (
+                "hoi4_politics_options",
+                json!({"current": null, "options": [{"idea": "X_minister", "enabled": true}],
+                    "slots": [{"slot": 0, "current": "law"}, {"slot": 5, "current": null}]}),
+            ),
+        ]);
+        let plan = json!({"politics_auto": {"threshold": 60, "order": [
+            {"category": "government", "slot": 4, "ideas": ["not_a_key"], "cost": 150}]}});
+        let mut state = State::default();
+        let mut bought = None;
+        for day in 0..4 {
+            if let Some(out) =
+                politics_auto_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap()
+            {
+                bought = Some(out);
+                break;
+            }
+        }
+        let out = bought.expect("the vacancy fill buys an advisor");
+        assert!(out.contains("-> X_minister"), "{out}");
+        let acts = actions(&tools);
+        assert_eq!(acts.len(), 1);
+        assert_eq!(acts[0].1["idea"], "X_minister");
     }
 
     #[test]
@@ -6741,13 +7637,14 @@ mod tests {
         assert!(out.contains("no idle factory"), "{out}");
         let sent = actions(&tools);
         assert_eq!(sent.len(), 2, "{sent:?}");
+        // PR09: a line gives at most a fifth of itself (12 -> 10)
         assert_eq!(
             (sent[0].1["line"].clone(), sent[0].1["factories"].clone()),
-            (json!(0), json!(9))
+            (json!(0), json!(10))
         );
         assert_eq!(
             (sent[1].1["line"].clone(), sent[1].1["factories"].clone()),
-            (json!(1), json!(11))
+            (json!(1), json!(10))
         );
         // switched off by the plan: the player is woken instead
         let mut replies = lines_with(0);
@@ -6813,7 +7710,7 @@ mod tests {
                 {"archetype": "artillery_equipment", "fielded_short": 0.0, "days_of_cover": 20.0, "variants": []}]}),
         ));
         let tools = fake(replies);
-        let plan = json!({"production_priority": ["infantry_equipment", "artillery_equipment"]});
+        let plan = json!({"production_priority": ["infantry_equipment", "artillery_equipment"], "manage": {"off": ["balance"]}});
         let mut state = State::default();
         let economy = tools.call("hoi4_economy", &json!({})).unwrap();
         let out = rebalance_step(&mut state, &tools, &plan, "l", START, &economy)
@@ -6856,5 +7753,167 @@ mod tests {
         let economy = tools.call("hoi4_economy", &json!({})).unwrap();
         let out = rebalance_step(&mut state, &tools, &plan, "l", START, &economy).unwrap();
         assert!(out.is_none(), "{out:?}");
+    }
+
+    fn pl(index: i64, equipment: &str, requested: i64, active: i64, eff: f64) -> ProdLine {
+        ProdLine {
+            index,
+            equipment: equipment.into(),
+            archetype: family(equipment).into(),
+            requested,
+            active,
+            efficiency: eff,
+            start: 10.0,
+        }
+    }
+
+    #[test]
+    fn idle_dockyards_go_to_the_planned_ship_lines_up_to_their_cap() {
+        let lines = vec![
+            (8, "ship_hull_submarine_1".to_string(), 1),
+            (9, "ship_hull_heavy_2".to_string(), 5),
+        ];
+        let planned = vec!["ship_hull_submarine".to_string()];
+        assert_eq!(
+            dockyard_decide(&lines, &planned, 3),
+            Some(DockAct::Set(8, "ship_hull_submarine_1".into(), 4))
+        );
+        // a planned equipment without a line gets one; nothing planned: the convoy rule's
+        let planned = vec!["ship_hull_light_2".to_string()];
+        assert_eq!(
+            dockyard_decide(&lines, &planned, 4),
+            Some(DockAct::Add("ship_hull_light_2".into(), 4))
+        );
+        assert_eq!(dockyard_decide(&lines, &[], 4), None);
+        assert_eq!(dockyard_decide(&lines, &planned, 0), None);
+    }
+
+    #[test]
+    fn family_drops_the_tier_number_only() {
+        assert_eq!(family("infantry_equipment_1"), "infantry_equipment");
+        assert_eq!(
+            family("ship_hull_cruiser_panzerschiff"),
+            "ship_hull_cruiser_panzerschiff"
+        );
+        assert_eq!(family("convoy_1"), "convoy");
+    }
+
+    #[test]
+    fn a_young_duplicate_line_is_closed_and_a_mature_one_kept() {
+        let mut b = BalanceIn {
+            total: 20,
+            ..Default::default()
+        };
+        b.lines = vec![
+            pl(0, "infantry_equipment_1", 10, 10, 40.0),
+            pl(7, "infantry_equipment_1", 3, 3, 10.0),
+        ];
+        match balance_decide(&b) {
+            Some(BalanceAct::Remove { index, .. }) => assert_eq!(index, 7),
+            other => panic!("{other:?}"),
+        }
+        b.lines[1].efficiency = 35.0;
+        assert!(!matches!(
+            balance_decide(&b),
+            Some(BalanceAct::Remove { .. })
+        ));
+    }
+
+    #[test]
+    fn a_request_above_the_factories_that_exist_is_trimmed() {
+        let mut b = BalanceIn {
+            total: 30,
+            ..Default::default()
+        };
+        b.lines = vec![
+            pl(0, "infantry_equipment_1", 37, 21, 40.0),
+            pl(1, "artillery_equipment_1", 2, 2, 40.0),
+        ];
+        assert_eq!(
+            balance_decide(&b),
+            Some(BalanceAct::Set { index: 0, equipment: "infantry_equipment_1".into(), factories: 21,
+                why: "infantry_equipment_1 asks for 37 factories and has 21: the request is trimmed to what exists, new factories go by need".into() })
+        );
+    }
+
+    #[test]
+    fn idle_factories_go_to_the_longest_shortfall_in_chunks() {
+        let mut b = BalanceIn {
+            total: 30,
+            ..Default::default()
+        };
+        b.lines = vec![
+            pl(0, "infantry_equipment_1", 20, 20, 40.0),
+            pl(1, "artillery_equipment_1", 2, 2, 40.0),
+        ];
+        b.need = HashMap::from([
+            ("infantry_equipment".into(), 5000.0),
+            ("artillery_equipment".into(), 400.0),
+        ]);
+        b.stock = HashMap::from([
+            ("infantry_equipment".into(), 20000.0),
+            ("artillery_equipment".into(), 10.0),
+        ]);
+        b.per_day = HashMap::from([
+            ("infantry_equipment".into(), 50.0),
+            ("artillery_equipment".into(), 0.8),
+        ]);
+        match balance_decide(&b) {
+            Some(BalanceAct::Set {
+                index, factories, ..
+            }) => {
+                assert_eq!(index, 1);
+                assert_eq!(factories, 4, "a chunk of max(2, a fifth), not all 8 idle");
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_need_without_a_line_gets_a_new_line_of_the_templates_variant() {
+        let mut b = BalanceIn {
+            total: 12,
+            ..Default::default()
+        };
+        b.lines = vec![pl(0, "infantry_equipment_1", 10, 10, 40.0)];
+        b.need = HashMap::from([("support_equipment".into(), 300.0)]);
+        b.variant = HashMap::from([("support_equipment".into(), "support_equipment_1".into())]);
+        assert!(
+            matches!(balance_decide(&b), Some(BalanceAct::Add { equipment, factories: 2, .. }) if equipment == "support_equipment_1")
+        );
+    }
+
+    #[test]
+    fn a_long_shortfall_pulls_a_fifth_from_a_large_surplus_once() {
+        let mut b = BalanceIn {
+            total: 30,
+            pull_days: 120.0,
+            ..Default::default()
+        };
+        b.lines = vec![
+            pl(0, "infantry_equipment_1", 28, 28, 50.0),
+            pl(1, "artillery_equipment_1", 2, 2, 40.0),
+        ];
+        b.need = HashMap::from([("artillery_equipment".into(), 900.0)]);
+        b.stock = HashMap::from([
+            ("infantry_equipment".into(), 200000.0),
+            ("artillery_equipment".into(), 0.0),
+        ]);
+        b.per_day = HashMap::from([("artillery_equipment".into(), 0.8)]);
+        match balance_decide(&b) {
+            Some(BalanceAct::Set {
+                index, factories, ..
+            }) => assert_eq!((index, factories), (0, 23)),
+            other => panic!("{other:?}"),
+        }
+        b.pulled.insert("infantry_equipment_1".into());
+        assert_eq!(balance_decide(&b), None, "one pull per line in 30 days");
+        b.pulled.clear();
+        b.per_day.insert("artillery_equipment".into(), 100.0);
+        assert_eq!(
+            balance_decide(&b),
+            None,
+            "a short shortfall waits for new factories"
+        );
     }
 }
