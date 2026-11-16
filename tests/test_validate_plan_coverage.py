@@ -496,6 +496,16 @@ class CoverageTests(unittest.TestCase):
         self.assertIn("hold_targets[2] h3: 'Ghost' is no army_layout name_hint", warn)
         self.assertIn("hold_targets[1] h2: 'North' is a strike role in army_layout", warn)
 
+    def test_vp_target_armies_the_plan_never_makes(self):
+        rows = [{"province": 10, "state": 1, "vp": 5, "army": "North"}, {"province": 30, "state": 3, "army": "East"},
+                {"province": 10, "state": 1, "vp": 5, "army": "East"}]
+        warn = [w for w in self.run_plan(vp_targets=rows).warnings if w.startswith("vp_targets")]
+        self.assertEqual(len(warn), 1)  # one warning per army name, not per row
+        self.assertIn("vp_targets (2 rows from [1]): 'East' is no army_layout name_hint", warn[0])
+        later = {"id": "p2", "overrides": {"army_layout": [{"name_hint": "East", "state": 3, "templates": ["x"]}]}}
+        self.assertFalse([w for w in self.run_plan(vp_targets=rows, phases=[later]).warnings
+                          if w.startswith("vp_targets")])
+
     def test_navy_and_invasions(self):
         rep = self.wave2(navy={"posture": "coastal", "fleets": [
                              {"fleet": "Ghost Fleet", "state_id": 77,
