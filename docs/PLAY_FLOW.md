@@ -107,6 +107,10 @@ whole campaign. It does what the developer rig's broker, plan loop and monitor d
   running;
 - **ends the run** when the executor reports the plan's goal reached, or once the game date passes the plan's
   `goal.deadline` (reasons `goal_reached`, `deadline`); `HOI4_LIVE_END=off` keeps the run going past both;
+- notes the machine's load and swap at the start (a machine short of memory plays at half its pace or less)
+  and **ends the run with a plain message** when the game's memory passes `HOI4_LIVE_GAME_MEMORY_GB` (default
+  10) or its date stands still for `HOI4_LIVE_STALL_MINUTES` (default 5) while it is not paused (reasons
+  `game_memory`, `game_stalled`; 0 switches either off);
 - writes `watch.jsonl` once a minute (game date, war stats, each army's supply and organisation; reads only);
 - writes `calls.jsonl` (token-free), `supervisor.log` and, at the end, `report.md`: wall time, game dates, calls,
   action receipts by outcome, duplicates refused, idle wakes, idle pauses (each with its time, game date, reason
