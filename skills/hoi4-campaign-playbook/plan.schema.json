@@ -969,6 +969,35 @@
         "note": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
+        },
+        "consolidate": {
+          "type": "object",
+          "x-owner": "executor",
+          "description": "Disband the weakest divisions on own-controlled land, as few as bring the mean equipment fill of the rest to until_fill, never below keep divisions; their equipment returns to the pool and refills the others (a country short of equipment all war: Ethiopia 1936). Never a division of an army in enemy-held land or at encirclement risk. Checked every few days; templates may be [] when only this is wanted.",
+          "properties": {
+            "until_fill": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1,
+              "description": "mean equipment fill the rest should reach (default 0.85)"
+            },
+            "keep": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "never fewer divisions than this"
+            },
+            "when": {
+              "$ref": "#/definitions/predicate"
+            },
+            "why": {
+              "type": "string",
+              "description": "Free text for people and the player; never read by the executor."
+            }
+          },
+          "required": [
+            "keep"
+          ],
+          "additionalProperties": false
         }
       },
       "additionalProperties": false,
@@ -4932,7 +4961,10 @@
         },
         "posture": {
           "type": "string",
-          "enum": ["attack", "defend"],
+          "enum": [
+            "attack",
+            "defend"
+          ],
           "default": "attack",
           "x-owner": "executor",
           "description": "defend: a defender until its counter-attack phase. In a hold phase (axes: []) no army draws a line on enemy land and none retakes a lost own state (a retake is an attack); the armies stand where the layout, the guards and the defence lines put them and entrench; every other theatre army keeps one front on the contact line (the nearest hostile-held state touching own-controlled land, weighed against the divisions already fronting it), drawn again when that state leaves the contact line or the army loses its order. Phases with axes attack as usual"

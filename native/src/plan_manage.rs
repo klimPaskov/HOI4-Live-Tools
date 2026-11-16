@@ -70,7 +70,9 @@
 //!                    on a line (hoi4_production_shortages; lines matching production_priority when it
 //!                    is set; else hoi4_resources shortages) turns automatic importing on with the
 //!                    budget through hoi4_auto_import, once per budget; a deficit that outlasts
-//!                    `manage.deficit_wake_days` (14) with it on, or any deficit without auto_import
+//!                    `manage.deficit_wake_days` (14) with it on raises the budget (an input of a
+//!                    production_priority line at once, every 7 days), and a deficit still there
+//!                    after the raise, or any deficit without auto_import
 //!                    (or enabled:false), wakes the player. With a `budget`, a civilian factory count
 //!                    that moved by `budget_step` (2) since the last check re-reads the view and
 //!                    sends the budget again when the game has cut it (EC27, every 7 game days)
@@ -1639,6 +1641,10 @@ fn resources_step(
     let mut short: BTreeSet<String> = BTreeSet::new();
     let mut lines: Vec<String> = Vec::new();
     let mut units = 0.0f64;
+    // an input of a production_priority line: the budget is raised at once, not after
+    // deficit_wake_days (e8, 16 Nov 2026: the two rifle lines ran short of steel ~70 game days
+    // on a budget of one while every division stood at half its rifles)
+    let mut urgent = false;
     if let Ok(read) = tools.call("hoi4_production_shortages", &json!({})) {
         // A resource short for the whole country that no line draws (coal for energy in 1.19)
         // has no priority line to show it, yet it slows every factory: it counts too (n1, 16 Nov
@@ -1673,6 +1679,7 @@ fn resources_step(
             }
             lines.push(format!("{equipment} short of {}", of.join("/")));
             short.extend(of);
+            urgent |= !priority.is_empty();
         }
     } else if let Ok(read) = tools.call("hoi4_resources", &json!({})) {
         if let Some(map) = read["resources"].as_object() {
@@ -1739,10 +1746,15 @@ fn resources_step(
             (now - since) / DAY
         ),
     );
-    if now - since >= days * DAY {
-        if let Some(done) = raise_import_budget(state, tools, plan, lease, now, units, &deficit)? {
+    let lasting = now - since >= days * DAY;
+    if urgent || lasting {
+        if let Some(done) =
+            raise_import_budget(state, tools, plan, lease, now, units, &deficit, urgent)?
+        {
             return Ok(Some(done));
         }
+    }
+    if lasting {
         wake(
             state,
             plan,
@@ -1756,7 +1768,8 @@ fn resources_step(
     Ok(None)
 }
 
-/// A deficit that automatic importing has not closed in `deficit_wake_days` raises its budget by
+/// A deficit that automatic importing has not closed in `deficit_wake_days` (an input of a
+/// production_priority line: at once, every 7 days) raises its budget by
 /// the factories the deficit costs (one civilian factory buys about 8 units), up to the factories
 /// the game offers and `auto_import.budget_max` (the plan's budget + 2 by default); at most once
 /// every 14 game days. None when there is nothing to raise (the player is woken instead).
@@ -1768,11 +1781,12 @@ fn raise_import_budget(
     now: GameHour,
     units: f64,
     deficit: &str,
+    urgent: bool,
 ) -> Result<Option<String>> {
     if state.skipped(now, "mimpraise", "x") {
         return Ok(None);
     }
-    state.skip(now, "mimpraise", "x", 14 * DAY);
+    state.skip(now, "mimpraise", "x", if urgent { 7 } else { 14 } * DAY);
     let (_, budget) = import_cfg(plan);
     let cap = plan["auto_import"]["budget_max"]
         .as_i64()
