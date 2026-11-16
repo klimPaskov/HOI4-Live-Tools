@@ -1162,10 +1162,15 @@ impl State {
         let result = tools.call(name, &args);
         match result {
             Err(e) if e.code == "action_uncertain" => Err(e),
-            // A system dialog held the input back before anything was sent: the whole step ends
-            // (the executor backs off and tries again), so no rule counts it as its order's
-            // failure (a politics back-off, a strike wait, a construction try).
-            Err(e) if e.code == "system_dialog_open" => Err(e),
+            // A system dialog, or another window in front of the game (the user switched apps, a
+            // window took the focus at the start), held the input back before anything was sent:
+            // the whole step ends (the executor backs off and tries again), so no rule counts it
+            // as its order's failure (a politics back-off, a strike wait, a construction try).
+            // n2, 16 Nov 2026: 44 orders refused in two bursts while the game was behind another
+            // app, each counted against its order.
+            Err(e) if e.code == "system_dialog_open" || e.code == "input_target_not_frontmost" => {
+                Err(e)
+            }
             Err(e) if self.stop_on_failure => Err(e),
             Err(e) => {
                 let mut text = format!("{}: {}", e.code, e.message);
@@ -9564,6 +9569,31 @@ mod tests {
                 )
                 .unwrap_err();
             assert_eq!(e.code, "system_dialog_open");
+        }
+        assert!(state.failures.is_empty() && state.failed_run.is_empty());
+    }
+
+    #[test]
+    fn a_game_behind_another_window_is_not_the_orders_failure() {
+        struct Behind;
+        impl Tools for Behind {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                Err(Error::new(
+                    "input_target_not_frontmost",
+                    "The exact owned game client is not frontmost; no input was sent",
+                ))
+            }
+        }
+        let mut state = State {
+            clock: START,
+            wall: Some(0),
+            ..State::default()
+        };
+        for _ in 0..5 {
+            let e = state
+                .act(&Behind, "l", "hoi4_research_start", json!({"slot": 0}), "t")
+                .unwrap_err();
+            assert_eq!(e.code, "input_target_not_frontmost");
         }
         assert!(state.failures.is_empty() && state.failed_run.is_empty());
     }

@@ -78,7 +78,8 @@ const MACOS: Ui = Ui {
     group_handle: 0x8,
     group_orders: 0x98,
     // A fallback stroke left +0x98 empty and added one COrderInstance to each of these lists
-    // (live 16 Nov 2026, 1.19.4.1, two armies; the line was drawn on the map).
+    // (live 16 Nov 2026, 1.19.4.1, two armies; the line was drawn on the map); an area defence
+    // order is counted there too (fb2: the card showed the order, +0x98 stayed empty).
     group_fallback_lists: [Some(0xb0), Some(0xc8)],
     division_location: 0x1f0,
     province_id: 0x9c,
@@ -646,7 +647,16 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 } else {
                     Some(r.string_bounded(leader + ui(r)?.leader_name, 128)?)
                 };
-                let orders = r.array_header(group + ui(r)?.group_orders)?.2;
+                // front, offensive and other plan orders, then the fallback and area defence
+                // orders the game keeps in two lists of their own (fb2, 16 Nov 2026: an area
+                // order left +0x98 empty): an army holding only those still has orders
+                let u = ui(r)?;
+                let lines = r.array_header(group + u.group_orders)?.2;
+                let mut defensive = 0;
+                for list in u.group_fallback_lists.into_iter().flatten() {
+                    defensive += r.array_header(group + list)?.2;
+                }
+                let orders = lines + defensive;
                 let executing = executing(r, image, &name).ok();
                 let exercise = exercise::state(r, image, &name).ok();
                 let parent = r.u64(group + ui(r)?.army_group)?;
@@ -657,6 +667,7 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 };
                 Ok(
                     json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
+                    "defensive_orders":defensive,
                     "plan_executing":executing,"exercising":exercise.map(|e| e.exercising),
                     "exercise_stop_at_max":exercise.map(|e| e.stop_at_max),"planning":planning_of(&planning, &ids),
                     "division_count":ids.len(),"divisions":ids,
@@ -3044,8 +3055,10 @@ pub(super) fn fallback(
 }
 
 /// Give `army` an area defence order over `states` (battle-plan toolbar area defence, key V):
-/// one right-click on each state's centre (Find view first). Verified by new battle-plan orders on
-/// the army. The order's settings window is left at the game's defaults.
+/// one LEFT click on each state's centre (Find view first): the game's own help reads "Click on
+/// states to add/remove them from the army's order", where the line tools say "Right-Click and
+/// drag" (a right-click with the tool, fb1 16 Nov 2026, placed nothing on two armies). Verified by
+/// new battle-plan orders on the army. The order's settings window is left at the game's defaults.
 pub(super) fn area_defense(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -3090,7 +3103,8 @@ pub(super) fn area_defense(
         select_for_orders(process, keys, army)?;
         keys.press(Key::letter('v')?)?;
         std::thread::sleep(std::time::Duration::from_millis(300));
-        keys.right_click(GAME, x, y)?;
+        // a click toggles the state: a second click on a state already in the order removes it
+        keys.click(GAME, x, y)?;
         std::thread::sleep(std::time::Duration::from_millis(250));
         clicked += 1;
     }
