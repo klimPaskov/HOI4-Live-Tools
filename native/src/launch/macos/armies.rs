@@ -3068,9 +3068,23 @@ pub(super) fn area_defense(
 ) -> Result<()> {
     let pos = super::mapdata::positions(game_dir)?;
     let before = read(process, |r, i| plan_nodes(r, i, army))?;
+    // Provinces where own divisions stand: a click there lands on a unit counter and selects
+    // those divisions instead of adding the state (e5/e6, 16 Nov 2026: Army of Wello's area order
+    // over 843 and 271 never placed, five tries a run; both states' central provinces hold
+    // stacks, Dessie and Addis Ababa).
+    let occupied: std::collections::HashSet<i32> = read(process, |r, i| {
+        Ok(division_provinces(r, i)?.into_values().flatten().collect())
+    })
+    .unwrap_or_default();
     let mut clicked = 0;
     for state in states {
-        let pts: Vec<(f64, f64)> = super::mapdata::state_provinces(game_dir, *state)?
+        let all: Vec<i32> = super::mapdata::state_provinces(game_dir, *state)?;
+        let free: Vec<i32> = all
+            .iter()
+            .copied()
+            .filter(|p| !occupied.contains(p))
+            .collect();
+        let pts: Vec<(f64, f64)> = if free.is_empty() { &all } else { &free }
             .iter()
             .filter_map(|p| pos.get(p).copied())
             .collect();
