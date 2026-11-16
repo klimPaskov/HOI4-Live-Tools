@@ -31,4 +31,6 @@ PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}"
 PYTHONIOENCODING=utf-8
 PYTHONUNBUFFERED=1
 export PYTHONPATH PYTHONIOENCODING PYTHONUNBUFFERED
-exec "$PY" -m hoi4_live "$@"
+# -c without the current folder on sys.path: `python -m` puts it first, so a hoi4_live folder there (an
+# older checkout the client starts in) was imported instead of this copy (1.1.0 served for 1.4.2).
+exec "$PY" -c "import runpy, sys; del sys.path[0]; runpy.run_module('hoi4_live', run_name='__main__', alter_sys=True)" "$@"
