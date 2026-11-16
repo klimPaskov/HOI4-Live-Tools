@@ -2956,7 +2956,7 @@
               "air_superiority",
               "overdrawn",
               "convoys",
-              "fuel"
+              "fuel", "balance", "dockyards"
             ]
           }
         },
@@ -3129,6 +3129,12 @@
           "minimum": 0,
           "maximum": 1,
           "x-rule": "fuel"
+        },
+        "balance_reserve": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.8,
+          "description": "production balance rule: the stock kept in reserve per equipment, as a share of what the fielded divisions use (the game's AI keeps 0.8, PRODUCTION_EQUIPMENT_SURPLUS_FACTOR); it counts as need for idle factories and is never pulled from"
         },
         "balance_pull_days": {
           "type": "number",

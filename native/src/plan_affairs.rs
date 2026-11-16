@@ -1651,6 +1651,28 @@ enum Answer {
 /// The first `incoming_proposals` rule that matches a proposal's class and sender and whose
 /// `when` holds decides it; a rule whose `when` is unknown stops the walk (a later rule must
 /// not answer what this one may still claim); no rule leaves the proposal to the player.
+/// The standing answers that follow the plan's `incoming_proposals`.
+fn default_incoming(plan: &Value) -> Vec<Value> {
+    // a plan that names a faction to join leaves invitations to the faction step and the player
+    let joins = !text(&plan["faction"]["join"]).trim().is_empty();
+    let refuse = [
+        if joins { "" } else { "faction_invitation" },
+        "military_access",
+        "lend_lease_request",
+        "manpower_request",
+        "non_aggression_pact",
+        "guarantee",
+    ];
+    let mut out: Vec<Value> = refuse
+        .iter()
+        .filter(|c| !c.is_empty())
+        .map(|c| json!({"class": c, "answer": "refuse", "why": "standing answer: the plan did not ask for it"}))
+        .collect();
+    out.push(json!({"class": "call_to_arms", "answer": "accept", "why": "standing answer: a faction's call to arms"}));
+    out.push(json!({"class": "any", "answer": "player", "why": "standing answer: peace and unclassed proposals are the player's"}));
+    out
+}
+
 fn incoming_answer(
     state: &mut State,
     run: &Run<'_>,
@@ -1699,8 +1721,14 @@ fn incoming_answer(
 /// the player, wakes the player once per proposal.
 fn incoming_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
-    let rules = list(plan, "incoming_proposals");
-    if rules.is_empty() || state.skipped(now, "minc", "x") {
+    // The plan's rules first; then the standing answers, so no proposal waits unanswered:
+    // invitations, access, lend-lease and manpower requests and pacts the plan did not ask for
+    // are refused (they bind the plan's own wars and stock), a faction's call to arms is
+    // accepted (refusing it costs the membership), and peace offers stay the player's.
+    let mut rules: Vec<Value> = list(plan, "incoming_proposals").to_vec();
+    rules.extend(default_incoming(plan));
+    let rules = rules.as_slice();
+    if state.skipped(now, "minc", "x") {
         return Ok(None);
     }
     let Ok(read) = tools.call("hoi4_diplomacy_incoming", &json!({})) else {
@@ -3715,21 +3743,18 @@ mod tests {
             "hoi4_country_status",
             json!({"fields": {"stability": {"value": 0.5}}}),
         );
+        // with the gate false, no plan rule is left: the standing answer refuses the guarantee
+        // (never silence, never a wake for a bind the plan did not ask for)
         let mut state = State::default();
-        assert_eq!(
-            step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap(),
-            None
-        );
-        assert_eq!(
-            wake_reasons(&mut state),
-            vec!["incoming:guarantee:Guarantee of Independence"]
-        );
-        assert_eq!(
-            step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
-            None
+        let out = step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        assert!(
+            out.as_deref()
+                .unwrap_or("")
+                .starts_with("incoming guarantee 'Guarantee of Independence' refuse"),
+            "{out:?}"
         );
         assert!(wake_reasons(&mut state).is_empty());
-        assert_eq!(actions(&tools).len(), 1);
+        assert_eq!(actions(&tools).len(), 2);
         // nothing open: one read a game day
         tools.reply("hoi4_diplomacy_incoming", json!({"proposals": []}));
         let before = reads(&tools, "hoi4_diplomacy_incoming");

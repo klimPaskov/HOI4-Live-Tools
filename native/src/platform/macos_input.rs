@@ -1139,9 +1139,29 @@ impl<'p> MacKeys<'p> {
 impl MacKeys<'static> {
     /// Retain the exact opened process for the controller/worker lifetime.
     pub fn bind_owned(process: std::sync::Arc<dyn Process + Send + Sync>) -> Result<Self> {
-        let (pid, geometry, window) = {
-            let bound = MacKeys::bind(process.as_ref())?;
-            (bound.pid, bound.geometry, bound.window)
+        // A server started while another window is in front waits for the game to come to the
+        // front instead of exiting (gr6, 16 Nov 2026: the server exited at start with
+        // input_target_not_frontmost and the run needed a manual restart). Nothing is sent
+        // while it waits; after two minutes the refusal stands.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        let mut said = false;
+        let (pid, geometry, window) = loop {
+            match MacKeys::bind(process.as_ref()) {
+                Ok(bound) => break (bound.pid, bound.geometry, bound.window),
+                Err(e)
+                    if e.code == "input_target_not_frontmost"
+                        && std::time::Instant::now() < deadline =>
+                {
+                    if !said {
+                        eprintln!(
+                            "waiting for the game window to be in front (click the game); no input is sent until it is"
+                        );
+                        said = true;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                }
+                Err(e) => return Err(e),
+            }
         };
         Ok(Self {
             pid,

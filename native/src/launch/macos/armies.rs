@@ -3789,11 +3789,48 @@ fn assign_commander_once(
             .find(|(n, _)| n.to_lowercase() == wanted)
             .map(|(_, rect)| rect))
     };
-    let Some(rect) = settled(process, "commander list", find)? else {
-        let names: Vec<String> = read(process, leader_rows)?
-            .into_iter()
-            .map(|(n, _)| n)
-            .collect();
+    let mut found = settled(process, "commander list", find)?;
+    // The list draws only the rows in its band (pm1/pm2, 17 Nov 2026: Guderian and Hoth, both
+    // recruited, were "not listed" among the first ten): wheel it down a page at a time and
+    // read the drawn rows again until the general shows or a page brings no new name.
+    let mut names: Vec<String> = Vec::new();
+    if found.is_none() {
+        for _ in 0..12 {
+            let rows = read(process, leader_rows)?;
+            let fresh: Vec<String> = rows
+                .iter()
+                .map(|(n, _)| n.clone())
+                .filter(|n| !names.contains(n))
+                .collect();
+            if fresh.is_empty() {
+                break;
+            }
+            names.extend(fresh);
+            let Some((_, first)) = rows.first() else {
+                break;
+            };
+            let band = read(process, |r, i| Ok(leader_band(r, i)))?;
+            let at = (
+                f64::from(first.x + first.w / 2),
+                f64::from(band.0 + band.1) / 2.0,
+            );
+            keys.scroll(GAME, at, -f64::from(band.1 - band.0).max(120.0) as i32)?;
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            found = settled(process, "commander list", find)?;
+            if found.is_some() {
+                break;
+            }
+        }
+    }
+    let Some(rect) = found else {
+        let names: Vec<String> = if names.is_empty() {
+            read(process, leader_rows)?
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect()
+        } else {
+            names
+        };
         super::ui::dismiss(process, keys, |r, i| Ok(!leader_list_open(r, i)?));
         let close = super::commanders::closest_names(general, &names, 5);
         return Err(Error::new(

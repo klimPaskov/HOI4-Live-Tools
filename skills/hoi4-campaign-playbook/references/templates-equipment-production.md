@@ -452,7 +452,10 @@ What the executor's production steps do against the tactics below. Followed: PR0
 on start lines before the first unpause), PR09 (a pull takes at most a fifth of a line, once in 30 days, only from
 a stock that covers twice its need), PR10 (balance rule: idle factories by days of production missing, chunks of
 max(2, a fifth)), PR11 (`production_priority` with hoi4_production_priority; line order sets which line gets new
-factories and resources first, and a new line joins the bottom), PR12 (auto-import and trade), PR28 (stockpile
+factories and resources first, and a new line joins the bottom; the game's own text: "A Production Line with
+higher priority will be given access to resources before Production Lines with a lower priority", and
+Shift+Click on the arrow gives highest or lowest priority; where the Shift+Click leaves the line in place the
+tool steps it one place per click), PR12 (auto-import and trade), PR28 (stockpile
 rule critical/warning cover), PR29 (trucks at 1.5x need, from idle factories only while the cover is unmeasured).
 Partly: PR03-PR05 (`production[].replace` and `switch_at_cover_days` switch a line; not live-validated), PR08
 (`production[].remove`; not live-validated), PR07 (start naval lines are removed only when the plan names them).

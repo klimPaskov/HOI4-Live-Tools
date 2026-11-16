@@ -8374,7 +8374,14 @@ mod tests {
         ]);
         let mut state = State::default();
         // 6 idle, no shortage known: 3 to the first priority line, then the next in turn
-        let step = tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        let step = tick(
+            &mut state,
+            &tools,
+            &json!({"manage": {"off": ["balance"]}}),
+            "l",
+            START,
+        )
+        .unwrap();
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("production_set infantry_equipment_2 12+3")),
             "{step:?}"
@@ -8384,7 +8391,14 @@ mod tests {
             json!(15)
         );
         tools.replies.insert("hoi4_production_lines", lines(15, 4));
-        let step = tick(&mut state, &tools, &json!({}), "l", START + 1).unwrap();
+        let step = tick(
+            &mut state,
+            &tools,
+            &json!({"manage": {"off": ["balance"]}}),
+            "l",
+            START + 1,
+        )
+        .unwrap();
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+3")),
             "{step:?}"
@@ -8397,7 +8411,7 @@ mod tests {
                 {"archetype": "infantry_equipment", "have": 90, "need": 100},
                 {"archetype": "support_equipment", "have": 0, "need": 30}]}]}),
         );
-        let plan = json!({"manage": {"rebalance_step": 2}, "production": [
+        let plan = json!({"manage": {"rebalance_step": 2, "off": ["balance"]}, "production": [
             {"equipment": "infantry_equipment_2", "remove": true}]});
         let mut state = State::default();
         let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
