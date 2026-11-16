@@ -820,6 +820,15 @@ def check_vp_targets(game, plan, meta, rep, good):
             if float(e["vp"]) != float(have) and not (other and float(e["vp"]) == 0):
                 rep.error(f"{label}: vp {e['vp']} but the state history gives {have:g} at the start"
                           + (f" (state {s} is {owner}'s, not the enemy's: give vp 0 or {have:g})" if other else ""))
+    # an army a row names must be one the plan makes (army_layout, also in a phase override) or one the game has
+    hints = layout_roles(plan)
+    unknown = {}
+    for i, e in entries:
+        a = e.get("army")
+        if isinstance(a, str) and a and a not in hints:
+            unknown.setdefault(a, []).append(i)
+    for a, rows in unknown.items():
+        _army_ref(rep, f"vp_targets ({len(rows)} rows from [{rows[0]}])", a, hints)
     return len(entries)
 
 
