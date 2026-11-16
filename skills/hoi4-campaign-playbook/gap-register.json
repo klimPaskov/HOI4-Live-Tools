@@ -1471,7 +1471,7 @@
    "payoff": "high",
    "why": "China's plan expects Soviet or Western lend-lease flowing",
    "closing": "both",
-   "owner": "request-lend-lease dialog support, then live"
+   "owner": "needs live check: the dialog hoi4_diplomacy_act request_lend_lease opens (named in its dialog_unsupported error; expected the incoming_lend_lease window of countrydiplomacyview.gui with category buttons, lend_leases_grid and send_button), what a category click opens (incoming_lend_lease_equipment_window, equipments_grid rows with equipment_name) and what a row click adds to lend_leases_grid (popup_lend_lease_request_item with number, percent and once buttons); then add the flow to SENDABLE with the lend_leases_grid row count as the pre-send readback, and live-verify as Ethiopia asking ENG"
   },
   {
    "id": "lendlease.answer_requests",
@@ -1895,7 +1895,7 @@
    "payoff": "high",
    "why": "garrisons otherwise eat front-line equipment and manpower",
    "closing": "both",
-   "owner": "offline done: executor step in plan_seams.rs (template resolved from templates[], waits for an occupied state and the template), GARRISON_TOOL hoi4_occupation_garrison {template}; live: build that tool (occupation view, garrison_template_button, template picker) with receipts, list it in RECEIPT_TOOLS, then live-verify"
+   "owner": "offline done: executor step in plan_seams.rs (template resolved from templates[], waits for an occupied state and the template), GARRISON_TOOL hoi4_occupation_garrison {template}. Needs live check before the tool can be built: in the Occupied Territories view (opened as hoi4_occupation_law does), what window the header garrison_template_button opens and which widget names each template there; and a readback of the chosen template (the button garrison_template_icon sprite, its tooltip, or a memory field of the country occupation status near the default law at +0x108). Then build the tool with receipts, list it in RECEIPT_TOOLS and live-verify"
   },
   {
    "id": "occupation.read_resistance",
@@ -3127,7 +3127,7 @@
    "payoff": "medium",
    "why": "policies add efficiency or cost bonuses on the main lines",
    "closing": "both",
-   "owner": "scroll the organisation roster / policy listbox in hoi4_mio_policy, then live-verify"
+   "owner": "needs live check: one wheel event over the organisation roster (organisation_list, a smooth listbox whose rows are found by opening each row details; rows 100 px, five visible) - how many pixels the rows move per event, and what a click on a row background_button does; then row_by_details (mio_act.rs) scrolls by whole rows and keeps scanning, and live-verify on an organisation below the fifth row"
   },
   {
    "id": "mio.design_team_slot",
