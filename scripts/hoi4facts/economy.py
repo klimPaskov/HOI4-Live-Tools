@@ -676,7 +676,8 @@ def _dyn(lint):
 def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
     """The plan's economy by arithmetic with the best switch date: {"switch", "war", "rows": [...], ...}.
     floors: {day: (civilian, military)} marks a switch should keep (the AI baseline): the switch that meets
-    the most of them wins, then the most military factory-days, then the most civilian factories at the end."""
+    the most of them up to the first war day wins (the marks lint_economy holds as errors), then the most of
+    them in all, then the most military factory-days, then the most civilian factories at the end."""
     start = tl.start
     until = until or plan_end(lint, start)
     war = tl.war_day
@@ -691,9 +692,9 @@ def forecast(lint, tl, until=None, extra=(), marks=(), floors=None):
     floors = {d: v for d, v in (floors or {}).items() if start <= d <= until}
     for sw in cands:
         r = simulate(lint, tl, sw, until, events, dyn, sample=floors)
-        met = sum(1 for d, (c, m) in floors.items()
-                  if r["rows"][d]["civ"] >= c and r["rows"][d]["mil"] >= m)
-        key = (met, r["mil_days"], r["end"]["civ"])
+        hit = [d for d, (c, m) in floors.items() if r["rows"][d]["civ"] >= c and r["rows"][d]["mil"] >= m]
+        pre = sum(1 for d in hit if war is None or d <= war)
+        key = (pre, len(hit), r["mil_days"], r["end"]["civ"])
         if best is None or key > best[0]:
             best = (key, sw)
     switch = best[1]

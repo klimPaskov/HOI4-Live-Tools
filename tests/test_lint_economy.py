@@ -217,5 +217,33 @@ class Germany(unittest.TestCase):
         self.assertIn("GER_industrial_consumer_goods_factor", e["consumer_goods_changed_by_script"])
 
 
+class SwitchChoice(unittest.TestCase):
+    def test_the_switch_keeps_the_floors_before_the_war(self):
+        """A later switch that meets a post-war floor must not win over one that meets the floor on the war day:
+        lint_economy holds only the marks up to the first war as errors."""
+        war, late = 400, 900
+
+        class Tl:
+            start, war_day = 0, war
+
+        class L:
+            plan = {}
+
+        def sim(lint, tl, sw, until, events, dyn, sample=()):
+            early = sw < 200
+            rows = {war: {"civ": 10, "mil": 10 if early else 5}, late: {"civ": 5 if early else 10, "mil": 10}}
+            rows.update({d: {"civ": 10, "mil": 10} for d in sample if d not in rows})
+            return {"rows": rows, "mil_days": 100 if early else 200, "end": {"civ": 1},
+                    "slot_bound_days": 0, "first_slot_bound": None, "risk_states": []}
+
+        saved = (economy.simulate, economy.plan_events, economy._dyn)
+        economy.simulate, economy.plan_events, economy._dyn = sim, lambda *a: [], lambda lint: {}
+        try:
+            fc = economy.forecast(L(), Tl(), until=1000, floors={war: (8, 8), late: (8, 8)})
+        finally:
+            economy.simulate, economy.plan_events, economy._dyn = saved
+        self.assertLess(economy._day(fc["switch"]), 200)
+
+
 if __name__ == "__main__":
     unittest.main()
