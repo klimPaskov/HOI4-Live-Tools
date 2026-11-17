@@ -471,8 +471,12 @@ Shift+Click on the arrow gives highest or lowest priority; where the Shift+Click
 tool steps it one place per click), PR12 (auto-import and trade), PR28 (stockpile
 rule critical/warning cover), PR29 (trucks at 1.5x need, from idle factories only while the cover is unmeasured).
 Partly: PR03-PR05 (`production[].replace` and `switch_at_cover_days` switch a line; not live-validated), PR08
-(`production[].remove`; not live-validated), PR07 (start naval lines are removed only when the plan names them).
-Not followed: PR06 (a removal or switch does not read the unit in progress), PR19 (line caps not checked).
+(`production[].remove`; removing a start line live-validated 17 Nov 2026), PR07 and PR06 for ships (the naval
+queue rule removes every hull line `production[]` does not name once its ship in progress is under half built and
+finishes the ones past half first; `manage.off` "naval_queue" turns it off; a hull the plan names stays, and the
+game's outdated-equipment alert on it is the plan's choice, written in the rule's note).
+Not followed: PR06 for land lines (a switch does not read the unit in progress), PR19 for military lines (caps
+not checked; dockyard caps are).
 No tool: PR22 market sales, PR24/PR25/PR40 conversion, PR26 refits, retiring obsolete air wings (gap register).
 
 ### (a) Automatable standing rules

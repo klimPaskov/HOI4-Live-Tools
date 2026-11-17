@@ -2452,7 +2452,7 @@
    "payoff": "medium",
    "why": "a sale run gave about 4000 construction IC; minors fill gaps by purchase",
    "closing": "both",
-   "owner": "hoi4_market tool (list, sell, buy contracts) and a plan key; live test with AAT"
+   "owner": "hoi4_market tool (list, sell, buy contracts) and a plan key; live test with AAT. Interface route to build on: the construction view's `open_market_view_btn` (countryconstructionsview.gui) opens interface/international_market/countryinternationalmarketview.gui; selling goes through marketequipmentstockpilewindow.gui, edit_market_stockpile_window.gui and addequipmenttomarketwindow.gui, buying through marketpurchasableequipmentwindow.gui and marketpurchasedraftwindow.gui (contracts_grid, active_purchase_contract_entry). Still to look at live: the market view's manager slot and the contract records in memory."
   },
   {
    "id": "construction.factories_by_state",
@@ -3084,7 +3084,7 @@
    "payoff": "medium",
    "why": "turns obsolete stock (old tanks, base fighters) into usable gear cheaply",
    "closing": "both",
-   "owner": "conversion tool (Production view convert line) and a plan key"
+   "owner": "conversion tool and a plan key. Interface route to build on (countryproductionlineview.gui): each military line entry (production_military_line_entry and its _collapsed form) has a `convert` button (sprite GFX_production_line_convert); the tool opens it for one line, reads the offered source equipment and stock, picks one, and is verified by the line's converted-from equipment in memory. Still to look at live: the window the button opens and where it lives (pop-up list or production view child)."
   },
   {
    "id": "designers.ship_refit",
@@ -3098,7 +3098,7 @@
    "payoff": "low",
    "why": "navies only",
    "closing": "both",
-   "owner": "refit tool and plan key"
+   "owner": "refit tool and plan key. Interface route to build on: naviesview.gui `btn_refit` on a fleet or ship entry opens `ship_refit_equipment_view` (pick the target variant); the refit then runs as a production line (countryproductionlineview.gui production_ship_refit_line_entry, factories in production_ship_refit_factory_item, list toggle `show_refitting`). Still to look at live: the refit view's variant list widgets and the refit line's memory record."
   },
   {
    "id": "mio.line_manufacturer",
@@ -3160,7 +3160,7 @@
    "tools": [
     "hoi4_mio_policy"
    ],
-   "blocked": "organization_not_offered: the roster is a smooth listbox the tool cannot scroll (sk2: 'shows Fiat | Ansaldo but not Beretta')",
+   "blocked": "organization_not_offered when the asked slot's roster is of another kind (each politics-view slot is the roster of one kind: tanks, ships, planes, materiel; pp1 17 Nov 2026) or the row lay below the first page; the tool now tries every slot and pages one wheel event per row (live check pending)",
    "payoff": "medium",
    "why": "policies add efficiency or cost bonuses on the main lines",
    "closing": "both",
@@ -6098,7 +6098,7 @@
    "payoff": "low",
    "why": "conversion takes only stockpiled planes; old wings also draw fuel",
    "closing": "both",
-   "owner": "air wing disband/re-equip tool (air view) and a plan key; then designers.equipment_conversion"
+   "owner": "air wing disband/re-equip tool (air view) and a plan key; then designers.equipment_conversion. Interface route to build on: the wing details window (airwingdetails.gui) and the air selection view (airselectionview.gui) each have `btn_delete`; re-equipping goes through airwingreorganization.gui. Still to look at live: whether btn_delete asks a confirmation (CONFIRM_VTABLES or default_confirmation_popup) and that disbanded planes return to the stockpile."
   },
   {
    "id": "states.bulk_read",

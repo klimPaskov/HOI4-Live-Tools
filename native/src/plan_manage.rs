@@ -195,7 +195,7 @@ pub(super) struct Memory {
     /// When the current resource deficit was first seen.
     deficit_since: Option<GameHour>,
     /// Alert name -> the game hour it was first seen in the current unbroken run of days.
-    alert_since: HashMap<String, GameHour>,
+    pub(super) alert_since: HashMap<String, GameHour>,
     /// The next priority line in turn for idle factories when no shortage is known.
     feed_turn: usize,
     /// Since when political power above the threshold found nothing to buy (`politics_auto`).
@@ -460,6 +460,9 @@ pub fn step(
     if let Some(done) = balance_rule(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
+    if let Some(done) = naval_queue_rule(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
     if let Some(done) = dockyard_rule(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
@@ -533,7 +536,11 @@ fn route(alert: &str) -> Route {
         ),
         // a vacant political advisor seat: the plan's dated picks, then the standing order's
         // vacancy fill (politics_auto.fill_vacant) owns it
-        "modify_government" => Route::Step("politics", &["pol", "pauto"], &["politics", "politics_auto"]),
+        "modify_government" => Route::Step(
+            "politics",
+            &["pol", "pauto"],
+            &["politics", "politics_auto"],
+        ),
         "unfulfilled_import_requests" | "insufficient_resources" | "insufficient_energy" => {
             Route::Step("resources", &["mres"], &["auto_import"])
         }
@@ -555,11 +562,17 @@ fn route(alert: &str) -> Route {
         "modify_officer_corps" => Route::Step("politics_auto", &["pauto"], &["politics_auto"]),
         "mio_traits" => Route::Step("mio", &[], &["mio"]),
         "research_slot_available" => Route::Info,
-        "free_civilian_factories" => Route::Step("construction", &["con", "confull"], &["construction"]),
-        "free_military_factories" => Route::Step("production", &["mbal", "prodset"], &["production", "production_priority"]),
-        "outdated_equipment_in_production" => Route::Wake(
-            "a line makes an outdated model: a `production` entry with `replace` (switch the line, variant 90% kept) or `remove` (after its unit is done) decides it",
+        "free_civilian_factories" => {
+            Route::Step("construction", &["con", "confull"], &["construction"])
+        }
+        "free_military_factories" => Route::Step(
+            "production",
+            &["mbal", "prodset"],
+            &["production", "production_priority"],
         ),
+        // the naval queue rule removes hulls the plan does not name (PR06/PR07); a line the plan
+        // names is its choice, noted by the rule with its reason
+        "outdated_equipment_in_production" => Route::Step("naval_queue", &["mnq"], &["production"]),
         "operative_recruitable" => Route::Step("intelligence", &[], &["intelligence"]),
         "special_project_available" | "scientist_unassigned" => {
             Route::Step("special_projects", &[], &["special_projects"])
@@ -678,8 +691,17 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
                         3,
                         &reason,
                         format!(
-                            "game alert {name} has stayed {} game days although the {step} step was nudged",
-                            (now - since) / DAY
+                            "game alert {name} has stayed {} game days although the {step} step was nudged{}",
+                            (now - since) / DAY,
+                            // the owning step's last status line is the written reason (why it
+                            // waits, what it deliberately leaves): pr2 kept five alerts open for
+                            // 467-753 days with none
+                            state
+                                .manage
+                                .notes
+                                .get(step)
+                                .map(|n| format!("; {step}: {n}"))
+                                .unwrap_or_default()
                         ),
                         evidence,
                     );
@@ -4519,6 +4541,138 @@ fn dockyard_decide(lines: &[(i64, String, i64)], planned: &[String], idle: i64) 
     ))
 }
 
+/// What the naval queue rule (PR06/PR07) does with the ship lines the plan does not name.
+#[derive(Debug, PartialEq)]
+enum NavalQueue {
+    /// Remove this line (entry index, equipment, progress of its ship in progress).
+    Remove(i64, String, f64),
+    /// Every unplanned line holds a ship past half its cost: wait for it (equipment, progress).
+    Finish(Vec<(String, f64)>),
+}
+
+/// PR07 (start naval queue) and PR06 (finish the unit in progress): a ship line whose hull the
+/// plan's `production[]` does not name is removed once its ship in progress is under half done
+/// (a ship past half is finished first; the line is removed after it, when the next hull
+/// starts from nothing). Convoys stay (the convoy rule owns them). `lines`: (entry index,
+/// equipment, progress 0..1 or None when unread).
+fn naval_queue_decide(
+    lines: &[(i64, String, Option<f64>)],
+    planned: &[String],
+) -> Option<NavalQueue> {
+    let unplanned: Vec<&(i64, String, Option<f64>)> = lines
+        .iter()
+        .filter(|l| l.1.starts_with("ship_hull"))
+        .filter(|l| !planned.iter().any(|p| l.1.starts_with(family(p))))
+        .collect();
+    if unplanned.is_empty() {
+        return None;
+    }
+    if let Some(l) = unplanned
+        .iter()
+        .filter_map(|l| l.2.map(|p| (l, p)))
+        .filter(|(_, p)| *p < 0.5)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+    {
+        return Some(NavalQueue::Remove(l.0 .0, l.0 .1.clone(), l.1));
+    }
+    Some(NavalQueue::Finish(
+        unplanned
+            .iter()
+            .filter_map(|l| l.2.map(|p| (l.1.clone(), p)))
+            .collect(),
+    ))
+}
+
+/// Rule: the start naval queue (manage.off "naval_queue"): hulls the plan does not name are
+/// removed once their ship in progress is under half built (PR06, PR07). The game's
+/// "outdated equipment in production" alert for a hull the plan does name is the plan's choice
+/// (noted with its reason).
+fn naval_queue_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if off(plan, "naval_queue") || state.skipped(now, "mnq", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mnq", "x", 7 * DAY);
+    let Ok(read) = all_lines(tools) else {
+        return Ok(None);
+    };
+    let naval: Vec<(i64, String, Option<f64>)> = read
+        .iter()
+        .filter(|l| l["line_kind"] == json!("naval"))
+        .map(|l| {
+            (
+                l["entry_index"].as_i64().unwrap_or(-1),
+                text(&l["equipment_id"]).to_string(),
+                l["output"]["progress"].as_f64(),
+            )
+        })
+        .collect();
+    let planned: Vec<String> = list(plan, "production")
+        .iter()
+        .filter(|e| e["remove"] != json!(true))
+        .map(|e| text(&e["equipment"]).to_string())
+        .filter(|e| e.starts_with("ship_hull"))
+        .collect();
+    let kept: Vec<String> = naval
+        .iter()
+        .filter(|l| l.1.starts_with("ship_hull"))
+        .filter(|l| planned.iter().any(|p| l.1.starts_with(family(p))))
+        .map(|l| l.1.clone())
+        .collect();
+    if !kept.is_empty() {
+        note(
+            state,
+            "naval_queue",
+            format!(
+                "ship lines kept because production[] names their hull (an outdated-design alert on them is the plan's choice): {}",
+                kept.join(", ")
+            ),
+        );
+    }
+    match naval_queue_decide(&naval, &planned) {
+        None => Ok(None),
+        Some(NavalQueue::Finish(waits)) => {
+            note(
+                state,
+                "naval_queue",
+                format!(
+                    "unplanned ship lines finish their ship first (past half built): {}",
+                    waits
+                        .iter()
+                        .map(|(e, p)| format!("{e} {:.0}%", p * 100.0))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            );
+            Ok(None)
+        }
+        Some(NavalQueue::Remove(index, equipment, progress)) => {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_production_set",
+                json!({"line": index, "equipment": equipment, "factories": 0}),
+                "nq",
+            )?;
+            if ok {
+                // the next unplanned line in the same tick a day later
+                state.skip(now, "mnq", "x", DAY);
+            }
+            let line = format!(
+                "removed unplanned {equipment} line {index} (ship in progress {:.0}%): {ok}",
+                progress * 100.0
+            );
+            note(state, "naval_queue", line.clone());
+            Ok(Some(format!("naval queue: {line} {why}")))
+        }
+    }
+}
+
 /// Rule: no idle dockyard (manage.off "dockyards").
 fn dockyard_rule(
     state: &mut State,
@@ -6330,6 +6484,37 @@ mod tests {
             .unwrap()
             .is_some());
         assert_eq!(actions(&tools)[0].1["factories"], 3);
+    }
+
+    #[test]
+    fn naval_queue_removes_unplanned_hulls_under_half_and_finishes_the_rest() {
+        let lines = vec![
+            (8, "ship_hull_submarine_1".to_string(), Some(0.7)),
+            (12, "ship_hull_light_2".to_string(), Some(0.2)),
+            (14, "ship_hull_cruiser_panzerschiff".to_string(), Some(0.05)),
+            (15, "convoy_1".to_string(), Some(0.0)),
+        ];
+        // the plan names cruisers: the Panzerschiff line is a cruiser hull and stays
+        let planned = vec!["ship_hull_cruiser_2".to_string()];
+        assert_eq!(
+            naval_queue_decide(&lines, &planned),
+            Some(NavalQueue::Remove(12, "ship_hull_light_2".into(), 0.2))
+        );
+        // only the sub past half is left: it finishes first
+        let left = vec![lines[0].clone(), lines[2].clone(), lines[3].clone()];
+        assert_eq!(
+            naval_queue_decide(&left, &planned),
+            Some(NavalQueue::Finish(vec![(
+                "ship_hull_submarine_1".into(),
+                0.7
+            )]))
+        );
+        // every hull planned, convoys never touched
+        let all = vec![
+            "ship_hull_submarine_1".to_string(),
+            "ship_hull_cruiser_2".to_string(),
+        ];
+        assert_eq!(naval_queue_decide(&left, &all), None);
     }
 
     #[test]

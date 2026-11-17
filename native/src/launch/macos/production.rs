@@ -302,35 +302,47 @@ pub(super) fn reveal_named(
         return Err(closed());
     }
     // One glide (a row not laid out yet is searched downwards one event at a time).
-    let outcome = super::glide::glide(
-        process,
-        keys,
-        &super::glide::Glide {
-            at: (260.0, 700.0),
-            pixels: 240,
-            band: (f64::from(LIST.0), f64::from(LIST.1)),
-            search: -1,
-        },
-        || {
-            if read(process, open)? {
-                Ok(())
-            } else {
-                Err(closed())
-            }
-        },
-        |r, i| {
-            Ok(button(r, i, handle, name)?.map(|b| {
-                let top = f64::from(b.y);
-                (top, top + f64::from(b.h.min(min_visible)))
-            }))
-        },
-    )?;
+    let glide_once = || {
+        super::glide::glide(
+            process,
+            keys,
+            &super::glide::Glide {
+                at: (260.0, 700.0),
+                pixels: 240,
+                band: (f64::from(LIST.0), f64::from(LIST.1)),
+                search: -1,
+            },
+            || {
+                if read(process, open)? {
+                    Ok(())
+                } else {
+                    Err(closed())
+                }
+            },
+            |r, i| {
+                Ok(button(r, i, handle, name)?.map(|b| {
+                    let top = f64::from(b.y);
+                    (top, top + f64::from(b.h.min(min_visible)))
+                }))
+            },
+        )
+    };
+    let mut outcome = glide_once()?;
+    if !matches!(outcome, super::glide::Glided::InBand(_)) {
+        // A row read far outside the list that a wheel event does not move (pp2, 17 Nov 2026:
+        // "Stuck(-523)" after the panel was reopened from another view, the game running): the
+        // rows keep the place of an older scroll until the list is drawn again. One burst to
+        // the list's top redraws it, then the glide is tried once more.
+        keys.scroll_burst(GAME, (260.0, 700.0), 240, 60)?;
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        outcome = glide_once()?;
+    }
     if matches!(outcome, super::glide::Glided::InBand(_)) {
         return Ok(());
     }
     Err(Error::new(
         "gui_target_unavailable",
-        "Production line row could not be scrolled into view",
+        format!("Production line row could not be scrolled into view ({outcome:?})"),
     ))
 }
 

@@ -231,6 +231,14 @@ pub(crate) trait GameInput: Send + Sync {
     fn press_code(&self, code: u16) -> Result<()>;
     fn press_shifted(&self, code: u16) -> Result<()>;
     fn press_control(&self, code: u16) -> Result<()>;
+    /// One key press with Option/Alt held (a dead key of the US layout: Option+U then a vowel
+    /// types the umlaut through the system's input method). Backends without it refuse.
+    fn press_option(&self, _code: u16) -> Result<()> {
+        Err(crate::error::Error::new(
+            "capability_unavailable",
+            "this input backend cannot hold Option",
+        ))
+    }
     fn press(&self, key: Key) -> Result<()> {
         self.press_code(key.code())
     }
@@ -309,6 +317,9 @@ macro_rules! delegate_game_input {
             }
             fn press_shifted(&self, code: u16) -> Result<()> {
                 (**self).press_shifted(code)
+            }
+            fn press_option(&self, code: u16) -> Result<()> {
+                (**self).press_option(code)
             }
             fn press_control(&self, code: u16) -> Result<()> {
                 (**self).press_control(code)

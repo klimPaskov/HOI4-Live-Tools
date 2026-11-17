@@ -542,7 +542,20 @@ fn drive_leave(process: &dyn Process, keys: &dyn GameInput, before: &str) -> Res
             ));
         }
         kit::click(keys, leave)?;
-        let answered = kit::answer_confirmation(process, keys, true)?;
+        let mut answered = kit::answer_confirmation(process, keys, true)?;
+        // The leader's "Dismantle faction" question (Cancel / Accept) is in no pop-up list the
+        // tools read (fsp5, 17 Nov 2026: no pop-up, manager or idler view holds it while it is on
+        // screen), and the 4 s wait below used to end in close_windows' Escape, which is its
+        // Cancel. Its Accept carries the RETURN shortcut: RETURN pressed with the question open
+        // dismantled the faction (in_faction false in memory). Only the faction view and the
+        // question are open here; membership in memory still decides the result.
+        if !answered && faction_now(process)?.is_some() {
+            pause(300);
+            if faction_now(process)?.is_some() {
+                keys.press(crate::platform::game_input::Key::Return)?;
+                answered = true;
+            }
+        }
         let deadline = Instant::now() + Duration::from_secs(4);
         loop {
             let now = faction_now(process)?;
@@ -1058,7 +1071,7 @@ mod tests {
             "already_in_faction"
         );
         assert_eq!(
-            plan_create(None, None, Some("Pakt\u{e4}".into()), vec![])
+            plan_create(None, None, Some("Pakt\u{e9}".into()), vec![])
                 .unwrap_err()
                 .code,
             "name_not_typable"

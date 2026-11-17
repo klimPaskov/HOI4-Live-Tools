@@ -22,6 +22,11 @@ const MAX_BURST: u32 = 60;
 const SEARCH_STEPS: u32 = 40;
 /// A list eases its movement: a position counts as resting once two reads this far apart agree.
 const REST_POLL: Duration = Duration::from_millis(40);
+/// After an input the game may not have drawn its next frame yet (first open of a view, a loaded
+/// machine at speed 3): the position is first awaited to leave its pre-input value this long, so
+/// two equal reads before the frame are not taken as "the list did not move" (its end). pr2/pp1,
+/// 17 Nov 2026: naval line arrows refused "could not be scrolled into view" in 0.54 s.
+const MOVE_START: Duration = Duration::from_millis(700);
 const REST_LIMIT: Duration = Duration::from_millis(1200);
 /// Below this many pixels the target did not move.
 const STILL: f64 = 0.5;
@@ -153,6 +158,52 @@ pub(super) fn plan_glide(
     Ok(Glided::Short(pos.0))
 }
 
+/// Whether a read differs from the pre-input one (appearing or vanishing counts as a change).
+fn moved(before: Option<Span>, now: Option<Span>) -> bool {
+    match (before, now) {
+        (Some(a), Some(b)) => (a.0 - b.0).abs() >= STILL || (a.1 - b.1).abs() >= STILL,
+        (None, None) => false,
+        _ => true,
+    }
+}
+
+/// Poll `now` (at most `polls` reads, `pause` between) until it differs from `before`; returns
+/// whether it did. The bound keeps a real end of the list costing one short wait.
+fn await_move(
+    before: Option<Span>,
+    polls: u32,
+    mut now: impl FnMut() -> Result<Option<Span>>,
+    mut pause: impl FnMut(),
+) -> Result<bool> {
+    for k in 0..polls {
+        if moved(before, now()?) {
+            return Ok(true);
+        }
+        if k + 1 < polls {
+            pause();
+        }
+    }
+    Ok(false)
+}
+
+/// After an input: wait for the movement to start (see MOVE_START), then for it to rest.
+fn rest_after(
+    process: &dyn Process,
+    position: &impl Fn(&Reader<'_>, u64) -> Result<Option<Span>>,
+    before: Option<Option<Span>>,
+) -> Result<Option<Span>> {
+    if let Some(before) = before {
+        let polls = (MOVE_START.as_millis() / REST_POLL.as_millis()).max(1) as u32;
+        await_move(
+            before,
+            polls,
+            || read(process, position),
+            || thread::sleep(REST_POLL),
+        )?;
+    }
+    rest(process, position)
+}
+
 /// Read `position` until two reads in a row agree (the eased movement has stopped).
 fn rest(
     process: &dyn Process,
@@ -188,6 +239,10 @@ pub(super) fn glide(
     position: impl Fn(&Reader<'_>, u64) -> Result<Option<Span>>,
 ) -> Result<Glided> {
     let pixels = g.pixels.abs();
+    // The last resting read, and whether an input was sent since (then the next read first
+    // waits for the movement to start).
+    let last: std::cell::Cell<Option<Span>> = std::cell::Cell::new(None);
+    let sent = std::cell::Cell::new(false);
     plan_glide(
         g.band,
         g.search,
@@ -195,9 +250,15 @@ pub(super) fn glide(
         // unit as one burst event on every backend (X11 `scroll` sends one notch per 120 px).
         |sign, count| {
             guard()?;
+            sent.set(true);
             keys.scroll_burst(GAME, g.at, sign * pixels, count)
         },
-        || rest(process, &position),
+        || {
+            let before = sent.replace(false).then(|| last.get());
+            let now = rest_after(process, &position, before)?;
+            last.set(now);
+            Ok(now)
+        },
     )
 }
 
@@ -235,12 +296,20 @@ pub(super) fn glide_to_end(
     position: impl Fn(&Reader<'_>, u64) -> Result<f64>,
 ) -> Result<f64> {
     let position = |r: &Reader<'_>, i: u64| position(r, i).map(|p| Some((p, p)));
+    let last: std::cell::Cell<Option<Span>> = std::cell::Cell::new(None);
+    let sent = std::cell::Cell::new(false);
     plan_to_end(
         |count| {
             guard()?;
+            sent.set(true);
             keys.scroll_burst(GAME, at, pixels, count)
         },
-        || Ok(rest(process, &position)?.map_or(0.0, |p| p.0)),
+        || {
+            let before = sent.replace(false).then(|| last.get());
+            let now = rest_after(process, &position, before)?;
+            last.set(now);
+            Ok(now.map_or(0.0, |p| p.0))
+        },
     )
 }
 
@@ -298,6 +367,48 @@ mod tests {
         .unwrap();
         let l = list.into_inner();
         (out, l.sent, l.pos)
+    }
+
+    #[test]
+    fn a_late_frame_is_awaited_not_taken_for_the_end() {
+        // The wheel event shows only on the fourth read (the game had not drawn yet).
+        let reads = RefCell::new(0);
+        let pauses = RefCell::new(0);
+        let moved_now = await_move(
+            Some((100.0, 120.0)),
+            10,
+            || {
+                *reads.borrow_mut() += 1;
+                Ok(Some(if *reads.borrow() >= 4 {
+                    (45.0, 65.0)
+                } else {
+                    (100.0, 120.0)
+                }))
+            },
+            || *pauses.borrow_mut() += 1,
+        )
+        .unwrap();
+        assert!(moved_now);
+        assert_eq!(*reads.borrow(), 4);
+        // A real end: every read equal, bounded by the poll count, no pause after the last.
+        let reads = RefCell::new(0);
+        let pauses = RefCell::new(0);
+        let moved_now = await_move(
+            Some((100.0, 120.0)),
+            5,
+            || {
+                *reads.borrow_mut() += 1;
+                Ok(Some((100.2, 120.2)))
+            },
+            || *pauses.borrow_mut() += 1,
+        )
+        .unwrap();
+        assert!(!moved_now);
+        assert_eq!((*reads.borrow(), *pauses.borrow()), (5, 4));
+        // A row that appears (search) or vanishes counts as movement.
+        assert!(moved(None, Some((1.0, 2.0))));
+        assert!(moved(Some((1.0, 2.0)), None));
+        assert!(!moved(None, None));
     }
 
     #[test]

@@ -283,6 +283,38 @@ fn open_system(
     Ok(())
 }
 
+/// The politics-view slot whose roster showed each organisation (display name), learned from
+/// every roster read this session: a later action on that organisation opens its slot first
+/// instead of walking the slots of other kinds.
+static SLOT_OF: std::sync::Mutex<Option<std::collections::HashMap<String, usize>>> =
+    std::sync::Mutex::new(None);
+/// The slot whose roster is open (set by `open_roster`).
+static OPEN_SLOT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(usize::MAX);
+fn learn_slot(name: &str) {
+    let slot = OPEN_SLOT.load(std::sync::atomic::Ordering::Relaxed);
+    if slot == usize::MAX || name.is_empty() {
+        return;
+    }
+    if let Ok(mut map) = SLOT_OF.lock() {
+        map.get_or_insert_with(Default::default)
+            .insert(name.to_string(), slot);
+    }
+}
+fn known_slot(name: &str) -> Option<usize> {
+    SLOT_OF
+        .lock()
+        .ok()
+        .and_then(|m| m.as_ref().and_then(|m| m.get(name).copied()))
+}
+/// The slots to try for an organisation: the one a roster showed it in, else the asked one,
+/// then every other.
+fn slot_order(asked: usize, count: usize, display: &str) -> Vec<usize> {
+    let first = known_slot(display).filter(|s| *s < count).unwrap_or(asked);
+    std::iter::once(first)
+        .chain((0..count).filter(|s| *s != first))
+        .collect()
+}
+
 fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Result<()> {
     pk::click(process, keys, "organisation slot", |r, i| {
         let entry = *org_entries(r, i)?.get(slot).ok_or_else(|| {
@@ -293,6 +325,7 @@ fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Resu
     wait(process, "open organisation list", |r, i| {
         pk::is_open(r, i, &pk::MIO_LIST)
     })?;
+    OPEN_SLOT.store(slot, std::sync::atomic::Ordering::Relaxed);
     pause(400);
     Ok(())
 }
@@ -495,6 +528,7 @@ fn find_row(r: &Reader<'_>, i: u64, display: &str) -> Result<(Vec<String>, Optio
     let mut found = None;
     for (n, frame) in list_frames(r, i)?.into_iter().enumerate() {
         let name = pk::text(r, i, frame, "name", 2)?.unwrap_or_default();
+        learn_slot(&name);
         if found.is_none() && loc::same(&name, display) {
             found = Some(n);
         }
@@ -583,49 +617,69 @@ fn row_by_details(
     display: &str,
 ) -> std::result::Result<usize, Fail> {
     let list = read(process, list_rect)?;
+    // The list shows about five rows; a roster holds up to a dozen or more (the materiel roster
+    // of Germany lists Carl Walther sixth, live 17 Nov 2026). One wheel event moves the list by
+    // about one row (scroll_wheel_factor 98, rows 100 high: pp1, 17 Nov 2026). Each page is read
+    // row by row through the detail window; the list is then wheeled down by the rows read less
+    // one, and a page whose first row is still the old one had its wheel events lost (the detail
+    // window was closing) and is wheeled again once. The returned index is the row's place ON
+    // SCREEN (the list is left where it found the row).
+    let centre = (
+        f64::from(list.x + list.w / 2),
+        f64::from(list.y + list.h / 2),
+    );
     let mut seen: Vec<String> = Vec::new();
-    // The list shows about five rows; a roster holds up to a dozen or more (the materiel
-    // roster of Germany lists Carl Walther seventh, live 17 Nov 2026). Each page is read row by
-    // row through the detail window, then the list is wheeled down three rows, until a page
-    // brings no new name (its end).
-    let mut index = 0usize;
-    for page in 0..8 {
-        let mut fresh = 0;
+    let mut previous_first: Option<String> = None;
+    let mut retried = false;
+    for _page in 0..8 {
+        let mut page: Vec<String> = Vec::new();
         for k in 0..12 {
             let top = list.y + ROW_HEIGHT * k;
             if top + 70 > list.y + list.h {
                 break;
             }
             close_detail(process, keys);
-            keys.click(pk::GAME, f64::from(list.x + 445), f64::from(top + 62))?;
-            let opened = wait(process, "organisation detail", |r, i| {
-                pk::is_open(r, i, &pk::MIO_DETAIL)
-            })
-            .is_ok();
+            let mut opened = false;
+            // a first click right after the list moved can be lost: one retry
+            for _ in 0..2 {
+                keys.click(pk::GAME, f64::from(list.x + 445), f64::from(top + 62))?;
+                if wait(process, "organisation detail", |r, i| {
+                    pk::is_open(r, i, &pk::MIO_DETAIL)
+                })
+                .is_ok()
+                {
+                    opened = true;
+                    break;
+                }
+            }
             if !opened {
                 break; // no row there
             }
             pause(250);
             let name = read(process, detail_name).unwrap_or_default();
+            learn_slot(&name);
             if loc::same(&name, display) {
-                return Ok(index + k as usize);
+                return Ok(k as usize);
             }
-            if !name.is_empty() && !seen.contains(&name) {
-                seen.push(name);
-                fresh += 1;
-            }
+            page.push(name);
         }
-        if fresh == 0 || (page > 0 && fresh < 1) {
+        let fresh: Vec<String> = page
+            .iter()
+            .filter(|n| !n.is_empty() && !seen.contains(n))
+            .cloned()
+            .collect();
+        let unmoved = previous_first.is_some() && previous_first.as_ref() == page.first();
+        if fresh.is_empty() && !(unmoved && !retried) {
             break;
         }
+        retried = unmoved;
+        previous_first = page.first().cloned();
+        seen.extend(fresh);
         close_detail(process, keys);
-        let centre = (
-            f64::from(list.x + list.w / 2),
-            f64::from(list.y + list.h / 2),
-        );
-        keys.scroll(pk::GAME, centre, -(ROW_HEIGHT * 3))?;
-        pause(400);
-        index += 3;
+        pause(250);
+        let rows = page.len().saturating_sub(1).max(1) as u32;
+        keys.scroll_burst(pk::GAME, centre, -ROW_HEIGHT, rows)?;
+        pause(500);
     }
     close_detail(process, keys);
     Err(refuse(
@@ -746,8 +800,8 @@ fn open_org(
         .unwrap_or(1)
         .max(slot + 1);
     let mut first: Option<Fail> = None;
-    for s in std::iter::once(slot).chain((0..count).filter(|s| *s != slot)) {
-        if s != slot {
+    for (n, s) in slot_order(slot, count, display).into_iter().enumerate() {
+        if n > 0 {
             leave(process, keys);
             open_system(process, keys, s)?;
         }
@@ -793,16 +847,46 @@ fn political_power(process: &dyn Process) -> Option<f64> {
 
 fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot: usize) -> Driven {
     let result: Driven = (|| {
+        // Each slot of the politics view is the roster of one kind (tanks, ships, planes,
+        // materiel: pp1, 17 Nov 2026, the first slot's tooltip "for Tanks"); an organisation
+        // can only join the slot of its kind, so the asked slot comes first and every other
+        // slot is tried after it (pr2 asked every organisation in slot 0).
         open_system(process, keys, slot)?;
-        open_roster(process, keys, slot)?;
+        let count = read(process, org_entries)
+            .map(|e| e.len())
+            .unwrap_or(1)
+            .max(slot + 1);
         let before = political_power(process);
-        if rows_readable(process) {
-            require_row(process, display)?;
-            pk::click(process, keys, "organisation row", |r, i| {
-                row_rect(r, i, display, "background_button")
-            })?;
-        } else {
-            let k = row_by_details(process, keys, display)?;
+        let mut found: Option<Option<usize>> = None;
+        let mut first: Option<Fail> = None;
+        for (n, s) in slot_order(slot, count, display).into_iter().enumerate() {
+            if n > 0 {
+                leave(process, keys);
+                open_system(process, keys, s)?;
+            }
+            open_roster(process, keys, s)?;
+            let attempt = if rows_readable(process) {
+                require_row(process, display).map(|()| None)
+            } else {
+                row_by_details(process, keys, display).map(Some)
+            };
+            match attempt {
+                Ok(k) => {
+                    found = Some(k);
+                    break;
+                }
+                Err(Fail::Refused(e)) if e.code == "organization_not_offered" => {
+                    first.get_or_insert(Fail::Refused(e));
+                }
+                Err(other) => return Err(other),
+            }
+        }
+        let Some(on_screen) = found else {
+            return Err(first.unwrap_or_else(|| {
+                refuse("organization_not_offered", "No organisation slot offers it")
+            }));
+        };
+        if let Some(k) = on_screen {
             close_detail(process, keys);
             let list = read(process, list_rect)?;
             keys.click(
@@ -810,6 +894,10 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
                 f64::from(list.x + 200),
                 f64::from(list.y + ROW_HEIGHT * k as i32 + 30),
             )?;
+        } else {
+            pk::click(process, keys, "organisation row", |r, i| {
+                row_rect(r, i, display, "background_button")
+            })?;
         }
         let confirmed = accept_command(process, keys)?;
         pause(600);
@@ -1124,7 +1212,7 @@ pub(super) fn call(
                     ))
                 }),
             };
-            ui_action::run(job, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_policy" => {
             super::allowed(
@@ -1160,7 +1248,7 @@ pub(super) fn call(
                     ))
                 }),
             };
-            ui_action::run_bounded(job, 40, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_trait" => {
             super::allowed(
@@ -1220,7 +1308,7 @@ pub(super) fn call(
                     )
                 }),
             };
-            ui_action::run_bounded(job, 40, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         _ => Err(Error::new(
             "capability_unavailable",

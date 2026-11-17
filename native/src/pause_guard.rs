@@ -378,6 +378,9 @@ impl GameInput for Watched<'_> {
     fn press_control(&self, code: u16) -> Result<()> {
         self.key(code, || self.inner.press_control(code))
     }
+    fn press_option(&self, code: u16) -> Result<()> {
+        self.key(code, || self.inner.press_option(code))
+    }
     fn press(&self, key: Key) -> Result<()> {
         self.key(key.code(), || self.inner.press(key))
     }
