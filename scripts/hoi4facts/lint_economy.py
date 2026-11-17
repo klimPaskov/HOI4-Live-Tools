@@ -29,14 +29,28 @@ Production is a set of factory targets per equipment over all lines, the ones th
                              than the free slots of the states its construction list names, while
                              construction_fallback_any_own_state is not true: civilian factories stand idle
                              once the listed states are full.
-  plan.ai_baseline           (warning) where a baseline of the game's own AI exists for the country and start
-                             (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json), a plan checkpoint,
-                             horizon target or forecast below the AI's mark on that date, with no reason in
-                             `goal.ai_baseline_why`.
+  plan.ai_baseline           (error) where a baseline of the game's own AI exists for the country and start
+                             (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json), a plan checkpoint or horizon
+                             target below BASELINE_SLACK of the AI's civilian, military or total factories on that
+                             date, or the forecast of the plan's own levers below FORECAST_SLACK of them. A written
+                             reason does not lift it: only goal.ai_baseline_constraint entries the lint confirms
+                             (no_free_slots: the forecast finds no free slot outside the construction risk by then;
+                             law_unavailable: the law is not offered or its gate is closed under the plan's timeline).
+                             Divisions below the AI stay a warning goal.ai_baseline_why can answer (the AI fields
+                             under-equipped divisions).
+  economy.unbacked           (warning) a civilian or military target more than UNBACKED_SLACK above what the plan's
+                             own levers give on that date (facts.economy.forecast).
+  economy.below_forecast     (warning) a target below what the plan's own levers give: the plan aims low.
+  construction.switch        (warning) the base construction list queues military factories from the first day while
+                             the arithmetic switches later: the arms_factory job belongs in a phase from the switch.
+  economy.forecast           (info) no forecast could be made (the reason).
 facts.economy: factories, consumer goods at the start (ideas, and the dynamic modifiers the history adds,
-resolved with the variables it sets), the scripts that change them later, free slots, free civilian factories
-by quarter on the listed builds; economy.consumer_goods (info) names the scripts. facts.production_need: need
-and what the country has per family.
+resolved with the variables it sets), the scripts that change them later, free slots, `forecast` (economy.py: the
+plan's own dated levers day by day with the switch date the arithmetic picks, by quarter and on the AI's dates) and
+`levers` (laws, advisors, techs and focuses the game offers that the plan leaves out or takes late, with the
+factories each adds by the first war day); economy.consumer_goods (info) names the scripts. facts.production_need:
+need and what the country has per family. facts.ai_baseline: the marks below the AI, the forecast's, and each
+constraint with whether the lint confirmed it.
 """
 import json
 import os
@@ -45,12 +59,16 @@ from collections import Counter, defaultdict
 
 from . import calc as calcmod
 from . import derive
+from . import economy as econmod
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASELINES = os.path.join(os.path.dirname(os.path.dirname(HERE)), "skills", "hoi4-campaign-playbook", "baselines")
 NEAR_ZERO = 0.6         # need_balance: a family with less than this share of its need is starved
 FAR_ABOVE = 2.5         # ... while another family has more than this many times its need
-BASELINE_SLACK = 0.9    # plan.ai_baseline: below 90% of the AI's mark warns
+BASELINE_SLACK = 0.9    # plan.ai_baseline: the plan's marks below 90% of the AI's fail
+FORECAST_SLACK = 0.85   # ... and the forecast of its own levers below 85% (the arithmetic leaves some levers out)
+UNBACKED_SLACK = 1.1    # economy.unbacked: a target more than 10% above what the levers give
+SWITCH_GRACE_DAYS = 180  # construction.switch: a switch within this of the start needs no phase
 LOSS_SHARE = 0.05       # share of the fielded equipment lost a month at war (as production.balance)
 
 
@@ -316,7 +334,9 @@ def economy(lint, tl):
     civ = sum(st[s]["buildings"].get("industrial_complex", 0) for s in owned)
     mil = sum(st[s]["buildings"].get("arms_factory", 0) for s in owned)
     cg_ideas, cg_src = calcmod.consumer_goods(w, tag)
-    dyn, dyn_rows, dyn_changes = _dynamic_consumer_goods(lint)
+    if getattr(lint, "_econ_dyn", None) is None:
+        lint._econ_dyn = _dynamic_consumer_goods(lint)
+    dyn, dyn_rows, dyn_changes = lint._econ_dyn
     cg = round(max(0.0, (cg_ideas + dyn["expected"]) * (1 + dyn["factor"])), 4)
     start = tl.start
     end = max([d for d, _ in lint.horizon()] or [start + 365])
@@ -362,24 +382,21 @@ def economy(lint, tl):
                            "civilian factories on construction stand idle. Set the fallback, or list states with "
                            "slots for every factory the targets need")
                 break
-    # free civilian factories by quarter on the calc's build of the listed factories (a floor: no construction
-    # bonuses from techs, focuses or laws)
-    table = []
-    order = []
-    for b_, k in (("industrial_complex", "civ"), ("arms_factory", "mil")):
-        order += [k] * (slots[b_] if not fallback else 40)
-    if order:
-        try:
-            r = calcmod.build_order(w, calcmod.parse_order(",".join(f"{k}:1" for k in order), w), civ, mil, cg,
-                                    lint.start, derive.fmt(derive.date_of(end)))
-        except Exception:  # noqa: BLE001 - the calc refuses odd input; the table is left out then
-            r = None
-        if r:
-            for q in range(start, end, 91):
-                done = [x for x in r["rows"] if _day(x["date"]) <= q]
-                c_, m_ = (done[-1]["civ"], done[-1]["mil"]) if done else (civ, mil)
-                table.append({"date": derive.fmt(derive.date_of(q)), "civ": c_, "mil": m_,
-                              "free_civs": max(0, c_ - int(-(-cg * (c_ + m_) // 1)))})
+    # the plan's own levers by date (economy.forecast): laws, ideas, advisors, focus gifts, techs, annexations,
+    # slots outside the construction risk; the switch date the arithmetic gives
+    b = load_baseline(lint.tag, lint.start)
+    floors = {}
+    for row in (b or {}).get("rows") or []:
+        d = _day(row["date"])
+        if d:
+            floors[d] = (BASELINE_SLACK * row["civilian_factories"], BASELINE_SLACK * row["military_factories"])
+    fc, lev = None, []
+    try:
+        fc = econmod.forecast(lint, tl, marks=list(floors), floors=floors)
+        lev = econmod.levers(lint, tl, fc)
+    except Exception as exc:  # noqa: BLE001 - advisory: the economy rules then run without the forecast
+        lint.add("info", "economy.forecast", "construction", f"no forecast: {type(exc).__name__}: {exc}")
+    table = fc["rows"] if fc else []
     lint.facts["economy"] = {
         "start": {"civilian": civ, "military": mil, "consumer_goods": cg,
                   "consumer_goods_civs": int(-(-cg * (civ + mil) // 1)), "free_civs": max(0, civ - int(-(-cg * (civ + mil) // 1))),
@@ -388,16 +405,22 @@ def economy(lint, tl):
         "consumer_goods_changed_by_script": dyn_changes,
         "free_slots": {"civilian_states": slots.get("industrial_complex"), "military_states": slots.get("arms_factory"),
                        "fallback": fallback},
-        "by_quarter": table,
-        "note": "by_quarter builds the listed factories with the start consumer goods and no construction bonuses "
-                "(a floor); law, focus and decision changes to consumer goods are the plan's to count in plan.md"}
+        "forecast": fc,
+        "levers": lev,
+        "note": "forecast: what the plan's own dated levers give with the switch date the arithmetic picks "
+                "(economy.py); levers: what the game offers that the plan leaves out or takes late, with the "
+                "factories it adds by the first war day when taken at the start (law gates and focus time are "
+                "the plan's to judge)"}
     if dyn_changes:
         lint.add("info", "economy.consumer_goods", "politics",
                  f"consumer goods start at {cg:g} of all factories ({lint.facts['economy']['start']['consumer_goods_civs']} "
                  f"civilian factories) and scripts change them over time through "
                  + ", ".join(f"{k} ({', '.join(v)})" for k, v in dyn_changes.items())
                  + ": state the share by quarter in plan.md and plan the laws, focuses and decisions that lower it")
-    baseline(lint, tl, table)
+    if fc:
+        targets_vs_forecast(lint, fc, lev)
+        construction_switch(lint, fc)
+    baseline(lint, tl, table, fc, lev)
 
 
 def load_baseline(tag, start):
@@ -409,13 +432,9 @@ def load_baseline(tag, start):
         return json.load(fh)
 
 
-def baseline(lint, tl, table):
-    b = load_baseline(lint.tag, lint.start)
-    if not b:
-        return
-    why = (lint.plan.get("goal") or {}).get("ai_baseline_why") if isinstance(lint.plan.get("goal"), dict) else None
-    marks = []
-    # the plan's own numbers by date: factories checkpoints, horizon targets, the army forecast
+def _plan_marks(lint):
+    """{day: {"factories" | "civilian_factories" | "military_factories" | "divisions": n}} the plan states:
+    factories checkpoints and horizon targets."""
     plan_at = defaultdict(dict)
     for c in lint.list_of("checkpoints"):
         d = _day(c.get("by"))
@@ -429,35 +448,167 @@ def baseline(lint, tl, table):
         for k_plan in ("divisions", "military_factories", "civilian_factories"):
             if isinstance(t.get(k_plan), (int, float)) and d:
                 plan_at[d][k_plan] = t[k_plan]
+    return plan_at
+
+
+def targets_vs_forecast(lint, fc, lev):
+    """economy.unbacked / economy.below_forecast: the plan's civilian and military targets against what its own
+    levers give on that date."""
+    rows = fc.get("rows") or []
+    unbacked, low = [], []
+    for d, v in sorted(_plan_marks(lint).items()):
+        r = econmod.at(rows, d)
+        if not r:
+            continue
+        for key, f_key in (("civilian_factories", "civ"), ("military_factories", "mil")):
+            if key not in v:
+                continue
+            if v[key] > UNBACKED_SLACK * r[f_key] + 1:
+                unbacked.append(f"{key.replace('_', ' ')} {v[key]} by {derive.fmt(derive.date_of(d))} against "
+                                f"{r[f_key]} the plan's levers give")
+            elif v[key] < BASELINE_SLACK * r[f_key] - 1:
+                low.append(f"{key.replace('_', ' ')} {v[key]} by {derive.fmt(derive.date_of(d))} against "
+                           f"{r[f_key]} its levers give")
+    if unbacked:
+        lint.add("warning", "economy.unbacked", "horizons",
+                 "targets the plan's own levers do not reach (facts.economy.forecast): " + "; ".join(unbacked[:6])
+                 + ". Add the levers that close the gap (facts.economy.levers: "
+                 + ", ".join(f"{x['id']} +{x['gain']}" for x in lev[:5] if x.get("gain")) + ") or lower the target")
+    if low:
+        lint.add("warning", "economy.below_forecast", "horizons",
+                 "targets below what the plan's own levers give (aim at the forecast, it is the plan's economy): "
+                 + "; ".join(low[:6]))
+
+
+def construction_switch(lint, fc):
+    """construction.switch: the base construction list queues military factories from the first day while the
+    arithmetic switches from civilian to military factories later (the executor runs every job of the active
+    list, so both are built side by side): the military job belongs in a phase override from the switch date."""
+    sw = _day(fc.get("switch"))
+    start = _day(lint.start)
+    if sw is None or start is None or sw - start < SWITCH_GRACE_DAYS:
+        return
+    jobs = [e for e in lint.list_of("construction") if e.get("building") == "arms_factory"]
+    if jobs and any(e.get("building") == "industrial_complex" for e in lint.list_of("construction")):
+        lint.add("warning", "construction.switch", "construction",
+                 f"the base construction list holds an arms_factory job, so military factories are queued from "
+                 f"{lint.start} beside the civilian ones, while the arithmetic switches on {fc['switch']} "
+                 f"(facts.economy.forecast): keep only civilian jobs in the base list and put the arms_factory job "
+                 f"in a phase whose overrides.construction starts at the switch date")
+
+
+CONSTRAINT_KINDS = ("no_free_slots", "law_unavailable")
+
+
+def _constraint_ok(lint, c, fc, day):
+    """A goal.ai_baseline_constraint the lint can check: no_free_slots (the forecast found no free slot outside
+    the construction risk on or before the date) or law_unavailable (the law is not offered to the country, or
+    its gate is closed under the plan's own timeline on the date). (ok, why)."""
+    if not isinstance(c, dict) or c.get("kind") not in CONSTRAINT_KINDS:
+        return False, "not a checkable constraint (kind must be one of " + ", ".join(CONSTRAINT_KINDS) + ")"
+    if c["kind"] == "no_free_slots":
+        first = _day((fc or {}).get("first_slot_bound"))
+        if first is not None and first <= day:
+            return True, f"no free slot outside the construction risk from {fc['first_slot_bound']}"
+        return False, "the forecast still finds free slots outside the construction risk on that date"
+    law = c.get("law")
+    try:
+        laws = lint.world.laws(lint.tag)
+    except Exception:  # noqa: BLE001
+        laws = {}
+    offered = {o.get("id"): o for row in laws.values() for o in row.get("options") or []}
+    if law not in offered:
+        return True, f"{law} is not offered to {lint.tag}"
+    facts_at = getattr(lint, "_gate_facts", None)
+    raw = (lint.world.ideas().get(law) or {}).get("available")
+    gate = raw if isinstance(raw, list) else None
+    if facts_at is not None and isinstance(gate, list) and gate:
+        from . import plan_gates
+        done = {f for end, f in getattr(lint, "_focus_done", []) if end <= day}
+        if plan_gates.evaluate(gate, facts_at(day, done)) is False:
+            return True, f"{law}'s gate is closed on that date under the plan's timeline"
+    return False, f"{law} is offered and its gate is not shown closed on that date"
+
+
+def baseline(lint, tl, table, fc=None, lev=()):
+    """plan.ai_baseline: the plan's factory marks (checkpoints, horizon targets) and the forecast of its own
+    levers against the game's own AI on the same dates. Factories below BASELINE_SLACK of the AI's are an error
+    unless goal.ai_baseline_constraint names a hard game constraint the lint confirms; divisions stay a warning
+    (the AI fields under-equipped divisions) that goal.ai_baseline_why can answer."""
+    b = load_baseline(lint.tag, lint.start)
+    if not b:
+        return
+    goal = lint.plan.get("goal") if isinstance(lint.plan.get("goal"), dict) else {}
+    why = goal.get("ai_baseline_why")
+    constraints = goal.get("ai_baseline_constraint") or []
+    if isinstance(constraints, dict):
+        constraints = [constraints]
+    marks, div_marks, fc_marks = [], [], []
+    plan_at = _plan_marks(lint)
+    horizon_end = max([x for x, _ in lint.horizon()] + list(plan_at) or [None]) if (lint.horizon() or plan_at) else None
+    rows = (fc or {}).get("rows") or []
     for row in b.get("rows") or []:
         d = _day(row["date"])
-        if d is None or d > max([x for x, _ in lint.horizon()] or [d]):
+        if d is None or (horizon_end is not None and d > horizon_end):
             continue
-        ai_f = row["civilian_factories"] + row["military_factories"] + row.get("naval_factories", 0)
-        # the nearest plan number at or after the AI's date (within a quarter)
+        ai_c, ai_m = row["civilian_factories"], row["military_factories"]
+        ai_f = ai_c + ai_m + row.get("naval_factories", 0)
         near = [(x, v) for x, v in plan_at.items() if d - 31 <= x <= d + 92]
         for x, v in near:
+            when = derive.fmt(derive.date_of(x))
             if "factories" in v and v["factories"] < BASELINE_SLACK * ai_f:
-                marks.append(f"factories {v['factories']} by {derive.fmt(derive.date_of(x))} against the AI's {ai_f} "
-                             f"on {row['date']}")
-            for k_plan, ai_k in (("civilian_factories", "civilian_factories"), ("military_factories", "military_factories")):
-                if k_plan in v and v[k_plan] < BASELINE_SLACK * row[ai_k]:
-                    marks.append(f"{k_plan.replace('_', ' ')} {v[k_plan]} by {derive.fmt(derive.date_of(x))} against "
-                                 f"the AI's {row[ai_k]} on {row['date']}")
+                marks.append((d, f"factories {v['factories']} by {when} against the AI's {ai_f} on {row['date']}"))
+            for k_plan, ai_v in (("civilian_factories", ai_c), ("military_factories", ai_m)):
+                if k_plan in v and v[k_plan] < BASELINE_SLACK * ai_v:
+                    marks.append((d, f"{k_plan.replace('_', ' ')} {v[k_plan]} by {when} against the AI's {ai_v} on "
+                                     f"{row['date']}"))
             if "divisions" in v and v["divisions"] < BASELINE_SLACK * row["divisions"]:
-                marks.append(f"divisions {v['divisions']} by {derive.fmt(derive.date_of(x))} against the AI's "
-                             f"{row['divisions']} on {row['date']}")
+                div_marks.append(f"divisions {v['divisions']} by {when} against the AI's {row['divisions']} on "
+                                 f"{row['date']}")
+        r = econmod.at(rows, d) if rows else None
+        if r and (r["civ"] < FORECAST_SLACK * ai_c or r["mil"] < FORECAST_SLACK * ai_m):
+            fc_marks.append((d, f"{r['civ']} civilian / {r['mil']} military on {row['date']} against the AI's "
+                                f"{ai_c} / {ai_m}"))
         divs, _ = tl.army_at(d)
         if divs < BASELINE_SLACK * row["divisions"]:
-            marks.append(f"the training lines field at most {round(divs)} divisions on {row['date']} against the "
-                         f"AI's {row['divisions']}")
+            div_marks.append(f"the training lines field at most {round(divs)} divisions on {row['date']} against "
+                             f"the AI's {row['divisions']}")
+    held, refused = [], []
+    for c in constraints:
+        ok, how = _constraint_ok(lint, c, fc, _day(c.get("date")) if isinstance(c, dict) and c.get("date")
+                                 else (horizon_end or _day(lint.start)))
+        (held if ok else refused).append((c, how))
     lint.facts["ai_baseline"] = {"file": f"baselines/{lint.tag}-{derive.as_tuple(lint.start)[0]}.json",
-                                 "below": marks}
-    if marks and not why:
-        lint.add("warning", "plan.ai_baseline", "checkpoints",
-                 f"the plan schedules less than the game's own AI reaches as {lint.tag} ({b.get('ai')} AI, "
-                 f"{b.get('difficulty')}): " + "; ".join(marks[:6]) + (" ..." if len(marks) > 6 else "")
-                 + ". Raise the plan, or say why in goal.ai_baseline_why")
+                                 "below": [m for _, m in marks] + div_marks,
+                                 "forecast_below": [m for _, m in fc_marks],
+                                 "constraints": [{"constraint": c, "confirmed": True, "how": h} for c, h in held]
+                                 + [{"constraint": c, "confirmed": False, "how": h} for c, h in refused]}
+    if refused:
+        lint.add("error", "plan.ai_baseline", "goal.ai_baseline_constraint",
+                 "constraints the lint cannot confirm: " + "; ".join(f"{json.dumps(c)}: {h}" for c, h in refused))
+    covered = bool(held)
+    lever_text = ", ".join(f"{x['kind']} {x['id']} ({x['gives']}; +{x['gain']} by the first war day)"
+                           for x in list(lev)[:6] if x.get("gain")) or "none found"
+    if marks and not covered:
+        lint.add("error", "plan.ai_baseline", "checkpoints",
+                 f"the plan schedules fewer factories than the game's own AI reaches as {lint.tag} ({b.get('ai')} "
+                 f"AI, {b.get('difficulty')}): " + "; ".join(m for _, m in marks[:6])
+                 + (" ..." if len(marks) > 6 else "")
+                 + ". A written reason does not lift this floor; raise the targets with the levers that reach them "
+                   "(facts.economy.forecast, facts.economy.levers: " + lever_text + "), or name a hard game "
+                   "constraint in goal.ai_baseline_constraint (no_free_slots, law_unavailable) the lint can confirm")
+    if fc_marks and not covered:
+        lint.add("error", "plan.ai_baseline", "construction",
+                 f"the plan's own levers (facts.economy.forecast, switch {fc.get('switch')}) build fewer factories "
+                 f"than the game's own AI: " + "; ".join(m for _, m in fc_marks[:6])
+                 + ". Use more of what the game offers (laws by date, construction advisors and focuses, "
+                   "construction and building-slot techs early, civilian-first to the switch date, build in every "
+                   "state outside the construction risk, a smaller import budget): " + lever_text)
+    if div_marks and not why:
+        lint.add("warning", "plan.ai_baseline", "training",
+                 f"the plan fields fewer divisions than the game's own AI as {lint.tag}: " + "; ".join(div_marks[:4])
+                 + ". Raise the training caps, or say why in goal.ai_baseline_why (the AI fields under-equipped "
+                   "divisions of cheaper templates)")
 
 
 def _atoms(pred):

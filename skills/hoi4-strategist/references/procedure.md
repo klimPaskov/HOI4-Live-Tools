@@ -306,11 +306,24 @@ the tag, policy, trait index range); rubric row 6.
 ### 10. Economy timing
 Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-deployment.md` §5. Facts:
 `C build-order`, `F states <TAG>`, `F state <id>`, `F province <id>`, `F route <from> <to>`.
-1. Months to the first war (item 2). Civ/mil/dockyard timing from the §1.2 table; run `C build-order`
-   with the start factories, free slots and the switch date (15-factory cap per project,
-   infrastructure multiplier). Copy factory counts by date into plan.md §4 as `[D build-order]`.
-2. Factory states from the top of the dossier ranking (§2): no state within 2 province steps of an
-   enemy or planned enemy border; infrastructure 2 or less gets `infrastructure` first or is not used.
+1. Months to the first war (item 2). The economy is the plan's own levers by date: run the lint on the
+   draft and read `facts.economy.forecast` (economy.py: day by day, free civilian factories after consumer
+   goods and the import budget, x 5 points x (1 + 0.2 x infrastructure) x every construction-speed modifier the
+   plan's laws, advisors, ideas and techs give on that date, plus focus gifts, building-slot techs and
+   annexed factories, in every free slot outside the construction risk). It also picks the **switch date** (the
+   last day civilian factories pay back, tried monthly to the first war) and lists `facts.economy.levers`:
+   laws, advisors, techs and focuses the game offers that the plan leaves out or takes late, each with the
+   factories it adds by the first war day. Copy the forecast by quarter into plan.md §4 as `[D forecast]`.
+   `C build-order` stays the check for a single item's finish date.
+2. **Build where the land is not at risk, not away from every border.** `facts.construction_risk` judges
+   each enemy the plan fights within its horizon: its side's factories (the enemy, its start faction partners
+   the plan also fights, its overlord and subjects) against ours at the start; at least 1x when the plan
+   attacks it, or 0.5x when it defends, puts the own states within 2 province steps of its land at risk
+   (lint `construction.front`). Border states next to a weaker enemy the plan attacks are open: an attacker
+   that keeps its border states empty throws away its best slots (Germany 1936: 13 border states, 61 free
+   slots). A cautious answer comes out of the same rule for the weaker side (Ethiopia 1936: every state near
+   Italian land is at risk). Then rank by infrastructure; infrastructure 2 or less gets `infrastructure` first
+   or is not used.
 3. Slot gains (focuses, techs, decisions) before the build order needs them; energy: coal states and
    one energy or industrial keystone per state where the files offer it; refineries and fuel silos for
    an oil-poor country (item 19).
@@ -329,9 +342,12 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 6. Supply construction on the attack axis is item 19: railways first, then a port where no supply
    reaches the shore, trucks, and a hub only after the cost and time check there. Idle-factory check: no date where civilian factories have no queued project
    (`construction` filler list).
-7. Switch date from the payback: war date - 2.9 x civilian payback; no civilian factories queued in the last
-   18 months before the war or once it runs unless it will last over a year; at war convert civilian to
-   military factories when slots are full (EC01-EC03).
+7. **Civilian first to the switch date the forecast gives** (`facts.economy.forecast.switch`); no civilian
+   factories queued in the last 18 months before the war or once it runs unless it will last over a year; at
+   war convert civilian to military factories when slots are full (EC01-EC03). The executor builds every job
+   of the active construction list side by side, so the base list holds only civilian jobs (and supply, rail,
+   infrastructure) and the `arms_factory` job sits in a phase whose `overrides.construction` starts at the
+   switch date (lint `construction.switch`).
 8. Slots: every concentrated or dispersed industry level adds +20% building slots; count them when ranking
    states (EC04). Expensive buildings in infrastructure-5 or dam states (EC05).
 9. Energy: coal and energy techs for the planned factory count; check coal before each economy-law step
@@ -346,7 +362,9 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
     factories x construction speed over the months to the war, not by the law's own bonus: a law or focus
     that closes a branch also closes the decisions behind it. Every decision the plan takes must be one
     the path makes visible (its own and its category's `visible`/`allowed`/`available` focuses on a focus
-    list; lint `decision.unreachable`). A construction-company advisor while civilian factories are built.
+    list; lint `decision.unreachable`). Every construction-speed advisor the country can hire while civilian
+    factories are built, judged by its trait's modifiers in the files (`F idea <trait>`): a "construction
+    company" trait may speed only infrastructure and railways, not factories.
     Lint `facts.economy` prints the start share with the dynamic modifiers the history adds (their variables
     resolved) and names the scripts that change it later (info `economy.consumer_goods`): copy the share by
     quarter into plan.md §4 and plan what lowers it.
@@ -354,13 +372,22 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
     cover every civilian and military factory the horizon targets add, or `construction_fallback_any_own_state`
     is true (lint `construction.capacity`, error).
 14. **The game's own AI is the floor.** Where `skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json`
-    exists (the AI playing the same country and start, read from its own saves), factory and division targets
-    and the training forecast at or above its marks, or `goal.ai_baseline_why` says why (lint
-    `plan.ai_baseline`).
+    exists (the AI playing the same country and start, read from its own saves), civilian, military and total
+    factory targets and checkpoints, and the forecast of the plan's own levers, are at or above its marks on
+    the same dates (lint `plan.ai_baseline`, error). A written reason does not lift the factory floor: only a
+    hard game constraint in `goal.ai_baseline_constraint` that the lint confirms (`no_free_slots` by a date,
+    or `law_unavailable` for a law not offered or gated shut under the plan's timeline). Close a gap with the
+    levers (`facts.economy.levers`): economy and trade laws as early as their gates open, construction
+    advisors, construction and building-slot techs early, the focuses that give factories, slots or speed, a
+    smaller import budget. Divisions below the AI stay a warning `goal.ai_baseline_why` can answer.
+15. **Targets are the forecast.** Horizon targets for civilian and military factories match what the plan's
+    levers give on that date: above it by more than 10% is a target the plan does not back (warning
+    `economy.unbacked`), below it is a plan that aims low (warning `economy.below_forecast`). Count annexed
+    and gifted factories (they need no slot) when reading the gap to the AI.
 Resolution: executor `construction`, `construction_plan` (stable `id`s), `construction_min_idle`,
-`construction_queue_depth`, `auto_import`, `trade`; plan.md §4. Check: lint `construction.front`,
-`construction.infrastructure`, `construction.capacity`, `decision.unreachable`, `plan.ai_baseline`; rubric
-row 4.
+`construction_queue_depth`, `auto_import`, `trade`, `goal.ai_baseline_constraint`; plan.md §4. Check: lint
+`construction.front`, `construction.infrastructure`, `construction.capacity`, `construction.switch`,
+`decision.unreachable`, `plan.ai_baseline`, `economy.unbacked`, `economy.below_forecast`; rubric row 4.
 
 ### 11. Research
 Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.

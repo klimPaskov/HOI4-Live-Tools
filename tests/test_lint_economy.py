@@ -1,5 +1,6 @@
-"""scripts/hoi4facts/lint_economy.py: production over all lines sized to the need, construction capacity, the
-AI baseline, consumer goods with the history's dynamic modifiers. Reads the installed game; skipped without it."""
+"""scripts/hoi4facts/lint_economy.py and economy.py: production over all lines sized to the need, construction
+capacity, the AI baseline as a floor, the forecast of the plan's own levers, consumer goods with the history's
+dynamic modifiers. Reads the installed game; skipped without it (the reward reader runs without it)."""
 
 import copy
 import json
@@ -10,7 +11,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 
-from hoi4facts import lint_economy, lint_plan  # noqa: E402
+from hoi4facts import economy, lint_economy, lint_plan  # noqa: E402
 
 PLANS = os.path.join(ROOT, "skills", "hoi4-campaign-playbook", "plans")
 GAME_DIR = os.environ.get("HOI4_DIR", lint_plan.DEFAULT_GAME_DIR)
@@ -25,6 +26,26 @@ def base_plan():
     plan["_validator"]["stop_date"] = "1939.9.1"
     plan.pop("stop_on_date", None)
     return plan
+
+
+class Rewards(unittest.TestCase):
+    """economy._reward_events without a game: what a focus reward gives."""
+
+    def test_if_takes_its_first_branch_and_random_states_multiply(self):
+        block = [("every_core_state", [("limit", [("is_controlled_by", "ROOT")]), ("random_select_amount", "2"),
+                                       ("add_extra_state_shared_building_slots", "2"),
+                                       ("add_building_construction", [("type", "arms_factory"), ("level", "2")])]),
+                 ("if", [("limit", [("has_dlc", "x")]), ("59", [("add_building_construction",
+                                                                  [("type", "industrial_complex"), ("level", "3")])]),
+                         ("else", [("add_building_construction", [("type", "industrial_complex"), ("level", "9")])])]),
+                 ("add_ideas", "autarkic_economy"), ("annex_country", [("target", "AUS")])]
+        ev = economy._reward_events(block, "GER")
+        self.assertIn(("build", ("arms_factory", 4, "random")), ev)
+        self.assertIn(("slots", (4, "random")), ev)
+        self.assertIn(("build", ("industrial_complex", 3, 59)), ev)
+        self.assertNotIn(("build", ("industrial_complex", 9, None)), ev)
+        self.assertIn(("idea+", "autarkic_economy"), ev)
+        self.assertIn(("annex", "AUS"), ev)
 
 
 class Baseline(unittest.TestCase):
@@ -55,6 +76,7 @@ class Germany(unittest.TestCase):
         plan["construction_fallback_any_own_state"] = False
         plan["horizons"] = [{"id": "h1", "until": "1939.9.1", "detail": True,
                              "targets": {"civilian_factories": 80, "military_factories": 60, "divisions": 60}}]
+        cls.lopsided_plan = plan
         cls.lopsided = lint_plan.lint(plan, cls.game)
 
     def rules(self, out, rule):
@@ -89,10 +111,51 @@ class Germany(unittest.TestCase):
         self.assertTrue(f)
         self.assertEqual(f[0]["severity"], "error")
 
-    def test_below_the_ai(self):
+    def test_below_the_ai_is_an_error(self):
         f = self.rules(self.lopsided, "plan.ai_baseline")
-        self.assertTrue(f)
-        self.assertIn("129", f[0]["message"])
+        errors = [x for x in f if x["severity"] == "error"]
+        self.assertTrue(errors, f)
+        self.assertTrue(any("civilian factories 80 by 1939.09.01 against the AI's 104" in x["message"]
+                            for x in errors), errors)
+        self.assertTrue(any("129" in x["message"] and x["severity"] == "warning" for x in f), f)
+
+    def test_a_written_reason_does_not_lift_the_factory_floor(self):
+        plan = copy.deepcopy(self.lopsided_plan)
+        plan["goal"]["ai_baseline_why"] = "the safe states allow no more"
+        out = lint_plan.lint(plan, self.game)
+        errors = [x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "error"]
+        self.assertTrue(errors)
+        # the divisions warning is answered by the reason
+        self.assertFalse([x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "warning"])
+
+    def test_only_a_confirmed_constraint_lifts_it(self):
+        plan = copy.deepcopy(self.lopsided_plan)
+        plan["goal"]["ai_baseline_constraint"] = [{"kind": "no_free_slots", "date": "1939.9.1"},
+                                                  {"kind": "law_unavailable", "law": "war_economy",
+                                                   "date": "1936.1.1"}]
+        out = lint_plan.lint(plan, self.game)
+        cons = out["facts"]["ai_baseline"]["constraints"]
+        self.assertEqual(len(cons), 2)
+        self.assertFalse(cons[0]["confirmed"], cons)  # Germany has free slots in 1939
+        errors = [x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "error"]
+        self.assertTrue(any("cannot confirm" in x["message"] for x in errors), errors)
+
+    def test_the_forecast_counts_the_plan_levers(self):
+        fc = self.lopsided["facts"]["economy"]["forecast"]
+        self.assertTrue(fc["rows"])
+        first, last = fc["rows"][0], fc["rows"][-1]
+        self.assertEqual((first["civ"], first["mil"]), (35, 28))
+        self.assertGreater(last["civ"] + last["mil"], first["civ"] + first["mil"])
+        self.assertEqual(fc["risk_states"], [])  # Germany attacks weaker neighbours: no border state barred
+        self.assertIsInstance(self.lopsided["facts"]["economy"]["levers"], list)
+
+    def test_military_jobs_from_the_first_day(self):
+        f = self.rules(self.lopsided, "construction.switch")
+        sw = self.lopsided["facts"]["economy"]["forecast"]["switch"]
+        if lint_plan.derive.day(sw) - lint_plan.derive.day("1936.1.1") >= lint_economy.SWITCH_GRACE_DAYS:
+            self.assertTrue(f)
+        else:
+            self.assertFalse(f)
 
     def test_consumer_goods_count_the_history_modifiers(self):
         e = self.appended["facts"]["economy"]
