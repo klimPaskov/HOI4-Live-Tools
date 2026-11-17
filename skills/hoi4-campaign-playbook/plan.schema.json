@@ -785,7 +785,8 @@
           "factories": {
             "type": "integer",
             "minimum": 0,
-            "x-owner": "executor"
+            "x-owner": "executor",
+            "description": "the line's factories: set on day 0, and a floor afterwards: the shortage shift never takes the line below it, and with no fielded shortage idle factories go first to a priority line below it"
           },
           "from": {
             "$ref": "#/definitions/date_or_ymd",

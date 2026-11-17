@@ -372,7 +372,7 @@ fn region_points(
         return Vec::new();
     };
     let in_region = super::mapdata::province_regions(dir).ok();
-    let world: Vec<(f64, f64)> = super::mapdata::state_provinces(dir, state)
+    let mut world: Vec<(f64, f64)> = super::mapdata::state_provinces(dir, state)
         .unwrap_or_default()
         .into_iter()
         .filter(|p| match (region, &in_region) {
@@ -381,6 +381,15 @@ fn region_points(
         })
         .filter_map(|p| positions.get(&p).copied())
         .collect();
+    // A sea region holds no state: the state centred is only the nearest one, so click the
+    // region's own provinces that the view shows (airact::nearest_state).
+    if let (true, Some(r), Some(map)) = (world.is_empty(), region, &in_region) {
+        world = map
+            .iter()
+            .filter(|(_, v)| **v == r)
+            .filter_map(|(p, _)| positions.get(p).copied())
+            .collect();
+    }
     if world.is_empty() {
         return Vec::new();
     }
@@ -422,6 +431,7 @@ pub(super) fn assign(
     name: &str,
     mission: &str,
     state: i32,
+    named: Option<i32>,
 ) -> Result<()> {
     let wanted = MISSIONS
         .iter()
@@ -433,10 +443,13 @@ pub(super) fn assign(
     let dir = process
         .identity()
         .and_then(|i| super::mapdata::game_dir(&i.exe).ok());
-    let region = dir
-        .as_ref()
-        .and_then(|dir| super::mapdata::state_regions(dir).ok())
-        .and_then(|m| m.get(&state).map(|v| v.0));
+    // The region named (a sea region holds no state: `state` is then only the nearest one),
+    // else the region holding most of the state.
+    let region = named.or_else(|| {
+        dir.as_ref()
+            .and_then(|dir| super::mapdata::state_regions(dir).ok())
+            .and_then(|m| m.get(&state).map(|v| v.0))
+    });
     // Training (Pilot Exercises) has no region: the mission button alone starts it over the
     // wing's base and the region click is refused ("None of the selected Air Wings can be
     // assigned here"); in memory the bit is set and the region stays 0 (st2, 17 Nov 2026).

@@ -3177,7 +3177,18 @@ fn air_idle_step(
                         json!({"wing": name, "mission": "training", "state_id": base}),
                         "at",
                     )?;
-                    state.skip(now, "airidle", &name, 30 * DAY);
+                    // a wing the game offers no mission at all (no planes, or a type with no
+                    // land-based mission: g17f, LG 'Greifswald' refused 5 times in 6 months)
+                    // waits half a year, not a month
+                    let none_offered = !ok
+                        && why.contains("invalid_target")
+                        && why.trim_end().ends_with("it can fly:");
+                    state.skip(
+                        now,
+                        "airidle",
+                        &name,
+                        if none_offered { 180 } else { 30 } * DAY,
+                    );
                     return Ok(Some(format!(
                         "air {name} trains over its base (state {base}){}: {ok} {why}",
                         if war {
@@ -4673,6 +4684,22 @@ fn feed_choice(
     if let Some((l, n)) = best {
         return Some((l.clone(), format!("fielded divisions lack {n:.0}")));
     }
+    // no shortage: a line below the plan's own count (production[].factories) first, in
+    // priority order: plane lines show no stock cover (their output becomes wings) and never
+    // won the cover choice below (g17f 1937: fighters on 1 factory of the plan's 6)
+    for l in &lines {
+        let planned: i64 = list(plan, "production")
+            .iter()
+            .filter(|e| text(&e["equipment"]) == l.1)
+            .filter_map(|e| e["factories"].as_i64())
+            .sum();
+        if l.2 < planned {
+            return Some((
+                (*l).clone(),
+                format!("below the plan's {planned} factories ({} now)", l.2),
+            ));
+        }
+    }
     // no shortage: the line whose stockpile runs out first (a falling stock only)
     let cover = |l: &MilLine| -> Option<f64> {
         let rows = stock.as_ref()?["equipment"].as_array()?;
@@ -5177,9 +5204,21 @@ fn donor_line(
     step: i64,
     rates: &HashMap<String, (f64, f64, f64)>,
 ) -> Option<(MilLine, i64)> {
+    // The plan's own allocation (production[].factories for this equipment) is a floor no
+    // shortage shift cuts below: plane output goes straight into wings, so a fighter line shows
+    // no stock to protect and gave its factories one by one to rifles and support equipment
+    // (g17f, 1936-37: the plan's 6 fighter factories down to 1, support 4 -> 11).
+    let floor = |equipment: &str| -> i64 {
+        list(plan, "production")
+            .iter()
+            .filter(|e| text(&e["equipment"]) == equipment)
+            .filter_map(|e| e["factories"].as_i64())
+            .sum::<i64>()
+            .max(1)
+    };
     military
         .iter()
-        .filter(|l| l.2 > 1 && !l.1.starts_with(needy))
+        .filter(|l| l.2 > floor(&l.1) && !l.1.starts_with(needy))
         .filter(|l| {
             let Some(arche) = archetype_row(read, &l.1) else {
                 return false;
@@ -5218,7 +5257,7 @@ fn donor_line(
             crate::plan_predicate::stockpile_days(read, &l.1).is_ok_and(|d| d >= 2.0 * want)
         })
         .max_by_key(|l| (l.2, std::cmp::Reverse(l.0)))
-        .map(|l| (l.clone(), step.min(l.2 - 1)))
+        .map(|l| (l.clone(), step.min(l.2 - floor(&l.1))))
 }
 
 /// The horizon over which a donor's stock and output are weighed against the needy item's: half
@@ -6621,6 +6660,25 @@ mod tests {
             &HashMap::new()
         )
         .is_none_or(|(l, _)| l.1 == "artillery_equipment_1"));
+    }
+
+    #[test]
+    fn a_donor_keeps_the_factories_the_plan_gives_its_line() {
+        // g17f: the fighter line (no stock: its planes become wings) donated 5 -> 1
+        let stock = json!({"equipment": [
+            {"archetype": "small_plane_airframe", "stockpile": 0.0, "produced_per_day": 0.5,
+             "factories": 5, "fielded_short": 0.0, "variants": [{"type": "small_plane_airframe_1"}]}]});
+        let lines: Vec<MilLine> = vec![(4, "small_plane_airframe_1".into(), 5, None)];
+        let plan = json!({"production": [{"equipment": "small_plane_airframe_1", "factories": 6}]});
+        let rates = HashMap::new();
+        assert!(donor_line(&stock, &plan, &lines, "support_equipment", 10.0, 3, &rates).is_none());
+        // above the plan's count it gives only what lies above it
+        let lines: Vec<MilLine> = vec![(4, "small_plane_airframe_1".into(), 7, None)];
+        if let Some((_, n)) =
+            donor_line(&stock, &plan, &lines, "support_equipment", 10.0, 3, &rates)
+        {
+            assert_eq!(n, 1);
+        }
     }
 
     #[test]

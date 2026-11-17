@@ -5374,7 +5374,7 @@
    "payoff": "medium",
    "why": "Decides fleet fights 1939-41 and opens the Channel for Germany; niche for land powers",
    "closing": "live",
-   "owner": "Live-verify naval_strike over a sea strategic region and port_strike over a port's region (region name resolution for sea regions)"
+   "owner": "Live-verify naval_strike over a sea strategic region and port_strike over a port's region (region name resolution for sea regions); sea regions (no state in them, e.g. English Channel): hoi4_air_mission centres the nearest state and clicks the region's own sea provinces on screen (offline, 18 Nov; needs a live receipt)"
   },
   {
    "id": "air.strategic_bombing_interception",
