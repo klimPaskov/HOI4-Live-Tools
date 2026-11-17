@@ -752,9 +752,66 @@ pub(super) fn key_for(c: char) -> Option<(u16, bool)> {
         _ => return None,
     })
 }
+/// The keys of a character typed through a dead key of the US layout (Option+U, then the
+/// vowel: an umlaut; Option+S: the sharp s), so names such as "Armee Süd" are typed as written
+/// (pr2: the plan's German army names were refused). (Option-key code, then the plain key and
+/// its Shift, or None for a single Option key.)
+pub(super) fn dead_key_for(c: char) -> Option<(u16, Option<(u16, bool)>)> {
+    const U: u16 = 32;
+    let vowel = |v: char| key_for(v).map(|k| (U, Some(k)));
+    match c {
+        'ä' => vowel('a'),
+        'ö' => vowel('o'),
+        'ü' => vowel('u'),
+        'Ä' => vowel('A'),
+        'Ö' => vowel('O'),
+        'Ü' => vowel('U'),
+        'ß' => Some((1, None)),
+        _ => None,
+    }
+}
 /// Whether every character of `name` can be typed.
 pub(super) fn typable(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| key_for(c).is_some())
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| key_for(c).is_some() || dead_key_for(c).is_some())
+}
+/// Type one character (plain, shifted or through a dead key).
+pub(super) fn press_char(keys: &dyn GameInput, c: char) -> Result<()> {
+    if let Some((code, shifted)) = key_for(c) {
+        return if shifted {
+            keys.press_shifted(code)
+        } else {
+            keys.press_code(code)
+        };
+    }
+    let (dead, then) = dead_key_for(c).ok_or_else(|| Error::new("name_not_typable", "key"))?;
+    keys.press_option(dead)?;
+    if let Some((code, shifted)) = then {
+        if shifted {
+            keys.press_shifted(code)?;
+        } else {
+            keys.press_code(code)?;
+        }
+    }
+    Ok(())
+}
+/// Whether the box text matches what was typed so far: equal, or (a typed character outside
+/// ASCII, whose stored form the reader may decode differently) the same length with the ASCII
+/// characters equal.
+pub(super) fn typed_matches(shown: &str, typed: &str) -> bool {
+    if shown == typed {
+        return true;
+    }
+    if typed.is_ascii() {
+        return false;
+    }
+    let (a, b): (Vec<char>, Vec<char>) = (shown.chars().collect(), typed.chars().collect());
+    a.len() == b.len()
+        && a.iter()
+            .zip(&b)
+            .all(|(x, y)| x == y || !y.is_ascii() || !x.is_ascii())
 }
 /// Replace the template name: click into the name box, Backspace away the old text (the first
 /// Backspace proves the box has the keyboard focus), then type the new name one key at a time,
@@ -886,14 +943,11 @@ pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) 
     }
     let mut typed = String::new();
     for c in name.chars() {
-        let (code, shifted) = key_for(c).ok_or_else(|| Error::new("name_not_typable", "key"))?;
-        if shifted {
-            keys.press_shifted(code)?;
-        } else {
-            keys.press_code(code)?;
-        }
+        press_char(keys, c)?;
         typed.push(c);
-        wait(process, "name key", |r, i| Ok(typed_name(r, i)? == typed))?;
+        wait(process, "name key", |r, i| {
+            Ok(typed_matches(&typed_name(r, i)?, &typed))
+        })?;
     }
     Ok(())
 }

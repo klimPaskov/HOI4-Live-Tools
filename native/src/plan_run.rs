@@ -27,7 +27,9 @@
 //!                          (then the catalog in order, unless research_fallback is false)
 //!   research_fallback      default true: an empty slot with nothing startable in research_priority takes the
 //!                          first startable catalogue tech (this can be naval hull junk; every pick raises the
-//!                          alarm `research_fallback_used`). false or "priority_only": never use the catalogue
+//!                          alarm `research_fallback_used`). false or "priority_only": the plan's list first,
+//!                          but a slot it cannot fill still takes an available tech (slots never idle; in-year
+//!                          first, industry first, the next year's only when this year has none left)
 //!   research_fallback_prefixes   ["infantry","support_"]: the catalogue fallback only takes keys starting with one
 //!   research_fallback_categories ["armor","air"]: ... or containing one (catalogue keys carry no category field,
 //!                          so a category is a word inside the key). With either list the fallback is restricted
@@ -1519,9 +1521,23 @@ pub fn tick(
         // Walk the technology catalog; the game refuses ineligible ones before
         // any input, so a few attempts per tick are cheap. Plans can switch this
         // off ("priority_only") or restrict it to wanted key prefixes/words.
-        let fallback_on = plan["research_fallback"] != json!(false)
-            && plan["research_fallback"] != json!("priority_only");
-        let prefixes = strings(plan, "research_fallback_prefixes");
+        // Every slot stays busy all campaign (the owner's rule): a plan that switches the
+        // fallback off ("research_fallback": false / "priority_only") still gets its own list
+        // first, but a slot its list cannot fill takes the fallback rather than idling (pr2,
+        // 17 Nov 2026: 1117a set it false with 20 techs for 1936-37; a slot idled for weeks).
+        let fallback_on = true;
+        let fallback_forced = plan["research_fallback"] == json!(false)
+            || plan["research_fallback"] == json!("priority_only");
+        let mut prefixes = strings(plan, "research_fallback_prefixes");
+        if prefixes.is_empty() {
+            // industry first when the plan names no order (key words, not an exclusive list:
+            // a tech matching none still comes after them, oldest first)
+            prefixes = DEFAULT_FALLBACK_ORDER
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+        }
+        let prefixes_given = !strings(plan, "research_fallback_prefixes").is_empty();
         let categories = strings(plan, "research_fallback_categories");
         // Words the fallback never takes (default: ships; a plan sets [] to allow them).
         let exclude: Vec<String> = match plan.get("research_fallback_exclude") {
@@ -1544,7 +1560,7 @@ pub fn tick(
         };
         let wanted = |tech: &str| {
             !exclude.iter().any(|x| tech.contains(x.as_str()))
-                && ((prefixes.is_empty() && categories.is_empty())
+                && ((!prefixes_given && categories.is_empty())
                     || prefixes.iter().any(|p| tech.starts_with(p.as_str()))
                     || categories.iter().any(|c| tech.contains(c.as_str())))
         };
@@ -1554,19 +1570,32 @@ pub fn tick(
             let rank = |t: &str| {
                 prefixes
                     .iter()
-                    .position(|p| t.starts_with(p.as_str()))
+                    .position(|p| {
+                        if prefixes_given {
+                            t.starts_with(p.as_str())
+                        } else {
+                            t.contains(p.as_str())
+                        }
+                    })
                     .unwrap_or(prefixes.len())
             };
-            let mut pool: Vec<String> = startable
-                .iter()
-                .flatten()
-                .filter(|t| !busy.contains(*t) && wanted(t) && !state.skipped(now, "tech", t))
-                .filter(|t| match (year, start_year(t)) {
-                    (Some(y), Some(sy)) => sy <= y,
-                    _ => true,
-                })
-                .cloned()
-                .collect();
+            let pool_for = |ahead: i64| -> Vec<String> {
+                startable
+                    .iter()
+                    .flatten()
+                    .filter(|t| !busy.contains(*t) && wanted(t) && !state.skipped(now, "tech", t))
+                    .filter(|t| match (year, start_year(t)) {
+                        (Some(y), Some(sy)) => sy <= y + ahead,
+                        _ => true,
+                    })
+                    .cloned()
+                    .collect()
+            };
+            // in-year techs first; the next year's only when nothing of this year is left
+            let mut pool = pool_for(0);
+            if pool.is_empty() {
+                pool = pool_for(1);
+            }
             pool.sort_by_key(|t| (rank(t), start_year(t).unwrap_or(0), t.clone()));
             for tech in pool.into_iter().take(3) {
                 let (ok, why) = state.act(
@@ -1579,7 +1608,14 @@ pub fn tick(
                 if ok {
                     state.stages.fallback_used.push(tech.clone());
                     state.stages.research = Some((
-                        format!("research: started {tech} slot {empty} (available, in time, plan order)"),
+                        format!(
+                            "research: started {tech} slot {empty} (available, in time, plan order{})",
+                            if fallback_forced {
+                                "; the plan's research_fallback false does not leave a slot idle"
+                            } else {
+                                ""
+                            }
+                        ),
                         false,
                     ));
                     return Ok(Tick::Acted(format!(
@@ -2566,6 +2602,23 @@ fn date_hour(text: &str) -> Option<GameHour> {
 
 /// How long to leave a refused tech alone: for the rest of the run when the game will never
 /// take it (not in this country's tree, an inactive variant, disabled), else `default`.
+/// Words that put a fallback tech first when the plan names no `research_fallback_prefixes`:
+/// industry, construction and production before anything else (the owner's rule), then
+/// resources and electronics. A tech matching none comes after them, oldest first.
+const DEFAULT_FALLBACK_ORDER: [&str; 11] = [
+    "industry",
+    "construction",
+    "machine_tools",
+    "production",
+    "excavation",
+    "fuel",
+    "oil",
+    "rubber",
+    "electronic",
+    "computing",
+    "radio",
+];
+
 fn tech_skip(why: &str, default: GameHour) -> GameHour {
     let never = [
         "no tile",
@@ -4244,7 +4297,7 @@ fn doctrine_fill(
         .collect();
     for folder in list(&read, "folders") {
         let key = text(&folder["folder"]);
-        if key.is_empty() || folder["grand_doctrine"].is_null() || pending.contains(key) {
+        if key.is_empty() || pending.contains(key) {
             continue;
         }
         let kind = match key {
@@ -4260,6 +4313,48 @@ fn doctrine_fill(
             .or_else(|| read["experience"][kind]["value"].as_f64())
             .unwrap_or(0.0);
         let preferred: Vec<String> = strings(&plan["doctrine_defaults"], key);
+        if folder["grand_doctrine"].is_null() {
+            // A folder no plan entry names and with no grand doctrine (pr2: naval and air sat
+            // empty all run and the doctrines alert stayed 467 days): the plan's default for the
+            // folder, else the first the game offers, once its experience covers the cost.
+            if state.skipped(now, "docfilltrack", &format!("{key}:grand")) {
+                continue;
+            }
+            let options = list(folder, "available_grand_doctrines");
+            let choice = preferred
+                .iter()
+                .find_map(|p| options.iter().find(|o| text(&o["id"]) == p.as_str()))
+                .or_else(|| options.first());
+            let Some(choice) = choice else {
+                continue;
+            };
+            let cost = choice["estimated_cost_after_reduction"]
+                .as_f64()
+                .or_else(|| choice["xp_cost"].as_f64())
+                .unwrap_or(f64::MAX);
+            let id = text(&choice["id"]).to_string();
+            if xp - reserve < cost {
+                plan_manage::note(
+                    state,
+                    "doctrines",
+                    format!("{key}: no grand doctrine yet; {id} costs {cost:.0}, {xp:.0} held ({reserve:.0} kept back)"),
+                );
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_doctrine_adopt",
+                json!({"doctrine": id}),
+                "df",
+            )?;
+            if !ok {
+                state.skip(now, "docfilltrack", &format!("{key}:grand"), 60 * DAY);
+            }
+            return Ok(Some(format!(
+                "doctrine fill {key}: grand doctrine {id} ({cost:.0} of {xp:.0} xp): {ok} {why}"
+            )));
+        }
         for track in list(folder, "tracks") {
             if !track["subdoctrine"].is_null() {
                 continue;
@@ -6993,9 +7088,31 @@ fn decisions_step(
         rules.push((id, key, target, taken, skip));
     }
     if wanted.is_empty() && rules.is_empty() {
+        // Nothing wanted now: once a month the offered decisions are read only to name what is
+        // deliberately left (the decisions_available alert's written reason; pr2 kept it open
+        // 753 days with none).
+        if state.manage.alert_since.contains_key("decisions_available")
+            && !state.skipped(now, "decnote", "x")
+        {
+            state.skip(now, "decnote", "x", 30 * DAY);
+            if let Ok(offered) = tools.call("hoi4_decisions_list", &json!({"lease_token": lease})) {
+                let line = decisions_left_note(plan, &offered, &[]);
+                plan_manage::note(state, "decisions", line);
+            }
+        }
         return Ok(None);
     }
     let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
+    let pending: Vec<String> = rules
+        .iter()
+        .map(|r| r.1.clone())
+        .chain(wanted.iter().cloned())
+        .collect();
+    plan_manage::note(
+        state,
+        "decisions",
+        decisions_left_note(plan, &offered, &pending),
+    );
     let ready =
         |d: &Value| d["enabled"] == json!(true) && !d["active_timer"].as_bool().unwrap_or(false);
     for (id, key, target, taken, skip) in rules {
@@ -7038,6 +7155,50 @@ fn decisions_step(
         }
     }
     Ok(None)
+}
+
+/// The decisions the game offers now that no plan entry wants, named as deliberately not taken
+/// (with the plan's reason where a never-rule gives one), and the wanted ones still waiting.
+fn decisions_left_note(plan: &Value, offered: &Value, pending: &[String]) -> String {
+    let mut left: Vec<String> = Vec::new();
+    let mut never: Vec<String> = Vec::new();
+    for d in list(offered, "decisions") {
+        if d["enabled"] != json!(true) || d["active_timer"].as_bool().unwrap_or(false) {
+            continue;
+        }
+        let key = text(&d["decision"]).to_string();
+        if key.is_empty() || pending.contains(&key) || left.contains(&key) || never.contains(&key) {
+            continue;
+        }
+        if decision_forbidden(plan, &key) {
+            never.push(key);
+        } else {
+            left.push(key);
+        }
+    }
+    let mut parts = Vec::new();
+    if !pending.is_empty() {
+        parts.push(format!(
+            "wanted, waiting for the game or its rule: {}",
+            pending.join(", ")
+        ));
+    }
+    if !never.is_empty() {
+        parts.push(format!("never-take rules: {}", never.join(", ")));
+    }
+    if !left.is_empty() {
+        let shown: Vec<&String> = left.iter().take(12).collect();
+        parts.push(format!(
+            "enabled but deliberately not taken (no decisions/decision_rules entry wants them): {}{}",
+            shown.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "),
+            if left.len() > 12 { format!(" and {} more", left.len() - 12) } else { String::new() }
+        ));
+    }
+    if parts.is_empty() {
+        "no enabled decision is open".to_string()
+    } else {
+        parts.join("; ")
+    }
 }
 
 /// Option text reduced for matching: colour codes, icons and $vars$ dropped, lower case, accents
@@ -7675,7 +7836,7 @@ pub fn run(
         alarms.push(json!({"code": "research_fallback_used",
             "message": format!("research_priority had nothing startable; the catalogue fallback picked: {}",
                 state.stages.fallback_used.join(", ")),
-            "fix": {"tool": "hoi4_plan", "args_hint": {"op": "set", "plan": {"research_priority": ["<wanted keys>"], "research_fallback": "priority_only"}}}}));
+            "fix": {"tool": "hoi4_plan", "args_hint": {"op": "set", "plan": {"research_priority": ["<wanted keys>"]}}}}));
     }
     alarms.extend(crate::alarms::strategy(
         &plan,
@@ -10012,7 +10173,8 @@ mod tests {
         });
         let mut state = State::default();
         let mut plan = war_plan();
-        plan["research_fallback"] = json!(false);
+        // nothing startable at all (the fallback never leaves a slot idle when it can fill it)
+        plan["research_fallback_exclude"] = json!(["tech_"]);
         tick(&mut state, &lab, &plan, "l", START).unwrap();
         assert!(lab
             .0
@@ -13229,23 +13391,47 @@ mod tests {
     }
 
     #[test]
-    fn priority_only_or_false_never_touches_the_catalogue_and_flags_the_idle_slot() {
+    fn priority_only_or_false_still_never_leaves_a_slot_idle() {
+        // The owner's rule: every slot busy all campaign. The plan's list comes first; a slot it
+        // cannot fill takes an available in-year tech, industry first (pr2: 1117a set the
+        // fallback false and a slot idled for weeks).
         for mode in [json!("priority_only"), json!(false)] {
             let tools = fake(vec![
                 ("hoi4_research", idle_research()),
-                ("hoi4_technology_list", catalogue()),
+                (
+                    "hoi4_technology_list",
+                    json!({"available_only": true,
+                        "technologies": ["support_weapons", "basic_machine_tools", "radio"],
+                        "start_years": {"support_weapons": 1936, "basic_machine_tools": 1936, "radio": 1936}}),
+                ),
             ]);
             let mut state = State::default();
             let plan = json!({"research_priority": ["radio"], "research_fallback": mode});
             let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
-            assert_eq!(step, Tick::Nothing);
-            assert!(!names(&tools).contains(&"hoi4_technology_list".to_string()));
+            assert!(matches!(step, Tick::Acted(_)), "{step:?}");
+            assert_eq!(started(&tools), ["basic_machine_tools"]);
             let (line, idle) = state.stages.research.clone().unwrap();
             assert!(
-                idle && line.contains("plan exhausted") && line.contains("fallback off"),
+                !idle && line.contains("does not leave a slot idle"),
                 "{line}"
             );
         }
+    }
+
+    #[test]
+    fn fallback_pulls_next_years_tech_only_when_nothing_of_this_year_is_left() {
+        let tools = fake(vec![
+            ("hoi4_research", idle_research()),
+            (
+                "hoi4_technology_list",
+                json!({"available_only": true,
+                    "technologies": ["improved_machine_tools", "advanced_machine_tools"],
+                    "start_years": {"improved_machine_tools": 1937, "advanced_machine_tools": 1939}}),
+            ),
+        ]);
+        let mut state = State::default();
+        tick(&mut state, &tools, &json!({}), "l", START).unwrap();
+        assert_eq!(started(&tools), ["improved_machine_tools"]);
     }
 
     #[test]
@@ -14120,6 +14306,23 @@ mod tests {
             doctrine_fill(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
             None
         );
+        // a folder without a grand doctrine takes the plan's default, else the first offered,
+        // once its experience covers it (pr2: naval and air sat empty all run)
+        let read = json!({"experience": {"air": {"value": 120.0}}, "folders": [
+            {"folder": "air", "grand_doctrine": null, "experience": 120.0, "tracks": [],
+             "available_grand_doctrines": [
+                {"id": "air_g1", "estimated_cost_after_reduction": 100.0},
+                {"id": "air_g2", "estimated_cost_after_reduction": 100.0}]}]});
+        let tools = fake(vec![("hoi4_doctrines", read)]);
+        let plan = json!({"doctrine_defaults": {"air": ["air_g2"]}});
+        let step = doctrine_fill(&mut State::default(), &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            step.starts_with("doctrine fill air: grand doctrine air_g2"),
+            "{step}"
+        );
+        assert_eq!(adopted(&tools), vec![json!({"doctrine": "air_g2"})]);
     }
 
     #[test]

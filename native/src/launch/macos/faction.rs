@@ -1058,7 +1058,7 @@ mod tests {
             "already_in_faction"
         );
         assert_eq!(
-            plan_create(None, None, Some("Pakt\u{e4}".into()), vec![])
+            plan_create(None, None, Some("Pakt\u{e9}".into()), vec![])
                 .unwrap_err()
                 .code,
             "name_not_typable"

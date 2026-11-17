@@ -1680,7 +1680,7 @@ pub(super) fn rename_refusal(view: &Value, army: &str, name: &str) -> Option<Err
         return Some(Error::new(
             "name_not_typable",
             format!(
-                "Army names may use letters, digits, space and - _ . , / ' ( ), at most {NAME_MAX} \
+                "Army names may use letters (with ä ö ü ß), digits, space and - _ . , / ' ( ), at most {NAME_MAX} \
                  characters, no leading or trailing space. Nothing was typed."
             ),
         ));
@@ -4461,17 +4461,34 @@ mod tests {
         );
     }
     #[test]
+    fn umlauts_are_dead_keys_and_match_by_length() {
+        use super::super::designer::{dead_key_for, typable, typed_matches};
+        assert!(typable("Armee Süd"));
+        assert!(!typable("Étna"));
+        assert_eq!(dead_key_for('ü'), Some((32, Some((32, false)))));
+        assert_eq!(dead_key_for('Ö'), Some((32, Some((31, true)))));
+        assert_eq!(dead_key_for('ß'), Some((1, None)));
+        assert!(typed_matches("Armee Süd", "Armee Süd"));
+        assert!(typed_matches("Armee S\u{fffd}d", "Armee Süd"));
+        assert!(!typed_matches("Armee Sxd", "Armee Sud"));
+        assert!(!typed_matches("Armee S", "Armee Sü"));
+    }
+
+    #[test]
     fn a_rename_is_refused_before_input_for_untypable_long_or_taken_names() {
         let view = json!({"armies": [{"army": "Army 1"}, {"army": "Army 2"}],
             "army_groups": [{"army_group": "Army Group 1"}]});
         assert!(rename_refusal(&view, "Army 1", "North_strike").is_none());
+        // umlauts and the sharp s are typed through the layout's dead keys
+        assert!(rename_refusal(&view, "Army 1", "Armee Süd").is_none());
+        assert!(rename_refusal(&view, "Army 1", "Ätna Straße").is_none());
         // its own name again is no refusal (nothing to type)
         assert!(rename_refusal(&view, "Army 1", "Army 1").is_none());
         for bad in [
             "",
             " North",
             "North ",
-            "Ätna",
+            "Étna",
             "North;strike",
             "abcdefghijklmnopqrstuvwxy",
         ] {

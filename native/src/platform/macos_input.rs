@@ -957,6 +957,11 @@ impl<'p> MacKeys<'p> {
     pub fn press_shifted(&self, code: u16) -> Result<()> {
         self.press_modified(code, 56, 0x2_0002)
     }
+    /// One key press with (left) Option held, the same way as `press_shifted` (dead keys of
+    /// the US layout: Option+U then a vowel is an umlaut, Option+S is the sharp s).
+    pub fn press_option(&self, code: u16) -> Result<()> {
+        self.press_modified(code, 58, 0x8_0020)
+    }
     /// One key press with (left) Control held, the same way as `press_shifted`.
     /// HOI4 1.19.4 moved the Find view to Ctrl+F (`interface/mapmodes_interface.gui`).
     pub fn press_control(&self, code: u16) -> Result<()> {
@@ -1837,6 +1842,9 @@ impl GameInput for MacKeys<'_> {
     }
     fn press_control(&self, code: u16) -> Result<()> {
         MacKeys::press_control(self, code)
+    }
+    fn press_option(&self, code: u16) -> Result<()> {
+        MacKeys::press_option(self, code)
     }
     fn press(&self, key: Key) -> Result<()> {
         MacKeys::press(self, key)

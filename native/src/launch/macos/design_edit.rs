@@ -469,15 +469,11 @@ pub(super) fn type_name(
     let _ = have;
     let mut typed = String::new();
     for c in name.chars() {
-        let (code, shifted) =
-            designer::key_for(c).ok_or_else(|| Error::new("name_not_typable", "key"))?;
-        if shifted {
-            keys.press_shifted(code)?;
-        } else {
-            keys.press_code(code)?;
-        }
+        designer::press_char(keys, c)?;
         typed.push(c);
-        wait(process, "name key", |r, i| Ok(current(r, i)? == typed))?;
+        wait(process, "name key", |r, i| {
+            Ok(designer::typed_matches(&current(r, i)?, &typed))
+        })?;
     }
     Ok(())
 }

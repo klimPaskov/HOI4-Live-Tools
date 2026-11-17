@@ -3160,7 +3160,7 @@
    "tools": [
     "hoi4_mio_policy"
    ],
-   "blocked": "organization_not_offered: the roster is a smooth listbox the tool cannot scroll (sk2: 'shows Fiat | Ansaldo but not Beretta')",
+   "blocked": "organization_not_offered when the asked slot's roster is of another kind (each politics-view slot is the roster of one kind: tanks, ships, planes, materiel; pp1 17 Nov 2026) or the row lay below the first page; the tool now tries every slot and pages one wheel event per row (live check pending)",
    "payoff": "medium",
    "why": "policies add efficiency or cost bonuses on the main lines",
    "closing": "both",

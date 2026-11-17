@@ -330,7 +330,7 @@ pub(super) fn reveal_named(
     }
     Err(Error::new(
         "gui_target_unavailable",
-        "Production line row could not be scrolled into view",
+        format!("Production line row could not be scrolled into view ({outcome:?})"),
     ))
 }
 
