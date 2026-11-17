@@ -543,22 +543,51 @@ fn row_rect(r: &Reader<'_>, i: u64, display: &str, button: &str) -> Result<gui_t
     let frame = list_frames(r, i)?[index];
     pk::rect_of(r, i, frame, button, 2)
 }
-fn require_row(process: &dyn Process, display: &str) -> std::result::Result<(), Fail> {
-    let (seen, found) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
-    if found.is_none() {
-        return Err(refuse(
-            "organization_not_offered",
-            format!(
-                "The organisation list shows {} but not {display:?}; nothing was changed",
-                if seen.is_empty() {
-                    "no rows".to_string()
-                } else {
-                    seen.join(" | ")
-                }
-            ),
-        ));
+/// The organisation row named `display` drawn in the open roster. The list draws about five rows
+/// at a time (pr3, 17 Nov 2026: the materiel roster showed its first five, and Mauser and
+/// Rheinmetall further down were refused as not offered): when the name is not drawn the list is
+/// wheeled down by the rows drawn less one (one wheel event is about one row) and read again,
+/// until the name shows or a page brings nothing new. The list is left where the row shows.
+fn require_row(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    display: &str,
+) -> std::result::Result<(), Fail> {
+    let mut all: Vec<String> = Vec::new();
+    for _ in 0..12 {
+        let (seen, found) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
+        if found.is_some() {
+            return Ok(());
+        }
+        let before = all.len();
+        for name in &seen {
+            if !all.contains(name) {
+                all.push(name.clone());
+            }
+        }
+        if seen.is_empty() || all.len() == before {
+            break;
+        }
+        let list = read(process, list_rect)?;
+        let centre = (
+            f64::from(list.x + list.w / 2),
+            f64::from(list.y + list.h / 2),
+        );
+        let page = seen.len().saturating_sub(1).max(1) as u32;
+        keys.scroll_burst(pk::GAME, centre, -ROW_HEIGHT, page)?;
+        pause(500);
     }
-    Ok(())
+    Err(refuse(
+        "organization_not_offered",
+        format!(
+            "The organisation list shows {} but not {display:?}; nothing was changed",
+            if all.is_empty() {
+                "no rows".to_string()
+            } else {
+                all.join(" | ")
+            }
+        ),
+    ))
 }
 
 /// Rows of the organisation list as drawn (industrial_organization_list.gui: rows 100 high,
@@ -726,55 +755,8 @@ fn open_detail(
         pause(300);
         return Ok(());
     }
-    if let Err(first) = require_row(process, display) {
-        // The readable rows are only the ones drawn (about five): the rest of the roster lies
-        // below. Wheel the list a page at a time and read the drawn rows again, until the row
-        // shows or a page brings no new name (the end). Opening every row's details instead
-        // took longer than the action's time (pm2, 17 Nov 2026).
-        let list = read(process, list_rect)?;
-        let centre = (
-            f64::from(list.x + list.w / 2),
-            f64::from(list.y + list.h / 2),
-        );
-        // the rows drawn before the wheel: a page that shows only these brought nothing new
-        let (mut all, _) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
-        let shown_first = all.len();
-        let mut found = false;
-        // the wheel's sign is not yet confirmed on this list (pm3: one direction brought no new
-        // row): try down, and if the first page brings nothing new, the other way
-        let mut step = -(ROW_HEIGHT * 3);
-        for page in 0..8 {
-            keys.scroll(pk::GAME, centre, step)?;
-            pause(300);
-            let (seen, at) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
-            if at.is_some() {
-                found = true;
-                break;
-            }
-            let fresh: Vec<String> = seen.into_iter().filter(|n| !all.contains(n)).collect();
-            if fresh.is_empty() {
-                if page == 0 && step < 0 {
-                    step = -step;
-                    continue;
-                }
-                break;
-            }
-            all.extend(fresh);
-        }
-        if !found {
-            return Err(match first {
-                Fail::Refused(mut e) if all.len() > shown_first => {
-                    e.message = format!(
-                        "{} (further down: {})",
-                        e.message,
-                        all[shown_first..].join(" | ")
-                    );
-                    Fail::Refused(e)
-                }
-                other => other,
-            });
-        }
-    }
+    // the drawn rows are about five; require_row wheels the list down until the row shows
+    require_row(process, keys, display)?;
     pk::click(process, keys, "organisation details", |r, i| {
         row_rect(r, i, display, "details_button")
     })?;
@@ -809,13 +791,28 @@ fn open_org(
         match open_detail(process, keys, display) {
             Ok(()) => return Ok(s),
             Err(Fail::Refused(e)) if e.code == "organization_not_offered" => {
-                first.get_or_insert(Fail::Refused(e));
+                fold_refusal(&mut first, s, e);
             }
             Err(other) => return Err(other),
         }
     }
     Err(first
         .unwrap_or_else(|| refuse("organization_not_offered", "No organisation slot offers it")))
+}
+
+/// Fold one slot's "not offered" refusal into the refusal for every slot tried, so the final
+/// message names what each roster showed (pr3: the message named only the tank roster).
+fn fold_refusal(all: &mut Option<Fail>, slot: usize, e: Error) {
+    match all {
+        Some(Fail::Refused(prev)) => {
+            prev.message = format!("{}; slot {slot}: {}", prev.message, e.message);
+        }
+        _ => {
+            let mut e = e;
+            e.message = format!("slot {slot}: {}", e.message);
+            *all = Some(Fail::Refused(e));
+        }
+    }
 }
 
 fn leave(process: &dyn Process, keys: &dyn GameInput) {
@@ -866,7 +863,7 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
             }
             open_roster(process, keys, s)?;
             let attempt = if rows_readable(process) {
-                require_row(process, display).map(|()| None)
+                require_row(process, keys, display).map(|()| None)
             } else {
                 row_by_details(process, keys, display).map(Some)
             };
@@ -876,7 +873,7 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
                     break;
                 }
                 Err(Fail::Refused(e)) if e.code == "organization_not_offered" => {
-                    first.get_or_insert(Fail::Refused(e));
+                    fold_refusal(&mut first, s, e);
                 }
                 Err(other) => return Err(other),
             }
