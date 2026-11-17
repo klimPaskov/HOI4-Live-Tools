@@ -130,6 +130,20 @@ Alternatives considered for the overall approach: <option> — rejected because 
 
 Arms not needed and why: <list>. Research and doctrine folders left out: <list>.
 
+Force design (`force_design`, procedure item 3.5): per war its tasks, then the force table by date.
+
+| War | Front (divisions, width, tanks, fighters) [V lint facts.force.needs] | Kind, axes | Tasks by phase |
+|---|---|---|---|
+| <war id> | <tags>: <n> div, <w> width, <n> tank bns, <n> fighters | offensive, <n> axes | <break the line on ..., hold ..., win the air over ...> |
+
+| Ready | Row (template / plane kind / ship kind) | Role | Count | War, phase | Forecast [D lint facts.force.table] | Why |
+|---|---|---|---|---|---|---|
+| <date> | <template> | breakthrough | <n> | <war>, <phase> | <n> | <need it answers> |
+
+| From | Land % | Air % | Navy % | Why |
+|---|---|---|---|---|
+| <date> | <n> | <n> | <n> | <the rows it pays for> |
+
 ## 13. Doctrine path and XP budget
 
 | Branch | Start XP | Forecast by <date> | Spends in order (month: item, cost) | Cap reached? |
