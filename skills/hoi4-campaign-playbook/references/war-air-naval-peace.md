@@ -276,6 +276,28 @@ Fleet composition:
   Dockyards no naval line uses build convoys by default even when convoys are not short (more trade and sea
   supply); a plan that keeps them for ships says so (`manage.idle_dockyards: "keep"`).
 
+### 6.2a Sizing the navy from the operations (force design)
+
+Every sea operation the goal needs is planned with the means that win it by its date (procedure item 21.7, lint
+`force.sea_*`). The enemy is its start fleet from the history files, the floor of what it will have:
+
+| Need | Rule | Game number |
+|---|---|---|
+| Control by a surface fleet | our surface hull IC at parity with the enemy side's (NA06: fight with 1-2x) | start fleets, dockyards x 2.5 IC a day |
+| Control from the air | 12 naval strike planes per enemy capital ship or carrier, under air superiority (AI20) | naval bombers' base range to the regions |
+| Control by carriers | carrier air counts 6x (x12 strike damage with the carrier present, half the planes sortie), within the decks | 10 planes per deck point, 1 capital per carrier |
+| Dominance | one patrol group of 8 screens per region, 50+ days ahead; only patrol builds it | 60% of the needed dominance controls; minimum 250 deep ocean, 100 shallow sea and fjords |
+| Screens | 3 per capital ship or carrier on top of the patrols | SCREEN_RATIO_FOR_FULL_SCREENING_FOR_CAPITALS 3 |
+| Denial and raids | 8 submarines per region in task forces of 8-12 | raiding counts half toward dominance |
+| Lift | 6 convoys per landing division (the game's own estimate), 1 escort per 12 convoys | landing techs: 4/6/10/15 divisions |
+| Landing | a port in the landing state, or a floating harbour | 72 hours of supply without one |
+
+The goal is fixed and the means are a choice: the plan provides the strongest route by the date. Against a
+fleet several times its own a land power wins the sea regions with land-based naval bombers under air
+superiority, submarines in the deep-ocean approaches and patrol groups of destroyers over the route, not with a
+battleship race; a naval power (Japan, the United States, Britain) adds carriers with their air groups, which
+are the best sea control per IC (NA28).
+
 ### 6.3 Blockading or defeating Britain
 
 1. Britain is an island supply problem. A blockade alone rarely capitulates it;

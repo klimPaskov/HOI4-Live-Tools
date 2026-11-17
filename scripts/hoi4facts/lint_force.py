@@ -30,6 +30,10 @@ plan's own economy (the army forecast of the executor's training, equipment coun
                           (x FIGHTER_RATIO), or whose surface fleet outweighs ours SEA_RATIO times while the plan
                           has no naval strike planes (a naval bomber line or start wings, and an air row or air_plan
                           entry on naval_strike or port_strike).
+  force.sea_*, force.navy_*, force.carrier_air
+                          the navy as an arm (lint_force_navy.py, navy.py): every sea operation the plan
+                          schedules held to the sea control, screens, lift, landing techs, port, patrols and
+                          tools it needs by its date; the building programme, designs, doctrine and admirals.
   force.unused_line       (error) a tank or plane line that no template (start or planned), start wing, air_plan
                           entry or force_design air row uses; and the reverse, a force_design row whose equipment no
                           line makes and no start stock holds.
@@ -86,6 +90,9 @@ def check(lint):
     lint_force_air.check(ctx)
     ctx.support_companies()
     ctx.invasions()
+    # the navy as an arm: the sea operations the plan schedules and what each needs (navy.py)
+    from . import lint_force_navy
+    lint_force_navy.check(ctx)
     ctx.unused_lines()
     ctx.table()
     ctx.budget()
@@ -132,12 +139,18 @@ class Ctx:
             d = self.tl.start
             end = self.tl.forecast_end()
             total = Counter()
+            carrier = Counter()
+            self._cv_out = []
+            from . import navy as navymod
             while d <= end:
                 for k, units in self.lint.line_output(d).items():
                     pk = fm.plane_kind(self.g, k)
                     if pk:
                         total[pk] += units * 7
+                        if navymod.carrier_plane(self.g, k):
+                            carrier[pk] += units * 7
                 self._air_out.append((d, Counter(total)))
+                self._cv_out.append((d, Counter(carrier)))
                 d += 7
         start = Counter()
         for a in self.lint.world.oob(self.lint.tag)["air"]:
@@ -148,6 +161,17 @@ class Ctx:
                 break
             made = c.get(kind, 0.0)
         return start.get(kind, 0) + made, start.get(kind, 0), made
+
+    def carrier_have(self, day):
+        """{plane kind: carrier-capable planes the lines made by day} (start carriers fly no wings in history)."""
+        if self._air_out is None:
+            self.air_have("fighter", self.tl.start)
+        made = Counter()
+        for d, c in self._cv_out:
+            if d > day:
+                break
+            made = c
+        return made
 
     # ------------------------------------------------------------------ facts
     def facts(self):
