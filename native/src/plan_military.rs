@@ -2209,7 +2209,26 @@ fn navy_step(
         })
         .collect();
     if !admirals.is_empty() {
-        note(state, "admiral_assignable", admirals.join("; "));
+        // Every fleet that can take an admiral has one: say so, the alert then rests on the
+        // reserve fleet or on admirals with no fleet (g17b, 17 Nov 2026: open 724 days with
+        // every fleet listed as led).
+        let all_led = fleets.iter().all(|row| {
+            let name = text(&row["fleet"]);
+            name.trim().is_empty()
+                || row["admiral"]
+                    .as_str()
+                    .is_some_and(|a| !a.trim().is_empty())
+                || reserve.is_some_and(|r| same_name(r, name))
+        });
+        let mut line = admirals.join("; ");
+        if all_led {
+            line.push_str(
+                "; every fleet that takes an admiral has one: the alert rests on the reserve \
+                 fleet (no admiral slot) or on admirals with no fleet to lead (no fleet is \
+                 founded for an admiral alone)",
+            );
+        }
+        note(state, "admiral_assignable", line);
     }
     // 3. regions, then the planned mission per task force
     let mut on_plan = 0;
@@ -3648,9 +3667,9 @@ mod tests {
             .iter()
             .any(|(n, a)| n == "hoi4_fleet_admiral" && a.get("admiral").is_some()));
         let why = note_of(&state, "admiral_assignable").unwrap();
-        assert_eq!(
-            why,
-            "Kriegsmarine: Raeder; Flotta 1: the reserve fleet, no admiral slot"
+        assert!(
+            why.starts_with("Kriegsmarine: Raeder; Flotta 1: the reserve fleet, no admiral slot; every fleet that takes an admiral has one"),
+            "{why}"
         );
     }
 

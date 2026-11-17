@@ -744,8 +744,8 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
                             format!(
                                 "air wings need planes no line makes: {}; the game asks for them \
                                  as air reinforcements. Add a line for the type the plan uses, or \
-                                 the plan names the wings it keeps understrength (the alert then \
-                                 stays open for that reason)",
+                                 put the alert in manage.alerts_ignore with alerts_ignore_why \
+                                 naming the wings the plan keeps understrength",
                                 air.join(", ")
                             )
                         } else if gaps.is_empty() {
