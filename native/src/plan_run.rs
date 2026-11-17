@@ -924,6 +924,12 @@ impl Moves {
 fn skip_key(kind: &str, key: &str) -> String {
     format!("{kind}:{key}")
 }
+/// The cost a command power refusal names ("... costs 40 command power and 2 are held").
+fn cp_cost(why: &str) -> Option<f64> {
+    let rest = &why[why.find("costs ")? + "costs ".len()..];
+    rest.split_whitespace().next()?.parse().ok()
+}
+
 impl State {
     fn skip(&mut self, now: GameHour, kind: &str, key: &str, hours: GameHour) {
         let key = skip_key(kind, key);
@@ -1030,6 +1036,10 @@ impl State {
             self.last_ok = Some(false);
             return Ok((false, why));
         }
+        if let Some(why) = self.cp_still_short(tools, &signature) {
+            self.last_ok = Some(false);
+            return Ok((false, why));
+        }
         let clock = self.clock;
         self.seq += 1;
         let mut args = args;
@@ -1094,6 +1104,26 @@ impl State {
             Err(_) => {}
         }
         result
+    }
+    /// An order the game refused for command power is not sent again while the command power
+    /// held (hoi4_country_status, read without input) is still below the cost that refusal
+    /// named; Some(refusal in the tool's words) while it is short. A wait estimated from the base
+    /// gain alone repeated a field marshal's refusal four times in one game year (g17b, 17 Nov
+    /// 2026). An unreadable command power sends the order as before.
+    fn cp_still_short(&self, tools: &dyn Tools, signature: &str) -> Option<String> {
+        let (_, last) = self.failed_run.get(signature)?;
+        if !last.starts_with("insufficient_command_power") {
+            return None;
+        }
+        let cost = cp_cost(last)?;
+        let read = tools.call("hoi4_country_status", &json!({})).ok()?;
+        let held = read["fields"]["command_power"]["value"].as_f64()?;
+        (held < cost).then(|| {
+            format!(
+                "insufficient_command_power: costs {cost} command power and {held:.1} are held \
+                 (read before sending; the order was not sent)"
+            )
+        })
     }
     /// Wall-clock seconds (a test sets `wall`).
     fn wall_now(&self) -> u64 {
@@ -8278,6 +8308,57 @@ mod tests {
     use std::cell::{Cell, RefCell};
 
     const START: GameHour = 1_000_000;
+
+    #[test]
+    fn an_order_refused_for_command_power_waits_until_the_power_read_reaches_the_cost() {
+        let refusal = "Promoting Fedor von Bock to field marshal costs 40 command power and 2 are \
+                       held; nothing was changed";
+        let short = fake(vec![(
+            "hoi4_country_status",
+            json!({"fields": {"command_power": {"value": 31.5}}}),
+        )]);
+        short.refuse_with("hoi4_army_commander", "insufficient_command_power", refusal);
+        let mut state = State {
+            clock: START,
+            ..State::default()
+        };
+        let args = json!({"army": "Army Group 1", "general": "Fedor von Bock"});
+        let sent = |t: &Fake| {
+            t.calls
+                .borrow()
+                .iter()
+                .filter(|(n, a)| n == "hoi4_army_commander" && a.get("request_id").is_some())
+                .count()
+        };
+        let (ok, _) = state
+            .act(&short, "l", "hoi4_army_commander", args.clone(), "af")
+            .unwrap();
+        assert!(!ok);
+        assert_eq!(sent(&short), 1);
+        // later, still short: not sent, and the refusal carries the power read now
+        state.clock = START + 30 * DAY;
+        let (ok, why) = state
+            .act(&short, "l", "hoi4_army_commander", args.clone(), "af")
+            .unwrap();
+        assert!(!ok);
+        assert_eq!(sent(&short), 1, "{why}");
+        assert!(
+            why.contains("costs 40 command power and 31.5 are held"),
+            "{why}"
+        );
+        assert_eq!(plan_military::cp_wait_days(&why), 22);
+        // enough command power now: the order goes out
+        let enough = fake(vec![(
+            "hoi4_country_status",
+            json!({"fields": {"command_power": {"value": 41.0}}}),
+        )]);
+        state.clock = START + 60 * DAY;
+        let (ok, _) = state
+            .act(&enough, "l", "hoi4_army_commander", args, "af")
+            .unwrap();
+        assert!(ok);
+        assert_eq!(sent(&enough), 1);
+    }
 
     struct Fake {
         calls: RefCell<Vec<(String, Value)>>,

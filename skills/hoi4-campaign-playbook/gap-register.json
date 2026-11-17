@@ -3118,7 +3118,7 @@
    ],
    "blocked": "hoi4_production_add Shift+clicks past the organisation chooser, so new lines get no organisation; the `organization` argument of hoi4_production_add and hoi4_design_set_production is refused with not_yet_built before input, and the executor holds it back (plan_run::UNBUILT_ARGS) and adds the line without it. hoi4_mio_line reads a line's organisation (already_attached Verified on every 1936 German start line, pp5-pp9 17 Nov 2026) and refuses roster_unreadable for a line without one: the roster the line's button opens (drawn at scale 0.45 at the rect's bottom-left) lists 'Produce without a Military Industrial Organization' and then rows the politics-roster reader cannot see (texts at list+0x80->+0x1e0->+0x100); a blind row click removed an organisation live",
    "payoff": "high",
-   "why": "MIO efficiency-cap and cost traits are the largest production modifiers; funds come from lines",
+   "why": "MIO efficiency-cap and cost traits are the largest production modifiers; funds come from lines; the owner counts a line without one as an unassigned organisation",
    "closing": "both",
    "owner": "a row reader for the production-opened roster (one of ten list windows of the production view, slot 0xd8 +0x21b8 step 0x470, root +0xf0, all read visible) with a shown test, then enable ROSTER_FROM_LINE_READABLE and live-test",
    "priority": 9
@@ -3143,8 +3143,8 @@
     "hoi4_mio_trait",
     "hoi4_mios"
    ],
-   "payoff": "medium",
-   "why": "about six traits by the war on the main lines",
+   "payoff": "high",
+   "why": "about six traits by the war on the main lines; the owner counts organisations without traits as unassigned",
    "closing": "live",
    "owner": "a route to any organisation's trait tree (its Details button in the roster a production line opens, or the filled slot's entry), live-mapped",
    "blocked": "hoi4_mio_trait reaches an organisation only through an EMPTY designer slot of the politics view (industrial_org_entry, countrypoliticsview.gui); a filled Research & Production slot draws political_selectable_idea_entry_grid, so organisations of filled kinds (Germany 1936: Mauser, Rheinmetall) are refused organization_not_offered (g17a, 17 Nov 2026)"
@@ -4017,7 +4017,7 @@
    "payoff": "high",
    "why": "new divisions without equipment drain reinforcement of the strike army",
    "closing": "live",
-   "owner": "run a plan with training_rules.only_if_stockpile live and see training wait on a low hoi4_stockpile read"
+   "owner": "run a plan live and see training wait on a low hoi4_stockpile read: the plan's only_if_stockpile, and (executor, 17 Nov 2026) one batch's need of every other equipment a fielded division of the template uses (g17a/g17b: the plan guarded rifles while support equipment, the binding one, stood at 0 days of cover)"
   },
   {
    "id": "training.equipment_fill_watch",

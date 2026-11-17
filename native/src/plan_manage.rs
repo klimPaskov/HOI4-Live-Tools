@@ -948,6 +948,24 @@ pub(super) fn training_step(
                 }
             }
         }
+        // Training is paced by what production can equip: every archetype a fielded division of
+        // the template needs and the plan does not guard waits for one batch's need in stock
+        // (g17a/g17b, 17 Nov 2026: the plan guarded rifles only while support equipment, the
+        // binding one, stood at 0 days of cover).
+        if let Some((archetype, held, need)) =
+            batch_short(state, tools, now, &template, count, &guards)
+        {
+            note(
+                state,
+                "training",
+                format!(
+                    "{template}: waits, {archetype} stockpile {held:.0} below one batch's need \
+                     {need:.0} (training is paced by what production can equip)"
+                ),
+            );
+            state.skip(now, "train", &template, DAY);
+            continue 'entries;
+        }
         let (ok, why) = state.act(
             tools,
             lease,
@@ -988,6 +1006,47 @@ pub(super) fn training_step(
         return Ok(Some(format!("train {count} {template}: {ok} {why}")));
     }
     Ok(None)
+}
+
+/// The first archetype a fielded division of `template` needs, the plan's `guards` do not name,
+/// and the stockpile holds less of than `count` divisions need: (archetype, held, need). None
+/// when nothing is short, or when the template has no fielded division or the reads fail.
+fn batch_short(
+    state: &mut State,
+    tools: &dyn Tools,
+    now: GameHour,
+    template: &str,
+    count: u64,
+    guards: &[(String, u64)],
+) -> Option<(String, f64, f64)> {
+    let read = supply(state, tools, now)?;
+    let division = list(&read, "divisions")
+        .iter()
+        .find(|d| text(&d["template"]) == template && !list(d, "equipment").is_empty())?;
+    let needs: Vec<(String, f64)> = list(division, "equipment")
+        .iter()
+        .filter_map(|e| {
+            let need = e["need"].as_f64().filter(|n| *n > 0.0)?;
+            Some((text(&e["archetype"]).to_string(), need))
+        })
+        .filter(|(a, _)| {
+            !guards
+                .iter()
+                .any(|(g, _)| a.starts_with(g.as_str()) || g.starts_with(a.as_str()))
+        })
+        .collect();
+    if needs.is_empty() {
+        return None;
+    }
+    let stock = stockpile(state, tools, now)?;
+    needs.into_iter().find_map(|(archetype, per)| {
+        let held = list(&stock, "equipment")
+            .iter()
+            .find(|r| text(&r["archetype"]) == archetype)?["stockpile"]
+            .as_f64()?;
+        let need = per * count as f64;
+        (held < need).then_some((archetype, held, need))
+    })
 }
 
 /// The `only_if_stockpile` proxy for one archetype: False while a fielded division lacks it
@@ -4449,8 +4508,11 @@ fn stockpile_rule(
             .filter(|l| !recent.contains(&l.1))
             .cloned()
             .collect();
+        let rates = supply(state, tools, now)
+            .map(|s| division_rates(&s, &read))
+            .unwrap_or_default();
         if let Some(((index, have, factories, _), take)) =
-            donor_line(&read, plan, &candidates, &archetype, warning, step)
+            donor_line(&read, plan, &candidates, &archetype, warning, step, &rates)
         {
             // PR09: a moved factory restarts at the start efficiency: a line gives at most a
             // fifth of itself and once in 30 days
@@ -4579,6 +4641,7 @@ fn donor_line(
     needy: &str,
     warning: f64,
     step: i64,
+    rates: &HashMap<String, (f64, f64)>,
 ) -> Option<(MilLine, i64)> {
     military
         .iter()
@@ -4590,6 +4653,18 @@ fn donor_line(
             if short_of(read, &arche) > 0.0 {
                 return false;
             }
+            // Never make the donor the binding equipment of the main template: after the move
+            // its output must still equip at least as many divisions a day as the needy item's
+            // (g17b, 17 Nov 2026: artillery cut 2 -> 1 for support equipment, which then made
+            // twice what the divisions took while artillery bound at 0.09 divisions a day).
+            if let (Some(&(rd, fd)), Some(&(rn, fnd))) = (rates.get(&arche), rates.get(needy)) {
+                let take = step.min(l.2 - 1).min((l.2 / 5).max(1)) as f64;
+                let donor_after = if fd > 0.0 { rd * (fd - take) / fd } else { rd };
+                let needy_after = if fnd > 0.0 { rn + rn / fnd * take } else { rn };
+                if donor_after < needy_after {
+                    return false;
+                }
+            }
             let want = plan["stockpile_targets"][arche.as_str()]
                 .as_f64()
                 .or_else(|| plan["stockpile_targets"][l.1.as_str()].as_f64())
@@ -4598,6 +4673,47 @@ fn donor_line(
         })
         .max_by_key(|l| (l.2, std::cmp::Reverse(l.0)))
         .map(|l| (l.clone(), step.min(l.2 - 1)))
+}
+
+/// Divisions a day the current output of each archetype equips for the template most fielded
+/// divisions use: archetype -> (produced per day / that template's need per division, factories
+/// on it), from hoi4_supply division rows and a hoi4_stockpile read. Empty when either lacks it.
+fn division_rates(supply: &Value, stock: &Value) -> HashMap<String, (f64, f64)> {
+    let mut count: BTreeMap<String, usize> = BTreeMap::new();
+    for d in list(supply, "divisions") {
+        if !list(d, "equipment").is_empty() {
+            *count.entry(text(&d["template"]).to_string()).or_default() += 1;
+        }
+    }
+    let Some(main) = count
+        .iter()
+        .max_by_key(|(_, n)| **n)
+        .map(|(t, _)| t.clone())
+    else {
+        return HashMap::new();
+    };
+    let Some(division) = list(supply, "divisions")
+        .iter()
+        .find(|d| text(&d["template"]) == main && !list(d, "equipment").is_empty())
+    else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for e in list(division, "equipment") {
+        let arche = text(&e["archetype"]);
+        let Some(need) = e["need"].as_f64().filter(|n| *n > 0.0) else {
+            continue;
+        };
+        if let Some(row) = list(stock, "equipment")
+            .iter()
+            .find(|r| text(&r["archetype"]) == arche)
+        {
+            let made = row["produced_per_day"].as_f64().unwrap_or(0.0);
+            let factories = row["factories"].as_f64().unwrap_or(0.0);
+            out.insert(arche.to_string(), (made / need, factories));
+        }
+    }
+    out
 }
 
 /// The archetype row a key names in a hoi4_stockpile read (itself, or the row holding the variant).
@@ -5910,6 +6026,91 @@ mod tests {
         json!({"template": template, "army": "Army 1", "equipment_fill_min": have as f64 / need as f64,
             "equipment": [{"archetype": "infantry_equipment", "have": have, "need": need}],
             "short_equipment": if have < need { json!(["infantry_equipment"]) } else { json!([]) }})
+    }
+
+    #[test]
+    fn a_donor_line_never_becomes_the_binding_equipment_of_the_main_template() {
+        // g17b 1937.05: artillery 2 factories make 1.8 a day (0.15 divisions a day at 12 each),
+        // support equipment 8 make 3.6 (0.12 at 30 each)
+        let supply = json!({"divisions": [{"template": "Inf", "equipment": [
+            {"archetype": "artillery_equipment", "have": 12, "need": 12},
+            {"archetype": "support_equipment", "have": 28, "need": 30}]}]});
+        let stock = json!({"equipment": [
+            {"archetype": "artillery_equipment", "stockpile": 400.0, "produced_per_day": 1.8,
+             "factories": 2, "fielded_short": 0.0, "variants": [{"type": "artillery_equipment_1"}]},
+            {"archetype": "support_equipment", "stockpile": 0.0, "produced_per_day": 3.6,
+             "factories": 8, "fielded_short": 2.0, "variants": [{"type": "support_equipment_1"}]}]});
+        let rates = division_rates(&supply, &stock);
+        assert!((rates["artillery_equipment"].0 - 0.15).abs() < 1e-9);
+        assert!((rates["support_equipment"].0 - 0.12).abs() < 1e-9);
+        let lines: Vec<MilLine> = vec![(1, "artillery_equipment_1".into(), 2, None)];
+        // taking one artillery factory leaves 0.075 a day against support's 0.135: refused
+        assert_eq!(
+            donor_line(
+                &stock,
+                &json!({}),
+                &lines,
+                "support_equipment",
+                10.0,
+                3,
+                &rates
+            ),
+            None
+        );
+        // without rates (no division read) the old rule decides
+        assert!(donor_line(
+            &stock,
+            &json!({}),
+            &lines,
+            "support_equipment",
+            10.0,
+            3,
+            &HashMap::new()
+        )
+        .is_none_or(|(l, _)| l.1 == "artillery_equipment_1"));
+    }
+
+    #[test]
+    fn training_waits_for_one_batch_of_every_equipment_the_template_needs() {
+        let fielded = vec![json!({"template": "Inf", "army": "Army 1", "equipment": [
+            {"archetype": "infantry_equipment", "have": 900, "need": 900},
+            {"archetype": "support_equipment", "have": 28, "need": 30}]})];
+        let stock = |support: f64| {
+            json!({"equipment": [
+                {"archetype": "infantry_equipment", "stockpile": 2000.0, "variants": []},
+                {"archetype": "support_equipment", "stockpile": support, "variants": []}]})
+        };
+        let tools = fake(vec![
+            ("hoi4_division_templates", templates_read(&[("Inf", 0)])),
+            ("hoi4_supply", json!({"divisions": fielded})),
+            ("hoi4_stockpile", stock(10.0)),
+        ]);
+        // the plan guards rifles only; support equipment binds: 10 held, a batch of 2 needs 60
+        let plan = json!({"training": {"template": "Inf", "queue": 4, "batch": 2, "deploy_state": 5,
+            "only_if_stockpile": {"infantry_equipment": 600}}});
+        let mut state = State::default();
+        assert_eq!(
+            training_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(
+            state.manage.notes["training"]
+                .contains("support_equipment stockpile 10 below one batch's need 60"),
+            "{}",
+            state.manage.notes["training"]
+        );
+        assert!(actions(&tools).is_empty());
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_stockpile".into(), stock(70.0));
+        let mut state = State::default();
+        assert_eq!(
+            training_step(&mut state, &tools, &plan, "l", START)
+                .unwrap()
+                .as_deref(),
+            Some("train 2 Inf: true Verified")
+        );
     }
 
     #[test]
