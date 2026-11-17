@@ -107,6 +107,17 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(cond.hired_exclusions(block), ["GER_walther_funk"])
 
 
+class Coverage(unittest.TestCase):
+    def test_a_factory_count_gate_needs_its_own_number(self):
+        from hoi4facts import lint_conditions as lc
+        line = {"kind": "civilian_factories", "value": 49, "cmp": ">"}  # industrial_complex > 49
+        self.assertFalse(lc._covered(line, "F", 100, [(90, "factories:GER >= 95")]))  # the total says nothing
+        self.assertFalse(lc._covered(line, "F", 100, [(120, "civilian_factories >= 45")]))
+        self.assertTrue(lc._covered(line, "F", 100, [(120, "civilian_factories >= 50")]))
+        self.assertTrue(lc._covered(line, "F", 100, [(500, "focus_completed:F")]))
+        self.assertTrue(lc._covered({"kind": "stability"}, "F", 100, [(110, "stability >= 0.5")]))
+
+
 class StopDate(unittest.TestCase):
     class L:
         def __init__(self, plan):

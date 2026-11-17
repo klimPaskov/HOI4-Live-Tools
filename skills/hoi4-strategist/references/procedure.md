@@ -430,7 +430,9 @@ Read: the country section of `economy-build-orders.md` §10 when it exists; doss
    training reaches it, or size the training lines (queue, caps, rifles behind them) so it does, and count
    only equipped divisions. A gate line the plan cannot decide offline (another country's state, a flag,
    stability, a factory count) needs a dated checkpoint: `focus_completed:<id>` by the date the plan counts
-   on, or an atom on the same quantity (`stability`, `war_support`, `factories`) by the focus's start.
+   on, or an atom on the same quantity (`stability`, `war_support`, `factories`) by the focus's start. A gate
+   on civilian or military factories alone (`industrial_complex > 49`) is not the `factories` total: a
+   horizon target of that kind at or above the gate by then, or the focus checkpoint.
 2. Balance of power, when the tag has one at the start date or a planned focus creates one: the side
    the plan wants, the range edges that matter, and the focuses and decisions that move it; consistent
    with the focus path. Not applicable: `F bop <TAG>` (until available `F grep <TAG> --folder common/bop`)

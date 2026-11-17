@@ -45,7 +45,9 @@ NUMERIC_KINDS = {
 }
 # plan predicate atoms that check a quantity (a dated checkpoint on the same quantity covers the line)
 ATOM_OF_KIND = {"stability": ("stability",), "war_support": ("war_support",), "factories": ("factories",),
-                "civilian_factories": ("factories",), "military_factories": ("factories",),
+                # no checkpoint atom counts civilian or military factories alone (factories:<TAG> is the total):
+                # a horizon target of that kind, or a checkpoint naming the focus, covers such a gate
+                "civilian_factories": ("civilian_factories",), "military_factories": ("military_factories",),
                 "political_power": ("pp",), "world_tension": ("world_tension",), "manpower": ("manpower",),
                 "army_xp": ("xp",), "navy_xp": ("xp",), "air_xp": ("xp",)}
 _SET_GLOBAL = re.compile(r"^global\.([A-Za-z0-9_]+)$")
