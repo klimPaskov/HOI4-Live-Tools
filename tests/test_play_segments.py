@@ -233,6 +233,7 @@ class ContinueTests(Base):
         s = self.supervisor(request={"resume_date": "1936.01.20"})
         self.assertTrue(s.start())
 
+    @unittest.skipIf(os.name == "nt", "no save link on Windows (the native save runs on macOS)")
     def test_the_save_link_points_at_the_games_save_folder(self):
         run = self.make_run()
         self.assertTrue(runs.link_saves(self.user_dir, run))
