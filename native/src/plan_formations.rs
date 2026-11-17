@@ -25,7 +25,10 @@
 //!
 //! [`command_step`] then brings the game in line, one verified action at a time:
 //!   1. an army bound to a task, and any other army standing in the theatre that no formation
-//!      plays, is merged into its formation (hoi4_army_merge; never above `armies.max`, 24);
+//!      plays, is merged into its formation (hoi4_army_merge; never above `armies.max`, 24): the
+//!      task's formation, else the one whose region holds the army's state, then the nearest
+//!      with room; one with room for only part of it is filled to strength (hoi4_army_detach
+//!      `into`) and the rest go to the next;
 //!   2. every army with at least `armies.min_for_general` divisions (default 1) gets a general
 //!      once: the layout's general, then `armies.generals`, then the best free commander of the
 //!      country for its role (attack and planning for strike formations, defence otherwise;
@@ -508,7 +511,6 @@ fn merge_and_lead(
                 || playing.contains(&name)
                 || reserve.contains(&name)
                 || plan_military::invading(state, plan, &name)
-                || super::plan_manage::spread_out(state, &name)
                 || state.skipped(now, "cmerge", &name)
             {
                 continue;
@@ -526,63 +528,103 @@ fn merge_and_lead(
                 },
                 None => None,
             };
-            let hint = match placed {
-                Some(f) => f,
-                None => {
-                    let here = a["main_state"].as_i64();
-                    if bound.is_none() && !here.is_some_and(|s| theatre.contains(&s)) {
-                        continue;
-                    }
-                    // the formation standing in the same state, else the nearest one
-                    let mut best: Option<(String, f64)> = None;
-                    for h in &formations {
-                        let Some(f) = formation_army(state, h) else {
-                            continue;
-                        };
-                        let there = armies
-                            .iter()
-                            .find(|x| text(&x["army"]) == f)
-                            .and_then(|x| x["main_state"].as_i64());
-                        let d = match (here, there) {
-                            (Some(x), Some(y)) if x == y => 0.0,
-                            (Some(x), Some(y)) => {
-                                match (
-                                    state.centers.get(&(x as i32)),
-                                    state.centers.get(&(y as i32)),
-                                ) {
-                                    (Some(p), Some(q)) => {
-                                        ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt()
-                                    }
-                                    _ => 1.0e9,
-                                }
-                            }
-                            _ => 1.0e9,
-                        };
-                        if best.as_ref().is_none_or(|b| d < b.1) {
-                            best = Some((h.clone(), d));
-                        }
-                    }
-                    match best {
-                        Some((h, _)) => h,
-                        None => continue,
-                    }
-                }
-            };
-            let Some(target) = formation_army(state, &hint) else {
-                continue; // the formation has no army yet: the layout makes it first
-            };
-            if target == name || size(&target) + n > max {
+            let here = a["main_state"].as_i64();
+            if placed.is_none() && bound.is_none() && !here.is_some_and(|s| theatre.contains(&s)) {
                 continue;
             }
+            // The formations that may take it, best first: its task's formation; else the one
+            // whose region (state, axis, covers, guard posts) holds the army's state, then the
+            // one standing in the same state, then the nearest. A full formation is passed over
+            // for the next one (g17b, 17 Nov 2026: Army 1-8 stood in Pomerania, the nearest
+            // formations were full at 24 and nothing was merged, while Armee Nord, whose region
+            // Pomerania is, held two divisions).
+            let mut ranked: Vec<(String, (bool, f64))> = Vec::new();
+            for h in &formations {
+                let Some(f) = formation_army(state, h) else {
+                    continue;
+                };
+                let entry = list(plan, "army_layout")
+                    .iter()
+                    .find(|e| text(&e["name_hint"]) == h.as_str());
+                let covers = here.is_some_and(|s| {
+                    entry.is_some_and(|e| {
+                        e["state"].as_i64() == Some(s)
+                            || ["axis", "covers", "guard_states_in_order"]
+                                .iter()
+                                .any(|k| ints(&e[*k]).contains(&s))
+                    })
+                });
+                let there = armies
+                    .iter()
+                    .find(|x| text(&x["army"]) == f)
+                    .and_then(|x| x["main_state"].as_i64());
+                let d = match (here, there) {
+                    (Some(x), Some(y)) if x == y => 0.0,
+                    (Some(x), Some(y)) => {
+                        match (
+                            state.centers.get(&(x as i32)),
+                            state.centers.get(&(y as i32)),
+                        ) {
+                            (Some(p), Some(q)) => {
+                                ((p.0 - q.0).powi(2) + (p.1 - q.1).powi(2)).sqrt()
+                            }
+                            _ => 1.0e9,
+                        }
+                    }
+                    _ => 1.0e9,
+                };
+                let first = placed.as_deref() == Some(h.as_str());
+                if placed.is_some() && !first {
+                    continue;
+                }
+                ranked.push((h.clone(), (!covers, d)));
+            }
+            ranked.sort_by(|a, b| (a.1 .0).cmp(&b.1 .0).then(a.1 .1.total_cmp(&b.1 .1)));
             // Never into an army that holds a standing order of its own: a reserve the war step
             // leaves alone, or an army with a fallback line or area defence. Joining divisions
             // cost the Army of Wello its area order (e2, 16 Nov 2026: Verified, then 0 orders
-            // after two merges); the group waits for a formation that can take it.
-            let defended = armies.iter().any(|x| {
-                text(&x["army"]) == target && x["defensive_orders"].as_u64().unwrap_or(0) > 0
-            });
-            if reserve.contains(&target) || defended {
-                continue;
+            // after two merges); the group goes to the next formation that can take it.
+            let open: Vec<(String, String, u64)> = ranked
+                .iter()
+                .filter_map(|(h, _)| {
+                    let target = formation_army(state, h)?;
+                    let defended = armies.iter().any(|x| {
+                        text(&x["army"]) == target
+                            && x["defensive_orders"].as_u64().unwrap_or(0) > 0
+                    });
+                    let room = max.saturating_sub(size(&target));
+                    (target != name && !reserve.contains(&target) && !defended && room > 0)
+                        .then(|| (h.clone(), target, room))
+                })
+                .collect();
+            let Some((hint, target, room)) = open.first().cloned() else {
+                continue; // no formation has room, or the formation has no army yet
+            };
+            if room < n {
+                // The best formation has room for part of the army: it is filled to strength
+                // with some of its divisions (hoi4_army_detach into it); the rest go to the next
+                // formation on a later tick.
+                let ids: Vec<String> = strings(a, "divisions")
+                    .into_iter()
+                    .take((room as usize).min(18))
+                    .collect();
+                if ids.is_empty() {
+                    continue;
+                }
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_detach",
+                    json!({"army": name, "divisions": ids, "into": target}),
+                    "cf",
+                )?;
+                if !ok {
+                    state.skip(now, "cmerge", &name, 2 * DAY);
+                }
+                return Ok(Some(format!(
+                    "command: {} of {name}'s {n} division(s) fill {target} ({hint}) to strength: {ok} {why}",
+                    ids.len()
+                )));
             }
             let (ok, why) = state.act(
                 tools,
@@ -923,6 +965,82 @@ mod tests {
             .borrow()
             .iter()
             .any(|(n, a)| n == "hoi4_army_merge" && a["source"] == "Army 7"));
+    }
+
+    /// g17b (17 Nov 2026): eight groups stood in Pomerania; the nearest formations were full at
+    /// 24 and nothing was merged, while Armee Nord, whose region Pomerania is, held two.
+    fn region_plan() -> Value {
+        json!({
+            "armies": {"max": 24},
+            "war": {"theatre": [5, 56, 63, 64]},
+            "army_layout": [
+                {"name_hint": "Nord", "state": 5, "role": "strike", "count": 2, "general": "K", "covers": [5, 63]},
+                {"name_hint": "West", "state": 56, "role": "strike", "count": 4, "general": "W"},
+                {"name_hint": "Mitte", "state": 64, "role": "strike", "count": 6, "general": "M"}
+            ]
+        })
+    }
+
+    #[test]
+    fn a_stray_army_joins_the_formation_of_its_region_past_full_ones_and_fills_it() {
+        let plan = concentrate(&region_plan()).unwrap_or_else(region_plan);
+        let roster = |nord: u64| {
+            json!({"armies": [
+                {"army": "Armee Nord", "division_count": nord, "commander": "K", "main_state": 5},
+                {"army": "Armee West", "division_count": 24, "commander": "W", "main_state": 63},
+                {"army": "Armee Mitte", "division_count": 24, "commander": "M", "main_state": 64},
+                {"army": "Army 4", "division_count": 5, "commander": "Kesselring", "main_state": 63,
+                    "divisions": ["a", "b", "c", "d", "e"]}]})
+        };
+        let mut state = State::default();
+        for (h, a) in [
+            ("Nord", "Armee Nord"),
+            ("West", "Armee West"),
+            ("Mitte", "Armee Mitte"),
+        ] {
+            state.layout.insert(h.into(), a.into());
+        }
+        // Armee West stands in the same state but is full: Armee Nord covers state 63
+        let tools = game(vec![("hoi4_armies", roster(2))]);
+        let out = command_step(&mut state, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with("command: Army 4 (5 division(s)) merged into Armee Nord (Nord): true"),
+            "{out}"
+        );
+        // Armee Nord has room for two only: two of them fill it, the rest wait for room
+        let tools = game(vec![("hoi4_armies", roster(22))]);
+        let mut state2 = State {
+            layout: state.layout.clone(),
+            ..State::default()
+        };
+        let out = command_step(&mut state2, &tools, &plan, "l", 1000)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.starts_with(
+                "command: 2 of Army 4's 5 division(s) fill Armee Nord (Nord) to strength: true"
+            ),
+            "{out}"
+        );
+        let sent = tools.actions.borrow();
+        assert_eq!(sent[0].0, "hoi4_army_detach");
+        assert_eq!(sent[0].1["divisions"], json!(["a", "b"]), "{:?}", sent[0].1);
+        assert_eq!(sent[0].1["into"], json!("Armee Nord"));
+        drop(sent);
+        // every formation full: nothing moves
+        let tools = game(vec![("hoi4_armies", roster(24))]);
+        let mut state3 = State {
+            layout: state.layout.clone(),
+            ..State::default()
+        };
+        let _ = command_step(&mut state3, &tools, &plan, "l", 1000).unwrap();
+        assert!(!tools
+            .actions
+            .borrow()
+            .iter()
+            .any(|(n, _)| n == "hoi4_army_merge" || n == "hoi4_army_detach"));
     }
 
     #[test]

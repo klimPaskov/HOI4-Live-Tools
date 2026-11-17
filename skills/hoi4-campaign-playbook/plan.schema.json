@@ -1093,7 +1093,7 @@
         "gather_into": {
           "type": "string",
           "x-owner": "executor",
-          "description": "the army (a layout name_hint or an army name) that takes every division left outside an army, in one hoi4_army_gather action; default: the fullest army without battle-plan orders that has room, else a new army"
+          "description": "the army (a layout name_hint or an army name) that takes every division left outside an army, in one hoi4_army_gather action, when no formation whose region (state, axis, covers, guard posts) holds most of those divisions has room; then the fullest formation with room, the fullest army without battle-plan orders with room, else a new army"
         },
         "gather": {
           "type": "boolean",
@@ -3135,7 +3135,7 @@
         "overdrawn_rest_days": {
           "type": "integer",
           "default": 10,
-          "description": "the army formed from the pulled-out divisions rests this many game days: the war step does not drive it and consolidation does not fold it back before",
+          "description": "the pulled-out divisions march to fed ground in their own army (no new army is made); a group is remembered this many game days: its divisions are not picked again and what it will draw counts against its destination's headroom",
           "x-rule": "overdrawn",
           "minimum": 0
         },

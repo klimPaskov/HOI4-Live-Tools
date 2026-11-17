@@ -594,8 +594,10 @@ dossier §9.
 2. Strike armies ≤ 24 divisions, also sized to the supply on the axis.
 2a. **Divisions outside an army are gathered, not scattered into new armies.** `armies.gather_into` names
    the formation (a layout `name_hint`) that takes every division left outside an army in one action (new
-   trainees, divisions freed by a disband or a lost army); without it the fullest army without battle-plan
-   orders and with room takes them; `armies.gather: false` only with a reason (lint `armies.gather`).
+   trainees, divisions freed by a disband or a lost army) when the formation whose region (state, axis,
+   `covers`, guard posts) holds them has no room; the executor tries that regional formation first, then
+   `gather_into`, then the fullest formation with room; `armies.gather: false` only with a reason (lint
+   `armies.gather`). Give each training `deploy_state` a formation that covers it.
 3. **Name only commanders the game shows on the start date.** A general or marshal whose role has a
    `visible` trigger the start does not meet (Germany 1936: Guderian and Hoth only after
    GER_adopt_new_panzer_doctrine) is unknown to hoi4_army_commander until then; name him in a phase from the

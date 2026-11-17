@@ -1034,7 +1034,10 @@ impl State {
             ));
         }
         let signature = format!("{name} {args}");
-        let army_move = (name == "hoi4_army_move")
+        // Divisions sent out of an overdrawn stack in their own army are not the army's move:
+        // they neither wait for its commitment nor count against its budget or commit it.
+        let part_out = tag == "so" && args["divisions"].is_array();
+        let army_move = (name == "hoi4_army_move" && !part_out)
             .then(|| text(&args["army"]).to_string())
             .filter(|a| !a.is_empty());
         if let Some(army) = &army_move {
@@ -2442,6 +2445,124 @@ fn assign_target_full(roster: &Value, id: i64, max: u64) -> Option<String> {
     })
 }
 
+/// The army a gather of `pool` loose divisions goes into, with room for all of them (`max`):
+/// the formation (army_layout entry bound to an army) whose state, axis, covers or guard posts
+/// hold most of the loose divisions, then the plan's `armies.gather_into` (a layout name_hint or
+/// an army name), then the fullest other formation, then the fullest army without battle-plan
+/// orders; None (a new army) only when none has room. g17b (17 Nov 2026): fresh divisions in
+/// Pomerania went into the western formations and, once those were full, into Army 1, a group
+/// the overdrawn rule had made, while Armee Nord, whose region Pomerania is, held two divisions.
+fn gather_target(
+    state: &State,
+    plan: &Value,
+    roster: &Value,
+    pool: u64,
+    max: u64,
+) -> Option<String> {
+    let rows = list(roster, "armies");
+    let size = |name: &str| {
+        rows.iter()
+            .find(|a| text(&a["army"]) == name)
+            .map(|a| a["division_count"].as_u64().unwrap_or(0))
+    };
+    let room = |name: &str| size(name).is_some_and(|n| n + pool <= max);
+    // formations in plan order: (army, states of its region)
+    let formations: Vec<(String, HashSet<i64>)> = list(plan, "army_layout")
+        .iter()
+        .filter_map(|e| {
+            let army = state.layout.get(text(&e["name_hint"]))?;
+            let mut region: HashSet<i64> = e["state"].as_i64().into_iter().collect();
+            for key in ["axis", "covers", "guard_states_in_order"] {
+                region.extend(ints(&e[key]));
+            }
+            (!army.is_empty() && size(army).is_some()).then(|| (army.clone(), region))
+        })
+        .collect();
+    let loose: Vec<(i64, u64)> = list(roster, "unassigned_by_state")
+        .iter()
+        .filter_map(|e| {
+            Some((
+                e["state_id"].as_i64()?,
+                e["divisions"].as_u64().unwrap_or(1),
+            ))
+        })
+        .collect();
+    let regional = formations
+        .iter()
+        .filter(|(a, _)| room(a))
+        .map(|(a, region)| {
+            let here: u64 = loose
+                .iter()
+                .filter(|(s, _)| region.contains(s))
+                .map(|(_, n)| n)
+                .sum();
+            (a, here)
+        })
+        .filter(|(_, here)| *here > 0)
+        // most of the loose divisions; the first in plan order on a tie
+        .fold(None::<(&String, u64)>, |best, (a, n)| match best {
+            Some((_, m)) if m >= n => best,
+            _ => Some((a, n)),
+        })
+        .map(|(a, _)| a.clone());
+    let wanted = text(&plan["armies"]["gather_into"]).to_string();
+    let wanted = state.layout.get(&wanted).cloned().unwrap_or(wanted);
+    regional
+        .or_else(|| (!wanted.is_empty() && room(&wanted)).then_some(wanted))
+        .or_else(|| {
+            formations
+                .iter()
+                .filter(|(a, _)| room(a))
+                .max_by_key(|(a, _)| size(a))
+                .map(|(a, _)| a.clone())
+        })
+        .or_else(|| {
+            rows.iter()
+                .filter(|a| a["battle_plan_orders"].as_u64().unwrap_or(0) == 0)
+                .map(|a| text(&a["army"]))
+                .filter(|a| room(a))
+                .max_by_key(|a| size(a))
+                .map(str::to_string)
+        })
+}
+
+/// Why a loose stack (an hoi4_armies `unassigned_by_state` entry) cannot be assigned: it shares
+/// its province with more than one army, or with one already at `max`; None when it can.
+fn shared_stack(entry: &Value, roster: &Value, max: u64) -> Option<String> {
+    let shared: Vec<&String> = entry["shared_with"]
+        .as_object()
+        .map(|m| m.keys().collect())
+        .unwrap_or_default();
+    let full = |name: &str| {
+        list(roster, "armies")
+            .iter()
+            .find(|a| text(&a["army"]) == name)
+            .and_then(|a| a["division_count"].as_u64())
+            .is_some_and(|n| n >= max)
+    };
+    let names = || {
+        shared
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if shared.len() > 1 {
+        Some(format!(
+            "they share a province with {} armies ({}), so no box selection takes them alone",
+            shared.len(),
+            names()
+        ))
+    } else if shared.first().is_some_and(|a| full(a)) {
+        Some(format!(
+            "they share a province with {}, which is full (cap {max})",
+            names()
+        ))
+    } else {
+        None
+    }
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -2467,9 +2588,8 @@ fn armies_step(
             .collect();
         // Every division outside an army goes into one army in one action, wherever it stands
         // (hoi4_army_gather: the alert's select-all, then the army card), never state by state:
-        // a large country is not walked. The target is the plan's `armies.gather_into` (a layout
-        // name_hint or an army name), else the fullest army without battle-plan orders that has
-        // room, else a new army (the split rule below restores the cap).
+        // a large country is not walked. The target is a formation with room (see
+        // `gather_target`), else a new army (the split rule below restores the cap).
         let pool = list(&roster, "unassigned").len() as u64;
         if pool == 0 {
             state.done.remove("gatherwait");
@@ -2503,19 +2623,7 @@ fn armies_step(
             }
         }
         if gathering && alert_shown && !state.skipped(now, "gather", "all") {
-            let wanted = text(&cfg["gather_into"]).to_string();
-            let wanted = state.layout.get(&wanted).cloned().unwrap_or(wanted);
-            let rows = list(&roster, "armies");
-            let room = |a: &Value| a["division_count"].as_u64().unwrap_or(0) + pool <= max;
-            let target = rows
-                .iter()
-                .find(|a| !wanted.is_empty() && text(&a["army"]) == wanted && room(a))
-                .or_else(|| {
-                    rows.iter()
-                        .filter(|a| a["battle_plan_orders"].as_u64().unwrap_or(0) == 0 && room(a))
-                        .max_by_key(|a| a["division_count"].as_u64().unwrap_or(0))
-                })
-                .map(|a| text(&a["army"]).to_string());
+            let target = gather_target(state, plan, &roster, pool, max);
             let args = match &target {
                 Some(t) => json!({"army": t, "max": max}),
                 None => json!({"max": max}),
@@ -2569,7 +2677,10 @@ fn armies_step(
                 continue;
             };
             let key = id.to_string();
-            if state.skipped(now, "armycreate", &key) {
+            // `armyrefused` is a refusal the game repeats, kept apart from `armycreate`: the
+            // unassigned-divisions alert nudges `armycreate` timers, and a 20-day rest set there
+            // was cleared at once (g17b, 17 Nov 2026: three refused assigns in 11 s).
+            if state.skipped(now, "armycreate", &key) || state.skipped(now, "armyrefused", &key) {
                 continue;
             }
             // "absorb": true|"assign" folds unassigned divisions into the army that
@@ -2593,6 +2704,22 @@ fn armies_step(
                     continue;
                 }
             }
+            // A loose stack sharing its province with more than one army, or with a full one,
+            // cannot be box-selected into any army: hoi4_army_assign refuses it every time (g17b,
+            // 17 Nov 2026: selection_unavailable four times for divisions of state 63 standing
+            // with Armee West Nord and Army 1). Nothing is sent; the gather takes them.
+            if assign {
+                if let Some(why) = shared_stack(entry, &roster, max) {
+                    state.skip(now, "armyrefused", &key, 20 * DAY);
+                    let ids = strings(entry, "division_ids").join(", ");
+                    plan_manage::note(
+                        state,
+                        "armies",
+                        format!("state {id}: no assign for {ids}: {why}; the gather takes them"),
+                    );
+                    continue;
+                }
+            }
             let assigned = if assign {
                 let (ok, why) = state.act(
                     tools,
@@ -2610,22 +2737,12 @@ fn armies_step(
                 None
             };
             if let Some((ok, why)) = assigned {
-                state.skip(
-                    now,
-                    "armycreate",
-                    &key,
-                    if ok {
-                        DAY
-                    } else if why.contains("selection_mismatch")
-                        || why.contains("selection_unavailable")
-                    {
-                        // the division shares its province with another army's stack: no click
-                        // takes it alone, so the gather owns it (g17a: three refusals in 11 s)
-                        20 * DAY
-                    } else {
-                        2 * DAY
-                    },
-                );
+                state.skip(now, "armycreate", &key, if ok { DAY } else { 2 * DAY });
+                if why.contains("selection_mismatch") || why.contains("selection_unavailable") {
+                    // the division shares its province with another army's stack: no click
+                    // takes it alone, so the gather owns it (g17a: three refusals in 11 s)
+                    state.skip(now, "armyrefused", &key, 20 * DAY);
+                }
                 if !ok {
                     plan_manage::note(
                         state,
@@ -2701,8 +2818,7 @@ fn armies_step(
         if cfg["consolidate"] != json!(false) {
             // Armies with a planned role (army_layout, a guard post or a hold_targets post) are
             // small on purpose: never fold them into others or others into them. Nor is an army
-            // the executor formed for a purpose that still holds (war_cool: a landing army, a
-            // group pulled out of an overdrawn province to rest).
+            // the executor formed for a purpose that still holds (war_cool: a landing army).
             let roles: HashSet<String> = state
                 .layout
                 .values()
@@ -9820,6 +9936,93 @@ mod tests {
         );
         assert_eq!(tools.sent.borrow().len(), 1);
         assert!(manage_note(&state, "armies").contains("assign refused"));
+    }
+
+    #[test]
+    fn a_gather_goes_to_the_formation_of_the_divisions_region_before_any_other_army() {
+        // g17b (17 Nov 2026): fresh divisions in Pomerania (63) went to the western formations
+        // and then into Army 1, a stray group, while Armee Nord covered Pomerania with two
+        let plan = json!({"armies": {"max": 24, "gather_into": "West"},
+            "army_layout": [
+                {"name_hint": "Nord", "state": 5, "covers": [5, 63]},
+                {"name_hint": "West", "state": 56}]});
+        let roster = |nord: u64, west: u64| {
+            json!({"unassigned": ["x", "y"],
+                "unassigned_by_state": [{"state_id": 63, "divisions": 2}],
+                "armies": [
+                    {"army": "Armee Nord", "division_count": nord, "battle_plan_orders": 0},
+                    {"army": "Armee West", "division_count": west, "battle_plan_orders": 0},
+                    {"army": "Army 1", "division_count": 20, "battle_plan_orders": 0}]})
+        };
+        let mut state = State::default();
+        state.layout.insert("Nord".into(), "Armee Nord".into());
+        state.layout.insert("West".into(), "Armee West".into());
+        let to = |nord, west| gather_target(&state, &plan, &roster(nord, west), 2, 24);
+        assert_eq!(to(2, 10).as_deref(), Some("Armee Nord"));
+        // the region's formation is full: the plan's gather_into
+        assert_eq!(to(23, 10).as_deref(), Some("Armee West"));
+        // both formations full: the fullest army with room
+        assert_eq!(to(23, 23).as_deref(), Some("Army 1"));
+        // nothing has room: a new army
+        let full = json!({"unassigned": ["x"], "armies": [
+            {"army": "Armee Nord", "division_count": 24}]});
+        assert_eq!(gather_target(&state, &plan, &full, 1, 24), None);
+    }
+
+    #[test]
+    fn a_loose_stack_shared_with_two_armies_is_never_assigned_and_its_rest_outlives_the_alert() {
+        // g17b (17 Nov 2026): army_assign for state 63 refused selection_unavailable four
+        // times; the unassigned-divisions alert cleared the 20-day rest each time
+        struct Shared(RefCell<Vec<String>>, &'static str);
+        impl Tools for Shared {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if args.get("request_id").is_some() {
+                    self.0.borrow_mut().push(name.to_string());
+                }
+                match name {
+                    "hoi4_armies" if self.1 == "two" => Ok(json!({
+                        "unassigned": ["d1"],
+                        "unassigned_by_state": [{"state_id": 63, "divisions": 1,
+                            "division_ids": ["d1"],
+                            "shared_with": {"Armee West Nord": 1, "Army 1": 1}}],
+                        "armies": [
+                            {"army": "Armee West Nord", "division_count": 23, "states": {"63": 23}},
+                            {"army": "Army 1", "division_count": 15, "states": {"63": 15}}]})),
+                    "hoi4_armies" => Ok(json!({
+                        "unassigned": ["d1"],
+                        "unassigned_by_state": [{"state_id": 63, "divisions": 1,
+                            "division_ids": ["d1"], "shared_with": {"Army 1": 1}}],
+                        "armies": [{"army": "Army 1", "division_count": 15, "states": {"63": 15}}]})),
+                    "hoi4_army_assign" => Err(Error::new("selection_unavailable", "refused")),
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"max": 24, "absorb": "assign", "gather": false}});
+        let tools = Shared(RefCell::new(vec![]), "two");
+        let mut state = State::default();
+        assert_eq!(
+            armies_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(tools.0.borrow().is_empty());
+        let note = manage_note(&state, "armies");
+        assert!(
+            note.contains("no assign for d1") && note.contains("Armee West Nord, Army 1"),
+            "{note}"
+        );
+        // one army shares it: the assign goes out once; refused, it rests 20 days even when
+        // the alert nudges the armies step (its `armycreate` timers cleared)
+        let tools = Shared(RefCell::new(vec![]), "one");
+        let mut state = State::default();
+        armies_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(tools.0.borrow().len(), 1);
+        state.bad.retain(|k, _| !k.starts_with("armycreate:"));
+        assert_eq!(
+            armies_step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(tools.0.borrow().len(), 1);
     }
 
     #[test]
