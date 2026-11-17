@@ -372,7 +372,7 @@ fn nudge(state: &mut State, kinds: &[&str]) -> usize {
 }
 
 /// hoi4_supply, read at most once a game day (None when unreadable).
-fn supply(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
+pub(super) fn supply(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> {
     if let Some((at, read)) = &state.manage.supply {
         if now - *at < DAY {
             return Some(read.clone());
@@ -381,6 +381,34 @@ fn supply(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Value> 
     let read = tools.call("hoi4_supply", &json!({})).ok()?;
     state.manage.supply = Some((now, read.clone()));
     Some(read)
+}
+
+/// Air wings whose plane family no own production line makes ("type (wings: a, b)"), from
+/// hoi4_air and hoi4_production_lines; empty when either read fails.
+fn unproduced_air_gaps(tools: &dyn Tools) -> Vec<String> {
+    let (Ok(air), Ok(lines)) = (
+        tools.call("hoi4_air", &json!({})),
+        tools.call("hoi4_production_lines", &json!({"limit": 128})),
+    ) else {
+        return Vec::new();
+    };
+    let made: BTreeSet<String> = list(&lines, "lines")
+        .iter()
+        .map(|l| family(text(&l["equipment_id"])).to_string())
+        .collect();
+    let mut gaps: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for wing in list(&air, "wings") {
+        let kind = text(&wing["aircraft_type"]);
+        if kind.is_empty() || made.contains(family(kind)) {
+            continue;
+        }
+        gaps.entry(family(kind).to_string())
+            .or_default()
+            .push(text(&wing["wing"]).to_string());
+    }
+    gaps.into_iter()
+        .map(|(kind, wings)| format!("{kind} (wings: {})", wings.join(", ")))
+        .collect()
 }
 
 /// Archetypes the fielded divisions lack that no production line makes ("name (short n)").
@@ -654,7 +682,19 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
                         .unwrap_or_default();
                     if !state.skipped(now, "megap", "x") {
                         state.skip(now, "megap", "x", 60 * DAY);
-                        let why = if gaps.is_empty() {
+                        // pp5 (17 Nov 2026), the alert's own tooltip: "Equipment required for Air
+                        // Reinforcements: Transport Plane, Naval Bomber": start wings whose plane
+                        // no line makes. Those are read (hoi4_air wings against the lines).
+                        let air = unproduced_air_gaps(tools);
+                        let why = if gaps.is_empty() && !air.is_empty() {
+                            format!(
+                                "air wings need planes no line makes: {}; the game asks for them \
+                                 as air reinforcements. Add a line for the type the plan uses, or \
+                                 the plan names the wings it keeps understrength (the alert then \
+                                 stays open for that reason)",
+                                air.join(", ")
+                            )
+                        } else if gaps.is_empty() {
                             "every equipment the divisions lack has a production line, so the request \
                              comes from garrison or air reinforcement or a queued division, which the \
                              server does not read: hover the alert (its tooltip lists the equipment), add \
@@ -742,6 +782,12 @@ pub(super) fn training_step(
     }
     let rules = &plan["training_rules"];
     let templates = tools.call("hoi4_division_templates", &json!({}))?;
+    // Several entries of one template (one per deploy state) add up: entry i trains while the
+    // template's queued lines are below the queues of the entries up to i whose `when` holds.
+    // The game counts queued lines per template, so comparing each entry with its own queue let
+    // only the largest act (pr3b, 17 Nov 2026: eight Infanterie-Division entries meant 29 lines,
+    // 5 ran, 55 divisions on 1938.1.1 against the AI's 66).
+    let mut queued_before: HashMap<String, u64> = HashMap::new();
     'entries: for tr in entries {
         let template = text(&tr["template"]).to_string();
         if template.is_empty() || state.skipped(now, "train", &template) {
@@ -755,10 +801,16 @@ pub(super) fn training_step(
             continue;
         };
         let queue = tr["queue"].as_u64().unwrap_or(6);
-        if have >= queue || when_holds(state, tools, &tr["when"], now) != Truth::True {
+        if when_holds(state, tools, &tr["when"], now) != Truth::True {
             continue;
         }
-        let mut count = tr["batch"].as_u64().unwrap_or(2).min(queue - have);
+        let prior = queued_before.entry(template.clone()).or_insert(0);
+        let target = *prior + queue;
+        *prior = target;
+        if have >= target {
+            continue;
+        }
+        let mut count = tr["batch"].as_u64().unwrap_or(2).min(target - have);
         let cap = tr["cap"].as_u64().or_else(|| {
             rules["cap_template"]
                 .as_str()
@@ -5660,6 +5712,36 @@ mod tests {
         assert_eq!(actions(&tools).len(), 2);
     }
 
+    #[test]
+    fn entries_of_one_template_add_their_queues() {
+        // 5 lines queued: the first entry (queue 5) is full, the second (queue 4) brings the
+        // template to 9 and trains in its own deploy state; a third entry whose `when` does not
+        // hold adds nothing.
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 5)]),
+        )]);
+        let plan = json!({"training": [
+            {"template": "Inf", "queue": 5, "batch": 2, "deploy_state": 5},
+            {"template": "Inf", "queue": 4, "batch": 3, "deploy_state": 6},
+            {"template": "Inf", "queue": 4, "deploy_state": 7, "when": "date:2000.1.1"}]});
+        let mut state = State::default();
+        let out = training_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(out.as_deref(), Some("train 3 Inf: true Verified"));
+        let sent = actions(&tools);
+        assert_eq!(sent[0].1["deploy_state_id"], 6);
+        // 9 queued: every holding entry is full
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 9)]),
+        )]);
+        let mut state = State::default();
+        assert_eq!(
+            training_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+    }
+
     fn division(template: &str, have: u64, need: u64) -> Value {
         json!({"template": template, "army": "Army 1", "equipment_fill_min": have as f64 / need as f64,
             "equipment": [{"archetype": "infantry_equipment", "have": have, "need": need}],
@@ -7971,6 +8053,31 @@ mod tests {
         );
         assert_eq!(dockyard_decide(&lines, &[], 4), None);
         assert_eq!(dockyard_decide(&lines, &planned, 0), None);
+    }
+
+    #[test]
+    fn air_wings_whose_plane_no_line_makes_are_named() {
+        let tools = fake(vec![
+            (
+                "hoi4_air",
+                json!({"wings": [
+                {"wing": "JG 1", "aircraft_type": "small_plane_airframe_0"},
+                {"wing": "KuFlGr 106", "aircraft_type": "small_plane_naval_bomber_airframe_1"},
+                {"wing": "KGrzbV 1", "aircraft_type": "transport_plane_equipment_1"}]}),
+            ),
+            (
+                "hoi4_production_lines",
+                json!({"lines": [
+                {"equipment_id": "small_plane_airframe_1"}, {"equipment_id": "infantry_equipment_1"}]}),
+            ),
+        ]);
+        assert_eq!(
+            super::unproduced_air_gaps(&tools),
+            vec![
+                "small_plane_naval_bomber_airframe (wings: KuFlGr 106)".to_string(),
+                "transport_plane_equipment (wings: KGrzbV 1)".to_string()
+            ]
+        );
     }
 
     #[test]

@@ -35,7 +35,12 @@ use crate::{
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
 
-pub(super) const TOOLS: [&str; 3] = ["hoi4_mio_design_team", "hoi4_mio_policy", "hoi4_mio_trait"];
+pub(super) const TOOLS: [&str; 4] = [
+    "hoi4_mio_design_team",
+    "hoi4_mio_policy",
+    "hoi4_mio_trait",
+    "hoi4_mio_line",
+];
 
 fn pause(ms: u64) {
     thread::sleep(Duration::from_millis(ms));
@@ -803,10 +808,10 @@ fn open_org(
     display: &str,
 ) -> std::result::Result<usize, Fail> {
     open_system(process, keys, slot)?;
-    let count = read(process, org_entries)
-        .map(|e| e.len())
-        .unwrap_or(1)
-        .max(slot + 1);
+    // The slot count is read once the politics view has settled; a read taken while it was still
+    // drawing gave one slot, so only the tank roster was searched (pp5, 17 Nov 2026: Rheinmetall
+    // "not offered" from the tank roster right after a listing had found it in another slot).
+    let count = slot_count(process, slot, display);
     let mut first: Option<Fail> = None;
     for (n, s) in slot_order(slot, count, display).into_iter().enumerate() {
         if n > 0 {
@@ -824,6 +829,17 @@ fn open_org(
     }
     Err(first
         .unwrap_or_else(|| refuse("organization_not_offered", "No organisation slot offers it")))
+}
+
+/// Organisation slots of the politics view, read after it settles; never fewer than the asked
+/// slot or the slot a roster read showed the organisation in.
+fn slot_count(process: &dyn Process, slot: usize, display: &str) -> usize {
+    settled(process, "organisation slots", |r, i| {
+        Ok(org_entries(r, i)?.len())
+    })
+    .unwrap_or(1)
+    .max(slot + 1)
+    .max(known_slot(display).map_or(0, |s| s + 1))
 }
 
 /// Fold one slot's "not offered" refusal into the refusal for every slot tried, so the final
@@ -875,10 +891,7 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
         // can only join the slot of its kind, so the asked slot comes first and every other
         // slot is tried after it (pr2 asked every organisation in slot 0).
         open_system(process, keys, slot)?;
-        let count = read(process, org_entries)
-            .map(|e| e.len())
-            .unwrap_or(1)
-            .max(slot + 1);
+        let count = slot_count(process, slot, display);
         let before = political_power(process);
         let mut found: Option<Option<usize>> = None;
         let mut first: Option<Fail> = None;
@@ -936,6 +949,196 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
         }))
     })();
     leave(process, keys);
+    result
+}
+
+// ------------------------------------------------------------ line manufacturer
+
+/// Close the organisation windows only (the production view stays).
+fn close_lists(process: &dyn Process, keys: &dyn GameInput) {
+    for class in [&pk::MIO_POLICY, &pk::MIO_DETAIL, &pk::MIO_LIST] {
+        if pk::open_now(process, class) {
+            let clicked = pk::click(process, keys, "close window", |r, i| {
+                let root = pk::open_root(r, i, class)?;
+                pk::rect_of(r, i, root, "close_button", 4)
+            });
+            if clicked.is_err() {
+                pk::dismiss_window(process, keys, class);
+            }
+            let _ = wait(process, "window closed", |r, i| {
+                Ok(!pk::is_open(r, i, class)?)
+            });
+        }
+    }
+}
+
+/// Attach an organisation to an own production line. The politics view's organisation slots
+/// only browse the rosters (live pp4, 17 Nov 2026: a row click there changed nothing): the game
+/// assigns an organisation from a task, and for production that is the line's
+/// `attach_manufacturer` button, which opens the roster of the organisations able to make that
+/// equipment. A production line costs no political power (ASSIGN_INDUSTRIAL_MANUFACTURER_PP_COST_
+/// PER_DAY 0) and task capacity is off (ENABLE_TASK_CAPACITY false) in 1.19.4.1, so any offered
+/// row can take the line. `display` None takes the first row the roster offers. Verified by the
+/// line's own row turning to the attached state (`has_mio_background`).
+/// Whether the roster a production line opens can be read row by row. It cannot yet (no row
+/// reader for its layout), so the line tool reads and reports the line's own state only.
+const ROSTER_FROM_LINE_READABLE: bool = false;
+
+/// Where a button drawn at LINE_BUTTON_SCALE shows inside its full-size rect: the scaled
+/// square at the rect's bottom-left corner.
+const LINE_BUTTON_SCALE: f64 = 0.45;
+fn logo_square(rect: gui_tree::Rect) -> gui_tree::Rect {
+    let side = ((f64::from(rect.h.min(rect.w)) * LINE_BUTTON_SCALE).round() as i32).max(1);
+    gui_tree::Rect {
+        x: rect.x,
+        y: rect.y + rect.h - side,
+        w: side,
+        h: side,
+    }
+}
+
+fn line_assign(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    display: Option<&str>,
+    handle: u64,
+    list_only: bool,
+) -> Driven {
+    let result: Driven = (|| {
+        if pk::open_now(process, &pk::POLITICS_VIEW) {
+            leave(process, keys);
+        }
+        super::production::ensure_open(process, keys)?;
+        pause(300);
+        super::production::reveal_named(process, keys, handle, "attach_manufacturer", 20)?;
+        let before = settled(process, "line organisation", |r, i| {
+            super::production::line_mio(r, i, handle)?.ok_or_else(|| {
+                Error::new("gui_target_unavailable", "Production line row not laid out")
+            })
+        })?;
+        if !before.can_attach {
+            return Err(refuse(
+                "line_takes_no_organization",
+                "The line shows no organisation button: no organisation makes this equipment",
+            ));
+        }
+        if before.attached && !list_only {
+            return Ok(json!({"assigned": true, "already_attached": true}));
+        }
+        if list_only {
+            return Ok(json!({"listing_only": true, "attached": before.attached,
+                "verification": "line_row"}));
+        }
+        if !ROSTER_FROM_LINE_READABLE {
+            return Err(refuse(
+                "roster_unreadable",
+                "The organisation roster a production line opens is not read yet (its rows are \
+                 not the politics roster's grid, and its first entry is \"Produce without a \
+                 Military Industrial Organization\": pp9, 17 Nov 2026, a blind first-row click \
+                 removed the rifle line's organisation). Nothing was changed; attach it in the \
+                 game from the line's organisation button",
+            ));
+        }
+        let button = if before.attached {
+            "change_manufacturer"
+        } else {
+            "attach_manufacturer"
+        };
+        // The button is drawn at scale 0.45 (countryproductionlineview.gui) while its rect keeps
+        // the sprite's full size, and the drawing shrinks toward the rect's bottom-left corner
+        // (pp8, 17 Nov 2026: rect 203,338 63x63, logo drawn about 216,386; the rect's centre
+        // missed it). The drawn square is clicked first, the rect's centre second.
+        let mut opened = Err(Error::new("input_readback_failed", "not tried"));
+        let tried: RefCell<Vec<String>> = RefCell::new(Vec::new());
+        for drawn in [true, false] {
+            pk::click(process, keys, "line organisation button", |r, i| {
+                let rect =
+                    super::production::shown_button(r, i, handle, button)?.ok_or_else(|| {
+                        Error::new("gui_target_unavailable", "Organisation button not shown")
+                    })?;
+                let rect = if drawn { logo_square(rect) } else { rect };
+                tried.borrow_mut().push(format!(
+                    "{button} {},{} {}x{}",
+                    rect.x, rect.y, rect.w, rect.h
+                ));
+                Ok(rect)
+            })?;
+            opened = wait(process, "open organisation list", |r, i| {
+                pk::is_open(r, i, &pk::MIO_LIST)
+            });
+            if opened.is_ok() {
+                break;
+            }
+        }
+        opened.map_err(|e| {
+            let last: Vec<String> = tried.borrow().iter().rev().take(2).cloned().collect();
+            Error::new(e.code, format!("{} (rects {})", e.message, last.join("; ")))
+        })?;
+        OPEN_SLOT.store(usize::MAX, std::sync::atomic::Ordering::Relaxed);
+        pause(500);
+        if list_only {
+            let offered = match row_by_details(process, keys, "\u{1}") {
+                Err(Fail::Refused(e)) => e.message,
+                Ok(_) => String::new(),
+                Err(other) => return Err(other),
+            };
+            close_lists(process, keys);
+            return Ok(json!({"listing_only": true, "attached": before.attached,
+                "offered": offered}));
+        }
+        let on_screen: Option<usize> = match display {
+            Some(name) => {
+                if rows_readable(process) {
+                    require_row(process, keys, name)?
+                } else {
+                    Some(row_by_details(process, keys, name)?)
+                }
+            }
+            None => {
+                // first row: the list wheeled to its top so the rows line up
+                let list = read(process, list_rect)?;
+                let centre = (
+                    f64::from(list.x + list.w / 2),
+                    f64::from(list.y + list.h / 2),
+                );
+                keys.scroll_burst(pk::GAME, centre, ROW_HEIGHT, 40)?;
+                pause(500);
+                Some(0)
+            }
+        };
+        let row_name = if let Some(k) = on_screen {
+            let name = if display.is_some() {
+                read(process, detail_name).unwrap_or_default()
+            } else {
+                read(process, |r, i| find_row(r, i, "\u{1}"))
+                    .ok()
+                    .and_then(|(seen, _)| seen.first().cloned())
+                    .unwrap_or_default()
+            };
+            close_detail(process, keys);
+            let list = read(process, list_rect)?;
+            keys.click(
+                pk::GAME,
+                f64::from(list.x + 200),
+                f64::from(list.y + ROW_HEIGHT * k as i32 + 30),
+            )?;
+            name
+        } else {
+            let name = display.unwrap_or_default().to_string();
+            pk::click(process, keys, "organisation row", |r, i| {
+                row_rect(r, i, &name, "background_button")
+            })?;
+            name
+        };
+        let attached = wait(process, "line organisation attached", |r, i| {
+            Ok(super::production::line_mio(r, i, handle)?.is_some_and(|m| m.attached))
+        })
+        .is_ok();
+        Ok(json!({"assigned": attached,
+            "attached_before": before.attached, "attached_after": attached,
+            "row": row_name, "verification": "line_row"}))
+    })();
+    close_lists(process, keys);
     result
 }
 
@@ -1333,6 +1536,72 @@ pub(super) fn call(
             };
             ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
+        "hoi4_mio_line" => {
+            super::allowed(
+                args,
+                &[
+                    "line",
+                    "equipment",
+                    "organization",
+                    "list",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
+            let organization = match args.get("organization") {
+                None => None,
+                Some(_) => Some(key_arg(args, "organization")?),
+            };
+            let list_only = mgmt::flag(args, "list")?;
+            let equipment = super::string(args, "equipment")?;
+            let index = args
+                .get("line")
+                .and_then(Value::as_u64)
+                .filter(|v| *v < 2048)
+                .ok_or_else(|| Error::new("invalid_arguments", "line must be 0..2047"))?
+                as usize;
+            let handle = super::production::lines(process)?
+                .get(index)
+                .filter(|l| l.key.as_deref() == Some(equipment))
+                .map(|l| l.handle)
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_target",
+                        "No own line with this index and equipment",
+                    )
+                })?;
+            let display: RefCell<Option<String>> = RefCell::new(None);
+            let job = Job {
+                kind: "mio_line",
+                action: json!({"kind":"mio_line","line":index,"equipment":equipment,
+                    "organization":organization,"list":list_only}),
+                plan: Box::new(|process| {
+                    if let Some(org) = organization {
+                        let n = names(process, org, None)?;
+                        *display.borrow_mut() = Some(n.org_display);
+                    }
+                    Ok(())
+                }),
+                dispatch: Box::new(|process, keys| {
+                    let shown = display.borrow().clone();
+                    line_assign(process, keys, shown.as_deref(), handle, list_only)
+                }),
+                settle: Box::new(|_, seen| {
+                    let detail = json!({"tool":"mio_line","organization":organization,
+                        "line":index,"equipment":equipment,"seen":seen.cloned()});
+                    Ok(
+                        match seen
+                            .and_then(|v| v.get("listing_only"))
+                            .and_then(Value::as_bool)
+                        {
+                            Some(true) => super::journal::Outcome::Reached(detail),
+                            _ => ui_action::effect(seen, "assigned", detail),
+                        },
+                    )
+                }),
+            };
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
+        }
         _ => Err(Error::new(
             "capability_unavailable",
             "Unknown organisation tool",
@@ -1342,14 +1611,28 @@ pub(super) fn call(
 
 pub(super) fn tools() -> Vec<Value> {
     vec![
-        json!({"name":"hoi4_mio_design_team","description":"UNVALIDATED (no live test yet): put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_mio_design_team","description":"Browse only, assigns nothing (live pp4, 17 Nov 2026): the politics view's organisation slots open a roster to look at; the game assigns an organisation from a task (a production line: hoi4_mio_line; a technology; a design). Kept for older plans: put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_policy","description":"UNVALIDATED (no live test yet): attach a policy to an organisation: politics view, the slot's roster, the organisation's details button, Open policies, the policy row (by localised name). `organization` and `policy` are script keys (mio_policy_general_ruthless_contracts, ...). Typed refusals: organization_unknown, organization_not_allowed, policy_unknown (before input); mio_system_absent, slot_unknown, organization_not_offered, policy_not_offered (lists the rows) from the windows before the click. Verified from the detail window's attached policy name only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"policy":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","policy","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_mio_line","description":"Reads one own production line's organisation state through the game's own row (live pp5-pp9, 17 Nov 2026): a line that has an organisation answers assigned, already_attached (Verified from the row's has_mio_background / change_manufacturer state); list:true answers attached true/false and opens nothing. Attaching to a line without one is refused roster_unreadable, nothing changed: the roster the line's button opens (only the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry) has no row reader yet, and a blind row click removed an organisation live. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment); roster_unreadable.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait_index":{"type":"integer","minimum":0,"maximum":63},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_line_logo_is_the_scaled_square_at_the_bottom_left() {
+        let r = super::logo_square(super::gui_tree::Rect {
+            x: 203,
+            y: 338,
+            w: 63,
+            h: 63,
+        });
+        assert_eq!((r.x, r.y, r.w, r.h), (203, 373, 28, 28));
+        // centre 217,387: the logo drawn about 216,386 (pp8)
+        assert_eq!(r.center(), (217.0, 387.0));
+    }
+
     use super::super::mios::{Catalog, Org};
     use super::super::script;
     use super::*;
@@ -1445,6 +1728,10 @@ mod tests {
             let description = t["description"].as_str().unwrap();
             if t["name"] == "hoi4_mio_trait" {
                 assert!(description.starts_with("Live-verified (6 Nov 2026"));
+            } else if t["name"] == "hoi4_mio_design_team" {
+                assert!(description.starts_with("Browse only, assigns nothing"));
+            } else if t["name"] == "hoi4_mio_line" {
+                assert!(description.starts_with("Reads one own production line's organisation"));
             } else {
                 assert!(description.starts_with("UNVALIDATED (no live test yet):"));
             }

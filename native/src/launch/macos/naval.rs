@@ -325,7 +325,43 @@ pub(super) fn fleets_tool(process: &dyn Process, args: &Map<String, Value>) -> R
         let (country, _) = economy::own_production(r, image)?;
         fleets(r, image, country)
     })?;
-    Ok(fleets_json(&found, with_ships, filter))
+    let mut out = fleets_json(&found, with_ships, filter);
+    if let Some(max) = super::mgmt::game_dir(process)
+        .ok()
+        .and_then(|dir| std::fs::read_to_string(dir.join("common/defines/00_defines.lua")).ok())
+        .and_then(|text| training_max_experience(&text))
+    {
+        // Exercises raise a crew to this experience and no further: the game ends a naval
+        // exercise when every ship of the task force holds it (pr3b/pp5, 17 Nov 2026).
+        out["training_max_experience"] = json!(max);
+    }
+    Ok(out)
+}
+
+/// The experience share exercises train to: the lower bound of the level after
+/// NMilitary.TRAINING_MAX_LEVEL in UNIT_EXP_LEVELS (1.19.4.1: level 2 = Regular, 0.3).
+pub(super) fn training_max_experience(defines: &str) -> Option<f64> {
+    let level = defines
+        .lines()
+        .map(str::trim_start)
+        .find(|l| l.starts_with("TRAINING_MAX_LEVEL") && l[18..].trim_start().starts_with('='))
+        .and_then(|l| l.split('=').nth(1))
+        .and_then(|v| {
+            v.trim()
+                .split(|c: char| !c.is_ascii_digit())
+                .next()
+                .and_then(|n| n.parse::<usize>().ok())
+        })?;
+    let levels = defines
+        .lines()
+        .map(str::trim_start)
+        .find(|l| l.starts_with("UNIT_EXP_LEVELS"))?;
+    let inner = levels.split('{').nth(1)?.split('}').next()?;
+    let values: Vec<f64> = inner
+        .split(',')
+        .filter_map(|v| v.trim().parse().ok())
+        .collect();
+    values.get(level.checked_sub(1)?).copied()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -570,5 +606,12 @@ mod tests {
         assert_eq!(v["convoys"]["in_use"], 32);
         assert_eq!(v["naval_bases"][0]["level"], 8);
         assert!(v["unavailable"]["escorts"].is_string());
+    }
+
+    #[test]
+    fn the_training_maximum_comes_from_the_defines() {
+        let text = "\tTRAINING_MAX_LEVEL = 2,\n\tDEPLOY_TRAINING_MAX_LEVEL = 1,\n\tUNIT_EXP_LEVELS = { 0.1, 0.3, 0.75, 0.9 },\t-- x\n";
+        assert_eq!(super::training_max_experience(text), Some(0.3));
+        assert_eq!(super::training_max_experience("nothing"), None);
     }
 }

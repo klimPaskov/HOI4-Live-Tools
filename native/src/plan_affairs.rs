@@ -133,8 +133,12 @@
 //!                goal (at most `runs`, default 5). Refusals and the agency state come from memory
 //!                (receipts verified by memory readback, live 14 Nov)
 //!   mio          [{"organisation" ("organization" too),"traits":[trait_index,..],"when"?,"slot"?,
-//!                "design_team"?:true|slot,"policy"?}] per organisation, in order: `design_team` puts it into
-//!                that design-team slot of the politics view once (hoi4_mio_design_team, slot `slot` or 0),
+//!                "line"?,"design_team"?,"policy"?}] per organisation, in order: `line` (an equipment key)
+//!                puts it on the own production line of that equipment family (hoi4_mio_line; the
+//!                politics view's slots only browse, so `design_team` assigns nothing and is settled),
+//!                and every other line that can take an organisation gets the first its roster offers
+//!                (rule mio_lines, manage.off "mio_lines"); an empty `traits` list (or "auto") keeps one
+//!                trait queued (rule mio_traits, monthly listing);
 //!                `policy` attaches that policy once (hoi4_mio_policy), then the traits are queued in list
 //!                order, one per action (hoi4_mio_trait). Trait entries carry no text in the game, so a trait
 //!                is its 0-based trait_index as hoi4_mio_trait list:true numbers it (a numeric string is
@@ -2123,7 +2127,7 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
     let entries = list(plan, "mio");
     if entries.is_empty() || state.skipped(now, "mmio", "x") {
-        return Ok(None);
+        return mio_lines(state, run);
     }
     let mut waits: Vec<String> = Vec::new();
     for entry in entries {
@@ -2186,17 +2190,11 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         if let Some(slot) = entry["slot"].as_u64() {
             args["slot"] = json!(slot);
         }
-        if let Some(slot) = team {
-            args["slot"] = json!(slot);
-            let (ok, why) = state.act(tools, run.lease, "hoi4_mio_design_team", args, "mt")?;
-            if ok {
-                state.done.insert(team_key, now);
-            } else {
-                mio_refused(state, now, "miodt", &org, &why);
-            }
-            return Ok(Some(format!(
-                "mio {org} design team slot {slot}: {ok} {why}"
-            )));
+        if team.is_some() {
+            // The politics view's organisation slots only browse the rosters (pp4, 17 Nov 2026:
+            // the row click assigned nothing): the organisation reaches production through
+            // `line` (mio_lines below), so the design-team flag is settled without input.
+            state.done.insert(team_key, now);
         }
         if want_policy {
             args["policy"] = json!(policy);
@@ -2219,11 +2217,201 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             return Ok(Some(format!("mio {org} trait {index}: {ok} {why}")));
         }
     }
+    if let Some(done) = mio_lines(state, run)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = mio_auto_traits(state, run)? {
+        return Ok(Some(done));
+    }
     if !waits.is_empty() {
         note(state, "mio", waits.join("; "));
         state.skip(now, "mmio", "x", DAY);
     }
     Ok(None)
+}
+
+/// The organisation the plan names for a line's equipment family (`mio[].line`).
+fn planned_line_org(plan: &Value, equipment: &str) -> Option<String> {
+    let family = super::plan_manage::family(equipment);
+    list(plan, "mio").iter().find_map(|e| {
+        let org = e["organisation"]
+            .as_str()
+            .or(e["organization"].as_str())
+            .unwrap_or("")
+            .trim();
+        let line = text(&e["line"]);
+        (!org.is_empty() && !line.is_empty() && super::plan_manage::family(line) == family)
+            .then(|| org.to_string())
+    })
+}
+
+/// Rule (manage.off "mio_lines"): every own production line that can take an organisation has
+/// one. The organisation is the plan's for that equipment (`mio[].line`), else the first the
+/// line's roster offers (a line costs no political power and task capacity is off in 1.19.4.1, so
+/// an organisation on a line is pure gain: its traits apply and it earns funds toward trait
+/// points). Each line is tried once (hoi4_mio_line answers already_attached for a line that has
+/// one); a line no organisation makes is settled; a planned organisation the roster does not
+/// offer falls back to the first row. New lines are looked for weekly.
+fn mio_lines(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    if strings(&plan["manage"], "off")
+        .iter()
+        .any(|r| r == "mio_lines")
+        || state.skipped(now, "miol", "x")
+    {
+        return Ok(None);
+    }
+    let Ok(read) = tools.call("hoi4_production_lines", &json!({"limit": 128})) else {
+        state.skip(now, "miol", "x", DAY);
+        return Ok(None);
+    };
+    for row in list(&read, "lines") {
+        let handle = text(&row["line_handle"]).to_string();
+        let equipment = text(&row["equipment_id"]).to_string();
+        if handle.is_empty() || equipment.is_empty() || !row["entry_index"].is_u64() {
+            continue;
+        }
+        let key = format!("miol:{handle}");
+        if state.done.contains_key(&key) || state.skipped(now, "miol", &handle) {
+            continue;
+        }
+        let org = planned_line_org(plan, &equipment)
+            .filter(|_| !state.done.contains_key(&format!("miolany:{handle}")));
+        let mut args = json!({"line": row["entry_index"], "equipment": equipment});
+        if let Some(o) = &org {
+            args["organization"] = json!(o);
+        }
+        let (ok, why) = state.act(tools, run.lease, "hoi4_mio_line", args, "ml")?;
+        if ok {
+            state.done.insert(key, now);
+        } else {
+            match code(&why) {
+                "line_takes_no_organization" => {
+                    state.done.insert(key, now);
+                }
+                "roster_unreadable" => {
+                    // The tool cannot pick from the line's roster yet: the line is settled and
+                    // named once for the player (the alert stays the game's own reminder).
+                    state.done.insert(key, now);
+                    wake(
+                        state,
+                        plan,
+                        now,
+                        31,
+                        &format!("mio_line:{handle}"),
+                        format!(
+                            "production line {equipment} has no organisation and the tools cannot \
+                             attach one yet: attach it in the game (the line's organisation \
+                             button){}",
+                            org.as_deref()
+                                .map(|o| format!("; the plan names {o}"))
+                                .unwrap_or_default()
+                        ),
+                        json!({"line": row["entry_index"], "equipment": equipment,
+                               "refusal": why}),
+                    );
+                }
+                "organization_not_offered"
+                | "organization_not_allowed"
+                | "organization_unknown"
+                    if org.is_some() =>
+                {
+                    note(
+                        state,
+                        "mio",
+                        format!("{equipment}: {why}; the first offered row next"),
+                    );
+                    state.done.insert(format!("miolany:{handle}"), now);
+                    state.skip(now, "miol", &handle, DAY);
+                }
+                _ => state.skip(now, "miol", &handle, 14 * DAY),
+            }
+        }
+        return Ok(Some(format!(
+            "mio line {equipment} -> {}: {ok} {why}",
+            org.as_deref().unwrap_or("first offered")
+        )));
+    }
+    state.skip(now, "miol", "x", 7 * DAY);
+    Ok(None)
+}
+
+/// Rule (manage.off "mio_traits"): an organisation of the plan whose `traits` list is empty (or
+/// "auto") always has one trait queued, so a trait point is spent the day it arrives (the game
+/// unlocks queued traits in order as points come). Monthly per organisation: the trait tree is
+/// listed (hoi4_mio_trait list:true) and, when no entry carries a queue number, the first
+/// enabled entry (else the first visible one) is queued.
+fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    if strings(&plan["manage"], "off")
+        .iter()
+        .any(|r| r == "mio_traits")
+    {
+        return Ok(None);
+    }
+    for entry in list(plan, "mio") {
+        let org = entry["organisation"]
+            .as_str()
+            .or(entry["organization"].as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let auto = match &entry["traits"] {
+            Value::Array(a) => a.is_empty(),
+            Value::String(s) => s == "auto",
+            Value::Null => true,
+            _ => false,
+        };
+        if org.is_empty() || !auto || state.skipped(now, "mioauto", &org) {
+            continue;
+        }
+        if gate(state, tools, &entry["when"], now).is_some() {
+            continue;
+        }
+        state.skip(now, "mioauto", &org, 30 * DAY);
+        let listing = tools.call(
+            "hoi4_mio_trait",
+            &json!({"organization": org, "list": true,
+                    "request_id": format!("plan-mtl-{}-{}", org.len(), now),
+                    "lease_token": run.lease}),
+        );
+        let Ok(listing) = listing else {
+            return Ok(Some(format!("mio {org} trait list: failed")));
+        };
+        let entries = list(&listing["observed"], "listed").to_vec();
+        let Some(index) = auto_trait_pick(&entries) else {
+            return Ok(Some(format!(
+                "mio {org} traits: one queued already or none open"
+            )));
+        };
+        let (ok, why) = state.act(
+            tools,
+            run.lease,
+            "hoi4_mio_trait",
+            json!({"organization": org, "trait_index": index}),
+            "mq",
+        )?;
+        if !ok {
+            mio_refused(state, now, "mio", &org, &why);
+        }
+        return Ok(Some(format!("mio {org} trait {index} (auto): {ok} {why}")));
+    }
+    Ok(None)
+}
+
+/// The trait to queue from a listing (`index`, `enabled`, `queue`, `visible`): none while any
+/// entry is queued, else the first enabled visible entry, else the first visible one.
+fn auto_trait_pick(entries: &[Value]) -> Option<u64> {
+    if entries.iter().any(|e| !text(&e["queue"]).trim().is_empty()) {
+        return None;
+    }
+    let visible = |e: &&Value| e["visible"].as_bool().unwrap_or(false);
+    entries
+        .iter()
+        .filter(visible)
+        .find(|e| e["enabled"].as_bool().unwrap_or(false))
+        .or_else(|| entries.iter().find(visible))
+        .and_then(|e| e["index"].as_u64())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3106,7 +3294,8 @@ mod tests {
             ),
             ("hoi4_designs", json!({"designs": []})),
         ]);
-        let plan = json!({
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            
             "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0}],
             "production": [{"equipment": "medium_tank_chassis", "factories": 5, "design": "t1"}]});
         let mut state = State::default();
@@ -3153,8 +3342,8 @@ mod tests {
                     "hull_or_chassis": "medium_tank_chassis_2", "production_lines": []}]}),
             ),
         ]);
-        let plan =
-            json!({"production": [{"equipment": "medium_tank_chassis_1", "design": "Panzer IV"}]});
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "production": [{"equipment": "medium_tank_chassis_1", "design": "Panzer IV"}]});
         // a starting line (age unknown): the new tier starts on its own line, the old one stays
         let mut state = State::default();
         let out = step(&mut state, &tools, &plan, "l", START)
@@ -3238,7 +3427,8 @@ mod tests {
             ("hoi4_designs", rifle_designs(&[])),
             ("hoi4_stockpile", rifle_cover(Some(12.0), 0.0)),
         ]);
-        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "production": [{"equipment": "infantry_equipment_1",
             "replace": "infantry_equipment_2", "from": "1936.6.1"}]});
         let at = date_hour("1936.6.1").unwrap();
         let mut state = State::default();
@@ -3326,7 +3516,8 @@ mod tests {
             ("hoi4_designs", rifle_designs(&["0x11"])),
             ("hoi4_stockpile", rifle_cover(Some(90.0), 0.0)),
         ]);
-        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "production": [{"equipment": "infantry_equipment_1",
             "replace": "infantry_equipment_2", "switch_at_cover_days": false}]});
         let mut state = State::default();
         // the new tier already runs on its own line: nothing to add, and the old line stays
@@ -3345,7 +3536,8 @@ mod tests {
             ("hoi4_designs", rifle_designs(&[])),
         ]);
         tools.refuse("hoi4_design_set_production", "design_wrong_type");
-        let plan = json!({"production": [{"equipment": "infantry_equipment_1",
+        let plan = json!({"manage": {"off": ["mio_lines"]},
+            "production": [{"equipment": "infantry_equipment_1",
             "replace": "infantry_equipment_2"}]});
         let mut state = State::default();
         // a young line (12%) switches at once; the game refuses the type
@@ -4109,16 +4301,13 @@ mod tests {
         let plan = json!({"mio": [{"organisation": "ITA_ansaldo_organization",
             "traits": [3, "5", "armor_focus"], "design_team": true, "slot": 1}]});
         let mut state = State::default();
-        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
-        assert_eq!(
-            out.as_deref(),
-            Some("mio ITA_ansaldo_organization design team slot 1: true Verified")
-        );
+        // the politics view's design-team slot only browses: settled without input
         let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("mio ITA_ansaldo_organization trait 3: true Verified")
         );
+        assert!(state.done.contains_key("miodt:ITA_ansaldo_organization"));
         tools.refuse("hoi4_mio_trait", "trait_unavailable");
         let out = step(&mut state, &tools, &plan, "l", START + 2).unwrap();
         assert!(out.unwrap().contains("trait 5: false trait_unavailable"));
@@ -4139,9 +4328,94 @@ mod tests {
         );
         assert!(again.affairs.notes["mio"].contains("armor_focus"));
         let sent = actions(&tools);
-        assert_eq!(sent.len(), 4);
-        assert_eq!(sent[1].1["trait_index"], 3);
-        assert_eq!(sent[1].1["slot"], 1);
+        assert_eq!(sent.len(), 3);
+        assert_eq!(sent[0].1["trait_index"], 3);
+        assert_eq!(sent[0].1["slot"], 1);
+    }
+
+    #[test]
+    fn every_line_gets_an_organisation_the_planned_one_first() {
+        let lines = json!({"lines": [
+            {"entry_index": 0, "equipment_id": "infantry_equipment_1", "line_handle": "0xa"},
+            {"entry_index": 1, "equipment_id": "support_equipment_1", "line_handle": "0xb"},
+            {"entry_index": 2, "equipment_id": "convoy_1", "line_handle": "0xc"}]});
+        let tools = fake(vec![("hoi4_production_lines", lines)]);
+        let plan = json!({"mio": [{"organisation": "GER_mauser_organization",
+            "line": "infantry_equipment_2", "design_team": true, "traits": [1]}]});
+        let mut state = State::default();
+        // the trait list goes first, then the lines one per tick
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio line infantry_equipment_1 -> GER_mauser_organization: true Verified")
+        );
+        let out = step(&mut state, &tools, &plan, "l", START + 2).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio line support_equipment_1 -> first offered: true Verified")
+        );
+        tools.refuse("hoi4_mio_line", "line_takes_no_organization");
+        let out = step(&mut state, &tools, &plan, "l", START + 3).unwrap();
+        assert!(out.unwrap().contains("convoy_1 -> first offered: false"));
+        // every line settled: nothing more this week, the convoy line is not tried again
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 4).unwrap(),
+            None
+        );
+        assert!(state.done.contains_key("miol:0xc"));
+        let sent: Vec<_> = actions(&tools)
+            .into_iter()
+            .filter(|(t, _)| t == "hoi4_mio_line")
+            .collect();
+        assert_eq!(sent.len(), 3);
+        assert_eq!(sent[0].1["organization"], "GER_mauser_organization");
+        assert!(sent[1].1.get("organization").is_none());
+        // no hoi4_mio_design_team is ever sent
+        assert!(actions(&tools)
+            .iter()
+            .all(|(t, _)| t != "hoi4_mio_design_team"));
+    }
+
+    #[test]
+    fn a_planned_organisation_not_offered_falls_back_to_the_first_row() {
+        let lines = json!({"lines": [
+            {"entry_index": 0, "equipment_id": "artillery_equipment_1", "line_handle": "0xa"}]});
+        let tools = fake(vec![("hoi4_production_lines", lines)]);
+        tools.refuse("hoi4_mio_line", "organization_not_offered");
+        let plan = json!({"mio": [{"organisation": "GER_rheinmetall_organization",
+            "line": "artillery_equipment_1", "traits": [0]}],
+            "manage": {"off": ["mio_traits"]}});
+        let mut state = State::default();
+        step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert!(out
+            .unwrap()
+            .contains("-> GER_rheinmetall_organization: false"));
+        tools.accept("hoi4_mio_line");
+        let out = step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("mio line artillery_equipment_1 -> first offered: true Verified")
+        );
+    }
+
+    #[test]
+    fn the_auto_trait_is_the_first_enabled_and_none_while_one_is_queued() {
+        let e = |i: u64, enabled: bool, queue: &str, visible: bool| json!({"index": i, "enabled": enabled, "queue": queue, "visible": visible});
+        assert_eq!(
+            auto_trait_pick(&[e(0, false, "", true), e(1, true, "", true)]),
+            Some(1)
+        );
+        assert_eq!(
+            auto_trait_pick(&[e(0, false, "", false), e(1, false, "", true)]),
+            Some(1)
+        );
+        assert_eq!(
+            auto_trait_pick(&[e(0, true, "1", true), e(1, true, "", true)]),
+            None
+        );
+        assert_eq!(auto_trait_pick(&[]), None);
     }
 
     #[test]

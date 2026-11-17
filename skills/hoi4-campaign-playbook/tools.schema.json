@@ -2813,6 +2813,46 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_general_trait": {
+   "description": "UNVALIDATED (no live test yet): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "general": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "list": {
+      "type": "boolean"
+     },
+     "prefer": {
+      "items": {
+       "maxLength": 128,
+       "type": "string"
+      },
+      "maxItems": 24,
+      "type": "array"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "trait": {
+      "maxLength": 128,
+      "type": "string"
+     }
+    },
+    "required": [
+     "general",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_industry": {
    "description": "Own civilian, military and dockyard factory counts (validated against the top bar total) and political power; consumer goods share, output modifier, trade-civilian usage, exact stability, war support and PP daily gain are null with reasons. Pure read.",
    "inputSchema": {
@@ -2976,7 +3016,7 @@
    "source": "--list-tools"
   },
   "hoi4_mio_design_team": {
-   "description": "UNVALIDATED (no live test yet): put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.",
+   "description": "Browse only, assigns nothing (live pp4, 17 Nov 2026): the politics view's organisation slots open a roster to look at; the game assigns an organisation from a task (a production line: hoi4_mio_line; a technology; a design). Kept for older plans: put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -2998,6 +3038,44 @@
     },
     "required": [
      "organization",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
+  "hoi4_mio_line": {
+   "description": "Reads one own production line's organisation state through the game's own row (live pp5-pp9, 17 Nov 2026): a line that has an organisation answers assigned, already_attached (Verified from the row's has_mio_background / change_manufacturer state); list:true answers attached true/false and opens nothing. Attaching to a line without one is refused roster_unreadable, nothing changed: the roster the line's button opens (only the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry) has no row reader yet, and a blind row click removed an organisation live. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment); roster_unreadable.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "equipment": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "line": {
+      "maximum": 2047,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "list": {
+      "type": "boolean"
+     },
+     "organization": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "line",
+     "equipment",
      "request_id",
      "lease_token"
     ],

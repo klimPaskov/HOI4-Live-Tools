@@ -63,6 +63,7 @@ mod intelligence;
 mod invasion;
 mod journal;
 mod kit;
+mod leader_act;
 #[cfg(test)]
 mod live_designer;
 #[cfg(test)]
@@ -825,6 +826,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(agency_act::tools())
     .chain(operation_act::tools())
     .chain(mio_act::tools())
+    .chain(leader_act::tools())
     .collect()
 }
 
@@ -837,6 +839,7 @@ impl Commands for MacClock {
     // read-only tools (hoi4_armies, hoi4_states, hoi4_events) should list it too.
     fn supports(&self, name: &str) -> bool {
         fleetops::handles(name)
+            || leader_act::TOOLS.contains(&name)
             || faction::handles(name)
             || name == invasion::TOOL
             || matches!(
@@ -945,6 +948,7 @@ impl Commands for MacClock {
                     | "hoi4_mio_design_team"
                     | "hoi4_mio_policy"
                     | "hoi4_mio_trait"
+                    | "hoi4_mio_line"
                     | "hoi4_agency_create"
                     | "hoi4_agency_upgrade"
                     | "hoi4_operative_recruit"
@@ -1896,6 +1900,9 @@ impl MacClock {
         }
         if mio_act::TOOLS.contains(&name) {
             return mio_act::call(name, args, process, &self.keys, guard, authority, actions);
+        }
+        if leader_act::TOOLS.contains(&name) {
+            return leader_act::call(name, args, process, &self.keys, guard, authority, actions);
         }
         if agency_act::TOOLS.contains(&name) {
             return agency_act::call(name, args, process, &self.keys, guard, authority, actions);

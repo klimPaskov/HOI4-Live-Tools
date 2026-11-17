@@ -2278,6 +2278,42 @@ fn navy_step(
             if current != "hold" && state.done.contains_key(&once) {
                 continue;
             }
+            if returning_for_repair(tf, current) {
+                // The game's own repair-and-return (fleet repair priority, NNavy
+                // REPAIR_AND_RETURN_PRIO_*) took a damaged task force off its mission: it sails
+                // home on hold and takes no order until repaired (pp5, 17 Nov 2026: a U-boat
+                // flotilla hit by training accidents went hold at sea at 91% and the training
+                // order "did not change"; in port at 100% it trains again).
+                state.skip(now, "navtf", &tname, 3 * DAY);
+                note(
+                    state,
+                    "navy_wait",
+                    format!(
+                        "{tname} ({fleet}): returning to port for repairs (hold at sea, strength {}%); \
+                         its mission is given once it is in port",
+                        tf["strength_percent"].as_f64().map_or("?".into(), |v| format!("{v:.0}"))
+                    ),
+                );
+                continue;
+            }
+            if mission == "training" {
+                // Exercises raise crews to the training maximum and no further; the game drops
+                // the order of a task force whose every ship holds it (pr3b: 20 orders "did not
+                // change"). Such a task force is left on its current mission with the reason.
+                let (trained, crews) = training_crews(tools, &fleet, &tname);
+                if trained == Some(true) {
+                    state.skip(now, "navtf", &tname, 60 * DAY);
+                    note(
+                        state,
+                        "navy_wait",
+                        format!(
+                            "{tname} ({fleet}): no exercise, every crew is at the training \
+                             maximum ({crews}); checked again in 60 days"
+                        ),
+                    );
+                    continue;
+                }
+            }
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -2289,6 +2325,37 @@ fn navy_step(
                 let prefix = format!("nmis:{tname}:");
                 state.done.retain(|k, _| !k.starts_with(&prefix));
                 state.done.insert(once, now);
+            } else if mission == "training" && code(&why) == "input_readback_failed" {
+                // The game takes the exercise order and drops it at once when the task force
+                // has nothing to train (pr3b, 17 Nov 2026: 20 orders "did not change", each
+                // between short Verified spells). Two causes are known: crews at the training
+                // maximum (checked before ordering) and the game's repair-and-return after
+                // training accidents (pp5). Crews at the maximum rest 60 days; anything else
+                // (ships repairing in port) is tried again in a week. The reason, with the
+                // crews' experience and strength, goes to the notes and the wake.
+                let (trained, crews) = training_crews(tools, &fleet, &tname);
+                let days = if trained == Some(true) { 60 } else { 7 };
+                state.skip(now, "navtf", &tname, days * DAY);
+                let why_text = format!(
+                    "task force {tname} ({fleet}): the game drops the exercise order at once \
+                     ({}); {crews}; next try in {days} days",
+                    if trained == Some(true) {
+                        "crews at the exercise maximum"
+                    } else {
+                        "ships damaged by training accidents under repair, or crews at the maximum"
+                    }
+                );
+                note(state, "navy", why_text.clone());
+                wake(
+                    state,
+                    plan,
+                    now,
+                    json!(31),
+                    &format!("fleet_training:{tname}"),
+                    why_text,
+                    json!({"fleet": fleet, "task_force": tname, "mission": mission,
+                           "refusal": why, "crews": crews}),
+                );
             } else {
                 state.skip(now, "navtf", &tname, 3 * DAY);
                 if matches!(code(&why), "no_assigned_region" | "mission_unavailable") {
@@ -2315,6 +2382,70 @@ fn navy_step(
     }
     note(state, "navy", line);
     Ok(None)
+}
+
+/// The crews of one task force as hoi4_fleets {fleet, ships:true} reads them: ship count, the
+/// lowest and highest experience and the strength, for the reason a training order is dropped.
+/// A task force the game is sending home for repairs: on hold, at sea, below full strength.
+fn returning_for_repair(tf: &Value, current: &str) -> bool {
+    current == "hold"
+        && tf["location"]["kind"].as_str() == Some("sea")
+        && tf["strength_percent"].as_f64().is_some_and(|s| s < 99.5)
+}
+
+/// Whether every ship is at the training maximum (hoi4_fleets training_max_experience, from the
+/// game's defines), with the summary.
+fn training_crews(tools: &dyn Tools, fleet: &str, task_force: &str) -> (Option<bool>, String) {
+    let Ok(read) = tools.call("hoi4_fleets", &json!({"fleet": fleet, "ships": true})) else {
+        return (None, "crews unreadable".into());
+    };
+    let Some(tf) = list(&read, "fleets")
+        .iter()
+        .flat_map(|f| list(f, "task_forces"))
+        .find(|t| same_name(text(&t["task_force"]), task_force))
+    else {
+        return (None, "task force not in the read".into());
+    };
+    let ships = list(tf, "ships");
+    // experience_points run 0..100 (pp5, 17 Nov 2026: crews on exercise rose 0 -> 12 in two
+    // months, start crews read 20 and 30); experience_factor did not move and is not the level.
+    let factor: Vec<f64> = ships
+        .iter()
+        .filter_map(|s| s["experience_points"].as_f64())
+        .map(|p| p / 100.0)
+        .collect();
+    let lo_hi = |v: &[f64]| {
+        let lo = v.iter().copied().fold(f64::INFINITY, f64::min);
+        let hi = v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        if v.is_empty() {
+            "?".to_string()
+        } else {
+            format!("{lo:.3}-{hi:.3}")
+        }
+    };
+    let weakest = ships
+        .iter()
+        .filter_map(|s| {
+            Some(s["strength"].as_f64()? / s["max_strength"].as_f64().filter(|m| *m > 0.0)?)
+        })
+        .fold(None, |a: Option<f64>, v| Some(a.map_or(v, |a| a.min(v))));
+    let max = read["training_max_experience"].as_f64();
+    let trained = max
+        .filter(|_| !factor.is_empty() && factor.len() == ships.len())
+        .map(|m| factor.iter().all(|f| *f >= m - 1e-6));
+    (
+        trained,
+        format!(
+            "{} ships, experience {} (training maximum {}), strength {}% (weakest ship {})",
+            ships.len(),
+            lo_hi(&factor),
+            max.map_or("?".into(), |m| format!("{m}")),
+            tf["strength_percent"]
+                .as_f64()
+                .map_or("?".into(), |v| format!("{v:.0}")),
+            weakest.map_or("?".into(), |w| format!("{:.0}%", w * 100.0))
+        ),
+    )
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3520,6 +3651,70 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 4);
+    }
+
+    #[test]
+    fn a_task_force_whose_crews_hold_the_training_maximum_is_not_sent_to_train() {
+        let read = |xp: f64| {
+            json!({"training_max_experience": 0.3, "fleets": [
+                {"fleet": "Squadra 1", "admiral": "A", "home_port": {"state_id": 2},
+                 "assigned_regions": [{"key": "Central Mediterranean", "name": "Central Mediterranean"}],
+                 "task_forces": [{"task_force": "TF 1", "strength_percent": 100.0,
+                    "mission": {"name": "hold"},
+                    "ships": [{"experience_points": 30.0}, {"experience_points": xp}]}]}]})
+        };
+        let tools = fake(vec![("hoi4_fleets", read(30.0))]);
+        let plan = json!({"navy": {"posture": "coastal", "fleets": [{"fleet": "Squadra 1",
+            "missions": [{"id": "drill", "mission": "training",
+                          "regions": ["Central Mediterranean"]}]}]}});
+        let mut state = State::default();
+        // every crew at Regular (30 of 100 = 0.3): no order, the reason in the notes
+        assert_eq!(
+            navy_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        assert!(
+            state.military.notes["navy_wait"].contains(
+                "training maximum (2 ships, experience 0.300-0.300 (training maximum 0.3)"
+            ),
+            "{}",
+            state.military.notes["navy_wait"]
+        );
+        // a crew below it: the task force trains (after the 60-day rest)
+        tools.reply("hoi4_fleets", read(10.0));
+        let out = navy_step(&mut state, &tools, &plan, "l", START + 61 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("navy: TF 1 (Squadra 1) hold -> training: true Verified")
+        );
+    }
+
+    #[test]
+    fn a_task_force_the_game_sends_home_for_repair_gets_no_order_until_in_port() {
+        let read = |kind: &str, strength: f64| {
+            json!({"fleets": [
+                {"fleet": "Squadra 1", "admiral": "A", "home_port": {"state_id": 2},
+                 "assigned_regions": [{"key": "Central Mediterranean", "name": "Central Mediterranean"}],
+                 "task_forces": [{"task_force": "TF 1", "strength_percent": strength,
+                    "location": {"kind": kind}, "mission": {"name": "hold"}}]}]})
+        };
+        let tools = fake(vec![("hoi4_fleets", read("sea", 91.4))]);
+        let plan = json!({"navy": {"posture": "coastal", "fleets": [{"fleet": "Squadra 1",
+            "missions": [{"id": "p", "mission": "patrol", "regions": ["Central Mediterranean"]}]}]}});
+        let mut state = State::default();
+        assert_eq!(
+            navy_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(actions(&tools).is_empty());
+        assert!(state.military.notes["navy_wait"].contains("returning to port for repairs"));
+        tools.reply("hoi4_fleets", read("land_or_port", 100.0));
+        let out = navy_step(&mut state, &tools, &plan, "l", START + 4 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("navy: TF 1 (Squadra 1) hold -> patrol: true Verified")
+        );
     }
 
     #[test]

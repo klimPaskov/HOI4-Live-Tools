@@ -65,6 +65,12 @@
 //!                 the set changed (a line added or gone) a round sends hoi4_production_priority
 //!                 {line, equipment, to: top} for each, last first, one per tick, so the first
 //!                 key ends on top. Done-memory `po:<handles>` (the round), `po:<handles>:<n>`
+//!   commanders [{"general","traits":[trait keys or names]}], manage.cp_trait_prefer [trait keys
+//!                 or names], manage.command_power_max (rule cp_spend, manage.off "cp_spend"):
+//!                 command power near its cap buys assignable unit-leader traits
+//!                 (hoi4_general_trait), the plan's picks first, then the first trait the tree
+//!                 offers the generals leading the most divisions. Done-memory
+//!                 `cps:<general>:<trait>`
 use super::{item_id, list, strings, text, GameHour, State, Tools, DAY, RECEIPT_TOOLS};
 use crate::error::Result;
 use crate::plan_predicate::Truth;
@@ -79,7 +85,20 @@ pub(super) struct Memory {
     /// army -> the highest organisation_mean seen (organisation is absolute, not a percent: the
     /// fall-back compares against the army's own best)
     org_peak: std::collections::HashMap<String, f64>,
+    /// Wake alarms raised since the last run result (cp_spend).
+    alarms: Vec<Value>,
+    /// cp_spend: why each general / general:trait could not be given a trait last time.
+    cp_why: BTreeMap<String, String>,
 }
+
+/// Assigns a unit-leader trait for command power (the trait tree window).
+pub(super) const TRAIT_TOOL: &str = "hoi4_general_trait";
+/// NDefines.NCountry.BASE_MAX_COMMAND_POWER of 1.19.4, used only when neither a tooltip read
+/// ("x / y") nor `manage.command_power_max` gives the cap (a mod or a raised cap sets the latter).
+const BASE_MAX_COMMAND_POWER: f64 = 80.0;
+/// NDefines.NMilitary.UNIT_LEADER_ASSIGN_TRAIT_COST of 1.19.4: below it nothing is tried (the
+/// tool reads the install's own value and refuses insufficient_command_power).
+const TRAIT_COST: f64 = 15.0;
 
 /// The fallback-line order (battle-plan toolbar).
 pub(super) const FALLBACK_TOOL: &str = "hoi4_army_fallback";
@@ -119,6 +138,28 @@ fn note(state: &mut State, key: &str, line: impl Into<String>) {
     state.seams.notes.insert(key.to_string(), line.into());
 }
 
+/// The wake alarms raised since the last call (the run result's `alarms`).
+pub(super) fn take_alarms(state: &mut State) -> Vec<Value> {
+    std::mem::take(&mut state.seams.alarms)
+}
+
+/// Raise a `wake_player` alarm once per `reason` per `manage.wake_repeat_days` (7).
+fn wake(state: &mut State, plan: &Value, now: GameHour, rule: &str, reason: &str, message: String) {
+    if state.skipped(now, "wake", reason) {
+        return;
+    }
+    let days = plan["manage"]["wake_repeat_days"]
+        .as_i64()
+        .filter(|d| *d > 0)
+        .unwrap_or(7);
+    state.skip(now, "wake", reason, days * DAY);
+    state.seams.alarms.retain(|a| a["reason"] != json!(reason));
+    state.seams.alarms.push(
+        json!({"code": "wake_player", "rule": rule, "reason": reason,
+        "message": message, "evidence": {}}),
+    );
+}
+
 /// The seam steps in order, at most one action.
 pub(super) fn step(
     state: &mut State,
@@ -136,7 +177,240 @@ pub(super) fn step(
     if let Some(done) = exercise_step(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
+    if let Some(done) = exercise_default_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = cp_spend_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
     production_order_step(state, tools, plan, lease, now)
+}
+
+/// The cap of an "x / y" command power text (the first number after a slash that follows a
+/// number); pure.
+pub(super) fn slash_max(text: &str) -> Option<f64> {
+    let number = |s: &str| -> Option<f64> {
+        let t: String = s
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        t.trim_end_matches('.').parse().ok()
+    };
+    for (at, _) in text.match_indices('/') {
+        let before = text[..at].trim_end();
+        let tail: String = before
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        if tail.is_empty() {
+            continue;
+        }
+        if let Some(max) = number(text[at + 1..].trim_start()) {
+            return Some(max);
+        }
+    }
+    None
+}
+
+/// Whether command power is high enough to spend: within 20 of the cap, or at 80% of it, and
+/// at least one trait's cost; pure.
+pub(super) fn cp_should_spend(cp: f64, max: f64) -> bool {
+    cp >= TRAIT_COST && (cp >= max - 20.0 || cp >= 0.8 * max)
+}
+
+/// Generals by the divisions of the armies they lead, most first (ties by name); pure.
+pub(super) fn generals_by_divisions(armies: &[Value]) -> Vec<String> {
+    let mut led: BTreeMap<String, u64> = BTreeMap::new();
+    for a in armies {
+        let general = text(&a["commander"]);
+        if general.is_empty() {
+            continue;
+        }
+        *led.entry(general.to_string()).or_default() += a["division_count"].as_u64().unwrap_or(0);
+    }
+    let mut out: Vec<(String, u64)> = led.into_iter().collect();
+    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    out.into_iter().map(|(g, _)| g).collect()
+}
+
+/// The command power cap: a tooltip read "x / y", else manage.command_power_max, else the
+/// 1.19.4 define.
+fn command_power_max(tools: &dyn Tools, plan: &Value) -> f64 {
+    tools
+        .call("hoi4_tooltip", &json!({"target": "command_power"}))
+        .ok()
+        .and_then(|r| slash_max(&r.to_string()))
+        .filter(|m| *m > 0.0)
+        .or_else(|| {
+            plan["manage"]["command_power_max"]
+                .as_f64()
+                .filter(|m| *m > 0.0)
+        })
+        .unwrap_or(BASE_MAX_COMMAND_POWER)
+}
+
+/// Refusals that mean "this general (or this trait) cannot take a trait now": the pick waits a
+/// month and the next one is tried next week.
+const CP_PICK_REFUSALS: &[&str] = &[
+    "unknown_commander",
+    "general_not_listed",
+    "wrong_leader",
+    "trait_unknown",
+    "trait_not_assignable",
+    "trait_not_offered",
+    "trait_unavailable",
+    "trait_not_visible",
+    "no_free_trait_slot",
+    "no_enabled_trait",
+];
+
+/// Rule (manage.off "cp_spend"): command power is not left at its cap. Once a week command
+/// power is read (hoi4_country_status fields.command_power.value; the cap from hoi4_tooltip
+/// target command_power when it reads "x / y", else manage.command_power_max, else the 1.19.4
+/// BASE_MAX_COMMAND_POWER 80); when it is within 20 of the cap or at 80% of it, one assignable
+/// trait is bought (hoi4_general_trait): first the plan's `commanders` [{general, traits}] in
+/// order (each general:trait once, done-memory `cps:<general>:<trait>`), then the first trait
+/// the tree lets the general pick for the generals leading the most divisions (hoi4_armies),
+/// the earliest of `manage.cp_trait_prefer` (trait keys or names) first. One trait a week. A
+/// pick the game refuses waits 30 days (its reason kept for the wake); short command power waits
+/// until it has grown. When nothing can be bought (no general, no reading, every pick refused)
+/// the rule notes why and wakes the player.
+fn cp_spend_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let key = "cp_spend";
+    if strings(&plan["manage"], "off").iter().any(|r| r == key) || state.skipped(now, "cps", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "cps", "x", 7 * DAY);
+    let Some(cp) = tools
+        .call("hoi4_country_status", &json!({}))
+        .ok()
+        .and_then(|r| r["fields"]["command_power"]["value"].as_f64())
+    else {
+        note(
+            state,
+            key,
+            "command power unreadable (hoi4_country_status gave no fields.command_power.value)",
+        );
+        return Ok(None);
+    };
+    let max = command_power_max(tools, plan);
+    if !cp_should_spend(cp, max) {
+        note(
+            state,
+            key,
+            format!("command power {cp:.0} of {max:.0}: kept"),
+        );
+        return Ok(None);
+    }
+    // the plan's own picks first, in order
+    let mut picks: Vec<(String, Option<String>)> = Vec::new();
+    for c in list(plan, "commanders") {
+        let general = text(&c["general"]);
+        if general.is_empty() {
+            continue;
+        }
+        for t in strings(c, "traits") {
+            if !state.done.contains_key(&format!("cps:{general}:{t}")) {
+                picks.push((general.to_string(), Some(t)));
+            }
+        }
+    }
+    // then the first enabled trait of the generals leading the most divisions
+    let armies = tools.call("hoi4_armies", &json!({"threat": false}));
+    let armies_read = armies.is_ok();
+    if let Ok(read) = &armies {
+        for general in generals_by_divisions(list(read, "armies")) {
+            picks.push((general, None));
+        }
+    }
+    let prefer = strings(&plan["manage"], "cp_trait_prefer");
+    let mut held: Vec<String> = Vec::new();
+    for (general, trait_name) in picks {
+        let pick = match &trait_name {
+            Some(t) => format!("{general}:{t}"),
+            None => general.clone(),
+        };
+        if state.skipped(now, "cpp", &pick) {
+            let why = state.seams.cp_why.get(&pick).cloned().unwrap_or_default();
+            held.push(format!("{pick}: {why}"));
+            continue;
+        }
+        let mut args = json!({"general": general});
+        match &trait_name {
+            Some(t) => args["trait"] = json!(t),
+            None if !prefer.is_empty() => args["prefer"] = json!(prefer),
+            None => {}
+        }
+        if !built(TRAIT_TOOL) {
+            note(
+                state,
+                key,
+                unbuilt(TRAIT_TOOL, &args, "command_power.traits"),
+            );
+            return Ok(None);
+        }
+        let (ok, why) = state.act(tools, lease, TRAIT_TOOL, args, "cp")?;
+        let code = super::plan_military::code(&why).to_string();
+        if ok {
+            if let Some(t) = &trait_name {
+                state.done.insert(format!("cps:{general}:{t}"), now);
+            }
+            state.seams.cp_why.remove(&pick);
+        } else if code == "trait_owned" {
+            if let Some(t) = &trait_name {
+                state.done.insert(format!("cps:{general}:{t}"), now);
+            }
+            // the next pick next tick, not next week
+            state.skip(now, "cps", "x", DAY);
+        } else if code == "insufficient_command_power" {
+            let days = super::plan_military::cp_wait_days(&why);
+            state.skip(now, "cps", "x", days * DAY);
+        } else if code == "window_not_found" {
+            // The tool cannot reach the trait tree on this build (pp6, 17 Nov 2026: the Leader
+            // Details window opened from the commander list's Details button is not in the
+            // manager slots or the pop-up list): no input is spent on it again this year.
+            state.skip(now, "cps", "x", 365 * DAY);
+            state.seams.cp_why.insert(pick.clone(), why.clone());
+        } else {
+            if CP_PICK_REFUSALS.contains(&code.as_str()) {
+                // another pick next tick
+                state.skip(now, "cps", "x", DAY);
+            }
+            state.skip(now, "cpp", &pick, 30 * DAY);
+            state.seams.cp_why.insert(pick.clone(), why.clone());
+        }
+        let line = format!("command power {cp:.0} of {max:.0}: trait for {pick}: {ok} {why}");
+        note(state, key, line.clone());
+        return Ok(Some(line));
+    }
+    let why = if !armies_read && held.is_empty() {
+        "no general to give a trait: no plan commanders and hoi4_armies unreadable".to_string()
+    } else if held.is_empty() {
+        "no general to give a trait: no plan commanders and no army has a commander".to_string()
+    } else {
+        format!("no enabled trait for any general: {}", held.join("; "))
+    };
+    note(
+        state,
+        key,
+        format!("command power {cp:.0} of {max:.0} unspent: {why}"),
+    );
+    wake(
+        state,
+        plan,
+        now,
+        key,
+        "cp_spend:nothing_to_buy",
+        format!("Command power is {cp:.0} of {max:.0} and nothing can be bought with it ({why}). Give a general a trait by hand (hoi4_general_trait list:true shows what each general can pick), or name traits in the plan's commanders list"),
+    );
+    Ok(None)
 }
 
 /// The lines that go on top, in order: for each `production_priority` key, the own lines whose
@@ -471,6 +745,142 @@ fn exercise_step(
     Ok(None)
 }
 
+/// The mean equipment fill of the fielded divisions (hoi4_supply equipment_fill_min).
+fn mean_fill(read: &Value) -> Option<f64> {
+    let fills: Vec<f64> = list(read, "divisions")
+        .iter()
+        .filter_map(|d| d["equipment_fill_min"].as_f64())
+        .collect();
+    (!fills.is_empty()).then(|| fills.iter().sum::<f64>() / fills.len() as f64)
+}
+
+/// Rule (manage.off "exercises"; a plan with its own xp_budget.army "exercise" entries keeps
+/// them instead): at peace the armies keep exercising, each stopping by itself at the training
+/// maximum, so army experience accrues for doctrines, templates and designs and new divisions
+/// reach the maximum before a war (pr3b, 17 Nov 2026: no exercise in two years, doctrines
+/// waited 412 days on experience). Exercises wear equipment, so they start only while the
+/// fielded divisions hold their equipment (mean fill >= manage.exercise_fill, default 0.9).
+/// Every 14 game days the armies not exercising are started together; a set of armies the game
+/// refuses (all at the maximum) waits 60 days. At war the rule stops the armies it started.
+fn exercise_default_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let planned = list(&plan["xp_budget"], "army")
+        .iter()
+        .any(|e| text(&e["purpose"]) == "exercise");
+    if planned
+        || strings(&plan["manage"], "off")
+            .iter()
+            .any(|r| r == "exercises")
+        || state.skipped(now, "exd", "x")
+    {
+        return Ok(None);
+    }
+    let Some(at_war) = tools
+        .call("hoi4_wars", &json!({}))
+        .ok()
+        .and_then(|r| r["wars"]["at_war"].as_bool())
+    else {
+        state.skip(now, "exd", "x", DAY);
+        return Ok(None);
+    };
+    let armies = match tools.call("hoi4_armies", &json!({"threat": false})) {
+        Ok(r) => list(&r, "armies").to_vec(),
+        Err(_) => {
+            state.skip(now, "exd", "x", DAY);
+            return Ok(None);
+        }
+    };
+    let exercising = |want: bool| -> Vec<String> {
+        armies
+            .iter()
+            .filter(|a| a["exercising"].as_bool() == Some(want))
+            .filter(|a| a["division_count"].as_u64().unwrap_or(1) > 0)
+            .map(|a| text(&a["army"]).to_string())
+            .filter(|a| !a.is_empty())
+            .collect()
+    };
+    if at_war {
+        let running = exercising(true);
+        if running.is_empty() || !state.done.contains_key("exd:started") {
+            state.skip(now, "exd", "x", 7 * DAY);
+            return Ok(None);
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            EXERCISE_TOOL,
+            json!({"armies": running, "on": false}),
+            "xd",
+        )?;
+        if ok {
+            state.done.remove("exd:started");
+        } else {
+            state.skip(now, "exd", "x", 2 * DAY);
+        }
+        note(
+            state,
+            "exercises",
+            format!("at war: exercises stopped: {ok} {why}"),
+        );
+        return Ok(Some(format!("exercises stopped at war: {ok} {why}")));
+    }
+    state.skip(now, "exd", "x", 14 * DAY);
+    let idle = exercising(false);
+    if idle.is_empty() {
+        note(state, "exercises", "every army exercises or none can");
+        return Ok(None);
+    }
+    let floor = plan["manage"]["exercise_fill"].as_f64().unwrap_or(0.9);
+    match super::plan_manage::supply(state, tools, now)
+        .as_ref()
+        .and_then(mean_fill)
+    {
+        Some(fill) if fill < floor => {
+            note(
+                state,
+                "exercises",
+                format!("waits: divisions' mean equipment fill {fill:.2} below {floor:.2} (exercises wear equipment)"),
+            );
+            return Ok(None);
+        }
+        None => {
+            note(state, "exercises", "waits: equipment fill unreadable");
+            return Ok(None);
+        }
+        _ => {}
+    }
+    let set = format!("exdset:{}", idle.join("|"));
+    if state.skipped(now, "exdset", &set) {
+        return Ok(None);
+    }
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        EXERCISE_TOOL,
+        json!({"armies": idle, "on": true, "stop_at_max": true}),
+        "xd",
+    )?;
+    if ok {
+        state.done.insert("exd:started".into(), now);
+    } else {
+        state.skip(now, "exdset", &set, 60 * DAY);
+    }
+    note(
+        state,
+        "exercises",
+        format!("start exercises ({} armies): {ok} {why}", idle.len()),
+    );
+    Ok(Some(format!(
+        "exercises start {} armies: {ok} {why}",
+        idle.len()
+    )))
+}
+
 fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour) -> Truth {
     match when {
         Value::Null => Truth::True,
@@ -751,6 +1161,8 @@ mod tests {
     struct Fake {
         calls: RefCell<Vec<(String, Value)>>,
         replies: HashMap<&'static str, Value>,
+        /// tool -> (refusal code, message) for its orders
+        refusing: HashMap<&'static str, (&'static str, &'static str)>,
     }
     impl Tools for Fake {
         fn call(&self, name: &str, args: &Value) -> Result<Value> {
@@ -758,6 +1170,9 @@ mod tests {
                 .borrow_mut()
                 .push((name.to_string(), args.clone()));
             if args.get("request_id").is_some() {
+                if let Some((code, message)) = self.refusing.get(name) {
+                    return Err(Error::new(code, *message));
+                }
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
             self.replies
@@ -779,6 +1194,7 @@ mod tests {
             ]
             .into_iter()
             .collect(),
+            refusing: HashMap::new(),
         }
     }
     fn actions(f: &Fake) -> Vec<(String, Value)> {
@@ -980,6 +1396,54 @@ mod tests {
     }
 
     #[test]
+    fn idle_armies_exercise_by_default_at_peace_while_the_equipment_holds() {
+        let mut f = game();
+        f.replies
+            .insert("hoi4_wars", json!({"wars": {"at_war": false}}));
+        f.replies.insert(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Armee Nord", "exercising": false, "division_count": 12},
+                {"army": "Armee Sued", "exercising": true, "division_count": 10},
+                {"army": "Leer", "exercising": false, "division_count": 0}]}),
+        );
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"divisions": [{"equipment_fill_min": 0.6}, {"equipment_fill_min": 0.8}]}),
+        );
+        let plan = json!({});
+        let mut state = State::default();
+        // fill 0.7 < 0.9: waits, no input
+        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert!(state.seams.notes["exercises"].contains("below 0.90"));
+        f.replies.insert(
+            "hoi4_supply",
+            json!({"divisions": [{"equipment_fill_min": 1.0}, {"equipment_fill_min": 0.95}]}),
+        );
+        let out = step(&mut state, &f, &plan, "l", START + 15 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("exercises start 1 armies: true"), "{out}");
+        let sent = actions(&f);
+        assert_eq!(sent[0].1["armies"], json!(["Armee Nord"]));
+        assert_eq!(sent[0].1["stop_at_max"], json!(true));
+        // a war: the armies still exercising are stopped once
+        f.replies
+            .insert("hoi4_wars", json!({"wars": {"at_war": true}}));
+        let out = step(&mut state, &f, &plan, "l", START + 30 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("exercises stopped at war: true"), "{out}");
+        assert_eq!(actions(&f)[1].1["on"], json!(false));
+        // switched off by the plan
+        let off = json!({"manage": {"off": ["exercises"]}});
+        let mut state = State::default();
+        f.replies
+            .insert("hoi4_wars", json!({"wars": {"at_war": false}}));
+        assert_eq!(step(&mut state, &f, &off, "l", START).unwrap(), None);
+    }
+
+    #[test]
     fn exercises_start_at_peace_for_the_named_armies_and_stop_when_a_war_starts() {
         let mut f = game();
         f.replies.insert(
@@ -1149,5 +1613,150 @@ mod tests {
             .insert("west_guard".into(), "Armia Poznan".into());
         step(&mut state, &f, &plan, "l", START).unwrap();
         assert!(state.seams.notes["defense_lines:v"].contains("for Armia Poznan"));
+    }
+
+    fn cp_game(cp: f64) -> Fake {
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_country_status",
+            json!({"fields": {"command_power": {"value": cp}}}),
+        );
+        f.replies.insert(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Armee 1", "commander": "Erwin Rommel", "division_count": 10},
+                {"army": "Armee 2", "commander": "Gerd von Rundstedt", "division_count": 24},
+                {"army": "Armee 3", "commander": "Gerd von Rundstedt", "division_count": 2},
+                {"army": "Armee 4", "division_count": 30}]}),
+        );
+        f
+    }
+
+    #[test]
+    fn the_trait_tool_is_built() {
+        assert!(built(TRAIT_TOOL));
+    }
+
+    #[test]
+    fn command_power_is_spent_near_its_cap_and_the_cap_comes_from_a_tooltip() {
+        assert!(cp_should_spend(60.0, 80.0));
+        assert!(cp_should_spend(64.0, 80.0));
+        assert!(!cp_should_spend(59.0, 80.0));
+        assert!(cp_should_spend(85.0, 100.0));
+        assert!(!cp_should_spend(10.0, 20.0), "below one trait's cost");
+        assert_eq!(slash_max("Command Power: 63.5 / 100"), Some(100.0));
+        assert_eq!(slash_max("{\"text\":\"a/b 5 / 120.\"}"), Some(120.0));
+        assert_eq!(slash_max("no cap here"), None);
+        assert_eq!(slash_max("and/or"), None);
+        let armies = list(&cp_game(0.0).replies["hoi4_armies"], "armies").to_vec();
+        assert_eq!(
+            generals_by_divisions(&armies),
+            ["Gerd von Rundstedt", "Erwin Rommel"]
+        );
+    }
+
+    #[test]
+    fn command_power_buys_the_plans_traits_first_then_for_the_largest_command() {
+        let f = cp_game(70.0);
+        let plan = json!({"commanders": [{"general": "Erwin Rommel", "traits": ["panzer_expert"]}],
+            "manage": {"cp_trait_prefer": ["logistics_wizard"]}});
+        let mut state = State::default();
+        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        assert!(
+            out.contains("trait for Erwin Rommel:panzer_expert: true"),
+            "{out}"
+        );
+        let sent = actions(&f);
+        assert_eq!(sent[0].0, TRAIT_TOOL);
+        assert_eq!(sent[0].1["general"], json!("Erwin Rommel"));
+        assert_eq!(sent[0].1["trait"], json!("panzer_expert"));
+        assert!(state.done.contains_key("cps:Erwin Rommel:panzer_expert"));
+        // one trait a week
+        assert_eq!(step(&mut state, &f, &plan, "l", START + DAY).unwrap(), None);
+        assert_eq!(actions(&f).len(), 1);
+        // the plan's list is done: the general leading the most divisions, preferences passed on
+        let out = step(&mut state, &f, &plan, "l", START + 8 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("trait for Gerd von Rundstedt: true"), "{out}");
+        let sent = actions(&f);
+        assert_eq!(sent[1].1["general"], json!("Gerd von Rundstedt"));
+        assert_eq!(sent[1].1["prefer"], json!(["logistics_wizard"]));
+        assert!(sent[1].1.get("trait").is_none());
+    }
+
+    #[test]
+    fn command_power_below_the_threshold_is_kept_and_the_rule_can_be_switched_off() {
+        let mut f = cp_game(50.0);
+        f.replies
+            .insert("hoi4_tooltip", json!({"text": "Command Power 50 / 120"}));
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &f, &json!({}), "l", START).unwrap(), None);
+        assert!(state.seams.notes["cp_spend"].contains("50 of 120: kept"));
+        // the plan's cap without a tooltip
+        let f = cp_game(50.0);
+        let plan = json!({"manage": {"command_power_max": 60}});
+        let mut state = State::default();
+        assert!(step(&mut state, &f, &plan, "l", START).unwrap().is_some());
+        assert_eq!(actions(&f).len(), 1);
+        // switched off
+        let f = cp_game(80.0);
+        let off = json!({"manage": {"off": ["cp_spend"]}});
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &f, &off, "l", START).unwrap(), None);
+        assert!(actions(&f).is_empty());
+        assert!(!state.seams.notes.contains_key("cp_spend"));
+    }
+
+    #[test]
+    fn nothing_to_buy_wakes_the_player_and_short_power_waits_until_it_has_grown() {
+        let mut f = cp_game(75.0);
+        f.refusing.insert(
+            TRAIT_TOOL,
+            ("no_enabled_trait", "No assignable trait can be picked now"),
+        );
+        let plan = json!({});
+        let mut state = State::default();
+        // both generals are refused, a day apart
+        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        assert!(
+            out.contains("Gerd von Rundstedt: false no_enabled_trait"),
+            "{out}"
+        );
+        let out = step(&mut state, &f, &plan, "l", START + DAY + 1)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("Erwin Rommel: false"), "{out}");
+        assert!(take_alarms(&mut state).is_empty());
+        // then nothing is left to try: a note and one wake naming why
+        assert_eq!(
+            step(&mut state, &f, &plan, "l", START + 2 * DAY + 2).unwrap(),
+            None
+        );
+        assert!(state.seams.notes["cp_spend"].contains("no enabled trait for any general"));
+        let alarms = take_alarms(&mut state);
+        assert_eq!(alarms.len(), 1);
+        assert_eq!(alarms[0]["reason"], json!("cp_spend:nothing_to_buy"));
+        assert_eq!(actions(&f).len(), 2);
+
+        // short command power: the rule waits until it has grown (15 - 4 at 0.4 a day)
+        let mut f = cp_game(75.0);
+        f.refusing.insert(
+            TRAIT_TOOL,
+            (
+                "insufficient_command_power",
+                "A unit-leader trait costs 15 command power and 4 are held",
+            ),
+        );
+        let mut state = State::default();
+        assert!(step(&mut state, &f, &plan, "l", START).unwrap().is_some());
+        assert_eq!(
+            step(&mut state, &f, &plan, "l", START + 20 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&f).len(), 1);
+        assert!(step(&mut state, &f, &plan, "l", START + 29 * DAY)
+            .unwrap()
+            .is_some());
     }
 }

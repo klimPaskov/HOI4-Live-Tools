@@ -112,9 +112,12 @@ infantry battalions, not mountaineers, marines or other special forces.
 
 - Pools: army, navy and air XP each cap at **500**; XP above the cap is lost, so plan spends before a pool fills.
 - Sources: combat (the main one); training divisions give at most 0.08 army XP a day and training ships at most 1
-  navy XP a day; army exercises in peace (`hoi4_army_exercise`; the plan form is an `xp_budget.army` entry with
-  purpose `exercise`, which the executor starts at peace and stops when a war starts; see the exercise costs in
-  `templates-equipment-production.md` AR15); focus and decision rewards (`army_experience = N`, read with
+  navy XP a day (a crew trains up to Regular, NMilitary TRAINING_MAX_LEVEL, 30 of 100 experience, and then the game
+  ends the exercise by itself; training accidents damage ships and the game's repair-and-return takes a damaged task
+  force home, so the executor waits for it in port and does not order exercises to crews at the maximum); army exercises in peace (`hoi4_army_exercise`; the plan form is an `xp_budget.army` entry with
+  purpose `exercise`, which the executor starts at peace and stops when a war starts; without such an entry the
+  executor's default rule exercises every idle army at peace while its equipment fill holds `manage.exercise_fill`,
+  0.9 by default; see the exercise costs in `templates-equipment-production.md` AR15); focus and decision rewards (`army_experience = N`, read with
   `facts.py focus <id>`); chiefs and high command with experience-gain traits (`politics-diplomacy-espionage.md` §4).
   Read the start pools with `hoi4_doctrines` at the first reconcile.
 - Costs: grand doctrine 100; subdoctrines 100 (most), 60 or 50 (§2); template edits 5 per battalion, 10 per support
@@ -280,6 +283,7 @@ nation lacks (e.g. tungsten, chromium for China): it crawls at the 20% floor.
 - A size-up costs 700 + 100 x (size + 1)^1.8 funds and gives 1 trait point. Funds: lines with the MIO as manufacturer (0.1 per IC a day, cap 100 a day) and tech completions with its design team.
 - Traits: production first (efficiency cap, then cost or output, growth last), then the role stat (soft attack in single-player; hard attack and piercing against tanks). Generic infantry MIO: `mass_rifle_production`/`bolt_action` for cheap production or `semi_auto` for quality (exclusive).
 - Assign only MIOs that match active techs and variants.
+- How an organisation is assigned (1.19.4.1): from a task, not from the politics view (its organisation slots only browse). A production line's organisation is its logo button (a line without one shows the attach button); the roster it opens lists "Produce without a Military Industrial Organization" first and then only the organisations that make that equipment. A line costs no political power and task capacity is off, so every line can carry one. Start lines usually carry one already (all 1936 German lines do); a line added later needs one attached, and the executor names such a line in a wake until the tools can pick from that roster (gap mio.line_manufacturer).
 
 ### 6.2 Variants and upgrades
 

@@ -125,7 +125,7 @@ const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", 0x36ba
 /// The army panel's commander portrait ("Click to assign") while an army is
 /// selected, and the commander list's visible row band; portraits are drawn
 /// 90 px tall from the bottom of their texture rectangle.
-const COMMANDER_SLOT: (f64, f64) = (33.0, 160.0);
+pub(super) const COMMANDER_SLOT: (f64, f64) = (33.0, 160.0);
 const LEADER_ROWS: (i32, i32) = (140, 625);
 const PORTRAIT_DRAWN: i32 = 90;
 /// Command power for promoting a general to field marshal (00_defines.lua, 1.19.4.1).
@@ -2053,7 +2053,7 @@ pub(super) fn orders(r: &Reader<'_>, image: u64, army: &str) -> Result<usize> {
     Ok(r.array_header(group + ui(r)?.group_orders)?.2)
 }
 /// Widget `name` in the card of army `army` (the card's portrait window).
-fn card_widget(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<u64> {
+pub(super) fn card_widget(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<u64> {
     let u = ui(r)?;
     let group = group_named(r, image, army)?;
     let handle = r.u64(group + u.group_handle)?;
@@ -3720,7 +3720,7 @@ pub(super) fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 /// Visible band (top, bottom) of the commander list's rows in game pixels:
 /// from the bottom of the sort header to the top of the Unassign button. The
 /// window sits at different heights depending on the panels open beside it.
-fn leader_band(r: &Reader<'_>, image: u64) -> (i32, i32) {
+pub(super) fn leader_band(r: &Reader<'_>, image: u64) -> (i32, i32) {
     let found = (|| -> Result<(i32, i32)> {
         let root = leader_root(r, image)?;
         let header = gui_tree::child(r, image, root, "sort_name")?
