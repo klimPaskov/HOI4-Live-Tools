@@ -3471,7 +3471,7 @@
           "maximum": 100,
           "default": 0.6,
           "x-rule": "air_superiority",
-          "description": "enemy air superiority over a front region above which one more fighter wing goes there per action (rule 27, plan_military.rs); a fraction or a percent. Reported unknown today: no tool maps air superiority by region"
+          "description": "enemy air superiority over a front region above which one more fighter wing goes there per action (rule 27, plan_military.rs); a fraction or a percent. Read from hoi4_air_regions when it has the figure; otherwise at war from hoi4_air_region_probe's enemy_air_superiority_estimate over up to three front regions (fighters times the efficiency shown, each side; an estimate)"
         },
         "air_front_regions": {
           "type": "array",
