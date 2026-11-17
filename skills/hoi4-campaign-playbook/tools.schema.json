@@ -160,11 +160,15 @@
    "source": "--list-tools"
   },
   "hoi4_air_region_probe": {
-   "description": "What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.",
+   "description": "What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again; `region` (id or display name) instead of `state_id` picks a state inside it from the game files. Adds enemy_air_superiority_estimate: the enemy's share of the active fighters weighted by each side's efficiency shown (theirs / (ours + theirs)), null with no fighter on either side; an estimate from what the window shows, not the game's own superiority figure (not located in memory). Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "lease_token": {
+      "type": "string"
+     },
+     "region": {
+      "maxLength": 96,
       "type": "string"
      },
      "state_id": {
@@ -174,7 +178,6 @@
      }
     },
     "required": [
-     "state_id",
      "lease_token"
     ],
     "type": "object"

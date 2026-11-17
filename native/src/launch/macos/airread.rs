@@ -191,6 +191,14 @@ pub(super) fn bases_and_wings(
 }
 
 /// Mission names set in `mask` (bit n = toolbar frame n + 1).
+/// Training runs with no region (region 0, the bit set): the game shows "Pilot Exercises".
+pub(super) fn training(mask: i32) -> bool {
+    MISSIONS
+        .iter()
+        .find(|(n, _)| *n == "training")
+        .is_some_and(|(_, f)| mask & (1 << (f - 1)) != 0)
+}
+
 pub(super) fn missions_in(mask: i32) -> Vec<&'static str> {
     MISSIONS
         .iter()
@@ -266,8 +274,8 @@ fn view(
                 "aircraft":w.planes,"manpower":w.manpower,
                 "air_base":{"base_id":w.base_id,"state_id":w.base_state},
                 "transfer_to_base_id":(w.transfer_base_id > 0).then_some(w.transfer_base_id),
-                "missions":if w.region_id > 0 { missions_in(w.mission_mask) } else { Vec::new() },
-                "standing_by":w.region_id <= 0,"last_mission_selection":missions_in(w.mission_mask),
+                "missions":if w.region_id > 0 { missions_in(w.mission_mask) } else if training(w.mission_mask) { vec!["training"] } else { Vec::new() },
+                "standing_by":w.region_id <= 0 && !training(w.mission_mask),"last_mission_selection":missions_in(w.mission_mask),
                 "region":(w.region_id > 0).then(|| json!({"id":w.region_id,"name":w.region_name.as_ref().or_else(|| names.get(&w.region_id))}))})
         })
         .collect();
@@ -335,6 +343,8 @@ mod tests {
     fn decodes_mission_bits_and_region_files() {
         assert_eq!(missions_in(1), vec!["air_superiority"]);
         assert_eq!(missions_in(2048), vec!["training"]);
+        // training runs with no region (st2): the bit alone says it
+        assert!(training(2048) && training(2048 | 1) && !training(1) && !training(0));
         assert_eq!(missions_in(0b1010), vec!["cas", "strategic_bombing"]);
         assert!(missions_in(0).is_empty());
         assert_eq!(

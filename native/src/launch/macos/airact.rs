@@ -719,7 +719,43 @@ pub(super) fn create_wing(
         let reserve = settled(process, "reserve rows", |r, i| {
             airui::reorg_entries(r, i, "list_left")
         })?;
-        let entry = pick_entry(&reserve, &plan.aircraft)?.clone();
+        let mut entry = pick_entry(&reserve, &plan.aircraft)?.clone();
+        // A row scrolled out of the list takes no click (st2, 17 Nov 2026: four reserve rows of a
+        // 1939 Germany showed, the Bf 110 lay below). The list's band: from the first row as the
+        // window opens (scrolled to the top) down to the Ok button below the list (the grid itself
+        // has no reviewed renderer to measure). Wheel over the list until the row fits the band.
+        let top = reserve.iter().map(|e| e.bg.y).min().unwrap_or(0);
+        let bottom = settled(process, "wing ok", airui::reorg_confirm)?.0.y - 8;
+        let fits = |e: &airui::Entry| e.bg.y >= top - 2 && e.bg.y + e.bg.h <= bottom;
+        let at = (entry.bg.center().0, f64::from(top + bottom) / 2.0);
+        for _ in 0..40 {
+            if bottom <= top || fits(&entry) {
+                break;
+            }
+            keys.scroll(
+                GAME,
+                at,
+                if entry.bg.y + entry.bg.h > bottom {
+                    -120
+                } else {
+                    120
+                },
+            )?;
+            pause(200);
+            let rows = settled(process, "reserve rows", |r, i| {
+                airui::reorg_entries(r, i, "list_left")
+            })?;
+            entry = pick_entry(&rows, &plan.aircraft)?.clone();
+        }
+        if bottom > top && !fits(&entry) {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                format!(
+                    "The reserve row {} stayed outside the new wing window's list after scrolling",
+                    entry.variant
+                ),
+            ));
+        }
         let (cx, cy) = entry.bg.center();
         click(keys, cx, cy)?;
         wait(process, "planes moved into the wing", |r, i| {
@@ -1016,6 +1052,22 @@ pub(super) fn probe_region(
     leave_air_mode(process, keys, entered);
     result
 }
+/// The enemy's share of the region's air superiority as the window lets a player judge it:
+/// active fighters times the efficiency shown, each side; None with no fighter on either side.
+pub(super) fn superiority_estimate(v: &airui::RegionView) -> Option<f64> {
+    let pct = |t: &str| {
+        t.trim()
+            .trim_end_matches('%')
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .map_or(1.0, |p| p / 100.0)
+    };
+    let ours = f64::from(v.ours[0]) * pct(&v.our_efficiency);
+    let theirs = f64::from(v.theirs[0]) * pct(&v.enemy_efficiency);
+    (ours + theirs > 0.0).then(|| ((theirs / (ours + theirs)) * 1000.0).round() / 1000.0)
+}
+
 pub(super) fn region_json(v: &airui::RegionView) -> Value {
     let kinds = ["fighters", "bombers", "close_air_support", "anti_air_guns"];
     let row = |counts: &[i32; 4]| {
@@ -1028,7 +1080,8 @@ pub(super) fn region_json(v: &airui::RegionView) -> Value {
     json!({"region":v.name,"our_active":row(&v.ours),"enemy_active":row(&v.theirs),
         "our_detection":v.our_detection,"our_efficiency":v.our_efficiency,
         "enemy_detection":v.enemy_detection,"enemy_efficiency":v.enemy_efficiency,
-        "superiority_bar_probe":v.bar,
+        "enemy_air_superiority_estimate":superiority_estimate(v),
+        "estimate_basis":"active fighters x efficiency shown, each side; the game's own figure is not located in memory",
         "note":"As the player's air map shows it (counts of currently active aircraft by type in the region)"})
 }
 

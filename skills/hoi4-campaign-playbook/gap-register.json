@@ -5237,7 +5237,7 @@
    "payoff": "medium",
    "why": "+25% air support on attacks; damage itself small since 1.17",
    "closing": "offline",
-   "owner": "Executor: air.war_missions only targets 'our first border state with an enemy' (plan_run.rs:3348); follow the executing offensive's region and the width cap"
+   "owner": "Executor: air.war_missions only targets 'our first border state with an enemy' (plan_run.rs:3348); follow the executing offensive's region and the width cap; hoi4_air_mission cas with `region` Verified on a 1939 Germany (Ju 87 over Western Poland, 18 Nov)"
   },
   {
    "id": "air.enemy_superiority_read",
@@ -5257,11 +5257,10 @@
     "hoi4_air_region_probe",
     "hoi4_air_regions"
    ],
-   "blocked": "hoi4_air_regions reports regions[].enemy_air_superiority null (not located in memory); the executor rule (manage.enemy_air_superiority) reads that field and acts on nothing while it is null; hoi4_air_region_probe counts active planes through input (not a superiority value) and is not read by the executor",
    "payoff": "high",
    "why": "Without it air superiority is assumed, attacks run under red air and fighters pile up past 3:1",
    "closing": "both",
-   "owner": "offline done: null seam field with reason in hoi4_air_regions, the rule's digest note names it, tests; live: locate per-region air superiority (both sides) in memory, fill enemy_air_superiority (0..1 enemy share), verify against the air map for 3 regions; the probe is not fed to the rule (it holds the input lane and reads plane counts, not superiority)",
+   "owner": "the game's own per-region figure is still not located (a widget scan and a one-level pointer scan found nothing that differs between a contested and an own sky, 17 Nov); instead hoi4_air_region_probe returns enemy_air_superiority_estimate (enemy fighters x efficiency shown over both sides', from the region window, takes `region`), live 18 Nov on a 1939 Germany: Western Poland 800 fighters at 76% vs 500 at 56% -> 0.315, Western Germany 500 vs 0 -> 0.0; at war the air_superiority rule probes up to three front regions (own CAS regions, then manage.air_front_regions) when hoi4_air_regions has no figure; open: the game's own figure, and a war run that acts on the estimate",
    "priority": 10
   },
   {
@@ -5285,7 +5284,7 @@
    "payoff": "medium",
    "why": "Out-of-range wings fly nothing; range is the most common air failure",
    "closing": "live",
-   "owner": "live: a follow_region wing rebases into the new mission region after switch_when (then_region) or a phase override moves it; lint air.deploy",
+   "owner": "live: a follow_region wing rebases into the new mission region after switch_when (then_region) or a phase override moves it; lint air.deploy; tool live on 1.19.4 BBA wings 17 Nov (hoi4_air_rebase across regions, a 1939 Germany save)",
    "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy planes; BBA wings never listed)",
    "verified": "game-actions of the Italy runs ag1, d1-d3 and others (8-14 Nov 2026, one small theatre): air_rebase Verified 190 times, NotApplied 11 (air_plan with base_state/base_region); follow_region moving with a front over several regions not yet seen live"
   },
@@ -5461,7 +5460,7 @@
    "payoff": "medium",
    "why": "Air XP gates every plane design and the air doctrine",
    "closing": "both",
-   "owner": "executor air_idle_step: in peace every wing with no mission trains over its own base while fuel >= manage.air_training_fuel (0.5); manage.air_training false keeps them home with manage.air_training_why written in the air_idle note; at war the war missions and the air plan take training wings; live-verify the training mission"
+   "owner": "executor air_idle_step: in peace every wing with no mission trains over its own base while fuel >= manage.air_training_fuel (0.5); manage.air_training false keeps them home with manage.air_training_why written in the air_idle note; at war the war missions and the air plan take training wings; live-verify the training mission; live 18 Nov: training is button-only (Pilot Exercises, no region; memory keeps region 0 with the training bit), hoi4_air_mission training Verified and hoi4_air reports missions [\"training\"]"
   },
   {
    "id": "air.plane_design",
