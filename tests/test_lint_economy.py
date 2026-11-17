@@ -153,6 +153,11 @@ class Germany(unittest.TestCase):
         for m in self.lopsided["facts"]["ai_baseline"]["forecast_below"] if until else []:
             self.assertLessEqual(lint_plan.derive.day(m.rsplit(" on ", 1)[1].split()[0]), lint_plan.derive.day(until))
 
+    def test_levers_leave_out_advisors_the_government_cannot_hire(self):
+        # Hans Luther's available block is NOT = { has_government = fascism }, and Germany starts fascist
+        ids = {x["id"] for x in self.lopsided["facts"]["economy"]["levers"]}
+        self.assertNotIn("GER_hans_luther", ids)
+
     def test_military_jobs_from_the_first_day(self):
         f = self.rules(self.lopsided, "construction.switch")
         sw = self.lopsided["facts"]["economy"]["forecast"]["switch"]
