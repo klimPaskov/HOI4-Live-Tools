@@ -3147,7 +3147,7 @@
    "why": "about six traits by the war on the main lines; the owner counts organisations without traits as unassigned",
    "closing": "none",
    "owner": "the executor's mio traits rule (plan_affairs mio_auto_traits) queues one trait per organisation as points arrive",
-   "verified": "pp11 (17 Nov 2026, fresh 1936 GER): hoi4_mio_trait GER_mauser_organization and GER_rheinmetall_organization trait 0 Verified, trait_queued true (queue 1), each found in the list of another slot than the asked one"
+   "verified": "pp11 (17 Nov 2026, fresh 1936 GER): hoi4_mio_trait GER_mauser_organization and GER_rheinmetall_organization trait 0 Verified, trait_queued true (queue 1), each found in the list of another slot than the asked one; g17c (17 Nov 2026) showed a held trait read as enabled (its icon drawn toggled on, button state 2), so the monthly pick clicked trait 0 again: the listing now carries owned/state and the pick skips held, disabled and already-tried traits"
   },
   {
    "id": "mio.policy",
@@ -4316,7 +4316,7 @@
    "why": "-15% supply use or +attack on the main effort for 15 CP",
    "closing": "both",
    "owner": "find the Leader Details window's owner (a deeper scan from the commander list window), fill TREE_PATHS in leader_act.rs, live-test the list and an assignment",
-   "blocked": "hoi4_general_trait (unvalidated) answers window_not_found: the trait tree (Leader Details: General, Field Marshal and Terrain traits) opens from the army card portrait -> Select Commander -> a row's Details, and its root unitleader_trait_tree_window is in none of the interface manager slots 0x8-0x400 nor the pop-up list (pp6, 17 Nov 2026); the cp_spend rule rests a year on that refusal"
+   "blocked": "hoi4_general_trait (unvalidated) answers window_not_found: the trait tree (Leader Details: General, Field Marshal and Terrain traits) opens from the army card portrait -> Select Commander -> a row's Details, and its root unitleader_trait_tree_window is in none of the interface manager slots 0x8-0x400 nor the pop-up list (pp6, 17 Nov 2026); the cp_spend rule refuses once and rests the rest of the run, so command power is unspent in peace (g17c: 140 held on 1 Jan 1938; the cap is not read, see formations.xp_cp_read)"
   },
   {
    "id": "formations.recruit_generals",

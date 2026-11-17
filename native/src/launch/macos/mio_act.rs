@@ -1236,6 +1236,10 @@ pub(super) struct TraitEntry {
     pub enabled: bool,
     pub queue: String,
     pub rect: Option<gui_tree::Rect>,
+    /// The icon button's raw state (0 normal, 2 toggled on, 3 disabled); 2 is read as a trait
+    /// the organisation already holds (g17c, 17 Nov 2026: trait 0 of Mauser and Rheinmetall,
+    /// queued on the first day, read enabled for months and every click left it unqueued).
+    pub state: i32,
 }
 fn trait_entries(r: &Reader<'_>, i: u64) -> Result<Vec<TraitEntry>> {
     let root = pk::open_root(r, i, &pk::MIO_DETAIL)?;
@@ -1248,8 +1252,12 @@ fn trait_entries(r: &Reader<'_>, i: u64) -> Result<Vec<TraitEntry>> {
             continue;
         };
         let icon = pk::find(r, i, entry, "icon_frame", 4)?;
+        let state = match icon {
+            Some(b) => gui_tree::button_state(r, b)?,
+            None => 3,
+        };
         let enabled = match icon {
-            Some(b) => gui_tree::shown(r, b)? && !gui_tree::disabled(r, b)?,
+            Some(b) => gui_tree::shown(r, b)? && state != 3 && state != 2,
             None => false,
         };
         // The queue number keeps its .gui placeholder ("99") while hidden: only a shown
@@ -1269,6 +1277,7 @@ fn trait_entries(r: &Reader<'_>, i: u64) -> Result<Vec<TraitEntry>> {
             enabled,
             queue,
             rect,
+            state,
         });
     }
     Ok(out)
@@ -1292,6 +1301,12 @@ pub(super) fn trait_refusal(
         return Some((
             "trait_already_queued",
             format!("Trait {index} is already queued (position {})", e.queue),
+        ));
+    }
+    if e.state == 2 {
+        return Some((
+            "trait_owned",
+            format!("Trait {index} is held already (its icon is drawn toggled on)"),
         ));
     }
     if !e.enabled {
@@ -1328,7 +1343,7 @@ fn mio_trait(
         let summary = |entries: &[TraitEntry]| -> Vec<Value> {
             entries
                 .iter()
-                .map(|e| json!({"index": e.index, "enabled": e.enabled, "queue": e.queue, "visible": e.rect.is_some()}))
+                .map(|e| json!({"index": e.index, "enabled": e.enabled, "queue": e.queue, "visible": e.rect.is_some(), "owned": e.state == 2, "state": e.state}))
                 .collect()
         };
         let Some(index) = index else {
@@ -1709,13 +1724,18 @@ mod tests {
             enabled,
             queue: queue.into(),
             rect,
+            state: if enabled { 0 } else { 3 },
         };
+        let mut owned = entry(4, false, "", rect);
+        owned.state = 2;
         let entries = vec![
             entry(0, true, "", rect),
             entry(1, true, "2", rect),
             entry(2, false, "", rect),
             entry(3, true, "", None),
+            owned,
         ];
+        assert_eq!(trait_refusal(&entries, 4).unwrap().0, "trait_owned");
         assert!(trait_refusal(&entries, 0).is_none());
         assert_eq!(
             trait_refusal(&entries, 1).unwrap().0,

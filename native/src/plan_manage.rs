@@ -4657,7 +4657,7 @@ fn donor_line(
     needy: &str,
     warning: f64,
     step: i64,
-    rates: &HashMap<String, (f64, f64)>,
+    rates: &HashMap<String, (f64, f64, f64)>,
 ) -> Option<(MilLine, i64)> {
     military
         .iter()
@@ -4670,14 +4670,19 @@ fn donor_line(
                 return false;
             }
             // Never make the donor the binding equipment of the main template: after the move
-            // its output must still equip at least as many divisions a day as the needy item's
-            // (g17b, 17 Nov 2026: artillery cut 2 -> 1 for support equipment, which then made
-            // twice what the divisions took while artillery bound at 0.09 divisions a day).
-            if let (Some(&(rd, fd)), Some(&(rn, fnd))) = (rates.get(&arche), rates.get(needy)) {
+            // its stock and output must still equip at least as many divisions over the next
+            // DONOR_HORIZON_DAYS as the needy item's (g17b, 17 Nov 2026: artillery cut 2 -> 1
+            // for support equipment, which then made twice what the divisions took while
+            // artillery bound at 0.09 divisions a day). The stock counts: rifles held for 21
+            // divisions while support equipment held for 2 at the same daily rate, and a rate-
+            // only guard kept all 16 rifle factories (g17c, 1937.01).
+            if let (Some(&(rd, fd, sd)), Some(&(rn, fnd, sn))) =
+                (rates.get(&arche), rates.get(needy))
+            {
                 let take = step.min(l.2 - 1).min((l.2 / 5).max(1)) as f64;
                 let donor_after = if fd > 0.0 { rd * (fd - take) / fd } else { rd };
                 let needy_after = if fnd > 0.0 { rn + rn / fnd * take } else { rn };
-                if donor_after < needy_after {
+                if sd + donor_after * DONOR_HORIZON_DAYS < sn + needy_after * DONOR_HORIZON_DAYS {
                     return false;
                 }
             }
@@ -4691,10 +4696,15 @@ fn donor_line(
         .map(|l| (l.clone(), step.min(l.2 - 1)))
 }
 
+/// The horizon over which a donor's stock and output are weighed against the needy item's: half
+/// a year, the time a moved factory needs to regain most of its efficiency (PR09).
+const DONOR_HORIZON_DAYS: f64 = 180.0;
+
 /// Divisions a day the current output of each archetype equips for the template most fielded
 /// divisions use: archetype -> (produced per day / that template's need per division, factories
-/// on it), from hoi4_supply division rows and a hoi4_stockpile read. Empty when either lacks it.
-fn division_rates(supply: &Value, stock: &Value) -> HashMap<String, (f64, f64)> {
+/// on it, divisions the stockpile equips), from hoi4_supply division rows and a hoi4_stockpile
+/// read. Empty when either lacks it.
+fn division_rates(supply: &Value, stock: &Value) -> HashMap<String, (f64, f64, f64)> {
     let mut count: BTreeMap<String, usize> = BTreeMap::new();
     for d in list(supply, "divisions") {
         if !list(d, "equipment").is_empty() {
@@ -4726,7 +4736,8 @@ fn division_rates(supply: &Value, stock: &Value) -> HashMap<String, (f64, f64)> 
         {
             let made = row["produced_per_day"].as_f64().unwrap_or(0.0);
             let factories = row["factories"].as_f64().unwrap_or(0.0);
-            out.insert(arche.to_string(), (made / need, factories));
+            let held = row["stockpile"].as_f64().unwrap_or(0.0).max(0.0);
+            out.insert(arche.to_string(), (made / need, factories, held / need));
         }
     }
     out
@@ -6052,7 +6063,7 @@ mod tests {
             {"archetype": "artillery_equipment", "have": 12, "need": 12},
             {"archetype": "support_equipment", "have": 28, "need": 30}]}]});
         let stock = json!({"equipment": [
-            {"archetype": "artillery_equipment", "stockpile": 400.0, "produced_per_day": 1.8,
+            {"archetype": "artillery_equipment", "stockpile": 40.0, "produced_per_day": 1.8,
              "factories": 2, "fielded_short": 0.0, "variants": [{"type": "artillery_equipment_1"}]},
             {"archetype": "support_equipment", "stockpile": 0.0, "produced_per_day": 3.6,
              "factories": 8, "fielded_short": 2.0, "variants": [{"type": "support_equipment_1"}]}]});
@@ -6060,7 +6071,8 @@ mod tests {
         assert!((rates["artillery_equipment"].0 - 0.15).abs() < 1e-9);
         assert!((rates["support_equipment"].0 - 0.12).abs() < 1e-9);
         let lines: Vec<MilLine> = vec![(1, "artillery_equipment_1".into(), 2, None)];
-        // taking one artillery factory leaves 0.075 a day against support's 0.135: refused
+        // taking one artillery factory leaves 3.3 + 0.075 x 180 = 16.8 divisions in half a year
+        // against support's 0 + 0.135 x 180 = 24.3: refused
         assert_eq!(
             donor_line(
                 &stock,
@@ -6084,6 +6096,36 @@ mod tests {
             &HashMap::new()
         )
         .is_none_or(|(l, _)| l.1 == "artillery_equipment_1"));
+    }
+
+    #[test]
+    fn a_donor_holding_stock_for_many_divisions_gives_at_an_equal_daily_rate() {
+        // g17c 1937.01: rifles 16 factories with 21289 in stock (21 divisions), support
+        // equipment 6 factories with 64 (2 divisions), both near 0.14 divisions a day
+        let supply = json!({"divisions": [{"template": "Inf", "equipment": [
+            {"archetype": "infantry_equipment", "have": 1012, "need": 1012},
+            {"archetype": "support_equipment", "have": 30, "need": 30}]}]});
+        let stock = json!({"equipment": [
+            {"archetype": "infantry_equipment", "stockpile": 21289.0, "produced_per_day": 140.0,
+             "days_of_cover": 383.0, "factories": 16, "fielded_short": 0.0, "variants": [{"type": "infantry_equipment_1"}]},
+            {"archetype": "support_equipment", "stockpile": 64.0, "produced_per_day": 4.2,
+             "factories": 6, "fielded_short": 0.0, "variants": [{"type": "support_equipment_1"}]}]});
+        let rates = division_rates(&supply, &stock);
+        assert!((rates["infantry_equipment"].2 - 21289.0 / 1012.0).abs() < 1e-9);
+        let lines: Vec<MilLine> = vec![(1, "infantry_equipment_1".into(), 16, None)];
+        let got = donor_line(
+            &stock,
+            &json!({}),
+            &lines,
+            "support_equipment",
+            10.0,
+            3,
+            &rates,
+        );
+        assert_eq!(
+            got.map(|(l, n)| (l.1, n)),
+            Some(("infantry_equipment_1".into(), 3))
+        );
     }
 
     #[test]

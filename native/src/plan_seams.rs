@@ -250,6 +250,10 @@ fn command_power_max(tools: &dyn Tools, plan: &Value) -> f64 {
         .unwrap_or(BASE_MAX_COMMAND_POWER)
 }
 
+/// How long the rule rests after the trait tree window was not found: longer than any campaign,
+/// since the same binary finds it no better later.
+const CP_WINDOW_REST_DAYS: i64 = 20 * 365;
+
 /// Refusals that mean "this general (or this trait) cannot take a trait now": the pick waits a
 /// month and the next one is tried next week.
 const CP_PICK_REFUSALS: &[&str] = &[
@@ -375,8 +379,9 @@ fn cp_spend_step(
         } else if code == "window_not_found" {
             // The tool cannot reach the trait tree on this build (pp6, 17 Nov 2026: the Leader
             // Details window opened from the commander list's Details button is not in the
-            // manager slots or the pop-up list): no input is spent on it again this year.
-            state.skip(now, "cps", "x", 365 * DAY);
+            // manager slots or the pop-up list): no input is spent on it again this run (a
+            // yearly retry only repeated the same refusal, g17b and g17c).
+            state.skip(now, "cps", "x", CP_WINDOW_REST_DAYS * DAY);
             state.seams.cp_why.insert(pick.clone(), why.clone());
         } else {
             if CP_PICK_REFUSALS.contains(&code.as_str()) {
