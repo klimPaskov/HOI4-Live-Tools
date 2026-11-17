@@ -148,6 +148,10 @@ class Germany(unittest.TestCase):
         self.assertGreater(last["civ"] + last["mil"], first["civ"] + first["mil"])
         self.assertEqual(fc["risk_states"], [])  # Germany attacks weaker neighbours: no border state barred
         self.assertIsInstance(self.lopsided["facts"]["economy"]["levers"], list)
+        # the forecast is held to the AI only up to the first war day (it leaves out conquest)
+        until = self.lopsided["facts"]["ai_baseline"]["forecast_checked_until"]
+        for m in self.lopsided["facts"]["ai_baseline"]["forecast_below"] if until else []:
+            self.assertLessEqual(lint_plan.derive.day(m.rsplit(" on ", 1)[1].split()[0]), lint_plan.derive.day(until))
 
     def test_military_jobs_from_the_first_day(self):
         f = self.rules(self.lopsided, "construction.switch")
