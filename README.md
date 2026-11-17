@@ -86,14 +86,22 @@ On a Mac with the native runtime:
 3. `hoi4-live play` attaches to that game, switches the plan's executor on, starts a supervisor in the background
    and prints: `Read <run folder>/BRIEF.txt and follow it word for word.` Give that to your coding client; it plays
    through the `hoi4-live-play` tools the installer registered (restart the client once after installing).
-4. The agent ends the run itself, or you run `hoi4-live stop`. Either way `report.md` is written in the run folder
-   and the game keeps running.
+4. The run ends when the plan's goal is reached, at a date you give (`--until 1938.01.01`), when the agent stops
+   or you run `hoi4-live stop`, when the agent has made no call for 45 minutes (a usage limit, a closed client),
+   or when the game's memory runs high. At its own ends the program pauses the game and saves it with the game's
+   own save; `report.md` in the run folder says why it ended and which save to continue from.
+5. A long campaign goes on in segments: load that save and run `hoi4-live play --continue`. The plan in force and
+   everything the program remembered carry over.
+6. `hoi4-live report` reads the run at any time: the campaign's segments, a bar audit from the run's own records
+   and where the country stands (factories, divisions and their equipment, force, air).
 
-The command never edits your game settings, saves or mods: it records them at the start and the report says if
-anything changed during the run. The game keeps running while the agent plays; it is paused only when you or the
-agent ask, or after a long silence: with no call from the agent for 15 minutes (`--idle-pause MINUTES` changes
-it, `0` switches it off) the supervisor pauses the game, after a wake at half that time, and the agent's next call
-lifts the pause. When the game closes, the run ends by itself. How it works: [docs/PLAY_FLOW.md](docs/PLAY_FLOW.md).
+The command never edits your game settings, saves or mods; the only file it writes outside its run folder is that
+save, named by the game. It records your files at the start and the report says if anything changed during the
+run. The game keeps running while the agent plays; it is paused only when you or the agent ask, or after a
+silence: with no call from the agent for 15 minutes (`--idle-pause MINUTES` changes it, `0` switches it off) the
+supervisor pauses the game, after a wake at half that time, and the agent's next call lifts the pause. The whole
+walk-through for players, with what to do when something stops: [docs/CAMPAIGN_GUIDE.md](docs/CAMPAIGN_GUIDE.md).
+How it works: [docs/PLAY_FLOW.md](docs/PLAY_FLOW.md).
 
 `hoi4-live update` installs the newest release. `hoi4-live uninstall` removes the program, the native runtime, the
 command and the client registrations.
@@ -114,8 +122,11 @@ Not supported yet:
 - Starting a campaign on Linux, and registering a server there: the Linux runtime plays only games its own launcher
   started under its own X display.
 - A plan for a country that has no shipped plan without the repository: the strategist runs from a checkout.
-- The macOS attach flow has passed its offline tests; its live checks (`scripts/live_checks/play_attach.py`) have
-  not run yet.
+- A full campaign through `hoi4-live play` has not been accepted yet. On macOS the attach flow passed its live
+  checks (`scripts/live_checks/play_attach.py`), and campaigns have been played live on the same runtime through the
+  developer rig; segments, `--continue` and `hoi4-live report` have passed their offline tests and wait for their
+  live check (`scripts/live_checks/product_campaign.py`). The Linux and Windows adapters exist but have not played
+  a campaign on the current game version.
 
 When the game updates to a version the native runtime cannot read, the doctor and the runtime say so, name the
 version that works and what to use meanwhile.

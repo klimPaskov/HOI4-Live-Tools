@@ -19,6 +19,9 @@ A campaign through the product, start to report: what the private developer rig 
 - The supervisor keeps the whole feed (`feed.jsonl`) and a production sample every five minutes, brings the game to
   the front before the executor's first input, watches for a system prompt on screen (ends the run if it stays
   five minutes) and removes a plan's `stop_on_date` (a run never pauses itself).
+- docs/CAMPAIGN_GUIDE.md: a campaign walk-through for players (what to type and see, time and cost, segments, the
+  report, what to do when something stops); `scripts/live_checks/product_campaign.py`: the acceptance check of
+  this path on a live game.
 
 Scale: nothing walks states or divisions one at a time.
 
