@@ -129,7 +129,8 @@ def _advisor_table(world, tag):
             if r.get("role") != "advisor":
                 continue
             row = {"traits": list(r.get("traits") or []), "character": ch["id"], "visible": r.get("visible"),
-                   "available": r.get("available"), "cost": r.get("cost"), "slot": r.get("slot")}
+                   "available": r.get("available"), "cost": r.get("cost"), "slot": r.get("slot"),
+                   "blocks": [b for b in (r.get("visible_block"), r.get("available_block")) if isinstance(b, list)]}
             out.setdefault(ch["id"], row)
             if r.get("idea_token"):
                 out[r["idea_token"]] = row
@@ -731,7 +732,11 @@ def _gain_text(mods):
 def _law_open_day(lint, tl, law):
     """The first day the plan's own timeline does not show the law's gate closed: the start, else the first war
     day; None when its gate stays closed then too (or needs a focus outside the country's tree)."""
-    raw = (lint.world.ideas().get(law) or {}).get("available")
+    return _gate_open_day(lint, tl, (lint.world.ideas().get(law) or {}).get("available"))
+
+
+def _gate_open_day(lint, tl, raw):
+    """_law_open_day for any trigger block (an idea's `available`, an advisor's `visible` and `available`)."""
     if not isinstance(raw, list) or not raw:
         return tl.start
     facts_at = getattr(lint, "_gate_facts", None)
@@ -754,6 +759,23 @@ def _law_open_day(lint, tl, law):
     for d in days:
         done = {f for end, f in getattr(lint, "_focus_done", []) if end <= d}
         if plan_gates.evaluate(raw, facts_at(d, done)) is not False:
+            return d
+    return None
+
+
+def _block_open_day(lint, tl, blk):
+    """The first of the start and the first war day on which the plan's timeline (conditions.evaluate: the
+    government, focuses done, wars, ideas) does not show the trigger block closed; None when it is closed on
+    both. A block the timeline cannot read counts as open."""
+    from . import conditions
+    days = [tl.start] + ([tl.war_day] if tl.war_day and tl.war_day > tl.start else [])
+    for d in days:
+        done = {f for end, f in getattr(lint, "_focus_done", []) if end <= d}
+        try:
+            ok, _ = conditions.evaluate(blk, conditions.Env(tl, d, done))
+        except Exception:  # noqa: BLE001
+            ok = None
+        if ok is not False:
             return d
     return None
 
@@ -827,7 +849,14 @@ def levers(lint, tl, base, limit=12):
         mods = modifiers_of(lint.game, w, tag, aid)
         if not any(mods.get(k, 0) > 0 for k in useful):
             continue
-        g = gain([(start, "idea+", aid, "lever")])
+        # hireable only while both his visible and his available blocks hold under the plan's timeline (a
+        # government or flag the plan never reaches keeps him out); the static start value decides a block the
+        # timeline cannot read
+        opens = [_block_open_day(lint, tl, blk) for blk in a.get("blocks") or []]
+        if any(d is None for d in opens):
+            continue
+        when = max([start] + opens)
+        g = gain([(when, "idea+", aid, "lever")])
         out.append({"kind": "advisor", "id": aid, "gives": _gain_text(mods),
                     "gate": (a.get("visible") or a.get("available") or "")[:160], "gain": g})
     # techs
