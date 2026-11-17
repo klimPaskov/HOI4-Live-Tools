@@ -162,6 +162,7 @@ class GermanyConditions(unittest.TestCase):
                                 "else": "revise"}]
         plan["diplomacy"] = [{"id": "dp_pol", "action": "declare", "target": "POL", "when": "date >= 1939.09.01"}]
         plan["training"] = [{"template": "Infanterie-Division", "queue": 2, "batch": 1, "cap": 40}]
+        cls.plan = plan
         cls.out = lint_plan.lint(plan, cls.game)
 
     def hits(self, rule):
@@ -182,6 +183,14 @@ class GermanyConditions(unittest.TestCase):
         f = self.hits("diplomacy.borders_unheld")
         self.assertTrue(f)
         self.assertIn("74", f[0]["message"])
+
+    def test_accept_widening_keeps_the_target_border_checked(self):
+        plan = copy.deepcopy(self.plan)
+        plan["diplomacy"][0]["accept_widening"] = True
+        out = lint_plan.lint(plan, self.game)
+        f = [x for x in out["findings"] if x["rule"] == "diplomacy.borders_unheld"]
+        self.assertTrue(f)
+        self.assertIn("accept_widening declares anyway", f[0]["message"])
 
     def test_stop_date(self):
         self.assertTrue(self.hits("plan.stop_date"))
