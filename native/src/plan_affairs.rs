@@ -2399,19 +2399,13 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         if !ok {
             mio_refused(state, now, "mio", &org, &why);
             if code(&why) == "organization_not_offered" {
-                // The tool reaches an organisation only through an empty designer slot (g17a, 17
-                // Nov 2026: Mauser and Rheinmetall, kinds whose slot is filled): not tried again
-                // this year, so the run carries no monthly repeated failure.
-                state.skip(now, "mioauto", &org, 365 * DAY);
                 // the mio_traits alert's reason (plan_manage.rs alerts)
                 note(
                     state,
                     "mio_traits",
                     format!(
-                        "{org}: no trait queued; hoi4_mio_trait reaches an organisation only \
-                         through an empty designer slot of its kind and {org}'s slot is filled \
-                         (organization_not_offered), so its trait points wait for a hand pick \
-                         (tried again in a year)"
+                        "{org}: no trait queued, no organisation slot's list offers it ({why}); \
+                         tried again in 30 days"
                     ),
                 );
             }
@@ -4489,9 +4483,7 @@ mod tests {
     }
 
     #[test]
-    fn an_organisation_the_trait_tool_cannot_reach_rests_a_year_with_the_reason() {
-        // g17a (17 Nov 2026): Mauser's designer slot was filled, the tool's list offered only
-        // the empty slot's kinds and refused it every month
+    fn an_organisation_no_list_offers_waits_30_days_with_the_reason() {
         let tools = fake(vec![(
             "hoi4_mio_trait",
             json!({"observed": {"listed": [{"index": 0, "enabled": true, "queue": "", "visible": true}]}}),
@@ -4505,8 +4497,9 @@ mod tests {
             .contains("(auto): false organization_not_offered"));
         assert!(note_of(&state, "mio_traits")
             .unwrap()
-            .contains("GER_mauser_organization's slot is filled"));
-        assert!(state.skipped(START + 300 * DAY, "mioauto", "GER_mauser_organization"));
+            .contains("no organisation slot's list offers it"));
+        assert!(state.skipped(START + 29 * DAY, "mioauto", "GER_mauser_organization"));
+        assert!(!state.skipped(START + 31 * DAY, "mioauto", "GER_mauser_organization"));
         let orders = actions(&tools)
             .into_iter()
             .filter(|(_, a)| a["list"] != json!(true))
