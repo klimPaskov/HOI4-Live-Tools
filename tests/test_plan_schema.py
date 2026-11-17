@@ -413,7 +413,8 @@ class CoverageKeys(unittest.TestCase):
         self.assertEqual(set(m["off"]["items"]["enum"]), {"alerts", "ledger", "manpower", "stability",
                                                           "equipment_fill", "resources", "stockpile", "trucks",
                                                           "casualties", "air_superiority", "overdrawn", "convoys", "fuel",
-                                                          "balance", "dockyards", "doctrines"})
+                                                          "balance", "dockyards", "doctrines", "exercises",
+                                                          "cp_spend", "mio_lines", "mio_traits"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
@@ -431,7 +432,9 @@ class CoverageKeys(unittest.TestCase):
                 # plan_manage.rs: a felt shortage takes factories (rule 11), idle dockyards go to convoys (rule 20)
                 "shift_factories": True, "idle_dockyards": "convoys",
                 # plan_run.rs: experience kept back from the doctrine fill
-                "xp_reserve": {"army": 30, "navy": 0, "air": 0}}
+                "xp_reserve": {"army": 30, "navy": 0, "air": 0},
+                # plan_seams.rs: default peacetime exercises and the command power spend
+                "exercise_fill": 0.9, "command_power_max": 80, "cp_trait_prefer": []}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):
@@ -490,7 +493,7 @@ class CoverageKeys(unittest.TestCase):
         self.assertEqual(v(plan), [])
         self.assertEqual(v({"auto_import": 2}), [])
         self.assertEqual(v({"auto_import": True}), [])
-        for bad in ({"manage": {"off": ["exercises"]}}, {"manage": {"stability_floor": 150}},
+        for bad in ({"manage": {"off": ["parades"]}}, {"manage": {"stability_floor": 150}},
                     {"manage": {"surprise": 1}}, {"templates": [{"name": "x"}]},
                     {"navy": {"posture": "big"}}, {"force_posture": {"phases": []}},
                     {"xp_budget": {"army": [{"id": "x", "cost": 1, "purpose": "template", "ref": "templates:x"}]}}):
