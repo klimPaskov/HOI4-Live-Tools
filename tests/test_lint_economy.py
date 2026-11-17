@@ -84,6 +84,17 @@ class Germany(unittest.TestCase):
     def rules(self, out, rule):
         return [f for f in out["findings"] if f["rule"] == rule]
 
+    def test_the_command_line_reads_the_same_modifiers(self):
+        # lint_plan.py run as a script (the strategist's gates) has no package: the production modifiers of the
+        # plan's laws, ideas and techs must not drop out there
+        import runpy
+        cli = runpy.run_path(os.path.join(ROOT, "scripts", "hoi4facts", "lint_plan.py"), run_name="lint_cli")
+        day = lint_plan.derive.day("1938.1.1")
+        a = cli["Lint"](base_plan(), self.game, lint_plan.FRONT_K, None, None).production_mods(day)
+        b = lint_plan.Lint(base_plan(), self.game, lint_plan.FRONT_K, None, None).production_mods(day)
+        self.assertEqual(a, b)
+        self.assertGreater(b[1], 50)  # the plan's techs raise the efficiency cap above the base 50
+
     def test_start_lines_need_a_target(self):
         f = self.rules(self.appended, "production.start_lines")
         self.assertTrue(any("infantry_equipment_1" in x["message"] and x["severity"] == "error" for x in f), f)

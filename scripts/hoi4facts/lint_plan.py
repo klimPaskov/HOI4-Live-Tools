@@ -3689,7 +3689,10 @@ class Lint:
         if getattr(self, "_prod_mods", None) is None:
             steps = []
             try:
-                from . import conditions, economy
+                # by name: run as a script (lint_plan.py PLAN, the strategist's gates) this module has no package,
+                # and a relative import here failed into the except below, dropping every modifier
+                conditions = __import__((__package__ or "hoi4facts") + ".conditions", fromlist=["Timeline"])
+                economy = econmod
                 tl = getattr(self, "_timeline", None) or conditions.Timeline(self)
                 e = economy._Econ(self, tl)
                 e.today, e.timed = tl.start, []
