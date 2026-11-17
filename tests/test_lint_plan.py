@@ -72,6 +72,14 @@ THIS_PASS = {"focus.condition", "focus.condition_unchecked", "decision.condition
 # the keys the live engineer settled on 17 Nov (doctrine fill, gather, faction calls): newer than the hand plans
 ENGINEER_KEY_RULES = {"doctrines.defaults", "armies.gather", "faction.call_allies"}
 THIS_PASS |= ENGINEER_KEY_RULES
+# the force against the plan's wars (lint_force.py, test_force_design): newer than the hand plans
+FORCE_RULES = {"force.required", "force.breakthrough", "force.single_template", "force.air", "force.invasion",
+              "force.unused_line", "force.template_late", "force.readiness", "force.anti_tank",
+              "force.anti_air", "force.budget", "force.air_support", "force.air_none", "force.air_use",
+              "force.air_lost", "force.air_deploy", "force.air_losses", "force.air_bases", "force.air_research",
+              "force.air_design", "force.air_doctrine", "force.air_command", "force.air_defence", "force.air_fuel",
+              "force.air_resources"}
+THIS_PASS |= FORCE_RULES
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
@@ -364,7 +372,8 @@ class HandPlans(unittest.TestCase):
             ("win.goal", "goal"),  # only the deprecated win_condition
         ])
         _, warnings = self.findings(load(ETH), "warning")
-        warnings = [w for w in warnings if w[0] not in ENGINEER_KEY_RULES]
+        # the force rules on the hand plans: test_force_design
+        warnings = [w for w in warnings if w[0] not in ENGINEER_KEY_RULES | FORCE_RULES]
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
         self.assertEqual(warnings, sorted(gaps + [
             *[("alerts.owner", "manage.alerts_ignore")] * 4,  # dockyards, admiral, officer corps, garrison

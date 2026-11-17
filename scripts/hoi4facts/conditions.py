@@ -115,6 +115,9 @@ def global_variables(game):
 
 
 # ---------------------------------------------------------------------------------------------- the timeline
+FORECAST_YEARS = 8  # the army forecast reaches at most this far past the start
+
+
 class Timeline:
     """What the plan says about its own country over time, for the gates (see the module doc)."""
 
@@ -251,6 +254,10 @@ class Timeline:
                 ds = self.lint_dates(when)
                 first = max(ds) if ds else self.start
                 last = _before_day(when)
+            made = self.template_day(e["template"])
+            first = max(first, made) if made is not None else None
+            if first is None:
+                continue  # the template is never made under the plan (a tech it waits on is not researched)
             q = e.get("queue") if isinstance(e.get("queue"), (int, float)) else 1
             cap = e.get("cap") if isinstance(e.get("cap"), int) else (
                 rules.get("cap") if rules.get("cap_template") in (None, e["template"]) and
@@ -285,15 +292,16 @@ class Timeline:
             rows_eq = derive.equipment_rows(self.game)
             made = [r["type"] for r in lt.start_lines()] + [x.get("equipment") for x in lt.list_of("production")
                                                              if isinstance(x.get("equipment"), str)]
+            from . import force as forcemod
             for k in made:
-                c = (rows_eq.get(k) or {}).get("cost")
+                c = forcemod.unit_cost(lt, k)[0] if hasattr(lt, "list_of") else (rows_eq.get(k) or {}).get("cost")
                 if c and fam(k) not in ic_cost:
                     ic_cost[fam(k)] = c
         started = []  # (day it deploys, template, divisions)
         rows = []
         by_template = []
         limits = []
-        end = max([d for d, _ in lt.horizon()] or [self.start + 365])
+        end = self.forecast_end()
         day = self.start
         while day <= end:
             for i in range(len(started) - 1, -1, -1):
@@ -359,6 +367,66 @@ class Timeline:
                           "limits": limits, "equipment_counted": stock is not None,
                           "manpower_per_division": {t: mp(t) for t in count}}
         return self._forecast[equipment]
+
+    def forecast_end(self):
+        """Last day the army forecast covers: the plan horizon, extended to the latest declaration date and the
+        latest force_design ready date (at most FORECAST_YEARS after the start), so the force table of later
+        wars is checked on the same arithmetic."""
+        lt = self.lint
+        end = max([d for d, _ in lt.horizon()] or [self.start + 365])
+        more = []
+        for e in lt.list_of("diplomacy"):
+            if e.get("action") in ("declare", "declare_war") and e.get("when") is not None:
+                more += self.lint_dates(e["when"])
+        fd = lt.plan.get("force_design") if isinstance(lt.plan.get("force_design"), dict) else {}
+        for part in ("land", "air", "navy"):
+            for r in fd.get(part) or []:
+                if isinstance(r, dict) and r.get("ready") and derive.day(r["ready"]) is not None:
+                    more.append(derive.day(r["ready"]))
+        return min(max([end] + more), self.start + FORECAST_YEARS * 365)
+
+    def template_day(self, name):
+        """Day the template can exist under the plan: the start for a start template; for a plan template the
+        last of its `when` dates, the research finish of the techs its `when` waits on and of the techs that
+        unlock its units; None when one of those techs is never researched (or for an unknown name: the start,
+        validate_plan reports it)."""
+        cache = self.__dict__.setdefault("_template_days", {})
+        if name in cache:
+            return cache[name]
+        lt = self.lint
+        out = self.start
+        if name not in lt.start_templates():
+            for x in lt.list_of("templates"):
+                if name not in (x.get("name"), x.get("id")):
+                    continue
+                when = x.get("when")
+                days = list(self.lint_dates(when)) if when is not None else []
+                end = self.start + FORECAST_YEARS * 365
+                sched = lt.research_schedule(end) if hasattr(lt, "research_schedule") else None
+                techs = [a.split(":", 1)[1].strip() for a in _atoms(when) if a.startswith("tech_researched:")]
+                if sched is not None:
+                    subs = derive.subunit_unlocks(self.game)
+                    units = derive.unit_types(self.game)
+                    for u in set(self.template_units(name)):
+                        if (units.get(u) or {}).get("active") or not subs.get(u):
+                            continue
+                        got = [sched["finish"].get(t) if t not in sched["have"] else self.start for t in subs[u]]
+                        got = [d for d in got if d is not None]
+                        if not got:
+                            cache[name] = None
+                            return None
+                        days.append(min(got))
+                    for t in techs:
+                        if t in sched["have"]:
+                            continue
+                        if sched["finish"].get(t) is None:
+                            cache[name] = None
+                            return None
+                        days.append(sched["finish"][t])
+                out = max([self.start] + days)
+                break
+        cache[name] = out
+        return out
 
     def limit_at(self, day):
         """{template: what held its training that week}: "queue", "cap" or the equipment family short."""

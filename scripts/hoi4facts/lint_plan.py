@@ -376,7 +376,8 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            sea_transfer.ports (the ports the divisions land at)
 
 The plan against the game's own conditions (lint_conditions.py), the management inventory (lint_manage.py) and
-production and economy by arithmetic (lint_economy.py); each module's docstring has the detail:
+production and economy by arithmetic (lint_economy.py) and the force against its wars (lint_force.py); each
+module's docstring has the detail:
   focus.condition          a planned focus whose available/bypass gate the plan's own timeline keeps closed
   focus.condition_unchecked  a planned focus gate the plan cannot decide offline, with no dated checkpoint
   decision.condition       a planned decision closed (or opening late) under the plan's timeline
@@ -391,9 +392,33 @@ production and economy by arithmetic (lint_economy.py); each module's docstring 
   production.need_balance  one family far above its need while another sits far below
   construction.capacity    the factory targets need more slots than the listed states have, no fallback
   plan.ai_baseline         factory marks, or the forecast of the plan's own levers, below the game's own AI
+                           (divisions against the AI: info, the count reported; the floor is force.readiness)
   economy.unbacked         (warning) targets above what the plan's own levers give (facts.economy.forecast)
   economy.below_forecast   (warning) targets below what the plan's own levers give
   construction.switch      (warning) military factories queued from the first day while the switch is later
+  force.required           a dated war and no force_design, or a war it does not name
+  force.breakthrough       an offensive war against a defended line without the armoured and mobile divisions
+                           its strike axes need on its first day
+  force.single_template    one template carries nearly the whole army (error with an offensive war planned)
+  force.air                fighters below the front's start fighters x 1.5, as far as 35% of the military output
+                           pays; air rows and air_plan counts the start wings and lines do not give by their dates
+  force.air_support        close air support over the breakthrough axes not made by the war's first day
+  force.air_none           a war with no air arm the plan can pay and no force_design.air_why
+  force.air_use            no air_plan superiority (or CAS) entry by a war's first day
+  force.air_lost           the air superiority rule off while the plan fights for the air
+  force.air_deploy         more planes of a kind than the start wings and no deploy entry founds new wings
+  force.air_losses         a kind the war flies with no line of it running
+  force.air_bases          a base in another country's land; fighters and CAS above the border air bases' capacity
+  force.air_research       an airframe flown before the research plan unlocks it
+  force.air_design         a designer airframe produced or flown with no variant and no design
+  force.air_doctrine       no air doctrine while the plan fights for the air
+  force.air_fuel           wings with no fuel plan
+  force.invasion           a landing without the fighters, or with a weaker fleet and no naval strike planes
+  force.unused_line        a tank or plane line nothing uses; a force row whose equipment no line makes
+  force.template_late      a force row's template cannot exist and train by its war or ready date
+  force.readiness          a force row the army forecast or the line output does not field by its date
+  force.budget             no factory budget by date (error), a budget row off the lines (warning)
+  force.anti_tank, force.anti_air, force.air_command, force.air_defence, force.air_resources  (warnings)
 
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
 a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
@@ -414,6 +439,7 @@ if __package__ in (None, ""):
     from hoi4facts import calc as calcmod  # noqa: E402
     from hoi4facts import content, derive, mapgraph, plan_gates, plan_keys, schema_check, script  # noqa: E402
     from hoi4facts import economy as econmod  # noqa: E402
+    from hoi4facts import force as forcemod  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
     from hoi4facts import research as researchmod  # noqa: E402
@@ -426,6 +452,7 @@ else:
     from . import calc as calcmod
     from . import content, derive, mapgraph, plan_gates, plan_keys, schema_check, script
     from . import economy as econmod
+    from . import force as forcemod
     from . import tech as techrule
     from .game import Game
     from . import research as researchmod
@@ -504,6 +531,11 @@ NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.conditio
               "diplomacy.borders_unheld", "plan.stop_date", "manage.owner", "production.start_lines",
               "production.duplicate_line", "production.priority_all", "production.missing_line",
               "production.need_balance", "construction.capacity"}
+# the force against the plan's wars (lint_force.py): a hand plan reports these as warnings
+NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "force.air", "force.invasion",
+              "force.unused_line", "force.template_late", "force.readiness", "force.budget", "force.air_support",
+              "force.air_none", "force.air_use", "force.air_lost", "force.air_deploy", "force.air_losses",
+              "force.air_bases", "force.air_research", "force.air_design", "force.air_doctrine", "force.air_fuel"}
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
@@ -3722,7 +3754,8 @@ class Lint:
 
     def line_output(self, d):
         """{equipment: units a day} of the military lines in force on day d: factories x factory_speed x
-        efficiency / the variant's build_cost_ic. A start line runs from its history efficiency (capped), and
+        efficiency / the unit's cost (force.unit_cost: a plan design with modules, the start variant, else the
+        chassis or airframe plus the start variants' mean module cost, else build_cost_ic). A start line runs from its history efficiency (capped), and
         factories the plan puts on it on day 0 join at that efficiency; a new line, or factories added later,
         start at the start efficiency; all grow by `efficiency` to the cap of each day (production_mods: the
         plan's techs, ideas and laws). Calibrated against the measured pr3b run (within about 10%); resource
@@ -3760,7 +3793,7 @@ class Lint:
             have, eff0 = start_lines.get(eq, (0, base))
             n = planned.get(eq, have)
             self._on_lines = (d, self._on_lines[1] + n)
-            cost = (rows.get(eq) or {}).get("cost")
+            cost = forcemod.unit_cost(self, eq)[0] or (rows.get(eq) or {}).get("cost")
             if not cost:
                 continue
             begin = min(d, first_day.get(eq, start))
@@ -5211,16 +5244,19 @@ class Lint:
                      f"needs: {basis}; list only the laws the plan allows")
 
     # ------------------------------------------------------------------ research (tactics)
-    def research_ahead(self):
-        """Techs researched more than half a year before their start year (each year ahead adds
-        BASE_YEAR_AHEAD_PENALTY_FACTOR times the cost) while in-year techs of the plan's fields stay
-        unplanned. Start days come from a slot timeline of the plan (base research days)."""
+    def research_schedule(self, end=None):
+        """The plan's research on a slot timeline (base research days, the ahead-of-time penalty), from the start
+        to `end` (default: the plan horizon, else two years): {"finish": {tech: day}, "started": {tech: (day,
+        where, dated, years ahead)}, "planned", "bonus", "have", "techs"}. Cached per end."""
         g = self.game
         techs = g.techs()
-        meta = derive.tech_meta(g)
         have = start_tech_set(g, self.meta)
         start = derive.day(self.start)
-        end = derive.day(self.stop) if self.stop else start + 730
+        if end is None:
+            end = derive.day(self.stop) if self.stop else start + 730
+        cache = self.__dict__.setdefault("_research_sched", {})
+        if end in cache:
+            return cache[end]
         slots = derive.research_slots(g, self.tag, self.ctx, self.start, self.meta.get("history_file")) or 1
         penalty = self.define("BASE_YEAR_AHEAD_PENALTY_FACTOR", 2)
         blocks = []
@@ -5265,6 +5301,19 @@ class Lint:
             ahead = max(0.0, (year_day(t) - now) / 365.0) if techs[t]["year"] else 0.0
             started[t] = (now, where, dated, ahead)
             finish[t] = free[k] = now + derive.tech_days(g, t) * (1 + penalty * ahead)
+        cache[end] = {"finish": finish, "started": started, "planned": planned, "bonus": bonus, "have": have,
+                      "techs": techs}
+        return cache[end]
+
+    def research_ahead(self):
+        """Techs researched more than half a year before their start year (each year ahead adds
+        BASE_YEAR_AHEAD_PENALTY_FACTOR times the cost) while in-year techs of the plan's fields stay
+        unplanned. Start days come from a slot timeline of the plan (base research days)."""
+        g = self.game
+        meta = derive.tech_meta(g)
+        penalty = self.define("BASE_YEAR_AHEAD_PENALTY_FACTOR", 2)
+        sched = self.research_schedule()
+        techs, have, planned, bonus, started = (sched[k] for k in ("techs", "have", "planned", "bonus", "started"))
         goals = self.domain_goals()
         folders = {(meta.get(t) or {}).get("folder") for t in planned} - {None}
         last_year = derive.as_tuple(self.stop)[0] if self.stop else derive.as_tuple(self.start)[0] + 1
@@ -5672,6 +5721,8 @@ class Lint:
         __import__((__package__ or "hoi4facts") + ".lint_manage", fromlist=["check"]).check(self)  # manage.owner
         # production over all lines sized to the need, construction capacity, the AI baseline
         __import__((__package__ or "hoi4facts") + ".lint_economy", fromlist=["check"]).check(self)
+        # the force against what the plan's wars need (force.py): breakthrough, air, landings, the force table
+        __import__((__package__ or "hoi4facts") + ".lint_force", fromlist=["check"]).check(self)
         order = {s: i for i, s in enumerate(SEVERITIES)}
         self.findings.sort(key=lambda f: (order[f["severity"]], f["rule"]))
         return self
