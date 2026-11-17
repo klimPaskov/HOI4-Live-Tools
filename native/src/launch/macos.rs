@@ -571,6 +571,7 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         }
         n if n.starts_with("dbg_slot_object:") => panelkit::debug_slot_object(process, &n[16..]),
         "dbg_mio_list" => mio_act::debug_list(process),
+        "dbg_line_roster" => mio_act::debug_line_roster(process),
         n if n.starts_with("dbg_find_text:") => mio_act::debug_find_text(process, &n[14..]),
         "dbg_factions" => diplomacy_state::debug_factions(process),
         "dbg_views" => panelkit::debug_views(process),

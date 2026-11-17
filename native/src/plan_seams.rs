@@ -377,10 +377,9 @@ fn cp_spend_step(
             let days = super::plan_military::cp_wait_days(&why);
             state.skip(now, "cps", "x", days * DAY);
         } else if code == "window_not_found" {
-            // The tool cannot reach the trait tree on this build (pp6, 17 Nov 2026: the Leader
-            // Details window opened from the commander list's Details button is not in the
-            // manager slots or the pop-up list): no input is spent on it again this run (a
-            // yearly retry only repeated the same refusal, g17b and g17c).
+            // The tool cannot reach the trait tree (a build where the Leader Details window is
+            // not at its mapped place; before pp13, 17 Nov 2026, every run): no input is spent
+            // on it again this run (a yearly retry only repeated the same refusal, g17b, g17c).
             state.skip(now, "cps", "x", CP_WINDOW_REST_DAYS * DAY);
             state.seams.cp_why.insert(pick.clone(), why.clone());
         } else {

@@ -92,6 +92,10 @@ const GAME: (u32, u32) = (1920, 1080);
 /// priority arrow (Germany, 16 Nov 2026: 21 lines, to:top of the last line refused "could not be
 /// scrolled into view" with a bottom of 1040), so the bottom is the screen's edge.
 const LIST: (i32, i32) = (360, 1078);
+/// Whether a rectangle lies wholly inside the production list area (LIST).
+pub(super) fn in_list(rect: Rect) -> bool {
+    rect.y >= LIST.0 && rect.y + rect.h <= LIST.1
+}
 const CATEGORIES: [&str; 3] = ["infantry_button", "tank_button", "aircraft_button"];
 /// Ships and convoys: the Production panel's naval category button opens the ship selection
 /// window (view +0x1cd8), whose rows `design_ui::rows` reads.
@@ -128,7 +132,7 @@ fn naval_offered(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
 fn ui(r: &Reader<'_>) -> Result<Ui> {
     MACOS.resolve(r.string_abi())
 }
-fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
+pub(super) fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let u = ui(r)?;
     r.u64(r.u64(idler + u.manager)? + u.view)
