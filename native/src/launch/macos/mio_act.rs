@@ -1163,6 +1163,9 @@ fn close_line_roster(process: &dyn Process, keys: &dyn GameInput) {
     }
 }
 
+/// Room below the drawn button that must be on screen too: a button whose square ended at
+/// 1078 (the list's bottom) opened nothing (g17e, convoy line drawn at 203,1072 6x6).
+const DRAWN_MARGIN: i32 = 16;
 /// Where a button drawn at LINE_BUTTON_SCALE shows inside its full-size rect: the scaled
 /// square at the rect's bottom-left corner.
 const LINE_BUTTON_SCALE: f64 = 0.45;
@@ -1225,8 +1228,13 @@ fn line_assign(
         // 203,1076 6x6, the click opened nothing). Such a line is moved to the top for the
         // roster and back to the bottom afterwards, so the line order is as before.
         let drawn_on_screen = |r: &Reader<'_>, i: u64| {
-            Ok(super::production::shown_button(r, i, handle, button)?
-                .is_some_and(|b| super::production::in_list(logo_square(b))))
+            Ok(
+                super::production::shown_button(r, i, handle, button)?.is_some_and(|b| {
+                    let mut drawn = logo_square(b);
+                    drawn.h += DRAWN_MARGIN;
+                    super::production::in_list(drawn)
+                }),
+            )
         };
         if !read(process, drawn_on_screen)? {
             let last = read(process, |r, i| {
@@ -1260,7 +1268,7 @@ fn line_assign(
             Ok(logo_square(rect))
         })?;
         wait(process, "open organisation roster", |r, i| {
-            Ok(line_roster(r, i)?.is_some_and(|x| x.open && !x.rows.is_empty()))
+            Ok(line_roster(r, i)?.is_some_and(|x| x.open))
         })
         .map_err(|e| {
             Error::new(
@@ -1284,6 +1292,14 @@ fn line_assign(
         if list_only {
             return Ok(json!({"listing_only": true, "attached": before.attached,
                 "offered": offered, "verification": "roster_rows"}));
+        }
+        if offered.is_empty() {
+            // The line shows the button, but no organisation of this country makes the
+            // equipment (g17e: Germany's convoy line; no German organisation lists convoys).
+            return Err(refuse(
+                "line_takes_no_organization",
+                "The roster offers no organisation for this equipment (only the 'Produce without' row)",
+            ));
         }
         let k = roster_pick(&roster.rows, display)
             .map_err(|why| Fail::Refused(Error::new("organization_not_offered", why)))?;
@@ -1839,7 +1855,7 @@ pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name":"hoi4_mio_design_team","description":"Browse only, assigns nothing (live pp4, 17 Nov 2026): the politics view's organisation slots open a roster to look at; the game assigns an organisation from a task (a production line: hoi4_mio_line; a technology; a design). Kept for older plans: put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_policy","description":"UNVALIDATED (no live test yet): attach a policy to an organisation: politics view, the slot's roster, the organisation's details button, Open policies, the policy row (by localised name). `organization` and `policy` are script keys (mio_policy_general_ruthless_contracts, ...). Typed refusals: organization_unknown, organization_not_allowed, policy_unknown (before input); mio_system_absent, slot_unknown, organization_not_offered, policy_not_offered (lists the rows) from the windows before the click. Verified from the detail window's attached policy name only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"policy":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","policy","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_mio_line","description":"Attach an organisation to an own production line with ordinary input, or read the line's state. The production line's organisation button (drawn at scale 0.45 in its rect's bottom-left corner) opens the roster of the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry; its rows are read from memory (name, organisation or not) before any row click, the list is wheeled to its top, read again, and only an organisation row drawn in full is clicked (live pp14, 17 Nov 2026: Rheinmetall attached to a new anti-air line). The last line, whose button the screen edge cuts, is moved to the top for the roster and back to the bottom after. `organization` (localised name or key) picks the row, else the first organisation offered. A line that has an organisation answers assigned, already_attached without input. list:true opens the roster, answers attached and offered (the organisations' names) and closes it, changing nothing. Verified from the line's own row (has_mio_background). A line costs no political power. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment); organization_not_offered (the roster's organisations named); row_not_visible (the row is below the five drawn in full); roster_unreadable (the roster's layout is not the reviewed one).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_mio_line","description":"Attach an organisation to an own production line with ordinary input, or read the line's state. The production line's organisation button (drawn at scale 0.45 in its rect's bottom-left corner) opens the roster of the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry; its rows are read from memory (name, organisation or not) before any row click, the list is wheeled to its top, read again, and only an organisation row drawn in full is clicked (live pp14, 17 Nov 2026: Rheinmetall attached to a new anti-air line). The last line, whose button the screen edge cuts, is moved to the top for the roster and back to the bottom after. `organization` (localised name or key) picks the row, else the first organisation offered. A line that has an organisation answers assigned, already_attached without input. list:true opens the roster, answers attached and offered (the organisations' names) and closes it, changing nothing. Verified from the line's own row (has_mio_background). A line costs no political power. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment: the line shows no button, or its roster offers only the 'Produce without' row); organization_not_offered (the roster's organisations named); row_not_visible (the row is below the five drawn in full); roster_unreadable (the roster's layout is not the reviewed one).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait_index":{"type":"integer","minimum":0,"maximum":63},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
