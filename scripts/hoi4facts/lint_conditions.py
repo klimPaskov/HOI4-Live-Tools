@@ -63,6 +63,12 @@ def _checkpoint_atoms(lint):
             continue
         for a in cond._atoms(c.get("must")):
             out.append((d, a.strip()))
+    for h in lint.list_of("horizons"):
+        d = _day(h.get("until"))
+        t = h.get("targets") if isinstance(h.get("targets"), dict) else {}
+        for k in ("civilian_factories", "military_factories"):
+            if d is not None and isinstance(t.get(k), (int, float)):
+                out.append((d, f"{k} >= {t[k]}"))
     return out
 
 
@@ -75,6 +81,11 @@ def _covered(line, focus, start, atoms):
     for d, a in atoms:
         head = re.split(r"[\s:<>=!]", a, 1)[0]
         if head in names and d <= start + CHECKPOINT_SLACK:
+            if head in ("civilian_factories", "military_factories") and isinstance(line.get("value"), (int, float)):
+                m = re.search(r">=?\s*(\d+(?:\.\d+)?)\s*$", a)
+                need = line["value"] + (1 if line.get("cmp") == ">" else 0)
+                if not m or float(m.group(1)) < need:
+                    continue
             return True
     return False
 
