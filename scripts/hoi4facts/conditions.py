@@ -11,7 +11,8 @@ done, start flags). This module adds what the plan's own timeline decides as wel
 * the war: at peace until the first war the plan dates (a `declare` entry or a dated `at_war` atom);
 * the start government, subject status and ideas, and the ideas the plan buys by then;
 * the army: start divisions minus the disband list plus what the plan's training lines can field by a day
-  (an upper bound: every queue slot busy, equipment not counted), and the army manpower of those
+  (the executor's queues, caps and training time, each division started only with its equipment in stock
+  from the start stockpile and the planned lines), and the army manpower of those
   divisions. Numeric army gates become numbers by date: `has_army_manpower` and
   `fighting_army_strength_ratio` (a division count against the other side's start divisions, with the
   ratio read from the global variable the game sets at start when the gate names one).
@@ -137,7 +138,7 @@ class Timeline:
         self.own_start = set(derive.tag_states(self.game, lint.ctx, self.tag, lint.start)) if self.tag else set()
         self.gains = self._planned_gains()
         self.war_day, self.war_why = self._first_war()
-        self._forecast = None
+        self._forecast = {}
 
     # ---- land
     def _planned_gains(self):
@@ -207,12 +208,16 @@ class Timeline:
         return out
 
     # ---- army
-    def forecast(self):
+    def forecast(self, equipment=True):
         """{"rows": [(day, divisions, manpower)] weekly, "start": divisions at the start, "per_template": ...}.
-        An upper bound: every training line keeps its queue full from its first date, each division takes the
-        longest training_time of its units, up to the line's cap (a cap counts the template's divisions)."""
-        if self._forecast is not None:
-            return self._forecast
+        The executor's training: entries of one template add their queues (entry i trains while the template's
+        lines in training are below the queues of the active entries up to i, within its cap; a cap counts the
+        template's divisions fielded and in training), each division takes the longest training_time of its
+        units, and starts only with its whole equipment need in stock (the start stockpile less the start
+        divisions' shortfall, plus the planned lines' output, lint.line_output). equipment=False: what the lines
+        would field with every need in stock (the demand the production lines are sized against)."""
+        if equipment in self._forecast:
+            return self._forecast[equipment]
         lt, w = self.lint, self.world
         subs = w.sub_units() if w is not None else {}
         units_of = self.template_units
@@ -254,26 +259,112 @@ class Timeline:
                           "days": train_days(e["template"])})
         total_cap = rules.get("cap") if isinstance(rules.get("cap"), int) and not rules.get("cap_template") else None
         count = Counter({k: float(v) for k, v in divs.items()})
+        # equipment: the start stockpile less the start divisions' shortfall (reinforcement comes first), plus
+        # what the planned lines make; a division starts training only with its whole need in stock
+        fam = lambda k: derive.equipment_family(self.game, k)  # noqa: E731
+        stock = None
+        if equipment and w is not None and hasattr(lt, "line_output"):
+            stock = Counter()
+            for st in w.country(self.tag).get("stockpile") or []:
+                stock[fam(st.get("v"))] += st.get("amount") or 0
+            for dv in w.oob(self.tag)["divisions"]:
+                for eq, a in self.template_need(dv["template"]).items():
+                    stock[fam(eq)] -= a * max(0.0, 1.0 - dv.get("start_equipment_factor", 1.0))
+        need = {t: Counter({fam(k): a for k, a in self.template_need(t).items() if a > 0})
+                for t in {ln["template"] for ln in lines}}
+        # the executor's balance rule: military factories on no line go to the line the divisions lack most
+        # (never taken from a line); modelled as the idle factories of the economy forecast split over the
+        # training templates' equipment by its IC per division, from the day they stand idle
+        mil_rows, idle, ic_cost = [], [], {}
+        if stock is not None:
+            try:
+                from . import economy as econmod
+                mil_rows = econmod.forecast(lt, self)["rows"]
+            except Exception:  # noqa: BLE001 - advisory: no idle factories then
+                mil_rows = []
+            rows_eq = derive.equipment_rows(self.game)
+            made = [r["type"] for r in lt.start_lines()] + [x.get("equipment") for x in lt.list_of("production")
+                                                             if isinstance(x.get("equipment"), str)]
+            for k in made:
+                c = (rows_eq.get(k) or {}).get("cost")
+                if c and fam(k) not in ic_cost:
+                    ic_cost[fam(k)] = c
+        started = []  # (day it deploys, template, divisions)
         rows = []
         by_template = []
+        limits = []
         end = max([d for d, _ in lt.horizon()] or [self.start + 365])
         day = self.start
         while day <= end:
+            for i in range(len(started) - 1, -1, -1):
+                if started[i][0] <= day:
+                    count[started[i][1]] += started.pop(i)[2]
+            if stock is not None:
+                for k, units in lt.line_output(day).items():
+                    stock[fam(k)] += units * 7
+                r = econmod.at(mil_rows, day) if mil_rows else None
+                spare = max(0, r["mil"] - lt.factories_on_lines(day)) if r else 0
+                while sum(n for _, n in idle) > spare:
+                    idle.pop()
+                if spare > sum(n for _, n in idle):
+                    idle.append((day, spare - sum(n for _, n in idle)))
+                active = {ln["template"] for ln in lines
+                          if ln["from"] <= day and (ln["until"] is None or day < ln["until"])}
+                ic = Counter()
+                for t in active:
+                    for f, a in need[t].items():
+                        if f in ic_cost:
+                            ic[f] += a * ic_cost[f]
+                if idle and ic:
+                    _, _, _, e0 = lt.production_mods(day)
+                    made_ic = sum(n * lt.factory_speed(day) * lt.efficiency(e0, b, day) / 100.0 for b, n in idle)
+                    for f, x in ic.items():
+                        stock[f] += made_ic * x / sum(ic.values()) / ic_cost[f] * 7
+            training = Counter()
+            for _, t, n in started:
+                training[t] += n
+            # the executor's semantics: entries of one template add up, entry i trains while the template's
+            # queued lines are below the queues of the active entries up to i, each within its own cap
+            target = Counter()
+            limit = {}
             for ln in lines:
-                if day < ln["from"] + ln["days"] or (ln["until"] is not None and day >= ln["until"] + ln["days"]):
+                t = ln["template"]
+                if day < ln["from"] or (ln["until"] is not None and day >= ln["until"]):
                     continue
-                add = ln["queue"] * 7.0 / ln["days"]
-                if ln["cap"] is not None:
-                    add = min(add, max(0.0, ln["cap"] - count[ln["template"]]))
-                if total_cap is not None:
-                    add = min(add, max(0.0, total_cap - sum(count.values())))
-                count[ln["template"]] += add
+                target[t] += ln["queue"]
+                room = target[t] - training[t]
+                why = "queue"
+                if ln["cap"] is not None and ln["cap"] - count[t] - training[t] < room:
+                    room, why = ln["cap"] - count[t] - training[t], "cap"
+                if total_cap is not None and total_cap - sum(count.values()) - sum(training.values()) < room:
+                    room, why = total_cap - sum(count.values()) - sum(training.values()), "cap"
+                if room <= 0:
+                    limit.setdefault(t, why)
+                    continue
+                if stock is not None and need[t]:
+                    short = min(need[t], key=lambda f: max(0.0, stock[f]) / need[t][f])
+                    if max(0.0, stock[short]) / need[t][short] < room:
+                        room, why = max(0.0, stock[short]) / need[t][short], short
+                    for f, a in need[t].items():
+                        stock[f] -= a * room
+                limit[t] = why
+                if room > 0:
+                    started.append((day + ln["days"], t, room))
+                    training[t] += room
             rows.append((day, sum(count.values()), sum(mp(t) * n for t, n in count.items())))
             by_template.append(dict(count))
+            limits.append(limit)
             day += 7
-        self._forecast = {"rows": rows, "by_template": by_template, "start": start_n, "lines": lines,
+        self._forecast[equipment] = {"rows": rows, "by_template": by_template, "start": start_n, "lines": lines,
+                          "limits": limits, "equipment_counted": stock is not None,
                           "manpower_per_division": {t: mp(t) for t in count}}
-        return self._forecast
+        return self._forecast[equipment]
+
+    def limit_at(self, day):
+        """{template: what held its training that week}: "queue", "cap" or the equipment family short."""
+        fc = self.forecast()
+        i = max(0, min(len(fc["limits"]) - 1, (day - self.start) // 7)) if fc["limits"] else None
+        return fc["limits"][i] if i is not None else {}
 
     def growth(self, day):
         """{template: divisions a day} the training lines add around day (four weeks either side, caps

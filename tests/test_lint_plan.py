@@ -1193,9 +1193,9 @@ class TacticsRules(unittest.TestCase):
     def test_equipment_balance(self):
         # the shakedown plan: rifles, support and trucks, no artillery line, a 30-day artillery stockpile target
         plan = self.plan(production=[
-            {"equipment": "infantry_equipment_1", "factories": 10},
+            {"equipment": "infantry_equipment_1", "factories": 6},
             {"equipment": "support_equipment_1", "factories": 3},
-            {"equipment": "motorized_equipment_1", "factories": 7}],
+            {"equipment": "motorized_equipment_1", "factories": 11}],
             stockpile_targets={"artillery_equipment": 30})
         plan["armies"]["states"] = [550, 559, 844, 908]  # the East African armies, as the strategist plan had them
         f = self.assertHit(plan, "production.balance", "error", "no production line builds artillery_equipment")
@@ -1251,10 +1251,15 @@ class TacticsRules(unittest.TestCase):
         lint = lint_plan.Lint(plan, self.game)
         start = derive.day(lint.start)
         day0, later = lint.line_output(start), lint.line_output(start + 180)
-        # the start rifle line (and the factories joining it on day 0) run at the line's efficiency at once
-        self.assertAlmostEqual(day0["infantry_equipment_1"], later["infantry_equipment_1"])
-        # a new line starts at the base efficiency and climbs to the cap
-        self.assertAlmostEqual(later["artillery_equipment_1"] / day0["artillery_equipment_1"], 5.0, places=3)
+        # the start rifle line (and the factories joining it on day 0) run at the line's efficiency at once:
+        # 10 factories x the factory speed x that efficiency / the rifle cost
+        eff0 = lint.efficiency(lint.production_mods(start)[1], start, start)
+        self.assertAlmostEqual(day0["infantry_equipment_1"], 10 * lint.factory_speed(start) * min(
+            eff0, [r for r in lint.start_lines() if r["type"] == "infantry_equipment_1"][0]["efficiency"]) / 100
+            / 0.5, places=3)
+        # a new line starts at the base efficiency and grows toward the cap (cap^2 / e a day)
+        self.assertGreater(later["artillery_equipment_1"] / day0["artillery_equipment_1"], 3.0)
+        self.assertLessEqual(lint.efficiency(10, start, start + 180), lint.production_mods(start + 180)[1])
 
     def test_mature_switch(self):
         plan = self.plan()

@@ -69,6 +69,8 @@ class Germany(unittest.TestCase):
             {"equipment": "infantry_equipment_1", "factories": 60, "from": "1936.01.01"},
             {"equipment": "infantry_equipment_1", "factories": 5, "from": "1937.01.01"},
             {"equipment": "artillery_equipment_1", "factories": 1, "from": "1936.01.01"},
+            # no support equipment: the start line goes
+            {"equipment": "support_equipment_1", "remove": True, "from": "1936.01.01"},
         ]
         plan["training"] = [{"template": "Infanterie-Division", "queue": 8, "batch": 2, "cap": 120}]
         plan["construction"] = [{"building": "industrial_complex", "count": 2, "states": [64]},
@@ -117,7 +119,8 @@ class Germany(unittest.TestCase):
         self.assertTrue(errors, f)
         self.assertTrue(any("civilian factories 80 by 1939.09.01 against the AI's 104" in x["message"]
                             for x in errors), errors)
-        self.assertTrue(any("129" in x["message"] and x["severity"] == "warning" for x in f), f)
+        # divisions before the first war day: an error like the factories (the AI's 51 on 1937.03.01)
+        self.assertTrue(any(x["where"] == "training" and "the AI's 51" in x["message"] for x in errors), errors)
 
     def test_a_written_reason_does_not_lift_the_factory_floor(self):
         plan = copy.deepcopy(self.lopsided_plan)
@@ -127,6 +130,36 @@ class Germany(unittest.TestCase):
         self.assertTrue(errors)
         # the divisions warning is answered by the reason
         self.assertFalse([x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "warning"])
+
+    def test_a_written_reason_does_not_lift_the_division_floor_before_the_war(self):
+        plan = copy.deepcopy(self.lopsided_plan)
+        plan["goal"]["ai_baseline_why"] = "the AI fields under-equipped divisions"
+        out = lint_plan.lint(plan, self.game)
+        errors = [x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "error"
+                  and x["where"] == "training"]
+        self.assertTrue(errors)
+        # the lopsided plan makes no support equipment: that is what holds its infantry
+        self.assertIn("by support_equipment", errors[0]["message"])
+
+    def test_entries_of_one_template_add_their_queues_and_equipment_holds_them(self):
+        def timeline(training):
+            plan = copy.deepcopy(self.lopsided_plan)
+            plan["training"] = training
+            return lint_plan.Lint(plan, self.game, lint_plan.FRONT_K, None, None).run()._timeline
+
+        one = timeline([{"template": "Infanterie-Division", "queue": 8, "cap": 200}])
+        two = timeline([{"template": "Infanterie-Division", "queue": 5, "cap": 200, "deploy_state": 64},
+                        {"template": "Infanterie-Division", "queue": 3, "cap": 200, "deploy_state": 65}])
+        day = lint_plan.derive.day("1937.1.1")
+        free_one, free_two = one.forecast(equipment=False), two.forecast(equipment=False)
+        self.assertEqual(one.army_at(day), two.army_at(day))
+        self.assertEqual(free_one["rows"][-1][1], free_two["rows"][-1][1])
+        # 8 lines of 120 days from the start: 8 by 1936.5, 16 by 1936.9
+        at = lambda fc, d: [r for r in fc["rows"] if r[0] <= lint_plan.derive.day(d)][-1][1]  # noqa: E731
+        self.assertEqual(at(free_two, "1936.9.15") - free_two["start"], 16)
+        # with the equipment counted it fields fewer: the plan makes no support equipment
+        self.assertLess(two.army_at(day)[0], at(free_two, "1937.1.1"))
+        self.assertEqual(two.limit_at(day).get("Infanterie-Division"), "support_equipment")
 
     def test_only_a_confirmed_constraint_lifts_it(self):
         plan = copy.deepcopy(self.lopsided_plan)

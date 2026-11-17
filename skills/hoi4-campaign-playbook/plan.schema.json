@@ -84,6 +84,21 @@
           "type": "string",
           "x-owner": "text"
         },
+        "edits": {
+          "type": "array",
+          "description": "Logged key edits made to a strategist plan after it was made (a live engineer's fix between runs or at a segment boundary): each names the keys, the date, who and why, so the strategist can take the finding into the next plan.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": {"type": "string"},
+              "by": {"type": "string"},
+              "keys": {"type": "string"},
+              "why": {"type": "string"}
+            },
+            "required": ["keys", "why"]
+          },
+          "x-owner": "text"
+        },
         "lint_summary": {
           "type": [
             "object",
