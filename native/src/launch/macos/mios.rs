@@ -326,7 +326,7 @@ pub(super) fn read_live(r: &Reader<'_>, image: u64, politics: u64) -> Result<Liv
     })
 }
 
-fn snapshot(r: &Reader<'_>, image: u64) -> Result<Live> {
+pub(super) fn snapshot(r: &Reader<'_>, image: u64) -> Result<Live> {
     let own = mgmt::own(r, image)?;
     let politics = mgmt::pointer(r, own.country + game::layout(r).country_politics)?;
     read_live(r, image, politics)

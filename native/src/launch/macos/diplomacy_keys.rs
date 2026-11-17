@@ -205,6 +205,20 @@ pub(super) const SPECS: &[Spec] = &[
         dialog: true,
     },
     Spec {
+        // The faction leader (or an overlord) asks a faction member into the current war: the
+        // ally answers later (an AI decision); the offered row is the only immediate proof.
+        key: "call_to_arms",
+        rows: &[
+            "Call to arms",
+            "Call to Arms",
+            "Call ally",
+            "Call an ally into this war",
+        ],
+        effect: Effect::RowsOnly,
+        ai_decides: true,
+        dialog: false,
+    },
+    Spec {
         key: "kick_from_faction",
         rows: &[
             "Kick from faction",

@@ -2183,6 +2183,115 @@ pub(super) fn merge(
         )
     })
 }
+/// Every unassigned own division into one army wherever the divisions stand, with the game's own
+/// controls: Shift+click on the unassigned-divisions alert selects all of them (the alert's own
+/// tooltip), then a right click on the target army's card assigns them, or a click on the
+/// new-army card makes one army of them. Nothing walks states or moves the camera over the map,
+/// so it costs the same for 3 divisions or 300. Returns (divisions moved, target army).
+pub(super) fn gather(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    target: Option<&str>,
+    max: usize,
+) -> Result<(usize, String)> {
+    let view = armies(process)?;
+    let pool: Vec<String> = view["unassigned"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|d| d.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if pool.is_empty() {
+        return Err(Error::new(
+            "no_unassigned",
+            "No own division is outside an army",
+        ));
+    }
+    if let Some(name) = target {
+        let row = view["armies"]
+            .as_array()
+            .and_then(|a| a.iter().find(|x| x["army"].as_str() == Some(name)))
+            .ok_or_else(|| Error::new("no_such_army", format!("No own army named {name:?}")))?;
+        let held = row["division_count"].as_u64().unwrap_or(0) as usize;
+        if held + pool.len() > max {
+            return Err(Error::new(
+                "army_full",
+                format!(
+                    "{name} holds {held}; {} unassigned divisions would make {} (over {max}): name another army or use new_army",
+                    pool.len(),
+                    held + pool.len()
+                ),
+            ));
+        }
+    }
+    let at = read(process, |r, i| super::alerts::rect_of(r, i, "unassigned_divisions"))?
+        .ok_or_else(|| {
+            Error::new(
+                "gui_target_unavailable",
+                "The unassigned-divisions alert is not shown (the game raises it some days after a division is left outside an army)",
+            )
+        })?;
+    clear_notices(process, keys)?;
+    clear_selection(process, keys)?;
+    let (x, y) = ((at[0] + at[2] / 2) as f64, (at[1] + at[3] / 2) as f64);
+    keys.shift_click(GAME, x, y)?;
+    wait(process, "unassigned divisions selected", |r, i| {
+        Ok(selection_size(r, i)? > 0 && selection_unassigned_only(r, i)?)
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "Shift+click on the unassigned-divisions alert selected no unassigned division within 3 s",
+        )
+    })?;
+    let selected = read(process, selected_divisions)?.unwrap_or_default();
+    if let Some(name) = target {
+        if selected.len()
+            + read(process, |r, i| {
+                let g = group_named(r, i, name)?;
+                Ok(membership(r, i)?.values().filter(|v| **v == g).count())
+            })?
+            > max
+        {
+            clear_selection(process, keys)?;
+            return Err(Error::new(
+                "army_full",
+                format!(
+                    "{} divisions were selected; {name} has no room for all of them",
+                    selected.len()
+                ),
+            ));
+        }
+    }
+    let before = read(process, membership)?;
+    let name = match target {
+        Some(name) => {
+            right_click_card(process, keys, name, &before)?;
+            name.to_string()
+        }
+        None => {
+            click_new_army(process, keys, &before, false)?;
+            let after = read(process, membership)?;
+            let groups_before: BTreeSet<u64> = before.values().copied().collect();
+            let group = after
+                .values()
+                .copied()
+                .find(|g| *g != 0 && !groups_before.contains(g))
+                .ok_or_else(|| Error::new("input_readback_failed", "No new army appeared"))?;
+            read(process, |r, _| army_name(r, group))
+                .unwrap_or_else(|_| format!("group {group:#x}"))
+        }
+    };
+    let after = read(process, membership)?;
+    let moved = selected
+        .iter()
+        .filter(|d| after.get(*d).is_some_and(|g| *g != 0))
+        .count();
+    clear_selection(process, keys)?;
+    Ok((moved, name))
+}
 /// Screen areas covered by the top bar, the selected army's panel, the
 /// battle-plan toolbar and the army card bar.
 fn covered(x: f64, y: f64) -> bool {

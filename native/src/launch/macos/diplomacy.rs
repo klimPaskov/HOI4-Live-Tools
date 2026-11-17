@@ -190,6 +190,40 @@ fn grid_texts(r: &Reader<'_>, image: u64, grid: u64, label: &str) -> Result<Vec<
     Ok(out)
 }
 
+/// The entries of a dialog grid with their screen rects (the entry's background button).
+fn grid_entries(
+    r: &Reader<'_>,
+    image: u64,
+    grid: u64,
+    label: &str,
+) -> Result<Vec<(String, Option<Rect>)>> {
+    let u = ui(r)?;
+    let (_, data, count) = r.array_header(grid + u.grid_items)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(128) as u64 {
+        let item = r.u64(data + index * 8)?;
+        let entry = r.u64(item + u.item_container)?;
+        let base = if r.u64(entry)? == image + u.container_vtable {
+            entry + u.container_base
+        } else {
+            entry
+        };
+        let (text, rect) = match gui_tree::container(r, base, image)? {
+            Some(frame) => {
+                let text = match gui_tree::child(r, image, frame, label)? {
+                    Some(t) => clean(&r.string_bounded(t + u.text, 256)?),
+                    None => String::new(),
+                };
+                let target = gui_tree::child(r, image, frame, "Background")?.unwrap_or(base);
+                (text, gui_tree::rect(r, image, target, GAME).ok())
+            }
+            None => (String::new(), None),
+        };
+        out.push((text, rect));
+    }
+    Ok(out)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Row {
     name: String,
@@ -597,7 +631,7 @@ fn war_goal_choose(
 /// Dialog windows whose Send button is the whole interaction (or, for war
 /// goals, after the type and states are chosen). Others need choices this
 /// tool cannot make and are cancelled with `dialog_unsupported`.
-const SENDABLE: [&str; 7] = [
+const SENDABLE: [&str; 8] = [
     "generate_wargoal",
     "add_wargoal",
     "declare_war",
@@ -605,6 +639,8 @@ const SENDABLE: [&str; 7] = [
     "standard_diplomacy_controller",
     "invite_faction_diplomacy_controller",
     "naval_blockade",
+    // Call to arms: one row per war of ours; the first war is chosen when none is.
+    "call_allies",
 ];
 const TEXT_FIELDS: [&str; 6] = [
     "title",
@@ -815,6 +851,60 @@ pub(super) fn execute(
                     return Err(Error::new("invalid_arguments", "Choose 1 or more states"));
                 }
                 war_goal(process, keys, kind, states)?;
+            }
+            if name == "call_allies" {
+                let (_, ready) = settled(process, "send button", |r, i| {
+                    dialog_button(r, i, "send_button")
+                })?;
+                if !ready {
+                    // The war rows fill in after the dialog opens; wait for them briefly.
+                    let mut wars = Vec::new();
+                    for _ in 0..10 {
+                        let found = read(process, |r, i| {
+                            let (_, window) = dialog(r, i)?.ok_or_else(|| {
+                                Error::new("input_readback_failed", "Dialog closed")
+                            })?;
+                            match find(r, i, window, "wars_grid", 0)? {
+                                Some(g) => grid_entries(r, i, g, "name"),
+                                None => Ok(Vec::new()),
+                            }
+                        })?;
+                        wars = found;
+                        if wars.first().is_some_and(|(_, rect)| rect.is_some()) {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(150));
+                    }
+                    // The first war row from the dialog's own layout when the grid gives no
+                    // rect (interface/countrydiplomacyview.gui call_allies, 527x360: the "wars"
+                    // box at 145,120 with margins 13,13, the grid at 5,3, slots 202x29, so the
+                    // first row's centre at 264,150; the send button, 123 wide, LOWER_LEFT at
+                    // 350,-60, i.e. its corner at 350,300). The send button's rect is read
+                    // reliably where the dialog window's is not (fsw2, 17 Nov 2026).
+                    let (send, _) = settled(process, "send button", |r, i| {
+                        dialog_button(r, i, "send_button")
+                    })?;
+                    let rect = wars.first().and_then(|(_, rect)| *rect).or_else(|| {
+                        (send.w > 0).then(|| {
+                            let k = f64::from(send.w) / 123.0;
+                            Rect {
+                                x: send.x + (-86.0 * k) as i32 - 4,
+                                y: send.y + (-150.0 * k) as i32 - 4,
+                                w: 8,
+                                h: 8,
+                            }
+                        })
+                    });
+                    let rect = rect.ok_or_else(|| {
+                        Error::new(
+                            "invalid_target",
+                            "The dialog lists no war to call the ally into",
+                        )
+                    })?;
+                    let (x, y) = rect.center();
+                    keys.click(GAME, x, y)?;
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                }
             }
             let (send, enabled) = settled(process, "send button", |r, i| {
                 dialog_button(r, i, "send_button")

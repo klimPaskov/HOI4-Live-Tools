@@ -66,6 +66,7 @@
 //!                own_war_goals, or a war with it, counts as done), "declare" (declare_war, below),
 //!                "guarantee", "non_aggression" (or "nap"), "access" (ask_military_access),
 //!                "offer_access", "docking", "improve_relations", "send_attache", "invite_to_faction",
+//!                "call_to_arms" (a faction member into our war; the ally decides),
 //!                or any other canonical key or exact row name of hoi4_diplomacy; "try_anyway":true sends a
 //!                row the AI would refuse. `world_tension_max` (fraction or percent): only while world
 //!                tension is at most that (rule 30; unknown waits). A declaration is sent only when
@@ -97,9 +98,13 @@
 //!                go ahead and retries the join after 30 game days. `create` founds the faction once
 //!                through hoi4_faction_create (already_in_faction counts as done). Tools: faction_create
 //!                opened live 6 Nov (descriptor UNVALIDATED); invite_accept and diplomacy_incoming never
+//!   faction.call_allies  "all" | [TAG..] | "none": while at war, faction members outside our war are
+//!                called to arms (hoi4_diplomacy_act call_to_arms), each again after 30 days; absent: no
+//!                call and a weekly note naming the members left out
 //!   incoming_proposals  [{"id"?,"class":"any"|<class>,"from"?:[TAG..],"answer":"accept"|"refuse"|"player",
 //!                "when"?}] the answers to the open diplomatic pop-ups (hoi4_diplomacy_incoming: faction
-//!                invitation, guarantee, non-aggression pact, military access, peace offer, call to arms,
+//!                invitation, faction_join_request (a country asks into ours; standing answer: refuse a
+//!                planned war target, accept the rest), join_war_offer (accepted), guarantee, non-aggression pact, military access, peace offer, call to arms,
 //!                lend-lease request, manpower request, other), once a game day while none is open: the
 //!                first rule matching a proposal's `class` (any: every class) and sender (`from`: the
 //!                pop-up names the tag or the country's name; absent: anyone) whose `when` holds answers it
@@ -264,9 +269,10 @@ pub fn step(
         lease,
         now,
     };
-    let sections: [Section; 9] = [
+    let sections: [Section; 10] = [
         diplomacy_step,
         faction_step,
+        call_allies_step,
         incoming_step,
         trade_step,
         designs_step,
@@ -998,6 +1004,7 @@ fn dip_action(action: &str) -> Option<String> {
         "improve" | "improve_relations" => "improve_relations",
         "attache" | "send_attache" => "send_attache",
         "invite" | "invite_to_faction" => "invite_to_faction",
+        "call" | "call_ally" | "call_to_arms" | "call_to_war" => "call_to_arms",
         _ => return Some(action.trim().to_string()),
     };
     Some(key.to_string())
@@ -1493,6 +1500,82 @@ fn invitation(tools: &dyn Tools, join: &str) -> Option<u64> {
         .and_then(|p| p["index"].as_u64())
 }
 
+/// The members of our faction a call to arms may go to now: in the faction, not the player,
+/// not already in our war, and allowed by `faction.call_allies` ("all" or a list of tags).
+fn call_candidates(cfg: &Value, diplomacy: &Value) -> Vec<String> {
+    let allowed: Option<Vec<String>> = match cfg {
+        Value::String(s) if s.eq_ignore_ascii_case("all") => None,
+        Value::Array(_) => Some(
+            cfg.as_array()
+                .into_iter()
+                .flatten()
+                .map(|t| text(t).trim().to_uppercase())
+                .collect(),
+        ),
+        _ => return Vec::new(),
+    };
+    if diplomacy["wars"]["at_war"] != json!(true) {
+        return Vec::new();
+    }
+    let own = text(&diplomacy["player"]["tag"]).to_uppercase();
+    let fighting: Vec<String> = diplomacy["wars"]["allies_at_war"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|a| text(&a["tag"]).to_uppercase())
+        .collect();
+    diplomacy["faction"]["faction"]["members"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|m| text(&m["tag"]).to_uppercase())
+        .filter(|t| !t.is_empty() && *t != own && !fighting.contains(t))
+        .filter(|t| allowed.as_ref().is_none_or(|list| list.contains(t)))
+        .collect()
+}
+
+/// `faction.call_allies` ("all" | [TAG..] | "none"): while we are at war, a faction member not
+/// in the war is called to arms (hoi4_diplomacy_act call_to_arms; the ally decides), one call a
+/// tick, each member again after 30 game days while it stays out. Absent: no call is sent and
+/// the members left out are noted once a week, so leaving allies out is a written choice.
+fn call_allies_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    let (tools, plan, now) = (run.tools, run.plan, run.now);
+    let cfg = &plan["faction"]["call_allies"];
+    if state.skipped(now, "mcall", "x") {
+        return Ok(None);
+    }
+    let Ok(diplomacy) = tools.call("hoi4_diplomacy_state", &json!({})) else {
+        state.skip(now, "mcall", "x", DAY);
+        return Ok(None);
+    };
+    if cfg.is_null() {
+        let out = call_candidates(&json!("all"), &diplomacy);
+        if !out.is_empty() {
+            note(
+                state,
+                "faction",
+                format!(
+                    "faction members not in our war: {} (faction.call_allies not set: no call sent)",
+                    out.join(", ")
+                ),
+            );
+        }
+        state.skip(now, "mcall", "x", 7 * DAY);
+        return Ok(None);
+    }
+    for tag in call_candidates(cfg, &diplomacy) {
+        if state.skipped(now, "call", &tag) {
+            continue;
+        }
+        let args = json!({"action": "call_to_arms", "country": tag});
+        let (ok, why) = state.act(tools, run.lease, "hoi4_diplomacy_act", args, "ca")?;
+        state.skip(now, "call", &tag, 30 * DAY);
+        return Ok(Some(format!("call_to_arms {tag}: {ok} {why}")));
+    }
+    state.skip(now, "mcall", "x", 3 * DAY);
+    Ok(None)
+}
+
 fn faction_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
     let cfg = &plan["faction"];
@@ -1668,6 +1751,41 @@ fn default_incoming(plan: &Value) -> Vec<Value> {
         .filter(|c| !c.is_empty())
         .map(|c| json!({"class": c, "answer": "refuse", "why": "standing answer: the plan did not ask for it"}))
         .collect();
+    // A country asking into our faction: a decision either way, never silence. A planned war
+    // target is refused (membership would block the war); anyone else is accepted, since its
+    // divisions and factories join our wars (a plan that wants otherwise writes a rule first).
+    let mut targets: Vec<String> = plan["diplomacy"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter(|i| {
+                    matches!(
+                        dip_action(text(&i["action"])).as_deref(),
+                        Some("justify_war_goal" | "declare_war")
+                    )
+                })
+                .map(dip_target)
+                .collect()
+        })
+        .unwrap_or_default();
+    targets.extend(
+        strings(&plan["war"], "enemies")
+            .into_iter()
+            .map(|t| t.to_uppercase()),
+    );
+    targets.retain(|t| !t.is_empty());
+    targets.sort();
+    targets.dedup();
+    if !targets.is_empty() {
+        out.push(
+            json!({"class": "faction_join_request", "from": targets, "answer": "refuse",
+            "why": "standing answer: a planned war target cannot be a member"}),
+        );
+    }
+    out.push(json!({"class": "faction_join_request", "answer": "accept",
+        "why": "standing answer: a member that asks brings its divisions and factories into our wars"}));
+    out.push(json!({"class": "join_war_offer", "answer": "accept", "why": "standing answer: help in our war"}));
     out.push(json!({"class": "call_to_arms", "answer": "accept", "why": "standing answer: a faction's call to arms"}));
     out.push(json!({"class": "any", "answer": "player", "why": "standing answer: peace and unclassed proposals are the player's"}));
     out
@@ -3693,6 +3811,48 @@ mod tests {
             {"index": 1, "class": "guarantee", "title": "Guarantee of Independence",
                 "description": "The United Kingdom offers to guarantee our independence",
                 "can_accept": true, "can_refuse": true}]})
+    }
+
+    #[test]
+    fn allies_outside_our_war_are_the_call_to_arms_candidates() {
+        let d = json!({"player": {"tag": "GER"},
+            "wars": {"at_war": true, "allies_at_war": [{"tag": "SLO"}]},
+            "faction": {"faction": {"members": [{"tag": "GER"}, {"tag": "SLO"}, {"tag": "ITA"}, {"tag": "HUN"}]}}});
+        assert_eq!(call_candidates(&json!("all"), &d), vec!["ITA", "HUN"]);
+        assert_eq!(call_candidates(&json!(["hun"]), &d), vec!["HUN"]);
+        assert!(call_candidates(&json!("none"), &d).is_empty());
+        let mut peace = d.clone();
+        peace["wars"]["at_war"] = json!(false);
+        assert!(call_candidates(&json!("all"), &peace).is_empty());
+    }
+
+    #[test]
+    fn a_request_to_join_our_faction_is_always_decided_and_a_war_target_is_refused() {
+        let plan = json!({"diplomacy": [{"action": "justify", "target": "pol"},
+                                        {"action": "invite", "target": "HUN"}],
+                          "war": {"enemies": ["FRA"]}});
+        let rules = default_incoming(&plan);
+        let join: Vec<&Value> = rules
+            .iter()
+            .filter(|r| r["class"] == json!("faction_join_request"))
+            .collect();
+        assert_eq!(join.len(), 2);
+        assert_eq!(join[0]["answer"], json!("refuse"));
+        assert_eq!(join[0]["from"], json!(["FRA", "POL"]));
+        assert_eq!(join[1]["answer"], json!("accept"));
+        assert!(join[1].get("from").is_none());
+        assert!(rules
+            .iter()
+            .any(|r| r["class"] == json!("join_war_offer") && r["answer"] == json!("accept")));
+        // no war target: one accepting rule, still a decision
+        let rules = default_incoming(&json!({}));
+        assert_eq!(
+            rules
+                .iter()
+                .filter(|r| r["class"] == json!("faction_join_request"))
+                .count(),
+            1
+        );
     }
 
     #[test]
