@@ -93,6 +93,7 @@ mod screenmap;
 mod settle;
 mod special_project_rules;
 mod special_projects;
+mod state_table;
 mod states;
 mod stateslots;
 mod stockpile;
@@ -757,7 +758,7 @@ pub fn mac_tool_list() -> Vec<Value> {
         json!({"name":"hoi4_army_fallback","description":"Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front): army card, fallback-line drawing (C), one right-button stroke across the states at their middle depth, perpendicular to the way to the army. Verified by new battle-plan orders on the army. The army moves to the line when its plan is executed (hoi4_army_plan execute): a defender executes it when the front breaks or goes unfed.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8,"description":"own states the line runs through, side by side"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_area_defense","description":"Give an own army an area defence order over own states (the army spreads over them and holds what the order covers): army card, area defence (V), one right-click on each state (Find view first). Verified by new battle-plan orders on the army. `settings` (the order window's toggles: victory_points, ports, coastlines, airbases, borders, forts, rail, facility) is not yet built: refused with not_yet_built; the game's defaults apply.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"settings":{"type":"array","items":{"type":"string","enum":["victory_points","ports","coastlines","airbases","borders","forts","rail","facility"]}},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","states","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_exercise","description":"Start or stop army exercises for own armies: the divisions train toward the game's training maximum and the country earns army experience (doctrines, templates and designs are paid with it), at the cost of extra attrition (equipment) and fuel. Start: the army's card selects it and the battle plan bar's exercise button (btn_exercise) is clicked; stop_at_max (default true) Shift+clicks it so each army stops by itself at the maximum. Stop (on:false): the card's stop-training button. Verified per army by its card: training_marker shown while it exercises, icn_exercise_stop_at_max with the stop at the maximum (hoi4_armies reports both as exercising and exercise_stop_at_max). An army already as asked is left alone. A disabled button (no division that can train, all at the maximum) is refused with exercise_unavailable for that army; the receipt's detail lists every army's card state.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string","minLength":1,"maxLength":128},"minItems":1,"maxItems":24},"on":{"type":"boolean"},"stop_at_max":{"type":"boolean","description":"start only: stop each army at the training maximum (default true)"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","on","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
+        json!({"name":"hoi4_states","description":"States in one memory read (no interface input). A country tag (e.g. SOV, GER) lists every state it owns or controls: owner, controller, category, live building levels (buildings, factories), for the own country the shared building slots (unlocked, used, queued, free), resources, victory points with who holds them, the factories history/states gives (factories_start, an estimate for another country) and totals. Filter and sort in the same call instead of opening states one by one: owned_only, ids, min_free_slots, building with min_level/max_level, resource; sort by free_slots (default), factories, infrastructure, victory_points, level (of building), resource, id or name; limit (default 200) and offset. Large countries are read as fast as small ones: choose the few states to act on from this table, then act. A name (accent-insensitive substring) or one exact ID finds states by name instead. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"},"ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"maxItems":1000},"owned_only":{"type":"boolean"},"min_free_slots":{"type":"integer","minimum":0,"maximum":25},"building":{"type":"string"},"min_level":{"type":"integer","minimum":0},"max_level":{"type":"integer","minimum":0},"resource":{"type":"string"},"sort":{"type":"string","enum":["free_slots","factories","infrastructure","victory_points","level","resource","id","name"]},"limit":{"type":"integer","minimum":0,"maximum":1000},"offset":{"type":"integer","minimum":0}},"required":["query"],"additionalProperties":false}}),
         json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; surrender progress (wars[].enemy_surrender_progress, own_surrender_progress) and the naval intel against each enemy (wars[].own_naval_intel) are not yet built and always null with a reason; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended. capital_land: own-controlled states the capital reaches over own-controlled land (history capital, else the largest own area); a division elsewhere is overseas (disbanding it loses 75% of its equipment).","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
         json!({"name":"hoi4_province_graph","description":"Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states): per province its id, its state and its land neighbours. Use it to see which provinces an objective can be attacked from and to find a way over land; who holds a province is in hoi4_states (a state id query lists its provinces with their controllers). Pure read; no lease, no game memory.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":128}},"required":["states"],"additionalProperties":false}}),
         json!({"name":"hoi4_front_plan","description":"War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"},"description":"enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]"},"max_axes":{"type":"integer","minimum":1,"maximum":6}},"required":["enemy"],"additionalProperties":false}}),
@@ -810,8 +811,9 @@ pub fn mac_tool_list() -> Vec<Value> {
         daynight::tool(),
         json!({"name":"hoi4_army_detach","description":"Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":18},"into":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_army_gather","description":"Put EVERY own division that is outside an army into one army, wherever the divisions stand, with the game's own controls: Shift+click on the unassigned-divisions alert selects all of them (the alert's tooltip), a right click on the army's card assigns them (army), or a click on the new-army card makes one new army of them (no army). No state is opened and the camera does not travel: the cost is the same for 3 divisions or 300. Refused before input with no_unassigned, no_such_army, army_full (the army would pass max, default 24: name another army or leave army out and split afterwards) or gui_target_unavailable (the game shows the alert some days after a division is left outside an army). Verified from division membership.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"max":{"type":"integer","minimum":1,"maximum":1000},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_state_slots","description":"Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_state_slots","description":"Free shared building slots of own states (unlocked, used, queued, free) from one memory read, no interface input; up to 12 states per call. For many states use hoi4_states with the own tag and min_free_slots / sort free_slots instead. view:true opens each state's view (Find view, one click) and reads the slot text the game shows: slow, only to check a doubtful count.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"view":{"type":"boolean"},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_create","description":"(optional absorb_existing: true folds armies standing there into the new one) Create one army from the unassigned own divisions standing in a state with ONE selection: the camera frames them once (the Find view only when they are not on screen, then one zoom-out swoop at most), one box around all of them (one click per stack when another army stands among them) selects them, read back from memory (a division of another army refuses the action before the card is clicked; missed stacks get one Shift+click round), then the new-army card. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"absorb_existing":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_assign_plan","description":"Pure read: where the unassigned divisions standing in a state would go (into the standing army with the most room under 24, or the named one; a new army when none stands there), how many, the overflow and the split needed afterwards. Typed refusals: no_unassigned_here, no_such_army, target_not_in_state, army_full.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"army":{"type":"string","maxLength":128}},"required":["state_id"],"additionalProperties":false}}),
         json!({"name":"hoi4_army_assign","description":"Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there. Same refusals as hoi4_army_assign_plan, all before any input. Folding into a standing army uses the game's own control (box-select the divisions, RIGHT-click the army's card); it refuses with selection_mismatch, before the click, when the box also took divisions of another army. Without an army it picks the army standing in the same provinces as the unassigned divisions (hoi4_armies unassigned_by_state shared_with): a stack shared with an army can only go to that army; a refused selection names those armies. Creating a new army uses the verified new-army path.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"army":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -951,6 +953,7 @@ impl Commands for MacClock {
                     | "hoi4_army_group_create"
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
+                    | "hoi4_army_gather"
                     | "hoi4_army_motorization"
                     | "hoi4_army_rename"
                     | "hoi4_army_detach"
@@ -1418,6 +1421,7 @@ const MAP_TOOLS: &[&str] = &[
     "hoi4_army_move",
     "hoi4_army_split",
     "hoi4_army_merge",
+    "hoi4_army_gather",
     "hoi4_construction_add",
     "hoi4_fleet_region",
     "hoi4_naval_invasion",
@@ -1797,7 +1801,23 @@ impl MacClock {
             return Ok(armies::plan_assign(&view, state, army, armies::ARMY_CAP)?.to_json());
         }
         if name == "hoi4_states" {
-            allowed(args, &["query"])?;
+            allowed(
+                args,
+                &[
+                    "query",
+                    "ids",
+                    "owned_only",
+                    "min_free_slots",
+                    "building",
+                    "min_level",
+                    "max_level",
+                    "resource",
+                    "sort",
+                    "limit",
+                    "offset",
+                ],
+            )?;
+            let table = state_table::Query::from_args(args)?;
             let query = string(args, "query")?;
             if query.len() > 64 || query.chars().any(char::is_control) {
                 return Err(Error::new("invalid_arguments", "Invalid state query"));
@@ -1806,7 +1826,7 @@ impl MacClock {
                 .identity()
                 .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
                 .exe;
-            return states::lookup(process, &mapdata::game_dir(exe)?, query);
+            return states::lookup(process, &mapdata::game_dir(exe)?, query, table.as_ref());
         }
         if name == "hoi4_division_templates" {
             allowed(args, &[])?;
@@ -4833,7 +4853,7 @@ impl MacClock {
             return Ok(json!({"receipt":receipt,"result":*info.borrow(),"wings_after":after_rows}));
         }
         if name == "hoi4_state_slots" {
-            allowed(args, &["state_ids", "lease_token"])?;
+            allowed(args, &["state_ids", "view", "lease_token"])?;
             let ids: Vec<i32> = args
                 .get("state_ids")
                 .and_then(Value::as_array)
@@ -4850,6 +4870,14 @@ impl MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
+            if args.get("view").and_then(Value::as_bool) != Some(true) {
+                // The memory route: no state is opened (a large country is not walked).
+                let exe = &process
+                    .identity()
+                    .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                    .exe;
+                return state_table::slots_of(process, &mapdata::game_dir(exe)?, &ids);
+            }
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
         }
@@ -5258,6 +5286,43 @@ impl MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 armies::merge(process, keys, source, target)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_gather" {
+            allowed(args, &["army", "max", "request_id", "lease_token"])?;
+            let target = args.get("army").and_then(Value::as_str);
+            if let Some(v) = target {
+                if v.is_empty() || v.len() > 128 || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", "Invalid army name"));
+                }
+            }
+            let max = args
+                .get("max")
+                .and_then(Value::as_u64)
+                .unwrap_or(armies::ARMY_CAP as u64) as usize;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let action = json!({"kind":"army_gather","army":target,"max":max});
+            let keys = &self.keys;
+            let view = armies::armies(process)?;
+            let before = settle::Roster::from_view(&view);
+            if !actions.receipt_exists(id) {
+                self.keys.preflight()?;
+            }
+            let mut settle = || {
+                let now = armies::armies(process)?;
+                Ok(
+                    settle::army_gather(&before, &settle::Roster::from_view(&now), target)
+                        .outcome(now),
+                )
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::gather(process, keys, target, max).map(|_| ())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));

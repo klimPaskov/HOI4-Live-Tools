@@ -1074,6 +1074,17 @@
           "default": 3,
           "minimum": 1,
           "description": "smallest formation: a smaller army_layout entry without a general is a task of the formation of its state"
+        },
+        "gather_into": {
+          "type": "string",
+          "x-owner": "executor",
+          "description": "the army (a layout name_hint or an army name) that takes every division left outside an army, in one hoi4_army_gather action; default: the fullest army without battle-plan orders that has room, else a new army"
+        },
+        "gather": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "false: no gather (divisions outside armies wait for the state-by-state path)"
         }
       },
       "additionalProperties": false,
@@ -2961,7 +2972,9 @@
               "air_superiority",
               "overdrawn",
               "convoys",
-              "fuel", "balance", "dockyards"
+              "fuel",
+              "balance",
+              "dockyards"
             ]
           }
         },
@@ -3263,6 +3276,26 @@
           "description": "alert name -> why the plan leaves it open (strategist lint alerts.owner: every game alert has a plan key that owns it or is ignored here with a reason)",
           "x-rule": "alerts",
           "x-owner": "lint"
+        },
+        "xp_reserve": {
+          "type": "object",
+          "x-owner": "executor",
+          "description": "experience the doctrine fill keeps back per kind (templates, designs): {army, navy, air}; default army 30, others 0",
+          "properties": {
+            "army": {
+              "type": "number",
+              "minimum": 0
+            },
+            "navy": {
+              "type": "number",
+              "minimum": 0
+            },
+            "air": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false,
@@ -4232,6 +4265,17 @@
       "x-owner": "player",
       "description": "deprecated: use goal",
       "x-deprecated": "goal"
+    },
+    "doctrine_defaults": {
+      "type": "object",
+      "x-owner": "executor",
+      "description": "per folder (land, naval, air, special_forces) the subdoctrine ids in preference order the executor puts on an empty track once experience covers it (after the plan's doctrines entries); without it the first subdoctrine the game offers on the track",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
     }
   },
   "patternProperties": {

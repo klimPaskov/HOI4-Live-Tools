@@ -898,47 +898,74 @@ pub(super) fn sample_variants(
     Ok(out)
 }
 
+/// One state of the game's state list: id, owner and controller tag indices, object pointer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct StateEntry {
+    pub id: i32,
+    pub owner: i32,
+    pub controller: i32,
+    pub ptr: u64,
+}
+/// Every state of the game in one pass over the state list (no interface).
+pub(super) fn state_scan(r: &Reader<'_>, image: u64) -> Result<Vec<StateEntry>> {
+    let c = crate::construction::layout(r);
+    let g = game::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    let (_, sdata, scount) = r.array_header(gs + c.gs_states)?;
+    let mut out = Vec::new();
+    for i in 0..scount.min(4096) as u64 {
+        let state = r.u64(sdata + i * 8)?;
+        if state == 0 || r.u64(state)? != image + c.state_vtable {
+            continue;
+        }
+        out.push(StateEntry {
+            id: r.i32(state + c.state_id)?,
+            owner: r.i32(state + c.state_owner)?,
+            controller: r.i32(state + c.state_controller)?,
+            ptr: state,
+        });
+    }
+    Ok(out)
+}
+/// Building levels of one state object (building key -> level).
+pub(super) fn state_levels(
+    r: &Reader<'_>,
+    image: u64,
+    state: u64,
+) -> Result<BTreeMap<String, u32>> {
+    let l = layout(r)?;
+    let c = crate::construction::layout(r);
+    let (_, bdata, bcount) = r.array_header(state + l.status_offset + l.status_buildings)?;
+    let mut levels = BTreeMap::new();
+    for b in 0..bcount.min(64) as u64 {
+        let building = r.u64(bdata + b * 8)?;
+        if building == 0 || r.u64(building)? != image + c.building_vtable {
+            continue;
+        }
+        let template = r.u64(building + l.building_template)?;
+        if template == 0 {
+            continue;
+        }
+        let key = r.string_bounded(template + c.template_key, 64)?;
+        let level = u16::from_le_bytes(r.read(building + l.building_level, 2)?.try_into().unwrap());
+        levels.insert(key, u32::from(level));
+    }
+    Ok(levels)
+}
 /// Building levels of the wanted states (one pass over the state list).
 pub(super) fn state_buildings(
     r: &Reader<'_>,
     image: u64,
     wanted: &std::collections::BTreeSet<i32>,
 ) -> Result<BTreeMap<i32, BTreeMap<String, u32>>> {
-    let l = layout(r)?;
-    let c = crate::construction::layout(r);
-    let g = game::layout(r);
-    let gs = r.u64(image + g.gs_global)?;
-    let (_, sdata, scount) = r.array_header(gs + c.gs_states)?;
     let mut out = BTreeMap::new();
-    for i in 0..scount.min(4096) as u64 {
+    for s in state_scan(r, image)? {
         if out.len() == wanted.len() {
             break;
         }
-        let state = r.u64(sdata + i * 8)?;
-        if state == 0 || r.u64(state)? != image + c.state_vtable {
-            continue;
+        if wanted.contains(&s.id) {
+            out.insert(s.id, state_levels(r, image, s.ptr)?);
         }
-        let id = r.i32(state + c.state_id)?;
-        if !wanted.contains(&id) {
-            continue;
-        }
-        let (_, bdata, bcount) = r.array_header(state + l.status_offset + l.status_buildings)?;
-        let mut levels = BTreeMap::new();
-        for b in 0..bcount.min(64) as u64 {
-            let building = r.u64(bdata + b * 8)?;
-            if building == 0 || r.u64(building)? != image + c.building_vtable {
-                continue;
-            }
-            let template = r.u64(building + l.building_template)?;
-            if template == 0 {
-                continue;
-            }
-            let key = r.string_bounded(template + c.template_key, 64)?;
-            let level =
-                u16::from_le_bytes(r.read(building + l.building_level, 2)?.try_into().unwrap());
-            levels.insert(key, u32::from(level));
-        }
-        out.insert(id, levels);
     }
     Ok(out)
 }

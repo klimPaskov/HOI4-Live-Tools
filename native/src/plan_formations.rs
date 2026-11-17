@@ -305,13 +305,16 @@ fn own_tag(state: &State, tools: &dyn Tools, plan: &Value) -> String {
         .unwrap_or_default()
 }
 
-/// A commander row is one of ours, free and not marked unassignable.
+/// A commander row is one of ours, free and not marked unassignable. A `stale` row (read while
+/// the commander list was closed) is still a candidate: the commander tool opens the list itself
+/// and refuses a name it does not offer, and who leads an army is read from the armies, not from
+/// the list (pm6, 17 Nov 2026: with the list closed every free general read stale, so armies
+/// whose planned general was hidden stayed without any general).
 fn free_own(c: &Value, tag: &str) -> bool {
     let id = text(&c["id"]);
     (tag.is_empty() || id.is_empty() || id.starts_with(&format!("{tag}_")))
         && c["assigned_to"].is_null()
         && c["available"] != json!(false)
-        && c["stale"] != json!(true)
 }
 
 /// The free commanders of the country that can be picked. The country's leader list also holds

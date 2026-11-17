@@ -694,6 +694,35 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_army_gather": {
+   "description": "Put EVERY own division that is outside an army into one army, wherever the divisions stand, with the game's own controls: Shift+click on the unassigned-divisions alert selects all of them (the alert's tooltip), a right click on the army's card assigns them (army), or a click on the new-army card makes one new army of them (no army). No state is opened and the camera does not travel: the cost is the same for 3 divisions or 300. Refused before input with no_unassigned, no_such_army, army_full (the army would pass max, default 24: name another army or leave army out and split afterwards) or gui_target_unavailable (the game shows the alert some days after a division is left outside an army). Verified from division membership.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "army": {
+      "maxLength": 128,
+      "type": "string"
+     },
+     "lease_token": {
+      "type": "string"
+     },
+     "max": {
+      "maximum": 1000,
+      "minimum": 1,
+      "type": "integer"
+     },
+     "request_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_army_group_create": {
    "description": "Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.",
    "inputSchema": {
@@ -2626,7 +2655,7 @@
      "focus_id": {
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^[A-Za-z0-9_]+$",
+      "pattern": "^[A-Za-z0-9_-]+$",
       "type": "string"
      },
      "include_pan": {
@@ -4272,7 +4301,7 @@
    "source": "--list-tools"
   },
   "hoi4_state_slots": {
-   "description": "Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.",
+   "description": "Free shared building slots of own states (unlocked, used, queued, free) from one memory read, no interface input; up to 12 states per call. For many states use hoi4_states with the own tag and min_free_slots / sort free_slots instead. view:true opens each state's view (Find view, one click) and reads the slot text the game shows: slow, only to check a doubtful count.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -4288,6 +4317,9 @@
       "maxItems": 12,
       "minItems": 1,
       "type": "array"
+     },
+     "view": {
+      "type": "boolean"
      }
     },
     "required": [
@@ -4299,11 +4331,64 @@
    "source": "--list-tools"
   },
   "hoi4_states": {
-   "description": "Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. A tag query also gives each state's factories_start (the factories history/states gives it) and the sums for the states the tag owns and controls now (factories_start.owned / controlled: an estimate of another country's industry; construction and bombing since the start are not in it), and the victory points the tag owns with the share others hold. Pure read.",
+   "description": "States in one memory read (no interface input). A country tag (e.g. SOV, GER) lists every state it owns or controls: owner, controller, category, live building levels (buildings, factories), for the own country the shared building slots (unlocked, used, queued, free), resources, victory points with who holds them, the factories history/states gives (factories_start, an estimate for another country) and totals. Filter and sort in the same call instead of opening states one by one: owned_only, ids, min_free_slots, building with min_level/max_level, resource; sort by free_slots (default), factories, infrastructure, victory_points, level (of building), resource, id or name; limit (default 200) and offset. Large countries are read as fast as small ones: choose the few states to act on from this table, then act. A name (accent-insensitive substring) or one exact ID finds states by name instead. Pure read.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
+     "building": {
+      "type": "string"
+     },
+     "ids": {
+      "items": {
+       "maximum": 4095,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "maxItems": 1000,
+      "type": "array"
+     },
+     "limit": {
+      "maximum": 1000,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "max_level": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "min_free_slots": {
+      "maximum": 25,
+      "minimum": 0,
+      "type": "integer"
+     },
+     "min_level": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "offset": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "owned_only": {
+      "type": "boolean"
+     },
      "query": {
+      "type": "string"
+     },
+     "resource": {
+      "type": "string"
+     },
+     "sort": {
+      "enum": [
+       "free_slots",
+       "factories",
+       "infrastructure",
+       "victory_points",
+       "level",
+       "resource",
+       "id",
+       "name"
+      ],
       "type": "string"
      }
     },
@@ -4813,7 +4898,7 @@
        "focus_id": {
         "maxLength": 128,
         "minLength": 1,
-        "pattern": "^[A-Za-z0-9_]+$",
+        "pattern": "^[A-Za-z0-9_-]+$",
         "type": "string"
        },
        "research": {

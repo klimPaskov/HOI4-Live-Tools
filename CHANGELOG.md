@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+Scale: nothing walks states or divisions one at a time.
+
+- `hoi4_states` with a country tag is one memory pass over the state list for any country size (the Soviet Union's
+  152 states in under 50 ms): live building levels, factories, shared building slots (unlocked, used, queued,
+  free) for the own country, category, resources, victory points with who holds them, and totals; filters
+  (`owned_only`, `ids`, `min_free_slots`, `building` with `min_level`/`max_level`, `resource`), sorting and paging
+  in the server. Unlocked slots follow the game's rules (category slots, the slot factor of researched
+  technologies and active ideas, the state's own extra slots, the shared-slot cap).
+- `hoi4_state_slots` answers from the same memory read; `view: true` keeps the old route through each state's view.
+- `hoi4_army_gather`: every division outside an army into one army in one action (the alert's select-all, then the
+  army card or the new-army card). The executor gathers instead of assigning state by state
+  (`armies.gather_into`, else the fullest army without orders that has room, else a new army).
+- Generals: a free general read while the commander list is closed is a candidate again, and a planned general
+  the game does not offer yet is not asked for every five days: an army gets the best available general once.
+- Doctrines: an empty track takes a subdoctrine once experience covers it (`doctrine_defaults`, else the first the
+  game offers; `manage.xp_reserve` keeps experience back for templates).
+
 Objective strikes (`war.strike`): after the opening battle plans the executor sends each army at one province at a
 time with a single march order of the whole army, and orders the next objective the tick the last one falls.
 

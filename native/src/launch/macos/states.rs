@@ -134,139 +134,28 @@ pub(super) fn province_controllers(
     }
     Ok(out)
 }
-/// Provinces of `state` held by a country other than `holder`.
-fn held_by_others(process: &dyn Process, dir: &Path, state: i32, holder: &str) -> Vec<Value> {
-    let Some(provinces) = super::mapdata::state_province_index(dir)
-        .ok()
-        .and_then(|m| m.get(&state).cloned())
-    else {
-        return Vec::new();
-    };
-    read(process, |r, i| province_controllers(r, i, &provinces))
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|(_, c)| c != holder)
-        .map(|(p, c)| json!({"province": p, "controller": c}))
-        .collect()
-}
-
 /// States whose English name contains `query` (accent-insensitive), at most 25.
-pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<Value> {
+pub(super) fn lookup(
+    process: &dyn Process,
+    dir: &Path,
+    query: &str,
+    table: Option<&super::state_table::Query>,
+) -> Result<Value> {
     let wanted = fold(query.trim());
     if wanted.is_empty() {
         return Err(Error::new("invalid_arguments", "Empty state query"));
     }
     let query = query.trim();
-    // A country tag (e.g. GER, POL) lists the states that country owns.
+    // A country tag (e.g. GER, POL) lists the states that country owns or controls: one memory
+    // pass (state_table), filtered and sorted in the server.
     if query.len() == 3 && query.bytes().all(|b| b.is_ascii_uppercase()) {
-        let all = names(dir)?;
-        let centers = super::mapdata::state_centers(dir).ok();
-        let victory = super::mapdata::state_victory_points(dir).ok();
-        let infrastructure = super::mapdata::state_infrastructure(dir).ok();
-        let factories = super::mapdata::state_factories(dir);
-        let (mut owned_factories, mut controlled_factories) = (
-            super::mapdata::Factories::default(),
-            super::mapdata::Factories::default(),
-        );
-        let (mut vp_total, mut vp_lost) = (0.0f64, 0.0f64);
-        let mut vp_kept: Vec<Value> = Vec::new();
-        let mut rows = Vec::new();
-        for (id, name) in all {
-            if let Ok((owner, controller)) = read(process, |r, i| holders(r, i, id)) {
-                if owner == query || controller == query {
-                    let mut row =
-                        json!({"state_id":id,"name":name,"owner":owner,"controller":controller});
-                    if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
-                        row["x"] = json!(x.round());
-                        row["z"] = json!(z.round());
-                    }
-                    if let Some(level) = infrastructure.as_ref().and_then(|m| m.get(&id)) {
-                        row["infrastructure_start"] = json!(level);
-                    }
-                    // The factories the state started with (history/states): another country's
-                    // factories are not in memory reads, so its industry is estimated from the
-                    // states it holds now.
-                    if let Some(f) = factories.get(&id) {
-                        row["factories_start"] = json!({"civilian": f.civilian,
-                            "military": f.military, "naval": f.naval});
-                        let add = |sum: &mut super::mapdata::Factories| {
-                            sum.civilian += f.civilian;
-                            sum.military += f.military;
-                            sum.naval += f.naval;
-                        };
-                        if owner == query {
-                            add(&mut owned_factories);
-                        }
-                        if controller == query {
-                            add(&mut controlled_factories);
-                        }
-                    }
-                    // Provinces another country holds inside the state: an enemy can take part
-                    // of a state while the state still counts as ours (w22: Eritrea went
-                    // province by province).
-                    let others = held_by_others(process, dir, id, &owner);
-                    if !others.is_empty() {
-                        row["provinces_held_by_others"] = json!(others);
-                    }
-                    // Victory points of the country's own states and who holds them: the share
-                    // held by others drives its surrender progress.
-                    if owner == query {
-                        if let Some(vps) = victory.as_ref().and_then(|v| v.get(&id)) {
-                            let ids: Vec<i32> = vps.iter().map(|(p, _)| *p).collect();
-                            let held: HashMap<i32, String> =
-                                read(process, |r, i| province_controllers(r, i, &ids))
-                                    .unwrap_or_default()
-                                    .into_iter()
-                                    .collect();
-                            let mut list = Vec::new();
-                            for (p, v) in vps {
-                                let c = held.get(p).cloned().unwrap_or_default();
-                                vp_total += v;
-                                if !c.is_empty() && c != owner {
-                                    vp_lost += v;
-                                } else {
-                                    vp_kept.push(
-                                        json!({"state_id": id, "province": p, "victory_points": v}),
-                                    );
-                                }
-                                list.push(
-                                    json!({"province": p, "victory_points": v, "controller": c}),
-                                );
-                            }
-                            row["victory_points"] = json!(list);
-                        }
-                    }
-                    rows.push(row);
-                }
-            }
-        }
-        let mut out = json!({"states": rows});
-        let sum = |f: &super::mapdata::Factories| {
-            json!({"civilian": f.civilian, "military": f.military, "naval": f.naval,
-                "total": f.total()})
-        };
-        out["factories_start"] = json!({
-            "owned": sum(&owned_factories),
-            "controlled": sum(&controlled_factories),
-            "note": "estimate: the factories history/states gives the states this country owns / controls now; construction, conversion and bombing since the start are not in it"
-        });
-        if vp_total > 0.0 {
-            vp_kept.sort_by(|a, b| {
-                b["victory_points"]
-                    .as_f64()
-                    .unwrap_or(0.0)
-                    .total_cmp(&a["victory_points"].as_f64().unwrap_or(0.0))
-            });
-            vp_kept.truncate(12);
-            out["victory_points"] = json!({
-                "total": vp_total,
-                "held_by_others": vp_lost,
-                "share_held_by_others": (vp_lost / vp_total * 1000.0).round() / 1000.0,
-                "largest_still_held": vp_kept,
-                "note": "estimate from the map files and live province control: a country's surrender progress follows the share of its own victory points others hold (laws, national spirits and events move the threshold)"
-            });
-        }
-        return Ok(out);
+        return super::state_table::table(process, dir, query, table);
+    }
+    if table.is_some() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Filters and sorting need a country tag as the query",
+        ));
     }
     let found: Vec<(i32, String)> = names(dir)?
         .into_iter()

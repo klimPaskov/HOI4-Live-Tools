@@ -352,7 +352,7 @@ A daily standing plan (`hoi4_plan`, run by `hoi4_plan_run`) can do these in this
 |---|---|
 | Factory counts, PP, stability, war support, fuel | `hoi4_industry`, `hoi4_economy`, `hoi4_country_status` |
 | Laws, consumer goods, free civs, modifiers, fuel | `hoi4_economy_detail` |
-| Free slots per state | `hoi4_state_slots` |
+| Every own state at once: free slots, buildings, resources, victory points (filters, sorting; one memory read for any country size, never one state at a time) | `hoi4_states` with the own tag (`owned_only`, `min_free_slots`, `sort`); `hoi4_state_slots` for up to 12 named states |
 | Queue a building or railway | `hoi4_construction_add` (factories, infra, refineries, silos, facilities, hubs, ports), `hoi4_railway_build` |
 | Construction queue: read, reorder, remove | `hoi4_construction_queue`, `hoi4_construction_order` |
 | Resources and line shortages | `hoi4_resources`, `hoi4_production_shortages` |

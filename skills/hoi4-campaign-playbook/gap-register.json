@@ -6066,21 +6066,22 @@
   {
    "id": "states.bulk_read",
    "domain": "construction",
-   "capability": "One memory read of every owned and controlled state (slots, building levels, infrastructure, resources, compliance, resistance, supply, cores, controller) with filters and sorting, cached per tick, so no tool walks states one by one through the interface",
+   "capability": "One memory read of every owned and controlled state (live building levels, shared slots unlocked/used/queued/free, category, resources, victory points and who holds them) with filters and sorting, so no tool walks states one by one through the interface",
    "playbook": [
-    "economy-build-orders.md#14 (c) Tools (No tool yet: per-state bulk read)"
+    "economy-build-orders.md#14. (c) Tools"
    ],
    "plan": [
     "construction_probe_slots"
    ],
    "tools": [
-    "hoi4_state_slots",
-    "hoi4_states"
+    "hoi4_states",
+    "hoi4_state_slots"
    ],
-   "payoff": "high",
-   "why": "hoi4_state_slots opens each state's view (up to 12 per call, 7-39 s each; gr1 18 calls 178 s); a large country (USSR, USA) multiplies it; building levels are already read in bulk from memory (units::state_buildings)",
-   "closing": "both",
-   "owner": "hoi4_state_table (memory, all states, filters) replacing the interface probe; max slots need the state category and slot modifiers"
+   "why": "hoi4_state_slots opened each state's view (11.5 s per state in pr1); a large country multiplied it. Now one memory pass for any country size",
+   "closing": "none",
+   "owner": "state_table.rs (hoi4_states with a tag); executor construction probe uses the memory route. Open: Linux offset of the extra-slot field; slot factor rounding after an industry tech not yet seen live",
+   "verified": "live 17 Nov sv1 (SOV 1936.01.01): hoi4_states query SOV = 152 states in one memory pass, 46 ms, factory totals equal the top bar; slots equal the game's state view in 6 of 6 states (Leningrad, Moscow, Kiev, Tula, Altai, Nikolayev); hoi4_state_slots answers from memory (view:true keeps the view route); extra shared slots read from the state (+0x7d0 macOS, re1)",
+   "payoff": "high"
   },
   {
    "id": "research.horizontal_scroll",
@@ -6097,6 +6098,47 @@
    "why": "wide trees (air, 1.19.4) put tiles outside the client area; the tool refuses them by name and the executor rests them 180 days",
    "closing": "both",
    "owner": "drag or wheel the tree sideways before the click (research.rs)"
+  },
+  {
+   "id": "armies.gather_unassigned",
+   "domain": "formations",
+   "capability": "Every division outside an army into one army in one action, wherever it stands (the alert's select-all, then the army card), never state by state",
+   "playbook": [
+    "war-operating-loop.md"
+   ],
+   "plan": [
+    "armies",
+    "armies.gather_into"
+   ],
+   "tools": [
+    "hoi4_army_gather"
+   ],
+   "verified": "live 17 Nov pm5: 30 German divisions into one new army in 1.4 s, Verified; pm6: the executor's gather step put 11 left-over divisions into Panzergruppe, Verified",
+   "payoff": "high",
+   "why": "pr1 left 27 of 71 divisions outside any army; army_assign by state box failed 15 times (selection_mismatch, divisions off screen) and costs a camera trip per state",
+   "closing": "none",
+   "owner": "armies.rs gather + plan_run armies_step"
+  },
+  {
+   "id": "doctrines.fill_empty_tracks",
+   "domain": "doctrines",
+   "capability": "Experience never idles on an empty doctrine track: each empty track of a folder with a grand doctrine takes the plan's default (doctrine_defaults) or the first offered subdoctrine once experience covers it above the reserve",
+   "playbook": [
+    "templates-equipment-production.md"
+   ],
+   "plan": [
+    "doctrines",
+    "doctrine_defaults",
+    "manage.xp_reserve"
+   ],
+   "tools": [
+    "hoi4_doctrines",
+    "hoi4_doctrine_adopt"
+   ],
+   "payoff": "medium",
+   "why": "pr1: doctrines_available open 384 days after the plan's three subdoctrines (12 tracks exist)",
+   "closing": "live",
+   "owner": "plan_run doctrine_fill"
   }
  ]
 }

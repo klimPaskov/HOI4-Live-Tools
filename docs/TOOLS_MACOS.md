@@ -29,10 +29,11 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_industry` (R): Own civilian, military and dockyard factory counts (validated against the top bar total) and political power;
 - `hoi4_naval_production_options` (R): Read-only (memory, no input):
 - `hoi4_production_add` (A): Add one own military or naval production line for a base equipment type (e.g.
+- `hoi4_production_priority` (A): Move an own production line in the production view's priority order (a line higher in the list gets resources and factories first, so shortages and lost factories hit the bottom lines):
 - `hoi4_production_set` (A): factories 0 removes the line (its close button).
 - `hoi4_production_shortages` (R): Per production line (military and naval) the resources it was allocated per day and which of them are in deficit for the whole country.
 - `hoi4_resources` (R): Own strategic resources per day from memory:
-- `hoi4_state_slots` (A): Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it).
+- `hoi4_state_slots` (A): Free shared building slots of own states (unlocked, used, queued, free) from one memory read, no interface input;
 - `hoi4_trade` (A): Read the Trade view (opens it with the R key, changes nothing):
 - `hoi4_trade_set` (A): Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it, or its three-letter tag such as USA) through the Trade view:
 
@@ -80,13 +81,17 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 ## Army, templates, designs, supply
 
 - `hoi4_armies` (R): Own armies (name, division ids, threat:
+- `hoi4_army_area_defense` (A): Give an own army an area defence order over own states (the army spreads over them and holds what the order covers):
 - `hoi4_army_assign` (A): Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there.
 - `hoi4_army_assign_plan` (R): Pure read:
 - `hoi4_army_attack` (A): Front line, offensive line and execute for one army in one call (the same steps as hoi4_army_front, hoi4_army_offensive and hoi4_army_plan execute:true, each verified and journalled as <request_id>:front, :offensive, :execute).
 - `hoi4_army_commander` (A): Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list.
 - `hoi4_army_create` (A): (optional absorb_existing:
 - `hoi4_army_detach` (A): Move chosen divisions out of an army:
+- `hoi4_army_exercise` (A): Start or stop army exercises for own armies:
+- `hoi4_army_fallback` (A): Draw a fallback line for an own army through own states (a defender's line on rivers, mountains or forts behind the front):
 - `hoi4_army_front` (A): Give an own army a front-line order along the border nearest a state:
+- `hoi4_army_gather` (A): Put EVERY own division that is outside an army into one army, wherever the divisions stand, with the game's own controls:
 - `hoi4_army_group_create` (A): Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card).
 - `hoi4_army_merge` (A): Move every division of army `source` into army `target` with the game's own controls:
 - `hoi4_army_motorization` (A): Set an army's supply motorization:
@@ -160,7 +165,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_province_graph` (R): Land provinces of the given states and the provinces each one touches, from the install's map files (provinces.bmp, definition.csv, history/states):
 - `hoi4_railway_build` (A): Queue ONE railway with the game's railway construction mode:
 - `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
-- `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.
+- `hoi4_states` (R): States in one memory read (no interface input).
 - `hoi4_stockpile` (R): Own equipment stockpile from game memory (no input, no lease, never pauses).
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
 - `hoi4_war_stats` (R): Read-only (memory, no input, no pause):

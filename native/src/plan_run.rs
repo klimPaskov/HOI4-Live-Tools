@@ -375,6 +375,7 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_army_front",
     "hoi4_army_group_create",
     "hoi4_army_merge",
+    "hoi4_army_gather",
     "hoi4_army_motorization",
     "hoi4_army_move",
     "hoi4_army_offensive",
@@ -2309,6 +2310,54 @@ fn armies_step(
             .iter()
             .filter_map(Value::as_i64)
             .collect();
+        // Every division outside an army goes into one army in one action, wherever it stands
+        // (hoi4_army_gather: the alert's select-all, then the army card), never state by state:
+        // a large country is not walked. The target is the plan's `armies.gather_into` (a layout
+        // name_hint or an army name), else the fullest army without battle-plan orders that has
+        // room, else a new army (the split rule below restores the cap).
+        let pool = list(&roster, "unassigned").len() as u64;
+        if pool > 0 && cfg["gather"] != json!(false) && !state.skipped(now, "gather", "all") {
+            let wanted = text(&cfg["gather_into"]).to_string();
+            let wanted = state.layout.get(&wanted).cloned().unwrap_or(wanted);
+            let rows = list(&roster, "armies");
+            let room = |a: &Value| a["division_count"].as_u64().unwrap_or(0) + pool <= max;
+            let target = rows
+                .iter()
+                .find(|a| !wanted.is_empty() && text(&a["army"]) == wanted && room(a))
+                .or_else(|| {
+                    rows.iter()
+                        .filter(|a| a["battle_plan_orders"].as_u64().unwrap_or(0) == 0 && room(a))
+                        .max_by_key(|a| a["division_count"].as_u64().unwrap_or(0))
+                })
+                .map(|a| text(&a["army"]).to_string());
+            let args = match &target {
+                Some(t) => json!({"army": t, "max": max}),
+                None => json!({"max": max}),
+            };
+            let (ok, why) = state.act(tools, lease, "hoi4_army_gather", args, "ga")?;
+            let unavailable = !ok
+                && (why.contains("capability_unavailable")
+                    || why.contains("unknown_tool")
+                    || why.contains("Unknown tool"));
+            if !unavailable {
+                state.skip(
+                    now,
+                    "gather",
+                    "all",
+                    if ok {
+                        DAY
+                    } else if why.contains("gui_target_unavailable") {
+                        3 * DAY
+                    } else {
+                        7 * DAY
+                    },
+                );
+                return Ok(Some(format!(
+                    "army_gather {pool} -> {}: {ok} {why}",
+                    target.as_deref().unwrap_or("new army")
+                )));
+            }
+        }
         let mut pending: Vec<&Value> = list(&roster, "unassigned_by_state").iter().collect();
         if !only.is_empty() {
             pending.retain(|e| e["state_id"].as_i64().is_some_and(|id| only.contains(&id)));
@@ -2734,7 +2783,14 @@ fn layout_step(
         let Some(army) = state.layout.get(hint).filter(|a| !a.is_empty()).cloned() else {
             continue;
         };
-        if general.is_empty() || state.skipped(now, "layoutgen", &army) {
+        // a general refused before (not offered now, or command power short) is not asked
+        // again here: the command step gives the army the best available general meanwhile,
+        // once, and nobody swaps it later (pr1: Guderian and Hoth asked every 5 days for two
+        // years while their armies stood without any general)
+        if general.is_empty()
+            || state.skipped(now, "layoutgen", &army)
+            || state.skipped(now, "cgenx", general)
+        {
             continue;
         }
         let row = armies.iter().find(|a| text(&a["army"]) == army);
@@ -2746,6 +2802,14 @@ fn layout_step(
                 json!({"army": army, "general": general}),
                 "lg",
             )?;
+            if !ok {
+                let wait = match plan_military::code(&why) {
+                    "unknown_commander" | "commander_unavailable" => 60,
+                    "insufficient_command_power" => plan_military::cp_wait_days(&why),
+                    _ => 30,
+                };
+                state.skip(now, "cgenx", general, wait * DAY);
+            }
             state.skip(
                 now,
                 "layoutgen",
@@ -4141,6 +4205,118 @@ fn special_projects_step(
     )))
 }
 
+/// Experience never idles on an empty doctrine track. Every 14 days: for each folder that holds
+/// a grand doctrine, an empty track takes a subdoctrine once the folder's experience covers its
+/// price above the reserve. The plan's own `doctrines` entries for a folder go first (a pending
+/// one holds that folder's experience); then `doctrine_defaults.<folder>` (subdoctrine ids in
+/// preference order), else the first subdoctrine the game offers on the track. Experience kept
+/// back: `manage.xp_reserve.<army|navy|air>` (army 30 by default, for templates and designs).
+/// Grand doctrines are the plan's decision and never chosen here. `manage.off` "doctrines" stops it.
+fn doctrine_fill(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if strings(&plan["manage"], "off")
+        .iter()
+        .any(|r| r == "doctrines")
+        || state.skipped(now, "docfill", "x")
+    {
+        return Ok(None);
+    }
+    state.skip(now, "docfill", "x", 14 * DAY);
+    let read = tools.call("hoi4_doctrines", &json!({"include_catalog": true}))?;
+    let pending: HashSet<String> = list(plan, "doctrines")
+        .iter()
+        .enumerate()
+        .filter(|(index, entry)| {
+            let key =
+                item_id(entry).map_or_else(|| format!("doc:{index}"), |id| format!("doc:id:{id}"));
+            !state.done.contains_key(&key)
+        })
+        .map(|(_, e)| match text(&e["folder"]) {
+            "" => "land".to_string(),
+            "navy" => "naval".to_string(),
+            f => f.to_string(),
+        })
+        .collect();
+    for folder in list(&read, "folders") {
+        let key = text(&folder["folder"]);
+        if key.is_empty() || folder["grand_doctrine"].is_null() || pending.contains(key) {
+            continue;
+        }
+        let kind = match key {
+            "air" => "air",
+            "naval" | "navy" => "navy",
+            _ => "army",
+        };
+        let reserve = plan["manage"]["xp_reserve"][kind]
+            .as_f64()
+            .unwrap_or(if kind == "army" { 30.0 } else { 0.0 });
+        let xp = folder["experience"]
+            .as_f64()
+            .or_else(|| read["experience"][kind]["value"].as_f64())
+            .unwrap_or(0.0);
+        let preferred: Vec<String> = strings(&plan["doctrine_defaults"], key);
+        for track in list(folder, "tracks") {
+            if !track["subdoctrine"].is_null() {
+                continue;
+            }
+            let name = text(&track["track"]).to_string();
+            if name.is_empty() || state.skipped(now, "docfilltrack", &format!("{key}:{name}")) {
+                continue;
+            }
+            let options: Vec<&Value> = list(track, "available_subdoctrines")
+                .iter()
+                .filter(|o| o["already_chosen_elsewhere"] != json!(true))
+                .collect();
+            let price = |o: &Value| {
+                o["estimated_cost_after_reduction"]
+                    .as_f64()
+                    .or_else(|| o["xp_cost"].as_f64())
+                    .unwrap_or(f64::MAX)
+            };
+            let choice = preferred
+                .iter()
+                .find_map(|p| options.iter().find(|o| text(&o["id"]) == p.as_str()))
+                .or_else(|| options.first())
+                .copied();
+            let Some(choice) = choice else {
+                continue;
+            };
+            let cost = price(choice);
+            if xp - reserve < cost {
+                plan_manage::note(
+                    state,
+                    "doctrines",
+                    format!(
+                        "{key} track {name} empty: {} costs {cost:.0}, {xp:.0} held ({reserve:.0} kept back)",
+                        text(&choice["id"])
+                    ),
+                );
+                continue;
+            }
+            let id = text(&choice["id"]).to_string();
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_doctrine_adopt",
+                json!({"doctrine": id, "track": name}),
+                "df",
+            )?;
+            if !ok {
+                state.skip(now, "docfilltrack", &format!("{key}:{name}"), 60 * DAY);
+            }
+            return Ok(Some(format!(
+                "doctrine fill {key}/{name}: {id} ({cost:.0} of {xp:.0} xp): {ok} {why}"
+            )));
+        }
+    }
+    Ok(None)
+}
+
 /// Routine domains the player tends to forget, one action per tick:
 ///   special_projects see [`special_projects_step`];
 ///   doctrines [{"id","folder":"land","grand_doctrine"?,"track"?,"subdoctrine"?,"xp":100},..]  the
@@ -4301,6 +4477,9 @@ fn extras_step(
             }
             return Ok(Some(format!("doctrine {doctrine}: {ok} {why}{held}")));
         }
+    }
+    if let Some(step) = doctrine_fill(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
     }
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
         state.skip(now, "aircheck", "x", 3 * DAY);
@@ -8957,6 +9136,52 @@ mod tests {
         state.skip(now, "armycreate", "66", 2 * DAY);
         let second = tick(&mut state, &Roster, &plan, "l", now).unwrap();
         assert!(matches!(&second, Tick::Acted(s) if s.starts_with("army_split Army 1 16: true")));
+    }
+
+    #[test]
+    fn unassigned_divisions_are_gathered_in_one_action_not_state_by_state() {
+        struct Gathering(RefCell<Vec<(String, Value)>>, bool);
+        impl Tools for Gathering {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"civilian_factories_available_for_projects": 0})),
+                    "hoi4_armies" => Ok(json!({
+                        "unassigned": ["d1", "d2", "d3"],
+                        "unassigned_by_state": [{"state_id": 56, "divisions": 2}, {"state_id": 57, "divisions": 1}],
+                        "armies": [
+                            {"army": "Army 1", "division_count": 10, "battle_plan_orders": 0},
+                            {"army": "Army 2", "division_count": 22, "battle_plan_orders": 0},
+                            {"army": "Army 3", "division_count": 15, "battle_plan_orders": 4}]})),
+                    "hoi4_army_gather" if self.1 => Ok(json!({"receipt": {"status": "Verified"}})),
+                    "hoi4_army_gather" => Err(Error::new("unknown_tool", "Unknown tool")),
+                    "hoi4_army_assign" => Ok(json!({"receipt": {"status": "Verified"}})),
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"max": 24, "absorb": "assign"}});
+        let tools = Gathering(RefCell::new(vec![]), true);
+        let step = acted(tick(&mut State::default(), &tools, &plan, "l", START).unwrap());
+        // the fullest army without battle-plan orders that still has room: Army 2 (22+3 > 24) no
+        assert!(step.starts_with("army_gather 3 -> Army 1: true"), "{step}");
+        let sent = tools.0.borrow();
+        let gather = sent.iter().find(|(n, _)| n == "hoi4_army_gather").unwrap();
+        assert_eq!(gather.1["army"], json!("Army 1"));
+        assert!(!sent.iter().any(|(n, _)| n == "hoi4_army_assign"));
+        drop(sent);
+        // the plan names the army: it is used when it has room
+        let plan = json!({"armies": {"max": 24, "gather_into": "Army 3"}});
+        let tools = Gathering(RefCell::new(vec![]), true);
+        let step = acted(tick(&mut State::default(), &tools, &plan, "l", START).unwrap());
+        assert!(step.starts_with("army_gather 3 -> Army 3: true"), "{step}");
+        // an older backend without the tool: the state-by-state path is the fallback
+        let plan = json!({"armies": {"max": 24, "absorb": "assign"}});
+        let tools = Gathering(RefCell::new(vec![]), false);
+        let step = acted(tick(&mut State::default(), &tools, &plan, "l", START).unwrap());
+        assert!(step.starts_with("army_assign state 56: true"), "{step}");
     }
 
     #[test]
@@ -13838,6 +14063,63 @@ mod tests {
         );
         assert!(state.done.contains_key("doc:id:land-grand"));
         assert!(state.done.contains_key("doc:id:land-inf"));
+    }
+
+    #[test]
+    fn empty_doctrine_tracks_are_filled_once_the_plan_entries_are_done() {
+        let read = json!({"experience": {"army": {"value": 120.0}, "navy": {"value": 5.0}, "air": {"value": 80.0}},
+            "folders": [
+                {"folder": "land", "grand_doctrine": {"id": "mobile_warfare"}, "experience": 120.0, "tracks": [
+                    {"track": "armor", "subdoctrine": {"id": "armored_spearhead"}},
+                    {"track": "infantry", "subdoctrine": null, "available_subdoctrines": [
+                        {"id": "inf_a", "estimated_cost_after_reduction": 100.0, "already_chosen_elsewhere": false},
+                        {"id": "inf_b", "estimated_cost_after_reduction": 60.0, "already_chosen_elsewhere": false}]}]},
+                {"folder": "naval", "grand_doctrine": {"id": "x"}, "experience": 5.0, "tracks": [
+                    {"track": "capital", "subdoctrine": null, "available_subdoctrines": [
+                        {"id": "nav_a", "estimated_cost_after_reduction": 50.0}]}]},
+                {"folder": "air", "grand_doctrine": null, "experience": 80.0, "tracks": [
+                    {"track": "fighters", "subdoctrine": null, "available_subdoctrines": [
+                        {"id": "air_a", "estimated_cost_after_reduction": 10.0}]}]}]});
+        let tools = fake(vec![("hoi4_doctrines", read)]);
+        // a pending plan entry for land holds land experience
+        let plan = json!({"doctrines": [{"id": "later", "folder": "land", "track": "support", "subdoctrine": "s", "xp": 500}]});
+        let mut state = State::default();
+        assert_eq!(
+            doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        // no plan entry: the plan's default for the track (inf_b, 60 <= 120 - 30), not the first
+        let plan = json!({"doctrine_defaults": {"land": ["inf_b"]}});
+        let mut state = State::default();
+        let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            step.starts_with("doctrine fill land/infantry: inf_b"),
+            "{step}"
+        );
+        // without a default: the first offered (100 > 120 - 30 reserve: waits); naval too poor;
+        // air has no grand doctrine (the plan's decision): nothing
+        let plan = json!({});
+        let mut state = State::default();
+        assert_eq!(
+            doctrine_fill(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let plan = json!({"manage": {"xp_reserve": {"army": 0}}});
+        let mut state = State::default();
+        let step = doctrine_fill(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            step.starts_with("doctrine fill land/infantry: inf_a"),
+            "{step}"
+        );
+        // checked every 14 days, not every tick
+        assert_eq!(
+            doctrine_fill(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
     }
 
     #[test]

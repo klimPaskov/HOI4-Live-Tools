@@ -226,6 +226,42 @@ pub(super) fn army_assign(
     }
 }
 
+/// Gathering every unassigned division into one army (`target`, or a new army when None):
+/// reached when no division the roster held unassigned before is still unassigned and each of
+/// them joined the same army (the named one), with no division of another army moved.
+pub(super) fn army_gather(before: &Roster, now: &Roster, target: Option<&str>) -> Verdict {
+    let pool: Vec<&String> = before
+        .home
+        .iter()
+        .filter(|(_, a)| a.is_none())
+        .map(|(d, _)| d)
+        .collect();
+    if pool.is_empty() {
+        return Verdict::Unknown;
+    }
+    let others_moved = now
+        .home
+        .iter()
+        .any(|(d, a)| before.home.get(d).is_some_and(|b| b.is_some() && b != a));
+    let homes: BTreeSet<Option<&str>> = pool
+        .iter()
+        .map(|d| now.home.get(*d).and_then(|a| a.as_deref()))
+        .collect();
+    if homes.len() == 1 && homes.contains(&None) && !others_moved {
+        return Verdict::Unchanged;
+    }
+    let one_home = homes.len() == 1 && !homes.contains(&None);
+    let right_home = match target {
+        Some(t) => homes.contains(&Some(t)),
+        None => true,
+    };
+    if one_home && right_home && !others_moved {
+        Verdict::Reached
+    } else {
+        Verdict::Unknown
+    }
+}
+
 /// Merging army `source` into army `target`: every division the source held now belongs to
 /// the target, and no other division changed army.
 pub(super) fn army_merge(before: &Roster, now: &Roster, source: &str, target: &str) -> Verdict {

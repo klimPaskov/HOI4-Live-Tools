@@ -61,6 +61,14 @@ READS (exact calls; no other arguments exist — never guess one):
                                              such as the layout name_hints also work in army tools)
     {CALL} hoi4_events '{}'                  open events and their options
     {CALL} hoi4_states '{"query":"<TAG or state id>"}'   ownership, control, victory points
+    {CALL} hoi4_states '{"query":"<own TAG>","owned_only":true,"min_free_slots":1,"limit":10}'
+                                             every own state in ONE read (buildings, free slots,
+                                             resources), filtered and sorted (sort: free_slots,
+                                             factories, infrastructure, victory_points, level with
+                                             building, resource with resource); never open states one
+                                             by one, however large the country
+    {CALL} hoi4_army_gather '{"army":"<army>"}'  every division outside an army into that army in one
+                                             action (leave army out for a new army); never state by state
     {CALL} hoi4_war_stats '{}'               losses
     Each read at most once per feed change that concerns it. The reply of step A carries `now` (date,
     wars, armies, open events, idle slots, own provinces held by others): that is the situation; a read
@@ -73,7 +81,8 @@ READS (exact calls; no other arguments exist — never guess one):
 ONE ACTION, ONE TRY: if an action returns action_unconfirmed (its effect was not observed; the request is
 closed and blocks nothing), do not resend it blindly: re-read the state and act only if the effect is missing.
 
-DON'T: re-read the same state every turn; order an army the executor is moving (the executor owns every
+DON'T: walk states, divisions, wings or ships one by one through the interface (one table read, then
+act on the few chosen); re-read the same state every turn; order an army the executor is moving (the executor owns every
 army in the plan's army_layout, army_group and hold_targets, all research, focus, production, construction,
 laws, events and templates in the plan — your items are only what the brief lists); send a move that failed
 twice; start research that is not in hoi4_technology_list {"available":true}; build in front states;

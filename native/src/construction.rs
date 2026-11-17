@@ -143,6 +143,9 @@ pub(crate) struct Layout {
     pub(crate) state_controller: u64,
     pub(crate) state_id: u64,
     pub(crate) state_status: u64,
+    /// Extra shared building slots of the state (history and effects such as
+    /// add_extra_state_shared_building_slots); 0 = not mapped on this build.
+    pub(crate) state_extra_slots: u64,
     pub(crate) province_vtable: u64,
     pub(crate) province_owner: u64,
     pub(crate) province_state: u64,
@@ -173,6 +176,7 @@ const LINUX: Layout = Layout {
     state_controller: 0xcc,
     state_id: 0x48,
     state_status: 0x120,
+    state_extra_slots: 0,
     province_vtable: 0x4390588,
     province_owner: 0x1a8,
     province_state: 0xe0,
@@ -203,6 +207,9 @@ const MACOS: Layout = Layout {
     state_controller: 0xc4,
     state_id: 0x40,
     state_status: 0x110,
+    // macOS 1.19.4.1 (17 Nov 2026): i32, 2 in Belgium and 1 in Beja (their history's
+    // add_extra_state_shared_building_slots), 0 in the other 1079 states.
+    state_extra_slots: 0x7d0,
     province_vtable: 0x357f020,
     province_owner: 0x188,
     province_state: 0xc0,
