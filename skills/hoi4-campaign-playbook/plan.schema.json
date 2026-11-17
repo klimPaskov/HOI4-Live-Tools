@@ -359,7 +359,7 @@
         "all"
       ],
       "x-owner": "executor",
-      "description": "answer news and single-option events (default true); \"all\" also answers every event after wait_events_days"
+      "description": "answer news and single-option events at once, and any other event no rule names once it has waited wait_events_days, with option 0 (the game's own timeout choice) (default true; \"all\" is the same); false answers none"
     },
     "wait_events_days": {
       "type": "integer",
@@ -3335,9 +3335,9 @@
             "type": "string"
           },
           "default": {},
-          "description": "alert name -> why the plan leaves it open (strategist lint alerts.owner: every game alert has a plan key that owns it or is ignored here with a reason)",
+          "description": "alert name -> why the plan leaves it open (strategist lint alerts.owner: every game alert has a plan key that owns it or is ignored here with a reason); the executor puts the reason in the wake of an ignored alert that stays open",
           "x-rule": "alerts",
-          "x-owner": "lint"
+          "x-owner": "executor"
         },
         "exercise_fill": {
           "type": "number",

@@ -193,6 +193,11 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.affairs.notes.is_empty()).then(|| json!(state.affairs.notes))
 }
 
+/// A section's last status line (the alerts rule reads the owning step's reason here).
+pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
+    state.affairs.notes.get(key).map(String::as_str)
+}
+
 fn note(state: &mut State, section: &str, line: impl Into<String>) {
     state.affairs.notes.insert(section.to_string(), line.into());
 }
@@ -2393,6 +2398,23 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         )?;
         if !ok {
             mio_refused(state, now, "mio", &org, &why);
+            if code(&why) == "organization_not_offered" {
+                // The tool reaches an organisation only through an empty designer slot (g17a, 17
+                // Nov 2026: Mauser and Rheinmetall, kinds whose slot is filled): not tried again
+                // this year, so the run carries no monthly repeated failure.
+                state.skip(now, "mioauto", &org, 365 * DAY);
+                // the mio_traits alert's reason (plan_manage.rs alerts)
+                note(
+                    state,
+                    "mio_traits",
+                    format!(
+                        "{org}: no trait queued; hoi4_mio_trait reaches an organisation only \
+                         through an empty designer slot of its kind and {org}'s slot is filled \
+                         (organization_not_offered), so its trait points wait for a hand pick \
+                         (tried again in a year)"
+                    ),
+                );
+            }
         }
         return Ok(Some(format!("mio {org} trait {index} (auto): {ok} {why}")));
     }
@@ -3098,6 +3120,13 @@ pub(super) fn bonus_first(
     priority.extend(rest);
 }
 
+// Test-only: other modules' tests set an affairs note through this (kept after the code so
+// the plan-key reader, which stops at the first test item, reads every step).
+#[cfg(test)]
+pub(super) fn put_note(state: &mut State, key: &str, line: &str) {
+    note(state, key, line);
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{date_hour, tick, Tick};
@@ -3120,6 +3149,12 @@ mod tests {
             self.calls
                 .borrow_mut()
                 .push((name.to_string(), args.clone()));
+            // a listing (list:true) answers from `replies` when the test gives one
+            if args["list"] == json!(true) {
+                if let Some(v) = self.replies.borrow().get(name) {
+                    return Ok(v.clone());
+                }
+            }
             if args.get("request_id").is_some() {
                 let refuse = self.refuse.borrow();
                 let by_action = format!("{name} {}", text(&args["action"]));
@@ -4451,6 +4486,32 @@ mod tests {
         assert!(out
             .unwrap()
             .contains("policy mio_policy_assembly_line_optimizers: true"));
+    }
+
+    #[test]
+    fn an_organisation_the_trait_tool_cannot_reach_rests_a_year_with_the_reason() {
+        // g17a (17 Nov 2026): Mauser's designer slot was filled, the tool's list offered only
+        // the empty slot's kinds and refused it every month
+        let tools = fake(vec![(
+            "hoi4_mio_trait",
+            json!({"observed": {"listed": [{"index": 0, "enabled": true, "queue": "", "visible": true}]}}),
+        )]);
+        tools.refuse("hoi4_mio_trait", "organization_not_offered");
+        let plan = json!({"mio": [{"organisation": "GER_mauser_organization", "traits": []}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out
+            .unwrap()
+            .contains("(auto): false organization_not_offered"));
+        assert!(note_of(&state, "mio_traits")
+            .unwrap()
+            .contains("GER_mauser_organization's slot is filled"));
+        assert!(state.skipped(START + 300 * DAY, "mioauto", "GER_mauser_organization"));
+        let orders = actions(&tools)
+            .into_iter()
+            .filter(|(_, a)| a["list"] != json!(true))
+            .count();
+        assert_eq!(orders, 1);
     }
 
     #[test]

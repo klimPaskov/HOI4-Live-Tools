@@ -166,6 +166,27 @@ pub(super) fn queued(r: &Reader<'_>, image: u64, name: &str) -> Result<usize> {
     }
     Ok(count)
 }
+/// The queues (conveyor addresses) of template `name` standing now.
+pub(super) fn queue_ids(r: &Reader<'_>, image: u64, name: &str) -> Result<Vec<u64>> {
+    Ok(conveyors(r, image)?
+        .into_iter()
+        .filter(|c| c.1 == name)
+        .map(|c| c.0)
+        .collect())
+}
+/// Training lines of template `name` in queues that were not standing before (`before`).
+pub(super) fn added_lines(r: &Reader<'_>, image: u64, name: &str, before: &[u64]) -> Result<usize> {
+    Ok(lines_in_new_queues(&conveyors(r, image)?, name, before))
+}
+/// What one Train action added: lines of the queues absent from `before`. The template's
+/// total is no measure while older queues finish during the action (g17a, 17 Nov 2026: a
+/// queue of 2 was added while 2 lines deployed, the total stayed 19 and it read NotApplied).
+fn lines_in_new_queues(now: &[(u64, String, i32, i32)], name: &str, before: &[u64]) -> usize {
+    now.iter()
+        .filter(|c| c.1 == name && !before.contains(&c.0))
+        .map(|c| c.3.clamp(1, 1024) as usize)
+        .sum()
+}
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let u = ui(r)?;
@@ -383,16 +404,28 @@ fn glide_list(
         position,
     )
 }
-/// Click button `name` of conveyor `index` once it rests inside the list area (scrolling it there).
+/// Click button `name` of conveyor `line` (its address) once it rests inside the list area
+/// (scrolling it there). Its list position is read anew on every look: a queue above it that
+/// finishes moves it up a row (g17a, 17 Nov 2026: "amount stayed infinite" and "button not
+/// found" while divisions deployed during the action).
 fn click_conveyor(
     process: &dyn Process,
     keys: &dyn GameInput,
-    index: usize,
+    line: u64,
     name: &str,
 ) -> Result<()> {
+    let button = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
+        match conveyors(r, i)?.iter().position(|c| c.0 == line) {
+            Some(index) => conveyor_button(r, i, index, name),
+            None => Err(Error::new(
+                "input_readback_failed",
+                "New training queue left the list",
+            )),
+        }
+    };
     // Long queue lists (seen live: 15 queues) glide the button in with one burst.
     let outcome = glide_list(process, keys, |r, i| {
-        Ok(conveyor_button(r, i, index, name)?.map(|b| {
+        Ok(button(r, i)?.map(|b| {
             let top = f64::from(b.y);
             (top, top + f64::from(b.h.min(40)))
         }))
@@ -404,7 +437,7 @@ fn click_conveyor(
         ));
     }
     let rect = settled(process, "queue button", |r, i| {
-        conveyor_button(r, i, index, name)?
+        button(r, i)?
             .filter(|r| r.y >= LIST.0 && r.y + r.h.min(40) <= LIST.1)
             .ok_or_else(|| {
                 Error::new(
@@ -457,11 +490,12 @@ pub(super) fn train(
             .map(|(k, c)| (k, c.0, c.2, c.3))
             .ok_or_else(|| Error::new("input_readback_failed", "New training queue left the list"))
     };
-    let (index, line, amount, _) = read(process, find_new)?;
+    let (_, line, amount, _) = read(process, find_new)?;
     if amount == 0 {
-        click_conveyor(process, keys, index, "increase_amount")?;
+        click_conveyor(process, keys, line, "increase_amount")?;
+        // the queue is its address; its row may move while older queues finish
         wait(process, "series amount one", |r, i| {
-            Ok(r.i32(line + ui(r)?.conveyor_amount)? == 1 && find_new(r, i)?.0 == index)
+            Ok(find_new(r, i)?.1 == line && r.i32(line + ui(r)?.conveyor_amount)? == 1)
         })
         .map_err(|_| {
             Error::new(
@@ -471,8 +505,7 @@ pub(super) fn train(
         })?;
     }
     for done in 1..count {
-        let (index, _, _, _) = read(process, find_new)?;
-        click_conveyor(process, keys, index, "add_button")?;
+        click_conveyor(process, keys, line, "add_button")?;
         wait(process, "training line added", |r, i| {
             Ok(find_new(r, i)?.3 as usize > done)
         })?;
@@ -600,4 +633,25 @@ pub(super) fn set_locations(
         done += 1;
     }
     Ok(done)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lines_in_new_queues;
+
+    #[test]
+    fn a_train_action_counts_only_the_queues_it_added() {
+        let row = |id: u64, name: &str, lines: i32| (id, name.to_string(), 1, lines);
+        // g17a: 19 lines before; a queue of 2 deployed while the new queue of 2 was made
+        let before = [1, 2, 3];
+        let now = [
+            row(2, "Inf", 9),
+            row(3, "Inf", 8),
+            row(4, "Inf", 2),
+            row(5, "Tank", 1),
+        ];
+        assert_eq!(lines_in_new_queues(&now, "Inf", &before), 2);
+        // nothing new: nothing added, whatever finished meanwhile
+        assert_eq!(lines_in_new_queues(&now[..2], "Inf", &before), 0);
+    }
 }

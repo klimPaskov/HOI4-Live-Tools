@@ -610,6 +610,26 @@ fn route(alert: &str) -> Route {
     }
 }
 
+/// "; <key>: <note>" for an alert: a note kept under the alert's own name, else the owning
+/// step's, wherever that step keeps it (manage, affairs or military rules: g17a, 17 Nov 2026,
+/// the navy and special-project wakes carried no reason because only manage notes were read).
+fn step_reason(state: &State, alert: &str, step: &str) -> String {
+    [alert, step]
+        .iter()
+        .filter(|k| !k.is_empty())
+        .find_map(|key| {
+            state
+                .manage
+                .notes
+                .get(*key)
+                .map(String::as_str)
+                .or_else(|| super::plan_affairs::note_of(state, key))
+                .or_else(|| super::plan_military::note_of(state, key))
+                .map(|n| format!("; {key}: {n}"))
+        })
+        .unwrap_or_default()
+}
+
 fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
     if off(plan, "alerts") || state.skipped(now, "malerts", "x") {
         return;
@@ -631,13 +651,47 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
         let name = alert["alert"]
             .as_str()
             .map_or_else(|| format!("frame_{frame}"), String::from);
-        if !seen.insert(name.clone()) || ignore.contains(&name) {
+        if !seen.insert(name.clone()) {
             continue;
         }
         let since = *state.manage.alert_since.entry(name.clone()).or_insert(now);
         let evidence =
             json!({"alert": name, "frame": frame, "todo": alert["todo"], "seen_since_hour": since});
         let reason = format!("alert:{name}");
+        if ignore.contains(&name) {
+            // The plan leaves it to someone (its alerts_ignore_why); it was dropped unseen while
+            // nothing did it (g17a, 17 Nov 2026: mio_traits open 465 days, never woken). Once
+            // per unbroken spell past the persist days the player hears why it is still open.
+            lines.push(format!("{name}: ignored by the plan"));
+            let once = format!("alertignored:{name}:{since}");
+            if now - since >= persist * DAY && !state.done.contains_key(&once) {
+                state.done.insert(once, now);
+                let why = text(&plan["manage"]["alerts_ignore_why"][&name]).to_string();
+                let step = match route(&name) {
+                    Route::Step(step, _, _) => step,
+                    _ => "",
+                };
+                wake(
+                    state,
+                    plan,
+                    now,
+                    3,
+                    &reason,
+                    format!(
+                        "game alert {name} has stayed {} game days; the plan ignores it{}{}",
+                        (now - since) / DAY,
+                        if why.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" ({why})")
+                        },
+                        step_reason(state, &name, step)
+                    ),
+                    evidence,
+                );
+            }
+            continue;
+        }
         match route(&name) {
             Route::Info => lines.push(format!("{name}: info")),
             Route::Wake(why) => {
@@ -736,12 +790,7 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
                             // the owning step's last status line is the written reason (why it
                             // waits, what it deliberately leaves): pr2 kept five alerts open for
                             // 467-753 days with none
-                            state
-                                .manage
-                                .notes
-                                .get(step)
-                                .map(|n| format!("; {step}: {n}"))
-                                .unwrap_or_default()
+                            step_reason(state, &name, step)
                         ),
                         evidence,
                     );
@@ -802,6 +851,11 @@ pub(super) fn training_step(
         };
         let queue = tr["queue"].as_u64().unwrap_or(6);
         if when_holds(state, tools, &tr["when"], now) != Truth::True {
+            continue;
+        }
+        // an entry whose deploy state the game refused rests (and adds no queue meanwhile)
+        let place = format!("{template}@{}", tr["deploy_state"]);
+        if state.skipped(now, "traindeploy", &place) {
             continue;
         }
         let prior = queued_before.entry(template.clone()).or_insert(0);
@@ -901,8 +955,28 @@ pub(super) fn training_step(
             json!({"template": template, "count": count, "deploy_state_id": tr["deploy_state"]}),
             "tr",
         )?;
+        if !ok && why.contains("No location was set") {
+            // The game does not let this template deploy in that state (g17a, 17 Nov 2026):
+            // the same entry would be refused every time, so it rests with the reason.
+            state.skip(now, "traindeploy", &place, 60 * DAY);
+            note(
+                state,
+                "training",
+                format!(
+                    "{template}: the game refuses deploy state {} for it; that entry rests 60 days: {why}",
+                    tr["deploy_state"]
+                ),
+            );
+            return Ok(Some(format!("train {count} {template}: {ok} {why}")));
+        }
         if !ok {
             state.skip(now, "train", &template, 2 * DAY);
+            note(
+                state,
+                "training",
+                format!("{template}: not queued, tried again in 2 days: {why}"),
+            );
+            return Ok(Some(format!("train {count} {template}: {ok} {why}")));
         }
         if !said.is_empty() {
             note(
@@ -5401,6 +5475,8 @@ mod tests {
         calls: RefCell<Vec<(String, Value)>>,
         replies: RefCell<HashMap<String, Value>>,
         refuse: RefCell<HashMap<String, &'static str>>,
+        /// The refusal's message (default "refused by the fake").
+        message: RefCell<Option<&'static str>>,
     }
     impl Tools for Fake {
         fn call(&self, name: &str, args: &Value) -> Result<Value> {
@@ -5409,7 +5485,8 @@ mod tests {
                 .push((name.to_string(), args.clone()));
             if args.get("request_id").is_some() {
                 if let Some(code) = self.refuse.borrow().get(name) {
-                    return Err(Error::new(code, "refused by the fake"));
+                    let message = self.message.borrow().unwrap_or("refused by the fake");
+                    return Err(Error::new(code, message));
                 }
                 return Ok(json!({"receipt": {"status": "Verified"}}));
             }
@@ -5431,6 +5508,7 @@ mod tests {
                     .collect(),
             ),
             refuse: RefCell::new(HashMap::new()),
+            message: RefCell::new(None),
         }
     }
     fn actions(f: &Fake) -> Vec<(String, Value)> {
@@ -5549,6 +5627,51 @@ mod tests {
         let alarms = wakes(&mut state);
         assert_eq!(alarms.len(), 1);
         assert_eq!(alarms[0]["reason"], "alert:unassigned_divisions");
+    }
+
+    #[test]
+    fn a_long_open_alert_carries_its_owning_steps_reason_wherever_the_step_keeps_it() {
+        let tools = fake(vec![(
+            "hoi4_alerts",
+            json!({"alerts": [{"frame": 67, "alert": "admiral_assignable"},
+                {"frame": 59, "alert": "special_project_available"},
+                {"frame": 57, "alert": "mio_traits"}]}),
+        )]);
+        let plan = json!({"navy": {"posture": "coastal"}, "special_projects": {"priority": []},
+            "mio": [{"organisation": "M"}],
+            "manage": {"alert_persist_days": 3, "alerts_ignore": ["mio_traits"],
+                "alerts_ignore_why": {"mio_traits": "the player queues traits"},
+                "off": ["manpower", "stability", "equipment_fill", "resources", "stockpile", "trucks"]}});
+        let mut state = State::default();
+        // g17a (17 Nov 2026): the navy and affairs steps keep their notes outside `manage`
+        super::super::plan_military::put_note(&mut state, "navy", "Flotta 1 is the reserve fleet");
+        super::super::plan_affairs::put_note(&mut state, "mio_traits", "M: no designer slot");
+        note(&mut state, "special_projects", "facility 3 busy");
+        for day in 0..3 {
+            step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+            assert!(wakes(&mut state).is_empty(), "day {day}");
+        }
+        step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap();
+        let alarms = wakes(&mut state);
+        let messages: Vec<&str> = alarms
+            .iter()
+            .filter(|a| {
+                a["reason"]
+                    .as_str()
+                    .is_some_and(|r| r.starts_with("alert:"))
+            })
+            .filter_map(|a| a["message"].as_str())
+            .collect();
+        assert_eq!(messages.len(), 3, "{messages:?}");
+        assert!(messages[0].ends_with("; navy: Flotta 1 is the reserve fleet"));
+        assert!(messages[1].ends_with("; special_projects: facility 3 busy"));
+        // the ignored alert is no longer dropped unseen: once per spell, with both reasons
+        assert!(messages[2].contains("the plan ignores it (the player queues traits)"));
+        assert!(messages[2].ends_with("; mio_traits: M: no designer slot"));
+        step(&mut state, &tools, &plan, "l", START + 20 * DAY).unwrap();
+        assert!(!wakes(&mut state)
+            .iter()
+            .any(|a| a["reason"] == "alert:mio_traits"));
     }
 
     #[test]
@@ -5710,6 +5833,47 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_deploy_state_the_game_refuses_rests_that_entry_with_its_reason() {
+        let tools = fake(vec![(
+            "hoi4_division_templates",
+            templates_read(&[("Inf", 0)]),
+        )]);
+        let plan = json!({"training": [
+            {"template": "Inf", "queue": 2, "deploy_state": 5},
+            {"template": "Inf", "queue": 2, "deploy_state": 6}]});
+        let mut state = State::default();
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_train".into(), "input_readback_failed");
+        *tools.message.borrow_mut() =
+            Some("No location was set: the game does not let these divisions deploy in that state");
+        let out = training_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.unwrap().contains(": false"));
+        assert!(state.manage.notes["training"].contains("refuses deploy state 5"));
+        // the next tick trains the other entry; the refused one is not sent again
+        tools.refuse.borrow_mut().clear();
+        let out = training_step(&mut state, &tools, &plan, "l", START + 1).unwrap();
+        assert_eq!(out.as_deref(), Some("train 2 Inf: true Verified"));
+        let sent = actions(&tools);
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1].1["deploy_state_id"], 6);
+        // any other refusal holds the template 2 days, with the reason noted
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_train".into(), "action_not_applied");
+        *tools.message.borrow_mut() = None;
+        let mut state = State::default();
+        training_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.manage.notes["training"].contains("tried again in 2 days"));
+        assert_eq!(
+            training_step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            None
+        );
     }
 
     #[test]

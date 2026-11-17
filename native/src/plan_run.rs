@@ -1342,7 +1342,7 @@ pub fn tick(
             .as_i64()
             .map_or(2 * DAY, |days| days.saturating_mul(DAY));
         // A choice event is the model's decision unless the plan names an option for it
-        // or explicitly allows answering every event ("auto_events": "all").
+        // (or it has waited `wait_events_days`, below).
         // `event_rules` come first: an option by its name; an unknown condition waits.
         let ruled = event_rule_choice(state, tools, plan, &key, top, now);
         if matches!(ruled, Some(None)) {
@@ -1367,8 +1367,20 @@ pub fn tick(
                 })
         });
         let chosen = ruled.or(chosen);
-        let all = plan["auto_events"] == json!("all");
-        if auto && (news || chosen.is_some() || (waited > patience && all)) {
+        // A choice event no rule names is the model's for `wait_events_days`; unanswered after
+        // that it takes option 0, the one the game itself takes when the event times out. Left
+        // open it blocked every other step until that timeout (g17a, 17 Nov 2026:
+        // denmark_trade_deal.1 and GER_inner_circle.03 open 13 days each).
+        let lapsed = waited > patience && chosen.is_none() && !news;
+        let how = if lapsed {
+            format!(
+                "{how} (unanswered {} game days: the game's own timeout choice)",
+                waited / DAY
+            )
+        } else {
+            how
+        };
+        if auto && (news || chosen.is_some() || waited > patience) {
             let option = chosen.unwrap_or(0);
             let (ok, why) = state.act(
                 tools,
@@ -2335,6 +2347,23 @@ fn cheap_work_idle(tools: &dyn Tools) -> bool {
             .unwrap_or(false)
 }
 
+/// The armies standing in state `id` ("name n") when every one of them holds `max` divisions or
+/// more (hoi4_army_assign then refuses army_full); None when one has room or none stands there.
+fn assign_target_full(roster: &Value, id: i64, max: u64) -> Option<String> {
+    let key = id.to_string();
+    let here: Vec<(&str, u64)> = list(roster, "armies")
+        .iter()
+        .filter(|a| a["states"][&key].as_u64().unwrap_or(0) > 0)
+        .map(|a| (text(&a["army"]), a["division_count"].as_u64().unwrap_or(0)))
+        .collect();
+    (!here.is_empty() && here.iter().all(|(_, n)| *n >= max)).then(|| {
+        here.iter()
+            .map(|(a, n)| format!("{a} {n}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    })
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -2364,7 +2393,38 @@ fn armies_step(
         // name_hint or an army name), else the fullest army without battle-plan orders that has
         // room, else a new army (the split rule below restores the cap).
         let pool = list(&roster, "unassigned").len() as u64;
-        if pool > 0 && cfg["gather"] != json!(false) && !state.skipped(now, "gather", "all") {
+        if pool == 0 {
+            state.done.remove("gatherwait");
+        }
+        // hoi4_army_gather selects through the game's unassigned-divisions alert, which the game
+        // raises some days after a division deploys: before it shows, the gather is refused
+        // (g17a, 17 Nov 2026: 12 of 13 refusals, "alert is not shown") and a fresh division
+        // shares a province with the army stack it deployed onto, so the state-by-state assign
+        // was refused too. Fresh divisions wait for the alert, a week at most.
+        let gathering = pool > 0 && cfg["gather"] != json!(false);
+        let alert_shown = gathering
+            && tools.call("hoi4_alerts", &json!({})).map_or(true, |read| {
+                list(&read, "alerts")
+                    .iter()
+                    .any(|a| a["alert"] == json!("unassigned_divisions"))
+            });
+        let mut await_alert = false;
+        if gathering && !alert_shown {
+            let since = *state.done.entry("gatherwait".to_string()).or_insert(now);
+            await_alert = now.saturating_sub(since) < 7 * DAY;
+            if await_alert {
+                plan_manage::note(
+                    state,
+                    "armies",
+                    format!(
+                        "{pool} division(s) outside an army wait for the game's unassigned-divisions \
+                         alert (raised some days after they deploy), then one gather takes them \
+                         all; after 7 days without it they are assigned state by state"
+                    ),
+                );
+            }
+        }
+        if gathering && alert_shown && !state.skipped(now, "gather", "all") {
             let wanted = text(&cfg["gather_into"]).to_string();
             let wanted = state.layout.get(&wanted).cloned().unwrap_or(wanted);
             let rows = list(&roster, "armies");
@@ -2400,6 +2460,15 @@ fn armies_step(
                         7 * DAY
                     },
                 );
+                if !ok {
+                    plan_manage::note(
+                        state,
+                        "armies",
+                        format!(
+                            "{pool} division(s) outside an army: the gather was refused ({why})"
+                        ),
+                    );
+                }
                 return Ok(Some(format!(
                     "army_gather {pool} -> {}: {ok} {why}",
                     target.as_deref().unwrap_or("new army")
@@ -2407,6 +2476,9 @@ fn armies_step(
             }
         }
         let mut pending: Vec<&Value> = list(&roster, "unassigned_by_state").iter().collect();
+        if await_alert {
+            pending.clear();
+        }
         if !only.is_empty() {
             pending.retain(|e| e["state_id"].as_i64().is_some_and(|id| only.contains(&id)));
             pending.sort_by_key(|e| {
@@ -2426,6 +2498,23 @@ fn armies_step(
             // stands there (or makes a new one when none does) without deleting it;
             // "assign" never falls back to the merging absorb_existing path.
             let assign = cfg["absorb"] == json!(true) || cfg["absorb"] == json!("assign");
+            // hoi4_army_assign joins the divisions to an army standing in the state and refuses
+            // when every such army is at the cap (g17a: army_full for Armee Mitte and Armee Süd
+            // at 24); those divisions are the gather's (any army with room).
+            if assign {
+                if let Some(full) = assign_target_full(&roster, id, max) {
+                    state.skip(now, "armycreate", &key, 7 * DAY);
+                    plan_manage::note(
+                        state,
+                        "armies",
+                        format!(
+                            "state {id}: no assign, every army standing there is full ({full}, \
+                             cap {max}); its divisions wait for the gather"
+                        ),
+                    );
+                    continue;
+                }
+            }
             let assigned = if assign {
                 let (ok, why) = state.act(
                     tools,
@@ -2449,12 +2538,25 @@ fn armies_step(
                     &key,
                     if ok {
                         DAY
-                    } else if why.contains("selection_mismatch") {
+                    } else if why.contains("selection_mismatch")
+                        || why.contains("selection_unavailable")
+                    {
+                        // the division shares its province with another army's stack: no click
+                        // takes it alone, so the gather owns it (g17a: three refusals in 11 s)
                         20 * DAY
                     } else {
                         2 * DAY
                     },
                 );
+                if !ok {
+                    plan_manage::note(
+                        state,
+                        "armies",
+                        format!(
+                            "state {id}: assign refused, the gather takes its divisions: {why}"
+                        ),
+                    );
+                }
                 return Ok(Some(format!("army_assign state {id}: {ok} {why}")));
             }
             let (ok, why) = state.act(
@@ -4140,11 +4242,24 @@ fn special_projects_step(
         .map(|p| text(&p["key"]).to_string())
         .collect();
     let mut unstaffed: Option<String> = None;
+    // Why each facility is as it is: the special_project_available alert's reason (g17a, 17 Nov
+    // 2026: open 400 days with no word on which facility was free or why).
+    let mut status: Vec<String> = Vec::new();
     for facility in list(&sp, "facilities") {
         let Some(id) = facility["facility_id"].as_i64() else {
             continue;
         };
-        if !facility["project"].is_null() || state.skipped(now, "spfac", &id.to_string()) {
+        if !facility["project"].is_null() {
+            status.push(format!(
+                "facility {id}: {} running",
+                text(&facility["project"]["key"])
+            ));
+            continue;
+        }
+        if state.skipped(now, "spfac", &id.to_string()) {
+            status.push(format!(
+                "facility {id}: free, its last start was refused (tried again after 30 days)"
+            ));
             continue;
         }
         let spec = text(&facility["specialization"]).to_string();
@@ -4167,6 +4282,9 @@ fn special_projects_step(
             })
             .flatten();
         if !held && scientist.is_none() {
+            status.push(format!(
+                "facility {id} ({spec}): free, no idle scientist has a {spec} skill"
+            ));
             unstaffed.get_or_insert(spec);
             continue;
         }
@@ -4183,7 +4301,19 @@ fn special_projects_step(
             .or_else(|| pool.first().cloned());
         let mut args = json!({"facility_id": id});
         let what = match (&scientist, &project) {
-            (_, None) if held || !basic => continue,
+            (_, None) if held || !basic => {
+                status.push(if held {
+                    format!(
+                        "facility {id} ({spec}): its scientist waits, no {spec} project is open \
+                         (none offered or every one runs or was stopped by the plan)"
+                    )
+                } else {
+                    format!(
+                        "facility {id} ({spec}): no {spec} project is open and basic_research is off"
+                    )
+                });
+                continue;
+            }
             (Some(name), None) => {
                 args["scientist"] = json!(name);
                 format!("basic research in facility {id} by {name}")
@@ -4211,15 +4341,47 @@ fn special_projects_step(
     let recruit = &cfg["recruit"];
     let wanted =
         recruit.is_object() && recruit["enabled"] != json!(false) || *recruit == json!(true);
+    let summary = |status: &[String], tail: &str| {
+        let mut line = if status.is_empty() {
+            "no facility read".to_string()
+        } else {
+            status.join("; ")
+        };
+        if !tail.is_empty() {
+            line.push_str("; ");
+            line.push_str(tail);
+        }
+        line
+    };
+    let short_of_staff = unstaffed.is_some();
     let Some(spec) = unstaffed.filter(|_| wanted) else {
+        let tail = if short_of_staff {
+            "no recruit: the plan has no special_projects.recruit"
+        } else {
+            ""
+        };
+        plan_manage::note(state, "special_projects", summary(&status, tail));
         return Ok(None);
     };
-    if state.skipped(now, "sprecruit", "x")
-        || !recruit["when"].is_null() && !judge(state, tools, &recruit["when"], now).is_true()
-    {
+    if state.skipped(now, "sprecruit", "x") {
+        let line = summary(&status, "recruit refused lately, tried again after 30 days");
+        plan_manage::note(state, "special_projects", line);
+        return Ok(None);
+    }
+    if !recruit["when"].is_null() && !judge(state, tools, &recruit["when"], now).is_true() {
+        let line = summary(
+            &status,
+            &format!("recruit waits for its when: {}", recruit["when"]),
+        );
+        plan_manage::note(state, "special_projects", line);
         return Ok(None);
     }
     let Some(cost) = sp["recruitable"]["cost_political_power"].as_f64() else {
+        let line = summary(
+            &status,
+            "recruit price unread (hoi4_special_projects recruitable)",
+        );
+        plan_manage::note(state, "special_projects", line);
         return Ok(None);
     };
     let max_cost = recruit["max_cost"].as_f64().unwrap_or(50.0);
@@ -4245,11 +4407,11 @@ fn special_projects_step(
         None
     };
     if let Some(why) = why_not {
-        plan_manage::note(
-            state,
-            "special_projects",
-            format!("recruit for a {spec} facility waits: {why}"),
+        let line = summary(
+            &status,
+            &format!("recruit for a {spec} facility waits: {why}"),
         );
+        plan_manage::note(state, "special_projects", line);
         return Ok(None);
     }
     let name = candidate.unwrap_or_default();
@@ -8640,6 +8802,38 @@ mod tests {
     }
 
     #[test]
+    fn an_unruled_choice_event_takes_the_games_timeout_option_after_the_wait() {
+        // g17a (17 Nov 2026): denmark_trade_deal.1 had no rule and stayed open 13 days,
+        // blocking every other step, until the game timed it out
+        let events = json!({"events": [{"event": "denmark_trade_deal.1",
+            "options": ["This could be beneficial", "We have no need"]}]});
+        let tools = fake(vec![("hoi4_events", events)]);
+        let plan = json!({"wait_events_days": 3});
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Waiting {
+                event: "denmark_trade_deal.1".into(),
+                new: true
+            }
+        );
+        let step = tick(&mut state, &tools, &plan, "l", START + 3 * DAY + 1).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with(
+                "event denmark_trade_deal.1 option 0 (unanswered 3 game days: the game's own timeout choice)")),
+            "{step:?}"
+        );
+        // auto_events false answers nothing
+        let mut state = State::default();
+        let off = json!({"auto_events": false, "wait_events_days": 3});
+        tick(&mut state, &tools, &off, "l", START).unwrap();
+        assert!(matches!(
+            tick(&mut state, &tools, &off, "l", START + 30 * DAY).unwrap(),
+            Tick::Waiting { .. }
+        ));
+    }
+
+    #[test]
     fn event_patience_counts_game_days() {
         let events = json!({"events": [{"event": "x.1", "options": ["a", "b"]}]});
         let tools = fake(vec![("hoi4_events", events)]);
@@ -9329,6 +9523,7 @@ mod tests {
                             {"army": "Army 1", "division_count": 10, "battle_plan_orders": 0},
                             {"army": "Army 2", "division_count": 22, "battle_plan_orders": 0},
                             {"army": "Army 3", "division_count": 15, "battle_plan_orders": 4}]})),
+                    "hoi4_alerts" => Ok(json!({"alerts": [{"alert": "unassigned_divisions"}]})),
                     "hoi4_army_gather" if self.1 => Ok(json!({"receipt": {"status": "Verified"}})),
                     "hoi4_army_gather" => Err(Error::new("unknown_tool", "Unknown tool")),
                     "hoi4_army_assign" => Ok(json!({"receipt": {"status": "Verified"}})),
@@ -9356,6 +9551,121 @@ mod tests {
         let tools = Gathering(RefCell::new(vec![]), false);
         let step = acted(tick(&mut State::default(), &tools, &plan, "l", START).unwrap());
         assert!(step.starts_with("army_assign state 56: true"), "{step}");
+    }
+
+    fn manage_note(state: &State, key: &str) -> String {
+        plan_manage::digest(state)
+            .and_then(|d| d[key].as_str().map(String::from))
+            .unwrap_or_default()
+    }
+
+    /// g17a (17 Nov 2026): 13 gathers refused "alert is not shown", 12 assigns refused
+    /// (army_full, selection_unavailable, selection_mismatch) for fresh divisions.
+    struct FreshDivisions {
+        sent: RefCell<Vec<(String, Value)>>,
+        alert: bool,
+        full: bool,
+        refusal: Option<&'static str>,
+    }
+    impl Tools for FreshDivisions {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            if args.get("request_id").is_some() {
+                self.sent
+                    .borrow_mut()
+                    .push((name.to_string(), args.clone()));
+            }
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"civilian_factories_available_for_projects": 0})),
+                "hoi4_alerts" if self.alert => {
+                    Ok(json!({"alerts": [{"alert": "unassigned_divisions"}]}))
+                }
+                "hoi4_alerts" => Ok(json!({"alerts": [{"alert": "decisions_available"}]})),
+                "hoi4_armies" => Ok(json!({
+                    "unassigned": ["d1"],
+                    "unassigned_by_state": [{"state_id": 67, "divisions": 1,
+                        "shared_with": {"Armee Mitte": 1}}],
+                    "armies": [{"army": "Armee Mitte", "battle_plan_orders": 0,
+                        "division_count": if self.full { 24 } else { 18 },
+                        "states": {"67": 3}},
+                        {"army": "Armee West", "battle_plan_orders": 0,
+                        "division_count": 10, "states": {"5": 10}}]})),
+                "hoi4_army_assign" => match self.refusal {
+                    Some(code) => Err(Error::new(code, "refused")),
+                    None => Ok(json!({"receipt": {"status": "Verified"}})),
+                },
+                "hoi4_army_gather" => Ok(json!({"receipt": {"status": "Verified"}})),
+                _ => Ok(json!({})),
+            }
+        }
+    }
+    fn fresh(alert: bool, full: bool, refusal: Option<&'static str>) -> FreshDivisions {
+        FreshDivisions {
+            sent: RefCell::new(vec![]),
+            alert,
+            full,
+            refusal,
+        }
+    }
+
+    #[test]
+    fn fresh_divisions_wait_for_the_games_alert_before_any_gather_or_assign() {
+        let plan = json!({"armies": {"max": 24, "absorb": "assign"}});
+        let tools = fresh(false, false, None);
+        let mut state = State::default();
+        assert_eq!(
+            armies_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(tools.sent.borrow().is_empty());
+        assert!(manage_note(&state, "armies")
+            .contains("wait for the game's unassigned-divisions alert"));
+        // the alert shows: one gather takes them
+        let tools = fresh(true, false, None);
+        let step = armies_step(&mut state, &tools, &plan, "l", START + DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            step.starts_with("army_gather 1 -> Armee Mitte: true"),
+            "{step}"
+        );
+        // no alert for a week: the state-by-state assign is the fallback
+        let tools = fresh(false, false, None);
+        let mut state = State::default();
+        armies_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let step = armies_step(&mut state, &tools, &plan, "l", START + 7 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(step.starts_with("army_assign state 67: true"), "{step}");
+    }
+
+    #[test]
+    fn an_assign_that_cannot_apply_is_not_sent_and_a_refused_one_rests() {
+        let plan = json!({"armies": {"max": 24, "absorb": "assign", "gather": false}});
+        // every army standing in the state is at the cap: army_full is known before any click
+        let tools = fresh(false, true, None);
+        let mut state = State::default();
+        assert_eq!(
+            armies_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(tools.sent.borrow().is_empty());
+        assert!(manage_note(&state, "armies")
+            .contains("every army standing there is full (Armee Mitte 24"));
+        // a division no click can take alone: refused once, then left to the gather
+        let tools = fresh(false, false, Some("selection_unavailable"));
+        let mut state = State::default();
+        let step = armies_step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(step.contains("false selection_unavailable"), "{step}");
+        assert_eq!(
+            armies_step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(tools.sent.borrow().len(), 1);
+        assert!(manage_note(&state, "armies").contains("assign refused"));
     }
 
     #[test]
@@ -9740,6 +10050,56 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("pending picks 100"));
+    }
+
+    #[test]
+    fn a_free_facility_left_without_a_start_is_named_with_its_reason() {
+        // g17a (17 Nov 2026): special_project_available stayed 400 days with no step note
+        let read = sp_read(
+            &[
+                (3, "land", Some("Grote"), Some(("sp_land_mev", false))),
+                (4, "land", Some("Bo"), None),
+                (5, "naval", None, None),
+            ],
+            &[],
+            &[],
+            50,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", read)]);
+        let plan = json!({"special_projects": {"recruit": {"when": "date:2000.1.1"}}});
+        let mut state = State::default();
+        assert_eq!(
+            special_projects_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(sp_actions(&tools).is_empty());
+        let note = manage_note(&state, "special_projects");
+        assert!(note.contains("facility 3: sp_land_mev running"), "{note}");
+        assert!(
+            note.contains("facility 4 (land): its scientist waits, no land project is open"),
+            "{note}"
+        );
+        assert!(
+            note.contains("facility 5 (naval): free, no idle scientist has a naval skill"),
+            "{note}"
+        );
+        assert!(note.contains("recruit waits for its when"), "{note}");
+        // without a recruit key the note says so
+        let tools = fake(vec![(
+            "hoi4_special_projects",
+            sp_read(&[(5, "naval", None, None)], &[], &[], 50, &[]),
+        )]);
+        let mut state = State::default();
+        special_projects_step(
+            &mut state,
+            &tools,
+            &json!({"special_projects": {}}),
+            "l",
+            START,
+        )
+        .unwrap();
+        assert!(manage_note(&state, "special_projects").contains("no recruit"));
     }
 
     #[test]

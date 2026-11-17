@@ -274,6 +274,11 @@ fn when_holds(state: &mut State, tools: &dyn Tools, when: &Value, now: GameHour)
     }
 }
 
+/// A section's last status line (the alerts rule reads the owning step's reason here).
+pub(super) fn note_of<'a>(state: &'a State, key: &str) -> Option<&'a str> {
+    state.military.notes.get(key).map(String::as_str)
+}
+
 fn note(state: &mut State, rule: &str, line: impl Into<String>) {
     state.military.notes.insert(rule.to_string(), line.into());
 }
@@ -1779,6 +1784,17 @@ fn fleet_plans(cfg: &Value) -> Vec<FleetPlan> {
     out
 }
 
+/// The reserve fleet as hoi4_fleets lists it: the last of several fleets, every task force of
+/// it on the reserve mission (the tools' own test, fleetops.rs reserve_index).
+fn reserve_fleet(fleets: &[Value]) -> Option<&str> {
+    let last = fleets.last()?;
+    let tfs = list(last, "task_forces");
+    (fleets.len() > 1
+        && !tfs.is_empty()
+        && tfs.iter().all(|t| t["mission"]["name"] == json!("reserve")))
+    .then(|| text(&last["fleet"]))
+}
+
 /// (fleet, admiral) pairs: `fleets[].admiral`, then `admirals` (an object or a list).
 fn admiral_plans(cfg: &Value) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = Vec::new();
@@ -2096,9 +2112,14 @@ fn navy_step(
     // most skilled admiral its commander list offers who leads no fleet and is planned for none,
     // once (no reassignment churn).
     let planned = admiral_plans(cfg);
+    // The reserve fleet has no admiral slot: the tool refuses it every time (g17a, 17 Nov 2026:
+    // "German Reich Flotta 1", reserve_fleet x8 until the ledger gave up).
+    let reserve = reserve_fleet(fleets);
+    let mut none_offered: Vec<String> = Vec::new();
     for row in fleets {
         let name = text(&row["fleet"]).to_string();
         if name.trim().is_empty()
+            || reserve.is_some_and(|r| same_name(r, &name))
             || row["admiral"]
                 .as_str()
                 .is_some_and(|a| !a.trim().is_empty())
@@ -2139,6 +2160,7 @@ fn navy_step(
             })
             .map(|a| text(&a["name"]).to_string());
         let Some(admiral) = best else {
+            none_offered.push(name);
             continue;
         };
         let (ok, why) = state.act(
@@ -2150,10 +2172,44 @@ fn navy_step(
         )?;
         if ok || code(&why) == "nothing_to_change" {
             state.done.insert(key, now);
+        } else if code(&why) == "reserve_fleet" {
+            // read as a real fleet but the game calls it the reserve: never again
+            state.done.insert(key, now);
         }
         return Ok(Some(format!(
             "navy: free admiral {admiral} -> {name} (the plan names none): {ok} {why}"
         )));
+    }
+    // the admiral_assignable alert's reason (plan_manage.rs alerts): each fleet's admiral, or
+    // why it has none
+    let admirals: Vec<String> = fleets
+        .iter()
+        .filter(|row| !text(&row["fleet"]).trim().is_empty())
+        .map(|row| {
+            let name = text(&row["fleet"]);
+            match row["admiral"].as_str().filter(|a| !a.trim().is_empty()) {
+                Some(a) => format!("{name}: {a}"),
+                None if reserve.is_some_and(|r| same_name(r, name)) => {
+                    format!("{name}: the reserve fleet, no admiral slot")
+                }
+                None if invasion_fleet
+                    .as_deref()
+                    .is_some_and(|f| same_name(f, name)) =>
+                {
+                    format!("{name}: the invasion fleet, its admiral comes with the invasion")
+                }
+                None if none_offered.iter().any(|f| f.as_str() == name) => {
+                    format!("{name}: no admiral offered who leads no fleet and is planned for none")
+                }
+                None => format!(
+                    "{name}: none yet (the planned or best free admiral is tried again within \
+                     30 days)"
+                ),
+            }
+        })
+        .collect();
+    if !admirals.is_empty() {
+        note(state, "admiral_assignable", admirals.join("; "));
     }
     // 3. regions, then the planned mission per task force
     let mut on_plan = 0;
@@ -2289,9 +2345,11 @@ fn navy_step(
                     state,
                     "navy_wait",
                     format!(
-                        "{tname} ({fleet}): returning to port for repairs (hold at sea, strength {}%); \
-                         its mission is given once it is in port",
-                        tf["strength_percent"].as_f64().map_or("?".into(), |v| format!("{v:.0}"))
+                        "{tname} ({fleet}): held for repairs (hold, strength {}%); its mission is \
+                         given once it is back at full strength",
+                        tf["strength_percent"]
+                            .as_f64()
+                            .map_or("?".into(), |v| format!("{v:.0}"))
                     ),
                 );
                 continue;
@@ -2386,11 +2444,11 @@ fn navy_step(
 
 /// The crews of one task force as hoi4_fleets {fleet, ships:true} reads them: ship count, the
 /// lowest and highest experience and the strength, for the reason a training order is dropped.
-/// A task force the game is sending home for repairs: on hold, at sea, below full strength.
+/// A task force the game is sending home or holding for repairs: on hold below full strength,
+/// at sea (sailing home) or in port (repairing). g17a (17 Nov 2026): a training school on hold
+/// in port at 94% (weakest ship 89%) dropped the exercise order twice; orders wait for 100%.
 fn returning_for_repair(tf: &Value, current: &str) -> bool {
-    current == "hold"
-        && tf["location"]["kind"].as_str() == Some("sea")
-        && tf["strength_percent"].as_f64().is_some_and(|s| s < 99.5)
+    current == "hold" && tf["strength_percent"].as_f64().is_some_and(|s| s < 99.5)
 }
 
 /// Whether every ship is at the training maximum (hoi4_fleets training_max_experience, from the
@@ -3157,6 +3215,13 @@ fn hold_one(
     Ok(Some(line))
 }
 
+// Test-only: other modules' tests set a military note through this (kept after the code so
+// the plan-key reader, which stops at the first test item, reads every step).
+#[cfg(test)]
+pub(super) fn put_note(state: &mut State, key: &str, line: &str) {
+    note(state, key, line);
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{date_hour, tick, Tick};
@@ -3559,6 +3624,37 @@ mod tests {
     }
 
     #[test]
+    fn the_reserve_fleet_gets_no_admiral_and_the_alert_reason_names_every_fleet() {
+        // g17a (17 Nov 2026): Lütjens was sent to the reserve fleet eight times (reserve_fleet)
+        let tools = fake(vec![
+            (
+                "hoi4_fleets",
+                json!({"fleets": [
+                    {"fleet": "Kriegsmarine", "admiral": "Raeder", "task_forces": []},
+                    {"fleet": "Flotta 1", "admiral": null, "task_forces": [
+                        {"task_force": "Old", "mission": {"name": "reserve"}}]}]}),
+            ),
+            (
+                "hoi4_fleet_admiral",
+                json!({"admirals": [{"name": "Lütjens", "skill": 3}]}),
+            ),
+        ]);
+        let plan = json!({"navy": {"posture": "coastal"}});
+        let mut state = State::default();
+        for day in 0..3 {
+            navy_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap();
+        }
+        assert!(!actions(&tools)
+            .iter()
+            .any(|(n, a)| n == "hoi4_fleet_admiral" && a.get("admiral").is_some()));
+        let why = note_of(&state, "admiral_assignable").unwrap();
+        assert_eq!(
+            why,
+            "Kriegsmarine: Raeder; Flotta 1: the reserve fleet, no admiral slot"
+        );
+    }
+
+    #[test]
     fn the_navy_adds_regions_then_gives_idle_task_forces_their_mission() {
         let tools = fake(vec![(
             "hoi4_fleets",
@@ -3708,7 +3804,7 @@ mod tests {
             None
         );
         assert!(actions(&tools).is_empty());
-        assert!(state.military.notes["navy_wait"].contains("returning to port for repairs"));
+        assert!(state.military.notes["navy_wait"].contains("held for repairs"));
         tools.reply("hoi4_fleets", read("land_or_port", 100.0));
         let out = navy_step(&mut state, &tools, &plan, "l", START + 4 * DAY).unwrap();
         assert_eq!(
@@ -3741,10 +3837,11 @@ mod tests {
             navy_step(&mut state, &tools, &plan, "l", START + 3 * DAY).unwrap(),
             None
         );
-        // repaired: idle again, so it gets its mission back
+        // repaired to full strength: idle again, so it gets its mission back (a hold below
+        // full strength is a repair, g17a)
         tools.reply(
             "hoi4_fleets",
-            fleets(&[("TF 1", "hold", 95.0)], &["Sea"], Some("A")),
+            fleets(&[("TF 1", "hold", 100.0)], &["Sea"], Some("A")),
         );
         let out = navy_step(&mut state, &tools, &plan, "l", START + 6 * DAY).unwrap();
         assert_eq!(
