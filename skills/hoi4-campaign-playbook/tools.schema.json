@@ -3385,6 +3385,34 @@
    },
    "source": "--list-tools"
   },
+  "hoi4_officer_corps": {
+   "description": "Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. Picking a spirit is not built yet (refused with not_yet_built). Refusal while driving: slot_missing. Results carry verification gui_only.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "lease_token": {
+      "type": "string"
+     },
+     "list": {
+      "type": "boolean"
+     },
+     "request_id": {
+      "type": "string"
+     },
+     "slot": {
+      "maxLength": 16,
+      "type": "string"
+     }
+    },
+    "required": [
+     "list",
+     "request_id",
+     "lease_token"
+    ],
+    "type": "object"
+   },
+   "source": "--list-tools"
+  },
   "hoi4_operation_start": {
    "description": "Prepare an intelligence operation against a target with ordinary input, as a player does: agency view (Shift+W), Operations tab, the operation's row (scrolled into view; one row per target with a network, the opened window's memory must name the asked operation and target), Prepare, one free operative per slot picked by name in the game's list, optionally Commence when ready, then the window's Prepare. The game then gathers the equipment and civilian factories and, with auto_commence (default true), commences on its own; the operation's phases then run for its days. Refusals before input: unknown_operation, operation_picks_location (the operation also picks a state or region in its window, e.g. coup, sabotage, coordinated strike: not built), agency_not_created, operative_unknown, operative_busy, not_enough_operatives (from memory and the content's files); from the windows before the first state-changing click: operation_unavailable (the game disables Prepare), operation_not_listed, operative_slots_unavailable, operative_not_offered, operative_pick_failed. Live-verified on 1.19.4 (collaboration government, ITA on ETH, at war). Use hoi4_operations first: it lists every missing piece with a code. Verified from memory: the operation appears among the agency's operations (hoi4_intelligence operations). operatives = recruited positions (hoi4_intelligence operatives.list order); default the first free ones.",
    "inputSchema": {

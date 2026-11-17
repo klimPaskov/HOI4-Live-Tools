@@ -828,6 +828,7 @@ pub fn mac_tool_list() -> Vec<Value> {
     .chain(operation_act::tools())
     .chain(mio_act::tools())
     .chain(leader_act::tools())
+    .chain(std::iter::once(doctrine_act::officer_tool()))
     .collect()
 }
 
@@ -946,6 +947,7 @@ impl Commands for MacClock {
                     | "hoi4_special_project_unassign"
                     | "hoi4_special_project_recruit"
                     | "hoi4_doctrine_adopt"
+                    | "hoi4_officer_corps"
                     | "hoi4_mio_design_team"
                     | "hoi4_mio_policy"
                     | "hoi4_mio_trait"
@@ -1913,6 +1915,11 @@ impl MacClock {
         }
         if name == "hoi4_doctrine_adopt" {
             return doctrine_act::call(args, process, &self.keys, guard, authority, actions);
+        }
+        if name == "hoi4_officer_corps" {
+            return doctrine_act::officer_call(
+                args, process, &self.keys, guard, authority, actions,
+            );
         }
         if name == "hoi4_construction_find_open" {
             allowed(
