@@ -1,0 +1,934 @@
+{"id": "plan-p0-1794922500-1", "action": {"equipment": "infantry_equipment_1", "factories": 16, "kind": "production_set", "line": 0}, "status": "Dispatching"}
+{"id": "plan-p0-1794922500-1", "action": {"equipment": "infantry_equipment_1", "factories": 16, "kind": "production_set", "line": 0}, "status": "Verified"}
+{"id": "plan-p0-1794922500-2", "action": {"equipment": "artillery_equipment_1", "factories": 2, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-p0-1794922500-2", "action": {"equipment": "artillery_equipment_1", "factories": 2, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-p0-1794922500-3", "action": {"equipment": "support_equipment_1", "factories": 3, "kind": "production_set", "line": 1}, "status": "Dispatching"}
+{"id": "plan-p0-1794922500-3", "action": {"equipment": "support_equipment_1", "factories": 3, "kind": "production_set", "line": 1}, "status": "Verified"}
+{"id": "plan-rs-1794922500-4", "action": {"kind": "research_start", "slot": 0, "technology": "construction1"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-4", "action": {"kind": "research_start", "slot": 0, "technology": "construction1"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-5", "action": {"kind": "research_start", "slot": 1, "technology": "basic_machine_tools"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-5", "action": {"kind": "research_start", "slot": 1, "technology": "basic_machine_tools"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-6", "action": {"kind": "research_start", "slot": 2, "technology": "electronic_mechanical_engineering"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-6", "action": {"kind": "research_start", "slot": 2, "technology": "electronic_mechanical_engineering"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-7", "action": {"kind": "research_start", "slot": 3, "technology": "interwar_artillery"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-7", "action": {"kind": "research_start", "slot": 3, "technology": "interwar_artillery"}, "status": "Verified"}
+{"id": "plan-fo-1794922500-8", "action": {"focus": "GER_the_four_year_plan", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-8", "action": {"focus": "GER_the_four_year_plan", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-9", "action": {"army": null, "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-9", "action": {"army": null, "kind": "army_gather", "max": 24}, "status": "NotApplied"}
+{"id": "plan-as-1794922500-10", "action": {"army": null, "kind": "army_assign", "state_id": 5}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-10", "action": {"army": null, "kind": "army_assign", "state_id": 5}, "status": "NotApplied"}
+{"id": "plan-as-1794922500-11", "action": {"army": null, "kind": "army_assign", "state_id": 50}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-11", "action": {"army": null, "kind": "army_assign", "state_id": 50}, "status": "Verified"}
+{"id": "plan-as-1794922500-12", "action": {"army": null, "kind": "army_assign", "state_id": 52}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-12", "action": {"army": null, "kind": "army_assign", "state_id": 52}, "status": "Verified"}
+{"id": "plan-as-1794922500-13", "action": {"army": null, "kind": "army_assign", "state_id": 53}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-13", "action": {"army": null, "kind": "army_assign", "state_id": 53}, "status": "Verified"}
+{"id": "plan-lg-1794922500-14", "action": {"army": "Army 3", "general": "Erwin von Witzleben", "kind": "army_commander"}, "status": "Dispatching"}
+{"id": "plan-lg-1794922500-14", "action": {"army": "Army 3", "general": "Erwin von Witzleben", "kind": "army_commander"}, "status": "Verified"}
+{"id": "plan-ln-1794922500-15", "action": {"army": "Army 3", "kind": "army_rename", "name": "Armee West S\u00fcd"}, "status": "Dispatching"}
+{"id": "plan-ln-1794922500-15", "action": {"army": "Army 3", "kind": "army_rename", "name": "Armee West S\u00fcd"}, "status": "Verified"}
+{"id": "plan-as-1794922500-16", "action": {"army": null, "kind": "army_assign", "state_id": 54}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-16", "action": {"army": null, "kind": "army_assign", "state_id": 54}, "status": "Verified"}
+{"id": "plan-as-1794922500-17", "action": {"army": null, "kind": "army_assign", "state_id": 55}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-17", "action": {"army": null, "kind": "army_assign", "state_id": 55}, "status": "Verified"}
+{"id": "plan-cg-1794922500-18", "action": {"army": "Army 3", "general": "Erich von Manstein", "kind": "army_commander"}, "status": "Dispatching"}
+{"id": "plan-cg-1794922500-18", "action": {"army": "Army 3", "general": "Erich von Manstein", "kind": "army_commander"}, "status": "Verified"}
+{"id": "plan-as-1794922500-19", "action": {"army": null, "kind": "army_assign", "state_id": 56}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-19", "action": {"army": null, "kind": "army_assign", "state_id": 56}, "status": "Verified"}
+{"id": "plan-lg-1794922500-20", "action": {"army": "Army 5", "general": "Maximilian von Weichs", "kind": "army_commander"}, "status": "Dispatching"}
+{"id": "plan-lg-1794922500-20", "action": {"army": "Army 5", "general": "Maximilian von Weichs", "kind": "army_commander"}, "status": "Verified"}
+{"id": "plan-ln-1794922500-21", "action": {"army": "Army 5", "kind": "army_rename", "name": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-ln-1794922500-21", "action": {"army": "Army 5", "kind": "army_rename", "name": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-cm-1794922500-22", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-22", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-cm-1794922500-23", "action": {"kind": "army_merge", "source": "Army 3", "target": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-23", "action": {"kind": "army_merge", "source": "Army 3", "target": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-cm-1794922500-24", "action": {"kind": "army_merge", "source": "Army 4", "target": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-24", "action": {"kind": "army_merge", "source": "Army 4", "target": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-cm-1794922500-25", "action": {"kind": "army_merge", "source": "Army 2", "target": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-25", "action": {"kind": "army_merge", "source": "Army 2", "target": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-as-1794922500-26", "action": {"army": null, "kind": "army_assign", "state_id": 58}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-26", "action": {"army": null, "kind": "army_assign", "state_id": 58}, "status": "Verified"}
+{"id": "plan-as-1794922500-27", "action": {"army": null, "kind": "army_assign", "state_id": 63}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-27", "action": {"army": null, "kind": "army_assign", "state_id": 63}, "status": "Verified"}
+{"id": "plan-cm-1794922500-28", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-28", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-cm-1794922500-29", "action": {"kind": "army_merge", "source": "Army 2", "target": "Armee West Nord"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-29", "action": {"kind": "army_merge", "source": "Army 2", "target": "Armee West Nord"}, "status": "Verified"}
+{"id": "plan-as-1794922500-30", "action": {"army": null, "kind": "army_assign", "state_id": 64}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-30", "action": {"army": null, "kind": "army_assign", "state_id": 64}, "status": "Verified"}
+{"id": "plan-lg-1794922500-31", "action": {"army": "Army 1", "general": "Erich von Manstein", "kind": "army_commander"}, "status": "Dispatching"}
+{"id": "plan-lg-1794922500-31", "action": {"army": "Army 1", "general": "Erich von Manstein", "kind": "army_commander"}, "status": "Verified"}
+{"id": "plan-ln-1794922500-32", "action": {"army": "Army 1", "kind": "army_rename", "name": "Armee West Mitte"}, "status": "Dispatching"}
+{"id": "plan-ln-1794922500-32", "action": {"army": "Army 1", "kind": "army_rename", "name": "Armee West Mitte"}, "status": "Verified"}
+{"id": "plan-as-1794922500-33", "action": {"army": null, "kind": "army_assign", "state_id": 66}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-33", "action": {"army": null, "kind": "army_assign", "state_id": 66}, "status": "Verified"}
+{"id": "plan-lg-1794922500-34", "action": {"army": "Army 1", "general": "G\u00fcnther von Kluge", "kind": "army_commander"}, "status": "Dispatching"}
+{"id": "plan-lg-1794922500-34", "action": {"army": "Army 1", "general": "G\u00fcnther von Kluge", "kind": "army_commander"}, "status": "Verified"}
+{"id": "plan-ln-1794922500-35", "action": {"army": "Army 1", "kind": "army_rename", "name": "Armee Mitte"}, "status": "Dispatching"}
+{"id": "plan-ln-1794922500-35", "action": {"army": "Army 1", "kind": "army_rename", "name": "Armee Mitte"}, "status": "Verified"}
+{"id": "plan-as-1794922500-36", "action": {"army": null, "kind": "army_assign", "state_id": 66}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-36", "action": {"army": null, "kind": "army_assign", "state_id": 66}, "status": "Verified"}
+{"id": "plan-as-1794922500-37", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-37", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "Verified"}
+{"id": "plan-lg-1794922500-38", "action": {"army": "Army 1", "general": "Wilhelm List", "kind": "army_commander"}, "status": "Dispatching"}
+{"id": "plan-lg-1794922500-38", "action": {"army": "Army 1", "general": "Wilhelm List", "kind": "army_commander"}, "status": "Verified"}
+{"id": "plan-ln-1794922500-39", "action": {"army": "Army 1", "kind": "army_rename", "name": "Armee S\u00fcd"}, "status": "Dispatching"}
+{"id": "plan-ln-1794922500-39", "action": {"army": "Army 1", "kind": "army_rename", "name": "Armee S\u00fcd"}, "status": "Verified"}
+{"id": "plan-as-1794922500-40", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-40", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "Verified"}
+{"id": "plan-as-1794922500-41", "action": {"army": null, "kind": "army_assign", "state_id": 68}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-41", "action": {"army": null, "kind": "army_assign", "state_id": 68}, "status": "Verified"}
+{"id": "plan-cm-1794922500-42", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee Mitte"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-42", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee Mitte"}, "status": "Verified"}
+{"id": "plan-as-1794922500-43", "action": {"army": null, "kind": "army_assign", "state_id": 763}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-43", "action": {"army": null, "kind": "army_assign", "state_id": 763}, "status": "Verified"}
+{"id": "plan-co-1794922500-44", "action": {"building": "industrial_complex", "count": 2, "kind": "construction_add", "province_id": null, "state_id": 42}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-44", "action": {"building": "industrial_complex", "count": 2, "kind": "construction_add", "province_id": null, "state_id": 42}, "status": "Verified"}
+{"id": "plan-cm-1794922500-45", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee S\u00fcd"}, "status": "Dispatching"}
+{"id": "plan-cm-1794922500-45", "action": {"kind": "army_merge", "source": "Army 1", "target": "Armee S\u00fcd"}, "status": "Verified"}
+{"id": "plan-sj-1794922500-46", "action": {"facility_id": 3499, "kind": "special_project_assign", "project": "sp_land_military_engineering_vehicles", "scientist": "Eduard Grote"}, "status": "Dispatching"}
+{"id": "plan-sj-1794922500-46", "action": {"facility_id": 3499, "kind": "special_project_assign", "project": "sp_land_military_engineering_vehicles", "scientist": "Eduard Grote"}, "status": "Verified"}
+{"id": "plan-co-1794922500-47", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 51}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-47", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 51}, "status": "Verified"}
+{"id": "plan-ai-1794922500-48", "action": {"budget": 1, "enabled": true, "kind": "auto_import"}, "status": "Dispatching"}
+{"id": "plan-ai-1794922500-48", "action": {"budget": 1, "enabled": true, "kind": "auto_import"}, "status": "Verified"}
+{"id": "plan-co-1794922500-49", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-49", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Verified"}
+{"id": "plan-ai-1794922500-50", "action": {"budget": 2, "enabled": true, "kind": "auto_import"}, "status": "Dispatching"}
+{"id": "plan-ai-1794922500-50", "action": {"budget": 2, "enabled": true, "kind": "auto_import"}, "status": "Verified"}
+{"id": "plan-co-1794922500-51", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-51", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Verified"}
+{"id": "plan-nq-1794922500-52", "action": {"equipment": "ship_hull_heavy_2", "factories": 0, "kind": "production_set", "line": 17}, "status": "Dispatching"}
+{"id": "plan-nq-1794922500-52", "action": {"equipment": "ship_hull_heavy_2", "factories": 0, "kind": "production_set", "line": 17}, "status": "Verified"}
+{"id": "plan-nq-1794922500-53", "action": {"equipment": "ship_hull_cruiser_2", "factories": 0, "kind": "production_set", "line": 15}, "status": "Dispatching"}
+{"id": "plan-nq-1794922500-53", "action": {"equipment": "ship_hull_cruiser_2", "factories": 0, "kind": "production_set", "line": 15}, "status": "Verified"}
+{"id": "plan-na-1794922500-54", "action": {"admiral": "Erich Raeder", "fleet": "Kriegsmarine", "kind": "fleet_admiral", "unassign": false}, "status": "Dispatching"}
+{"id": "plan-na-1794922500-54", "action": {"admiral": "Erich Raeder", "fleet": "Kriegsmarine", "kind": "fleet_admiral", "unassign": false}, "status": "Verified"}
+{"id": "plan-nq-1794922500-55", "action": {"equipment": "ship_hull_heavy_2", "factories": 0, "kind": "production_set", "line": 15}, "status": "Dispatching"}
+{"id": "plan-nq-1794922500-55", "action": {"equipment": "ship_hull_heavy_2", "factories": 0, "kind": "production_set", "line": 15}, "status": "Verified"}
+{"id": "plan-na-1794922500-56", "action": {"admiral": "Karl D\u00f6nitz", "fleet": "Unterseeboots-Flotte ", "kind": "fleet_admiral", "unassign": false}, "status": "Dispatching"}
+{"id": "plan-na-1794922500-56", "action": {"admiral": "Karl D\u00f6nitz", "fleet": "Unterseeboots-Flotte ", "kind": "fleet_admiral", "unassign": false}, "status": "Verified"}
+{"id": "plan-nr-1794922500-57", "action": {"fleet": "Kriegsmarine", "kind": "fleet_region", "region": "Lower Baltic Sea", "remove": false, "state_id": 58}, "status": "Dispatching"}
+{"id": "plan-nr-1794922500-57", "action": {"fleet": "Kriegsmarine", "kind": "fleet_region", "region": "Lower Baltic Sea", "remove": false, "state_id": 58}, "status": "Verified"}
+{"id": "plan-nm-1794922500-58", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "Hochseeflotte"}, "status": "Dispatching"}
+{"id": "plan-nm-1794922500-58", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "Hochseeflotte"}, "status": "Verified"}
+{"id": "plan-nm-1794922500-59", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "Ostseeflotte"}, "status": "Dispatching"}
+{"id": "plan-nm-1794922500-59", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "Ostseeflotte"}, "status": "Verified"}
+{"id": "plan-nm-1794922500-60", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "Marineschule Kiel"}, "status": "Dispatching"}
+{"id": "plan-nm-1794922500-60", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "Marineschule Kiel"}, "status": "Verified"}
+{"id": "plan-nr-1794922500-61", "action": {"fleet": "Unterseeboots-Flotte ", "kind": "fleet_region", "region": "Lower Baltic Sea", "remove": false, "state_id": 58}, "status": "Dispatching"}
+{"id": "plan-nr-1794922500-61", "action": {"fleet": "Unterseeboots-Flotte ", "kind": "fleet_region", "region": "Lower Baltic Sea", "remove": false, "state_id": 58}, "status": "Verified"}
+{"id": "plan-nm-1794922500-62", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "I. U-Boots Flottille Weddigen"}, "status": "Dispatching"}
+{"id": "plan-nm-1794922500-62", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "I. U-Boots Flottille Weddigen"}, "status": "Verified"}
+{"id": "plan-nm-1794922500-63", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "II. U-Boots-Ausbildungs-Gruppe"}, "status": "Dispatching"}
+{"id": "plan-nm-1794922500-63", "action": {"kind": "fleet_mission", "mission": "training", "task_force": "II. U-Boots-Ausbildungs-Gruppe"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-64", "action": {"equipment": "infantry_equipment_1", "kind": "mio_line", "line": 0, "list": false, "organization": "GER_mauser_organization"}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-64", "action": {"equipment": "infantry_equipment_1", "kind": "mio_line", "line": 0, "list": false, "organization": "GER_mauser_organization"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-65", "action": {"equipment": "support_equipment_1", "kind": "mio_line", "line": 1, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-65", "action": {"equipment": "support_equipment_1", "kind": "mio_line", "line": 1, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-66", "action": {"equipment": "artillery_equipment_1", "kind": "mio_line", "line": 2, "list": false, "organization": "GER_rheinmetall_organization"}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-66", "action": {"equipment": "artillery_equipment_1", "kind": "mio_line", "line": 2, "list": false, "organization": "GER_rheinmetall_organization"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-67", "action": {"equipment": "light_tank_chassis_2", "kind": "mio_line", "line": 3, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-67", "action": {"equipment": "light_tank_chassis_2", "kind": "mio_line", "line": 3, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-68", "action": {"equipment": "motorized_equipment_1", "kind": "mio_line", "line": 4, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-68", "action": {"equipment": "motorized_equipment_1", "kind": "mio_line", "line": 4, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-69", "action": {"equipment": "small_plane_airframe_1", "kind": "mio_line", "line": 5, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-69", "action": {"equipment": "small_plane_airframe_1", "kind": "mio_line", "line": 5, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-70", "action": {"equipment": "small_plane_cas_airframe_1", "kind": "mio_line", "line": 6, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-70", "action": {"equipment": "small_plane_cas_airframe_1", "kind": "mio_line", "line": 6, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-71", "action": {"equipment": "medium_plane_airframe_1", "kind": "mio_line", "line": 7, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-71", "action": {"equipment": "medium_plane_airframe_1", "kind": "mio_line", "line": 7, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-72", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 8, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-72", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 8, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-73", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 9, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-73", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 9, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-74", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 10, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-74", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 10, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-75", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-75", "action": {"equipment": "ship_hull_submarine_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-76", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-76", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-77", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-77", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-78", "action": {"equipment": "ship_hull_cruiser_panzerschiff", "kind": "mio_line", "line": 14, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-78", "action": {"equipment": "ship_hull_cruiser_panzerschiff", "kind": "mio_line", "line": 14, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-79", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 15, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-79", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 15, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-80", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 16, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-80", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 16, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-81", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-81", "action": {"equipment": "ship_hull_light_2", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Verified"}
+{"id": "plan-mtl-23-60759371", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60759371", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-82", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 0}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-82", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 0}, "status": "Verified"}
+{"id": "plan-mtl-28-60759371", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60759371", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-83", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 0}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-83", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 0}, "status": "Verified"}
+{"id": "plan-xd-1794922500-84", "action": {"armies": ["Armee S\u00fcd", "Armee West Nord", "Armee West S\u00fcd", "Armee West Mitte", "Armee Mitte"], "kind": "army_exercise", "on": true, "stop_at_max": true}, "status": "Dispatching"}
+{"id": "plan-xd-1794922500-84", "action": {"armies": ["Armee S\u00fcd", "Armee West Nord", "Armee West S\u00fcd", "Armee West Mitte", "Armee Mitte"], "kind": "army_exercise", "on": true, "stop_at_max": true}, "status": "Verified"}
+{"id": "plan-po-1794922500-85", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 17, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-85", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 17, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-86", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 16, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-86", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 16, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-87", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000500000039", "kind": "production_priority", "line": 14, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-87", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000500000039", "kind": "production_priority", "line": 14, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-88", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 1, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-88", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 1, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-89", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 0, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-89", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 0, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-90", "action": {"equipment": "medium_plane_airframe_1", "handle": "0x0000000800000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-90", "action": {"equipment": "medium_plane_airframe_1", "handle": "0x0000000800000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-91", "action": {"equipment": "small_plane_cas_airframe_1", "handle": "0x0000000700000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-91", "action": {"equipment": "small_plane_cas_airframe_1", "handle": "0x0000000700000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-92", "action": {"equipment": "small_plane_airframe_1", "handle": "0x0000000600000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-92", "action": {"equipment": "small_plane_airframe_1", "handle": "0x0000000600000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-93", "action": {"equipment": "light_tank_chassis_2", "handle": "0x0000000400000038", "kind": "production_priority", "line": 9, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-93", "action": {"equipment": "light_tank_chassis_2", "handle": "0x0000000400000038", "kind": "production_priority", "line": 9, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-94", "action": {"equipment": "motorized_equipment_1", "handle": "0x0000000500000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-94", "action": {"equipment": "motorized_equipment_1", "handle": "0x0000000500000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-95", "action": {"equipment": "support_equipment_1", "handle": "0x0000000200000038", "kind": "production_priority", "line": 9, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-95", "action": {"equipment": "support_equipment_1", "handle": "0x0000000200000038", "kind": "production_priority", "line": 9, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-96", "action": {"equipment": "artillery_equipment_1", "handle": "0x0000000300000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-96", "action": {"equipment": "artillery_equipment_1", "handle": "0x0000000300000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-97", "action": {"equipment": "infantry_equipment_1", "handle": "0x0000000100000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-97", "action": {"equipment": "infantry_equipment_1", "handle": "0x0000000100000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-98", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-98", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-99", "action": {"equipment": "support_equipment_1", "factories": 4, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-99", "action": {"equipment": "support_equipment_1", "factories": 4, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-ga-1794922500-100", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-100", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-pk-1794922500-101", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-101", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-102", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-102", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-mtl-23-60760092", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60760092", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mtl-28-60760121", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60760121", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-fo-1794922500-103", "action": {"focus": "GER_autarky_efforts", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-103", "action": {"focus": "GER_autarky_efforts", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-104", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-104", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-105", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-105", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-106", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-106", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-mtl-23-60760819", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60760819", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-po-1794922500-107", "action": {"category": "government", "idea": "GER_hjalmar_schacht", "kind": "politics_choose", "slot": 3}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-107", "action": {"category": "government", "idea": "GER_hjalmar_schacht", "kind": "politics_choose", "slot": 3}, "status": "Verified"}
+{"id": "plan-mtl-28-60760856", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60760856", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-fo-1794922500-108", "action": {"focus": "GER_construct_the_reichsautobahn", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-108", "action": {"focus": "GER_construct_the_reichsautobahn", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-109", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-109", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-110", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-110", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ev-1794922500-111", "action": {"event": "bba_news.8", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-111", "action": {"event": "bba_news.8", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-mtl-23-60761541", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60761541", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mtl-28-60761586", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60761586", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-pk-1794922500-112", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-112", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-113", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-113", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-fo-1794922500-114", "action": {"focus": "GER_institute_price_controls", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-114", "action": {"focus": "GER_institute_price_controls", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-115", "action": {"kind": "research_start", "slot": 2, "technology": "radio"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-115", "action": {"kind": "research_start", "slot": 2, "technology": "radio"}, "status": "NotApplied"}
+{"id": "plan-rs-1794922500-116", "action": {"kind": "research_start", "slot": 2, "technology": "support_weapons"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-116", "action": {"kind": "research_start", "slot": 2, "technology": "support_weapons"}, "status": "NotApplied"}
+{"id": "plan-rs-1794922500-117", "action": {"kind": "research_start", "slot": 2, "technology": "interwar_antitank"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-117", "action": {"kind": "research_start", "slot": 2, "technology": "interwar_antitank"}, "status": "NotApplied"}
+{"id": "plan-rf-1794922500-118", "action": {"kind": "research_start", "slot": 2, "technology": "mechanical_computing"}, "status": "Dispatching"}
+{"id": "plan-rf-1794922500-118", "action": {"kind": "research_start", "slot": 2, "technology": "mechanical_computing"}, "status": "NotApplied"}
+{"id": "plan-rf-1794922500-119", "action": {"kind": "research_start", "slot": 2, "technology": "damage_control_1"}, "status": "Dispatching"}
+{"id": "plan-rf-1794922500-119", "action": {"kind": "research_start", "slot": 2, "technology": "damage_control_1"}, "status": "NotApplied"}
+{"id": "plan-rf-1794922500-120", "action": {"kind": "research_start", "slot": 2, "technology": "fire_control_methods_1"}, "status": "Dispatching"}
+{"id": "plan-rf-1794922500-120", "action": {"kind": "research_start", "slot": 2, "technology": "fire_control_methods_1"}, "status": "NotApplied"}
+{"id": "plan-ev-1794922500-121", "action": {"event": "AUS_political_events.15", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-121", "action": {"event": "AUS_political_events.15", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-rs-1794922500-122", "action": {"kind": "research_start", "slot": 2, "technology": "radio"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-122", "action": {"kind": "research_start", "slot": 2, "technology": "radio"}, "status": "Verified"}
+{"id": "plan-ai-1794922500-123", "action": {"budget": 3, "enabled": true, "kind": "auto_import"}, "status": "Dispatching"}
+{"id": "plan-ai-1794922500-123", "action": {"budget": 3, "enabled": true, "kind": "auto_import"}, "status": "Verified"}
+{"id": "plan-ev-1794922500-124", "action": {"event": "AUS_political_events.18", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-124", "action": {"event": "AUS_political_events.18", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-cv-1794922500-125", "action": {"design": 1, "equipment": "convoy_1", "factories": 1, "kind": "production_add", "line": null}, "status": "Dispatching"}
+{"id": "plan-cv-1794922500-125", "action": {"design": 1, "equipment": "convoy_1", "factories": 1, "kind": "production_add", "line": null}, "status": "Verified"}
+{"id": "plan-ai-1794922500-126", "action": {"budget": 4, "enabled": true, "kind": "auto_import"}, "status": "Dispatching"}
+{"id": "plan-ai-1794922500-126", "action": {"budget": 4, "enabled": true, "kind": "auto_import"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-127", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-127", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-po-1794922500-128", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 16, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-128", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 16, "to": "top"}, "status": "Verified"}
+{"id": "plan-ev-1794922500-129", "action": {"event": "mtg_news.61", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-129", "action": {"event": "mtg_news.61", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-po-1794922500-130", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 11, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-130", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 11, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-131", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-131", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000b00000039", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-mtl-23-60762266", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60762266", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-po-1794922500-132", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 1, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-132", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 1, "to": "top"}, "status": "Verified"}
+{"id": "plan-mtl-28-60762315", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60762315", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-po-1794922500-133", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 0, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-133", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 0, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-134", "action": {"equipment": "medium_plane_airframe_1", "handle": "0x0000000800000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-134", "action": {"equipment": "medium_plane_airframe_1", "handle": "0x0000000800000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-135", "action": {"equipment": "small_plane_cas_airframe_1", "handle": "0x0000000700000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-135", "action": {"equipment": "small_plane_cas_airframe_1", "handle": "0x0000000700000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-ai-1794922500-136", "action": {"budget": 5, "enabled": true, "kind": "auto_import"}, "status": "Dispatching"}
+{"id": "plan-ai-1794922500-136", "action": {"budget": 5, "enabled": true, "kind": "auto_import"}, "status": "Verified"}
+{"id": "plan-po-1794922500-137", "action": {"equipment": "small_plane_airframe_1", "handle": "0x0000000600000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-137", "action": {"equipment": "small_plane_airframe_1", "handle": "0x0000000600000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-138", "action": {"equipment": "light_tank_chassis_2", "handle": "0x0000000400000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-138", "action": {"equipment": "light_tank_chassis_2", "handle": "0x0000000400000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-139", "action": {"equipment": "motorized_equipment_1", "handle": "0x0000000500000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-139", "action": {"equipment": "motorized_equipment_1", "handle": "0x0000000500000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-140", "action": {"equipment": "support_equipment_1", "handle": "0x0000000200000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-140", "action": {"equipment": "support_equipment_1", "handle": "0x0000000200000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-141", "action": {"equipment": "artillery_equipment_1", "handle": "0x0000000300000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-141", "action": {"equipment": "artillery_equipment_1", "handle": "0x0000000300000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-142", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-142", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-po-1794922500-143", "action": {"equipment": "infantry_equipment_1", "handle": "0x0000000100000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-143", "action": {"equipment": "infantry_equipment_1", "handle": "0x0000000100000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-144", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-144", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-145", "action": {"focus": "GER_remilitarize_the_rhineland", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-145", "action": {"focus": "GER_remilitarize_the_rhineland", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-dr-1794922500-146", "action": {"decision": "GER_import_tariffs", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-146", "action": {"decision": "GER_import_tariffs", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-dr-1794922500-147", "action": {"decision": "GER_implement_rations", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-147", "action": {"decision": "GER_implement_rations", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-dr-1794922500-148", "action": {"decision": "GER_implement_wage_controls", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-148", "action": {"decision": "GER_implement_wage_controls", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-rs-1794922500-149", "action": {"kind": "research_start", "slot": 3, "technology": "support_weapons"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-149", "action": {"kind": "research_start", "slot": 3, "technology": "support_weapons"}, "status": "Verified"}
+{"id": "plan-mtl-23-60762988", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60762988", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-co-1794922500-150", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-150", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Verified"}
+{"id": "plan-mtl-28-60763050", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60763050", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-151", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 0}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-151", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 0}, "status": "NotApplied"}
+{"id": "plan-co-1794922500-152", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-152", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Verified"}
+{"id": "plan-rs-1794922500-153", "action": {"kind": "research_start", "slot": 1, "technology": "concentrated_industry"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-153", "action": {"kind": "research_start", "slot": 1, "technology": "concentrated_industry"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-154", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-154", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-co-1794922500-155", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-155", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 67}, "status": "Verified"}
+{"id": "plan-co-1794922500-156", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 978}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-156", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 978}, "status": "Verified"}
+{"id": "plan-dr-1794922500-157", "action": {"decision": "GER_guns_before_butter", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-157", "action": {"decision": "GER_guns_before_butter", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-158", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-158", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 17, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-tr-1794922500-159", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-159", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-160", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-160", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-fo-1794922500-161", "action": {"focus": "GER_fuhrerprinzip", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-161", "action": {"focus": "GER_fuhrerprinzip", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-mtl-23-60763713", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60763713", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mtl-28-60763771", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60763771", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-162", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 1}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-162", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 1}, "status": "Verified"}
+{"id": "plan-dr-1794922500-163", "action": {"decision": "GER_arbeit_und_brot", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-163", "action": {"decision": "GER_arbeit_und_brot", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-cv-1794922500-164", "action": {"equipment": "convoy_1", "factories": 2, "kind": "production_set", "line": 16}, "status": "Dispatching"}
+{"id": "plan-cv-1794922500-164", "action": {"equipment": "convoy_1", "factories": 2, "kind": "production_set", "line": 16}, "status": "Verified"}
+{"id": "plan-po-1794922500-165", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000600000039", "kind": "production_priority", "line": 15, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-165", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000600000039", "kind": "production_priority", "line": 15, "to": "top"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-166", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-166", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-pk-1794922500-167", "action": {"equipment": "artillery_equipment_1", "factories": 1, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-167", "action": {"equipment": "artillery_equipment_1", "factories": 1, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-pk-1794922500-168", "action": {"equipment": "support_equipment_1", "factories": 5, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-168", "action": {"equipment": "support_equipment_1", "factories": 5, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-po-1794922500-169", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 11, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-169", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 11, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-170", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-170", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000d00000039", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-171", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 1, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-171", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 1, "to": "top"}, "status": "Verified"}
+{"id": "plan-cp-1794922500-172", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-172", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ml-1794922500-173", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 16, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-173", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 16, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-cp-1794922500-174", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-174", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-175", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-175", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Verified"}
+{"id": "plan-po-1794922500-176", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 0, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-176", "action": {"equipment": "ship_hull_light_2", "handle": "0x0000000c00000039", "kind": "production_priority", "line": 0, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-177", "action": {"equipment": "medium_plane_airframe_1", "handle": "0x0000000800000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-177", "action": {"equipment": "medium_plane_airframe_1", "handle": "0x0000000800000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-178", "action": {"equipment": "small_plane_cas_airframe_1", "handle": "0x0000000700000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-178", "action": {"equipment": "small_plane_cas_airframe_1", "handle": "0x0000000700000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-179", "action": {"equipment": "small_plane_airframe_1", "handle": "0x0000000600000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-179", "action": {"equipment": "small_plane_airframe_1", "handle": "0x0000000600000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-180", "action": {"equipment": "light_tank_chassis_2", "handle": "0x0000000400000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-180", "action": {"equipment": "light_tank_chassis_2", "handle": "0x0000000400000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-181", "action": {"equipment": "motorized_equipment_1", "handle": "0x0000000500000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-181", "action": {"equipment": "motorized_equipment_1", "handle": "0x0000000500000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-182", "action": {"equipment": "support_equipment_1", "handle": "0x0000000200000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-182", "action": {"equipment": "support_equipment_1", "handle": "0x0000000200000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-183", "action": {"kind": "research_start", "slot": 0, "technology": "interwar_antitank"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-183", "action": {"kind": "research_start", "slot": 0, "technology": "interwar_antitank"}, "status": "Verified"}
+{"id": "plan-fo-1794922500-184", "action": {"focus": "GER_ascension_of_todt", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-184", "action": {"focus": "GER_ascension_of_todt", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-po-1794922500-185", "action": {"equipment": "artillery_equipment_1", "handle": "0x0000000300000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-185", "action": {"equipment": "artillery_equipment_1", "handle": "0x0000000300000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-po-1794922500-186", "action": {"equipment": "infantry_equipment_1", "handle": "0x0000000100000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-186", "action": {"equipment": "infantry_equipment_1", "handle": "0x0000000100000038", "kind": "production_priority", "line": 10, "to": "top"}, "status": "Verified"}
+{"id": "plan-cv-1794922500-187", "action": {"equipment": "convoy_1", "factories": 3, "kind": "production_set", "line": 15}, "status": "Dispatching"}
+{"id": "plan-cv-1794922500-187", "action": {"equipment": "convoy_1", "factories": 3, "kind": "production_set", "line": 15}, "status": "Verified"}
+{"id": "plan-mtl-23-60764441", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60764441", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-188", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 0}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-188", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 0}, "status": "NotApplied"}
+{"id": "plan-mtl-28-60764512", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60764512", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-dr-1794922500-189", "action": {"decision": "GER_collect_scrap_metal", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-189", "action": {"decision": "GER_collect_scrap_metal", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-190", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 15, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-190", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 15, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-191", "action": {"focus": "GER_accelerate_the_rearmament_program", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-191", "action": {"focus": "GER_accelerate_the_rearmament_program", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-192", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-192", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-193", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-193", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-dk-1794922500-194", "action": {"equipment": "ship_hull_light_2", "factories": 2, "kind": "production_set", "line": 8}, "status": "Dispatching"}
+{"id": "plan-dk-1794922500-194", "action": {"equipment": "ship_hull_light_2", "factories": 2, "kind": "production_set", "line": 8}, "status": "Verified"}
+{"id": "plan-pk-1794922500-195", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-195", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-196", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-196", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-ml-1794922500-197", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 14, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-197", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 14, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-mtl-23-60765162", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60765162", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-198", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 1}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-198", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 1}, "status": "Verified"}
+{"id": "plan-cp-1794922500-199", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-199", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-pa-1794922500-200", "action": {"category": "government", "idea": "GER_franz_seldte", "kind": "politics_choose", "slot": 4}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-200", "action": {"category": "government", "idea": "GER_franz_seldte", "kind": "politics_choose", "slot": 4}, "status": "Verified"}
+{"id": "plan-tr-1794922500-201", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-201", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-cv-1794922500-202", "action": {"equipment": "convoy_1", "factories": 4, "kind": "production_set", "line": 13}, "status": "Dispatching"}
+{"id": "plan-cv-1794922500-202", "action": {"equipment": "convoy_1", "factories": 4, "kind": "production_set", "line": 13}, "status": "Verified"}
+{"id": "plan-mtl-28-60765320", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60765320", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ga-1794922500-203", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-203", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-cp-1794922500-204", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-204", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ga-1794922500-205", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-205", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-cp-1794922500-206", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-206", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-207", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-207", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-208", "action": {"focus": "GER_establish_production_targets", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-208", "action": {"focus": "GER_establish_production_targets", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-209", "action": {"equipment": "light_tank_chassis_2", "factories": 4, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-209", "action": {"equipment": "light_tank_chassis_2", "factories": 4, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-210", "action": {"equipment": "light_tank_chassis_2", "factories": 3, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-210", "action": {"equipment": "light_tank_chassis_2", "factories": 3, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-211", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-211", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-rs-1794922500-212", "action": {"kind": "research_start", "slot": 1, "technology": "tech_logistics_company"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-212", "action": {"kind": "research_start", "slot": 1, "technology": "tech_logistics_company"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-213", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-213", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-tr-1794922500-214", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-214", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-215", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-215", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-23-60765959", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60765959", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-df-1794922500-216", "action": {"doctrine": "wolfpacks", "kind": "doctrine_adopt", "track": "submarines"}, "status": "Dispatching"}
+{"id": "plan-df-1794922500-216", "action": {"doctrine": "wolfpacks", "kind": "doctrine_adopt", "track": "submarines"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-217", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-217", "action": {"equipment": "motorized_equipment_1", "factories": 1, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-218", "action": {"equipment": "support_equipment_1", "factories": 6, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-218", "action": {"equipment": "support_equipment_1", "factories": 6, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-mtl-28-60766057", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60766057", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-cp-1794922500-219", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-219", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-220", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-220", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-221", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-221", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-222", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-222", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-rs-1794922500-223", "action": {"kind": "research_start", "slot": 3, "technology": "tech_maintenance_company"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-223", "action": {"kind": "research_start", "slot": 3, "technology": "tech_maintenance_company"}, "status": "Verified"}
+{"id": "plan-cp-1794922500-224", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-224", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-co-1794922500-225", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-225", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Verified"}
+{"id": "plan-ml-1794922500-226", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-226", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-227", "action": {"focus": "GER_kdf_wagen_factories", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-227", "action": {"focus": "GER_kdf_wagen_factories", "kind": "focus_start"}, "status": "NotApplied"}
+{"id": "plan-as-1794922500-229", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-229", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "NotApplied"}
+{"id": "plan-fo-1794922500-230", "action": {"focus": "GER_kdf_wagen_factories", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-230", "action": {"focus": "GER_kdf_wagen_factories", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-231", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-231", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-232", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-232", "action": {"equipment": "light_tank_chassis_2", "factories": 2, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-233", "action": {"equipment": "motorized_equipment_1", "factories": 3, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-233", "action": {"equipment": "motorized_equipment_1", "factories": 3, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-mtl-23-60766696", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60766696", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-234", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 1}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-234", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 1}, "status": "NotApplied"}
+{"id": "plan-tr-1794922500-235", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-235", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-236", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-236", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-mtl-28-60766817", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60766817", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-rs-1794922500-237", "action": {"kind": "research_start", "slot": 2, "technology": "construction2"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-237", "action": {"kind": "research_start", "slot": 2, "technology": "construction2"}, "status": "Verified"}
+{"id": "plan-cp-1794922500-238", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-238", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-239", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-239", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-240", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-240", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ev-1794922500-241", "action": {"event": "news.288", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-241", "action": {"event": "news.288", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-cp-1794922500-242", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-242", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-243", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-243", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ml-1794922500-244", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-244", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-245", "action": {"focus": "GER_concentrated_armament_program", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-245", "action": {"focus": "GER_concentrated_armament_program", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-246", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-246", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-247", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-247", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-248", "action": {"equipment": "support_equipment_1", "factories": 7, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-248", "action": {"equipment": "support_equipment_1", "factories": 7, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-co-1794922500-249", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-249", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Verified"}
+{"id": "plan-mtl-23-60767421", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60767421", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-250", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 2}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-250", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": 2}, "status": "Verified"}
+{"id": "plan-pk-1794922500-251", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-251", "action": {"equipment": "light_tank_chassis_2", "factories": 1, "kind": "production_set", "line": 4}, "status": "Verified"}
+{"id": "plan-pk-1794922500-252", "action": {"equipment": "motorized_equipment_1", "factories": 3, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-252", "action": {"equipment": "motorized_equipment_1", "factories": 3, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-mtl-28-60767539", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60767539", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-rs-1794922500-253", "action": {"kind": "research_start", "slot": 0, "technology": "improved_machine_tools"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-253", "action": {"kind": "research_start", "slot": 0, "technology": "improved_machine_tools"}, "status": "Verified"}
+{"id": "plan-cp-1794922500-254", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-254", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-255", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-255", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-tr-1794922500-256", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-256", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-cp-1794922500-257", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-257", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-258", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-258", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-259", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-259", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-fo-1794922500-260", "action": {"focus": "GER_reorganize_the_wehrmacht", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-260", "action": {"focus": "GER_reorganize_the_wehrmacht", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-261", "action": {"equipment": "motorized_equipment_1", "factories": 6, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-261", "action": {"equipment": "motorized_equipment_1", "factories": 6, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-co-1794922500-262", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-262", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 67}, "status": "Verified"}
+{"id": "plan-ai-1794922500-263", "action": {"budget": 6, "enabled": true, "kind": "auto_import"}, "status": "Dispatching"}
+{"id": "plan-ai-1794922500-263", "action": {"budget": 6, "enabled": true, "kind": "auto_import"}, "status": "Verified"}
+{"id": "plan-bl-1794922500-264", "action": {"equipment": "artillery_equipment_1", "factories": 2, "kind": "production_set", "line": 1}, "status": "Dispatching"}
+{"id": "plan-bl-1794922500-264", "action": {"equipment": "artillery_equipment_1", "factories": 2, "kind": "production_set", "line": 1}, "status": "Verified"}
+{"id": "plan-mtl-23-60768146", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60768146", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-tr-1794922500-265", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-265", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-266", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-266", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-pa-1794922500-267", "action": {"category": "government", "idea": "GER_hanns_kerrl", "kind": "politics_choose", "slot": 5}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-267", "action": {"category": "government", "idea": "GER_hanns_kerrl", "kind": "politics_choose", "slot": 5}, "status": "Verified"}
+{"id": "plan-mtl-28-60768269", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60768269", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ml-1794922500-268", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-268", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 13, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-so-1794922500-269", "action": {"army": "Armee S\u00fcd", "divisions": ["00000033:0000000d"], "kind": "army_move", "province_id": 692, "state_id": 52}, "status": "Dispatching"}
+{"id": "plan-so-1794922500-269", "action": {"army": "Armee S\u00fcd", "divisions": ["00000033:0000000d"], "kind": "army_move", "province_id": 692, "state_id": 52}, "status": "Verified"}
+{"id": "plan-rs-1794922500-270", "action": {"kind": "research_start", "slot": 1, "technology": "armor_tech_1"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-270", "action": {"kind": "research_start", "slot": 1, "technology": "armor_tech_1"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-271", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-271", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-272", "action": {"equipment": "motorized_equipment_1", "factories": 5, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-272", "action": {"equipment": "motorized_equipment_1", "factories": 5, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-273", "action": {"equipment": "support_equipment_1", "factories": 8, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-273", "action": {"equipment": "support_equipment_1", "factories": 8, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-cp-1794922500-274", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-274", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ga-1794922500-275", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-275", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ev-1794922500-276", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-276", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-as-1794922500-277", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-277", "action": {"army": null, "kind": "army_assign", "state_id": 67}, "status": "NotApplied"}
+{"id": "plan-mtl-23-60768868", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60768868", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ga-1794922500-278", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-278", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-fo-1794922500-279", "action": {"focus": "GER_ascension_of_speer", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-279", "action": {"focus": "GER_ascension_of_speer", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-cp-1794922500-280", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-280", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-po-1794922500-281", "action": {"category": "government", "idea": "GER_joachim_von_ribbentrop", "kind": "politics_choose", "slot": 4}, "status": "Dispatching"}
+{"id": "plan-po-1794922500-281", "action": {"category": "government", "idea": "GER_joachim_von_ribbentrop", "kind": "politics_choose", "slot": 4}, "status": "Verified"}
+{"id": "plan-tr-1794922500-282", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-282", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-28-60768995", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60768995", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-cp-1794922500-283", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-283", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-rs-1794922500-284", "action": {"kind": "research_start", "slot": 3, "technology": "concentrated_industry2"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-284", "action": {"kind": "research_start", "slot": 3, "technology": "concentrated_industry2"}, "status": "Verified"}
+{"id": "plan-co-1794922500-285", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 978}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-285", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 978}, "status": "NotApplied"}
+{"id": "plan-fo-1794922500-286", "action": {"focus": "GER_develop_modern_maneuver_warfare", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-286", "action": {"focus": "GER_develop_modern_maneuver_warfare", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-ev-1794922500-287", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-287", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-tr-1794922500-288", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-288", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-289", "action": {"kind": "research_start", "slot": 2, "technology": "excavation2"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-289", "action": {"kind": "research_start", "slot": 2, "technology": "excavation2"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-290", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-290", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-co-1794922500-291", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 978}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-291", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 978}, "status": "Verified"}
+{"id": "plan-mtl-23-60769613", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60769613", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-cp-1794922500-292", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-292", "action": {"general": "Wilhelm List", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ga-1794922500-293", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-293", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-mtl-28-60769715", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60769715", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-cp-1794922500-294", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-294", "action": {"general": "Erich von Manstein", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-cp-1794922500-295", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-295", "action": {"general": "Erwin von Witzleben", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-ev-1794922500-296", "action": {"event": "lar_news.11", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-296", "action": {"event": "lar_news.11", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-fo-1794922500-297", "action": {"focus": "GER_expanding_the_luftwaffe", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-297", "action": {"focus": "GER_expanding_the_luftwaffe", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-298", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-298", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-299", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-299", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-mtl-23-60770333", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60770333", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-tr-1794922500-300", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-300", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-28-60770461", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60770461", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-pk-1794922500-301", "action": {"equipment": "artillery_equipment_1", "factories": 5, "kind": "production_set", "line": 1}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-301", "action": {"equipment": "artillery_equipment_1", "factories": 5, "kind": "production_set", "line": 1}, "status": "Verified"}
+{"id": "plan-rs-1794922500-302", "action": {"kind": "research_start", "slot": 1, "technology": "oil_processing"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-302", "action": {"kind": "research_start", "slot": 1, "technology": "oil_processing"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-303", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-303", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-tr-1794922500-304", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-304", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-co-1794922500-305", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 53}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-305", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 53}, "status": "Verified"}
+{"id": "plan-pa-1794922500-306", "action": {"category": "military_staff", "idea": "GER_ludwig_beck", "kind": "politics_choose", "slot": 0}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-306", "action": {"category": "military_staff", "idea": "GER_ludwig_beck", "kind": "politics_choose", "slot": 0}, "status": "Verified"}
+{"id": "plan-fo-1794922500-307", "action": {"focus": "GER_establish_the_reichswerke", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-307", "action": {"focus": "GER_establish_the_reichswerke", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-308", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-308", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-23-60771088", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60771088", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ga-1794922500-309", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-309", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ev-1794922500-310", "action": {"event": "news.42", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-310", "action": {"event": "news.42", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-ev-1794922500-311", "action": {"event": "denmark_trade_deal.1", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-311", "action": {"event": "denmark_trade_deal.1", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-mtl-28-60771201", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60771201", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-co-1794922500-312", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 68}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-312", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 68}, "status": "NotApplied"}
+{"id": "plan-ev-1794922500-313", "action": {"event": "mtg_news.3", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-313", "action": {"event": "mtg_news.3", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-co-1794922500-314", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 763}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-314", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 763}, "status": "Verified"}
+{"id": "plan-tr-1794922500-315", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-315", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-316", "action": {"kind": "research_start", "slot": 0, "technology": "improved_equipment_conversion"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-316", "action": {"kind": "research_start", "slot": 0, "technology": "improved_equipment_conversion"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-317", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-317", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-318", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-318", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-cv-1794922500-319", "action": {"equipment": "convoy_1", "factories": 5, "kind": "production_set", "line": 12}, "status": "Dispatching"}
+{"id": "plan-cv-1794922500-319", "action": {"equipment": "convoy_1", "factories": 5, "kind": "production_set", "line": 12}, "status": "Verified"}
+{"id": "plan-tr-1794922500-320", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-320", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-321", "action": {"equipment": "motorized_equipment_1", "factories": 4, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-321", "action": {"equipment": "motorized_equipment_1", "factories": 4, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-322", "action": {"equipment": "artillery_equipment_1", "factories": 6, "kind": "production_set", "line": 1}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-322", "action": {"equipment": "artillery_equipment_1", "factories": 6, "kind": "production_set", "line": 1}, "status": "Verified"}
+{"id": "plan-ml-1794922500-323", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-323", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-324", "action": {"focus": "GER_build_the_rur_dam", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-324", "action": {"focus": "GER_build_the_rur_dam", "kind": "focus_start"}, "status": "NotApplied"}
+{"id": "plan-fo-1794922500-326", "action": {"focus": "GER_build_the_rur_dam", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-326", "action": {"focus": "GER_build_the_rur_dam", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-mtl-23-60771816", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60771816", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ga-1794922500-327", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-327", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-so-1794922500-328", "action": {"army": "Armee Mitte", "divisions": ["00001269:00001e1e", "00001269:00001d93", "00001269:00001f00", "00001269:00001e1d"], "kind": "army_move", "province_id": 537, "state_id": 68}, "status": "Dispatching"}
+{"id": "plan-so-1794922500-328", "action": {"army": "Armee Mitte", "divisions": ["00001269:00001e1e", "00001269:00001d93", "00001269:00001f00", "00001269:00001e1d"], "kind": "army_move", "province_id": 537, "state_id": 68}, "status": "Verified"}
+{"id": "plan-mtl-28-60771927", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60771927", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-tr-1794922500-329", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-329", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-so-1794922500-330", "action": {"army": "Armee S\u00fcd", "divisions": ["00001269:00001ade", "00001269:0000182f", "00001269:00001adf", "00001269:00001b84", "00001269:00001b8a", "00001269:000016b4"], "kind": "army_move", "province_id": 11505, "state_id": 64}, "status": "Dispatching"}
+{"id": "plan-so-1794922500-330", "action": {"army": "Armee S\u00fcd", "divisions": ["00001269:00001ade", "00001269:0000182f", "00001269:00001adf", "00001269:00001b84", "00001269:00001b8a", "00001269:000016b4"], "kind": "army_move", "province_id": 11505, "state_id": 64}, "status": "Verified"}
+{"id": "plan-ml-1794922500-331", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-331", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-pa-1794922500-332", "action": {"category": "military_staff", "idea": "GER_erich_raeder", "kind": "politics_choose", "slot": 1}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-332", "action": {"category": "military_staff", "idea": "GER_erich_raeder", "kind": "politics_choose", "slot": 1}, "status": "Verified"}
+{"id": "plan-tr-1794922500-333", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-333", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-334", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-334", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-co-1794922500-335", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 42}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-335", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 42}, "status": "Verified"}
+{"id": "plan-ga-1794922500-336", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-336", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ev-1794922500-337", "action": {"event": "news.49", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-337", "action": {"event": "news.49", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-ml-1794922500-338", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-338", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 12, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-mtl-23-60772572", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60772572", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-cv-1794922500-339", "action": {"equipment": "convoy_1", "factories": 6, "kind": "production_set", "line": 11}, "status": "Dispatching"}
+{"id": "plan-cv-1794922500-339", "action": {"equipment": "convoy_1", "factories": 6, "kind": "production_set", "line": 11}, "status": "Verified"}
+{"id": "plan-tr-1794922500-340", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-340", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-28-60772647", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60772647", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "NotApplied"}
+{"id": "plan-ml-1794922500-341", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-341", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-ev-1794922500-342", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-342", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-tr-1794922500-343", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-343", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-co-1794922500-344", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 55}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-344", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 55}, "status": "Verified"}
+{"id": "plan-dc-1794922500-345", "action": {"doctrine": "mobile_infantry", "kind": "doctrine_adopt", "track": "infantry"}, "status": "Dispatching"}
+{"id": "plan-dc-1794922500-345", "action": {"doctrine": "mobile_infantry", "kind": "doctrine_adopt", "track": "infantry"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-346", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-346", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-tr-1794922500-347", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-347", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-23-60773293", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60773293", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ga-1794922500-348", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-348", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ml-1794922500-349", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-349", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-mtl-28-60773377", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60773377", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-fo-1794922500-350", "action": {"focus": "GER_bribe_senior_officers", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-350", "action": {"focus": "GER_bribe_senior_officers", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-351", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-351", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-352", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-352", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-pa-1794922500-353", "action": {"category": "military_staff", "idea": "GER_albert_kesselring", "kind": "politics_choose", "slot": 2}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-353", "action": {"category": "military_staff", "idea": "GER_albert_kesselring", "kind": "politics_choose", "slot": 2}, "status": "Verified"}
+{"id": "plan-df-1794922500-354", "action": {"doctrine": "convoy_escort", "kind": "doctrine_adopt", "track": "screens"}, "status": "Dispatching"}
+{"id": "plan-df-1794922500-354", "action": {"doctrine": "convoy_escort", "kind": "doctrine_adopt", "track": "screens"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-355", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-355", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-ev-1794922500-356", "action": {"event": "news.334", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-356", "action": {"event": "news.334", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-tr-1794922500-357", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-357", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-co-1794922500-358", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-358", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 60}, "status": "Verified"}
+{"id": "plan-ga-1794922500-359", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-359", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-mtl-23-60774017", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60774017", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-rs-1794922500-360", "action": {"kind": "research_start", "slot": 3, "technology": "rubber_processing"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-360", "action": {"kind": "research_start", "slot": 3, "technology": "rubber_processing"}, "status": "Verified"}
+{"id": "plan-mtl-28-60774104", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60774104", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-361", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 0}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-361", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 0}, "status": "NotApplied"}
+{"id": "plan-tr-1794922500-362", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-362", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-363", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-363", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ga-1794922500-364", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-364", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-fo-1794922500-365", "action": {"focus": "GER_autonomy_in_the_kriegsschulen", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-365", "action": {"focus": "GER_autonomy_in_the_kriegsschulen", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-366", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-366", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-tr-1794922500-367", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-367", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-368", "action": {"kind": "research_start", "slot": 1, "technology": "tech_military_police"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-368", "action": {"kind": "research_start", "slot": 1, "technology": "tech_military_police"}, "status": "Verified"}
+{"id": "plan-co-1794922500-369", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-369", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 66}, "status": "Verified"}
+{"id": "plan-tr-1794922500-370", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-370", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-rs-1794922500-371", "action": {"kind": "research_start", "slot": 2, "technology": "tech_signal_company"}, "status": "Dispatching"}
+{"id": "plan-rs-1794922500-371", "action": {"kind": "research_start", "slot": 2, "technology": "tech_signal_company"}, "status": "Verified"}
+{"id": "plan-ml-1794922500-372", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-372", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-ga-1794922500-373", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-373", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-tr-1794922500-374", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-374", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-23-60774740", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60774740", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mtl-28-60774841", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60774841", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-375", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 1}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-375", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 1}, "status": "NotApplied"}
+{"id": "plan-ga-1794922500-376", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-376", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-tr-1794922500-377", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-377", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-so-1794922500-378", "action": {"army": "Armee West Mitte", "divisions": ["00001269:000022b0", "00001269:0000231d", "00001269:00002388", "00001269:00002375", "00001269:00002253", "00001269:000021c9", "00001269:00002254"], "kind": "army_move", "province_id": 478, "state_id": 64}, "status": "Dispatching"}
+{"id": "plan-so-1794922500-378", "action": {"army": "Armee West Mitte", "divisions": ["00001269:000022b0", "00001269:0000231d", "00001269:00002388", "00001269:00002375", "00001269:00002253", "00001269:000021c9", "00001269:00002254"], "kind": "army_move", "province_id": 478, "state_id": 64}, "status": "Verified"}
+{"id": "plan-fo-1794922500-379", "action": {"focus": "GER_expand_the_truppenschulen", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-379", "action": {"focus": "GER_expand_the_truppenschulen", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-380", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-380", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-pa-1794922500-381", "action": {"category": "military_staff", "idea": "GER_erich_bey", "kind": "politics_choose", "slot": 3}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-381", "action": {"category": "military_staff", "idea": "GER_erich_bey", "kind": "politics_choose", "slot": 3}, "status": "Verified"}
+{"id": "plan-ga-1794922500-382", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-382", "action": {"army": "Armee S\u00fcd", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ev-1794922500-383", "action": {"event": "lar_operative_event.6", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-383", "action": {"event": "lar_operative_event.6", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-ev-1794922500-384", "action": {"event": "news.175", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-384", "action": {"event": "news.175", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-co-1794922500-385", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 67}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-385", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 67}, "status": "Verified"}
+{"id": "plan-tr-1794922500-386", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-386", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-387", "action": {"equipment": "motorized_equipment_1", "factories": 3, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-387", "action": {"equipment": "motorized_equipment_1", "factories": 3, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-388", "action": {"equipment": "support_equipment_1", "factories": 9, "kind": "production_set", "line": 2}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-388", "action": {"equipment": "support_equipment_1", "factories": 9, "kind": "production_set", "line": 2}, "status": "Verified"}
+{"id": "plan-mtl-23-60775461", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60775461", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-ga-1794922500-389", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-389", "action": {"army": "Armee West Mitte", "kind": "army_gather", "max": 24}, "status": "NotApplied"}
+{"id": "plan-mtl-28-60775566", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60775566", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-390", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 2}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-390", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 2}, "status": "NotApplied"}
+{"id": "plan-tr-1794922500-391", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-391", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-392", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-392", "action": {"army": "Armee Mitte", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-co-1794922500-393", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 42}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-393", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 42}, "status": "Verified"}
+{"id": "plan-tr-1794922500-394", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-394", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-395", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-395", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-ml-1794922500-396", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Dispatching"}
+{"id": "plan-ml-1794922500-396", "action": {"equipment": "convoy_1", "kind": "mio_line", "line": 11, "list": false, "organization": null}, "status": "Diverged"}
+{"id": "plan-fo-1794922500-397", "action": {"focus": "GER_fortify_the_vaterland", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-397", "action": {"focus": "GER_fortify_the_vaterland", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-tr-1794922500-398", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-398", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-399", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-399", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-mtl-23-60776181", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-23-60776181", "action": {"kind": "mio_trait", "organization": "GER_mauser_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-cp-1794922500-400", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-400", "action": {"general": "Maximilian von Weichs", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "plan-tr-1794922500-401", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-401", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-mtl-28-60776314", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Dispatching"}
+{"id": "plan-mtl-28-60776314", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": null}, "status": "Verified"}
+{"id": "plan-mq-1794922500-402", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 3}, "status": "Dispatching"}
+{"id": "plan-mq-1794922500-402", "action": {"kind": "mio_trait", "organization": "GER_rheinmetall_organization", "slot": 0, "trait_index": 3}, "status": "Verified"}
+{"id": "plan-co-1794922500-403", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 51}, "status": "Dispatching"}
+{"id": "plan-co-1794922500-403", "action": {"building": "industrial_complex", "count": 1, "kind": "construction_add", "province_id": null, "state_id": 51}, "status": "Verified"}
+{"id": "plan-rf-1794922500-404", "action": {"kind": "research_start", "slot": 0, "technology": "excavation1"}, "status": "Dispatching"}
+{"id": "plan-rf-1794922500-404", "action": {"kind": "research_start", "slot": 0, "technology": "excavation1"}, "status": "Verified"}
+{"id": "plan-pk-1794922500-405", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-405", "action": {"equipment": "motorized_equipment_1", "factories": 2, "kind": "production_set", "line": 3}, "status": "Verified"}
+{"id": "plan-pk-1794922500-406", "action": {"equipment": "infantry_equipment_1", "factories": 17, "kind": "production_set", "line": 0}, "status": "Dispatching"}
+{"id": "plan-pk-1794922500-406", "action": {"equipment": "infantry_equipment_1", "factories": 17, "kind": "production_set", "line": 0}, "status": "Verified"}
+{"id": "plan-ev-1794922500-407", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-407", "action": {"event": "country_capitulated.0", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-ev-1794922500-408", "action": {"event": "news.409", "kind": "event_choose", "option": 0}, "status": "Dispatching"}
+{"id": "plan-ev-1794922500-408", "action": {"event": "news.409", "kind": "event_choose", "option": 0}, "status": "Verified"}
+{"id": "plan-tr-1794922500-409", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-409", "action": {"count": 1, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-410", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-410", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-tr-1794922500-411", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Dispatching"}
+{"id": "plan-tr-1794922500-411", "action": {"count": 2, "kind": "train", "template": "Infanterie-Division"}, "status": "Verified"}
+{"id": "plan-ga-1794922500-412", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-412", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-as-1794922500-413", "action": {"army": null, "kind": "army_assign", "state_id": 51}, "status": "Dispatching"}
+{"id": "plan-as-1794922500-413", "action": {"army": null, "kind": "army_assign", "state_id": 51}, "status": "NotApplied"}
+{"id": "plan-fo-1794922500-414", "action": {"focus": "GER_aeronautical_research_institute", "kind": "focus_start"}, "status": "Dispatching"}
+{"id": "plan-fo-1794922500-414", "action": {"focus": "GER_aeronautical_research_institute", "kind": "focus_start"}, "status": "Verified"}
+{"id": "plan-pa-1794922500-415", "action": {"category": "military_staff", "idea": "GER_ferdinand_schorner", "kind": "politics_choose", "slot": 4}, "status": "Dispatching"}
+{"id": "plan-pa-1794922500-415", "action": {"category": "military_staff", "idea": "GER_ferdinand_schorner", "kind": "politics_choose", "slot": 4}, "status": "Verified"}
+{"id": "plan-ga-1794922500-416", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Dispatching"}
+{"id": "plan-ga-1794922500-416", "action": {"army": "Armee West Nord", "kind": "army_gather", "max": 24}, "status": "Verified"}
+{"id": "plan-dr-1794922500-417", "action": {"decision": "GER_construct_the_westwall", "kind": "decision_take", "target": null}, "status": "Dispatching"}
+{"id": "plan-dr-1794922500-417", "action": {"decision": "GER_construct_the_westwall", "kind": "decision_take", "target": null}, "status": "Verified"}
+{"id": "plan-cp-1794922500-418", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "Dispatching"}
+{"id": "plan-cp-1794922500-418", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": false, "prefer": ["offensive_doctrine", "logistics_wizard", "infantry_expert", "organisational_leader", "aggressive_assaulter", "inspirational_leader", "fast_planner"], "trait": null}, "status": "NotApplied"}
+{"id": "c42396655", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": true, "prefer": [], "trait": null}, "status": "Dispatching"}
+{"id": "c42396655", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": true, "prefer": [], "trait": null}, "status": "Verified"}
+{"id": "c42403602", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": true, "prefer": [], "trait": null}, "status": "Dispatching"}
+{"id": "c42403602", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": true, "prefer": [], "trait": null}, "status": "Verified"}
+{"id": "c42428027", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": true, "prefer": [], "trait": null}, "status": "Dispatching"}
+{"id": "c42428027", "action": {"general": "G\u00fcnther von Kluge", "kind": "general_trait", "list": true, "prefer": [], "trait": null}, "status": "Verified"}

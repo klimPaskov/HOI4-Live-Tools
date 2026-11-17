@@ -308,7 +308,8 @@ class SupervisorTests(Folder):
         s = self.supervisor(front=lambda pid: fronted.append(pid) or True)
         s.start_native = factory
         self.assertTrue(s.start())
-        self.assertEqual(fronted, [4242])
+        # once for the retry, once more before the executor's first input
+        self.assertEqual(fronted, [4242, 4242])
 
     def test_a_reason_only_the_user_can_fix_ends_the_start_with_its_step(self):
         s = self.supervisor()
@@ -413,13 +414,14 @@ class SupervisorTests(Folder):
         self.fake.handlers["hoi4_research_start"] = lambda a: next(replies)
         out = s.handle("hoi4_research_start", {"technology": "radio"})
         self.assertFalse(out["isError"])
-        self.assertEqual(fronted, [4242])
+        # once before the executor started, once for the refused action
+        self.assertEqual(fronted, [4242, 4242])
         self.assertEqual(s.counts["front"], 1)
 
     def test_the_idle_pause_defaults_to_fifteen_minutes_from_the_runs_settings(self):
         s = self.ready()
         self.assertEqual(supervisor.IDLE_PAUSE_MINUTES, 15)
-        self.assertEqual(runs.read_json(os.path.join(self.run_dir, "settings.json")), {"idle_pause_minutes": 15})
+        self.assertEqual(runs.read_json(os.path.join(self.run_dir, "settings.json")), {"idle_pause_minutes": 15, "player_silent_minutes": 45})
         self.assertEqual(s.idle_limit(), 900)
 
     def test_a_silence_shorter_than_half_the_threshold_does_nothing(self):
@@ -489,7 +491,7 @@ class SupervisorTests(Folder):
     def test_the_idle_pause_can_be_switched_off_or_changed_during_the_run(self):
         s = self.ready()
         self.fake.paused = False
-        runs.write_json(os.path.join(self.run_dir, "settings.json"), {"idle_pause_minutes": 0})
+        runs.write_json(os.path.join(self.run_dir, "settings.json"), {"idle_pause_minutes": 0, "player_silent_minutes": 45})
         self.assertIsNone(s.idle_limit())
         self.clock.now += 24 * 3600
         self.assertFalse(s.watchdog(self.clock()))
@@ -532,7 +534,7 @@ class SupervisorTests(Folder):
 
     def test_play_writes_the_idle_pause_given_for_the_run(self):
         run = start.prepare(self.prefix, ITALY, "conquer Ethiopia", template(), idle_pause_minutes=0)
-        self.assertEqual(runs.read_json(os.path.join(run, "settings.json")), {"idle_pause_minutes": 0})
+        self.assertEqual(runs.read_json(os.path.join(run, "settings.json")), {"idle_pause_minutes": 0, "player_silent_minutes": 45})
         self.assertIsNone(runs.idle_pause_seconds(run, 20))
 
     def test_a_closed_game_stops_the_run_with_a_report(self):
@@ -588,7 +590,8 @@ class SupervisorTests(Folder):
         self.clock.now += supervisor.HEALTH_EVERY + 1
         s.tick()
         observed = [a for n, a in self.fake.calls if n == "hoi4_observe"]
-        self.assertIn("goal_reached", observed[0]["kinds"])
+        # the whole feed is read (and kept in feed.jsonl), not only the kinds the supervisor acts on
+        self.assertEqual(observed[1], {"since": 1, "limit": supervisor.FEED_PAGE})
         self.assertTrue(s.finished.is_set())
         self.assertEqual(s.end_reason, "goal_reached")
 
@@ -693,7 +696,9 @@ class SupervisorTests(Folder):
         s.tick()
         self.assertEqual(s.end_reason, "game_memory")
         with open(os.path.join(self.run_dir, "report.md"), encoding="utf-8") as f:
-            self.assertIn("Ended: game_memory (the game uses 10.6 GB", f.read())
+            text = f.read()
+        self.assertIn("Ended: game_memory: ", text)
+        self.assertIn("(the game uses 10.6 GB", text)
 
     def test_a_date_that_stands_still_while_the_game_runs_ends_the_run_and_a_pause_does_not(self):
         s = self.ready()

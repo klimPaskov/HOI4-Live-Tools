@@ -150,3 +150,89 @@ def bring_to_front(pid):
         return bool(activate(app, objc.sel_registerName(b"activateWithOptions:"), 1))
     except (OSError, AttributeError, TypeError):
         return False
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# the windows on screen (macOS): reads only, no permission needed for owners, numbers and bounds
+
+# The system's own prompts (a privacy or permission request, a password dialog). While one is on screen the native
+# runtime refuses input (system_dialog_open) and only the user may answer it.
+SYSTEM_DIALOG_OWNERS = ("UserNotificationCenter", "CoreServicesUIAgent", "SecurityAgent")
+
+
+def mac_windows(on_screen=True):
+    """[{"owner", "pid", "id", "layer", "bounds": (x, y, width, height)}] of the windows macOS lists, front to back;
+    [] where the list cannot be read (another system, no CoreGraphics). Standard library only (ctypes)."""
+    if system_name() != "macos":
+        return []
+    try:
+        import ctypes
+        vp = ctypes.c_void_p
+        cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        cg.CGWindowListCopyWindowInfo.restype = vp
+        cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+        cf.CFArrayGetCount.restype = ctypes.c_long
+        cf.CFArrayGetCount.argtypes = [vp]
+        cf.CFArrayGetValueAtIndex.restype = vp
+        cf.CFArrayGetValueAtIndex.argtypes = [vp, ctypes.c_long]
+        cf.CFDictionaryGetValue.restype = vp
+        cf.CFDictionaryGetValue.argtypes = [vp, vp]
+        cf.CFStringGetCString.restype = ctypes.c_bool
+        cf.CFStringGetCString.argtypes = [vp, ctypes.c_char_p, ctypes.c_long, ctypes.c_uint32]
+        cf.CFStringCreateWithCString.restype = vp
+        cf.CFStringCreateWithCString.argtypes = [vp, ctypes.c_char_p, ctypes.c_uint32]
+        cf.CFNumberGetValue.restype = ctypes.c_bool
+        cf.CFNumberGetValue.argtypes = [vp, ctypes.c_long, vp]
+        cf.CFRelease.argtypes = [vp]
+        utf8, double = 0x08000100, 13
+
+        def text(ref):
+            buf = ctypes.create_string_buffer(512)
+            return buf.value.decode("utf-8", "replace") if ref and cf.CFStringGetCString(ref, buf, 512, utf8) else None
+
+        def number(ref):
+            out = ctypes.c_double()
+            return out.value if ref and cf.CFNumberGetValue(ref, double, ctypes.byref(out)) else None
+
+        keys = {n: vp.in_dll(cg, "kCGWindow" + n).value for n in ("OwnerName", "OwnerPID", "Number", "Layer", "Bounds")}
+        corner = {n: cf.CFStringCreateWithCString(None, n.encode(), utf8) for n in ("X", "Y", "Width", "Height")}
+        # kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements
+        array = cg.CGWindowListCopyWindowInfo((1 if on_screen else 0) | 16, 0)
+        rows = []
+        try:
+            for i in range(cf.CFArrayGetCount(array) if array else 0):
+                d = cf.CFArrayGetValueAtIndex(array, i)
+                b = cf.CFDictionaryGetValue(d, keys["Bounds"])
+                bounds = tuple(number(cf.CFDictionaryGetValue(b, corner[n])) if b else None
+                               for n in ("X", "Y", "Width", "Height"))
+                rows.append({"owner": text(cf.CFDictionaryGetValue(d, keys["OwnerName"])),
+                             "pid": int(number(cf.CFDictionaryGetValue(d, keys["OwnerPID"])) or 0),
+                             "id": int(number(cf.CFDictionaryGetValue(d, keys["Number"])) or 0),
+                             "layer": int(number(cf.CFDictionaryGetValue(d, keys["Layer"])) or 0),
+                             "bounds": None if None in bounds else bounds})
+        finally:
+            if array:
+                cf.CFRelease(array)
+            for ref in corner.values():
+                if ref:
+                    cf.CFRelease(ref)
+        return rows
+    except (OSError, AttributeError, TypeError, ValueError):
+        return []
+
+
+def system_dialogs(windows=None):
+    """The owners of the system prompts on screen (sorted, each once); [] when none or unreadable."""
+    rows = mac_windows() if windows is None else windows
+    return sorted({w["owner"] for w in rows if w.get("owner") in SYSTEM_DIALOG_OWNERS})
+
+
+def game_window(pid, windows=None):
+    """The game's main window ({"id", "bounds"} of its largest normal-layer window), None when not on screen."""
+    rows = mac_windows() if windows is None else windows
+    mine = [w for w in rows if w.get("pid") == pid and w.get("layer") == 0 and w.get("bounds")]
+    if not mine:
+        return None
+    best = max(mine, key=lambda w: w["bounds"][2] * w["bounds"][3])
+    return {"id": best["id"], "bounds": best["bounds"]}

@@ -107,11 +107,27 @@ whole campaign. It does what the developer rig's broker, plan loop and monitor d
   running;
 - **ends the run** when the executor reports the plan's goal reached, or once the game date passes the plan's
   `goal.deadline` (reasons `goal_reached`, `deadline`); `HOI4_LIVE_END=off` keeps the run going past both;
+- **ends the run at the user's end date**: `hoi4-live play ... --until 1938.01.01` (reason `end_date`);
+- **ends the run when the player is gone**: with no player call for `player_silent_minutes` (45 by default, in
+  the run's `settings.json`; 0 switches it off), for example after the model's usage limit or a closed client,
+  the run ends as `player_silent` instead of leaving the executor to play on alone for hours;
+- **watches for a system prompt** (a permission or password dialog: owners `UserNotificationCenter`,
+  `CoreServicesUIAgent`, `SecurityAgent`, read from the window list with no permission). The runtime refuses input
+  while one is on screen; the supervisor tells the player and the status at once, never touches the prompt, and
+  ends the run as `system_dialog` when it is still there after five minutes;
+- brings the game to the front once just before the executor starts (an order sent while another window is in
+  front is refused);
 - notes the machine's load and swap at the start (a machine short of memory plays at half its pace or less)
   and **ends the run with a plain message** when the game's memory passes `HOI4_LIVE_GAME_MEMORY_GB` (default
   10) or its date stands still for `HOI4_LIVE_STALL_MINUTES` (default 5) while it is not paused (reasons
   `game_memory`, `game_stalled`; 0 switches either off);
-- writes `watch.jsonl` once a minute (game date, war stats, each army's supply and organisation; reads only);
+- writes `watch.jsonl` once a minute (game date, war stats, each army's supply and organisation; every five
+  minutes also the production lines, stockpile and factories) and `feed.jsonl` (every change of the runtime's
+  feed: alerts, wakes, lost land, the executor's orders); both read only, for `hoi4-live report`;
+- **at the end of the run** keeps what the gate reads (`gate/<date>.json`: factories, armies, equipment,
+  templates, air, navy, alerts); at its own ends (goal, deadline, end date, silence, memory limit) pauses the game;
+  then saves it with the game's own save (`hoi4_save`), so the campaign can continue in a new segment. No save is
+  tried when input cannot work (the game closed or hung, a system prompt). `HOI4_LIVE_SAVE_AT_END=off` skips it;
 - writes `calls.jsonl` (token-free), `supervisor.log` and, at the end, `report.md`: wall time, game dates, calls,
   action receipts by outcome, duplicates refused, idle wakes, idle pauses (each with its time, game date, reason
   and when it was lifted), pauses the player asked for, self-pauses the runtime recorded, why it ended, and the
@@ -124,7 +140,8 @@ whole campaign. It does what the developer rig's broker, plan loop and monitor d
 | The player's `hoi4_time {"paused":true}` | the player asks | an explicit request; counted in the report |
 | The user's own pause in the game | the user asks | the user's; nothing undoes it |
 | Idle guard | no player call for `idle_pause_minutes` (15; 0 = off) | the only pause the product makes itself; lifted by the next call |
-| The plan's end date | the game reaches the plan's `stop_on_date`: the executor stops acting for good and pauses once | the plan asks for it; `"stop_on_date_pause": false` in the plan keeps the game running |
+| The plan's end date | never in a `hoi4-live play` run: `play` and `--continue` remove a plan's `stop_on_date` (a strategist's review date) and log it in the plan's `_meta.edits` | a real campaign never pauses itself |
+| The run's end | the supervisor's own ends (goal, deadline, `--until`, silent player, memory limit): paused, then saved | nobody plays after the run; the save is where the next segment starts |
 | Pause guard in the runtime (`pause_guard`) | an Escape or Space of an action changed the pause state | it puts back the state the action started with, running or paused; it never adds a pause |
 
 The user starts the campaign paused and the player's opening runs while paused; the player unpauses once its
@@ -132,9 +149,31 @@ armies are placed, and from then on it never pauses. The Python server's step to
 `hoi4_time {"action":"step"}`) run the clock for the days they are asked for and stop paused: that is their request,
 and the native play flow does not use them.
 
+## 3b. Segments and the report
+
+A campaign of several game years cannot be one game process on a 16 GB machine: the game's memory grows. It is
+played in segments. A segment ends at the memory limit (or at `--until`, or when the player is gone) with the game
+paused and saved by the game's own save. The user quits the game, starts it again and loads that save (the
+launcher's Continue loads the newest save), then runs `hoi4-live play --continue`. That makes a new run folder
+and carries over the plan in force (`plan.json`, with the names reconciled on day one and any revision),
+the executor's memory (`plan_state.json`: done work, timers, the failure ledger, the phase), the plan notes, the
+player's log and the run's settings. The supervisor refuses a loaded game older than where the last segment
+ended (more than 45 days: a save from before the boundary would replay turns). A continued segment is never a
+reload to get a better result.
+
+`hoi4-live report [RUN]` reads a run, live or after it ended: the campaign's segments (dates, why each ended, the
+save it wrote), the bar audit from the run's files (`play/audit.py`: self-pauses, repeated failures, research
+idle, political power, armies, actions by domain, lost land, alerts open with or without a written reason, pace,
+production, per-state interface work) and the gate (`play/gate.py`: factories and divisions against the game's
+own AI where a baseline ships, or against `--marks CIV MIL DIVS`; equipment fill; force composition against the
+plan's force table; air). On a live run the gate is read through the supervisor (`snapshot`, reads only, not a
+player call); after the run from `gate/<date>.json`.
+
 ## 4. The user's files
 
-`play` changes no file outside its run folder. The game's settings, saves, mods and playset are the user's:
+`play` changes no file outside its run folder except the save it writes at the end of a run with the game's own
+save (named by the game: country and date; the report names it). The game's settings, saves, mods and playset are
+the user's:
 
 - the steps for display mode, resolution and UI scale are printed for the user to do in the game;
 - before attaching, `play` records the SHA-256 of `settings.txt`, `pdx_settings.txt`, `dlc_load.json` and the
@@ -164,3 +203,5 @@ same table.
 Everything above is unit-tested behind seams (process listing, the native runtime as a fake JSON-RPC child, the
 clock, the endpoint). What only a running game can prove is listed and scripted in
 `scripts/live_checks/play_attach.py` (run by the owner of a live test machine, never in CI).
+`scripts/live_checks/product_campaign.py` checks a campaign end to end through the product: a clean install,
+the doctor, a run to an end date, the report, a forced segment boundary and `--continue`, and the silent player.

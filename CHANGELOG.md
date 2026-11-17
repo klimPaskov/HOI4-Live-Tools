@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+A campaign through the product, start to report: what the private developer rig did for a run is now in
+`hoi4-live play` and a new `hoi4-live report`.
+
+- The run ends by itself when the player is gone (no call for `player_silent_minutes`, 45 by default: a usage
+  limit, a closed client) instead of the executor playing on alone, and at a game date the user gives
+  (`hoi4-live play ... --until 1938.01.01`).
+- At the end of a run the game is saved with its own save (paused first at the supervisor's own ends), the state
+  the gate reads is kept (`gate/<date>.json`) and `end.json` names the save.
+- Segments: `hoi4-live play --continue [RUN]` starts the next segment from that save in a new run folder, with the
+  plan in force and the executor's memory (`plan_state.json`) carried; a save older than the boundary is refused.
+  The memory limit is a segment boundary.
+- `hoi4-live report [RUN]`: the campaign's segments, the bar audit from the run's own files (the same lines the
+  developer rig printed) and the gate: factories and divisions against the game's own AI where a baseline ships
+  (or `--marks`), equipment fill, force composition against the plan's force table, air.
+- The supervisor keeps the whole feed (`feed.jsonl`) and a production sample every five minutes, brings the game to
+  the front before the executor's first input, watches for a system prompt on screen (ends the run if it stays
+  five minutes) and removes a plan's `stop_on_date` (a run never pauses itself).
+
 Scale: nothing walks states or divisions one at a time.
 
 - `hoi4_states` with a country tag is one memory pass over the state list for any country size (the Soviet Union's

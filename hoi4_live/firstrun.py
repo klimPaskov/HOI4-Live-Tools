@@ -9,10 +9,16 @@ It takes a country and a goal and does, in order, what a fresh install needs bef
        (hoi4_live.play) and print the one instruction for the coding client; elsewhere what this system's
        installed runtime can start today, or the exact piece that is still missing (docs/PLAY_FLOW.md)
 
+`--continue [RUN]` starts the next segment of a campaign instead (the last run that ended, or RUN): the plan in
+force and the executor's memory are carried into a new run folder and the run attaches to the game the user
+loaded from the save the last segment wrote. `--until DATE` ends the run at that game date (saved, so it can be
+continued).
+
 It never starts the game binary: the user starts the game from Steam (--launch asks Steam to). It sends no input
-itself and changes no file outside the run folder. Standard library only. Exit codes: 0 handed to the coding
-client, 1 the doctor has steps to do, 2 usage or no plan for the country, 3 this system has no start path yet,
-4 no game or the run did not start, 5 a campaign is already running.
+itself; it changes no file outside the run folder except the save the run writes at its end with the game's own
+save (listed in the report). Standard library only. Exit codes: 0 handed to the coding client, 1 the doctor has
+steps to do, 2 usage or no plan for the country, 3 this system has no start path yet, 4 no game or the run did not
+start, 5 a campaign is already running.
 """
 
 import argparse
@@ -108,6 +114,16 @@ def client_prompt(plan, goal, run, app):
             "while you act and stop at " + str(plan["stop"] or "the goal") + " or when the goal is reached.")
 
 
+def runs_read(run):
+    """A run folder's request (the goal of a continued campaign)."""
+    try:
+        with open(os.path.join(run, "request.json"), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def campaigns(plans):
     return "; ".join(f"{p['name']} ({p['tag']}, {p['mode'].upper()}, {p['start']} to {p['stop']})" for p in plans)
 
@@ -151,12 +167,28 @@ def plan_from_folder(folder):
             "brief": brief if os.path.isfile(brief) else None, "guide": guide if os.path.isfile(guide) else None}
 
 
+DATE = re.compile(r"^\d{4}[.-]\d{1,2}[.-]\d{1,2}$")
+
+
 def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout, now=None, plan_folder=None,
          launch=False, wait_minutes=15, minutes=180, start_native=native_start.start_native,
-         idle_pause_minutes=native_start.IDLE_PAUSE_MINUTES):
+         idle_pause_minutes=native_start.IDLE_PAUSE_MINUTES, until=None, continue_run=None,
+         player_silent_minutes=None):
     app = os.path.join(prefix, "app")
     plans = shipped_plans(app)
-    if plan_folder:
+    if until and not DATE.match(until):
+        out.write(f"--until takes a game date such as 1938.01.01, not \"{until}\".\n")
+        return EXIT_USAGE
+    previous = None
+    if continue_run:
+        previous = native_start.previous_run(prefix, None if continue_run == "last" else continue_run)
+        if not previous:
+            out.write("No earlier run to continue" + ("" if continue_run == "last" else f" at {continue_run}")
+                      + ". A campaign starts with: hoi4-live play COUNTRY \"GOAL\"\n")
+            return EXIT_USAGE
+        plan = native_start.continued_plan(previous)
+        goal = (runs_read(previous).get("goal") or goal or "")
+    elif plan_folder:
         plan = plan_from_folder(plan_folder)
         if not plan:
             out.write(f"{plan_folder} is not a strategist plan folder (plan.json and run_spec.json with a tag).\n")
@@ -175,8 +207,9 @@ def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout,
     items = doctor.evaluate(facts)
     path = start_path(facts["system"], facts, items)
     out.write(f"Campaign: {plan['name']} ({plan['tag']}), {plan['mode'].upper()}, {plan['start']} to {plan['stop']}\n"
-              f"Goal: {goal}\nPlan: " + ("strategist plan " if plan_folder else "shipped reviewed plan ")
-              + f"{plan['id']}\n")
+              f"Goal: {goal}\nPlan: " + ("the plan in force at the end of the last segment " if previous else
+                                          "strategist plan " if plan_folder else "shipped reviewed plan ")
+              + f"{plan['id']}\n" + (f"Ends at the game date {until}\n" if until else ""))
     if not path["ready"]:
         key = doctor.NATIVE if path["runtime"] == "native runtime" else doctor.SERVER
         out.write(f"\nThe {path['runtime']} is not ready. Do these steps, then run the command again:\n")
@@ -188,12 +221,17 @@ def play(prefix, country, goal, mode=None, gather=doctor.gather, out=sys.stdout,
     if not path["can_start"]:
         out.write(f"\n{path['missing']}\n")
         return EXIT_NO_START
+    if previous and not path.get("native"):
+        out.write("\nContinuing a campaign needs the native runtime (macOS on Apple silicon today).\n")
+        return EXIT_NO_START
     if path.get("native"):
         template = os.path.join(app, PLAYBOOK, "briefs", "player.txt")
         with open(template, encoding="utf-8") as f:
             text = f.read()
         return start_native(prefix, plan, goal, facts, out, text, launch=launch, wait_minutes=wait_minutes,
-                            minutes=minutes, now=now, idle_pause_minutes=idle_pause_minutes)
+                            minutes=minutes, now=now, idle_pause_minutes=idle_pause_minutes, until=until,
+                            continue_from=previous, **({} if player_silent_minutes is None else
+                                                       {"player_silent_minutes": player_silent_minutes}))
     run = prepare_run(prefix, plan, goal, now)
     prompt = client_prompt(plan, goal, run, app)
     with open(os.path.join(run, "prompt.txt"), "w", encoding="utf-8", newline="\n") as f:
@@ -217,17 +255,31 @@ def main(argv=None):
                              "(default %d; 0 never pauses). The game is never paused otherwise; the run's "
                              "settings.json holds it and can be changed during the run"
                              % native_start.IDLE_PAUSE_MINUTES)
+    parser.add_argument("--player-silent", type=int, default=None, metavar="MINUTES",
+                        help="end the run (paused and saved) after this many minutes without any call from the "
+                             "agent (default 45; 0 never: the executor then plays on alone)")
+    parser.add_argument("--until", metavar="DATE", help="end the run at this game date, for example 1938.01.01 "
+                                                       "(the game is paused and saved there)")
+    parser.add_argument("--continue", dest="continue_run", nargs="?", const="last", metavar="RUN",
+                        help="the next segment of a campaign: the last run that ended (or RUN), from the save it "
+                             "wrote; no country or goal needed")
     parser.add_argument("country", nargs="?", help="a country tag or name, for example ITA or Italy")
     parser.add_argument("goal", nargs="*", help="what the campaign should achieve, in your words")
     args = parser.parse_args(argv)
     prefix = os.path.abspath(args.prefix)
+    if args.continue_run:
+        return play(prefix, args.country or "", " ".join(args.goal), args.mode, launch=args.launch,
+                    wait_minutes=args.wait, minutes=args.minutes, idle_pause_minutes=max(0, args.idle_pause),
+                    until=args.until, continue_run=args.continue_run)  # a segment keeps its run's settings
     if not args.country or not args.goal:
         sys.stdout.write("usage: hoi4-live play COUNTRY \"GOAL\"   for example: hoi4-live play ITA \"conquer "
                          "Ethiopia before 1937\"\n"
                          f"Campaigns with a reviewed plan: {campaigns(shipped_plans(os.path.join(prefix, 'app')))}\n")
         return EXIT_USAGE
     return play(prefix, args.country, " ".join(args.goal), args.mode, plan_folder=args.plan, launch=args.launch,
-                wait_minutes=args.wait, minutes=args.minutes, idle_pause_minutes=max(0, args.idle_pause))
+                wait_minutes=args.wait, minutes=args.minutes, idle_pause_minutes=max(0, args.idle_pause),
+                until=args.until, player_silent_minutes=None if args.player_silent is None
+                else max(0, args.player_silent))
 
 
 if __name__ == "__main__":
