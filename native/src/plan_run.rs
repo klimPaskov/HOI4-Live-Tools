@@ -111,7 +111,8 @@
 //!   production_min_idle    idle military factories needed before rebalancing (default 2)
 //!   production             [{"equipment","factories"}] lines added once; {"equipment","remove":true,"from"?}
 //!                          removes every own line of that equipment (live entry_index, factories 0); a
-//!                          naval line only with an explicit `from` (its ships in progress finish first)
+//!                          naval line once its ship in progress is under half built (progress read; a ship
+//!                          past half finishes first), or from an explicit `from` when progress is unread
 //!   construction           [{"building","states":[..],"count":1}] spent while civilian factories are idle;
 //!                          states are ids (or numeric strings, or exact state names, resolved with
 //!                          hoi4_states); states with no free slot are remembered full for
@@ -2113,17 +2114,26 @@ fn production_step(
                 state.done.insert(format!("prodrm:{equipment}"), now);
                 continue;
             };
-            // A naval line holds a ship in progress: deleting it throws the hull away. No read
-            // gives ship progress yet, so a naval line is removed only from an explicit `from`
-            // date (the strategist's estimate of when its current ships are done).
+            // A naval line holds a ship in progress: deleting it throws the hull away (PR06). The
+            // line's progress is read (hoi4_production_lines output.progress): past half built,
+            // the ship is finished first and the line removed after it; unread progress waits
+            // for an explicit `from` date (the strategist's estimate). pr2 kept two `remove`
+            // hull lines all run because no `from` was given.
             let entry = list(plan, "production")
                 .iter()
                 .find(|l| text(&l["equipment"]) == equipment.as_str() && l["remove"] == json!(true))
                 .cloned()
                 .unwrap_or_default();
-            if text(&live["line_kind"]) == "naval" && entry["from"].is_null() {
-                state.skip(now, "prodrm", equipment, 30 * DAY);
-                continue;
+            if text(&live["line_kind"]) == "naval" {
+                let progress = live["output"]["progress"].as_f64();
+                let wait = match progress {
+                    Some(p) => p >= 0.5,
+                    None => entry["from"].is_null(),
+                };
+                if wait {
+                    state.skip(now, "prodrm", equipment, 14 * DAY);
+                    continue;
+                }
             }
             let (ok, why) = state.act(
                 tools,
