@@ -924,6 +924,20 @@ impl Moves {
 fn skip_key(kind: &str, key: &str) -> String {
     format!("{kind}:{key}")
 }
+/// A focus start that failed for a passing reason (a GUI read or a readback), not because the
+/// game refuses the focus (requirements, an exclusive branch, a known unavailability).
+fn focus_failure_passing(code: &str) -> bool {
+    !(code.starts_with("unavailable")
+        || [
+            "focus_not_available",
+            "prerequisite",
+            "exclusive",
+            "invalid_target",
+        ]
+        .iter()
+        .any(|c| code.contains(c)))
+}
+
 /// The cost a command power refusal names ("... costs 40 command power and 2 are held").
 fn cp_cost(why: &str) -> Option<f64> {
     let rest = &why[why.find("costs ")? + "costs ".len()..];
@@ -1755,7 +1769,31 @@ pub fn tick(
         let completed = strings(&focus, "completed");
         let path = strings(plan, "focus_path");
         let fallback = strings(plan, "focus_fallback");
+        // The next focus of the path, waiting out a passing failure (a GUI read, not a refusal
+        // by the game), holds the step: no later focus starts in its place. g17b (17 Nov 2026):
+        // Reorganize the Wehrmacht failed once on gui_target_unavailable, a fallback focus of 35
+        // days started the next tick, and two checkpoints were missed. After three such failures
+        // in a row it no longer holds.
+        let held: Option<String> = path
+            .iter()
+            .find(|f| !completed.contains(*f))
+            .filter(|f| {
+                state.skipped(now, "focus", f)
+                    && state
+                        .stages
+                        .focus_why
+                        .get(*f)
+                        .is_some_and(|c| focus_failure_passing(c))
+                    && state
+                        .failed_run
+                        .get(&format!("hoi4_focus_start {}", json!({"focus": f})))
+                        .is_none_or(|(n, _)| *n < 3)
+            })
+            .cloned();
         let startable = |state: &State, keys: &[String]| -> Vec<String> {
+            if held.is_some() {
+                return Vec::new();
+            }
             keys.iter()
                 .filter(|f| !completed.contains(*f) && !state.skipped(now, "focus", f))
                 .cloned()
@@ -1884,6 +1922,16 @@ pub fn tick(
                 )
             };
             state.stages.focus = Some((line, left == 0));
+        }
+        if let Some(key) = &held {
+            let code = state.stages.focus_why.get(key).cloned().unwrap_or_default();
+            state.stages.focus = Some((
+                format!(
+                    "focus: none active, waits for {key} (its last try failed: {code}; no later \
+                     focus starts first)"
+                ),
+                false,
+            ));
         }
     }
     if cheap_first {
@@ -4366,6 +4414,31 @@ fn special_projects_step(
             state.skip(now, "spfac", &id.to_string(), 30 * DAY);
         }
         return Ok(Some(format!("{what}: {ok} {why}")));
+    }
+    // Open projects of a specialization the country has no facility for keep the game's
+    // special_project_available alert open while every facility runs (g17b, 17 Nov 2026: one
+    // land facility running, the alert open 338 days): the reason names them.
+    let built: HashSet<String> = list(&sp, "facilities")
+        .iter()
+        .map(|f| text(&f["specialization"]).to_string())
+        .collect();
+    let mut homeless: BTreeMap<String, usize> = BTreeMap::new();
+    for p in list(&sp, "projects") {
+        let spec = text(&p["specialization"]);
+        if p["running_in_facility_id"].is_null() && !spec.is_empty() && !built.contains(spec) {
+            *homeless.entry(spec.to_string()).or_default() += 1;
+        }
+    }
+    if !homeless.is_empty() {
+        status.push(format!(
+            "open projects with no facility of their kind: {} (a facility is a building the \
+             construction plan adds in a state)",
+            homeless
+                .iter()
+                .map(|(k, n)| format!("{k} {n}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     // 3. a facility nobody can staff: recruit, within the plan's price cap and its PP reserve
     let recruit = &cfg["recruit"];
@@ -10017,6 +10090,30 @@ mod tests {
     }
 
     #[test]
+    fn open_projects_with_no_facility_of_their_kind_are_the_alerts_reason() {
+        let read = sp_read(
+            &[(7, "land", Some("Ada"), Some(("sp_l", false)))],
+            &[],
+            &[("sp_n1", "naval"), ("sp_n2", "naval"), ("sp_a", "air")],
+            25,
+            &[],
+        );
+        let tools = fake(vec![("hoi4_special_projects", read)]);
+        let plan = json!({"special_projects": {}});
+        let mut state = State::default();
+        assert_eq!(
+            special_projects_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        let line = manage_note(&state, "special_projects");
+        assert!(line.contains("facility 7: sp_l running"), "{line}");
+        assert!(
+            line.contains("open projects with no facility of their kind: air 1, naval 2"),
+            "{line}"
+        );
+    }
+
+    #[test]
     fn a_facility_with_nothing_to_start_gets_its_idle_scientist_for_basic_research() {
         let read = sp_read(&[(7, "air", None, None)], &[("Ada", "air")], &[], 25, &[]);
         let tools = fake(vec![("hoi4_special_projects", read.clone())]);
@@ -14267,6 +14364,38 @@ mod tests {
         assert_eq!(step, Tick::Acted("focus Z".into()));
         assert!(state.skipped(START + 29, "focus", "A"));
         assert!(!state.skipped(START + 30, "focus", "A"));
+    }
+
+    #[test]
+    fn a_path_focus_waiting_out_a_gui_failure_holds_the_later_focuses() {
+        let reads = focus_reads();
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new(
+                [
+                    Err(Error::new("gui_target_unavailable", "focus tree not shown")),
+                    Ok(json!({"receipt": {"status": "Verified"}})),
+                ]
+                .into(),
+            ),
+        };
+        let mut state = State::default();
+        let plan = json!({"focus_path": ["Done", "A", "B"], "focus_fallback": ["C"]});
+        tick(&mut state, &tools, &plan, "l", START).unwrap();
+        // later the same day: neither B nor the fallback starts in A's place
+        tick(&mut state, &tools, &plan, "l", START + 6).unwrap();
+        assert_eq!(tools.actions.borrow().len(), 1);
+        assert!(state
+            .stages
+            .focus
+            .as_ref()
+            .unwrap()
+            .0
+            .contains("waits for A"));
+        // a day later A is tried again and starts
+        let step = tick(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        assert_eq!(step, Tick::Acted("focus A".into()));
     }
 
     #[test]
