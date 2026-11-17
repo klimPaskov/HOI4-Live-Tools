@@ -7538,8 +7538,18 @@ fn decisions_step(
         "decisions",
         decisions_left_note(plan, &offered, &pending),
     );
-    let ready =
-        |d: &Value| d["enabled"] == json!(true) && !d["active_timer"].as_bool().unwrap_or(false);
+    // A decision the country cannot afford yet waits for the political power: the game draws
+    // it enabled and a click does nothing (g17c: three refusals in nine days, then taken).
+    let pp = plan_manage::political_power(tools);
+    let affordable = |d: &Value| match (d["cost"].as_f64(), pp) {
+        (Some(cost), Some(pp)) => pp + 1e-6 >= cost,
+        _ => true,
+    };
+    let ready = |d: &Value| {
+        d["enabled"] == json!(true)
+            && !d["active_timer"].as_bool().unwrap_or(false)
+            && affordable(d)
+    };
     for (id, key, target, taken, skip) in rules {
         let wanted_row = |d: &&Value| {
             text(&d["decision"]) == key
@@ -15940,6 +15950,36 @@ mod tests {
         assert_eq!(taken, vec![json!("ITA_good")]);
         assert!(decision_forbidden(&plan, "ITA_withdraw_from_ethiopia"));
         assert!(!decision_forbidden(&plan, "ITA_good"));
+    }
+
+    #[test]
+    fn a_decision_waits_for_the_political_power_it_costs() {
+        let plan = json!({"decisions": ["GER_guns_before_butter"]});
+        let game = |pp: i64| {
+            fake(vec![
+                (
+                    "hoi4_decisions_list",
+                    json!({"decisions": [{"decision": "GER_guns_before_butter",
+                        "enabled": true, "active_timer": false, "cost": 30.0}]}),
+                ),
+                (
+                    "hoi4_economy",
+                    json!({"political_power": {"raw_signed": pp}}),
+                ),
+            ])
+        };
+        let mut state = State::default();
+        let poor = game(384_200);
+        tick(&mut state, &poor, &plan, "l", START).unwrap();
+        assert!(
+            !names(&poor).contains(&"hoi4_decision_take".to_string()),
+            "3.8 political power does not pay for 30"
+        );
+        let rich = game(4_055_300);
+        assert_eq!(
+            acted(tick(&mut state, &rich, &plan, "l", START + DAY).unwrap()),
+            "decision GER_guns_before_butter: true Verified"
+        );
     }
 
     #[test]

@@ -1561,7 +1561,7 @@
    "source": "--list-tools"
   },
   "hoi4_decision_take": {
-   "description": "Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables. A targeted decision has one row per target: pass `target` (part of the row title as hoi4_decisions_list shows it, e.g. the target country's name) to pick that row.",
+   "description": "Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables, and before input with insufficient_political_power a decision whose script cost (common/decisions, a plain number) is above the political power held: the game draws it enabled and a click does nothing. A targeted decision has one row per target: pass `target` (part of the row title as hoi4_decisions_list shows it, e.g. the target country's name) to pick that row.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
