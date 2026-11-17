@@ -8,8 +8,9 @@ a claim, with the same `--mode` (the FAIR boundary in SKILL.md applies to the cr
 
 ## 1. Scores
 
-Each row scores 0, 1 or 2 (16 rows, maximum 32). **Pass: total ≥ 22 of 32 and no 0 in rows 1, 2, 7 or
-13.** A score needs evidence: a plan item, a facts or lint output, or a dossier line. "Looks fine" is
+Each row scores 0, 1 or 2 (17 rows, maximum 34). **Pass: total ≥ 24 of 34 and no 0 in rows 1, 2, 7, 13 or
+17.** The standard is dominance: the game's AI is a sanity floor, and a plan that only matches it, plans a
+war it cannot win fast, or doubts or scales down a goal fails row 17. A score needs evidence: a plan item, a facts or lint output, or a dossier line. "Looks fine" is
 not evidence. Rows 12-16 check the checklist items of `procedure.md` that rows 1-11 do not; the
 coverage table (plan.md §25) is the starting point for them and for row 10. A goal without a land war
 scores row 13 on its doctrines alone; a row whose whole subject is not applicable with a cited
@@ -33,6 +34,7 @@ reason scores 2.
 | 14 | Air, naval and overseas supply | the air force as an arm: fighters sized to the front's air force as far as the economy pays, CAS over the breakthrough axes, naval air for landings, each with its factory share, airframe research, design, doctrine, bases on our side of the border with capacity, deploy entries, fuel, and use by phase (superiority first, then support, following the front; what happens when superiority is lost), or `force_design.air_why`; no `force.air*` error; the navy as an arm: every sea operation the goal needs in `force_design.sea` with the means that win it by its date against the enemy's start fleet (surface parity, naval strike planes, carrier air with its groups, submarines), patrols per region, screens at the ratio, lift, landing techs, ports, a dated building programme by hull type, designs, doctrine, admirals, and a fallback for every lever no tool carries; no `force.sea*`, `force.navy*` or `force.carrier_air` error; or "no navy" with a reason; every overseas theatre has ports, convoys, escort and sea transfers | one of these thin (a base over capacity, convoys not sized) | an overseas theatre without a convoy and port plan, a landing or sea goal without the sea control it needs, or an air force with no plan |
 | 15 | Occupation, peace, intelligence | occupation law per phase and per state with the resistance-target switch rule and a garrison template by hardness; peace demands ranked per enemy in bidding order with the answer to scripted peace offers; never-take list; intelligence decided (agency and upgrades, or not applicable) | one of these missing | a conquest with no occupation item, or an enemy with no peace item |
 | 16 | Continuous-management thresholds | every rule of procedure item 28 has a campaign value or "default" with a reason (rest and resume relative to max organisation, supply floor 50, pocket fall-back at 50% or a 2-province neck); rules the executor does not watch yet are brief lines with read, threshold and call | some rules left at default without a reason | no thresholds decided (`alarms` untouched and no `manage` decisions) |
+| 17 | Dominance and decisive wars | economy and force from the country's best build, well above the AI baseline on every date; each offensive war has `duration_days` and `decisive` reasons that the numbers back: breakthrough met against the enemy grown to the war's day, fighters met, supply, divisions at least half the enemy's estimate and above the AI's; bombers where the war is long; designs costed with their modules; every goal reached in full; no `force.decisive`, `force.bombers` or `force.design_cost` error | one war short on one measure with a dated remedy | a war planned to grind (no duration or months of attrition), a breakthrough short against the enemy's real strength, or a goal doubted or scaled down |
 
 ## 2. Output format
 
@@ -42,9 +44,9 @@ The critic writes `RUN/review/critic-<n>.json` (n = 1 + the number of existing `
 {
   "round": 1,
   "scores": {"1": 2, "2": 1, "3": 2, "4": 1, "5": 2, "6": 1, "7": 2, "8": 2, "9": 1, "10": 2, "11": 2,
-             "12": 1, "13": 2, "14": 1, "15": 2, "16": 1},
-  "total": 25,
-  "max": 32,
+             "12": 1, "13": 2, "14": 1, "15": 2, "16": 1, "17": 2},
+  "total": 27,
+  "max": 34,
   "pass": true,
   "findings": [
     {
@@ -60,7 +62,7 @@ The critic writes `RUN/review/critic-<n>.json` (n = 1 + the number of existing `
 }
 ```
 
-`max` is 32 (2 points × 16 rows); `scripts/strategist/strategize.py` reads `total`, `max`, `scores` and
+`max` is 34 (2 points × 17 rows); `scripts/strategist/strategize.py` reads `total`, `max`, `scores` and
 the open blocker and major findings (a finding's `status` is `open` unless the critic marks it `fixed`).
 
 Severities:
@@ -84,7 +86,7 @@ the answers changed, keeps the ids, and sets each finding's `status` to `fixed` 
    A rebuttal needs a source; "I disagree" is not an answer.
 2. Re-run step 7 (validate and lint) after the fixes.
 3. Run the critic for round 2 with the same command. It reads the answers.
-4. At most 2 rounds. Gate: no open blocker, no open major (round 1), total ≥ 22 of 32, no 0 in rows 1, 2, 7, 13. If round 2
+4. At most 2 rounds. Gate: no open blocker, no open major (round 1), total ≥ 24 of 34, no 0 in rows 1, 2, 7, 13, 17. If round 2
    fails, write `RUN/strategist-blocked.md` (failed rows, open findings, what would fix them) and stop;
    do not run a third round and do not freeze.
 5. List every finding and its answer in plan.md §11.

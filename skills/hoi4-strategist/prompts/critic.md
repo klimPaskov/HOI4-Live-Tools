@@ -25,7 +25,7 @@ Inputs:
 
 Do not read `RUN/agents/` (the strategist's output log). Do not edit the plan files.
 
-Check every rubric row (16 rows, 0-2 each) against evidence: run the facts commands, `python3
+Check every rubric row (17 rows, 0-2 each) against evidence: run the facts commands, `python3
 scripts/hoi4facts/lint_plan.py RUN/plan.json --json` and `python3 scripts/hoi4facts/check_calls.py RUN`
 (every player call against the tool catalogue; each invalid call is a blocker finding under row 10),
 and compare plan dates with `RUN/plan.timelines.md` (re-run the timelines only after a change). Check the goal reading against the user's words first. Then
@@ -41,6 +41,6 @@ In round 2 re-check only the open findings and what the answers changed, keep th
 each finding a `status`: `fixed` when the plan now answers it (or the rebuttal holds), `open` otherwise.
 An open blocker or major finding fails the gate whatever the total.
 
-Finish with one line: round, total of 32, pass or fail, open blockers and majors.
+Finish with one line: round, total of 34, pass or fail, open blockers and majors.
 
 Files: change nothing outside RUN (the tools, skills, schema and plans in the repository are what the plan is checked with). If a tool or fact reader is wrong or missing, write the gap with evidence to `RUN/tool-gaps.md` and continue with the best sourced workaround.

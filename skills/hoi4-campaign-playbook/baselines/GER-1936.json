@@ -4,6 +4,7 @@
  "game_version": "1.19.4.1",
  "difficulty": "regular",
  "ai": "historical",
+ "peace_until": "1939.09.01",
  "dlcs": "the ten DLCs of the project's macOS install",
  "how": "the game's own AI played the country from the start (an observer seat, no orders); its own saves at each date were loaded as the country and read with the read-only tools (factories, divisions, lines, techs, focuses). A floor for a plan of the same country, start and rules: a plan that schedules less than the stock AI reaches by a date says why.",
  "notes": {

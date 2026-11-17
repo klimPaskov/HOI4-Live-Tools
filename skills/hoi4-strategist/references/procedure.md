@@ -112,6 +112,12 @@ rubric row 2.
 ## B. Force posture, doctrines, experience
 
 ### 3. Force posture
+**Dominance, not parity.** The plan steamrolls the AI. The game's own AI (baselines) is a sanity floor, never a
+target: economy and force are set from the country's best build and stand well above it on every date, and
+every war is planned to be decisive and short (for Germany: Poland in weeks, France quickly, the Soviet Union
+destroyed, not held). FAIR and META differ only in timing and the multiplayer list (`rules-and-modes.md`); a FAIR
+plan reaches every goal in full and is optimised in everything else. Where the numbers show more is needed, the
+plan provides it by the date by the strongest legitimate route; it never doubts or scales down a goal.
 Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-equipment-production.md`
 §7. Facts: `F dossier show 3` (enemy aggregates: divisions, templates, planes, ships), `F oob <TAG>`
 (own divisions, wings, fleets), `F states <TAG>` (dockyards, naval and air bases), `C build-order`
@@ -139,6 +145,20 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
      them armoured, ready on the war's first day. A breakthrough template takes its techs, its army
      experience (exercises in peace give it) and 180 days of training: create it a year before the war,
      not on the day of the war.
+   - **Bombers where the war uses them** (item 20): in a war planned past 120 days, tactical bombers on
+     logistics strike (rail, hubs, air bases behind the front), one wing per axis once fighters and CAS are
+     paid; in a war of a year or more, strategic bombers on industry and ports (about 1000 to beat repairs).
+     Otherwise `force_design.bomber_why` says why none (lint `force.bombers`).
+   - **The enemy as it will be, not as it starts**: the front's divisions are grown from the start order of
+     battle to the war's day at the AI's peace rate (facts.force.needs[].front.divisions_est, growth_why), and
+     the breakthrough is sized against that. A tank or plane design a line builds carries its `modules`, so its
+     cost and the force count are the design's (lint `force.design_cost`).
+   - **Decisive by design** (lint `force.decisive`): each offensive war gets `duration_days` (its first day to
+     the enemy's capitulation) and `decisive`, the reasons it is won fast: the force ratio on the axes
+     (breakthrough met), the air (fighters met), the supply, and our divisions against the enemy's estimate
+     (at least half, with the axes concentrated) and above the AI's count on that date. A war the numbers do
+     not win fast is changed until they do: more military factories earlier, a larger land or air share, a
+     later start inside the timeline the mode allows.
    - **Line infantry** for the rest of the front: artillery, engineers, anti-tank where the front fields
      tanks, anti-air where the plan cannot win the air, mountaineers or narrow divisions in mountains.
    - **Air, a first-class arm** (item 20): fighters 1.5x the front's start fighters, as far as 35% of the
@@ -152,7 +172,8 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
      that date. The goal is fixed; the means are the plan's choice, and it picks the strongest one the
      numbers allow (facts.force.navy gives what each costs).
    - **Garrison** for occupied land (item 23).
-   Then write `force_design`: `wars` [{`id`, `enemies`, `kind`, `axes`, `tasks` phase by phase, `why`}],
+   Then write `force_design`: `wars` [{`id`, `enemies`, `kind`, `axes`, `duration_days`, `decisive`, `tasks`
+   phase by phase, `why`}], `sea` (item 21.7), `bomber_why` when no bombers,
    `land` [{`template`, `role` (breakthrough, exploit, line, assault, mountain, marine, paratrooper,
    garrison, reserve, anti_tank), `count` (divisions fielded by `ready`, start divisions included), `ready`,
    `war`, `phase`, `why`}], `air` [{`kind`, `equipment`, `count` (planes by `ready`), `ready`, `war`,
@@ -163,12 +184,13 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
    research that unlocks each template's units and each airframe before its row, `designs` with their
    experience, `templates[].when` early enough. The lint holds the table to the plan's own arithmetic: the
    army forecast by template and the lines' output (`force.readiness`, `force.template_late`). The
-   division count against the game's AI is reported, not a floor.
+   division count against the game's AI is a floor on each war's first day (`force.decisive`), never the aim.
 Resolution: executor `production` (factories per line, `from`), `production_priority`,
 `phases[].overrides.production_priority`, `research_fallback_exclude`, `doctrines` folders; lint-owned
 `force_design` (wars, land, air, navy, budget); plan.md §12. Check: lint `production.factories`,
 `research.folders`, `force.required`, `force.breakthrough`, `force.single_template`, `force.readiness`,
-`force.template_late`, `force.unused_line`, `force.budget`; rubric rows 6, 12 and 14.
+`force.template_late`, `force.unused_line`, `force.budget`, `force.bombers`, `force.design_cost`,
+`force.decisive`; rubric rows 6, 12, 14 and 17.
 
 ### 4. Doctrine path
 Read: `research-doctrines-projects.md` §2, §2.2. Facts: `F dossier show 6` (doctrines at start, grand

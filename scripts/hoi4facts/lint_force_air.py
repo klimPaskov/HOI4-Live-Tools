@@ -113,8 +113,9 @@ def _deploy_and_losses(ctx, fought):
               if (a.get("deploy") is True or isinstance(a.get("deploy"), dict)) and a.get("airframe")}
     seen = set()
     for w, f in fought:
-        rows = [("fighter", f)] + [(r["role"], r) for r in (ctx.need_of(w, "cas"), ctx.need_of(w, "transport"))
-                                   if r and r["required"]]
+        rows = [("fighter", f)] + [({"tactical_bombers": "tactical_bomber"}.get(r["role"], r["role"]), r)
+                                   for r in (ctx.need_of(w, "cas"), ctx.need_of(w, "transport"),
+                                             ctx.need_of(w, "tactical_bombers")) if r and r["required"]]
         for kind, r in rows:
             if r["planes"] > start.get(kind, 0) and kind not in deploy and kind not in seen:
                 seen.add(kind)
