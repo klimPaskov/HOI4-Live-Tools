@@ -548,16 +548,31 @@ fn row_rect(r: &Reader<'_>, i: u64, display: &str, button: &str) -> Result<gui_t
 /// Rheinmetall further down were refused as not offered): when the name is not drawn the list is
 /// wheeled down by the rows drawn less one (one wheel event is about one row) and read again,
 /// until the name shows or a page brings nothing new. The list is left where the row shows.
+///
+/// Returns None when the row is drawn (readable rows), or Some(on-screen index) when the rows
+/// could not be read and the detail-window path found it (its detail window is left open).
 fn require_row(
     process: &dyn Process,
     keys: &dyn GameInput,
     display: &str,
-) -> std::result::Result<(), Fail> {
+) -> std::result::Result<Option<usize>, Fail> {
     let mut all: Vec<String> = Vec::new();
-    for _ in 0..12 {
+    let mut empty_reads = 0;
+    for _ in 0..16 {
         let (seen, found) = settled(process, "organisation rows", |r, i| find_row(r, i, display))?;
         if found.is_some() {
-            return Ok(());
+            return Ok(None);
+        }
+        if seen.is_empty() && all.is_empty() {
+            // The roster opened but no row is readable (pr3b, 17 Nov 2026: the plane and materiel
+            // rosters showed "no rows" after the tank and ship rosters had been read): wait a
+            // moment for the rows, then find the row through the detail windows instead.
+            empty_reads += 1;
+            if empty_reads >= 4 {
+                return row_by_details(process, keys, display).map(Some);
+            }
+            pause(400);
+            continue;
         }
         let before = all.len();
         for name in &seen {
@@ -657,6 +672,13 @@ fn row_by_details(
         f64::from(list.x + list.w / 2),
         f64::from(list.y + list.h / 2),
     );
+    // The game keeps each roster's scroll, and one wheel event moves 98 px for 100 px rows, so
+    // the list can sit part of a row off and the clicks below (row top + 62) land between rows
+    // (pp3, 17 Nov 2026: the materiel roster drawn half a row down, "no rows" read). Wheel to
+    // the top first so the rows line up with the list's top edge.
+    close_detail(process, keys);
+    keys.scroll_burst(pk::GAME, centre, ROW_HEIGHT, 40)?;
+    pause(600);
     let mut seen: Vec<String> = Vec::new();
     let mut previous_first: Option<String> = None;
     let mut retried = false;
@@ -756,7 +778,11 @@ fn open_detail(
         return Ok(());
     }
     // the drawn rows are about five; require_row wheels the list down until the row shows
-    require_row(process, keys, display)?;
+    if require_row(process, keys, display)?.is_some() {
+        // found through its detail window, which is open now
+        pause(300);
+        return Ok(());
+    }
     pk::click(process, keys, "organisation details", |r, i| {
         row_rect(r, i, display, "details_button")
     })?;
@@ -863,7 +889,7 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
             }
             open_roster(process, keys, s)?;
             let attempt = if rows_readable(process) {
-                require_row(process, keys, display).map(|()| None)
+                require_row(process, keys, display)
             } else {
                 row_by_details(process, keys, display).map(Some)
             };

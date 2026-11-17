@@ -2091,6 +2091,70 @@ fn navy_step(
             "navy: admiral {admiral} -> {name}: {ok} {why}"
         )));
     }
+    // 2b. a fleet with no admiral that the plan does not name (the shape step founds fleets:
+    // pr3b, 17 Nov 2026, "German Reich Flotta 1" kept the admiral_assignable alert open): the
+    // most skilled admiral its commander list offers who leads no fleet and is planned for none,
+    // once (no reassignment churn).
+    let planned = admiral_plans(cfg);
+    for row in fleets {
+        let name = text(&row["fleet"]).to_string();
+        if name.trim().is_empty()
+            || row["admiral"]
+                .as_str()
+                .is_some_and(|a| !a.trim().is_empty())
+            || planned.iter().any(|(f, _)| same_name(f, &name))
+            || invasion_fleet
+                .as_deref()
+                .is_some_and(|f| same_name(f, &name))
+        {
+            continue;
+        }
+        let key = format!("nadmfree:{name}");
+        if state.done.contains_key(&key) || state.skipped(now, "nadmfree", &name) {
+            continue;
+        }
+        state.skip(now, "nadmfree", &name, 30 * DAY);
+        let busy: Vec<String> = fleets
+            .iter()
+            .filter_map(|f| f["admiral"].as_str())
+            .map(String::from)
+            .chain(planned.iter().map(|(_, a)| a.clone()))
+            .collect();
+        let Ok(offered) = tools.call(
+            "hoi4_fleet_admiral",
+            &json!({"fleet": name, "list": true,
+                    "request_id": format!("plan-nal-{}-{}", name.len(), now), "lease_token": lease}),
+        ) else {
+            continue;
+        };
+        let best = list(&offered, "admirals")
+            .iter()
+            .filter(|a| !text(&a["name"]).is_empty())
+            .filter(|a| !busy.iter().any(|b| same_name(b, text(&a["name"]))))
+            .max_by(|a, b| {
+                a["skill"]
+                    .as_f64()
+                    .unwrap_or(0.0)
+                    .total_cmp(&b["skill"].as_f64().unwrap_or(0.0))
+            })
+            .map(|a| text(&a["name"]).to_string());
+        let Some(admiral) = best else {
+            continue;
+        };
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_fleet_admiral",
+            json!({"fleet": name, "admiral": admiral}),
+            "na",
+        )?;
+        if ok || code(&why) == "nothing_to_change" {
+            state.done.insert(key, now);
+        }
+        return Ok(Some(format!(
+            "navy: free admiral {admiral} -> {name} (the plan names none): {ok} {why}"
+        )));
+    }
     // 3. regions, then the planned mission per task force
     let mut on_plan = 0;
     let mut missing: Vec<String> = Vec::new();
@@ -2982,7 +3046,7 @@ mod tests {
             self.calls
                 .borrow_mut()
                 .push((name.to_string(), args.clone()));
-            if args.get("request_id").is_some() {
+            if args.get("request_id").is_some() && args.get("list").is_none() {
                 if let Some(code) = self.refuse.borrow().get(name) {
                     return Err(Error::new(code, "refused by the fake"));
                 }
@@ -3328,6 +3392,39 @@ mod tests {
         );
         let out = navy_step(&mut state, &tools, &plan, "l", START).unwrap();
         assert_eq!(out, None);
+    }
+
+    #[test]
+    fn a_fleet_the_plan_does_not_name_gets_the_best_free_admiral_once() {
+        let tools = fake(vec![
+            (
+                "hoi4_fleets",
+                json!({"fleets": [
+                    {"fleet": "Squadra 1", "admiral": "Iachino", "task_forces": []},
+                    {"fleet": "Flotta 3", "admiral": null, "task_forces": []}]}),
+            ),
+            (
+                "hoi4_fleet_admiral",
+                json!({"admirals": [{"name": "Iachino", "skill": 5},
+                    {"name": "Bergamini", "skill": 3}, {"name": "Da Zara", "skill": 2}]}),
+            ),
+        ]);
+        let plan = json!({"navy": {"fleets": [{"fleet": "Squadra 1", "admiral": "Iachino"}]}});
+        let mut state = State::default();
+        let mut out = Vec::new();
+        for _ in 0..4 {
+            if let Some(line) = navy_step(&mut state, &tools, &plan, "l", START).unwrap() {
+                out.push(line);
+            }
+        }
+        let sent: Vec<_> = actions(&tools)
+            .into_iter()
+            .filter(|(n, a)| n == "hoi4_fleet_admiral" && a.get("admiral").is_some())
+            .collect();
+        assert_eq!(sent.len(), 1, "{out:?}");
+        assert_eq!(sent[0].1["fleet"], "Flotta 3");
+        // the leader of another fleet is never moved: the best free one
+        assert_eq!(sent[0].1["admiral"], "Bergamini");
     }
 
     #[test]
