@@ -142,10 +142,12 @@
 //!                    overdrawn (supply.split_overdrawn, once a game day from hoi4_supply): in an
 //!                    overdrawn province whose divisions' mean supply is below "overdrawn_floor":35
 //!                    the weakest divisions of the army with most divisions there (at most
-//!                    "overdrawn_share":0.5 of them) are detached until their supply need covers the
-//!                    shortfall and moved to a province with room; their army rests
-//!                    "overdrawn_rest_days":10 before the war step or consolidation take it back;
-//!                    never in a defender's hold (war.posture "defend", no axes): it stands.
+//!                    "overdrawn_share":0.5 of them, until their supply need covers the shortfall)
+//!                    march to a province with room, in their own army (no new army); a province
+//!                    takes only what its headroom holds less the groups already on their way, a
+//!                    group is remembered "overdrawn_rest_days":10, a province whose order failed
+//!                    is not chosen for 10 days; never in a defender's hold (war.posture "defend",
+//!                    no axes): it stands.
 //!                    These keys act whether or not the plan has `manage` (defaults shown):
 //!                    "rebalance_step":3 idle military factories per action to a priority line (tick
 //!                    step 6b, `production_priority` in plan_run.rs: the line whose equipment the
@@ -217,17 +219,15 @@ pub(super) struct Memory {
     tpl_need: HashMap<String, TemplateNeed>,
     /// Production balance: when a line last gave factories away (PR09: once per 30 days).
     pulled: HashMap<String, GameHour>,
-    /// Divisions pulled out of overdrawn provinces: their new army and where it goes.
+    /// Divisions sent out of overdrawn provinces and where they go.
     spread: Vec<Spread>,
 }
 
-/// An army formed from divisions pulled out of an overdrawn province (supply.split_overdrawn).
+/// Divisions sent out of an overdrawn province (supply.split_overdrawn), in their own army.
 #[derive(Clone)]
 struct Spread {
-    army: String,
-    state: i64,
+    divisions: Vec<String>,
     province: i64,
-    moved: bool,
     since: GameHour,
 }
 
@@ -3718,10 +3718,20 @@ fn overdrawn_pick(
     (!ids.is_empty()).then_some((army, ids, need))
 }
 
-/// Where the pulled-out divisions go: a province where own divisions stand that still has
-/// `need` of headroom, in the source's state first, then where the same army stands, then
-/// anywhere; the most headroom first. (state, province) or None.
-fn overdrawn_destination(read: &Value, source: i64, army: &str, need: f64) -> Option<(i64, i64)> {
+/// Where the pulled-out divisions go: a province where own divisions stand whose headroom, less
+/// what groups already on their way there will draw (`load`), still holds at least `least`;
+/// one with room for the whole `need` first, then in the source's state, then where the same
+/// army stands, then the most room. Provinces `avoid` names (a march order there failed) are
+/// passed over. (state, province, room) or None.
+fn overdrawn_destination(
+    read: &Value,
+    source: i64,
+    army: &str,
+    need: f64,
+    least: f64,
+    load: &HashMap<i64, f64>,
+    avoid: impl Fn(i64) -> bool,
+) -> Option<(i64, i64, f64)> {
     let src_state = list(read, "provinces")
         .iter()
         .find(|p| p["province_id"].as_i64() == Some(source))
@@ -3735,35 +3745,34 @@ fn overdrawn_destination(read: &Value, source: i64, army: &str, need: f64) -> Op
         .iter()
         .filter_map(|p| {
             let (pid, sid) = (p["province_id"].as_i64()?, p["state_id"].as_i64()?);
-            let room = p["headroom"].as_f64()?;
-            (pid != source && room >= need).then_some((pid, sid, room))
+            let room = p["headroom"].as_f64()? - load.get(&pid).copied().unwrap_or(0.0);
+            (pid != source && room >= least && !avoid(pid)).then_some((pid, sid, room))
         })
         .max_by(|a, b| {
-            let rank = |(pid, sid, _): &(i64, i64, f64)| {
-                (Some(*sid) == src_state, army_provinces.contains(pid))
+            let rank = |(pid, sid, room): &(i64, i64, f64)| {
+                (
+                    *room >= need,
+                    Some(*sid) == src_state,
+                    army_provinces.contains(pid),
+                )
             };
             rank(a).cmp(&rank(b)).then(a.2.total_cmp(&b.2))
         })
-        .map(|(pid, sid, _)| (sid, pid))
-}
-
-/// Whether `army` is a group the overdrawn rule took out of a stack: it is on its way to fed
-/// ground or rests there, and is not merged back into a formation meanwhile (merged the tick
-/// after its detach it never moved, and its divisions went into the wrong formation).
-pub(super) fn spread_out(state: &State, army: &str) -> bool {
-    state.manage.spread.iter().any(|s| s.army == army)
+        .map(|(pid, sid, room)| (sid, pid, room))
 }
 
 /// supply.split_overdrawn (`manage.overdrawn_floor` 35, `overdrawn_share` 0.5,
 /// `overdrawn_rest_days` 10), once a game day from hoi4_supply: in a province on
 /// `overdrawn_provinces` whose divisions' mean supply is below the floor (attrition starts at
-/// 35%), the weakest divisions of the army with most divisions there are detached into their own
-/// army (hoi4_army_detach), at most `overdrawn_share` of them, until their supply need covers the
-/// shortfall; the next tick moves that army to the province with room for them
-/// (hoi4_army_move: in the same state first, then where the same army stands). The new army rests
-/// there for `overdrawn_rest_days`: the war step does not drive it and the army consolidation
-/// does not fold it back until then. No province with room: nothing is detached and the digest
-/// says so (the supply relief's railway and hub levers remain).
+/// 35%), the weakest divisions of the army with most divisions there (at most `overdrawn_share`
+/// of them, until their supply need covers the shortfall) march to the province with room for
+/// them (hoi4_army_move with `divisions`: in the same state first, then where the same army
+/// stands). They stay in their army: no new army is made. A province takes only what its
+/// headroom holds, less what groups already on their way there will draw, so the next group
+/// goes elsewhere; a group is remembered for `overdrawn_rest_days` (its divisions are not picked
+/// again meanwhile). A province whose march order failed is not chosen again for 10 days. No
+/// province with room: nothing moves and the digest says so (the supply relief's railway and
+/// hub levers remain).
 fn overdrawn_rule(
     state: &mut State,
     tools: &dyn Tools,
@@ -3788,24 +3797,6 @@ fn overdrawn_rule(
         .filter(|d| *d >= 0)
         .unwrap_or(10)
         * DAY;
-    // a detached group moves on the tick after its detach
-    if let Some(at) = state.manage.spread.iter().position(|s| !s.moved) {
-        let go = state.manage.spread[at].clone();
-        let (ok, why) = state.act(
-            tools,
-            lease,
-            "hoi4_army_move",
-            json!({"army": go.army, "state_id": go.state, "province_id": go.province}),
-            "so",
-        )?;
-        state.manage.spread[at].moved = true;
-        let line = format!(
-            "{} out of the overdrawn stack to state {} province {}: {ok} {why}",
-            go.army, go.state, go.province
-        );
-        note(state, "overdrawn", line.clone());
-        return Ok(Some(format!("overdrawn: {line}")));
-    }
     state.manage.spread.retain(|s| now - s.since < rest);
     if state.skipped(now, "mspread", "x") {
         return Ok(None);
@@ -3830,6 +3821,24 @@ fn overdrawn_rule(
             ))
         })
         .collect();
+    // Groups on their way: what they will draw where they go (until they stand there) and
+    // their divisions, which are not picked again. g17b (17 Nov 2026) sent Armies 4, 6 and 7
+    // one after another to province 241, each against the same day-old headroom.
+    let mut load: HashMap<i64, f64> = HashMap::new();
+    let mut leaving: HashMap<String, i64> = HashMap::new();
+    for s in &state.manage.spread {
+        for id in &s.divisions {
+            let row = divisions.get(id);
+            let at = row.and_then(|d| d["province_id"].as_i64());
+            if at != Some(s.province) {
+                *load.entry(s.province).or_default() +=
+                    row.and_then(|d| d["supply_need"].as_f64()).unwrap_or(0.0);
+                if let Some(at) = at {
+                    leaving.insert(id.clone(), at);
+                }
+            }
+        }
+    }
     let mut lines: Vec<String> = Vec::new();
     for o in list(&read, "overdrawn_provinces") {
         let Some(pid) = o["province_id"].as_i64() else {
@@ -3838,11 +3847,11 @@ fn overdrawn_rule(
         if state.skipped(now, "spread", &pid.to_string()) {
             continue;
         }
-        let rows: Vec<&Value> = list(o, "division_ids")
+        let all: Vec<&Value> = list(o, "division_ids")
             .iter()
             .filter_map(|id| divisions.get(&division_id(id)?).copied())
             .collect();
-        let pcts: Vec<f64> = rows
+        let pcts: Vec<f64> = all
             .iter()
             .filter_map(|r| r["supply_percent"].as_f64())
             .collect();
@@ -3856,8 +3865,25 @@ fn overdrawn_rule(
             ));
             continue;
         }
-        let shortfall = o["shortfall"].as_f64().unwrap_or(0.0);
-        let Some((army, ids, need)) = overdrawn_pick(
+        // divisions already on their way out no longer count against the province
+        let going: f64 = all
+            .iter()
+            .filter(|r| division_id(&r["id"]).is_some_and(|id| leaving.contains_key(&id)))
+            .filter_map(|r| r["supply_need"].as_f64())
+            .sum();
+        let shortfall = o["shortfall"].as_f64().unwrap_or(0.0) - going;
+        if shortfall <= 0.0 {
+            lines.push(format!(
+                "province {pid} ({mean:.0}% supply): enough divisions are already on their way out"
+            ));
+            continue;
+        }
+        let rows: Vec<&Value> = all
+            .iter()
+            .copied()
+            .filter(|r| division_id(&r["id"]).is_none_or(|id| !leaving.contains_key(&id)))
+            .collect();
+        let Some((army, mut ids, mut need)) = overdrawn_pick(
             &rows,
             shortfall,
             share,
@@ -3865,13 +3891,23 @@ fn overdrawn_rule(
             |a| {
                 super::plan_military::holding(state, a)
                     || super::plan_military::invading(state, plan, a)
-                    || state.manage.spread.iter().any(|s| s.army == a)
             },
         ) else {
             lines.push(format!("province {pid}: no army whose divisions may leave"));
             continue;
         };
-        let Some((to_state, to_province)) = overdrawn_destination(&read, pid, &army, need) else {
+        let need_of = |id: &String| {
+            divisions
+                .get(id)
+                .and_then(|d| d["supply_need"].as_f64())
+                .unwrap_or(0.0)
+        };
+        let least = ids.iter().map(need_of).fold(f64::INFINITY, f64::min);
+        let Some((to_state, to_province, room)) =
+            overdrawn_destination(&read, pid, &army, need, least, &load, |p| {
+                state.skipped(now, "spreadto", &p.to_string())
+            })
+        else {
             state.skip(now, "spread", &pid.to_string(), 3 * DAY);
             lines.push(format!(
                 "province {pid} ({mean:.0}% supply): no province with {need:.2} supply of room for {} of {army}'s divisions; railway or hub needed",
@@ -3879,57 +3915,37 @@ fn overdrawn_rule(
             ));
             continue;
         };
-        let present: HashSet<String> = sizes.keys().cloned().collect();
+        // no province holds them all: as many as the one with most room feeds (the weakest
+        // first); the rest go the next day, elsewhere
+        while need > room && ids.len() > 1 {
+            if let Some(last) = ids.pop() {
+                need -= need_of(&last);
+            }
+        }
         let (ok, why) = state.act(
             tools,
             lease,
-            "hoi4_army_detach",
-            json!({"army": army, "divisions": ids}),
+            "hoi4_army_move",
+            json!({"army": army, "state_id": to_state, "province_id": to_province, "divisions": ids}),
             "so",
         )?;
-        state.skip(now, "spread", &pid.to_string(), 5 * DAY);
-        // The new army is the one that now holds the detached divisions. A name missing from the
-        // day-old supply read is no proof: e2 (16 Nov 2026) took an older group for the new one,
-        // so the real new group was never marked as resting and the consolidation merged it back
-        // seconds later, eight times over (detach, merge, detach...).
-        let new = if ok {
-            tools
-                .call("hoi4_armies", &json!({"threat": false}))
-                .ok()
-                .and_then(|after| {
-                    let rows = list(&after, "armies");
-                    let holder = rows
-                        .iter()
-                        .find(|a| {
-                            text(&a["army"]) != army
-                                && list(a, "divisions")
-                                    .iter()
-                                    .any(|d| division_id(d).is_some_and(|d| ids.contains(&d)))
-                        })
-                        .map(|a| text(&a["army"]).to_string());
-                    holder.or_else(|| {
-                        rows.iter()
-                            .map(|a| text(&a["army"]).to_string())
-                            .find(|n| !n.is_empty() && !present.contains(n))
-                    })
-                })
-        } else {
-            None
-        };
-        if let Some(new) = &new {
-            state.war_cool.insert(new.clone(), now + rest);
+        if ok {
+            state.skip(now, "spread", &pid.to_string(), 5 * DAY);
             state.manage.spread.push(Spread {
-                army: new.clone(),
-                state: to_state,
+                divisions: ids.clone(),
                 province: to_province,
-                moved: false,
                 since: now,
             });
+        } else {
+            // The order to that province did not take (g17b: "No division of the army took a
+            // march order to province 241", four times, with other groups standing on it):
+            // the next try goes to another province, the next game day.
+            state.skip(now, "spreadto", &to_province.to_string(), 10 * DAY);
+            state.skip(now, "spread", &pid.to_string(), DAY);
         }
         let line = format!(
-            "province {pid} at {mean:.0}% supply (shortfall {shortfall:.2}): {} of {army}'s divisions out into {} for state {to_state} province {to_province}: {ok} {why}",
-            ids.len(),
-            new.as_deref().unwrap_or("no new army seen")
+            "province {pid} at {mean:.0}% supply (shortfall {shortfall:.2}): {} of {army}'s divisions to state {to_state} province {to_province} ({room:.2} supply of room), in their army: {ok} {why}",
+            ids.len()
         );
         note(state, "overdrawn", line.clone());
         return Ok(Some(format!("overdrawn: {line}")));
@@ -7391,39 +7407,25 @@ mod tests {
 
     #[test]
     fn the_weakest_divisions_leave_an_overdrawn_stack_for_a_province_with_room() {
-        let tools = fake(vec![
-            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
-            (
-                "hoi4_armies",
-                json!({"armies": [{"army": "A"}, {"army": "Army 9"}]}),
-            ),
-        ]);
+        let tools = fake(vec![("hoi4_supply", overdrawn_read(20.0, 2.0))]);
         let plan = json!({"manage": {}});
         let mut state = State::default();
         let out = step(&mut state, &tools, &plan, "l", START).unwrap();
         assert_eq!(
             out.as_deref(),
-            Some("overdrawn: province 100 at 20% supply (shortfall 1.20): 3 of A's divisions out into Army 9 for state 10 province 200: true Verified")
+            Some("overdrawn: province 100 at 20% supply (shortfall 1.20): 3 of A's divisions to state 10 province 200 (2.00 supply of room), in their army: true Verified")
         );
-        // the three with the lowest equipment fill cover the 1.2 shortfall (3 x 0.5)
-        assert_eq!(actions(&tools)[0].1["divisions"], json!(["2", "5", "4"]));
-        assert!(state
-            .war_cool
-            .get("Army 9")
-            .is_some_and(|t| *t == START + 10 * DAY));
-        // the next tick moves the new army; then nothing until the next game day
-        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        // the three with the lowest equipment fill cover the 1.2 shortfall (3 x 0.5); they march
+        // in their own army: one order, no detach, no new army
         assert_eq!(
-            out.as_deref(),
-            Some("overdrawn: Army 9 out of the overdrawn stack to state 10 province 200: true Verified")
+            actions(&tools)[0].1,
+            json!({"army": "A", "state_id": 10, "province_id": 200, "divisions": ["2", "5", "4"],
+                "request_id": actions(&tools)[0].1["request_id"], "lease_token": "l"})
         );
-        assert_eq!(
-            actions(&tools)[1].1,
-            json!({"army": "Army 9", "state_id": 10, "province_id": 200,
-                "request_id": actions(&tools)[1].1["request_id"], "lease_token": "l"})
-        );
+        assert!(state.war_cool.is_empty());
+        // nothing more until the next game day
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
-        assert_eq!(actions(&tools).len(), 2);
+        assert_eq!(actions(&tools).len(), 1);
     }
 
     #[test]
@@ -7447,91 +7449,76 @@ mod tests {
     }
 
     #[test]
-    fn the_new_group_is_the_army_holding_the_detached_divisions() {
-        // the day-old supply read knows only A; Army 2 is an older group, Army 1 the new one
-        let tools = fake(vec![
-            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
-            (
-                "hoi4_armies",
-                json!({"armies": [{"army": "A", "divisions": ["1", "3"]},
-                    {"army": "Army 2", "divisions": ["9"]},
-                    {"army": "Army 1", "divisions": ["2", "5", "4"]}]}),
-            ),
-        ]);
+    fn groups_out_of_an_overdrawn_stack_never_form_armies_and_spread_over_the_room() {
+        // g17b (17 Nov 2026): every split made a new army (Army 1-8) and three of them were
+        // sent to the same province against the same day-old headroom
+        let mut read = overdrawn_read(20.0, 1.6);
+        read["overdrawn_provinces"][0]["shortfall"] = json!(3.0);
+        let tools = fake(vec![("hoi4_supply", read.clone())]);
+        let plan = json!({"manage": {"overdrawn_rest_days": 20}});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("3 of A's divisions to state 10 province 200"),
+            "{out}"
+        );
+        // five days on, those three are still on their way: they are not picked again, and
+        // province 200 (1.6 of room, 1.5 of it promised) cannot take another
+        let out = step(&mut state, &tools, &plan, "l", START + 5 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("1 of A's divisions to state 11 province 300"),
+            "{out}"
+        );
+        let moves = actions(&tools);
+        assert_eq!(moves.len(), 2);
+        assert!(moves.iter().all(|(n, _)| n == "hoi4_army_move"));
+        assert_eq!(moves[1].1["divisions"], json!(["1"]));
+        // the stack's shortfall is covered by what is leaving: nothing more is sent
+        tools.replies.borrow_mut().insert("hoi4_supply".into(), {
+            let mut r = read;
+            r["overdrawn_provinces"][0]["shortfall"] = json!(1.4);
+            r
+        });
+        assert_eq!(
+            step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap(),
+            None
+        );
+        assert!(
+            state.manage.notes["overdrawn"].contains("already on their way out"),
+            "{}",
+            state.manage.notes["overdrawn"]
+        );
+        assert_eq!(actions(&tools).len(), 2);
+    }
+
+    #[test]
+    fn a_province_whose_march_order_failed_is_not_chosen_again() {
+        let tools = fake(vec![("hoi4_supply", overdrawn_read(20.0, 2.0))]);
+        tools
+            .refuse
+            .borrow_mut()
+            .insert("hoi4_army_move".into(), "input_readback_failed");
         let plan = json!({"manage": {}});
         let mut state = State::default();
         let out = step(&mut state, &tools, &plan, "l", START)
             .unwrap()
             .unwrap();
-        assert!(out.contains("out into Army 1 for state 10"), "{out}");
-        assert!(super::spread_out(&state, "Army 1") && !super::spread_out(&state, "Army 2"));
-    }
-
-    #[test]
-    fn a_group_out_of_an_overdrawn_stack_is_not_merged_back_while_it_rests() {
-        use super::super::plan_formations::command_step;
-        // formation N1 is army A in state 10; Army 9 is the group detached from it there
-        let tools = fake(vec![
-            ("hoi4_supply", overdrawn_read(20.0, 2.0)),
-            (
-                "hoi4_armies",
-                json!({"armies": [
-                    {"army": "A", "division_count": 5, "commander": "X", "main_state": 10},
-                    {"army": "Army 9", "division_count": 3, "commander": "Y", "main_state": 10}]}),
-            ),
-        ]);
-        let plan = json!({"manage": {}, "armies": {},
-            "army_layout": [{"name_hint": "N1", "state": 10, "role": "strike"}]});
-        let mut state = State::default();
-        state.layout.insert("N1".into(), "A".into());
-        let merges = |tools: &Fake| {
-            actions(tools)
-                .iter()
-                .filter(|(n, _)| n == "hoi4_army_merge")
-                .count()
-        };
-        let out = step(&mut state, &tools, &plan, "l", START)
+        assert!(out.contains("to state 10 province 200"), "{out}");
+        assert!(out.contains("false input_readback_failed"), "{out}");
+        assert!(state.manage.spread.is_empty());
+        // the next game day the same divisions go to the other province with room
+        tools.refuse.borrow_mut().clear();
+        let out = step(&mut state, &tools, &plan, "l", START + DAY)
             .unwrap()
             .unwrap();
-        assert!(out.contains("divisions out into Army 9"), "{out}");
-        assert!(spread_out(&state, "Army 9") && !spread_out(&state, "A"));
-        // detached and not yet moved: the command step leaves it alone
-        assert_eq!(
-            command_step(&mut state, &tools, &plan, "l", START).unwrap(),
-            None
-        );
-        let out = step(&mut state, &tools, &plan, "l", START)
-            .unwrap()
-            .unwrap();
-        assert!(
-            out.starts_with("overdrawn: Army 9 out of the overdrawn stack"),
-            "{out}"
-        );
-        // moved and resting on fed ground: still not merged
-        assert_eq!(
-            command_step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
-            None
-        );
-        assert_eq!(merges(&tools), 0, "{:?}", actions(&tools));
-        // the rest is over and the stack is fed: the rule forgets the group, and the stray
-        // army in the formation's state is merged as before
-        tools
-            .replies
-            .borrow_mut()
-            .insert("hoi4_supply".into(), overdrawn_read(60.0, 2.0));
-        assert_eq!(
-            step(&mut state, &tools, &plan, "l", START + 10 * DAY).unwrap(),
-            None
-        );
-        assert!(!spread_out(&state, "Army 9"));
-        let out = command_step(&mut state, &tools, &plan, "l", START + 10 * DAY)
-            .unwrap()
-            .unwrap();
-        assert!(
-            out.starts_with("command: Army 9 (3 division(s)) merged into A (N1): true"),
-            "{out}"
-        );
-        assert_eq!(merges(&tools), 1);
+        assert!(out.contains("to state 11 province 300"), "{out}");
+        let moves = actions(&tools);
+        assert_eq!(moves.len(), 2);
+        assert_eq!(moves[0].1["divisions"], moves[1].1["divisions"]);
     }
 
     #[test]
@@ -7541,9 +7528,22 @@ mod tests {
         let mut state = State::default();
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
         assert!(state.manage.notes["overdrawn"].contains("above the floor"));
-        // no province has 1.5 of room: nothing leaves, the digest names the lever
+        // no province has 1.5 of room: the one with most room takes what it feeds (two of the
+        // three, the weakest first), the third waits for the next day
         let mut read = overdrawn_read(20.0, 0.1);
         read["provinces"][2]["headroom"] = json!(1.0);
+        let tools = fake(vec![("hoi4_supply", read.clone())]);
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("2 of A's divisions to state 11 province 300"),
+            "{out}"
+        );
+        assert_eq!(actions(&tools)[0].1["divisions"], json!(["2", "5"]));
+        // no province feeds even one more division: nothing leaves, the digest names the lever
+        read["provinces"][2]["headroom"] = json!(0.4);
         let tools = fake(vec![("hoi4_supply", read)]);
         let mut state = State::default();
         assert_eq!(step(&mut state, &tools, &plan, "l", START).unwrap(), None);
