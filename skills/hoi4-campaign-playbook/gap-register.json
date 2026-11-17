@@ -3119,7 +3119,7 @@
    "why": "MIO efficiency-cap and cost traits are the largest production modifiers; funds come from lines; the owner counts a line without one as an unassigned organisation",
    "closing": "both",
    "priority": 9,
-   "verified": "live pp14 17 Nov 2026 (macOS 1.19.4.1): hoi4_mio_line read the roster a new anti-air line opens (offered Rheinmetall; the 'Produce without' row is told apart by its missing details button) and attached Rheinmetall (line row has_mio_background false -> true); the production view's own COrganisationListWindow at +0x2030, rows from its smooth listbox's item list. The last line is moved to the top for its roster and back (built after the receipt). The organization argument of hoi4_production_add stays not_yet_built: the executor's mio_lines rule attaches after the line is added"
+   "verified": "live pp14 17 Nov 2026 (macOS 1.19.4.1): hoi4_mio_line read the roster a new anti-air line opens (offered Rheinmetall; the 'Produce without' row is told apart by its missing details button) and attached Rheinmetall (line row has_mio_background false -> true); the production view's own COrganisationListWindow at +0x2030, rows from its smooth listbox's item list. The last line is moved to the top for its roster and back (built after the receipt). The organization argument of hoi4_production_add stays not_yet_built: the executor's mio_lines rule attaches after the line is added g17e (1936-1938, executor only): every line got its organisation except the appended convoy line; no German organisation makes convoys, so the tool now refuses line_takes_no_organization when the roster offers only the 'Produce without' row, and the mio_lines rule settles a line after two other failures."
   },
   {
    "id": "mio.trait_queue",
@@ -4316,7 +4316,7 @@
    "payoff": "medium",
    "why": "-15% supply use or +attack on the main effort for 15 CP",
    "closing": "both",
-   "verified": "live pp13 17 Nov 2026 (macOS 1.19.4.1): the Leader Details window is CArmyLeaderTraitWindow at interface-manager slot 0x2b0, root +0x60; hoi4_general_trait list for Erich von Manstein (49 entries, 2 free slots, cost 15), then Fortress Buster bought, command power 16 -> 1, entry owned; the cp_spend rule buys one trait a week near the cap (the plan's commanders first, else manage.cp_trait_prefer, else the first enabled trait)"
+   "verified": "live pp13 17 Nov 2026 (macOS 1.19.4.1): the Leader Details window is CArmyLeaderTraitWindow at interface-manager slot 0x2b0, root +0x60; hoi4_general_trait list for Erich von Manstein (49 entries, 2 free slots, cost 15), then Fortress Buster bought, command power 16 -> 1, entry owned; the cp_spend rule buys one trait a week near the cap (the plan's commanders first, else manage.cp_trait_prefer, else the first enabled trait) Open (g17e): the four army commanders' trees read every assignable entry locked with two free slots and 136 command power, while Manstein (leading no army) bought two traits; the cause is not settled, the next probe screenshots an army commander's tree while the tool holds it open. cp_spend rests a general refused no_free_trait_slot or no_enabled_trait for 180 days."
   },
   {
    "id": "formations.recruit_generals",

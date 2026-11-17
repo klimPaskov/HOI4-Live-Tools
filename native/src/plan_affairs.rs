@@ -2329,7 +2329,31 @@ fn mio_lines(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
                     state.done.insert(format!("miolany:{handle}"), now);
                     state.skip(now, "miol", &handle, DAY);
                 }
-                _ => state.skip(now, "miol", &handle, 14 * DAY),
+                // Any other failure (the roster did not open, an input readback): one more try
+                // two weeks later, then the line is settled and named once for the player, so a
+                // line the tool cannot serve is not retried all game (g17e: the convoy line's
+                // roster never opened, 19 tries in two game years).
+                _ if state.done.contains_key(&format!("miolfail:{handle}")) => {
+                    state.done.insert(key, now);
+                    wake(
+                        state,
+                        plan,
+                        now,
+                        31,
+                        &format!("mio_line:{handle}"),
+                        format!(
+                            "production line {equipment} has no organisation and two tries to \
+                             attach one failed: attach it in the game if an organisation makes \
+                             this equipment"
+                        ),
+                        json!({"line": row["entry_index"], "equipment": equipment,
+                               "refusal": why}),
+                    );
+                }
+                _ => {
+                    state.done.insert(format!("miolfail:{handle}"), now);
+                    state.skip(now, "miol", &handle, 14 * DAY);
+                }
             }
         }
         return Ok(Some(format!(
@@ -4423,6 +4447,27 @@ mod tests {
         assert!(actions(&tools)
             .iter()
             .all(|(t, _)| t != "hoi4_mio_design_team"));
+    }
+
+    #[test]
+    fn a_line_the_tool_cannot_serve_is_tried_twice_then_settled_with_one_wake() {
+        let lines = json!({"lines": [
+            {"entry_index": 0, "equipment_id": "convoy_1", "line_handle": "0xc"}]});
+        let tools = fake(vec![("hoi4_production_lines", lines)]);
+        tools.refuse("hoi4_mio_line", "input_readback_failed");
+        let plan = json!({"manage": {"off": ["mio_traits"]}});
+        let mut state = State::default();
+        let mut at = START;
+        for _ in 0..60 {
+            let _ = step(&mut state, &tools, &plan, "l", at);
+            at += DAY;
+        }
+        let sent = actions(&tools)
+            .into_iter()
+            .filter(|(t, _)| t == "hoi4_mio_line")
+            .count();
+        assert_eq!(sent, 2, "two tries in sixty days, then settled");
+        assert!(state.done.contains_key("miol:0xc"));
     }
 
     #[test]

@@ -256,6 +256,8 @@ const CP_WINDOW_REST_DAYS: i64 = 20 * 365;
 
 /// Refusals that mean "this general (or this trait) cannot take a trait now": the pick waits a
 /// month and the next one is tried next week.
+/// Game days a general with no free trait slot or no enabled trait is left alone.
+const CP_GENERAL_REST_DAYS: i64 = 180;
 const CP_PICK_REFUSALS: &[&str] = &[
     "unknown_commander",
     "general_not_listed",
@@ -387,7 +389,15 @@ fn cp_spend_step(
                 // another pick next tick
                 state.skip(now, "cps", "x", DAY);
             }
-            state.skip(now, "cpp", &pick, 30 * DAY);
+            // A general with nothing to pick (no free slot, every entry locked) stays so until
+            // he gains skill: half a year, not a month (g17e: four army generals refused 5-6
+            // times each in two game years until the ledger gave them up).
+            let rest = if matches!(code.as_str(), "no_free_trait_slot" | "no_enabled_trait") {
+                CP_GENERAL_REST_DAYS
+            } else {
+                30
+            };
+            state.skip(now, "cpp", &pick, rest * DAY);
             state.seams.cp_why.insert(pick.clone(), why.clone());
         }
         let line = format!("command power {cp:.0} of {max:.0}: trait for {pick}: {ok} {why}");
