@@ -328,7 +328,9 @@ time only when a template is waiting for the tech.
 2a. **A shortage the divisions feel outranks a mature line.** With no idle factory, equipment the fielded
    divisions lack with nothing in stock (or under the critical days of cover) takes factories from a line
    whose equipment nobody lacks and whose stock covers twice its target, a few at a time; the donor keeps
-   at least one factory. A stock left at 0 for months starves every attack (artillery at 0 from May left a
+   at least one factory, and after the move its stock plus half a year's output still equips at least as
+   many divisions of the main template as the needy item's (a line with stock for twenty divisions gives
+   to one with stock for two, even at the same daily rate). A stock left at 0 for months starves every attack (artillery at 0 from May left a
    strike army at a sixth of its equipment). Plans switch this off only with a reason
    (`manage.shift_factories`).
 3. **Adding factories is safe**: it never lowers the existing factories' efficiency; each new one starts at

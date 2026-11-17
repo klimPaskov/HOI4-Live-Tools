@@ -2384,7 +2384,16 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             return Ok(Some(format!("mio {org} trait list: failed")));
         };
         let entries = list(&listing["observed"], "listed").to_vec();
-        let Some(index) = auto_trait_pick(&entries) else {
+        let tried = |i: u64| state.skipped(now, "miotrait", &format!("{org}#{i}"));
+        let Some(index) = auto_trait_pick(&entries, &tried) else {
+            note(
+                state,
+                "mio_traits",
+                format!(
+                    "{org}: no trait to queue (one is queued, or none is enabled, visible, not \
+                     held and not tried in vain this year)"
+                ),
+            );
             return Ok(Some(format!(
                 "mio {org} traits: one queued already or none open"
             )));
@@ -2398,6 +2407,13 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         )?;
         if !ok {
             mio_refused(state, now, "mio", &org, &why);
+            if matches!(
+                code(&why),
+                "action_not_applied" | "trait_owned" | "trait_unavailable"
+            ) {
+                // that trait did not queue: the next pick takes another one
+                state.skip(now, "miotrait", &format!("{org}#{index}"), 365 * DAY);
+            }
             if code(&why) == "organization_not_offered" {
                 // the mio_traits alert's reason (plan_manage.rs alerts)
                 note(
@@ -2417,17 +2433,20 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
 
 /// The trait to queue from a listing (`index`, `enabled`, `queue`, `visible`): none while any
 /// entry is queued, else the first enabled visible entry, else the first visible one.
-fn auto_trait_pick(entries: &[Value]) -> Option<u64> {
+fn auto_trait_pick(entries: &[Value], tried: &dyn Fn(u64) -> bool) -> Option<u64> {
     if entries.iter().any(|e| !text(&e["queue"]).trim().is_empty()) {
         return None;
     }
-    let visible = |e: &&Value| e["visible"].as_bool().unwrap_or(false);
+    // Only an enabled, visible trait the organisation does not hold and whose click did not
+    // already come back unqueued: a disabled or held one never queues (g17c, 17 Nov 2026: trait
+    // 0, held since the first month, was clicked every month).
     entries
         .iter()
-        .filter(visible)
-        .find(|e| e["enabled"].as_bool().unwrap_or(false))
-        .or_else(|| entries.iter().find(visible))
-        .and_then(|e| e["index"].as_u64())
+        .filter(|e| e["visible"].as_bool().unwrap_or(false))
+        .filter(|e| e["enabled"].as_bool().unwrap_or(false))
+        .filter(|e| e["owned"] != json!(true))
+        .filter_map(|e| e["index"].as_u64())
+        .find(|i| !tried(*i))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4432,19 +4451,29 @@ mod tests {
     #[test]
     fn the_auto_trait_is_the_first_enabled_and_none_while_one_is_queued() {
         let e = |i: u64, enabled: bool, queue: &str, visible: bool| json!({"index": i, "enabled": enabled, "queue": queue, "visible": visible});
+        let none = |_: u64| false;
         assert_eq!(
-            auto_trait_pick(&[e(0, false, "", true), e(1, true, "", true)]),
+            auto_trait_pick(&[e(0, false, "", true), e(1, true, "", true)], &none),
             Some(1)
         );
+        // a disabled trait is never picked
         assert_eq!(
-            auto_trait_pick(&[e(0, false, "", false), e(1, false, "", true)]),
-            Some(1)
-        );
-        assert_eq!(
-            auto_trait_pick(&[e(0, true, "1", true), e(1, true, "", true)]),
+            auto_trait_pick(&[e(0, false, "", false), e(1, false, "", true)], &none),
             None
         );
-        assert_eq!(auto_trait_pick(&[]), None);
+        assert_eq!(
+            auto_trait_pick(&[e(0, true, "1", true), e(1, true, "", true)], &none),
+            None
+        );
+        assert_eq!(auto_trait_pick(&[], &none), None);
+        // a held trait, and one whose click came back unqueued, are passed over
+        let mut held = e(0, true, "", true);
+        held["owned"] = json!(true);
+        assert_eq!(
+            auto_trait_pick(&[held, e(1, true, "", true), e(2, true, "", true)], &|i| i
+                == 1),
+            Some(2)
+        );
     }
 
     #[test]
