@@ -4669,6 +4669,13 @@ fn donor_line(
             if short_of(read, &arche) > 0.0 {
                 return false;
             }
+            // Equipment the main template's divisions use never pays for equipment they do not
+            // use: a few trucks short at the front took artillery and support factories again
+            // and again while those bound the training (g17c 1936, reproduced by the production
+            // simulation: 7 trucks short of 605, artillery 2 -> 1, support 3 -> 2).
+            if rates.contains_key(&arche) && !rates.contains_key(needy) {
+                return false;
+            }
             // Never make the donor the binding equipment of the main template: after the move
             // its stock and output must still equip at least as many divisions over the next
             // DONOR_HORIZON_DAYS as the needy item's (g17b, 17 Nov 2026: artillery cut 2 -> 1
@@ -8616,3 +8623,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "plan_manage_sim.rs"]
+mod sim;
