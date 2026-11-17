@@ -643,7 +643,11 @@ dossier §9.
    name_hints, `marshal`: a name or names tried in order, `when`), grouped once and led once, never
    churned; when no listed marshal is free the executor takes the best free field marshal. A marshal who
    is only a general is promoted by the tool for command power; one who also commands a layout army is
-   skipped (`F characters <TAG> --role marshal`).
+   skipped (`F characters <TAG> --role marshal`). A listed army still missing after 30 game days no longer
+   holds the group back: the armies present form it. Plan an army group in peace too: the assignable
+   traits command power buys first (logistics_wizard, offensive_doctrine, ...) are field-marshal traits,
+   and a corps commander is offered traits only after he earns a parent trait (common/unit_leader
+   any_parent), so without a field marshal command power sits at its cap.
 3a. Offensives are battle plans: front, offensive line, planning, execute. `vp_targets` name the state the
    offensive goes for; direct province moves only with `war.direct_moves` or as the stall response. A
    target's `path` (the `F route` provinces from own land to the target, each touching the next) is the

@@ -18,7 +18,9 @@
 //!   army_group   [{"id","name"?,"armies":[..],"marshal"?,"when"?}] (W2-1, audit G4-G5): once
 //!                `when` holds and every entry of `armies` exists (an army_layout name_hint means
 //!                the army playing that role, anything else an army name, hoi4_armies), the armies
-//!                are grouped once (hoi4_army_group_create); then `marshal` (a general's name, or
+//!                are grouped once (hoi4_army_group_create; an army still missing after 30 game
+//!                days no longer holds it: the two or more present are grouped and the player is
+//!                woken once); then `marshal` (a general's name, or
 //!                a list tried in order) leads the group once (hoi4_army_commander with the
 //!                group's name; the tool promotes a general to field marshal itself, 40 command
 //!                power: short of it the step waits 7 game days). Never churn: a group that
@@ -1525,6 +1527,10 @@ fn air_superiority_rule(
 // ---------------------------------------------------------------------------------------------
 // W2-1: army groups and field marshals.
 
+/// Game days an army group waits for a listed army that does not exist before it is formed
+/// from the armies present.
+const AGRP_WAIT_DAYS: GameHour = 30;
+
 /// The field marshal candidates of an entry, in order.
 fn marshals(entry: &Value) -> Vec<String> {
     match &entry["marshal"] {
@@ -1600,8 +1606,31 @@ pub(super) fn army_group_step(
                     .filter(|n| army_row(&roster, n).is_none())
                     .map(String::as_str)
                     .collect();
-                lines.push(format!("{label}: waiting for {}", missing.join(", ")));
-                continue;
+                // An army the layout never forms must not hold the group (and its field
+                // marshal) back all game: after AGRP_WAIT_DAYS the armies present (two or more)
+                // are grouped and the player is told once (g17e: Armee Nord never formed, no
+                // field marshal in two game years, command power idle at 136).
+                let since = *state.done.entry(format!("agwait:{id}")).or_insert(now);
+                if rows.len() < 2 || now - since < AGRP_WAIT_DAYS * DAY {
+                    lines.push(format!("{label}: waiting for {}", missing.join(", ")));
+                    continue;
+                }
+                state.done.insert(format!("agpart:{id}"), now);
+                wake(
+                    state,
+                    plan,
+                    now,
+                    json!("G4"),
+                    &format!("army_group_partial:{id}"),
+                    format!(
+                        "army group {label}: {} did not form in {AGRP_WAIT_DAYS} game days; the {} \
+                         armies present are grouped so a field marshal leads them (an army \
+                         formed later is not added)",
+                        missing.join(", "),
+                        rows.len()
+                    ),
+                    json!({"army_group": id, "missing": missing, "armies": wanted}),
+                );
             }
             if groups.len() == 1 && groups.iter().all(Option::is_some) {
                 // already one group (made by hand, or before a restart)
@@ -1649,9 +1678,26 @@ pub(super) fn army_group_step(
         if entry["marshal"] == json!(false) || state.done.contains_key(&led) {
             continue;
         }
-        let group = match groups.iter().next() {
-            Some(Some(g)) if groups.len() == 1 && rows.len() == wanted.len() => g.to_string(),
-            _ => {
+        // A group formed from the armies present (agpart) is the one group those armies share;
+        // an army formed later stands outside it.
+        let partial = state.done.contains_key(&format!("agpart:{id}"));
+        let shared: HashSet<&str> = rows
+            .iter()
+            .filter_map(|r| r["army_group"].as_str())
+            .collect();
+        let one = if partial {
+            (shared.len() == 1)
+                .then(|| shared.iter().next().copied())
+                .flatten()
+        } else {
+            match groups.iter().next() {
+                Some(Some(g)) if groups.len() == 1 && rows.len() == wanted.len() => Some(*g),
+                _ => None,
+            }
+        };
+        let group = match one {
+            Some(g) => g.to_string(),
+            None => {
                 lines.push(format!("{label}: the armies are not one group now"));
                 continue;
             }
@@ -3407,6 +3453,60 @@ mod tests {
             None
         );
         assert_eq!(actions(&tools).len(), 3);
+    }
+
+    #[test]
+    fn an_army_group_missing_an_army_for_a_month_forms_from_the_armies_present() {
+        let present = || roster(&[("A", None, false), ("B", None, false)], &[]);
+        let tools = fake(vec![("hoi4_armies", present())]);
+        let plan = json!({"army_group": [{"id": "ost", "name": "Heeresgruppe Ost",
+            "armies": ["A", "B", "Nord"], "marshal": ["Bock"]}]});
+        let t0 = date_hour("1936.1.1").unwrap();
+        let mut state = State::default();
+        for day in [0, 10, 29] {
+            assert_eq!(
+                army_group_step(&mut state, &tools, &plan, "l", t0 + day * DAY).unwrap(),
+                None
+            );
+        }
+        assert!(state.military.notes["army_group"].contains("waiting for Nord"));
+        assert!(actions(&tools).is_empty());
+        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + 31 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("army group Heeresgruppe Ost from A, B: true Verified")
+        );
+        assert_eq!(actions(&tools)[0].1["armies"], json!(["A", "B"]));
+        // the two armies share a group: its field marshal is given although Nord is missing
+        tools.reply(
+            "hoi4_armies",
+            roster(
+                &[("A", Some("HG 1"), false), ("B", Some("HG 1"), false)],
+                &[("HG 1", None)],
+            ),
+        );
+        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + 32 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("army group Heeresgruppe Ost (HG 1) field marshal Bock: true Verified")
+        );
+        // Nord formed later stays outside: nothing more is sent
+        tools.reply(
+            "hoi4_armies",
+            roster(
+                &[
+                    ("A", Some("HG 1"), false),
+                    ("B", Some("HG 1"), false),
+                    ("Nord", None, false),
+                ],
+                &[("HG 1", Some("Bock"))],
+            ),
+        );
+        assert_eq!(
+            army_group_step(&mut state, &tools, &plan, "l", t0 + 40 * DAY).unwrap(),
+            None
+        );
+        assert_eq!(actions(&tools).len(), 2);
     }
 
     #[test]
