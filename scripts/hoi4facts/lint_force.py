@@ -395,6 +395,11 @@ class Ctx:
             if days is None:
                 problems.append("no planned duration (force_design.wars[].duration_days, or a capitulation "
                                 "checkpoint for its targets)")
+            said, cp = fm.declared_days(self.lint, w), fm.checkpoint_days(self.lint, w)
+            if said is not None and cp is not None and cp > said * 1.1 + 14:
+                problems.append(f"duration_days {said} while the plan's own capitulation checkpoint for "
+                                f"{', '.join(w['targets'])} falls {cp} days after the war starts: the timetable and "
+                                "the force must make the shorter war true, or the label follows the timetable")
             if not entry.get("decisive"):
                 problems.append("no reasons it is won fast (force_design.wars[].decisive: the force ratio on the "
                                 "axes, the air, the supply)")

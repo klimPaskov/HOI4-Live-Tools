@@ -120,6 +120,10 @@ class Britain(unittest.TestCase):
         self.assertFalse(any("home_waters" in w for w in tools), tools)
         self.assertTrue(any("sea_lion" in w for w in tools), tools)
 
+    def test_a_sea_won_from_the_air_needs_wings_over_every_region(self):
+        cover = [x for x in self.rules(self.planned, "force.sea_air_cover") if "sea_lion" in x["where"]]
+        self.assertTrue(cover)  # the hand plan flies no naval strike over the route
+
     def test_tools_are_ordered_by_reliance(self):
         tools = self.planned["facts"]["force"]["navy"]["tools"]
         self.assertTrue(tools)

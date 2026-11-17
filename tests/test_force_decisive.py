@@ -54,5 +54,20 @@ class Decisive(unittest.TestCase):
         self.assertTrue(any("d_tank" in x["where"] for x in f), f)
 
 
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class Duration(unittest.TestCase):
+    def test_the_label_follows_the_plans_own_timetable(self):
+        game = lint_plan.load_game(GAME_DIR)
+        plan = germany_at_war()
+        plan["force_design"] = {"wars": [{"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 3,
+                                          "duration_days": 30, "decisive": "three axes, air superiority"}]}
+        plan["checkpoints"] = list(plan.get("checkpoints") or []) + [
+            {"id": "cp_pol", "by": "1940.6.1", "must": ["capitulated:POL"]}]
+        out = lint_plan.lint(plan, game)
+        row = next(r for r in out["facts"]["force"]["decisive"] if r["war"] == "war_pol")
+        self.assertGreater(row["planned_days"], 200)
+        self.assertTrue(any("duration_days 30" in p for p in row["problems"]), row["problems"])
+
+
 if __name__ == "__main__":
     unittest.main()

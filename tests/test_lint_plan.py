@@ -79,6 +79,11 @@ FORCE_RULES = {"force.required", "force.breakthrough", "force.single_template", 
               "force.air_lost", "force.air_deploy", "force.air_losses", "force.air_bases", "force.air_research",
               "force.air_design", "force.air_doctrine", "force.air_command", "force.air_defence", "force.air_fuel",
               "force.air_resources"}
+# the navy as an arm and the dominance standard (lint_force_navy.py, test_force_navy, test_force_decisive)
+FORCE_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea_required", "force.sea_control",
+                "force.sea_screens", "force.sea_lift", "force.sea_port", "force.sea_patrol", "force.sea_air_cover",
+                "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
+                "force.navy_design", "force.navy_tools", "force.navy_doctrine", "force.navy_admirals"}
 THIS_PASS |= FORCE_RULES
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",

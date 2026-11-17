@@ -17,6 +17,8 @@ goal: every landing, overseas front and sea region the goal needs is carried out
   force.sea_port       (error) a landing on a state without a naval base and without with_harbor.
   force.sea_patrol     (error) a declared control or deny operation whose regions no navy patrol or strike_force
                        mission covers (invasions[] have navy.sea_control).
+  force.sea_air_cover  (error) an operation won from the air whose route regions no air_plan naval_strike or
+                       naval_patrol entry flies over by its date (carrier means cover their own route).
   force.sea_raid       (error) a raid operation (or a deny operation by submarine) with fewer submarines than its
                        regions need.
   force.carrier_air    (error) carriers in the plan's operations or lines and no carrier-capable plane line, air row
@@ -198,6 +200,17 @@ def _judge(ctx, op, n, met, tools):
             lint.add("error", "force.sea_patrol", where,
                      f"{when}: no navy patrol or strike_force mission covers {', '.join(x['name'] for x in miss)}; "
                      f"only patrols build dominance (one task force per region, {nv.PATROL_DAYS}+ days before)")
+    if ("air" in op["means"] or "carrier" in op["means"]) and op["regions"] and \
+            (op["kind"] in nv.CONTROL_KINDS or op["kind"] == "deny"):
+        flown = _air_covered(ctx, op["day"])
+        carrier = "carrier" in op["means"]
+        miss = [x for x in op["regions"] if x["name"].lower() not in flown and str(x["id"]) not in flown]
+        if miss and not carrier:
+            lint.add("error", "force.sea_air_cover", where,
+                     f"{when}: the sea is won from the air, and no air_plan entry flies naval_strike or naval_patrol "
+                     f"over {', '.join(x['name'] for x in miss)} by then; every region of the route needs its "
+                     "naval strike wings (based in range) and fighters over them, or a carrier or surface means "
+                     "there")
     blocked = [t["row"] for t in tools if t["status"] == "not executable"]
     if blocked and not op.get("fallback"):
         lint.add("error", "force.navy_tools", where,
@@ -208,6 +221,30 @@ def _judge(ctx, op, n, met, tools):
         lint.add("warning", "force.navy_tools", where,
                  f"{when} rests on tools with no live receipt yet: {', '.join(open_rows)} (facts.force.navy.tools: "
                  "the live engineers' order before the run)")
+
+
+def _air_covered(ctx, day):
+    """Sea region names and ids an air_plan naval_strike, naval_patrol or port_strike entry flies over by day
+    (an entry whose `when` the plan dates after day does not count)."""
+    lint = ctx.lint
+    out = set()
+    regions, by_name = nv._region_index(lint)
+    for a in lint.list_of("air_plan"):
+        if not isinstance(a, dict) or a.get("mission") not in ("naval_strike", "naval_patrol", "port_strike"):
+            continue
+        d = fm.predicate_day(lint, ctx.tl, a.get("when"), ctx.wars) if a.get("when") else None
+        if d is not None and day is not None and d > day:
+            continue
+        for key in ("region", "regions", "then_region", "follow_region"):
+            v = a.get(key)
+            for r in v if isinstance(v, list) else [v]:
+                if isinstance(r, (str, int)) and not isinstance(r, bool):
+                    out.add(str(r).strip().lower())
+                    rid = by_name.get(str(r).strip().lower())
+                    if rid is not None:
+                        out.add(str(rid))
+                        out.add(str((regions.get(rid) or {}).get("name", "")).lower())
+    return out
 
 
 def _patrolled(lint):
