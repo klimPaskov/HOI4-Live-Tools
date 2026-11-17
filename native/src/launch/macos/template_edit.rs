@@ -815,7 +815,8 @@ mod tests {
         assert!(check_name("Infanterie-Division (mot.)").is_ok());
         assert!(check_name("Zz Test A").is_ok());
         assert_eq!(check_name("Bad%").unwrap_err().code, "name_not_typable");
-        assert_eq!(check_name("Ünicode").unwrap_err().code, "name_not_typable");
+        assert!(check_name("Ünicode Straße").is_ok());
+        assert_eq!(check_name("Énicode").unwrap_err().code, "name_not_typable");
         assert!(check_name(" lead").is_err());
         assert!(check_name("").is_err());
         assert!(check_name(&"x".repeat(41)).is_err());

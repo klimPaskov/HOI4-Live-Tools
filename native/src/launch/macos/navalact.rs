@@ -649,25 +649,59 @@ pub(super) fn find_region_point(
                 .filter(|(_, r)| **r == id)
                 .map(|(p, _)| *p)
                 .collect();
-            let mut points = read(process, |r, i| {
-                let mut pts = Vec::new();
-                for p in &provinces {
-                    if let Some(&(x, z)) = positions.get(p) {
-                        if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
-                            let in_theatre = s.0 > 1450.0 && s.1 < 330.0;
-                            let in_mission_bar = (640.0..=1200.0).contains(&s.0) && s.1 > 800.0;
-                            if (360.0..1700.0).contains(&s.0)
-                                && (150.0..880.0).contains(&s.1)
-                                && !in_theatre
-                                && !in_mission_bar
-                            {
-                                pts.push(s);
+            let project_points = || {
+                read(process, |r, i| {
+                    let mut pts = Vec::new();
+                    for p in &provinces {
+                        if let Some(&(x, z)) = positions.get(p) {
+                            if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
+                                let in_theatre = s.0 > 1450.0 && s.1 < 330.0;
+                                let in_mission_bar = (640.0..=1200.0).contains(&s.0) && s.1 > 800.0;
+                                if (360.0..1700.0).contains(&s.0)
+                                    && (150.0..880.0).contains(&s.1)
+                                    && !in_theatre
+                                    && !in_mission_bar
+                                {
+                                    pts.push(s);
+                                }
                             }
                         }
                     }
+                    Ok(pts)
+                })
+            };
+            let mut points = project_points()?;
+            if points.is_empty() {
+                // None of the region's provinces on screen once the state is centred (pp2, 17 Nov
+                // 2026: Lower Baltic Sea from Schleswig-Holstein saw only the Belts and the North
+                // Sea): zoom out until its province nearest the screen centre shows, then project
+                // again. Camera only; nothing is ordered.
+                let near = read(process, |r, i| {
+                    let mut best: Option<((f64, f64), f64)> = None;
+                    for p in &provinces {
+                        if let Some(&(x, z)) = positions.get(p) {
+                            if let Some(s) = super::screenmap::to_screen(r, i, x, z)? {
+                                let d = (s.0 - 960.0).powi(2) + (s.1 - 500.0).powi(2);
+                                if best.is_none_or(|(_, b)| d < b) {
+                                    best = Some(((x, z), d));
+                                }
+                            }
+                        }
+                    }
+                    Ok(best.map(|(w, _)| w))
+                })?;
+                if let Some(at) = near {
+                    super::screenmap::frame_two(
+                        process,
+                        keys,
+                        at,
+                        at,
+                        (420.0, 160.0, 1650.0, 860.0),
+                        || Ok(()),
+                    )?;
+                    points = project_points()?;
                 }
-                Ok(pts)
-            })?;
+            }
             points.sort_by(|a, b| {
                 let d = |p: &(f64, f64)| (p.0 - 960.0).powi(2) + (p.1 - 500.0).powi(2);
                 d(a).total_cmp(&d(b))

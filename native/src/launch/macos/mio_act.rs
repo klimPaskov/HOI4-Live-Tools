@@ -283,6 +283,38 @@ fn open_system(
     Ok(())
 }
 
+/// The politics-view slot whose roster showed each organisation (display name), learned from
+/// every roster read this session: a later action on that organisation opens its slot first
+/// instead of walking the slots of other kinds.
+static SLOT_OF: std::sync::Mutex<Option<std::collections::HashMap<String, usize>>> =
+    std::sync::Mutex::new(None);
+/// The slot whose roster is open (set by `open_roster`).
+static OPEN_SLOT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(usize::MAX);
+fn learn_slot(name: &str) {
+    let slot = OPEN_SLOT.load(std::sync::atomic::Ordering::Relaxed);
+    if slot == usize::MAX || name.is_empty() {
+        return;
+    }
+    if let Ok(mut map) = SLOT_OF.lock() {
+        map.get_or_insert_with(Default::default)
+            .insert(name.to_string(), slot);
+    }
+}
+fn known_slot(name: &str) -> Option<usize> {
+    SLOT_OF
+        .lock()
+        .ok()
+        .and_then(|m| m.as_ref().and_then(|m| m.get(name).copied()))
+}
+/// The slots to try for an organisation: the one a roster showed it in, else the asked one,
+/// then every other.
+fn slot_order(asked: usize, count: usize, display: &str) -> Vec<usize> {
+    let first = known_slot(display).filter(|s| *s < count).unwrap_or(asked);
+    std::iter::once(first)
+        .chain((0..count).filter(|s| *s != first))
+        .collect()
+}
+
 fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Result<()> {
     pk::click(process, keys, "organisation slot", |r, i| {
         let entry = *org_entries(r, i)?.get(slot).ok_or_else(|| {
@@ -293,6 +325,7 @@ fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Resu
     wait(process, "open organisation list", |r, i| {
         pk::is_open(r, i, &pk::MIO_LIST)
     })?;
+    OPEN_SLOT.store(slot, std::sync::atomic::Ordering::Relaxed);
     pause(400);
     Ok(())
 }
@@ -495,6 +528,7 @@ fn find_row(r: &Reader<'_>, i: u64, display: &str) -> Result<(Vec<String>, Optio
     let mut found = None;
     for (n, frame) in list_frames(r, i)?.into_iter().enumerate() {
         let name = pk::text(r, i, frame, "name", 2)?.unwrap_or_default();
+        learn_slot(&name);
         if found.is_none() && loc::same(&name, display) {
             found = Some(n);
         }
@@ -623,6 +657,7 @@ fn row_by_details(
             }
             pause(250);
             let name = read(process, detail_name).unwrap_or_default();
+            learn_slot(&name);
             if loc::same(&name, display) {
                 return Ok(k as usize);
             }
@@ -765,8 +800,8 @@ fn open_org(
         .unwrap_or(1)
         .max(slot + 1);
     let mut first: Option<Fail> = None;
-    for s in std::iter::once(slot).chain((0..count).filter(|s| *s != slot)) {
-        if s != slot {
+    for (n, s) in slot_order(slot, count, display).into_iter().enumerate() {
+        if n > 0 {
             leave(process, keys);
             open_system(process, keys, s)?;
         }
@@ -824,8 +859,8 @@ fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot:
         let before = political_power(process);
         let mut found: Option<Option<usize>> = None;
         let mut first: Option<Fail> = None;
-        for s in std::iter::once(slot).chain((0..count).filter(|s| *s != slot)) {
-            if s != slot {
+        for (n, s) in slot_order(slot, count, display).into_iter().enumerate() {
+            if n > 0 {
                 leave(process, keys);
                 open_system(process, keys, s)?;
             }
@@ -1177,7 +1212,7 @@ pub(super) fn call(
                     ))
                 }),
             };
-            ui_action::run(job, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_policy" => {
             super::allowed(
@@ -1213,7 +1248,7 @@ pub(super) fn call(
                     ))
                 }),
             };
-            ui_action::run_bounded(job, 40, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_trait" => {
             super::allowed(
@@ -1273,7 +1308,7 @@ pub(super) fn call(
                     )
                 }),
             };
-            ui_action::run_bounded(job, 40, id, token, process, keys, guard, authority, actions)
+            ui_action::run_bounded(job, 90, id, token, process, keys, guard, authority, actions)
         }
         _ => Err(Error::new(
             "capability_unavailable",

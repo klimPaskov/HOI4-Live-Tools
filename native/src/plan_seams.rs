@@ -161,6 +161,31 @@ pub(super) fn priority_round(lines: &[Value], keys: &[String]) -> Vec<(u64, Stri
     out
 }
 
+/// The "to top" moves a priority round needs: the smallest m such that the shown list without
+/// the round's first m lines starts with the round's other lines in order (those then need no
+/// move; the first m go to the top last-first).
+fn moves_needed(lines: &[Value], round: &[(u64, String, String)]) -> usize {
+    let mut shown: Vec<(u64, &str)> = lines
+        .iter()
+        .filter_map(|l| Some((l["entry_index"].as_u64()?, l["line_handle"].as_str()?)))
+        .collect();
+    shown.sort_unstable();
+    let shown: Vec<&str> = shown.into_iter().map(|(_, h)| h).collect();
+    for m in 0..=round.len() {
+        let moved: Vec<&str> = round[..m].iter().map(|(_, h, _)| h.as_str()).collect();
+        let rest: Vec<&str> = shown
+            .iter()
+            .copied()
+            .filter(|h| !moved.contains(h))
+            .collect();
+        let want: Vec<&str> = round[m..].iter().map(|(_, h, _)| h.as_str()).collect();
+        if rest.len() >= want.len() && rest[..want.len()] == want[..] {
+            return m;
+        }
+    }
+    round.len()
+}
+
 fn production_order_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -181,7 +206,17 @@ fn production_order_step(
             return Ok(None);
         }
     };
-    let round = priority_round(&lines, &keys);
+    // a line the plan removes is not ordered (pr2/pp2: the round moved the hull lines marked
+    // `remove` to the top first, and their removal then aimed at a moved index)
+    let removed: Vec<String> = list(plan, "production")
+        .iter()
+        .filter(|l| l["remove"] == json!(true))
+        .map(|l| text(&l["equipment"]).to_string())
+        .collect();
+    let round: Vec<(u64, String, String)> = priority_round(&lines, &keys)
+        .into_iter()
+        .filter(|(_, _, e)| !removed.contains(e))
+        .collect();
     if round.is_empty() {
         note(state, key, "no own line of the priority equipment yet");
         state.skip(now, "spo", "x", 7 * DAY);
@@ -198,6 +233,26 @@ fn production_order_step(
         );
         state.skip(now, "spo", "x", 7 * DAY);
         return Ok(None);
+    }
+    // A new round moves only what is out of place: with "to top" moves the round's first m
+    // lines go up last-first, so m is the smallest count after which the rest of the list
+    // already starts with the round's remaining lines in order (pr2 moved every planned line
+    // again after each added or removed line: 13 moves a round).
+    if !(0..round.len()).any(|n| state.done.contains_key(&format!("{sig}:{n}"))) {
+        let m = moves_needed(&lines, &round);
+        for n in 0..round.len() - m {
+            state.done.insert(format!("{sig}:{n}"), now);
+        }
+        if m == 0 {
+            state.done.insert(sig.clone(), now);
+            note(
+                state,
+                key,
+                format!("{} lines already on top in the plan's order", round.len()),
+            );
+            state.skip(now, "spo", "x", 7 * DAY);
+            return Ok(None);
+        }
     }
     // the next line of the round: the last one not yet moved
     let Some(n) = (0..round.len()).find(|n| !state.done.contains_key(&format!("{sig}:{n}"))) else {
@@ -1025,6 +1080,62 @@ mod tests {
         let sent = actions(&f);
         assert_eq!(sent.len(), 5);
         assert_eq!(sent[4].1["line"], json!(2));
+    }
+
+    #[test]
+    fn a_round_moves_only_the_lines_out_of_place_and_skips_removed_ones() {
+        let line = |i: u64, h: &str, e: &str| json!({"entry_index": i, "line_handle": h, "equipment_id": e});
+        let keys = vec![
+            "infantry_equipment".to_string(),
+            "artillery_equipment".to_string(),
+            "support_equipment".to_string(),
+        ];
+        // already in order on top: no move
+        let lines = vec![
+            line(0, "0xa", "infantry_equipment_1"),
+            line(1, "0xb", "artillery_equipment_1"),
+            line(2, "0xc", "support_equipment_1"),
+            line(3, "0xd", "ship_hull_light_2"),
+        ];
+        let round = priority_round(&lines, &keys);
+        assert_eq!(moves_needed(&lines, &round), 0);
+        // only the rifles fell below: one move
+        let lines = vec![
+            line(0, "0xb", "artillery_equipment_1"),
+            line(1, "0xc", "support_equipment_1"),
+            line(2, "0xa", "infantry_equipment_1"),
+        ];
+        let round = priority_round(&lines, &keys);
+        assert_eq!(moves_needed(&lines, &round), 1);
+        // the support line first: art and rifles move
+        let lines = vec![
+            line(0, "0xc", "support_equipment_1"),
+            line(1, "0xa", "infantry_equipment_1"),
+            line(2, "0xb", "artillery_equipment_1"),
+        ];
+        let round = priority_round(&lines, &keys);
+        assert_eq!(moves_needed(&lines, &round), 2);
+        // another line above all of them: all three move
+        let lines = vec![
+            line(0, "0xd", "ship_hull_light_2"),
+            line(1, "0xa", "infantry_equipment_1"),
+            line(2, "0xb", "artillery_equipment_1"),
+            line(3, "0xc", "support_equipment_1"),
+        ];
+        let round = priority_round(&lines, &keys);
+        assert_eq!(moves_needed(&lines, &round), 3);
+        // a removed hull is never ordered
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_production_lines",
+            json!({"lines": [
+            line(0, "0xa", "infantry_equipment_1"), line(1, "0xh", "ship_hull_heavy_2")]}),
+        );
+        let plan = json!({"production_priority": ["infantry_equipment", "ship_hull_heavy"],
+            "production": [{"equipment": "ship_hull_heavy_2", "remove": true}]});
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert!(actions(&f).is_empty());
     }
 
     #[test]
