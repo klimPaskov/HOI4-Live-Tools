@@ -6874,7 +6874,10 @@ mod speed_lock_tests {
     #[test]
     fn a_locked_run_refuses_other_speeds_only() {
         assert!(super::speed_lock(Some("2"), 2).is_ok());
-        assert_eq!(super::speed_lock(Some("2"), 1).unwrap_err().code, "speed_locked");
+        assert_eq!(
+            super::speed_lock(Some("2"), 1).unwrap_err().code,
+            "speed_locked"
+        );
         assert!(super::speed_lock(None, 1).is_ok());
         assert!(super::speed_lock(Some(""), 4).is_ok());
     }
