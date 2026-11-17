@@ -114,7 +114,8 @@ def check(lint):
         "start_divisions": tl.forecast()["start"],
         "by_date": [{"date": derive.fmt(derive.date_of(d)), "divisions": round(n), "manpower": round(m)}
                     for d, n, m in rows[::13]],
-        "note": "upper bound: every training queue busy from its first date, equipment not counted"}
+        "note": "the executor's training queues and caps, each division started only with its equipment in "
+                "stock (start stockpile less the start shortfall, plus the planned lines' output)"}
     return lint
 
 

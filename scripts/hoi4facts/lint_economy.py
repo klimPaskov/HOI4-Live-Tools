@@ -37,8 +37,11 @@ Production is a set of factory targets per equipment over all lines, the ones th
                              reason does not lift it: only goal.ai_baseline_constraint entries the lint confirms
                              (no_free_slots: the forecast finds no free slot outside the construction risk by then;
                              law_unavailable: the law is not offered or its gate is closed under the plan's timeline).
-                             Divisions below the AI stay a warning goal.ai_baseline_why can answer (the AI fields
-                             under-equipped divisions).
+                             Divisions the same way up to the first war day: a stated divisions target, or the
+                             army forecast (the executor's training queues, caps and training time, each division
+                             started only with its equipment in stock from the planned lines), below BASELINE_SLACK
+                             of the AI's divisions; later division marks stay a warning goal.ai_baseline_why can
+                             answer (the AI fields under-equipped divisions, conquest changes the need).
   economy.unbacked           (warning) a civilian or military target more than UNBACKED_SLACK above what the plan's
                              own levers give on that date (facts.economy.forecast).
   economy.below_forecast     (warning) a target below what the plan's own levers give: the plan aims low.
@@ -179,8 +182,9 @@ def _variant_cost(lint, family):
 def need_balance(lint, tl):
     """Cumulative from the start to the judged date, per equipment family: what the country has (start
     stockpile plus what the planned lines make) against what the plan's army needs (the start divisions'
-    shortfall, every division the training lines add, the fielded army's losses at war)."""
-    fc = tl.forecast()
+    shortfall, every division the training lines add, the fielded army's losses at war). The divisions are the
+    lines' demand (tl.forecast(equipment=False)): the equipment-held forecast would only ask for what is made."""
+    fc = tl.forecast(equipment=False)
     if not fc["lines"]:
         return
     g, w = lint.game, lint.world
@@ -534,8 +538,9 @@ def _constraint_ok(lint, c, fc, day):
 def baseline(lint, tl, table, fc=None, lev=()):
     """plan.ai_baseline: the plan's factory marks (checkpoints, horizon targets) and the forecast of its own
     levers against the game's own AI on the same dates. Factories below BASELINE_SLACK of the AI's are an error
-    unless goal.ai_baseline_constraint names a hard game constraint the lint confirms; divisions stay a warning
-    (the AI fields under-equipped divisions) that goal.ai_baseline_why can answer."""
+    unless goal.ai_baseline_constraint names a hard game constraint the lint confirms. Divisions likewise up to
+    the first war day (the army forecast counts the equipment the planned lines make); later division marks
+    stay a warning goal.ai_baseline_why can answer."""
     b = load_baseline(lint.tag, lint.start)
     if not b:
         return
@@ -544,7 +549,8 @@ def baseline(lint, tl, table, fc=None, lev=()):
     constraints = goal.get("ai_baseline_constraint") or []
     if isinstance(constraints, dict):
         constraints = [constraints]
-    marks, div_marks, fc_marks = [], [], []
+    marks, div_marks, div_errors, fc_marks = [], [], [], []
+    war_day = getattr(tl, "war_day", None)
     plan_at = _plan_marks(lint)
     horizon_end = max([x for x, _ in lint.horizon()] + list(plan_at) or [None]) if (lint.horizon() or plan_at) else None
     rows = (fc or {}).get("rows") or []
@@ -565,8 +571,8 @@ def baseline(lint, tl, table, fc=None, lev=()):
                     marks.append((d, f"{k_plan.replace('_', ' ')} {v[k_plan]} by {when} against the AI's {ai_v} on "
                                      f"{row['date']}"))
             if "divisions" in v and v["divisions"] < BASELINE_SLACK * row["divisions"]:
-                div_marks.append(f"divisions {v['divisions']} by {when} against the AI's {row['divisions']} on "
-                                 f"{row['date']}")
+                (div_errors if war_day is None or d <= war_day else div_marks).append(
+                    f"divisions {v['divisions']} by {when} against the AI's {row['divisions']} on {row['date']}")
         # the forecast models the economy the plan builds, not what conquest adds: it is held to the AI only up
         # to the first war day (later marks are the plan's targets, checked above)
         r = econmod.at(rows, d) if rows and (fc_until is None or d <= fc_until) else None
@@ -575,15 +581,17 @@ def baseline(lint, tl, table, fc=None, lev=()):
                                 f"{ai_c} / {ai_m}"))
         divs, _ = tl.army_at(d)
         if divs < BASELINE_SLACK * row["divisions"]:
-            div_marks.append(f"the training lines field at most {round(divs)} divisions on {row['date']} against "
-                             f"the AI's {row['divisions']}")
+            held = ", ".join(f"{t} by {why}" for t, why in tl.limit_at(d).items()) if hasattr(tl, "limit_at") else ""
+            (div_errors if war_day is None or d <= war_day else div_marks).append(
+                f"the training lines field {round(divs)} divisions on {row['date']} against the AI's "
+                f"{row['divisions']}" + (f" (held: {held})" if held else ""))
     held, refused = [], []
     for c in constraints:
         ok, how = _constraint_ok(lint, c, fc, _day(c.get("date")) if isinstance(c, dict) and c.get("date")
                                  else (horizon_end or _day(lint.start)))
         (held if ok else refused).append((c, how))
     lint.facts["ai_baseline"] = {"file": f"baselines/{lint.tag}-{derive.as_tuple(lint.start)[0]}.json",
-                                 "below": [m for _, m in marks] + div_marks,
+                                 "below": [m for _, m in marks] + div_errors + div_marks,
                                  "forecast_below": [m for _, m in fc_marks],
                                  "forecast_checked_until": (fc or {}).get("war"),
                                  "constraints": [{"constraint": c, "confirmed": True, "how": h} for c, h in held]
@@ -609,6 +617,14 @@ def baseline(lint, tl, table, fc=None, lev=()):
                  + ". Use more of what the game offers (laws by date, construction advisors and focuses, "
                    "construction and building-slot techs early, civilian-first to the switch date, build in every "
                    "state outside the construction risk, a smaller import budget): " + lever_text)
+    if div_errors and not covered:
+        lint.add("error", "plan.ai_baseline", "training",
+                 f"before the first war day the plan fields fewer divisions than the game's own AI as {lint.tag}: "
+                 + "; ".join(div_errors[:4]) + (" ..." if len(div_errors) > 4 else "")
+                 + ". A written reason does not lift this floor: add training lines (several entries of one template "
+                   "add their queues), raise the caps, and give the lines of what holds them (an equipment family) "
+                   "the factories (facts.army_forecast, facts.production_need), or name a hard game constraint in "
+                   "goal.ai_baseline_constraint the lint can confirm")
     if div_marks and not why:
         lint.add("warning", "plan.ai_baseline", "training",
                  f"the plan fields fewer divisions than the game's own AI as {lint.tag}: " + "; ".join(div_marks[:4])

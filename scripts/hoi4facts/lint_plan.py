@@ -74,9 +74,9 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
   production.balance       an equipment family the start divisions need (sub-unit `need` x the OOB templates)
                            that no line builds while the divisions start short of it (start_equipment_factor,
                            less the history stockpile), the theatre's divisions lose it at war or
-                           stockpile_targets names it; or planned output (factories x BASE_FACTORY_SPEED_MIL x
-                           efficiency / build cost: start lines at their efficiency, new ones climbing from
-                           the start efficiency to the cap over 180 days) that leaves the family short at the
+                           stockpile_targets names it; or planned output (factories x Lint.factory_speed x
+                           efficiency / build cost: start lines at their efficiency, new ones from the start
+                           efficiency, growing to the cap the plan's techs give, Lint.efficiency) that leaves the family short at the
                            goal deadline or horizon, or covers the start shortfall and the losses (5% a month
                            of the theatre divisions' equipment assumed) only more than 120 days into the war
                            (warning from 90 days); facts.equipment_balance has the numbers. A gap larger than
@@ -480,7 +480,6 @@ WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at 
 # assumption, stated in facts.equipment_balance), days a new line or new factories take to climb from the start
 # efficiency to the cap, and days into the war after which a family still short warns
 EQUIPMENT_LOSS_SHARE = 0.05
-EFFICIENCY_RAMP_DAYS = 180
 BALANCE_DAYS = 90
 BALANCE_ERROR_DAYS = 120
 NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.overseas", "navy.shape", "supply.port_convoys",
@@ -3646,18 +3645,91 @@ class Lint:
                              f"switched line keeps ({key}); start {ny} on new factories and keep {eq} until its gear "
                              f"covers the need")
 
+    def production_mods(self, d):
+        """(output factor, efficiency cap %, efficiency gain factor, start efficiency %) on day d. Output: 1 +
+        industrial_capacity_factory of the start ideas and laws, the dated politics picks, the focus path's ideas
+        and the research path's techs on completion (economy.plan_events), plus the stability static modifier
+        (stability_good_modifier / stability_bad_modifier scaled by the start stability's distance from 50%).
+        Cap: BASE_FACTORY_MAX_EFFICIENCY_FACTOR + production_factory_max_efficiency_factor x 100; start:
+        BASE_FACTORY_START_EFFICIENCY_FACTOR + production_factory_start_efficiency_factor x 100."""
+        keys = ("industrial_capacity_factory", "production_factory_max_efficiency_factor",
+                "production_factory_efficiency_gain_factor", "production_factory_start_efficiency_factor")
+        if getattr(self, "_prod_mods", None) is None:
+            steps = []
+            try:
+                from . import conditions, economy
+                tl = getattr(self, "_timeline", None) or conditions.Timeline(self)
+                e = economy._Econ(self, tl)
+                e.today, e.timed = tl.start, []
+                steps.append((tl.start, tuple(e.total(k) for k in keys)))
+                for day, kind, payload, _src in economy.plan_events(self, tl):
+                    for end, name in [x for x in e.timed if x[0] <= day]:
+                        e.ideas[name] = max(0, e.ideas[name] - 1)
+                        e.timed.remove((end, name))
+                    e.today = day
+                    if kind in ("law", "idea+", "idea-", "idea_timed", "tech"):
+                        e.apply(kind, payload)
+                        steps.append((day, tuple(e.total(k) for k in keys)))
+            except Exception:  # noqa: BLE001 - advisory: no modifiers then
+                steps = []
+            stab = ((self.world.country(self.tag).get("stability") or {}).get("v") if self.tag else None)
+            stat = derive.static_modifiers(self.game)
+            bonus = 0.0
+            if isinstance(stab, (int, float)):
+                good = (stat.get("stability_good_modifier") or {}).get(keys[0]) or 0.0
+                bad = (stat.get("stability_bad_modifier") or {}).get(keys[0]) or 0.0
+                bonus = good * (stab - 0.5) / 0.5 if stab > 0.5 else bad * (0.5 - stab) / 0.5
+            self._prod_mods = (steps, bonus)
+        steps, bonus = self._prod_mods
+        m = (0.0, 0.0, 0.0, 0.0)
+        for day, v in steps:
+            if day > d:
+                break
+            m = v
+        return (1.0 + m[0] + bonus, self.define("BASE_FACTORY_MAX_EFFICIENCY_FACTOR", 50) + 100.0 * m[1], m[2],
+                self.define("BASE_FACTORY_START_EFFICIENCY_FACTOR", 10) + 100.0 * m[3])
+
+    def efficiency(self, e0, begin, d):
+        """Efficiency % on day d of factories at e0 % on day begin: each day it gains BASE_FACTORY_EFFICIENCY_GAIN
+        x BASE_FACTORY_EFFICIENCY_BALANCE_FACTOR x (1 + production_factory_efficiency_gain_factor) x cap^2 / e
+        / 100 up to the cap of that day (fitted to the pr3b run, 17 Nov 2026: lines at 40-65% grew 1.5-2.5
+        points a month under caps of 50-75%)."""
+        cache = self.__dict__.setdefault("_eff_paths", {})
+        path = cache.setdefault((round(e0, 3), begin), [e0])
+        if d - begin >= len(path):
+            k = self.define("BASE_FACTORY_EFFICIENCY_GAIN", 1) * self.define("BASE_FACTORY_EFFICIENCY_BALANCE_FACTOR",
+                                                                              0.1)
+            e = path[-1]
+            for day in range(begin + len(path), d + 1):
+                _, cap, gain, _ = self.production_mods(day)
+                e = min(cap, max(e, e + k * (1 + gain) * cap * cap / max(e, 1.0) / 100.0)) if e < cap else cap
+                path.append(e)
+        return path[max(0, d - begin)]
+
+    def factory_speed(self, d):
+        """IC a military factory makes a day at 100% efficiency on day d: POWERED_FACTORY_SPEED_MIL (the energy
+        mechanic's speed; BASE_FACTORY_SPEED_MIL where a game has no such define) x the output factor
+        (production_mods). The country is taken as powered: pr3b's Germany ran 5.3 IC at the start (4.5 x
+        1.13 here) against 3.5 x 1.13 unpowered."""
+        return self.define("POWERED_FACTORY_SPEED_MIL", self.define("BASE_FACTORY_SPEED_MIL", 3.5)) * \
+            self.production_mods(d)[0]
+
+    def factories_on_lines(self, d):
+        """Military factories the plan's lines (and the start lines it keeps) hold on day d."""
+        if getattr(self, "_on_lines", (None,))[0] != d:
+            self.line_output(d)
+        return self._on_lines[1]
+
     def line_output(self, d):
-        """{equipment: units a day} of the military lines in force on day d: factories x
-        BASE_FACTORY_SPEED_MIL x efficiency / the variant's build_cost_ic. A start line runs at its history
-        efficiency (capped at BASE_FACTORY_MAX_EFFICIENCY_FACTOR), and factories the plan puts on it on day 0
-        join at that efficiency; a new line, or factories added later, start at
-        BASE_FACTORY_START_EFFICIENCY_FACTOR and climb linearly to the cap over EFFICIENCY_RAMP_DAYS. No
-        output modifiers (industry techs, resource shortages): the estimate leans low on purpose."""
+        """{equipment: units a day} of the military lines in force on day d: factories x factory_speed x
+        efficiency / the variant's build_cost_ic. A start line runs from its history efficiency (capped), and
+        factories the plan puts on it on day 0 join at that efficiency; a new line, or factories added later,
+        start at the start efficiency; all grow by `efficiency` to the cap of each day (production_mods: the
+        plan's techs, ideas and laws). Calibrated against the measured pr3b run (within about 10%); resource
+        shortages are left out."""
         g = self.game
         start = derive.day(self.start)
-        speed = self.define("BASE_FACTORY_SPEED_MIL", 3.5)
-        base = self.define("BASE_FACTORY_START_EFFICIENCY_FACTOR", 10)
-        cap = self.define("BASE_FACTORY_MAX_EFFICIENCY_FACTOR", 50)
+        _, cap0, _, base = self.production_mods(start)
         rows = derive.equipment_rows(g)
         removed = self.removal_days()
         start_lines = defaultdict(lambda: [0, 0.0])
@@ -3668,7 +3740,7 @@ class Lint:
             if gone:
                 continue
             n = int(r.get("factories") or 0)
-            e = min(cap, float(r.get("efficiency") or base))
+            e = min(cap0, float(r.get("efficiency") or base))
             row = start_lines[r["type"]]
             row[1] = (row[1] * row[0] + e * n) / (row[0] + n) if row[0] + n else e
             row[0] += n
@@ -3679,21 +3751,24 @@ class Lint:
                     and "replace" not in x:
                 first_day[eq] = min(first_day.get(eq, d), derive.day(x.get("from")) or start)
         planned = self.active_lines(d)
+        speed = self.factory_speed(d)
         out = {}
+        self._on_lines = (d, 0)
         for eq in set(planned) | set(start_lines):
             if self.factory_pool(eq) != "military":
                 continue
+            have, eff0 = start_lines.get(eq, (0, base))
+            n = planned.get(eq, have)
+            self._on_lines = (d, self._on_lines[1] + n)
             cost = (rows.get(eq) or {}).get("cost")
             if not cost:
                 continue
-            have, eff0 = start_lines.get(eq, (0, base))
-            n = planned.get(eq, have)
-            begin = first_day.get(eq, start)
+            begin = min(d, first_day.get(eq, start))
             old = min(n, have) if eq in start_lines else 0
             joined = n - old if eq in start_lines and begin <= start else 0
             fresh = n - old - joined
-            ramp = min(cap, base + (cap - base) * max(0, d - begin) / EFFICIENCY_RAMP_DAYS)
-            ic = speed * ((old + joined) * eff0 + fresh * ramp) / 100.0
+            ic = speed * ((old + joined) * self.efficiency(eff0, start, d)
+                          + fresh * self.efficiency(base, begin, d)) / 100.0
             if ic > 0:
                 out[eq] = ic / cost
         return out
@@ -3804,7 +3879,8 @@ class Lint:
                          f"{row['covered']}, {covered - first} days into the war: the armies fight under-equipped "
                          f"until then; add factories to its line from day 0")
         self.facts["equipment_balance"] = {"loss_share_per_month": EQUIPMENT_LOSS_SHARE,
-                                           "efficiency_ramp_days": EFFICIENCY_RAMP_DAYS, "families": rows}
+                                           "efficiency": "Lint.efficiency: + gain x balance x cap^2 / e a day "
+                                                         "to the cap of the day", "families": rows}
 
     def beyond_industry(self, fam, cache, start, end, row):
         """True (and a warning) when every military factory the country has and plans, on the family's line at
@@ -3820,8 +3896,8 @@ class Lint:
         costs = [c for c in costs if c]
         if not total or not costs:
             return False
-        speed = self.define("BASE_FACTORY_SPEED_MIL", 3.5)
-        cap = self.define("BASE_FACTORY_MAX_EFFICIENCY_FACTOR", 50)
+        speed = self.factory_speed(end)
+        cap = self.production_mods(end)[1]
         ceiling = total * speed * cap / 100.0 / min(costs) * (end - start + 1)
         need = row["start_shortfall"] + row["lost"]
         if ceiling >= need:
@@ -3981,7 +4057,7 @@ class Lint:
                 cut = self.define("PRODUCTION_MAX_PROGRESS_TO_SWITCH_NAVAL", 0.1)
             else:
                 eff = r.get("efficiency") or self.define("BASE_FACTORY_START_EFFICIENCY_FACTOR", 10)
-                per_day = n * self.define("BASE_FACTORY_SPEED_MIL", 3.5) * eff / 100.0
+                per_day = n * self.factory_speed(start) * eff / 100.0
                 # the game's line between expensive and cheap items: fewer than one a week
                 cut = self.define("PRODUCTION_WAIT_TO_FINISH_IF_EXPENSIVE", 0.1) if cost / per_day > 7 else \
                     self.define("PRODUCTION_WAIT_TO_FINISH_IF_CHEAP", 0.75)
