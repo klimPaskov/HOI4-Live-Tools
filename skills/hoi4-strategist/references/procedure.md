@@ -154,7 +154,8 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
      the breakthrough is sized against that. A tank or plane design a line builds carries its `modules`, so its
      cost and the force count are the design's (lint `force.design_cost`).
    - **Decisive by design** (lint `force.decisive`): each offensive war gets `duration_days` (its first day to
-     the enemy's capitulation) and `decisive`, the reasons it is won fast: the force ratio on the axes
+     the enemy's capitulation, matching the plan's own capitulation checkpoint and target timetable: a shorter
+     label than the timetable is an error) and `decisive`, the reasons it is won fast: the force ratio on the axes
      (breakthrough met), the air (fighters met), the supply, and our divisions against the enemy's estimate
      (at least half, with the axes concentrated) and above the AI's count on that date. A war the numbers do
      not win fast is changed until they do: more military factories earlier, a larger land or air share, a
@@ -439,7 +440,7 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
 13. **Slots for every factory the targets need.** The free slots of the states the construction list names
     cover every civilian and military factory the horizon targets add, or `construction_fallback_any_own_state`
     is true (lint `construction.capacity`, error).
-14. **The game's own AI is the floor.** Where `skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json`
+14. **The game's own AI is the floor, never the target.** Where `skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json`
     exists (the AI playing the same country and start, read from its own saves), civilian, military and total
     factory targets and checkpoints, and the forecast of the plan's own levers, are at or above its marks on
     the same dates (lint `plan.ai_baseline`, error). A written reason does not lift the factory floor: only a
@@ -1026,7 +1027,8 @@ Resolution: executor `navy`, `invasions`; `sea_transfer` (player key, executor s
 `navy.overseas`, `army.generals` (admirals); validate_plan (fleets in the start OOB, sea region names,
 coastal invasion states), lint `navy.invasion_prep`, `force.sea_required`, `force.sea_control`,
 `force.sea_screens`, `force.sea_lift`, `force.sea_port`, `force.sea_patrol`, `force.sea_raid`,
-`force.carrier_air`, `force.navy_unused`, `force.navy_readiness`, `force.navy_design`, `force.navy_tools`;
+`force.carrier_air`, `force.navy_unused`, `force.navy_readiness`, `force.navy_design`, `force.navy_tools`, `force.sea_air_cover` (a sea won
+from the air has naval strike or patrol wings over every region of the route by its date);
 rubric row 14.
 
 ## H. Diplomacy, occupation, intelligence, peace

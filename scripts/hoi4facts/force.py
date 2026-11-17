@@ -641,19 +641,30 @@ def needs(lint, tl, wars):
     return out
 
 
-def planned_days(lint, war):
-    """Days the plan gives a war: force_design.wars[].duration_days of the entry naming its targets, else from its
-    first day to the latest capitulation checkpoint of its targets; None when the plan dates no end."""
+def declared_days(lint, war):
+    """force_design.wars[].duration_days of the entry naming the war's targets, or None."""
     fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
     for x in fd.get("wars") or []:
         if isinstance(x, dict) and set(x.get("enemies") or []) & set(war["targets"]) and \
-                isinstance(x.get("duration_days"), int):
+                isinstance(x.get("duration_days"), int) and not isinstance(x.get("duration_days"), bool):
             return x["duration_days"]
+    return None
+
+
+def checkpoint_days(lint, war):
+    """Days from the war's first day to the latest capitulation checkpoint of its targets, or None."""
     caps = capitulation_days(lint)
     ends = [caps[t] for t in war["targets"] if t in caps]
     if war.get("start") is None or not ends:
         return None
     return max(ends) - war["start"]
+
+
+def planned_days(lint, war):
+    """Days the plan gives a war: the later of force_design.wars[].duration_days and the latest capitulation
+    checkpoint of its targets (the plan's own timetable wins over a shorter label); None when it dates no end."""
+    vals = [d for d in (declared_days(lint, war), checkpoint_days(lint, war)) if d is not None]
+    return max(vals) if vals else None
 
 
 def air_rows(lint, war, front, out_mil, axes, breakthrough, days=None):

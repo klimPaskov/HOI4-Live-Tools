@@ -418,6 +418,23 @@ module's docstring has the detail:
   force.template_late      a force row's template cannot exist and train by its war or ready date
   force.readiness          a force row the army forecast or the line output does not field by its date
   force.budget             no factory budget by date (error), a budget row off the lines (warning)
+  force.bombers            a long war without the tactical bombers its logistics strike needs, or no bomber_why
+  force.design_cost        a tank, plane or ship design a line builds with no modules (costed on the bare chassis)
+  force.decisive           an offensive war not planned to be won fast (duration and reasons, breakthrough, air,
+                           divisions above the AI's and at least half the enemy's estimate, label = timetable)
+  force.sea_required       land across the sea the checkpoints take and no landing; sea operations, no `sea`
+  force.sea_control        an operation whose chosen means do not hold its sea regions by its date
+  force.sea_screens        screens short of the patrol groups and the screening ratio
+  force.sea_lift           convoys, landing techs or escorts short for a landing or overseas front
+  force.sea_port           a landing on a state without a naval base or a floating harbour
+  force.sea_patrol         a control or deny operation whose regions no patrol or strike force covers
+  force.sea_air_cover      a sea won from the air with no naval strike or patrol wings over a route region
+  force.sea_raid           a raid with fewer submarines than its regions need
+  force.carrier_air        carriers and no carrier-capable planes to fly from them
+  force.navy_unused        a ship line no sea operation uses, or done after the last one
+  force.navy_readiness     a force_design.navy row the fleet and dockyard lines do not reach by its date
+  force.navy_design        a designer hull line with no variant and no design
+  force.navy_tools         an operation resting on a lever no tool carries, with no fallback
   force.anti_tank, force.anti_air, force.air_command, force.air_defence, force.air_resources  (warnings)
 
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
@@ -540,7 +557,7 @@ NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "
 NEW_RULES |= {"force.sea_required", "force.sea_control", "force.sea_screens", "force.sea_lift", "force.sea_port",
               "force.sea_patrol", "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
               "force.navy_design", "force.navy_tools"}
-NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive"}  # bombers, designed cost, decisive wars
+NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea_air_cover"}  # bombers, designed cost, decisive wars
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
