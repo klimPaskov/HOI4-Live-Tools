@@ -17,7 +17,8 @@ Every item ends in exactly one of:
   types, enums), never from memory, and check it with `tool_schemas.py check-call <tool> '<json>'`;
   step 7 runs `python3 scripts/hoi4facts/check_calls.py RUN` over the plan, the brief and plan.md.
   Shorthand such as `hoi4_air_rebase {wing, state_id}` in this file lists argument names only; never
-  copy it as a call;
+  copy it as a call. A player item that reads states reads them in bulk with `hoi4_states` (tag, filters
+  and sort in one call), never one read per state (`hoi4_state_slots`, a map click);
 * **not applicable: <reason>**, where the reason cites a fact (a facts output, a dossier line, the DLC
   list) or a missing tool (name it, e.g. "no tool: production line MIO chooser"). "Later",
   "TBD" and "if needed" are not resolutions.
@@ -142,8 +143,15 @@ doctrines and tracks), `F grep <doctrine key> --folder common/doctrines` (`xp_co
 3. Special forces: which branch, or not applicable with the reason (no special-forces templates planned).
 4. Land: Mass Assault for a defensive war, Grand Battle Plan for an offensive one; naval and air doctrines follow
    the build (RE06-RE09).
-Resolution: executor `doctrines` (`id`, `folder`, `grand_doctrine` or `track` + `subdoctrine`, `xp`) and
-`politics` (theorist); plan.md §13. Check: `validate_plan.py` doctrine check; rubric row 13.
+5. **Every track has an owner.** A folder has several tracks (`F dossier show 6` lists them); a track no
+   `doctrines` entry names is filled by the executor's doctrine fill (every 14 days, once experience covers
+   it above `manage.xp_reserve`) with the first subdoctrine the game offers. For every folder the plan uses
+   (land always; naval and air when the posture builds or keeps ships or planes) write
+   `doctrine_defaults.<folder>`: the subdoctrine ids in preference order for the tracks the entries leave
+   out (lint `doctrines.defaults`). `manage.xp_reserve` {army, navy, air} keeps experience back for templates
+   and designs (item 5; default army 30); `manage.off: ["doctrines"]` only with a reason.
+Resolution: executor `doctrines` (`id`, `folder`, `grand_doctrine` or `track` + `subdoctrine`, `xp`),
+`doctrine_defaults`, `manage.xp_reserve` and `politics` (theorist); plan.md §13. Check: `validate_plan.py` doctrine check; rubric row 13.
 
 ### 5. XP budget
 Read: `research-doctrines-projects.md` §2.3. Facts: starting experience (dossier §1; until available
@@ -579,7 +587,15 @@ dossier §9.
    `role` strike or guard. Every own state bordering an enemy is covered: by a formation's own state,
    `axis`, `covers` or `guard_states_in_order`, or by a task (`task_of`) whose state is there.
 2. Strike armies ≤ 24 divisions, also sized to the supply on the axis.
-3. One general per formation, chosen once by traits for its role (no reassignment later); the executor
+2a. **Divisions outside an army are gathered, not scattered into new armies.** `armies.gather_into` names
+   the formation (a layout `name_hint`) that takes every division left outside an army in one action (new
+   trainees, divisions freed by a disband or a lost army); without it the fullest army without battle-plan
+   orders and with room takes them; `armies.gather: false` only with a reason (lint `armies.gather`).
+3. **Name only commanders the game shows on the start date.** A general or marshal whose role has a
+   `visible` trigger the start does not meet (Germany 1936: Guderian and Hoth only after
+   GER_adopt_new_panzer_doctrine) is unknown to hoi4_army_commander until then; name him in a phase from the
+   day his trigger holds, a commander shown from the start before that (lint `army.generals`).
+   One general per formation, chosen once by traits for its role (no reassignment later); the executor
    gives every other army the best free general, so commanders do not sit idle. One army group per
    theatre over all its formations: executor `army_group` (`id`, `name`, `armies`: 2 to 12 army_layout
    name_hints, `marshal`: a name or names tried in order, `when`), grouped once and led once, never
@@ -896,14 +912,24 @@ gates, war goals), `F factions <TAG>` (templates), `F defines TENSION_CB_WAR` an
 `F defines WARGOAL_WORLD_TENSION_REDUCTION` (tension and justification costs).
 1. War goals: target, justification start and declaration dates against the world-tension gates of the
    ideology; who joins the target (the executor checks `hoi4_war_risk` before declaring).
-2. Factions (join, create, goals), guarantees, non-aggression pacts, access, volunteers, lend-lease;
-   the answer policy for incoming proposals (player: `hoi4_diplomacy_incoming` is not live-verified, so
-   the policy goes in the brief).
+2. Factions (join, create, goals), guarantees, non-aggression pacts, access, volunteers, lend-lease.
+   **Members: help or burden** (`politics-diplomacy-espionage.md` §7): invite (`diplomacy` action
+   `invite_to_faction`) the countries the wars use, never a planned target; decide which members are called
+   into each war: `faction.call_allies` ("all", a list of tags, or "none"; absent = nobody is called and the
+   executor notes the members left out each week), and a dated single call as a `diplomacy` item with
+   action `call_to_arms`. Leave out a member whose joining opens a front the plan cannot hold (lint
+   `faction.call_allies`).
+2a. Incoming proposals: `incoming_proposals` rules come first, then the executor's standing answers (an
+   unasked binding offer is refused, a call to arms accepted, a `faction_join_request` from a planned war
+   target refused and any other accepted, a `join_war_offer` accepted, a peace offer goes to the player).
+   Write a rule for each class where a standing answer is wrong for this campaign (a member that would be a
+   burden, a war the plan stays out of).
 3. Not applicable for any part only with the reason (for example "already at war on day 1 with the
    only enemy; no faction is open to the tag").
 4. **World-tension gates** by ideology for every justify, guarantee, faction join, lend-lease and volunteer
    item (`when` with `world_tension`); justify on claims and cores (Conquer expires 60 days after completion);
-   one justification at a time; no AI allies called into the plan's wars (DI01-DI03, DI08).
+   one justification at a time; AI allies called only where `faction.call_allies` says the plan wants
+   them in (DI01-DI03, DI08).
 5. Attaché, volunteer and lend-lease routes with their costs and recall dates (PO19, DI07, DI09).
 6. **Every border a declaration waits on is held.** Before declaring, the executor reads `hoi4_war_risk`: an own
    border state with the target or an accepted joiner that is empty, or fewer than 2 divisions per border
@@ -917,7 +943,7 @@ hoi4_diplomacy row), `target` (tag), `when`, `world_tension_max`; justify: `war_
 hoi4_diplomacy lists it) and 1-5 `states` names; declare: `justify_days`, `joiners_ok`, `widen_ratio`,
 `accept_widening`, `expiry_warn_days`, `rejustify`}]; a declaration waits for the target's justify items
 and the widening check. Executor `faction` {`join` (tag or ANY), `create` {`name`, `template`, `invite`},
-`when`}. Plan.md §20. Check: validate_plan (tags, justify fields); rubric row 10.
+`when`, `call_allies`}; `incoming_proposals` [{`class`, `from`, `answer`, `when`}]. Plan.md §20. Check: validate_plan (tags, justify fields); rubric row 10.
 
 ### 23. Occupation
 Read: `supply-logistics-deployment.md` §7; `army-organisation.md` §6; `strategy.md` "Occupation, peace
@@ -1056,7 +1082,10 @@ threshold, call) when the player must act.
 | Casualty ratio | own/enemy losses above the limit (2.0) over 14 days, at least 1000 own losses → the front's attacking armies rest 7 days | `manage.casualty_ratio_max`, `casualty_window_days`, `casualty_min_losses`, `casualty_rest_days` |
 | War goal expiry, world-tension gates | goal older than ~50 days; tension crosses a plan gate | `diplomacy[].expiry_warn_days`, `rejustify`, `world_tension_max` |
 | Idle task forces, damaged ships | no mission; strength < 50% → mission; port | `navy.fleets[].missions`, `navy.repair_below` / `repair_until` |
-| Incoming proposals | pop-up → answer by the item 22 policy | brief: `hoi4_diplomacy_incoming` |
+| Incoming proposals | pop-up → the plan's rules, then the standing answers (item 22) | `incoming_proposals` |
+| Allies outside our war | weekly: call the members the plan wants in | `faction.call_allies` |
+| Divisions outside an army | gathered into one formation | `armies.gather_into` |
+| Empty doctrine tracks | every 14 days, once XP covers it above the reserve | `doctrine_defaults`, `manage.xp_reserve` |
 | Command power near the cap | ≥ 70 of 80 → planned trait or ability; wake the player | `manage` |
 | Agency upgrade idle | no upgrade running → next upgrade | `intelligence.upgrades` |
 | Refused action | 3 refusals in 10 days → wake the player with the evidence (failure ledger) | executor default |

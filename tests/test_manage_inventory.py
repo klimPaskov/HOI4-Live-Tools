@@ -70,6 +70,14 @@ class Owners(unittest.TestCase):
         e = self.entry("call_allies")
         self.assertIsNone(inv.owners({"diplomacy": [{"action": "declare"}]}, e))
         self.assertIsNotNone(inv.owners({"diplomacy": [{"action": "call_allies", "target": "ITA"}]}, e))
+        self.assertEqual(inv.owners({"faction": {"call_allies": "none"}}, e), "key faction.call_allies")
+
+    def test_the_doctrine_fill_owns_doctrines_until_switched_off(self):
+        e = self.entry("doctrines")
+        self.assertIn("rule doctrines", inv.owners({}, e))
+        self.assertIsNone(inv.owners({"manage": {"off": ["doctrines"]}}, e))
+        self.assertEqual(inv.owners({"manage": {"off": ["doctrines"]}, "doctrine_defaults": {"land": []}}, e),
+                         "key doctrine_defaults")
 
     def test_alert_owned_through_its_item(self):
         e = self.entry("alert:mio_traits")

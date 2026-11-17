@@ -69,6 +69,9 @@ THIS_PASS = {"focus.condition", "focus.condition_unchecked", "decision.condition
              "plan.stop_date", "manage.owner", "production.start_lines", "production.duplicate_line",
              "production.priority_all", "production.missing_line", "production.need_balance",
              "production.parked_request", "production.need_cap", "construction.capacity", "plan.ai_baseline"}
+# the keys the live engineer settled on 17 Nov (doctrine fill, gather, faction calls): newer than the hand plans
+ENGINEER_KEY_RULES = {"doctrines.defaults", "armies.gather", "faction.call_allies"}
+THIS_PASS |= ENGINEER_KEY_RULES
 RULE_LINE = re.compile(r"^  ([a-z]+\.[a-z0-9_]+)\s", re.M)  # a rule line of the lint_plan docstring
 EXECUTOR_RULES = {"planning_wait", "supply_floor", "pocket_threshold", "advance_in_bounds",
                   "factory_rebalance_steps", "domain_turns", "politics_auto", "command_concentration",
@@ -361,6 +364,7 @@ class HandPlans(unittest.TestCase):
             ("win.goal", "goal"),  # only the deprecated win_condition
         ])
         _, warnings = self.findings(load(ETH), "warning")
+        warnings = [w for w in warnings if w[0] not in ENGINEER_KEY_RULES]
         gaps = [("coverage.checklist", f"_coverage.c{n}") for n in (3, 5, 6, 9, 12, 14, 15, 17, 22, 23, 25)]
         self.assertEqual(warnings, sorted(gaps + [
             *[("alerts.owner", "manage.alerts_ignore")] * 4,  # dockyards, admiral, officer corps, garrison
@@ -506,6 +510,36 @@ class SeededBadPlans(unittest.TestCase):
         plan["army_layout"][1]["general"] = plan["army_layout"][0]["general"]
         self.assertRule(plan, "research.fallback")
         self.assertRule(plan, "army.generals", "more than one army")
+
+    def test_doctrine_defaults_are_game_subdoctrines_of_their_folder(self):
+        sub = self.game.doctrines(lint_plan.Lint(copy.deepcopy(self.base), self.game).ctx)["sub"]
+        air = next(k for k, v in sub.items() if v.get("xp_type") == "air")
+        plan = copy.deepcopy(self.base)
+        plan["doctrine_defaults"] = {"land": ["no_such_subdoctrine", air], "space": []}
+        out = [f for f in lint_plan.lint(plan, self.game)["findings"] if f["rule"] == "doctrines.defaults"]
+        errors = " ".join(f["message"] for f in out if f["severity"] == "error")
+        self.assertIn("no_such_subdoctrine is not a subdoctrine", errors)
+        self.assertIn(f"{air} sits on track", errors)
+        self.assertIn("space is not a doctrine folder", errors)
+        plan.pop("doctrine_defaults")
+        warn = [f["message"] for f in lint_plan.lint(plan, self.game)["findings"]
+                if f["rule"] == "doctrines.defaults"]
+        self.assertTrue(any("folder land" in m for m in warn), warn)  # land is always used
+
+    def test_call_allies_and_gather_into(self):
+        plan = copy.deepcopy(self.base)
+        plan["faction"] = dict(plan.get("faction") or {}, call_allies=["ETH", "ZZZ"])
+        plan.setdefault("armies", {})["gather_into"] = "No such army"
+        out = lint_plan.lint(plan, self.game)["findings"]
+        calls = [f["message"] for f in out if f["rule"] == "faction.call_allies" and f["severity"] == "error"]
+        self.assertTrue(any("ETH is a planned enemy" in m for m in calls), calls)
+        self.assertTrue(any("ZZZ is no country tag" in m for m in calls), calls)
+        self.assertTrue([f for f in out if f["rule"] == "armies.gather" and "No such army" in f["message"]])
+        hint = plan["army_layout"][0]["name_hint"]
+        plan["armies"]["gather_into"] = hint
+        plan["faction"]["call_allies"] = "none"
+        out = lint_plan.lint(plan, self.game)["findings"]
+        self.assertFalse([f for f in out if f["rule"] in ("armies.gather", "faction.call_allies")])
 
     def test_eval_with_game_rows(self):
         ref = self.base
