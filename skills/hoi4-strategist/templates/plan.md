@@ -62,7 +62,7 @@ Do not research: <list with reason>.
 
 ## 4. Construction order
 
-<civ/mil timing in one paragraph: months to war, switch date> [D build-order].
+<civ/mil timing in one paragraph: months to war, switch date, the forecast by quarter against the AI baseline> [D forecast].
 
 | # | Build | Where | When (trigger) | Cost (points) | Finish | Why |
 |---|---|---|---|---|---|---|

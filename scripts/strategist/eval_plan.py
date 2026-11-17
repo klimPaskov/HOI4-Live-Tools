@@ -25,7 +25,7 @@ Rows (game = needs the game folder, through hoi4facts.lint_plan):
     construction rail_first    share of railway/infrastructure items queued before the first factory
     construction hubs          supply_node items (20000 points each; fewer is better, each must pass hub_cost)
     construction factory_infra mean infrastructure percentile of the factory states (game)
-    construction front         factories on fronts (lint construction.front, game)
+    construction front         factories in states at construction risk (lint construction.front, game)
     production  factories      total factories on lines
     production  mix            overlap of the factory shares by equipment family
     events      options        share of REF's event choices (event -> option name) that GEN makes

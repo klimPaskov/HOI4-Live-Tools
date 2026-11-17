@@ -127,6 +127,9 @@ already 5 everywhere, queue railway levels along the planned attack axis (a supp
 check).
 
 **Does NOT apply:** states you will lose in the first war (border states of a doomed front): spend nothing there.
+A border is doomed only when the enemy across it can take the state: its side's factories at least our own when
+we attack it, half of ours when we defend (lint `construction.front`, `facts.construction_risk`). A weaker
+neighbour we attack leaves the border states open, and they often hold the best slots.
 
 ## 4. Capital and VP
 
@@ -405,7 +408,7 @@ No tool yet:
 | EC23 | Refineries a year before the war | About 12 refineries from mid-1938 for an Axis major (more if the air force is large); switch the construction MIO to the chemical designer while they build and back after; then cancel rubber imports | GER, ITA, JAP 1938 | FAIR |
 | EC24 | Build in conquered land before its gold | Decisions that seize a capitulated country's gold or reserves lower consumer goods more the more factories you already own there: build military factories in the conquered states first, then click the decision | Germany after Poland and France | FAIR |
 | EC25 | Forward bases before an overseas war | A year before the war: ports on the far shore and the stepping-stone islands, level-2 railways linking every hub and port to the network, motorised hubs, max air bases near the front; spare IC to AA and coastal forts at the exposed bases | Japan 1940 (Malaya, Taiwan, Hainan, Siam), any overseas offensive | FAIR |
-| EC26 | Never build where the front will pass | New factories go behind the planned defence line (the USSR builds east of Moscow, never in the western border states; Japan never in Korea); max infrastructure in the fuel state before the war | Countries expecting an invasion | FAIR |
+| EC26 | Never build where the front will pass | Where an enemy that can take the land will pass (not every border: an attacker builds in its border states): new factories go behind the planned defence line (the USSR builds east of Moscow, never in the western border states; Japan never in Korea); max infrastructure in the fuel state before the war | Countries expecting an invasion | FAIR |
 | EC27 | Re-set the auto-import budget | The budget is a factory count that shrinks when usable civilian factories fall (consumer-goods rises, spirits, lost states) and never grows back by itself; in peace it may buy from future enemies, handing them the factories | After any change in usable civilian factories | FAIR |
 | EC28 | Split long railways | Each project takes at most 15 civilian factories: when free factories exceed 15 per open project, split a long railway into segments so each gets its own 15 | Railway pushes | FAIR |
 | EC29 | Civilian nuclear reactor | Late game, Gotterdammerung only: the nuclear special project `sp_commercial_nuclear_reactor` (after the nuclear reactor project, needs Construction IV) unlocks `commercial_nuclear_reactor`: 35000 cost, one per state (shares the reactor slot group), -50% factory energy use, +15% construction speed, +15% building slots and +10% resources in its state. Put it in the state with the most factories once energy runs short (EC11; `facts states <TAG> --energy`); before that, coal, the energy keystone and dams are cheaper. Built with `hoi4_construction_add` (placement not yet run live); no plan key asks for it | 1942+ economies short of energy | FAIR |

@@ -1419,8 +1419,24 @@
         },
         "ai_baseline_why": {
           "type": "string",
-          "description": "why the plan schedules fewer factories or divisions on a date than the game's own AI reaches as the same country (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json; lint plan.ai_baseline)",
+          "description": "why the plan fields fewer divisions on a date than the game's own AI reaches as the same country (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json; lint plan.ai_baseline). It does not lift the factory floor: only goal.ai_baseline_constraint does",
           "x-owner": "lint"
+        },
+        "ai_baseline_constraint": {
+          "type": "array",
+          "x-owner": "lint",
+          "description": "hard game constraints that keep the plan's factories below the game's own AI on a date, each one the lint confirms (lint plan.ai_baseline): no_free_slots (the forecast finds no free building slot outside the construction risk on or before `date`) or law_unavailable (`law` is not offered to the country, or its gate is closed under the plan's timeline on `date`)",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {"type": "string", "enum": ["no_free_slots", "law_unavailable"], "description": "no_free_slots: the forecast finds no free slot outside the construction risk by `date`; law_unavailable: `law` is not offered or its gate is closed on `date`"},
+              "date": {"type": "string", "description": "the date the constraint holds on (the lint checks it there)"},
+              "law": {"type": "string", "description": "law_unavailable: the law id (common/ideas)"},
+              "why": {"type": "string", "description": "Free text for people and the player; never read by the executor."}
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          }
         },
         "capitulation": {
           "type": "object",

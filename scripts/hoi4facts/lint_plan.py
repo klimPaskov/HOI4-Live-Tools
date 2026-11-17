@@ -44,7 +44,13 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            (ownership, control, variables) while no focus that is certainly available is
                            listed for that time; or a listed focus waits for a prerequisite only the game
                            completes by script
-  construction.front       factory in a state within K province steps of an enemy-held province
+  construction.front       factory in a state at construction risk: within K province steps of the land of an
+                           enemy the plan fights within its horizon whose side (the enemy, its start faction
+                           partners the plan also fights, its subjects and overlord) owns at least
+                           ATTACK_RISK_RATIO (1.0) x our start factories when the plan attacks it, or
+                           DEFEND_RISK_RATIO (0.5) x when it defends (economy.py); adjacency alone is no risk, so an
+                           attacker builds in its border states (facts.construction_risk lists every border state
+                           with its verdict)
   construction.infrastructure  factory in a state with infrastructure <= 2 and no infrastructure
                            queued before it there
   construction.idle        (warning) the executor `construction` list names states but
@@ -375,6 +381,10 @@ production and economy by arithmetic (lint_economy.py); each module's docstring 
   production.missing_line  a family the planned divisions need that no line makes or stocks
   production.need_balance  one family far above its need while another sits far below
   construction.capacity    the factory targets need more slots than the listed states have, no fallback
+  plan.ai_baseline         factory marks, or the forecast of the plan's own levers, below the game's own AI
+  economy.unbacked         (warning) targets above what the plan's own levers give (facts.economy.forecast)
+  economy.below_forecast   (warning) targets below what the plan's own levers give
+  construction.switch      (warning) military factories queued from the first day while the switch is later
 
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
 a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
@@ -394,6 +404,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from hoi4facts import calc as calcmod  # noqa: E402
     from hoi4facts import content, derive, mapgraph, plan_gates, plan_keys, schema_check, script  # noqa: E402
+    from hoi4facts import economy as econmod  # noqa: E402
     from hoi4facts import tech as techrule  # noqa: E402
     from hoi4facts.game import Game  # noqa: E402
     from hoi4facts import research as researchmod  # noqa: E402
@@ -405,6 +416,7 @@ if __package__ in (None, ""):
 else:
     from . import calc as calcmod
     from . import content, derive, mapgraph, plan_gates, plan_keys, schema_check, script
+    from . import economy as econmod
     from . import tech as techrule
     from .game import Game
     from . import research as researchmod
@@ -1096,10 +1108,22 @@ class Lint:
         game = self.game
         kinds = derive.building_kinds(game)
         enemies = self.enemies()
-        front = derive.front_distance(game, self.ctx, self.start, enemies, self.k) if enemies else {}
+        # construction risk, not adjacency: a state is barred only when an enemy side the plan fights within its
+        # horizon is strong enough to take it (economy.construction_risk)
+        risk = econmod.risk_states(self) if (enemies and self.tag and self.world is not None) else \
+            {"enemies": {}, "states": {}}
+        front = {sid: r["steps"] for sid, r in risk["states"].items() if r["risk"]}
+        risk_why = {sid: r["why"] for sid, r in risk["states"].items() if r["risk"]}
         infra = derive.state_buildings(game, self.ctx, self.start)
         states = self.states()
         self.facts["front_states"] = {str(s): d for s, d in sorted(front.items())}
+        self.facts["construction_risk"] = {
+            "enemies": risk["enemies"],
+            "border_states": {str(s): {"steps": r["steps"], "enemy": r["enemy"], "risk": r["risk"]}
+                              for s, r in sorted(risk["states"].items())},
+            "rule": f"barred: own states within {self.k} province steps of an enemy side at least "
+                    f"{econmod.ATTACK_RISK_RATIO} x our start factories when the plan attacks it, "
+                    f"{econmod.DEFEND_RISK_RATIO} x when it defends; other border states are open"}
 
         def infra_of(sid):
             return sum(v for b, v in infra.get(sid, {}).items() if b in kinds["infrastructure"])
@@ -1107,8 +1131,9 @@ class Lint:
         def factory_checks(where, b, sid, infra_first):
             if sid in front:
                 self.add("error", "construction.front", where,
-                         f"{b} in state {sid}: {front[sid]} province step(s) from {'/'.join(enemies)}-held land "
-                         f"(K={self.k})")
+                         f"{b} in state {sid}: {front[sid]} province step(s) from land of an enemy that can take it "
+                         f"({risk_why[sid]}; K={self.k}): build behind it, or in border states no such enemy "
+                         f"threatens (facts.construction_risk)")
             lvl = infra_of(sid)
             if lvl <= LOW_INFRA and not infra_first:
                 self.add("error", "construction.infrastructure", where,

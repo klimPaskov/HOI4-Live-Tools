@@ -445,21 +445,29 @@ class SeededBadPlans(unittest.TestCase):
                  if f["rule"] == "supply.axis_reach" and f["where"].startswith("phases[0].overrides.war")]
         self.assertTrue(found, "the phase override axis to state 271 was not checked")
 
-    def test_factory_on_the_front(self):
+    def test_a_border_state_the_enemy_cannot_take_is_open(self):
+        # Italy attacks an Ethiopia with a tenth of its factories: Eritrea borders the enemy but is no risk
         plan = copy.deepcopy(self.base)
         plan["construction_plan"].append({"id": "cp99_arms_factory_550", "order": 99, "building": "arms_factory",
                                           "state": 550, "when": "1936.01.01"})
-        self.assertRule(plan, "construction.front", "cp99")
-        self.assertRule(plan, "construction.infrastructure", "cp99")  # Eritrea has infrastructure 2
-
-    def test_factory_after_infrastructure_is_only_a_front_problem(self):
-        plan = copy.deepcopy(self.base)
-        plan["construction_plan"] += [
-            {"id": "cp98_infrastructure_550", "order": 98, "building": "infrastructure", "state": 550, "when": ""},
-            {"id": "cp99_arms_factory_550", "order": 99, "building": "arms_factory", "state": 550, "when": ""}]
         rules = {f["rule"] for f in self.new_errors(plan)}
-        self.assertIn("construction.front", rules)
-        self.assertNotIn("construction.infrastructure", rules)
+        self.assertNotIn("construction.front", rules)
+        self.assertRule(plan, "construction.infrastructure", "cp99")  # Eritrea has infrastructure 2
+        risk = lint_plan.lint(plan, self.game)["facts"]["construction_risk"]
+        self.assertFalse(risk["enemies"]["ETH"]["risk"])
+        self.assertFalse(risk["border_states"]["550"]["risk"])
+
+    def test_factory_where_a_stronger_enemy_can_take_it(self):
+        # Ethiopia against an Italy with ten times its factories: the states near Italian land are at risk
+        plan = load(ETH)
+        plan.setdefault("construction_plan", []).append(
+            {"id": "cp99_arms_factory_835", "order": 99, "building": "arms_factory", "state": 835, "when": ""})
+        out = lint_plan.lint(plan, self.game)
+        found = [f for f in out["findings"] if f["rule"] == "construction.front" and "cp99" in f["where"]]
+        self.assertTrue(found)
+        self.assertIn("ITA side", found[0]["message"])
+        self.assertTrue(out["facts"]["construction_risk"]["enemies"]["ITA"]["risk"])
+        self.assertNotIn("271", out["facts"]["front_states"])  # the capital is farther away
 
     def test_tech_from_1940_in_the_1936_block(self):
         techs = self.game.techs()
@@ -510,7 +518,9 @@ class SeededBadPlans(unittest.TestCase):
         gen["war"]["guard_states"] = [550, 559]
         gen["army_layout"] = [e for e in gen["army_layout"] if e["name_hint"] != "Jubaland guard"]
         scores = {(r["area"], r["metric"]): r["score"] for r in eval_plan.evaluate(gen, ref, game=self.game)}
-        for key in [("construction", "front"), ("construction", "rail_first"), ("construction", "factory_infra"),
+        # Eritrea borders a far weaker Ethiopia that Italy attacks: no construction risk there (construction.front)
+        self.assertEqual(scores[("construction", "front")], 1.0)
+        for key in [("construction", "rail_first"), ("construction", "factory_infra"),
                     ("research", "past_start"), ("army", "guard_cover")]:
             self.assertLess(scores[key], 1.0, key)
 
