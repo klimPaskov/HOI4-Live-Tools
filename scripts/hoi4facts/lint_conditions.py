@@ -26,10 +26,11 @@ training lines can field by each day.
                              (`<character> = { is_hired_as_advisor = no }`): the order of the two decides.
   politics.dual_role         (warning) a character the plan both commands with (general or marshal) and hires
                              as an advisor; the game files give him both roles, so plan which one he holds.
-  diplomacy.borders_unheld   (error) a declaration (no accept_widening) whose own border states with the target
-                             and the joiners it accepts, on its date under the plan, include states no army,
-                             task or guard list covers: the executor's war-risk read reports them as
-                             borders_not_held and the declaration waits forever.
+  diplomacy.borders_unheld   (error) a declaration whose own border states with the target (and, without
+                             accept_widening, with the joiners it accepts), on its date under the plan,
+                             include states no army, task or guard list covers: the executor's war-risk read
+                             reports them as borders_not_held and the declaration waits forever, or with
+                             accept_widening the war opens on an empty border.
   plan.stop_date             (error) stop_on_date before the run's horizon while stop_on_date_pause is not false:
                              the run pauses itself there. The detail horizon belongs in _validator.stop_date.
 """
@@ -394,12 +395,13 @@ def borders(lint, tl):
     nb = _state_neighbours(lint)
     covered = _covered_states(lint)
     for i, e in items:
-        if e.get("accept_widening") is True:
-            continue
+        # accept_widening lets the executor declare with weak borders against the joiners it accepts; the
+        # target's own border is still the front the war opens on, so it stays checked
+        widen = e.get("accept_widening") is True
         ds = predicate_days(lint, e.get("when"))
         day = max(ds) if ds else tl.start
         mine = tl.owned(day)
-        theirs_tags = {e["target"]} | {t for t in e.get("joiners_ok") or [] if isinstance(t, str)}
+        theirs_tags = {e["target"]} | (set() if widen else {t for t in e.get("joiners_ok") or [] if isinstance(t, str)})
 
         def theirs(n):  # their land: the start owners minus what the plan expects to hold by then
             return owner0.get(n) in theirs_tags and n not in mine
@@ -416,9 +418,11 @@ def borders(lint, tl):
                      f"states with {', '.join(sorted(theirs_tags))} that no army, task or guard list covers: "
                      f"{', '.join(map(str, empty))}"
                      + (f" (gained under the plan by then: {', '.join(map(str, gained))})" if gained else "")
-                     + ". The executor's war-risk read counts them as borders_not_held (at least 2 divisions per "
-                       "border state, none empty) and the declaration waits; add them to war.guard_states or an "
-                       "army's covers, or set accept_widening with a reason")
+                     + (". accept_widening declares anyway, so the target walks into them on the first day; add "
+                        "them to war.guard_states or an army's covers" if widen else
+                        ". The executor's war-risk read counts them as borders_not_held (at least 2 divisions per "
+                        "border state, none empty) and the declaration waits; add them to war.guard_states or an "
+                        "army's covers, or set accept_widening with a reason (the target's border stays checked)"))
 
 
 # ---------------------------------------------------------------------------------------------- stop date
