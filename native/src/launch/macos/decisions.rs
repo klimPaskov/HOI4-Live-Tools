@@ -2,7 +2,13 @@
 //! decision's row (scrolled into view only while the panel is open) and its
 //! select button. Verified when the decision view shows the decision taken:
 //! a timed entry for it appears, its entry disappears or its button turns
-//! disabled. Lists the offered decisions with the game's enabled state.
+//! disabled. Lists the offered decisions with the game's enabled state and the political power
+//! each costs where its script names a plain number (`cost = 30` in common/decisions).
+//!
+//! The game draws a decision the country cannot afford with an enabled select button: a click
+//! then does nothing. A decision whose cost is above the political power held is refused before
+//! input (`insufficient_political_power`); g17c, 17 Nov 2026: GER_guns_before_butter (cost 30)
+//! was clicked at 3.8, 7.4 and 11.0 political power and read back as not taken each time.
 use super::glide::{glide, span_y, Glide, Glided};
 use super::ui::{clear_notices, decline_stale, read, settled, wait};
 use crate::{
@@ -14,6 +20,47 @@ use crate::{
     xlayout::{self, fld},
 };
 use serde_json::{json, Value};
+use std::collections::HashMap;
+
+/// Political power each decision costs where its script names a plain number, by key (a scripted
+/// or variable cost is not listed).
+pub(super) fn costs_from(entries: &[crate::script::Entry]) -> HashMap<String, f64> {
+    let mut out = HashMap::new();
+    for category in entries {
+        let crate::script::Val::Block(decisions) = &category.val else {
+            continue;
+        };
+        for d in decisions {
+            let crate::script::Val::Block(fields) = &d.val else {
+                continue;
+            };
+            let cost = fields
+                .iter()
+                .find(|f| f.key == "cost")
+                .and_then(|f| match &f.val {
+                    crate::script::Val::Scalar(v) => v.trim().parse::<f64>().ok(),
+                    _ => None,
+                });
+            if let Some(cost) = cost {
+                out.insert(d.key.clone(), cost);
+            }
+        }
+    }
+    out
+}
+
+/// The political power `key` costs (common/decisions of the running game), None when unknown.
+fn cost(process: &dyn Process, key: &str) -> Option<f64> {
+    let dir = super::mgmt::game_dir(process).ok()?;
+    crate::script::cached(&dir, "decision_costs", |d| {
+        costs_from(&crate::script::parse_dir(&d.join("common/decisions")))
+    })
+    .get(key)
+    .copied()
+}
+
+/// Raw engine units per political power point (economy.rs FIXED).
+const PP_UNITS: f64 = 100_000.0;
 
 struct Ui {
     manager: u64,
@@ -209,9 +256,10 @@ pub(super) fn list(process: &dyn Process, keys: &dyn GameInput) -> Result<Value>
     let found = settled(process, "decisions", rows)?;
     Ok(json!(found
         .into_iter()
-        .map(
-            |r| json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled})
-        )
+        .map(|r| {
+            let cost = cost(process, &r.key);
+            json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled,"cost":cost})
+        })
         .collect::<Vec<_>>()))
 }
 
@@ -289,6 +337,17 @@ pub(super) fn take(
             "The game disables this decision (cost, cooldown or conditions)",
         ));
     }
+    if let Some(cost) = cost(process, key) {
+        let held = pp_before as f64 / PP_UNITS;
+        if held + 1e-6 < cost {
+            return Err(Error::new(
+                "insufficient_political_power",
+                format!(
+                    "This decision costs {cost} political power and {held:.1} are held; nothing was clicked"
+                ),
+            ));
+        }
+    }
     // Glide the row into the list area in one movement, only while the panel is open
     // (a row not laid out yet is searched downwards one event at a time).
     let outcome = glide(
@@ -356,6 +415,16 @@ pub(super) fn take(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn costs_are_read_from_plain_numbers_in_the_decision_scripts() {
+        let entries = crate::script::parse(
+            "economy_decisions = { GER_a = { cost = 30 available = { } } GER_b = { cost = var:x } \
+             GER_c = { icon = foo } }",
+        );
+        let c = costs_from(&entries);
+        assert_eq!(c.get("GER_a"), Some(&30.0));
+        assert!(!c.contains_key("GER_b") && !c.contains_key("GER_c"));
+    }
     fn row(key: &str, timed: bool, enabled: bool) -> Row {
         Row {
             key: key.into(),
