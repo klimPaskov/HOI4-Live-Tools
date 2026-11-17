@@ -128,9 +128,44 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
 4. Military factories and dockyards are two pools: a naval line (ships, convoys) in `production` takes
    dockyards and no military factory, and the lint counts each pool on its own. Free dockyards get a line
    (convoys when the theatre is overseas) like free military factories do.
+5. **Force design: the force each planned war needs, by date (`force_design`).** Start from the plan's own
+   wars, not from a division count. Run the lint once on the draft: `facts.force.wars` lists every war it
+   reads from the plan (declarations grouped by day, the war at the start, `war.enemies`), and
+   `facts.force.needs` gives per war the front (targets and bordering joiners, their start divisions, line
+   width, tank battalions, planes by kind, surface fleet, from the history files), the theatre terrain,
+   the military output to its first day and the rows it needs:
+   - **Breakthrough** (offensive wars against a defended line: the front's width fills every strike axis
+     twice over): two mobile divisions per strike axis and at least 15% of the front's divisions, half of
+     them armoured, ready on the war's first day. A breakthrough template takes its techs, its army
+     experience (exercises in peace give it) and 180 days of training: create it a year before the war,
+     not on the day of the war.
+   - **Line infantry** for the rest of the front: artillery, engineers, anti-tank where the front fields
+     tanks, anti-air where the plan cannot win the air, mountaineers or narrow divisions in mountains.
+   - **Air, a first-class arm** (item 20): fighters 1.5x the front's start fighters, as far as 35% of the
+     military output to the war pays (fighters first); once they are paid, one wing of close air support per
+     breakthrough axis; naval bombers and patrol planes for a landing or blockade against a stronger fleet;
+     transports for paratroopers. A war the plan cannot pay air for gets `force_design.air_why`, and
+     anti-air in its divisions.
+   - **Sea:** a landing needs fighters over the beach, naval strike planes or a fleet that wins the sea
+     regions, transports and escorts, dated before it (item 21).
+   - **Garrison** for occupied land (item 23).
+   Then write `force_design`: `wars` [{`id`, `enemies`, `kind`, `axes`, `tasks` phase by phase, `why`}],
+   `land` [{`template`, `role` (breakthrough, exploit, line, assault, mountain, marine, paratrooper,
+   garrison, reserve, anti_tank), `count` (divisions fielded by `ready`, start divisions included), `ready`,
+   `war`, `phase`, `why`}], `air` [{`kind`, `equipment`, `count` (planes by `ready`), `ready`, `war`,
+   `mission`}], `navy` rows, and `budget` [{`from`, `land`, `air`, `navy`, `why`}]: the military factories'
+   split by date with the reason. Then make the rest of the plan carry it out: `training` entries per
+   template sized to its rows (one template is never the whole army), `production` lines for every
+   equipment the rows use, sized from their ready dates back (one line per equipment, shares by need),
+   research that unlocks each template's units and each airframe before its row, `designs` with their
+   experience, `templates[].when` early enough. The lint holds the table to the plan's own arithmetic: the
+   army forecast by template and the lines' output (`force.readiness`, `force.template_late`). The
+   division count against the game's AI is reported, not a floor.
 Resolution: executor `production` (factories per line, `from`), `production_priority`,
-`phases[].overrides.production_priority`, `research_fallback_exclude`, `doctrines` folders; plan.md §12.
-Check: lint `production.factories`, `research.folders`; rubric row 12.
+`phases[].overrides.production_priority`, `research_fallback_exclude`, `doctrines` folders; lint-owned
+`force_design` (wars, land, air, navy, budget); plan.md §12. Check: lint `production.factories`,
+`research.folders`, `force.required`, `force.breakthrough`, `force.single_template`, `force.readiness`,
+`force.template_late`, `force.unused_line`, `force.budget`; rubric rows 6, 12 and 14.
 
 ### 4. Doctrine path
 Read: `research-doctrines-projects.md` §2, §2.2. Facts: `F dossier show 6` (doctrines at start, grand
@@ -869,9 +904,34 @@ Read: `war-air-naval-peace.md` §5; `strategy.md` "Air and naval support". Facts
    less against AA-heavy enemies); naval bombers only against fleets; no strategic bombers in a war shorter
    than a year; bases at 70% capacity or less; logistics strike when no attack runs; interception only
    against bombers; bombers change region at most monthly (AI01-AI14).
+4. **The air force is an arm, not a line item.** From `force_design.air` (item 3.5), each with a date and an
+   owner in the plan:
+   - the factory share for aircraft against land and sea (`force_design.budget`, with the reason), lines
+     ramped from the war date back: a fighter line takes months to reach its output;
+   - airframe research before the row's date and one design per role (modules for the role, the air
+     experience it costs; variants later, never a second airframe for the same role) (item 7);
+   - an air doctrine and its tracks (`doctrines` folder air or `doctrine_defaults.air`), an air chief, a
+     theorist before an expensive adoption;
+   - air bases where the wings must stand: our states on the border with the war's targets, levels at the
+     start plus `construction` queued in time (200 planes a level), never a base in land not yet taken;
+   - radar and state anti-air where the enemy bombs;
+   - fuel for the sorties (refineries, oil trade, `auto_import` with `manage.fuel_floor`) and aluminium and
+     rubber for the plane lines (`F resources <TAG>`);
+   - `air_plan` entries with `deploy` so the planes the lines make become wings (the start wings only refill),
+     wing sizes and the number of wings per region within base capacity.
+5. **Use by phase:** per war and phase, which wings fly which mission over which region from which base:
+   superiority first over the breakthrough axes on the war's first day, then CAS over the same axes, then
+   logistics strike once the front breaks; the superiority and CAS entries follow the front
+   (`follow_region`, or `then_region` with `switch_when`); naval strike and patrol over the sea regions a
+   landing crosses from 50 days before it; what to do when superiority is lost (the air superiority rule
+   stays on: `manage.enemy_air_superiority`, `air_hold_days`). A minor gets a small fighter and support arm
+   it can afford and fuel, or `force_design.air_why`.
 Resolution: executor `air.war_missions`; player `air_plan` (`wing`, `base_state`, `mission`, `region`,
 `switch_when`, `call` `hoi4_air_mission {wing, mission, region}` or `hoi4_air_rebase {wing,
-state_id}`); plan.md §18. Check: lint `schema.player_call`; rubric row 14.
+state_id}`); lint-owned `force_design.air`, `force_design.air_why`; plan.md §18. Check: lint
+`schema.player_call`, `force.air`, `force.air_support`, `force.air_use`, `force.air_deploy`, `force.air_losses`,
+`force.air_bases`, `force.air_research`, `force.air_design`, `force.air_doctrine`, `force.air_fuel`,
+`force.invasion`; rubric row 14.
 
 ### 21. Naval plan
 Read: `war-air-naval-peace.md` §6, §7; `strategy.md` "Naval invasion state machine";

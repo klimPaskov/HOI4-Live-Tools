@@ -54,6 +54,7 @@ How to use it:
 | `L23_invasion_prep_default` | 21 naval plan |
 | `L26_every_resource_has_an_owner` | 13-15 politics; every domain's standing policy |
 | `L28_ask_the_files_before_the_screen` | 12 focus and balance of power (the executor asks `hoi4_focus_available` before it opens a focus; list focuses that can start while the plan is at war) |
+| `L29_design_the_force_from_the_wars` | 3 force posture (3.5 force design), 6 templates, 8 production, 20 air plan |
 
 ## Why each lesson matters
 
