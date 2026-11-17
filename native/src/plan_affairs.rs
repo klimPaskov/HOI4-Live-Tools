@@ -2294,9 +2294,9 @@ fn mio_lines(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
                 "line_takes_no_organization" => {
                     state.done.insert(key, now);
                 }
-                "roster_unreadable" => {
-                    // The tool cannot pick from the line's roster yet: the line is settled and
-                    // named once for the player (the alert stays the game's own reminder).
+                "roster_unreadable" | "row_not_visible" => {
+                    // The tool cannot pick from the line's roster: the line is settled and named
+                    // once for the player (the alert stays the game's own reminder).
                     state.done.insert(key, now);
                     wake(
                         state,
@@ -2305,8 +2305,8 @@ fn mio_lines(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
                         31,
                         &format!("mio_line:{handle}"),
                         format!(
-                            "production line {equipment} has no organisation and the tools cannot \
-                             attach one yet: attach it in the game (the line's organisation \
+                            "production line {equipment} has no organisation and the tools could \
+                             not attach one: attach it in the game (the line's organisation \
                              button){}",
                             org.as_deref()
                                 .map(|o| format!("; the plan names {o}"))

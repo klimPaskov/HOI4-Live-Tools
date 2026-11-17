@@ -458,6 +458,27 @@ pub(super) fn debug_list(process: &dyn Process) -> Result<Value> {
         Ok(json!({"list": format!("{list:#x}"), "kids": kids, "vectors": vectors}))
     })
 }
+/// Probe-only (`dbg_line_roster`): the roster a production line opens, as the line tool reads it.
+pub(super) fn debug_line_roster(process: &dyn Process) -> Result<Value> {
+    read(process, |r, i| {
+        let Some(roster) = line_roster(r, i)? else {
+            return Ok(json!({"roster": null}));
+        };
+        let rows: Vec<Value> = roster
+            .rows
+            .iter()
+            .map(|row| {
+                json!({"name": row.name, "organisation": row.organisation,
+                "rect": row.rect.map(|x| [x.x, x.y, x.w, x.h])})
+            })
+            .collect();
+        Ok(
+            json!({"open": roster.open, "list": roster.list.map(|x| [x.x, x.y, x.w, x.h]),
+            "rows": rows}),
+        )
+    })
+}
+
 /// Probe-only (`dbg_find_text:TEXT`): pointer paths (up to depth 4) from the organisation list
 /// widget to a string equal to TEXT.
 pub(super) fn debug_find_text(process: &dyn Process, text: &str) -> Result<Value> {
@@ -972,17 +993,175 @@ fn close_lists(process: &dyn Process, keys: &dyn GameInput) {
     }
 }
 
-/// Attach an organisation to an own production line. The politics view's organisation slots
-/// only browse the rosters (live pp4, 17 Nov 2026: a row click there changed nothing): the game
-/// assigns an organisation from a task, and for production that is the line's
-/// `attach_manufacturer` button, which opens the roster of the organisations able to make that
-/// equipment. A production line costs no political power (ASSIGN_INDUSTRIAL_MANUFACTURER_PP_COST_
-/// PER_DAY 0) and task capacity is off (ENABLE_TASK_CAPACITY false) in 1.19.4.1, so any offered
-/// row can take the line. `display` None takes the first row the roster offers. Verified by the
-/// line's own row turning to the attached state (`has_mio_background`).
-/// Whether the roster a production line opens can be read row by row. It cannot yet (no row
-/// reader for its layout), so the line tool reads and reports the line's own state only.
-const ROSTER_FROM_LINE_READABLE: bool = false;
+/// The roster a production line's organisation button opens. The production view keeps its own
+/// COrganisationListWindow (macOS 1.19.4.1, pp13 17 Nov 2026: embedded at view +0x2030; its root
+/// container at +0xf0 is made the first time the roster opens). Its `organisation_list` is a
+/// smooth listbox whose rows are not GUI children: the listbox object (the widget itself) keeps
+/// a linked list of its COrganisationListItem objects, head node at +0xa0 and the count at
+/// +0xb0, node = {item, prev, next}; each item's row window is at item +0x58 (name,
+/// details_button, background_button). The first row, "Produce without a Military Industrial
+/// Organization", has no details button: clicking it removes the line's organisation.
+const LINE_ROSTER_AT: u64 = 0x2030;
+/// How far into the production view the roster is looked for on a build where it moved.
+const LINE_ROSTER_SPAN: u64 = 0x10000;
+const ROSTER_ROOT: u64 = 0xf0;
+const LISTBOX_VTABLE: u64 = 0x36cbb20;
+const LISTBOX_ITEMS: u64 = 0xa0;
+const LISTBOX_COUNT: u64 = 0xb0;
+const NODE_NEXT: u64 = 0x10;
+const ITEM_FRAME: u64 = 0x58;
+/// Rows drawn in full in the roster's 552 px list at ROW_HEIGHT each.
+const ROSTER_ROWS_DRAWN: usize = 5;
+
+#[derive(Debug, Clone, PartialEq)]
+struct RosterRow {
+    name: String,
+    /// An organisation row (it has a details button); false for the "produce without" row.
+    organisation: bool,
+    rect: Option<gui_tree::Rect>,
+}
+#[derive(Debug, Clone, PartialEq)]
+struct LineRoster {
+    open: bool,
+    close: Option<gui_tree::Rect>,
+    list: Option<gui_tree::Rect>,
+    rows: Vec<RosterRow>,
+}
+
+fn roster_object(r: &Reader<'_>, i: u64) -> Result<Option<u64>> {
+    let view = super::production::view(r, i)?;
+    let want = i + img(r.string_abi(), pk::MIO_LIST.vtable)?;
+    if r.u64(view + LINE_ROSTER_AT).ok() == Some(want) {
+        return Ok(Some(view + LINE_ROSTER_AT));
+    }
+    // another build: the first embedded roster whose root is laid out
+    let mut at = 0u64;
+    while at < LINE_ROSTER_SPAN {
+        if let Ok(bytes) = r.read(view + at, 0x400) {
+            for (k, c) in bytes.chunks_exact(8).enumerate() {
+                let obj = view + at + k as u64 * 8;
+                if u64::from_le_bytes(c.try_into().unwrap()) == want
+                    && r.u64(obj + ROSTER_ROOT).unwrap_or(0) != 0
+                {
+                    return Ok(Some(obj));
+                }
+            }
+        }
+        at += 0x400;
+    }
+    Ok(None)
+}
+
+/// The production roster as drawn: None until it has been opened once on this game.
+fn line_roster(r: &Reader<'_>, i: u64) -> Result<Option<LineRoster>> {
+    let Some(obj) = roster_object(r, i)? else {
+        return Ok(None);
+    };
+    let p = r.u64(obj + ROSTER_ROOT)?;
+    if p == 0 {
+        return Ok(None);
+    }
+    let Some(root) = gui_tree::container(r, p, i)? else {
+        return Ok(None);
+    };
+    let open = match pk::find(r, i, root, "organisations", 1)? {
+        Some(w) => gui_tree::shown(r, w)?,
+        None => false,
+    };
+    let close = pk::find(r, i, root, "close_button", 3)?
+        .and_then(|c| gui_tree::rect(r, i, c, pk::GAME).ok());
+    let list = pk::need(r, i, root, "organisation_list", 3)?;
+    if r.u64(list)? != i + img(r.string_abi(), LISTBOX_VTABLE)? {
+        return Err(Error::new(
+            "roster_unreadable",
+            "The production roster's organisation_list is not the reviewed smooth listbox",
+        ));
+    }
+    let count = r.u64(list + LISTBOX_COUNT)?;
+    if count > 64 {
+        return Err(Error::new(
+            "roster_unreadable",
+            "Roster row count out of bounds",
+        ));
+    }
+    let mut rows = Vec::new();
+    let mut node = r.u64(list + LISTBOX_ITEMS)?;
+    for _ in 0..count {
+        let item = r.u64(node)?;
+        let frame = gui_tree::container(r, r.u64(item + ITEM_FRAME)?, i)?
+            .ok_or_else(|| Error::new("roster_unreadable", "Roster row window not found"))?;
+        let name = pk::text(r, i, frame, "name", 2)?.unwrap_or_default();
+        let organisation = match pk::find(r, i, frame, "details_button", 2)? {
+            Some(d) => gui_tree::shown(r, d)?,
+            None => false,
+        };
+        let rect = pk::find(r, i, frame, "background_button", 2)?
+            .and_then(|b| gui_tree::rect(r, i, b, pk::GAME).ok());
+        rows.push(RosterRow {
+            name,
+            organisation,
+            rect,
+        });
+        node = r.u64(node + NODE_NEXT)?;
+    }
+    // The list's place in the 550-wide window, anchored on the close button (see list_rect).
+    let list_at = close.map(|c| gui_tree::Rect {
+        x: c.x - 512 + 10,
+        y: c.y - 4 + 92,
+        w: 515,
+        h: 552,
+    });
+    Ok(Some(LineRoster {
+        open,
+        close,
+        list: list_at,
+        rows,
+    }))
+}
+
+/// Where row `k` of a roster wheeled to its top is clicked: on its background (not its details
+/// button). None when the row is not drawn in full.
+fn roster_row_point(list: gui_tree::Rect, k: usize) -> Option<(f64, f64)> {
+    (k < ROSTER_ROWS_DRAWN && (k as i32 + 1) * ROW_HEIGHT <= list.h).then(|| {
+        (
+            f64::from(list.x + 200),
+            f64::from(list.y + ROW_HEIGHT * k as i32 + 30),
+        )
+    })
+}
+
+/// The row to take: the organisation named `display`, else the first organisation offered.
+fn roster_pick(rows: &[RosterRow], display: Option<&str>) -> std::result::Result<usize, String> {
+    let offered: Vec<&str> = rows
+        .iter()
+        .filter(|r| r.organisation)
+        .map(|r| r.name.as_str())
+        .collect();
+    let found = rows
+        .iter()
+        .position(|r| r.organisation && display.is_none_or(|d| loc::same(&r.name, d)));
+    found.ok_or_else(|| {
+        if offered.is_empty() {
+            "the roster offers no organisation for this equipment".to_string()
+        } else {
+            format!("offered: {}", offered.join(", "))
+        }
+    })
+}
+
+fn close_line_roster(process: &dyn Process, keys: &dyn GameInput) {
+    let open = |r: &Reader<'_>, i: u64| Ok(line_roster(r, i)?.is_some_and(|x| x.open));
+    if read(process, open).unwrap_or(false) {
+        let _ = pk::click(process, keys, "close organisation roster", |r, i| {
+            line_roster(r, i)?
+                .and_then(|x| x.close)
+                .ok_or_else(|| Error::new("gui_target_unavailable", "Roster close button"))
+        });
+        let _ = wait(process, "organisation roster closed", |r, i| {
+            Ok(!open(r, i)?)
+        });
+    }
+}
 
 /// Where a button drawn at LINE_BUTTON_SCALE shows inside its full-size rect: the scaled
 /// square at the rect's bottom-left corner.
@@ -997,6 +1176,16 @@ fn logo_square(rect: gui_tree::Rect) -> gui_tree::Rect {
     }
 }
 
+/// Attach an organisation to an own production line. The politics view's organisation slots
+/// only browse the rosters (live pp4, 17 Nov 2026: a row click there changed nothing): the game
+/// assigns an organisation from a task, and for production that is the line's
+/// `attach_manufacturer` button, which opens the roster of the organisations able to make that
+/// equipment. A production line costs no political power (ASSIGN_INDUSTRIAL_MANUFACTURER_PP_COST_
+/// PER_DAY 0) and task capacity is off (ENABLE_TASK_CAPACITY false) in 1.19.4.1, so any offered
+/// row can take the line. `display` None takes the first organisation the roster offers. The
+/// rows are read from memory before any row click, and a row is clicked only when it is an
+/// organisation row drawn in full with the list wheeled to its top. Verified by the line's own
+/// row turning to the attached state (`has_mio_background`).
 fn line_assign(
     process: &dyn Process,
     keys: &dyn GameInput,
@@ -1025,122 +1214,140 @@ fn line_assign(
         if before.attached && !list_only {
             return Ok(json!({"assigned": true, "already_attached": true}));
         }
-        if list_only {
-            return Ok(json!({"listing_only": true, "attached": before.attached,
-                "verification": "line_row"}));
-        }
-        if !ROSTER_FROM_LINE_READABLE {
-            return Err(refuse(
-                "roster_unreadable",
-                "The organisation roster a production line opens is not read yet (its rows are \
-                 not the politics roster's grid, and its first entry is \"Produce without a \
-                 Military Industrial Organization\": pp9, 17 Nov 2026, a blind first-row click \
-                 removed the rifle line's organisation). Nothing was changed; attach it in the \
-                 game from the line's organisation button",
-            ));
-        }
+        close_line_roster(process, keys);
         let button = if before.attached {
             "change_manufacturer"
         } else {
             "attach_manufacturer"
         };
+        // The last line cannot be wheeled higher than the screen's bottom edge (a new line is
+        // always last), and its drawn button is then cut by the edge (pp14, 17 Nov 2026: drawn at
+        // 203,1076 6x6, the click opened nothing). Such a line is moved to the top for the
+        // roster and back to the bottom afterwards, so the line order is as before.
+        let drawn_on_screen = |r: &Reader<'_>, i: u64| {
+            Ok(super::production::shown_button(r, i, handle, button)?
+                .is_some_and(|b| super::production::in_list(logo_square(b))))
+        };
+        if !read(process, drawn_on_screen)? {
+            let last = read(process, |r, i| {
+                Ok(super::production::shown_order(r, i)?.last() == Some(&handle))
+            })?;
+            if !last {
+                return Err(refuse(
+                    "row_not_visible",
+                    "The line's organisation button is not wholly on screen",
+                ));
+            }
+            super::production::prioritize(process, keys, handle, super::production::Move::Top)?;
+            MOVED_LINE.store(handle, std::sync::atomic::Ordering::Relaxed);
+            super::production::reveal_named(process, keys, handle, button, 20)?;
+            if !read(process, drawn_on_screen)? {
+                return Err(refuse(
+                    "row_not_visible",
+                    "The line's organisation button is not wholly on screen at the top",
+                ));
+            }
+        }
+
         // The button is drawn at scale 0.45 (countryproductionlineview.gui) while its rect keeps
         // the sprite's full size, and the drawing shrinks toward the rect's bottom-left corner
         // (pp8, 17 Nov 2026: rect 203,338 63x63, logo drawn about 216,386; the rect's centre
-        // missed it). The drawn square is clicked first, the rect's centre second.
-        let mut opened = Err(Error::new("input_readback_failed", "not tried"));
-        let tried: RefCell<Vec<String>> = RefCell::new(Vec::new());
-        for drawn in [true, false] {
-            pk::click(process, keys, "line organisation button", |r, i| {
-                let rect =
-                    super::production::shown_button(r, i, handle, button)?.ok_or_else(|| {
-                        Error::new("gui_target_unavailable", "Organisation button not shown")
-                    })?;
-                let rect = if drawn { logo_square(rect) } else { rect };
-                tried.borrow_mut().push(format!(
-                    "{button} {},{} {}x{}",
-                    rect.x, rect.y, rect.w, rect.h
-                ));
-                Ok(rect)
+        // missed it). Only the drawn square is clicked: it opens the roster and changes nothing.
+        let rect = pk::click(process, keys, "line organisation button", |r, i| {
+            let rect = super::production::shown_button(r, i, handle, button)?.ok_or_else(|| {
+                Error::new("gui_target_unavailable", "Organisation button not shown")
             })?;
-            opened = wait(process, "open organisation list", |r, i| {
-                pk::is_open(r, i, &pk::MIO_LIST)
-            });
-            if opened.is_ok() {
-                break;
-            }
-        }
-        opened.map_err(|e| {
-            let last: Vec<String> = tried.borrow().iter().rev().take(2).cloned().collect();
-            Error::new(e.code, format!("{} (rects {})", e.message, last.join("; ")))
+            Ok(logo_square(rect))
         })?;
-        OPEN_SLOT.store(usize::MAX, std::sync::atomic::Ordering::Relaxed);
-        pause(500);
+        wait(process, "open organisation roster", |r, i| {
+            Ok(line_roster(r, i)?.is_some_and(|x| x.open && !x.rows.is_empty()))
+        })
+        .map_err(|e| {
+            Error::new(
+                e.code,
+                format!(
+                    "{} (drawn button {},{} {}x{})",
+                    e.message, rect.x, rect.y, rect.w, rect.h
+                ),
+            )
+        })?;
+        pause(300);
+        let roster = read(process, |r, i| {
+            line_roster(r, i)?.ok_or_else(|| Error::new("roster_unreadable", "Roster not laid out"))
+        })?;
+        let offered: Vec<String> = roster
+            .rows
+            .iter()
+            .filter(|x| x.organisation)
+            .map(|x| x.name.clone())
+            .collect();
         if list_only {
-            let offered = match row_by_details(process, keys, "\u{1}") {
-                Err(Fail::Refused(e)) => e.message,
-                Ok(_) => String::new(),
-                Err(other) => return Err(other),
-            };
-            close_lists(process, keys);
             return Ok(json!({"listing_only": true, "attached": before.attached,
-                "offered": offered}));
+                "offered": offered, "verification": "roster_rows"}));
         }
-        let on_screen: Option<usize> = match display {
-            Some(name) => {
-                if rows_readable(process) {
-                    require_row(process, keys, name)?
-                } else {
-                    Some(row_by_details(process, keys, name)?)
-                }
-            }
-            None => {
-                // first row: the list wheeled to its top so the rows line up
-                let list = read(process, list_rect)?;
-                let centre = (
-                    f64::from(list.x + list.w / 2),
-                    f64::from(list.y + list.h / 2),
-                );
-                keys.scroll_burst(pk::GAME, centre, ROW_HEIGHT, 40)?;
-                pause(500);
-                Some(0)
-            }
-        };
-        let row_name = if let Some(k) = on_screen {
-            let name = if display.is_some() {
-                read(process, detail_name).unwrap_or_default()
-            } else {
-                read(process, |r, i| find_row(r, i, "\u{1}"))
-                    .ok()
-                    .and_then(|(seen, _)| seen.first().cloned())
-                    .unwrap_or_default()
-            };
-            close_detail(process, keys);
-            let list = read(process, list_rect)?;
-            keys.click(
-                pk::GAME,
-                f64::from(list.x + 200),
-                f64::from(list.y + ROW_HEIGHT * k as i32 + 30),
-            )?;
-            name
-        } else {
-            let name = display.unwrap_or_default().to_string();
-            pk::click(process, keys, "organisation row", |r, i| {
-                row_rect(r, i, &name, "background_button")
+        let k = roster_pick(&roster.rows, display)
+            .map_err(|why| Fail::Refused(Error::new("organization_not_offered", why)))?;
+        let list = roster
+            .list
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Roster list not placed"))?;
+        // wheel the list to its top so the rows sit at their places, then read them again
+        let centre = (
+            f64::from(list.x + list.w / 2),
+            f64::from(list.y + list.h / 2),
+        );
+        keys.scroll_burst(pk::GAME, centre, ROW_HEIGHT, 40)?;
+        pause(500);
+        let again = read(process, |r, i| {
+            line_roster(r, i)?.ok_or_else(|| Error::new("roster_unreadable", "Roster not laid out"))
+        })?;
+        let row = again
+            .rows
+            .get(k)
+            .filter(|x| x.organisation && x.name == roster.rows[k].name && again.open)
+            .ok_or_else(|| {
+                Error::new(
+                    "input_readback_failed",
+                    "The roster changed before the row click",
+                )
             })?;
-            name
+        let Some((x, y)) = roster_row_point(list, k) else {
+            return Err(refuse(
+                "row_not_visible",
+                format!("{} is row {} of the roster, below the rows drawn in full; attach it in the game", row.name, k + 1),
+            ));
         };
+        keys.click(pk::GAME, x, y)?;
         let attached = wait(process, "line organisation attached", |r, i| {
             Ok(super::production::line_mio(r, i, handle)?.is_some_and(|m| m.attached))
         })
         .is_ok();
         Ok(json!({"assigned": attached,
             "attached_before": before.attached, "attached_after": attached,
-            "row": row_name, "verification": "line_row"}))
+            "row": row.name, "row_index": k, "offered": offered, "verification": "line_row"}))
     })();
+    close_line_roster(process, keys);
     close_lists(process, keys);
+    let moved = MOVED_LINE.swap(0, std::sync::atomic::Ordering::Relaxed);
+    if moved == handle {
+        let back =
+            super::production::prioritize(process, keys, handle, super::production::Move::Bottom);
+        return match (result, back) {
+            (Ok(mut v), Ok(())) => {
+                v["moved_to_top_and_back"] = json!(true);
+                Ok(v)
+            }
+            (Ok(mut v), Err(e)) => {
+                v["moved_to_top_and_back"] = json!(false);
+                v["priority_not_restored"] = json!(e.message);
+                Ok(v)
+            }
+            (Err(e), _) => Err(e),
+        };
+    }
     result
 }
+/// The line moved to the top for its roster, to be put back last (0: none).
+static MOVED_LINE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 // ------------------------------------------------------------------ policy
 
@@ -1632,13 +1839,50 @@ pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name":"hoi4_mio_design_team","description":"Browse only, assigns nothing (live pp4, 17 Nov 2026): the politics view's organisation slots open a roster to look at; the game assigns an organisation from a task (a production line: hoi4_mio_line; a technology; a design). Kept for older plans: put a military-industrial organisation into a design-team slot of the politics view: Q politics view, the slot's roster button (the `slot`-th shown organisation slot, default 0), the organisation's row in the list (found by its localised name; `organization` is the script key from hoi4_mios, e.g. GER_porsche_organization). Typed refusals: organization_unknown, organization_not_allowed (allowed block rules the tag out) before input; mio_system_absent (the politics view shows no organisation slot: the organisation system is not in use in this game, designers are ideas, use hoi4_politics_choose), slot_unknown, organization_not_offered (lists the rows) found from the windows before the first state-changing click. Verified only by the list closing (political power before/after is recorded): verification gui_only. Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_policy","description":"UNVALIDATED (no live test yet): attach a policy to an organisation: politics view, the slot's roster, the organisation's details button, Open policies, the policy row (by localised name). `organization` and `policy` are script keys (mio_policy_general_ruthless_contracts, ...). Typed refusals: organization_unknown, organization_not_allowed, policy_unknown (before input); mio_system_absent, slot_unknown, organization_not_offered, policy_not_offered (lists the rows) from the windows before the click. Verified from the detail window's attached policy name only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"policy":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","policy","request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_mio_line","description":"Reads one own production line's organisation state through the game's own row (live pp5-pp9, 17 Nov 2026): a line that has an organisation answers assigned, already_attached (Verified from the row's has_mio_background / change_manufacturer state); list:true answers attached true/false and opens nothing. Attaching to a line without one is refused roster_unreadable, nothing changed: the roster the line's button opens (only the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry) has no row reader yet, and a blind row click removed an organisation live. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment); roster_unreadable.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_mio_line","description":"Attach an organisation to an own production line with ordinary input, or read the line's state. The production line's organisation button (drawn at scale 0.45 in its rect's bottom-left corner) opens the roster of the organisations that make that equipment, under a 'Produce without a Military Industrial Organization' entry; its rows are read from memory (name, organisation or not) before any row click, the list is wheeled to its top, read again, and only an organisation row drawn in full is clicked (live pp14, 17 Nov 2026: Rheinmetall attached to a new anti-air line). The last line, whose button the screen edge cuts, is moved to the top for the roster and back to the bottom after. `organization` (localised name or key) picks the row, else the first organisation offered. A line that has an organisation answers assigned, already_attached without input. list:true opens the roster, answers attached and offered (the organisations' names) and closes it, changing nothing. Verified from the line's own row (has_mio_background). A line costs no political power. The politics view's organisation slots only browse rosters. The line is addressed like hoi4_production_set (line = entry_index from hoi4_production_lines, with its equipment). Typed refusals: invalid_target, organization_unknown, organization_not_allowed (before input); line_takes_no_organization (no organisation makes the equipment); organization_not_offered (the roster's organisations named); row_not_visible (the row is below the five drawn in full); roster_unreadable (the roster's layout is not the reviewed one).","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"organization":{"type":"string","maxLength":128},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_mio_trait","description":"Live-verified (6 Nov 2026 on 1.19.4 with 10 DLCs: a trait queued, read back by reopening the detail window): queue a trait of an organisation's trait tree: politics view, the slot's roster, the organisation's details button, the trait icon at `trait_index` (0-based in the order the tree window lists its entries; trait entries carry no text, so call with list:true first: it returns each entry's index, enabled state, queue number and whether it is visible, changing nothing). Exactly one of trait_index and list. Typed refusals: organization_unknown, organization_not_allowed (before input); mio_system_absent, slot_unknown, organization_not_offered, trait_unknown, trait_already_queued, trait_unavailable, trait_not_visible from the windows before the click. Verified from the entry's queue number only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"organization":{"type":"string","maxLength":128},"trait_index":{"type":"integer","minimum":0,"maximum":63},"list":{"type":"boolean"},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["organization","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
 #[cfg(test)]
 mod tests {
+    fn row(name: &str, organisation: bool) -> super::RosterRow {
+        super::RosterRow {
+            name: name.into(),
+            organisation,
+            rect: None,
+        }
+    }
+
+    #[test]
+    fn the_production_roster_never_picks_the_produce_without_row() {
+        let rows = [
+            row("Produce without a Military Industrial Organization", false),
+            row("Rheinmetall", true),
+            row("Krupp", true),
+        ];
+        assert_eq!(super::roster_pick(&rows, None), Ok(1));
+        assert_eq!(super::roster_pick(&rows, Some("Krupp")), Ok(2));
+        let why = super::roster_pick(&rows, Some("Mauser")).unwrap_err();
+        assert!(why.contains("Rheinmetall, Krupp"), "{why}");
+        let none = super::roster_pick(&rows[..1], None).unwrap_err();
+        assert!(none.contains("no organisation"), "{none}");
+    }
+
+    #[test]
+    fn only_rows_drawn_in_full_are_clicked() {
+        let list = super::gui_tree::Rect {
+            x: 550,
+            y: 172,
+            w: 515,
+            h: 552,
+        };
+        // live pp13: row 1 (Rheinmetall) drawn about 313..394 in game pixels
+        assert_eq!(super::roster_row_point(list, 1), Some((750.0, 302.0)));
+        assert_eq!(super::roster_row_point(list, 4), Some((750.0, 602.0)));
+        assert_eq!(super::roster_row_point(list, 5), None);
+    }
+
     #[test]
     fn the_line_logo_is_the_scaled_square_at_the_bottom_left() {
         let r = super::logo_square(super::gui_tree::Rect {
@@ -1755,7 +1999,7 @@ mod tests {
             } else if t["name"] == "hoi4_mio_design_team" {
                 assert!(description.starts_with("Browse only, assigns nothing"));
             } else if t["name"] == "hoi4_mio_line" {
-                assert!(description.starts_with("Reads one own production line's organisation"));
+                assert!(description.starts_with("Attach an organisation to an own production line"));
             } else {
                 assert!(description.starts_with("UNVALIDATED (no live test yet):"));
             }

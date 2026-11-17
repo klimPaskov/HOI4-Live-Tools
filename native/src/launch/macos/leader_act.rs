@@ -1,7 +1,8 @@
-//! Unit-leader trait assignment with ordinary input: `hoi4_general_trait`. UNVALIDATED: written
-//! from `interface/armytraittreewindow.gui`, `interface/traittreewindow_common.gui`,
-//! `interface/leadergroups.gui` and `interface/unitleaderwindow.gui`; no live run has located the
-//! trait tree window yet (see the TODO-live constants below).
+//! Unit-leader trait assignment with ordinary input: `hoi4_general_trait`. Written from
+//! `interface/armytraittreewindow.gui`, `interface/traittreewindow_common.gui`,
+//! `interface/leadergroups.gui` and `interface/unitleaderwindow.gui`; live-verified on macOS
+//! 1.19.4.1 (pp13, 17 Nov 2026: the tree listed for Erich von Manstein, then Fortress Buster
+//! bought, command power 16 -> 1, the entry owned).
 //!
 //! The game charges NDefines.NMilitary.UNIT_LEADER_ASSIGN_TRAIT_COST command power (15 in
 //! 1.19.4) for an assignable trait (`trait_type = assignable_trait` or
@@ -252,35 +253,36 @@ pub(super) fn cp_refusal(
 // --------------------------------------------------------------- the window
 
 const TREE_ROOT: &str = "unitleader_trait_tree_window";
-/// TODO-live: the trait tree window's class (RTTI name and image-relative vtable are unknown;
-/// `dbg_owner:VTABLE` once the vtable is seen). 0 = not mapped: the class lookup is skipped.
+/// The trait tree window's class: a persistent view of the interface manager (macOS 1.19.4.1,
+/// pp12 17 Nov 2026: CArmyLeaderTraitWindow at manager slot 0x2b0, its root container at +0x60;
+/// the CUnitLeaderTraitTree objects of its two tree panels are made while it is open).
 const TREE_CLASS: pk::Class = pk::Class {
-    name: "CUnitLeaderTraitTreeWindow",
-    vtable: 0,
+    name: "CArmyLeaderTraitWindow",
+    vtable: 0x3640050,
     root_name: TREE_ROOT,
 };
-/// TODO-live: fixed paths to the window's root container: (interface-manager slot, the fields
-/// followed from the slot's view; the last word read is the root container pointer). Find them
-/// with `dbg_views` (the slot whose view owns it) and
-/// `dbg_find_root:SLOTHEX:unitleader_trait_tree_window` while the window is open
-/// ("A->B" = &[A, B]). Empty: the window is looked for in the pop-up list and the manager
-/// slots, then once by a two-level search (remembered for this server life).
-const TREE_PATHS: &[(u64, &[u64])] = &[];
+/// Fixed paths to the window's root container: (interface-manager slot, the fields followed
+/// from the slot's view; the last word read is the root container pointer). macOS 1.19.4.1:
+/// slot 0x2b0 holds CArmyLeaderTraitWindow, root at +0x60 (pp12, 17 Nov 2026,
+/// `dbg_find_root:2b0:unitleader_trait_tree_window`). Another build falls back to the class
+/// lookup, the pop-up list and the manager slots, then a two-level search (remembered).
+const TREE_PATHS: &[(u64, &[u64])] = &[(0x2b0, &[0x60])];
 /// Interface manager of the in-game idler (the same reviewed field panelkit reads).
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
 const MANAGER: u64 = 0x670;
 const MANAGER_SCAN: usize = 0x400;
 /// Root-container fields seen on reviewed windows (views +0x490/+0x430, pop-ups +0x20..+0x30,
-/// child windows +0x50/+0x68...).
-const ROOT_OFFSETS: [u64; 12] = [
-    0x490, 0x430, 0x20, 0x28, 0x30, 0x50, 0x68, 0x70, 0x78, 0x8, 0x10, 0x18,
+/// child windows +0x50/+0x68..., the trait window +0x60). Searched by the root's .gui name, so a
+/// build whose slot moved is still found.
+const ROOT_OFFSETS: [u64; 13] = [
+    0x60, 0x490, 0x430, 0x20, 0x28, 0x30, 0x50, 0x68, 0x70, 0x78, 0x8, 0x10, 0x18,
 ];
 /// (slot, field, root field) found by the two-level search.
 static LEARNED: Mutex<Option<(u64, u64, u64)>> = Mutex::new(None);
 
 /// armytraittreewindow.gui geometry, anchored on the close button (x = -44 from the right edge,
 /// y = 11, window 1340 wide): the scrolled panels regular_traits (294,110 636x640) and
-/// terrain_traits (939,110 410x640). TODO-live: confirm the clip against a drawn window.
+/// terrain_traits (939,110 410x640); an entry click inside it bought a trait live (pp13, 17 Nov 2026).
 const WINDOW_W: i32 = 1340;
 const CLOSE_AT: (i32, i32) = (44, 11);
 const REGULAR_CLIP: (i32, i32, i32, i32) = (294, 110, 636, 640);
@@ -289,7 +291,7 @@ const TERRAIN_CLIP: (i32, i32, i32, i32) = (939, 110, 410, 640);
 /// The commander list row's `traits_btn` (unitleaderwindow.gui 318,56, 96 px left of
 /// promote_btn) from the row's leader_button rectangle, the way armies.rs places Promote
 /// (centre 402 px right, 22 px up from the portrait's bottom, measured live 1 Nov 2026).
-/// TODO-live: confirm the centre (306, 22) on a drawn row.
+/// Live pp13 (17 Nov 2026): the Traits button opened the tree from a commander list row.
 const TRAITS_BTN_CENTRE: (f64, f64) = (306.0, 22.0);
 
 fn plausible(p: u64) -> bool {
@@ -1130,7 +1132,7 @@ pub(super) fn call(
 
 pub(super) fn tools() -> Vec<Value> {
     vec![
-        json!({"name":"hoi4_general_trait","description":"UNVALIDATED (no live test yet): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost.","inputSchema":{"type":"object","properties":{"general":{"type":"string","maxLength":128},"trait":{"type":"string","maxLength":128},"prefer":{"type":"array","items":{"type":"string","maxLength":128},"maxItems":24},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["general","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_general_trait","description":"Live-verified (pp13, 17 Nov 2026: a list and an assignment): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines; 15 in 1.19.4) with the game's own trait tree window: the card's trait button when the general leads an army or army group, else an own army's panel, its commander list and the general's Traits button; then the trait's entry in the tree. `general` is the name hoi4_commanders lists; `trait` is an assignable trait's script key or localised name (from common/unit_leader, so mods work); without `trait` the first trait the tree lets the general pick is taken, the earliest of `prefer` (keys or names) first. list:true opens the tree and returns every entry (name, script key, assignable, state owned/available/locked, can_pick), the free trait slots shown, command power and the cost, changing nothing. Typed refusals before input: unknown_commander (closest names), trait_unknown, trait_not_assignable (a trait the game grants), insufficient_command_power (\"costs N command power and M are held\"), catalog_unavailable; from the window before the click: no_own_army, general_not_listed, wrong_leader, trait_not_offered (lists the tree), trait_owned, trait_unavailable, no_free_trait_slot, no_enabled_trait, trait_not_visible. Verified by the entry turning to the owned state, else by command power dropping by about the cost.","inputSchema":{"type":"object","properties":{"general":{"type":"string","maxLength":128},"trait":{"type":"string","maxLength":128},"prefer":{"type":"array","items":{"type":"string","maxLength":128},"maxItems":24},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["general","request_id","lease_token"],"additionalProperties":false}}),
     ]
 }
 
@@ -1340,12 +1342,12 @@ mod tests {
     }
 
     #[test]
-    fn descriptors_are_unvalidated_and_lease_gated() {
+    fn descriptors_are_live_verified_and_lease_gated() {
         for t in tools() {
             assert!(t["description"]
                 .as_str()
                 .unwrap()
-                .starts_with("UNVALIDATED (no live test yet): "));
+                .starts_with("Live-verified (pp13, 17 Nov 2026"));
             assert!(t["inputSchema"]["required"]
                 .as_array()
                 .unwrap()
