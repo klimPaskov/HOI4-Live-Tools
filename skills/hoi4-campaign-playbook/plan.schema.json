@@ -2974,7 +2974,8 @@
               "convoys",
               "fuel",
               "balance",
-              "dockyards"
+              "dockyards",
+              "doctrines"
             ]
           }
         },
@@ -3295,7 +3296,13 @@
               "minimum": 0
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": {
+            "army": 30,
+            "navy": 0,
+            "air": 0
+          },
+          "x-rule": "doctrines"
         }
       },
       "additionalProperties": false,

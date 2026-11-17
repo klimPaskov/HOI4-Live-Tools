@@ -413,7 +413,7 @@ class CoverageKeys(unittest.TestCase):
         self.assertEqual(set(m["off"]["items"]["enum"]), {"alerts", "ledger", "manpower", "stability",
                                                           "equipment_fill", "resources", "stockpile", "trucks",
                                                           "casualties", "air_superiority", "overdrawn", "convoys", "fuel",
-                                                          "balance", "dockyards"})
+                                                          "balance", "dockyards", "doctrines"})
         want = {"wake_repeat_days": 7, "alert_persist_days": 14, "manpower_months": 2, "stability_floor": 0.5,
                 "equipment_fill_floor": 0.8, "stockpile_days_critical": 7, "stockpile_days_warning": 30,
                 "trucks_ratio": 1.5, "deficit_wake_days": 14,
@@ -429,7 +429,9 @@ class CoverageKeys(unittest.TestCase):
                 "mature_line_days": 30, "mature_line_efficiency": 30, "invasion_base_days": 60, "invasion_base_divisions": 4,
                 "invasion_techs": {},
                 # plan_manage.rs: a felt shortage takes factories (rule 11), idle dockyards go to convoys (rule 20)
-                "shift_factories": True, "idle_dockyards": "convoys"}
+                "shift_factories": True, "idle_dockyards": "convoys",
+                # plan_run.rs: experience kept back from the doctrine fill
+                "xp_reserve": {"army": 30, "navy": 0, "air": 0}}
         for k, v in want.items():
             self.assertEqual(m[k]["default"], v, k)
         for k in ("casualty_ratio_max", "casualty_window_days", "casualty_min_losses", "casualty_rest_days"):

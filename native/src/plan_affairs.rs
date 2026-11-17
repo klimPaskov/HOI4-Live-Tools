@@ -66,6 +66,7 @@
 //!                own_war_goals, or a war with it, counts as done), "declare" (declare_war, below),
 //!                "guarantee", "non_aggression" (or "nap"), "access" (ask_military_access),
 //!                "offer_access", "docking", "improve_relations", "send_attache", "invite_to_faction",
+//!                "call_to_arms" (a faction member into our war; the ally decides),
 //!                or any other canonical key or exact row name of hoi4_diplomacy; "try_anyway":true sends a
 //!                row the AI would refuse. `world_tension_max` (fraction or percent): only while world
 //!                tension is at most that (rule 30; unknown waits). A declaration is sent only when
@@ -998,6 +999,7 @@ fn dip_action(action: &str) -> Option<String> {
         "improve" | "improve_relations" => "improve_relations",
         "attache" | "send_attache" => "send_attache",
         "invite" | "invite_to_faction" => "invite_to_faction",
+        "call" | "call_ally" | "call_to_arms" | "call_to_war" => "call_to_arms",
         _ => return Some(action.trim().to_string()),
     };
     Some(key.to_string())
