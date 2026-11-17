@@ -3088,6 +3088,14 @@
                 "type": "string",
                 "description": "a date (1939.9.1) the row must hold by"
               },
+              "operation": {
+                "type": "string",
+                "description": "the force_design.sea id it serves"
+              },
+              "design": {
+                "type": "string",
+                "description": "the designs[] id the line builds"
+              },
               "war": {
                 "type": "string"
               },
@@ -3143,6 +3151,112 @@
             ],
             "additionalProperties": false
           }
+        },
+        "sea": {
+          "type": "array",
+          "description": "The sea operations the plan's wars and goal need (procedure item 21, lint_force_navy.py): landings, overseas fronts, sea regions to control or deny, convoy raids and escorts, each with its date, regions, enemies and the means that win it. invasions[], sea_transfer routes and convoy_raiding missions no entry names are operations too.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "invasion",
+                  "overseas_supply",
+                  "sea_control",
+                  "deny",
+                  "raid",
+                  "escort"
+                ]
+              },
+              "war": {
+                "type": "string",
+                "description": "the force_design.wars id it serves"
+              },
+              "by": {
+                "type": "string",
+                "description": "a date (1940.9.1) the operation starts; else the date its invasion or route `when` can first hold"
+              },
+              "regions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/sea_region"
+                },
+                "description": "sea regions it must control, deny, raid or escort in (absent for a landing or route: the shortest sea route from from_state)"
+              },
+              "enemies": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/tag"
+                },
+                "description": "whose fleets contest it (absent: the war's enemy side; capitulated ones drop out on the date)"
+              },
+              "means": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "surface",
+                    "air",
+                    "carrier",
+                    "submarine"
+                  ]
+                },
+                "description": "how the sea is won: a surface fleet, land-based naval strike, carrier air, submarines (deny and raid)"
+              },
+              "invasion": {
+                "type": "string",
+                "description": "the invasions[] id that carries it out"
+              },
+              "route": {
+                "type": "string",
+                "description": "the sea_transfer.routes id that carries it out"
+              },
+              "from_state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "target_state": {
+                "$ref": "#/definitions/state_id"
+              },
+              "target_province": {
+                "$ref": "#/definitions/province_id"
+              },
+              "with_harbor": {
+                "type": "boolean",
+                "description": "the landing brings a floating harbour"
+              },
+              "divisions": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "divisions in the landing (absent: the invasion's armies from army_layout)"
+              },
+              "convoys": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "convoys the lift needs, when the plan knows better than the estimate"
+              },
+              "fallback": {
+                "type": "string",
+                "description": "what the tools that do work carry when a lever this operation rests on is not executable yet"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "id",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "bomber_why": {
+          "type": "string",
+          "description": "why a war the force design asks bombers for flies none (answers force.bombers)"
         },
         "air_why": {
         "type": "string",

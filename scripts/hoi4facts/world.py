@@ -1239,6 +1239,7 @@ class World:
         if get1(v, "fleet") is not None or get1(v, "task_force") is not None or get1(v, "ship") is not None:
             pass
         ships = defaultdict(int)
+        units = defaultdict(int)  # (hull, definition): the ship's role (destroyer, heavy_cruiser, ...) by its unit
 
         def count(block):
             for a, b in block:
@@ -1246,12 +1247,15 @@ class World:
                     eq = get1(b, "equipment", [])
                     kind = eq[0][0] if isinstance(eq, list) and eq else get1(b, "definition")
                     ships[kind or "ship"] += 1
+                    units[(kind or "ship", get1(b, "definition"))] += 1
                 elif isinstance(b, list):
                     count(b)
 
         count(v)
         out["fleets"].append({"name": get1(v, "name"), "base": num(get1(v, "naval_base")),
-                              "ships": dict(ships), "src": self.src(path, line)})
+                              "ships": dict(ships),
+                              "units": [{"hull": h, "definition": d, "n": n} for (h, d), n in units.items()],
+                              "src": self.src(path, line)})
 
     # ------------------------------------------------------------ decisions and missions
     def decision_index(self):
@@ -1781,7 +1785,8 @@ class World:
                         periods.append(row)
                     out[rid] = {"id": rid, "name": self.loc.get(get1(v, "name") or "") or get1(v, "name"),
                                 "provinces": [int(x) for x in bare(get1(v, "provinces", [])) if x.isdigit()],
-                                "periods": periods, "src": self.src(p, line_of(items, i)),
+                                "periods": periods, "naval_terrain": get1(v, "naval_terrain"),
+                                "src": self.src(p, line_of(items, i)),
                                 "mod": self.content.source(p)}
             return out
 

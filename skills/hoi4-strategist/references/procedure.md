@@ -146,8 +146,11 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
      breakthrough axis; naval bombers and patrol planes for a landing or blockade against a stronger fleet;
      transports for paratroopers. A war the plan cannot pay air for gets `force_design.air_why`, and
      anti-air in its divisions.
-   - **Sea:** a landing needs fighters over the beach, naval strike planes or a fleet that wins the sea
-     regions, transports and escorts, dated before it (item 21).
+   - **Sea, a first-class arm** (item 21.7): every landing, overseas front, sea region to hold or deny and
+     convoy war the goal needs is a `force_design.sea` operation with its date, regions, enemies and means,
+     and the fleet, naval strike planes, carrier air, submarines, convoys, landing techs and ports it takes by
+     that date. The goal is fixed; the means are the plan's choice, and it picks the strongest one the
+     numbers allow (facts.force.navy gives what each costs).
    - **Garrison** for occupied land (item 23).
    Then write `force_design`: `wars` [{`id`, `enemies`, `kind`, `axes`, `tasks` phase by phase, `why`}],
    `land` [{`template`, `role` (breakthrough, exploit, line, assault, mountain, marine, paratrooper,
@@ -969,10 +972,40 @@ Read: `war-air-naval-peace.md` §6, §7; `strategy.md` "Naval invasion state mac
    10/5/40, 15/9/30); the invasion army detached from front and fallback lines; 60% control and 40% naval
    intel on every route region; radar on the route coast (NA20-NA23, L23).
 6. Start naval queue: each start ship line finished, cut or removed with a date (PR07).
+7. **The navy as an arm (force design).** From the plan's wars and goal, list every sea operation in
+   `force_design.sea` [{`id`, `kind` (invasion, overseas_supply, sea_control, deny, raid, escort), `war`, `by`
+   (or the `invasion` / `route` that dates it), `regions` (else the route from `from_state` to
+   `target_state`), `enemies` (else the war's enemy side), `means` (surface, air, carrier, submarine),
+   `divisions`, `fallback`, `why`}]. A landing a later horizon makes (Sea Lion, an island) is an operation now,
+   with its date. For each, `lint_plan.py` (facts.force.navy) gives the enemy side's start fleet (capital ships,
+   carriers, screens, submarines, surface hull IC from history/units) and what each means takes by the date:
+   - surface: our surface hull IC at parity with the enemy's (start fleet plus the dockyard lines' output),
+     with the years it takes at the plan's dockyards;
+   - air: 12 naval strike planes per enemy capital ship or carrier (AI20), with air superiority over the
+     route and base range to the regions;
+   - carrier: carrier air counts 6 times (the naval strike bonus with its carrier present, half sortie), up to
+     the decks (deck points x 10 planes); one capital ship per carrier, carrier-capable plane lines for the
+     air groups (lint `force.carrier_air`);
+   - submarine (deny, raid): 8 per region, task forces of 8-12, raid only convoy-dependent enemies;
+   - always: a patrol group of 8 screens per region (only patrols build dominance, 50+ days ahead) plus 3
+     screens per capital ship or carrier; convoys for the lift (6 per division, the game's own estimate) and 1
+     escort per 12 convoys; landing techs for the divisions per landing by the date; a port in the landing
+     state or `with_harbor`.
+   Choose the means that win each operation soonest for the factories it costs (Germany against Britain:
+   land-based naval bombers and submarines win the Channel sooner than a surface race against a fleet several
+   times larger; Japan: carriers with their air groups and land-based naval bombers, screens at the ratio), then
+   the building programme: one dockyard line per hull type sized from the operation's date back (`force_design.
+   navy` rows with `operation`, `design`), designs and refits with navy experience, the naval doctrine and its
+   tracks, admirals (one per fleet, submarines apart), task forces by mission in `navy.fleets`, ports and
+   naval bases, fuel. Each operation lists the tools it rests on from the gap register; a lever no tool carries
+   yet gets a `fallback` the working tools carry (lint `force.navy_tools`).
 Resolution: executor `navy`, `invasions`; `sea_transfer` (player key, executor step pending W1-14):
 `hoi4_army_move`; convoy lines in executor `production`; plan.md §19. Check: lint `navy.required`,
 `navy.overseas`, `army.generals` (admirals); validate_plan (fleets in the start OOB, sea region names,
-coastal invasion states), lint `navy.invasion_prep`; rubric row 14.
+coastal invasion states), lint `navy.invasion_prep`, `force.sea_required`, `force.sea_control`,
+`force.sea_screens`, `force.sea_lift`, `force.sea_port`, `force.sea_patrol`, `force.sea_raid`,
+`force.carrier_air`, `force.navy_unused`, `force.navy_readiness`, `force.navy_design`, `force.navy_tools`;
+rubric row 14.
 
 ## H. Diplomacy, occupation, intelligence, peace
 

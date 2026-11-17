@@ -536,6 +536,10 @@ NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "
               "force.unused_line", "force.template_late", "force.readiness", "force.budget", "force.air_support",
               "force.air_none", "force.air_use", "force.air_lost", "force.air_deploy", "force.air_losses",
               "force.air_bases", "force.air_research", "force.air_design", "force.air_doctrine", "force.air_fuel"}
+# the navy as an arm (lint_force_navy.py)
+NEW_RULES |= {"force.sea_required", "force.sea_control", "force.sea_screens", "force.sea_lift", "force.sea_port",
+              "force.sea_patrol", "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
+              "force.navy_design", "force.navy_tools"}
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"
