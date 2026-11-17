@@ -790,10 +790,11 @@ pub(super) fn mission(
     wing: &str,
     mission: &str,
     state: i32,
+    region: Option<i32>,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
-    let result = air::assign(process, keys, wing, mission, state);
+    let result = air::assign(process, keys, wing, mission, state, region);
     leave_air_mode(process, keys, entered);
     result
 }
@@ -1229,6 +1230,41 @@ pub(super) fn best_state(map: &mapdata::StateRegions, region: i32) -> Option<i32
         })
         .map(|(s, _)| *s)
 }
+/// A region with no state in it (a sea): the state whose centre lies nearest the region's
+/// provinces' centre, for the Find view to centre on before the region's own provinces are
+/// clicked (air::region_points falls back to them).
+pub(super) fn nearest_state(dir: &std::path::Path, region: i32) -> Option<i32> {
+    let regions = mapdata::province_regions(dir).ok()?;
+    let positions = mapdata::positions(dir).ok()?;
+    let pts: Vec<(f64, f64)> = regions
+        .iter()
+        .filter(|(_, r)| **r == region)
+        .filter_map(|(p, _)| positions.get(p).copied())
+        .collect();
+    if pts.is_empty() {
+        return None;
+    }
+    let n = pts.len() as f64;
+    let mid = pts
+        .iter()
+        .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n));
+    // the region province nearest its own centre (a bay's centre can lie on land)
+    let anchor = pts
+        .iter()
+        .min_by(|a, b| {
+            let d = |p: &&(f64, f64)| (p.0 - mid.0).powi(2) + (p.1 - mid.1).powi(2);
+            d(a).total_cmp(&d(b))
+        })
+        .copied()?;
+    mapdata::state_centers(dir)
+        .ok()?
+        .iter()
+        .min_by(|a, b| {
+            let d = |c: &(f64, f64)| (c.0 - anchor.0).powi(2) + (c.1 - anchor.1).powi(2);
+            d(a.1).total_cmp(&d(b.1)).then(a.0.cmp(b.0))
+        })
+        .map(|(s, _)| *s)
+}
 /// The state to centre on and the region to verify afterwards (when `region` was named).
 pub(super) fn resolve_region(
     process: &dyn Process,
@@ -1264,6 +1300,7 @@ pub(super) fn resolve_region(
             _ => Ok((s, Some(id))),
         },
         None => best_state(&states, id)
+            .or_else(|| nearest_state(&dir, id))
             .map(|s| (s, Some(id)))
             .ok_or_else(|| {
                 Error::new(
