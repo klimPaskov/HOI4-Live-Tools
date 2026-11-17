@@ -225,6 +225,15 @@ Coverage-build rules (coverage audit section 3 "Check" column; W1-2):
                            invitation faction.join waits for; (warning) a rule an earlier unconditional rule
                            already answers (never reached); accepting every lend-lease or manpower request
                            without `from` (equipment or men to anyone who asks)
+  doctrines.defaults       doctrine_defaults names a folder the game has not, or a subdoctrine that is not one or sits
+                           in another folder; (warning) a folder the plan uses (land always; air and naval when the
+                           posture uses them; any folder with a doctrines entry) without doctrine_defaults while
+                           the doctrine fill is on: its other tracks take the first subdoctrine the game offers
+  armies.gather            (warning) armies.gather_into names no army_layout formation; a plan that trains or
+                           frees divisions with an army_layout and no gather_into (the default army takes them)
+  faction.call_allies      faction.call_allies lists a planned enemy or no country tag; (warning) a plan in a
+                           faction (at the start, faction.join or faction.create) with a war and no call_allies
+                           (nobody is called to arms)
   occupation.required      states resisting at the start, or states the plan conquers, without an
                            occupation key
   occupation.law_shown     (warning) an occupation law the plan names whose `visible` trigger does not hold for
@@ -3050,6 +3059,97 @@ class Lint:
                 self.add("info", "politics.law_gates", where,
                          f"the gate of {p['idea']} also opens on {hint}; `when` can wait on that branch")
 
+    def doctrine_defaults(self):
+        """doctrines.defaults: the doctrine fill's choices for the tracks the doctrines entries leave out."""
+        d = self.game.doctrines(self.ctx) if self.ctx else None
+        if not d or not d.get("grand"):
+            return
+        track_folder = {tr: g["folder"] for g in d["grand"].values() for tr in g.get("tracks") or []}
+        folders = set(track_folder.values())
+        sub = d["sub"]
+        defaults = self.plan.get("doctrine_defaults")
+        defaults = defaults if isinstance(defaults, dict) else {}
+        for f, ids in defaults.items():
+            where = f"doctrine_defaults.{f}"
+            if f not in folders:
+                self.add("error", "doctrines.defaults", where,
+                         f"{f} is not a doctrine folder of the game ({', '.join(sorted(folders))})")
+                continue
+            for x in ids if isinstance(ids, list) else []:
+                if x not in sub:
+                    self.add("error", "doctrines.defaults", where, f"{x} is not a subdoctrine (common/doctrines)")
+                elif track_folder.get(sub[x].get("track")) != f:
+                    self.add("error", "doctrines.defaults", where,
+                             f"{x} sits on track {sub[x].get('track')} of folder "
+                             f"{track_folder.get(sub[x].get('track'))}, not {f}")
+        manage = self.plan.get("manage") if isinstance(self.plan.get("manage"), dict) else {}
+        if "doctrines" in (manage.get("off") or []):
+            return
+        dom = self.domain_goals()
+        used = {"land"} | {str(e.get("folder")) for e in self.list_of("doctrines")}
+        used |= {"air"} if dom["air"] else set()
+        used |= {"naval"} if dom["naval"] else set()
+        named = {str(e.get("track")) for e in self.list_of("doctrines") if e.get("track")}
+        named |= {sub[str(e.get("subdoctrine"))]["track"] for e in self.list_of("doctrines")
+                  if str(e.get("subdoctrine")) in sub}
+        for f in sorted((used & folders) - set(defaults)):
+            open_tracks = sorted(tr for tr, ff in track_folder.items() if ff == f and tr not in named)
+            if not open_tracks:
+                continue
+            self.add("warning", "doctrines.defaults", "doctrine_defaults",
+                     f"folder {f}: no doctrines entry and no doctrine_defaults.{f} for the tracks "
+                     f"{', '.join(open_tracks)}, so the doctrine fill puts the first subdoctrine the game offers on "
+                     f"each: list the subdoctrines in preference order (facts.py dossier show 6)")
+
+    def gather(self):
+        """armies.gather: the formation that takes divisions outside an army."""
+        armies = self.plan.get("armies") if isinstance(self.plan.get("armies"), dict) else {}
+        layout = self.list_of("army_layout")
+        if not layout or armies.get("gather") is False:
+            return
+        hints = {e.get("name_hint") for e in layout if isinstance(e.get("name_hint"), str)}
+        into = armies.get("gather_into")
+        if isinstance(into, str) and into:
+            if into not in hints:
+                self.add("warning", "armies.gather", "armies.gather_into",
+                         f"{into!r} is no army_layout name_hint ({', '.join(sorted(hints))}): the executor then "
+                         f"looks for an army of that name and falls back to the fullest army with room")
+            return
+        trains = any(isinstance(e, dict) for e in self.list_of("training"))
+        frees = isinstance(self.plan.get("disband"), dict) and bool(self.plan["disband"])
+        if trains or frees:
+            self.add("warning", "armies.gather", "armies",
+                     "the plan trains or frees divisions and names no armies.gather_into: name the formation that "
+                     "takes every division left outside an army (the default is the fullest army without "
+                     "battle-plan orders, which may be a guard)")
+
+    def call_allies(self):
+        """faction.call_allies: which faction members the plan calls into its wars."""
+        fac = self.plan.get("faction") if isinstance(self.plan.get("faction"), dict) else {}
+        ca = fac.get("call_allies")
+        enemies = self.enemies()
+        tags = self.game.country_tags()
+        if isinstance(ca, list):
+            for x in ca:
+                if tags and x not in tags:
+                    self.add("error", "faction.call_allies", "faction.call_allies",
+                             f"{x} is no country tag of the game (common/country_tags)")
+                elif x in enemies:
+                    self.add("error", "faction.call_allies", "faction.call_allies",
+                             f"{x} is a planned enemy, not an ally to call")
+            return
+        if ca is not None or not enemies or not self.tag or self.world is None:
+            return
+        try:
+            start_faction = self.world.country(self.tag).get("faction")
+        except Exception:  # noqa: BLE001
+            start_faction = None
+        if start_faction or fac.get("join") or fac.get("create"):
+            self.add("warning", "faction.call_allies", "faction",
+                     "the plan is in a faction (at the start, or it joins or creates one) and fights "
+                     f"{', '.join(sorted(enemies))}, but sets no faction.call_allies: nobody is called to arms. "
+                     "Set \"all\", the tags the wars use, or \"none\" with the reason")
+
     def incoming(self):
         """diplomacy.incoming: the incoming_proposals rules. The first matching rule answers, so a rule an
         earlier unconditional rule already covers is never reached; a sender that is no country tag of
@@ -5469,7 +5569,7 @@ class Lint:
     def run(self):
         steps = [self.schema_rules, self.research, self.focus, self.construction, self.production, self.army,
                  self.conquest, self.capitulation_plan, self.win, self.events, self.coverage, self.posture, self.navy, self.navy_shape, self.port_convoys,
-                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.air_deploy, self.templates, self.laws, self.incoming, self.occupation, self.peace, self.manage, self.supply_overdrawn,
+                 self.convoy_size, self.xp_unspent, self.hub_cost, self.supply_axis_reach, self.air_bases, self.air_deploy, self.templates, self.laws, self.incoming, self.doctrine_defaults, self.gather, self.call_allies, self.occupation, self.peace, self.manage, self.supply_overdrawn,
                  self.manage_convoys, self.manage_fuel,
                  self.template_cleanup, self.special_projects,
                  self.alarms_silenced,
