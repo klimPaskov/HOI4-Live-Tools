@@ -387,7 +387,12 @@ Read: `economy-build-orders.md` §1.2, §2, §3, §7, §8; `supply-logistics-dep
     or `law_unavailable` for a law not offered or gated shut under the plan's timeline). Close a gap with the
     levers (`facts.economy.levers`): economy and trade laws as early as their gates open, construction
     advisors, construction and building-slot techs early, the focuses that give factories, slots or speed, a
-    smaller import budget. Divisions below the AI stay a warning `goal.ai_baseline_why` can answer.
+    smaller import budget. Divisions are held to the AI up to the first war day (error; later marks a warning
+    `goal.ai_baseline_why` can answer) as EQUIPPED divisions: the forecast starts a division only with its
+    whole need in stock, and the executor trains the same way (it waits for one batch's need of every
+    equipment the template uses, beyond the plan's `only_if_stockpile`). The AI's count is not equipped
+    strength (it fields under-equipped divisions), so meet it with lines sized to the factory-days each
+    equipment takes per division, the binding one first, not with more training lines.
 15. **Targets are the forecast.** Horizon targets for civilian and military factories match what the plan's
     levers give on that date: above it by more than 10% is a target the plan does not back (warning
     `economy.unbacked`), below it is a plan that aims low (warning `economy.below_forecast`). Count annexed

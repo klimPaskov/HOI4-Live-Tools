@@ -739,7 +739,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "description": "archetype (or variant key) -> equipment the stockpile must hold: training waits while hoi4_stockpile holds less (without that read, while a fielded division lacks that archetype)"
+          "description": "archetype (or variant key) -> equipment the stockpile must hold: training waits while hoi4_stockpile holds less (without that read, while a fielded division lacks that archetype); every archetype not named here waits for one batch's need of a fielded division of the template"
         },
         "why": {
           "type": "string",
@@ -5839,7 +5839,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "description": "archetype (or variant key) -> equipment the stockpile must hold: training waits while hoi4_stockpile holds less (without that read, while a fielded division lacks that archetype)"
+          "description": "archetype (or variant key) -> equipment the stockpile must hold: training waits while hoi4_stockpile holds less (without that read, while a fielded division lacks that archetype); every archetype not named here waits for one batch's need of a fielded division of the template"
         },
         "why": {
           "type": "string",

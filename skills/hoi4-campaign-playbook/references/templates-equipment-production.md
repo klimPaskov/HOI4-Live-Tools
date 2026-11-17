@@ -422,7 +422,10 @@ civilians after the first war plan is fixed (see `economy-build-orders.md`).
 - Size the queue to the stockpile: queue only as many divisions as the **current stock of the binding item**
   supports (the smallest of infantry eq, support eq, artillery, trucks, tanks, each stock divided by the
   template need). Every queued division draws its equipment on completion, and manpower is held during
-  training. Up to 75% of field manpower may be in training, and at least 100,000.
+  training. Up to 75% of field manpower may be in training, and at least 100,000. The executor waits for
+  one batch's need of every equipment a fielded division of the template uses, beyond the plan's
+  `only_if_stockpile`; give each item lines in proportion to the factory-days it takes per division (1936
+  German infantry division: rifles 129, support equipment 66, artillery 13), the binding item first.
 - Training adds 0.0015 experience a day; a division deploys at most Trained, and exercises raise it to
   Regular (AR15); level thresholds 0.1 / 0.3 / 0.75 / 0.9.
 - Exercises (`hoi4_army_exercise {armies, on, stop_at_max}`; `hoi4_armies` shows `exercising` per army), from
