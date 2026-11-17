@@ -4,9 +4,10 @@
 closes or the run is stopped:
 
     start       start the native runtime on the run's session, retrying while the user is still in the menus;
-                take the input lease, check the country, reconcile the plan's names with the live game
-                (play/reconcile.py: templates, generals, wings, production, first research; reads only), switch
-                the executor on
+                take the input lease, check the country (and, for a continued campaign, that the loaded game is
+                not older than where the last segment ended), reconcile the plan's names with the live game
+                (play/reconcile.py: templates, generals, wings, production, first research; reads only), bring the
+                game to the front once, switch the executor on
     serve       answer the `hoi4-live-play` proxy on a private endpoint (authenticated, this user only)
     each call   add the lease token and a request id where the tool takes them; refuse an identical action that
                 succeeded within DUPLICATE_WINDOW seconds with its earlier result (`already_done`); bring the
@@ -21,12 +22,26 @@ closes or the run is stopped:
     end         the plan's goal reached (the executor's goal_reached change) or its goal.deadline passed in the
                 game: stop with that reason (HOI4_LIVE_END=off keeps the run going)
     limits      the machine's swap and load noted at the start; the run ends with a plain message when the game's
-                memory passes HOI4_LIVE_GAME_MEMORY_GB (default 10; 0 off) or its date stands still while it runs
-                for HOI4_LIVE_STALL_MINUTES (default 5; 0 off)
+                memory passes HOI4_LIVE_GAME_MEMORY_GB (default 10; 0 off: a segment boundary, saved, continued with
+                `hoi4-live play --continue`) or its date stands still while it runs for HOI4_LIVE_STALL_MINUTES
+                (default 5; 0 off)
     watch       every SAMPLE_EVERY seconds one line in watch.jsonl: game date, war stats, each army's supply and
                 organisation (reads only), for the report and for looking back at how the war went
-    stop        executor off, lease released, runtime closed, report.md written, the active-run pointer removed;
-                the game itself is never closed
+    silence     the player taken for gone: no player call for the run's player_silent_minutes (default 45; 0
+                off), for example after the model's usage limit: the run ends as player_silent, with the game paused
+                and saved, instead of the executor playing on alone for hours
+    until       the game date the user gave (`hoi4-live play ... --until 1938.01.01`, request.json "until"):
+                the run ends as end_date
+    dialog      a system prompt on screen (a permission or password dialog; the runtime refuses input while it is
+                there): the player and the status are told at once; still there after DIALOG_MINUTES, the run ends
+                as system_dialog (nothing touches the dialog)
+    feed        every change of the runtime's feed in feed.jsonl, and every PRODUCTION_EVERY seconds the
+                production lines, stockpile and economy in watch.jsonl ("prod"), for `hoi4-live report`
+    stop        the state for the gate (gate/<date>.json: factories, armies, equipment, templates, air, navy,
+                alerts); at the supervisor's own ends (goal, deadline, end date, silence, memory limit) the game is
+                paused; the game's own save (hoi4_save) so the campaign continues in a new segment
+                (`hoi4-live play --continue`); executor off, lease released, runtime closed, report.md written, the
+                active-run pointer removed; the game itself is never closed
 
 Every decision is in the Supervisor class, which takes its runtime, clock and helpers as arguments for tests.
 """
@@ -51,12 +66,27 @@ DUPLICATE_WINDOW = 45
 RENEW_EVERY = 300
 LEASE_SECONDS = 900
 CAMPAIGN_WAIT = 1800
+# A continued campaign may load a save written a little before the boundary (the game's own autosave).
+RESUME_SLACK_DAYS = 45
 RETRY_EVERY = 5
 TICK = 5
 HEALTH_EVERY = 15
 SAMPLE_EVERY = 60
+PRODUCTION_EVERY = 300
 GAME_MEMORY_GB = 10.0
 STALL_MINUTES = 5.0
+PLAYER_SILENT_MINUTES = runs.PLAYER_SILENT_MINUTES
+DIALOG_MINUTES = 5.0
+FEED_PAGE, FEED_PAGES = 200, 10
+# The supervisor's own ends: nobody plays after them, so the game is paused before the save.
+PAUSE_AT_END = {"goal_reached", "deadline", "end_date", "player_silent", "game_memory"}
+# Ends where input no longer works or the game is gone: no save is tried.
+NO_SAVE = {"game_closed", "game_stalled", "system_dialog", "supervisor_exit"}
+# What the gate reads (reads only), kept at the end of each segment and on demand for `hoi4-live report`.
+GATE_READS = (("hoi4_observe", {"since": 999999}), ("hoi4_economy", {}), ("hoi4_armies", {"threat": False}),
+              ("hoi4_alerts", {}), ("hoi4_country_status", {}), ("hoi4_supply", {"summary": False}),
+              ("hoi4_stockpile", {}), ("hoi4_template_get", {}), ("hoi4_air", {}), ("hoi4_fleets", {}),
+              ("hoi4_air_regions", {}), ("hoi4_resources", {}))
 HOLDER = "hoi4-live-play"
 # Actions whose repeat is meaningful (a clock change, a plan step) or that the supervisor owns.
 NOT_DEDUPED = {"hoi4_time", "hoi4_army_plan", "hoi4_plan_run", "hoi4_autopilot", "hoi4_input_lease"}
@@ -168,7 +198,7 @@ def shrink(value, budget):
 class Supervisor:
     def __init__(self, run, prefix, start_native, clock=time.time, sleep=time.sleep, front=None,
                  idle_pause=None, duplicate_window=DUPLICATE_WINDOW, campaign_wait=CAMPAIGN_WAIT,
-                 retry_every=RETRY_EVERY, swap=None, game_memory=None):
+                 retry_every=RETRY_EVERY, swap=None, game_memory=None, dialogs=None):
         self.run, self.prefix = run, prefix
         self.start_native, self.clock, self.sleep, self.front = start_native, clock, sleep, front
         # Seconds; None reads the run's settings file (and follows a change made to it during the run).
@@ -177,6 +207,11 @@ class Supervisor:
         # The machine readers (tests pass their own): swap (used, total) GB and the game's memory in GB.
         self.swap = swap or machine_swap
         self.read_game_memory = game_memory or self.game_memory_gb
+        # The system prompts on screen (owner names); tests pass their own; None where it cannot be read.
+        self.dialogs = dialogs
+        self.dialog_since = None
+        self.last_production = None
+        self.saved = None
         self.request = runs.read_json(os.path.join(run, "request.json")) or {}
         self.session = runs.read_json(os.path.join(run, "session.json")) or {}
         self.native = None
@@ -198,7 +233,7 @@ class Supervisor:
         self.idle_woken = False
         self.pending_wake = None
         self.counts = {"calls": 0, "already_done": 0, "idle_wakes": 0, "idle_pauses": 0, "pause_requests": 0,
-                       "front": 0, "executor_stops": 0}
+                       "front": 0, "executor_stops": 0, "dialogs": 0}
         self.feed_seq = 0
         self.state = "starting"
         self.end_reason = None
@@ -320,7 +355,26 @@ class Supervisor:
                                   "again" % (overview["player"], tag, tag))
             self.release()
             return False
+        resume = self.request.get("resume_date")
+        now_date = (overview.get("date") or {}).get("text") if not err and isinstance(overview, dict) else None
+        if resume and now_date and report._day_number(now_date) is not None \
+                and report._day_number(resume) is not None \
+                and report._day_number(now_date) < report._day_number(resume) - RESUME_SLACK_DAYS:  # noqa: SLF001
+            self.end_reason = "older_save"
+            self.status("failed", "the loaded game is at %s, but the campaign's last segment ended at %s: load the "
+                                  "save it wrote (%s) and run hoi4-live play --continue again"
+                        % (now_date, resume, self.request.get("resume_save") or "the newest save"))
+            self.release()
+            return False
         self.reconcile_day_one()
+        # The feed from here on is kept (feed.jsonl): 0 gives the current sequence and no changes.
+        ferr, feed = self.native.call("hoi4_observe", {"since": 0})
+        if not ferr and isinstance(feed, dict):
+            self.feed_seq = feed.get("seq") or 0
+        # The executor's first input needs the game in front (another window in front refuses every order).
+        pid = (self.session.get("game") or {}).get("pid")
+        if self.front and pid:
+            self.event("front_at_start", ok=bool(self.front(pid)))
         err, body = self.native_call("hoi4_autopilot", {"enabled": True, "interval_ms": 1000})
         if err:
             self.note("the executor could not be switched on (%s); the plan's routine work is yours until it is"
@@ -594,20 +648,84 @@ class Supervisor:
         err, body = self.native.call("hoi4_overview", {})
         if err and error_code(body) in GONE:
             return False
-        err, feed = self.native.call("hoi4_observe", {"since": self.feed_seq,
-                                                      "kinds": ["autopilot_stopped", "goal_reached"]})
-        if not err and isinstance(feed, dict):
-            self.feed_seq = feed.get("seq", self.feed_seq)
-            for change in feed.get("changes") or []:
-                if change.get("kind") == "goal_reached":
-                    self.goal_reached = change.get("detail") or {}
-                    self.event("goal_reached", detail=change.get("detail"))
-                if change.get("kind") == "autopilot_stopped" and not self.idle_paused:
-                    self.counts["executor_stops"] += 1
-                    self.event("executor_stopped", detail=change.get("detail"))
-                    self.note("the executor stopped (%s); the plan's routine work waits until it is on again "
-                              "(hoi4_autopilot {\"enabled\":true})" % json.dumps(change.get("detail"))[:200])
+        for change in self.read_feed():
+            if change.get("kind") == "goal_reached":
+                self.goal_reached = change.get("detail") or {}
+                self.event("goal_reached", detail=change.get("detail"))
+            if change.get("kind") == "autopilot_stopped" and not self.idle_paused:
+                self.counts["executor_stops"] += 1
+                self.event("executor_stopped", detail=change.get("detail"))
+                self.note("the executor stopped (%s); the plan's routine work waits until it is on again "
+                          "(hoi4_autopilot {\"enabled\":true})" % json.dumps(change.get("detail"))[:200])
         return True
+
+    def read_feed(self):
+        """The runtime's feed since the last read, every change written to feed.jsonl; the changes. Pages of
+        FEED_PAGE follow the last row read (the reply's own seq jumps to the newest)."""
+        out = []
+        for _ in range(FEED_PAGES):
+            err, feed = self.native.call("hoi4_observe", {"since": self.feed_seq, "limit": FEED_PAGE})
+            if err or not isinstance(feed, dict):
+                break
+            rows = [c for c in feed.get("changes") or [] if isinstance(c, dict)]
+            out += rows
+            if rows and feed.get("more"):
+                self.feed_seq = max(c.get("seq") or 0 for c in rows)
+                continue
+            self.feed_seq = feed.get("seq", self.feed_seq)
+            break
+        if out:
+            with self.lock:
+                with open(os.path.join(self.run, "feed.jsonl"), "a", encoding="utf-8") as f:
+                    for change in out:
+                        f.write(json.dumps(change, ensure_ascii=False) + "\n")
+        return out
+
+    def silent_limit(self):
+        """Seconds without a player call before the run ends as player_silent, or None when it is off."""
+        return runs.idle_pause_seconds(self.run, PLAYER_SILENT_MINUTES, key="player_silent_minutes")
+
+    def silent(self, now):
+        limit = self.silent_limit()
+        if limit is None or now - self.last_player < limit:
+            return False
+        minutes = int((now - self.last_player) // 60)
+        self.event("player_silent", minutes=minutes, limit=round(limit / 60.0))
+        self.note("no call from the player for %d minutes (a usage limit or a closed client): the run ends with "
+                  "the game paused and saved; continue it with hoi4-live play --continue" % minutes)
+        return True
+
+    def watch_dialogs(self, now):
+        """A system prompt on screen: told at once, the run ends when it stays DIALOG_MINUTES. True to end."""
+        if self.dialogs is None:
+            return False
+        try:
+            owners = self.dialogs()
+        except Exception:  # noqa: BLE001 - an unreadable window list is not a dialog
+            owners = []
+        if not owners:
+            if self.dialog_since is not None:
+                self.event("dialog_gone")
+                self.note("the system prompt is gone: input works again")
+                self.dialog_since = None
+                self.status(message="playing")
+            return False
+        if self.dialog_since is None:
+            self.dialog_since = now
+            self.counts["dialogs"] += 1
+            self.event("dialog", owners=owners)
+            message = ("a system prompt is on screen (%s): the game takes no input until someone answers it. Answer "
+                       "it yourself (nothing here touches it); the run ends if it is still there in %d minutes"
+                       % (", ".join(owners), DIALOG_MINUTES))
+            self.note(message)
+            self.status(message=message)
+            return False
+        return now - self.dialog_since >= DIALOG_MINUTES * 60
+
+    def past_until(self, date):
+        """True once the game date is at or past the end date the user gave (request.json "until")."""
+        day, until = report._day_number(date), report._day_number(self.request.get("until"))  # noqa: SLF001
+        return day is not None and until is not None and int(day) >= int(until)
 
     def tick(self):
         now = self.clock()
@@ -619,11 +737,20 @@ class Supervisor:
         if self.goal_reached is not None and self.ends():
             self.stop("goal_reached")
             return
+        if self.silent(now):
+            self.stop("player_silent")
+            return
+        if self.watch_dialogs(now):
+            self.stop("system_dialog")
+            return
         self.renew(now)
         self.watchdog(now)
         if now - self.last_sample >= SAMPLE_EVERY:
             self.last_sample = now
             date = self.sample(now)
+            if date and self.past_until(date):
+                self.stop("end_date")
+                return
             if date and self.ends() and self.past_deadline(date):
                 self.stop("deadline")
                 return
@@ -696,8 +823,9 @@ class Supervisor:
         if limit > 0:
             gb = self.read_game_memory()
             if gb is not None and gb > limit:
-                return ("game_memory", "the game uses %.1f GB of memory, over the %.0f GB limit: the run ends before "
-                        "the machine stalls; save, restart the game and run hoi4-live play again" % (gb, limit))
+                return ("game_memory", "the game uses %.1f GB of memory, over the %.0f GB limit: the run ends here "
+                        "as a segment boundary (the game is paused and saved) before the machine stalls; quit the "
+                        "game, start it again, load that save and run hoi4-live play --continue" % (gb, limit))
         stall = self.env_number("HOI4_LIVE_STALL_MINUTES", STALL_MINUTES)
         if date is None or self.last_paused is not False:
             self.last_date, self.date_since = date, None
@@ -726,10 +854,81 @@ class Supervisor:
             line["armies"] = [{"army": a.get("army"), "supply": a.get("supply_percent_mean"),
                                "org": a.get("organisation_mean"), "divisions": a.get("divisions")}
                               for a in (supply.get("armies") or []) if isinstance(a, dict)][:40]
+        if date and (self.last_production is None or now - self.last_production >= PRODUCTION_EVERY):
+            self.last_production = now
+            prod = self.production(date)
+            if prod:
+                line["prod"] = prod
         with self.lock:
             with open(os.path.join(self.run, "watch.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(line) + "\n")
         return date
+
+    def production(self, date):
+        """Production lines, stockpile and economy in one record (reads only), the shape `hoi4-live report`
+        reads: lines [index, kind, equipment, requested, active, efficiency], stock [archetype, stockpile,
+        fielded need, fielded short, factories, made per day]."""
+        lerr, lines = self.native.call("hoi4_production_lines", {"limit": 128})
+        serr, stock = self.native.call("hoi4_stockpile", {})
+        eerr, economy = self.native.call("hoi4_economy", {})
+        if lerr and serr and eerr:
+            return None
+        lines = lines if not lerr and isinstance(lines, dict) else {}
+        stock = stock if not serr and isinstance(stock, dict) else {}
+        economy = economy if not eerr and isinstance(economy, dict) else {}
+        counters = lambda line: line.get("factory_counters") or {}  # noqa: E731
+        return {"date": str(date)[:10], "mil": (economy.get("factory_trigger_count") or {}).get("military"),
+                "pp": ((economy.get("political_power") or {}).get("raw_signed") or 0) / 1e5,
+                "lines": [[x.get("entry_index"), x.get("line_kind"), x.get("equipment_id"),
+                           counters(x).get("requested_factories_raw_signed"),
+                           counters(x).get("active_factories_raw_signed"), (x.get("output") or {}).get("efficiency")]
+                          for x in lines.get("lines") or [] if isinstance(x, dict)],
+                "stock": [[x.get("archetype"), x.get("stockpile"), x.get("fielded_need"), x.get("fielded_short"),
+                           x.get("factories"), x.get("produced_per_day")]
+                          for x in stock.get("equipment") or [] if isinstance(x, dict)]}
+
+    def snapshot(self):
+        """What the gate reads, as {tool: body} with the game date; None without a runtime. Reads only."""
+        if not (self.native and self.native.alive()):
+            return None
+        out = {"t": round(self.clock(), 3), "tag": self.request.get("tag"), "reads": {}}
+        for tool, args in GATE_READS:
+            err, body = self.native.call(tool, dict(args))
+            out["reads"][tool] = {"error": error_code(body) or True} if err else body
+        now = (out["reads"].get("hoi4_observe") or {}).get("now") or {}
+        out["date"] = now.get("date") if isinstance(now, dict) else None
+        return out
+
+    def keep_snapshot(self, snap):
+        """gate/<date>.json in the run folder; the path, or None."""
+        if not snap:
+            return None
+        folder = runs.private_dir(os.path.join(self.run, "gate"))
+        name = re.sub(r"[^0-9.]", "", str(snap.get("date") or "")) or "%d" % int(snap["t"])
+        path = os.path.join(folder, name + ".json")
+        runs.write_json(path, snap)
+        return path
+
+    def end_save(self, reason):
+        """At the end of a segment: the game paused (the supervisor's own ends) and saved with its own save.
+        {"saved": name} or {"error": ...}; None when no save is tried."""
+        if reason in NO_SAVE or os.environ.get("HOI4_LIVE_SAVE_AT_END") == "off" or not self.token \
+                or not (self.native and self.native.alive()) or "hoi4_save" not in {t["name"] for t in self.tools}:
+            return None
+        self.native_call("hoi4_autopilot", {"enabled": False})
+        if reason in PAUSE_AT_END:
+            err, overview = self.native.call("hoi4_overview", {})
+            if not err and isinstance(overview, dict) and overview.get("paused") is False:
+                self.native_call("hoi4_time", {"paused": True})
+        err, body = self.native_call("hoi4_save", {})
+        if err or not isinstance(body, dict) or not body.get("saved"):
+            out = {"error": error_code(body) or "not_saved",
+                   "message": str((body.get("error") or {}).get("message") if isinstance(body, dict)
+                                  and isinstance(body.get("error"), dict) else body)[:300]}
+        else:
+            out = {"saved": body["saved"]}
+        self.event("end_save", **out)
+        return out
 
     # ------------------------------------------------------------------------------------------ planner
     def start_planner(self, load_facts=True):
@@ -804,6 +1003,13 @@ class Supervisor:
                                  "needed": needed})
             if rows:
                 final["capitulation"] = rows
+            try:
+                final["gate"] = self.keep_snapshot(self.snapshot())
+            except Exception as exc:  # noqa: BLE001 - the report is written without the gate state
+                self.event("snapshot_failed", error=str(exc)[:300])
+            self.saved = self.end_save(reason)
+            if self.saved:
+                final["save"] = self.saved
         if self.planner is not None:
             self.planner.write_summary()
         self.release()
@@ -812,8 +1018,13 @@ class Supervisor:
         path = report.write(self.run, reason, self.counts, final, self.started, self.clock())
         self.status("ended", "run ended: %s; report: %s" % (reason, path), report=path)
         runs.clear_active(self.prefix, self.run)
+        # what a continued segment starts from (`hoi4-live play --continue`)
+        runs.write_json(os.path.join(self.run, "end.json"),
+                        {"reason": reason, "date": final.get("date"), "saved": (self.saved or {}).get("saved"),
+                         "save_error": (self.saved or {}).get("error"), "gate": final.get("gate")})
         runs.write_json(os.path.join(runs.runs_dir(self.prefix), "last.json"),
-                        {"run": self.run, "reason": reason, "report": path})
+                        {"run": self.run, "reason": reason, "report": path, "date": final.get("date"),
+                         "saved": (self.saved or {}).get("saved"), "tag": self.request.get("tag")})
         self.close_records()
         self.finished.set()
 
@@ -868,8 +1079,11 @@ def serve(supervisor, address, family, authkey):
                     elif op == "stop":
                         threading.Thread(target=supervisor.stop, args=("stopped_by_user",), daemon=True).start()
                         conn.send({"stopping": True})
+                    elif op == "snapshot":
+                        # `hoi4-live report` on the running campaign: the gate's reads, not a player call
+                        conn.send({"snapshot": supervisor.snapshot() if supervisor.state == "ready" else None})
                     else:
-                        conn.send(error("invalid_request", "op is tools, call or stop"))
+                        conn.send(error("invalid_request", "op is tools, call, stop or snapshot"))
             except (EOFError, OSError):
                 return
 
@@ -902,7 +1116,8 @@ def main(argv=None):
     supervisor = Supervisor(run, os.path.abspath(args.prefix),
                             lambda: Native(native_args, os.path.join(run, "native.stderr")),
                             front=game.bring_to_front if game.system_name() == "macos" else None,
-                            idle_pause=args.idle_pause)
+                            idle_pause=args.idle_pause,
+                            dialogs=game.system_dialogs if game.system_name() == "macos" else None)
     supervisor.status("starting", "starting the native runtime")
     if not supervisor.start():
         return 1

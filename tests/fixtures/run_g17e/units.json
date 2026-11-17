@@ -1,0 +1,51 @@
+{
+"cavalry": [
+"mobile",
+[
+"category_army",
+"category_cavalry",
+"category_front_line"
+]
+],
+"infantry": [
+"infantry",
+[
+"category_all_infantry",
+"category_army",
+"category_front_line",
+"category_infantry_and_bicycle",
+"category_light_infantry"
+]
+],
+"light_armor": [
+"armor",
+[
+"category_all_armor",
+"category_army",
+"category_front_line",
+"category_tanks"
+]
+],
+"motorized": [
+"mobile",
+[
+"category_all_infantry",
+"category_army",
+"category_front_line",
+"category_mobile_and_mobile_combat_sup",
+"category_vehicle_infantry"
+]
+],
+"mountaineers": [
+"infantry",
+[
+"category_all_infantry",
+"category_army",
+"category_front_line",
+"category_light_infantry",
+"category_mountaineers",
+"category_special_forces",
+"category_special_forces_leg_infantry"
+]
+]
+}

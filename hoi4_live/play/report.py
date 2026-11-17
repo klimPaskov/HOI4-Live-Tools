@@ -14,6 +14,20 @@ import re
 from . import runs
 
 RECEIPTS = ("Verified", "NotApplied", "Diverged", "Unconfirmed")
+# Why a run ended, in plain words.
+ENDS = {
+    "goal_reached": "the plan's goal was reached",
+    "deadline": "the plan's goal deadline passed in the game",
+    "end_date": "the game reached the end date you gave (--until)",
+    "player_silent": "the player made no call for a long time (a usage limit or a closed client); the run stopped "
+                     "instead of letting the executor play on alone",
+    "game_memory": "the game's memory passed the limit: a segment boundary",
+    "game_stalled": "the game date stood still while the game ran (the game hung)",
+    "game_closed": "the game closed",
+    "system_dialog": "a system prompt stayed on screen and the game took no input",
+    "stopped_by_player": "the player ended the run (hoi4_run stop)",
+    "stopped_by_user": "you ended the run (hoi4-live stop)",
+}
 
 
 def _jsonl(path):
@@ -213,8 +227,11 @@ def build(run, reason, counts, final, started, ended):
         "",
         "- Goal: %s" % request.get("goal", "?"),
         "- Plan: %s, %s mode" % (request.get("plan", "?"), str(request.get("mode", "fair")).upper()),
-        "- Ended: %s%s" % (reason, "".join(" (%s)" % e.get("message") for e in events
-                                           if e.get("event") == "limit" and e.get("message"))[:400]),
+        "- Ended: %s: %s%s" % (reason, ENDS.get(reason, "see supervisor.log"),
+                                "".join(" (%s)" % e.get("message") for e in events
+                                        if e.get("event") == "limit" and e.get("message"))[:400]),
+        "- Segment: %s" % (("%d, continues %s" % (request.get("segment") or 2, request["continues"]))
+                           if request.get("continues") else "1 (the start of the campaign)"),
         "- Wall time: %.1f minutes" % ((ended - started) / 60.0),
         "- Machine at the start: %s" % machine_line(events),
         "- Game dates: %s to %s" % (start_date or "?", final.get("date") or "?"),
@@ -253,6 +270,7 @@ def build(run, reason, counts, final, started, ended):
     if final.get("capitulation"):
         lines += ["", "## Capitulation", ""] + capitulation_lines(final["capitulation"])
     lines += planner_section(run)
+    lines += continue_section(request, final, reason)
     stats = final.get("war_stats")
     if stats:
         lines += ["", "## War statistics at the end", "", "```", json.dumps(stats, indent=1)[:3000], "```"]
@@ -263,6 +281,26 @@ def build(run, reason, counts, final, started, ended):
     else:
         lines.append("- the game's settings files and saves are as they were at the start")
     return "\n".join(lines) + "\n"
+
+
+def continue_section(request, final, reason):
+    """The save the run wrote at its end and the command that continues the campaign from it."""
+    save = final.get("save") or {}
+    out = ["", "## Continue the campaign", ""]
+    if save.get("saved"):
+        out.append("- Saved with the game's own save as \"%s\" at %s." % (save["saved"], final.get("date") or "?"))
+        out.append("- To continue: %sstart or bring up the game, load that save (the launcher's Continue loads the "
+                   "newest save), leave it paused, then run: hoi4-live play --continue"
+                   % ("quit the game first (its memory is high), " if reason == "game_memory" else ""))
+    elif save.get("error"):
+        out.append("- The save at the end failed (%s: %s). Save the game yourself (Esc, Save) before you quit it; "
+                   "then load it and run: hoi4-live play --continue" % (save["error"], save.get("message") or ""))
+    else:
+        out.append("- No save was written at the end (%s). The game's own autosave is the latest point; load it "
+                   "and run: hoi4-live play --continue" % ENDS.get(reason, reason))
+    if final.get("gate"):
+        out.append("- The state for the gate is kept in %s; read the run with: hoi4-live report" % final["gate"])
+    return out
 
 
 def write(run, reason, counts, final, started, ended):

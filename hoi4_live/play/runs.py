@@ -5,8 +5,14 @@
         session.json                      written by `hoi4-live-native --attach`
         status.json  endpoint.json        written by the supervisor
         calls.jsonl  supervisor.log  native.stderr  report.md
+        feed.jsonl  watch.jsonl           the runtime's feed and the supervisor's samples (for hoi4-live report)
+        gate/<date>.json                  what the gate reads, kept at the end of the run
+        end.json                          why and where the run ended, the save it wrote (for --continue)
+        plan_state.json                   the executor's memory, written by the runtime; carried to the next segment
+        userdata/save games               a link to the game's own save folder (where hoi4_save looks)
         user-files/                       private copies of the game's settings files at the start
     <prefix>/runs/active.json         the run the `hoi4-live-play` proxy forwards to
+    <prefix>/runs/last.json           the last run that ended (what `--continue` and `report` take by default)
 """
 
 import datetime
@@ -19,6 +25,8 @@ ACTIVE = "active.json"
 SETTINGS = "settings.json"
 # A long silence only: the player is taken for dead (a real campaign never pauses itself).
 IDLE_PAUSE_MINUTES = 15
+# A longer silence: the player is gone (a usage limit, a closed client). The run is saved and ends.
+PLAYER_SILENT_MINUTES = 45
 USER_FILES = ("settings.txt", "pdx_settings.txt", "dlc_load.json")
 SAVES = "save games"
 
@@ -58,11 +66,12 @@ def read_json(path):
         return None
 
 
-def idle_pause_seconds(run, default_minutes):
-    """The run's idle pause in seconds from settings.json (idle_pause_minutes), or None when it is off (0, false
-    or null). A missing file or key gives the default; a value that is not a number is ignored."""
+def idle_pause_seconds(run, default_minutes, key="idle_pause_minutes"):
+    """The run's idle pause in seconds from settings.json (idle_pause_minutes, or another minutes `key`), or None
+    when it is off (0, false or null). A missing file or key gives the default; a value that is not a number is
+    ignored."""
     settings = read_json(os.path.join(run, SETTINGS)) or {}
-    value = settings.get("idle_pause_minutes", default_minutes)
+    value = settings.get(key, default_minutes)
     if value is None or value is False:
         return None
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -109,6 +118,39 @@ def clear_active(prefix, run):
             os.remove(active_path(prefix))
         except OSError:
             pass
+
+
+def clear_stop_date(plan, by):
+    """A real campaign never pauses itself: a plan's stop_on_date (a strategist's review date) would make the
+    runtime pause the game on that day. Removed here, and the removal logged in the plan's _meta.edits. Returns
+    the date removed, or None."""
+    date = plan.pop("stop_on_date", None)
+    if date:
+        if not isinstance(plan.get("_meta"), dict):
+            plan["_meta"] = {}
+        if not isinstance(plan["_meta"].get("edits"), list):
+            plan["_meta"]["edits"] = []
+        plan["_meta"]["edits"].append({"by": by, "edit": "stop_on_date %s removed: runs never pause" % date})
+    return date
+
+
+def link_saves(user_dir, run):
+    """RUN/userdata/save games -> the game's own save folder, where hoi4_save looks for the file it wrote (the
+    runtime checks RUN/userdata/save games). True when the link is there. Nothing is copied or written in the
+    save folder; macOS and Linux only."""
+    if os.name == "nt" or not user_dir:
+        return False
+    saves = os.path.join(user_dir, SAVES)
+    if not os.path.isdir(saves):
+        return False
+    link = os.path.join(private_dir(os.path.join(run, "userdata")), SAVES)
+    if os.path.islink(link) or os.path.exists(link):
+        return os.path.realpath(link) == os.path.realpath(saves)
+    try:
+        os.symlink(saves, link)
+    except OSError:
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------------------------------------------

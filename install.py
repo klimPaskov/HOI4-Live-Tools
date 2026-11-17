@@ -8,7 +8,9 @@
     python install.py doctor                check what a first run needs and print the fix for each failed item
     python install.py play COUNTRY "GOAL"   the first campaign: checks, the plan, and what starts on this system
                                             (macOS: attaches to your game; --launch asks Steam to start it)
+    python install.py play --continue       the next segment of a campaign, from the save the last run wrote
     python install.py stop                  end the running campaign (report written, the game keeps running)
+    python install.py report [RUN]          the run against the bar: audit from its files, gate from the game
     python install.py mcp                   the hoi4-live-play MCP server (what the clients start; stdio)
     python install.py game-dir FOLDER       record where the game is, when the Steam library search misses it
     python install.py status
@@ -30,7 +32,7 @@ What is installed where a build exists for the computer:
 Layout of an install (default prefix %LOCALAPPDATA%\\hoi4-live-tools on Windows,
 ~/Library/Application Support/hoi4-live-tools on macOS, ~/.local/share/hoi4-live-tools on Linux):
 
-    hoi4-live      the command: doctor, play, stop, mcp, update, uninstall, status, game-dir (hoi4-live.cmd on
+    hoi4-live      the command: doctor, play, stop, report, mcp, update, uninstall, status, game-dir (hoi4-live.cmd on
                    Windows)
     app\\            the program (hoi4-live-tools.cmd on Windows, hoi4-live-tools elsewhere: what clients start)
     native\\         hoi4-live-native and its entitlements file
@@ -1157,6 +1159,8 @@ def cmd_play(args, out):
     argv += ["--plan", os.path.abspath(args.plan)] if args.plan else []
     argv += ["--launch"] if args.launch else []
     argv += ["--wait", str(args.wait)] if args.wait else []
+    argv += ["--until", args.until] if args.until else []
+    argv += ["--continue"] + ([args.continue_run] if args.continue_run != "last" else []) if args.continue_run else []
     argv += [part for part in [args.value] + list(args.more) if part]
     return run_app_module(prefix, argv, "play")
 
@@ -1183,6 +1187,18 @@ def cmd_stop(args, out):
     code = ("import sys; from hoi4_live.play import start; "
             "sys.exit(start.stop_active(sys.argv[1], sys.stdout))")
     return run_app_module(prefix, [sys.executable, "-c", code, prefix], "stop")
+
+
+def cmd_report(args, out):
+    """Read a campaign run against the bar: the audit from its files and the gate from the game's state."""
+    prefix = os.path.abspath(args.prefix or default_prefix())
+    if not os.path.isfile(os.path.join(prefix, "app", "hoi4_live", "play", "review.py")):
+        raise InstallError(f"no install with the report command at {prefix}; run: {COMMAND} update", EXIT_USAGE)
+    argv = [sys.executable, "-m", "hoi4_live.play.review", "--prefix", prefix]
+    argv += ["--marks"] + [str(n) for n in args.marks] if args.marks else []
+    argv += ["--no-baseline"] if args.no_baseline else []
+    argv += [args.value] if args.value else []
+    return run_app_module(prefix, argv, "report")
 
 
 def cmd_mcp(args, out):
@@ -1323,8 +1339,8 @@ def cmd_status(args, out):
     return EXIT_OK if installed else EXIT_FAILED
 
 
-COMMANDS = ("install", "update", "doctor", "play", "stop", "mcp", "game-dir", "status", "register", "unregister",
-            "uninstall")
+COMMANDS = ("install", "update", "doctor", "play", "stop", "report", "mcp", "game-dir", "status", "register",
+            "unregister", "uninstall")
 
 
 def build_parser():
@@ -1332,12 +1348,20 @@ def build_parser():
                                      description=__doc__.split("\n\n")[0])
     parser.add_argument("command", nargs="?", default=None, choices=COMMANDS)
     parser.add_argument("value", nargs="?", default=None,
-                        help="game-dir: the folder the game is installed in; play: the country (tag or name)")
+                        help="game-dir: the folder the game is installed in; play: the country (tag or name); "
+                             "report: the run folder (default: the running or the last run)")
     parser.add_argument("more", nargs="*", help="play: the goal, in your words")
     parser.add_argument("--mode", choices=("fair", "meta"), default=None, help="play: the rule set")
     parser.add_argument("--plan", default=None, help="play: a strategist plan folder instead of a shipped plan")
     parser.add_argument("--launch", action="store_true", help="play: ask Steam to start the game")
     parser.add_argument("--wait", type=int, default=None, help="play: minutes to wait for the game (default 15)")
+    parser.add_argument("--until", default=None, metavar="DATE",
+                        help="play: end the run at this game date, for example 1938.01.01 (paused and saved there)")
+    parser.add_argument("--continue", dest="continue_run", nargs="?", const="last", default=None, metavar="RUN",
+                        help="play: the next segment of a campaign, from the save the last run wrote")
+    parser.add_argument("--marks", nargs=3, type=int, default=None, metavar=("CIV", "MIL", "DIVS"),
+                        help="report: factories and divisions to reach, instead of the game's own AI")
+    parser.add_argument("--no-baseline", action="store_true", help="report: no comparison with the game's own AI")
     parser.add_argument("--prefix", help="install folder (default %%LOCALAPPDATA%%\\hoi4-live-tools on Windows, "
                                          "~/Library/Application Support/hoi4-live-tools on macOS, "
                                          "~/.local/share/hoi4-live-tools on Linux)")
@@ -1374,7 +1398,7 @@ def main(argv=None):
         args.command = "install"
     out = Output(args.quiet)
     handlers = {"install": cmd_install, "update": cmd_update, "doctor": cmd_doctor, "play": cmd_play,
-                "stop": cmd_stop, "mcp": cmd_mcp,
+                "stop": cmd_stop, "report": cmd_report, "mcp": cmd_mcp,
                 "game-dir": cmd_game_dir,
                 "register": cmd_register,
                 "unregister": cmd_unregister, "uninstall": cmd_uninstall, "status": cmd_status}

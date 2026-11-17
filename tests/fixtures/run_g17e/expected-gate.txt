@@ -1,0 +1,36 @@
+date 1938.01.01.11 (marks: AI baseline 1938.01.01)
+civilian 70 / AI 64: ok
+military 38 / AI 34: ok
+divisions in armies 88 + unassigned 0 / AI 66: count ok; EQUIPPED ok (a count passes only with the fill)
+equipment fill of 88 fielded divisions: mean 1.00, below 0.9: 0; worst army Armee West Nord 0.99 (20 div): ok (needs mean >= 0.9, every army >= 0.8)
+  armies: Armee West Nord 0.99, Armee West Süd 0.99, Armee Mitte 1.00, Armee Süd 1.00, Armee West Mitte 1.00
+manpower in the field 0.83M
+main template Infanterie-Division (82 fielded): divisions a day the output equips, by archetype: infantry_equipment 0.191, support_equipment 0.322, artillery_equipment 0.569; binding infantry_equipment
+path to 1939.09.01: stock plus today's output equips 117 more Infanterie-Division in 608 days (binding infantry_equipment; infantry_equipment 117, support_equipment 198, artillery_equipment 384): 205 divisions against the AI's 129 (output grows with factories; training lines and their own equipment not counted)
+  artillery_equipment: stock 457.0, made 6.83/d, used 3.34/d, cover None d, fielded 1039.0/1044.0, factories 6
+  infantry_equipment: stock 784.0, made 173.7/d, used 187.28/d, cover 57.74 d, fielded 77535.0/77680.0, factories 17
+  light_tank_chassis: stock 91.0, made 0.72/d, used 0.35/d, cover None d, fielded 720.0/720.0, factories 1
+  motorized_equipment: stock 1877.0, made 3.7/d, used 0.0/d, cover None d, fielded 602.0/605.0, factories 2
+  support_equipment: stock 72.0, made 9.66/d, used 8.34/d, cover None d, fielded 2616.0/2630.0, factories 9
+manpower pool 595910.0 / AI pool 867710
+armies 5: Armee Süd 23, Armee West Nord 20, Armee West Süd 2, Armee West Mitte 23, Armee Mitte 20
+idle: research slots 0, civilian factories 0
+alerts: missing_equipment_production, decisions_available, admiral_assignable, modify_officer_corps, special_project_available, mio_traits, doctrines_available
+FORCE not gated (no force table)
+  divisions by template: Infanterie-Division 82 (line), Panzer-Division 3 (armour), Infanterie-Division (mot.) 1 (motorised/mechanised), Kavallerie-Brigade 1 (garrison), Gebirgs-Brigade 1 (special forces)
+  divisions by role: armour 3, motorised/mechanised 1, special forces 1, line 82, garrison 1
+  air wings by type: medium_plane_airframe_0 6 wings 458 planes, medium_plane_airframe_1 1 wings 70 planes, small_plane_airframe_0 5 wings 400 planes, small_plane_cas_airframe_0 1 wings 100 planes, small_plane_naval_bomber_airframe_1 1 wings 72 planes, transport_plane_equipment_1 1 wings 80 planes
+  ships by class: battleship 2, destroyer 23, heavy_cruiser 3, light_cruiser 8, submarine 22
+  force against the plan: the plan has no force table (force_design); composition not gated
+AIR
+  wings 15, planes 1180
+    medium_plane_airframe_0: 6 wings, 458 planes; based Eastern Germany 3, North-West Germany 2, Western Germany 1; flying nothing
+    medium_plane_airframe_1: 1 wings, 70 planes; based Eastern Germany 1; flying nothing
+    small_plane_airframe_0: 5 wings, 400 planes; based North-West Germany 2, Western Germany 1, Eastern Germany 1, Western Poland 1; flying nothing
+    small_plane_cas_airframe_0: 1 wings, 100 planes; based Eastern Germany 1; flying nothing
+    small_plane_naval_bomber_airframe_1: 1 wings, 72 planes; based Jutland Peninsula 1; flying nothing
+    transport_plane_equipment_1: 1 wings, 80 planes; based Eastern Germany 1; flying nothing
+  wings with no mission: 15 (Jagdgeschwader 136, Kampfgeschwader 154, Jagdgeschwader 134, JG 1 'Oesau', Kampfgeschwader 152, Kampfgeschwader 155...)
+  enemy air superiority in the plan's regions: no region named
+  planes in stock: medium_plane_airframe 0.0, small_plane_airframe 0.0, small_plane_cas_airframe 90.0
+  fuel 121363.93207 of 124190.72 (ratio 0.98); days left unknown (the tool has no burn rate)

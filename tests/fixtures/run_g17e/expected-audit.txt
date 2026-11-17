@@ -1,0 +1,41 @@
+BAR AUDIT g17e: feed to 1938.01.01, 467 actions, 0 watch samples
+1 self-pauses: 1
+2 failed actions: 69; repeated failures: 47 in 11 groups: 6x general_trait; 6x general_trait; 5x mio_line; 5x general_trait; 5x general_trait; 5x general_trait; 5x mio_line; 3x mio_line; 3x mio_line; 2x mio_trait; 2x army_assign
+3 research: slot_idle events 17, idle watch samples 0
+4 political power: idle wakes 0; max PP ?; actions politics_choose 9/9, decision_take 7/7; decisions_available open 706 d, modify_officer_corps open 681 d
+5 stability: low wakes 0 (values ?-?); war support: not readable
+6 armies: fill<0.8 samples {}; supply<50% samples {}; equipment_fill_low wakes 0; no_divisions_in_training open 22 d; unassigned_divisions open 49 d; missing_equipment_production open 706 d; stockpile_low wakes 58
+7 battle: army_move 4/4
+7b executor strike orders per month: {}; post orders {}
+8 air: none; air_wings_without_mission open 0 d
+9 navy: fleet_mission 5/5, fleet_region 2/2, fleet_admiral 2/2; free_dockyards open 9 d; admiral_assignable open 706 d
+10 espionage: none
+11 doctrine: doctrine_adopt 3/3; doctrines_available open 344 d
+12 designer: none
+13 construction: construction_add 21/23
+13b MIO and special projects: mio_trait 53/60, special_project_assign 1/1; mio_traits open 380 d, special_project_available open 388 d, scientist_unassigned open 0 d
+13c decisions and factions: decision_take 7/7; decisions_available open 706 d
+14 trade: auto_import 6/6
+15 territory lost: 0 []
+alerts open (days): {'missing_equipment_production [plan ignores]': 706, 'decisions_available [reason]': 706, 'admiral_assignable [reason]': 706, 'modify_officer_corps [reason]': 681, 'outdated_equipment_in_production [reason]': 530, 'special_project_available [reason]': 388, 'mio_traits [plan ignores]': 380, 'doctrines_available [reason]': 344, 'modify_government [NO REASON]': 290, 'events_or_decisions_timeout [NO REASON]': 184, 'unassigned_divisions [NO REASON]': 49, 'no_divisions_in_training [reason]': 22, 'no_national_focus [NO REASON]': 19, 'insufficient_resources [reason]': 17}
+alerts open 60+ days without a written reason: 2 ['modify_government', 'events_or_decisions_timeout']
+  reason admiral_assignable: ; admiral_assignable: Kriegsmarine: Erich Raeder; Unterseeboots-Flotte : Karl Dönitz; Germ
+  reason decisions_available: ; decisions: wanted, waiting for the game or its rule: form_greater_german_reich; never-ta
+  reason doctrines_available: ; doctrines: special_forces: no grand doctrine yet; special_forces_quantity costs 15, 57 h
+  reason mio_traits: ; mio_traits: GER_rheinmetall_organization: no trait to queue (one is queued, or none is e
+  reason missing_equipment_production: ; production: day 0: no free military factory
+  reason modify_officer_corps: ; politics_auto: PP 68 below 165: banked (plan reserve 0: GER_albert_kesselring not held (
+  reason outdated_equipment_in_production: ; naval_queue: ship lines kept because production[] names their hull (an outdated-design a
+  reason special_project_available: ; special_projects: facility 3499: sp_land_military_engineering_vehicles running; open pro
+pace: 11.6 game days per wall minute over 63 running minutes
+P1 duplicate military lines: max 0 equipment with two lines 
+P2 lines appended (production_add): 1 adds: [('convoy', 1)]
+P3 requested above active by >2 for >3 weeks: none
+P4 stock/fielded-need spread (last sample 1938.01.01): best motorized_equipment 3.10, worst infantry_equipment 0.01
+P5 last lines 1938.01.01 (mil 38, requested 38): infantry_equipment 17/17, artillery_equipmen 6/6, support_equipment 9/9, motorized_equipmen 2/2, light_tank_chassis 1/1, small_plane_airfra 1/1, small_plane_cas_ai 1/1, medium_plane_airfr 1/1
+P6 political power samples: max 153, samples above 150: 1/32
+S1 per-state interface selections per game month (24 months): executor:construction_add 1.0 (4 s), executor:army_assign 0.8 (3 s), executor:army_move 0.2 (1 s); per-state reads by the player: none
+M alerts open (days) by management item: decisions_available 706, modify_government 290, modify_officer_corps 681, doctrines_available 344, mio_traits 380, free_dockyards 9, free_military_factories 11, free_civilian_factories 0, unassigned_divisions 49, outdated_equipment_in_production 530, special_project_available 388, scientist_unassigned 0, operative_recruitable 0, research_slot_available 9, admiral_assignable 706, missing_equipment_production 706, not_enough_garrison 0
+E equipped strength: run not live (gate.py reads it from the game)
+F force composition: run not live (gate.py reads it from the game)
+A air: run not live (gate.py reads it from the game)
