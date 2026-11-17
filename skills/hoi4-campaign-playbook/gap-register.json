@@ -1151,13 +1151,13 @@
     "diplomacy[].action"
    ],
    "tools": [
-    "hoi4_faction_create",
     "hoi4_diplomacy_act"
    ],
    "payoff": "medium",
    "why": "more members on the planned front",
    "closing": "live",
-   "owner": "live invite_to_faction"
+   "owner": "plan diplomacy[] invite_to_faction; playbook 7 'Members: help or burden'",
+   "verified": "live 17 Nov fsw1 (1940-01 AI Germany save): invite_to_faction HUN sent ('They will accept'), the row went pending, Hungary answered no four days later (Axis at war); fsp1 ITA try_anyway sent and refused as previewed"
   },
   {
    "id": "factions.leave_or_kick",
@@ -1176,7 +1176,44 @@
    "payoff": "low",
    "why": "rare",
    "closing": "live",
-   "owner": "throwaway-save live test"
+   "owner": "hoi4_faction_leave: at war the leader's leave is refused (leave_unavailable, fst1); alone in the faction the dismantle confirmation is a diplomacy dialog, sent since 17 Nov (fsp1 failed before the fix): live retest"
+  },
+  {
+   "id": "factions.answer_join_requests",
+   "domain": "factions",
+   "capability": "Answer a country's request to join our faction (accept or refuse with a reason; never silence)",
+   "playbook": [
+    "politics-diplomacy-espionage.md#7. Factions"
+   ],
+   "plan": [
+    "incoming_proposals"
+   ],
+   "tools": [
+    "hoi4_diplomacy_incoming"
+   ],
+   "payoff": "medium",
+   "why": "a member that asks brings divisions; a planned war target must not become a member",
+   "closing": "live",
+   "owner": "plan_affairs default_incoming (faction_join_request, join_war_offer)"
+  },
+  {
+   "id": "factions.call_to_arms",
+   "domain": "factions",
+   "capability": "Call faction members outside our war to arms (each member a decision)",
+   "playbook": [
+    "politics-diplomacy-espionage.md#7. Factions"
+   ],
+   "plan": [
+    "faction.call_allies",
+    "diplomacy[].action"
+   ],
+   "tools": [
+    "hoi4_diplomacy_act"
+   ],
+   "payoff": "high",
+   "why": "an ally that is not called stays out of the war; the AI decides",
+   "closing": "live",
+   "owner": "plan_affairs call_allies_step; diplomacy call_allies dialog"
   },
   {
    "id": "factions.goals",

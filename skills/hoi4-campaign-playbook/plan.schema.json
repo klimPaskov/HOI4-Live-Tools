@@ -2448,6 +2448,25 @@
         "note": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
+        },
+        "call_allies": {
+          "x-owner": "executor",
+          "description": "while at war, call faction members outside our war to arms: \"all\", a list of tags, or \"none\"; absent = no call and a weekly note naming the members left out. Leave out a member whose joining opens a front we cannot hold",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "all",
+                "none"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -2479,6 +2498,8 @@
             "enum": [
               "any",
               "faction_invitation",
+              "join_war_offer",
+              "faction_join_request",
               "guarantee",
               "non_aggression_pact",
               "military_access",

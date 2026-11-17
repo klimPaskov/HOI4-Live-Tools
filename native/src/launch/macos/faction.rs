@@ -461,7 +461,33 @@ fn drive_create(process: &dyn Process, keys: &dyn GameInput, plan: &CreatePlan) 
             ));
         }
         kit::click(keys, finish)?;
-        let answered = kit::answer_confirmation(process, keys, true)?;
+        let mut answered = kit::answer_confirmation(process, keys, true)?;
+        // A leader alone in its faction dismantles it: the game asks in a diplomacy pop-up
+        // (diplomacy_standard_popup_window, "Dismantle faction", Cancel / Accept), not in a
+        // confirmation pop-up (fsp1/fsp2, 17 Nov 2026: screenshots of the open question).
+        // Only a pop-up titled for leaving or dismantling is accepted, never an incoming proposal.
+        for _ in 0..10 {
+            if answered {
+                break;
+            }
+            let asked = read(process, proposals_in)?.into_iter().find(|p| {
+                let title = p.title.to_lowercase();
+                title.contains("dismantle") || title.contains("leave")
+            });
+            if let Some(rect) = asked.and_then(|p| p.accept) {
+                kit::click(keys, rect)?;
+                answered = true;
+            } else {
+                pause(200);
+            }
+        }
+        // fsp3 (17 Nov 2026): the question was on screen but no pop-up list held it. Its Accept
+        // button carries the RETURN shortcut (interface/popupwindow.gui
+        // diplomacy_standard_popup_window); the faction view has no RETURN binding of its own.
+        if !answered {
+            keys.press(crate::platform::game_input::Key::Return)?;
+            answered = true;
+        }
         let deadline = Instant::now() + Duration::from_secs(4);
         let found = loop {
             if let Some(f) = faction_now(process)? {
@@ -567,6 +593,12 @@ pub(super) fn classify(window: &str, title: &str, description: &str) -> &'static
         "lend_lease_request"
     } else if window == "foreign_manpower" {
         "manpower_request"
+    } else if text.contains("wants to join our faction") {
+        // DIPLOMACY_JOIN_FACTION_REQUEST_DESC: another country asks into the player's faction
+        "faction_join_request"
+    } else if text.contains("help in our war") {
+        // DIPLOMACY_JOIN_ALLY_REQUEST_DESC: an ally offers to join the player's war
+        "join_war_offer"
     } else if text.contains("join their faction")
         || text.contains("invite to faction")
         || text.contains("join the faction")
@@ -1115,6 +1147,30 @@ mod tests {
             "Italy wants us to join their faction: Axis.",
         );
         assert_eq!(invite, "faction_invitation");
+        assert_eq!(
+            classify(
+                "standard",
+                "Join faction",
+                "Hungary wants to join our faction Axis.\nIf any volunteers have been sent or received between the faction members, they will be sent back."
+            ),
+            "faction_join_request"
+        );
+        assert_eq!(
+            classify(
+                "standard",
+                "Join war",
+                "Hungary wants to help in our war efforts."
+            ),
+            "join_war_offer"
+        );
+        assert_eq!(
+            classify(
+                "standard",
+                "Call to arms",
+                "Italy wants our help in their war efforts."
+            ),
+            "call_to_arms"
+        );
         assert_eq!(
             classify(
                 "standard",

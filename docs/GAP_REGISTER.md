@@ -11,7 +11,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 
 ## Summary
 
-291 capabilities: missing from playbook 0, not executable 88, not plannable 2, unvalidated 112, ok 89.
+293 capabilities: missing from playbook 0, not executable 88, not plannable 2, unvalidated 113, ok 90.
 
 | Domain | missing from playbook | not executable | not plannable | unvalidated | ok | total |
 |---|---:|---:|---:|---:|---:|---:|
@@ -21,7 +21,7 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 | National focuses |  | 1 |  | 2 | 3 | 6 |
 | Events |  | 1 |  | 2 | 2 | 5 |
 | Diplomacy |  | 3 |  | 8 | 2 | 13 |
-| Factions |  | 6 |  | 4 |  | 10 |
+| Factions |  | 6 |  | 5 | 1 | 12 |
 | Puppets and subjects |  | 1 |  | 6 | 1 | 8 |
 | Lend-lease and volunteers |  | 7 |  | 2 |  | 9 |
 | Peace conferences |  | 3 |  | 4 | 1 | 8 |
@@ -154,10 +154,12 @@ first of missing from playbook, not executable, not plannable, unvalidated that 
 | Set faction rules (peace rule before a conference, call-to-war, leader decides goals) (`factions.rules`) | politics-diplomacy-espionage.md#12 DI13, war-air-naval-peace.md#18 PC13 | none | none; refused: no tool reads or sets faction rules | no | not executable | medium: the peace rule cuts conference costs (x0.8-0.9) | both. Owner: faction rule tool and plan key |
 | Take over faction leadership when the AI leader is passive and failing (`factions.leadership_takeover`) | politics-diplomacy-espionage.md#12 DI14 | none | none; refused: no tool or diplomacy key for a leadership change | no | not executable | low: only for CHI/POL/ITA edge cases | both. Owner: leadership action in the faction view |
 | Faction member upgrades: contribute or draw manpower through the faction pool (`factions.manpower_contribution`) | politics-diplomacy-espionage.md#12 DI24 | none | none; refused: no tool or plan key sets the contribution | no | not executable | low: feeds the faction garrison pool allies draw from; small for a conqueror | both. Owner: a contribution setting tool if a campaign needs it |
+| Call faction members outside our war to arms (each member a decision) (`factions.call_to_arms`) | politics-diplomacy-espionage.md#7. Factions | `faction.call_allies` (executor), `diplomacy[].action` (executor) | `hoi4_diplomacy_act` | no | unvalidated | high: an ally that is not called stays out of the war; the AI decides | live. Owner: plan_affairs call_allies_step; diplomacy call_allies dialog |
 | Found a faction from a template (Poland Intermarium, China United Front) (`factions.create`) | politics-diplomacy-espionage.md#7. Factions, politics-diplomacy-espionage.md#12 DI12 | `faction.create` (executor), `faction.create.template` (executor), `faction.create.name` (executor) | `hoi4_faction_create` | no | unvalidated | high: Poland and China plans need their own faction | live. Owner: record a founded faction (round w12 rests on notes only [?]); clear UNVALIDATED |
 | Join the planned faction before the war (accept the invitation) (`factions.join`) | politics-diplomacy-espionage.md#7. Factions | `faction.join` (executor), `faction.when` (executor) | `hoi4_faction_invite_accept`, `hoi4_diplomacy_incoming`, `hoi4_diplomacy_act` | no | unvalidated | high: the faction decides who fights and who shares the peace | live. Owner: live test of hoi4_faction_invite_accept and join_faction (both never run) |
-| Invite chosen minors into the own faction (`factions.invite_members`) | politics-diplomacy-espionage.md#7. Factions | `faction.create.invite` (executor), `diplomacy[].action` (executor) | `hoi4_faction_create`, `hoi4_diplomacy_act` | no | unvalidated | medium: more members on the planned front | live. Owner: live invite_to_faction |
-| Leave a faction or kick a member when its wars hurt the plan (`factions.leave_or_kick`) | politics-diplomacy-espionage.md#7. Factions | `diplomacy[].action` (executor) | `hoi4_faction_leave`, `hoi4_diplomacy_act` | no | unvalidated | low: rare | live. Owner: throwaway-save live test |
+| Answer a country's request to join our faction (accept or refuse with a reason; never silence) (`factions.answer_join_requests`) | politics-diplomacy-espionage.md#7. Factions | `incoming_proposals` (executor) | `hoi4_diplomacy_incoming` | no | unvalidated | medium: a member that asks brings divisions; a planned war target must not become a member | live. Owner: plan_affairs default_incoming (faction_join_request, join_war_offer) |
+| Leave a faction or kick a member when its wars hurt the plan (`factions.leave_or_kick`) | politics-diplomacy-espionage.md#7. Factions | `diplomacy[].action` (executor) | `hoi4_faction_leave`, `hoi4_diplomacy_act` | no | unvalidated | low: rare | live. Owner: hoi4_faction_leave: at war the leader's leave is refused (leave_unavailable, fst1); alone in the faction the dismantle confirmation is a diplomacy dialog, sent since 17 Nov (fsp1 failed before the fix): live retest |
+| Invite chosen minors into the own faction (`factions.invite_members`) | politics-diplomacy-espionage.md#7. Factions | `faction.create.invite` (executor), `diplomacy[].action` (executor) | `hoi4_diplomacy_act` | live 17 Nov fsw1 (1940-01 AI Germany save): invite_to_faction HUN sent ('They will accept'), the row went pending, Hungary answered no four days later (Axis at war); fsp1 ITA try_anyway sent and refused as previewed | ok | medium: more members on the planned front | live. |
 
 ### Puppets and subjects
 
