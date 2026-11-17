@@ -262,6 +262,56 @@ pub(super) fn button(r: &Reader<'_>, image: u64, handle: u64, name: &str) -> Res
     Ok(Some(gui_tree::rect_unclipped(r, image, button, GAME)?))
 }
 
+/// The named row element of the line when the game shows it, with its rectangle.
+pub(super) fn shown_button(
+    r: &Reader<'_>,
+    image: u64,
+    handle: u64,
+    name: &str,
+) -> Result<Option<Rect>> {
+    let Some(frame) = row(r, image, handle)? else {
+        return Ok(None);
+    };
+    let Some(button) = gui_tree::child(r, image, frame, name)? else {
+        return Ok(None);
+    };
+    if !gui_tree::shown(r, button)? {
+        return Ok(None);
+    }
+    Ok(Some(gui_tree::rect_unclipped(r, image, button, GAME)?))
+}
+
+/// The organisation state the line's row shows (countryproductionlineview.gui: a row with an
+/// organisation attached shows `has_mio_background` and `change_manufacturer`, a row without
+/// one shows `attach_manufacturer`; equipment no organisation makes shows neither button).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct LineMio {
+    pub attached: bool,
+    pub can_attach: bool,
+}
+pub(super) fn line_mio(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option<LineMio>> {
+    let Some(frame) = row(r, image, handle)? else {
+        return Ok(None);
+    };
+    let shown = |name: &str| -> Result<bool> {
+        Ok(match gui_tree::child(r, image, frame, name)? {
+            Some(b) => gui_tree::shown(r, b)?,
+            None => false,
+        })
+    };
+    Ok(Some(mio_state(
+        shown("has_mio_background")?,
+        shown("change_manufacturer")?,
+        shown("attach_manufacturer")?,
+    )))
+}
+pub(super) fn mio_state(background: bool, change: bool, attach: bool) -> LineMio {
+    LineMio {
+        attached: background || (change && !attach),
+        can_attach: attach || change,
+    }
+}
+
 pub(super) fn lines(process: &dyn Process) -> Result<Vec<OwnLine>> {
     read(process, production_lines::own_lines)
 }

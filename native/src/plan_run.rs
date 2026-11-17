@@ -407,7 +407,9 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_fleet_reserve",
     "hoi4_fleet_split",
     "hoi4_focus_start",
+    "hoi4_general_trait",
     "hoi4_mio_design_team",
+    "hoi4_mio_line",
     "hoi4_mio_policy",
     "hoi4_mio_trait",
     "hoi4_naval_invasion",
@@ -7806,6 +7808,7 @@ pub fn run(
     alarms.extend(plan_manage::take_alarms(state));
     alarms.extend(plan_military::take_alarms(state));
     alarms.extend(plan_affairs::take_alarms(state));
+    alarms.extend(plan_seams::take_alarms(state));
     if let Some(alarm) = construction_alarm(state, tools, &plan, construction.as_deref()) {
         alarms.push(alarm);
     }

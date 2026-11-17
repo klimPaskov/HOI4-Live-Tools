@@ -3032,7 +3032,11 @@
               "fuel",
               "balance",
               "dockyards",
-              "doctrines"
+              "doctrines",
+              "exercises",
+              "cp_spend",
+              "mio_lines",
+              "mio_traits"
             ]
           }
         },
@@ -3334,6 +3338,30 @@
           "description": "alert name -> why the plan leaves it open (strategist lint alerts.owner: every game alert has a plan key that owns it or is ignored here with a reason)",
           "x-rule": "alerts",
           "x-owner": "lint"
+        },
+        "exercise_fill": {
+          "type": "number",
+          "default": 0.9,
+          "description": "the mean equipment fill an idle army needs before the default exercise rule exercises it at peace (plans with xp_budget.army exercise entries use those instead)",
+          "x-rule": "exercises",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "command_power_max": {
+          "type": "number",
+          "default": 80,
+          "description": "the country's command power maximum when no read gives it (the defines' BASE_MAX_COMMAND_POWER); cp_spend buys a trait when command power is within 20 of it",
+          "x-rule": "cp_spend",
+          "minimum": 1
+        },
+        "cp_trait_prefer": {
+          "type": "array",
+          "default": [],
+          "description": "assignable general traits cp_spend takes first, in order (trait keys or localised names); otherwise the first enabled one",
+          "x-rule": "cp_spend",
+          "items": {
+            "type": "string"
+          }
         },
         "xp_reserve": {
           "type": "object",
@@ -4169,6 +4197,28 @@
       },
       "x-owner": "executor",
       "description": "equipment designs made once per id (plan_affairs.rs designs_step, W2-2) through hoi4_design_create, XP-guarded; `production` (here) or production[].design (on the line) switches a line to the design"
+    },
+    "commanders": {
+      "type": "array",
+      "x-owner": "executor",
+      "description": "traits to buy with command power per general (rule cp_spend, hoi4_general_trait), in order",
+      "items": {
+        "type": "object",
+        "properties": {
+          "general": {
+            "type": "string"
+          },
+          "traits": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "general"
+        ]
+      }
     },
     "mio": {
       "type": "array",

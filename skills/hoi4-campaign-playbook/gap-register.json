@@ -419,11 +419,11 @@
    ],
    "plan": [],
    "tools": [],
-   "blocked": "no tool opens the officer corps (army spirits) view; hoi4_alerts only names the 'officer corps' alert",
+   "blocked": "no tool opens the officer corps view (interface/countryofficercorpview.gui: army_spirits_view, air_spirits_view and the navy tab; slots academy_spirit, army_spirit, division_command_spirit and the naval/air pairs as *_spirit_entry with *_spirit_window_item_grid); hoi4_alerts only names the 'officer corps' alert",
    "payoff": "low",
    "why": "discounts and small bonuses, not decisive",
    "closing": "both",
-   "owner": "build an army-spirit tool (officer corps view) with a plan key, then live-test"
+   "owner": "build an officer-corps tool and a plan key officer_corps [{slot, spirit}], then live-test. To look at: the view's manager slot and root (dbg_views while it is open), the entry rects, the owned/affordable state; the spirits are ideas of the slot's type in common/ideas/army_spirits.txt (navy_spirits.txt, air_spirits.txt) and the price is the slot's cost in common/idea_tags/00_idea.txt paid in army/navy/air EXPERIENCE (army 20/35/50 in 1.19.4), so the XP budget (procedure.md#5) ranks them against template edits"
   },
   {
    "id": "advisors.grow_high_command",
@@ -3112,14 +3112,15 @@
     "production[].organization"
    ],
    "tools": [
-    "hoi4_production_add",
-    "hoi4_design_set_production"
+    "hoi4_design_set_production",
+    "hoi4_mio_line",
+    "hoi4_production_add"
    ],
-   "blocked": "hoi4_production_add Shift+clicks past the organisation chooser, so new lines get no organisation; the `organization` argument of hoi4_production_add and hoi4_design_set_production is refused with not_yet_built before input, and the executor holds it back (plan_run::UNBUILT_ARGS) and adds the line without it",
+   "blocked": "hoi4_production_add Shift+clicks past the organisation chooser, so new lines get no organisation; the `organization` argument of hoi4_production_add and hoi4_design_set_production is refused with not_yet_built before input, and the executor holds it back (plan_run::UNBUILT_ARGS) and adds the line without it. hoi4_mio_line reads a line's organisation (already_attached Verified on every 1936 German start line, pp5-pp9 17 Nov 2026) and refuses roster_unreadable for a line without one: the roster the line's button opens (drawn at scale 0.45 at the rect's bottom-left) lists 'Produce without a Military Industrial Organization' and then rows the politics-roster reader cannot see (texts at list+0x80->+0x1e0->+0x100); a blind row click removed an organisation live",
    "payoff": "high",
    "why": "MIO efficiency-cap and cost traits are the largest production modifiers; funds come from lines",
    "closing": "both",
-   "owner": "offline done: production[].organization (executor, sent once built), UNBUILT_ARGS seam, the argument in both tool schemas refused not_yet_built, validate_plan checks (organisation allowed, equipment_type covers the line, task capacity), tests; live: drive the organisation chooser (industrial_organisation_list_window, organisation_list rows) on a plain click, read the line's organisation back in hoi4_production_lines, remove the UNBUILT_ARGS entries, verify on Germany 1936",
+   "owner": "a row reader for the production-opened roster (one of ten list windows of the production view, slot 0xd8 +0x21b8 step 0x470, root +0xf0, all read visible) with a shown test, then enable ROSTER_FROM_LINE_READABLE and live-test",
    "priority": 9
   },
   {
@@ -4110,7 +4111,8 @@
    "payoff": "medium",
    "why": "Regular is +25% over Trained; XP pays for templates and doctrines",
    "closing": "both",
-   "owner": "offline done: hoi4_army_exercise {armies,on,stop_at_max} (start: the card selects the army, the battle plan bar btn_exercise, Shift+click for the stop at the maximum; stop: the card btn_stop_training), receipt per army from the card training_marker and icn_exercise_stop_at_max (hoi4_armies exercising, exercise_stop_at_max), in RECEIPT_TOOLS; the executor step for xp_budget.army purpose exercise sends it (start at peace, stop at war), tests; live: exercise_test.py on a fresh Germany 1936 game: both readbacks flip and army XP grows over a few days"
+   "owner": "offline done: hoi4_army_exercise {armies,on,stop_at_max} (start: the card selects the army, the battle plan bar btn_exercise, Shift+click for the stop at the maximum; stop: the card btn_stop_training), receipt per army from the card training_marker and icn_exercise_stop_at_max (hoi4_armies exercising, exercise_stop_at_max), in RECEIPT_TOOLS; the executor step for xp_budget.army purpose exercise sends it (start at peace, stop at war), tests; live: exercise_test.py on a fresh Germany 1936 game: both readbacks flip and army XP grows over a few days",
+   "verified": "executor default rule exercises: idle armies exercise at peace while the equipment holds (army_exercise Verified, pp5/pp9 17 Nov 2026)"
   },
   {
    "id": "training.early_deploy_cancel",
@@ -4306,11 +4308,14 @@
     "procedure.md#16. Army organisation"
    ],
    "plan": [],
-   "tools": [],
+   "tools": [
+    "hoi4_general_trait"
+   ],
    "payoff": "medium",
    "why": "-15% supply use or +attack on the main effort for 15 CP",
    "closing": "both",
-   "owner": "build a leader tool (assign trait, preferred tactic) and a `commanders` plan key (procedure says 'commanders key pending')"
+   "owner": "find the Leader Details window's owner (a deeper scan from the commander list window), fill TREE_PATHS in leader_act.rs, live-test the list and an assignment",
+   "blocked": "hoi4_general_trait (unvalidated) answers window_not_found: the trait tree (Leader Details: General, Field Marshal and Terrain traits) opens from the army card portrait -> Select Commander -> a row's Details, and its root unitleader_trait_tree_window is in none of the interface manager slots 0x8-0x400 nor the pop-up list (pp6, 17 Nov 2026); the cp_spend rule rests a year on that refusal"
   },
   {
    "id": "formations.recruit_generals",
@@ -4387,14 +4392,15 @@
    "plan": [],
    "tools": [
     "hoi4_template_options",
-    "hoi4_doctrines"
+    "hoi4_doctrines",
+    "hoi4_country_status"
    ],
-   "blocked": "command power has no read tool (hoi4_army_commander reads it only inside a promotion)",
+   "blocked": "command power's current value is read from the top bar (hoi4_country_status fields.command_power, live 17 Nov 2026); its maximum shows only in the tooltip",
    "verified": "LIVE_VERIFICATION_1_19_4.md: hoi4_template_options 1 Nov and hoi4_doctrines 1 Nov, 10 DLC (army XP)",
    "payoff": "low",
    "why": "spend timing only",
    "closing": "both",
-   "owner": "expose command power in a read (hoi4_commanders or hoi4_country_status)"
+   "owner": "read the command power maximum (tooltip or the country's modifiers)"
   },
   {
    "id": "formations.rename_roles",

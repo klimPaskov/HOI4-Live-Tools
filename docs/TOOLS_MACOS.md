@@ -43,7 +43,8 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_doctrines` (R): Own doctrines read from game memory (no input, no lease, never pauses).
 - `hoi4_focus_start` (A): Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory;
 - `hoi4_intelligence` (R): Own intelligence agency, read-only (no input, no lease, never pauses).
-- `hoi4_mio_design_team` (A): UNVALIDATED (no live test yet): put a military-industrial organisation into a design-team slot of the politics view:
+- `hoi4_mio_design_team` (A): Browse only, assigns nothing (live pp4, 17 Nov 2026):
+- `hoi4_mio_line` (A): Reads one own production line's organisation state through the game's own row (live pp5-pp9, 17 Nov 2026):
 - `hoi4_mio_policy` (A): UNVALIDATED (no live test yet): attach a policy to an organisation:
 - `hoi4_mio_trait` (A): Live-verified: queue a trait of an organisation's trait tree:
 - `hoi4_mios` (R): Military-industrial organisations and designers for the own country, read-only (no input, no lease, never pauses).
@@ -151,6 +152,7 @@ Politics slots (`hoi4_politics_options`, `hoi4_politics_choose`): `slot` is the 
 - `hoi4_agency_upgrade` (A): Start an agency upgrade:
 - `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
+- `hoi4_general_trait` (A): UNVALIDATED (no live test yet): give an own army general an assignable trait for command power (NDefines UNIT_LEADER_ASSIGN_TRAIT_COST, read from the game's defines;
 - `hoi4_map_mode` (A): Switch the map mode with the game's own F-key shortcut, as a human checks the map:
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
 - `hoi4_occupation_law` (A): Set the DEFAULT occupation law for all occupied territories (the Occupied Territories view's Territory Management law) with ordinary input:
