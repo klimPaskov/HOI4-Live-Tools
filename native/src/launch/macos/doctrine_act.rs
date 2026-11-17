@@ -21,7 +21,7 @@ use super::{
     journal::Outcome,
     loc, mgmt, panelkit as pk,
     settle::Verdict,
-    ui::{accept_command, clear_notices, read, wait},
+    ui::{accept_command, clear_notices, read, settled, wait},
     ui_action::{self, refuse, Driven, Job},
     Guard, InputAuthority,
 };
@@ -738,11 +738,427 @@ pub(super) fn tool() -> Value {
     json!({"name":"hoi4_doctrine_adopt","description":"Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled; the message names the game's price read from the row and the experience held, or says the price is covered and a precondition is unmet). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false. `replace` (swap the grand doctrine or the track's subdoctrine already chosen, instead of the refusals grand_doctrine_set and track_occupied) is not yet built: refused with not_yet_built.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
 }
 
+// ------------------------------------------------------------------ officer corps (list)
+
+/// Interface-manager slot of the officer corps view (CCountryArmyOfficerCorpView, pp13).
+const OFFICER_SLOT: u64 = 0x160;
+/// Widget names whose text is read in the officer corps listing.
+fn texty(name: &str) -> bool {
+    ["name", "cost", "text", "title", "desc", "value", "label"]
+        .iter()
+        .any(|w| name.contains(w))
+}
+
+/// Every widget of the open officer corps view under a spirit window or grid (all: every
+/// widget): its path, shown state, rect, button state (buttons) and text (text-like names).
+fn officer_widgets(r: &crate::memory::Reader<'_>, i: u64, all: bool) -> Result<Vec<Value>> {
+    let root = pk::open_root(r, i, &pk::OFFICER_VIEW)?;
+    widgets_under(r, i, root, all)
+}
+fn widgets_under(
+    r: &crate::memory::Reader<'_>,
+    i: u64,
+    root: u64,
+    all: bool,
+) -> Result<Vec<Value>> {
+    let mut out = Vec::new();
+    let mut stack = vec![(root, 0u32, String::new(), false)];
+    while let Some((obj, depth, path, inside)) = stack.pop() {
+        for child in gui_tree::children(r, obj)? {
+            let name = gui_tree::name(r, child, i)?.unwrap_or_default();
+            let p = format!("{path}/{name}");
+            let spirit = all || inside || name.contains("spirit");
+            if spirit {
+                let rect = gui_tree::rect_unclipped(r, i, child, pk::GAME)
+                    .map(|x| json!([x.x, x.y, x.w, x.h]))
+                    .unwrap_or(Value::Null);
+                let mut row = json!({"path": p, "shown": gui_tree::shown(r, child).unwrap_or(false),
+                    "rect": rect});
+                if name.contains("button") {
+                    row["button_state"] = json!(gui_tree::button_state(r, child).ok());
+                }
+                if texty(&name) {
+                    if let Ok(Some(t)) = pk::text(r, i, obj, &name, 0) {
+                        row["text"] = json!(t);
+                    }
+                }
+                out.push(row);
+            }
+            if depth < 10 && out.len() < 600 {
+                if let Ok(Some(inner)) = gui_tree::container(r, child, i) {
+                    stack.push((inner, depth + 1, p.clone(), spirit));
+                }
+                // a grid box keeps its entries as grid items, not as children (pp17)
+                if name.contains("grid") {
+                    match pk::items(r, i, child) {
+                        Ok(items) => {
+                            for (k, item) in items.iter().enumerate() {
+                                stack.push((item.frame, depth + 1, format!("{p}/#{k}"), spirit));
+                            }
+                        }
+                        Err(e) => out.push(json!({"path": p, "grid_items_error": e.message})),
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The spirit slots of the open officer corps view, from widgets_under(root, false): per view
+/// (army, navy, air) and slot index, the entry kind (the gui file's `<kind>_spirit_entry`, read
+/// from its glow), the slot button's rect, whether it is the selected slot (button state 2) and
+/// whether a spirit is taken (its spirit_icon shown).
+fn slots_of(widgets: &[Value]) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+    for w in widgets {
+        let Some(path) = w["path"].as_str() else {
+            continue;
+        };
+        let parts: Vec<&str> = path.split('/').filter(|x| !x.is_empty()).collect();
+        // officer_core_view / <view>_spirits_view / spirit_grid / #k / leaf
+        let [_, view, "spirit_grid", k, leaf] = parts.as_slice() else {
+            continue;
+        };
+        let (Some(view), Some(k)) = (
+            view.strip_suffix("_spirits_view"),
+            k.strip_prefix('#').and_then(|x| x.parse::<u64>().ok()),
+        ) else {
+            continue;
+        };
+        let at = match out
+            .iter()
+            .position(|s| s["view"] == json!(view) && s["index"] == json!(k))
+        {
+            Some(at) => at,
+            None => {
+                out.push(
+                    json!({"view": view, "index": k, "entry": null, "rect": null,
+                    "selected": false, "taken": false}),
+                );
+                out.len() - 1
+            }
+        };
+        let slot = &mut out[at];
+        match *leaf {
+            "button" => {
+                slot["rect"] = w["rect"].clone();
+                slot["selected"] = json!(w["button_state"] == json!(2));
+            }
+            "spirit_icon" => slot["taken"] = json!(w["shown"] == json!(true)),
+            l => {
+                if let Some(kind) = l.strip_suffix("_spirit_glow") {
+                    slot["entry"] = json!(kind);
+                }
+            }
+        }
+    }
+    out.sort_by_key(|s| {
+        (
+            s["view"].as_str().unwrap_or("").to_string(),
+            s["index"].as_u64(),
+        )
+    });
+    out
+}
+
+/// The spirits a slot's spirit_window offers, from widgets_under(spirit_window, true): its title
+/// and per box_grid item the name, the cost shown and the entry's rect (the click target).
+fn spirits_of(widgets: &[Value]) -> (Option<String>, Vec<Value>) {
+    let mut title = None;
+    let mut out: Vec<Value> = Vec::new();
+    for w in widgets {
+        let Some(path) = w["path"].as_str() else {
+            continue;
+        };
+        if path == "/title" {
+            title = w["text"].as_str().map(str::to_string);
+            continue;
+        }
+        let Some(rest) = path.strip_prefix("/ideas/grid/box_grid/#") else {
+            continue;
+        };
+        let Some((k, leaf)) = rest.split_once('/') else {
+            continue;
+        };
+        let Ok(k) = k.parse::<u64>() else { continue };
+        let at = match out.iter().position(|s| s["index"] == json!(k)) {
+            Some(at) => at,
+            None => {
+                out.push(json!({"index": k, "name": null, "cost": null, "rect": null}));
+                out.len() - 1
+            }
+        };
+        let spirit = &mut out[at];
+        match leaf {
+            "idea_entry_bg" => spirit["rect"] = w["rect"].clone(),
+            "cost" => {
+                spirit["cost"] = w["text"]
+                    .as_str()
+                    .and_then(|t| t.trim().parse::<f64>().ok())
+                    .map_or(Value::Null, |c| json!(c));
+            }
+            "traits_container/name" => spirit["name"] = w["text"].clone(),
+            _ => {}
+        }
+    }
+    out.sort_by_key(|s| s["index"].as_u64());
+    (title, out)
+}
+
+/// One spirit_window instance as read: drawn (visible or shown) and its title and spirits.
+#[derive(Clone, Debug, PartialEq)]
+struct SpiritWindow {
+    drawn: bool,
+    read: (Option<String>, Vec<Value>),
+}
+
+/// The window a slot click opened: the only drawn one that lists spirits, else the only one
+/// whose list changed with the click; None when that is not one window.
+fn pick_window(
+    before: &[SpiritWindow],
+    after: &[SpiritWindow],
+) -> Option<(Option<String>, Vec<Value>)> {
+    let drawn: Vec<&SpiritWindow> = after
+        .iter()
+        .filter(|w| w.drawn && !w.read.1.is_empty())
+        .collect();
+    if let [one] = drawn.as_slice() {
+        return Some(one.read.clone());
+    }
+    let changed: Vec<&SpiritWindow> = after
+        .iter()
+        .enumerate()
+        .filter(|(k, w)| !w.read.1.is_empty() && before.get(*k).map(|b| &b.read) != Some(&w.read))
+        .map(|(_, w)| w)
+        .collect();
+    match changed.as_slice() {
+        [one] => Some(one.read.clone()),
+        _ => None,
+    }
+}
+
+/// hoi4_officer_corps: list:true opens the officer corps view (Shift+E), returns its spirit slots
+/// and, with `slot`, the spirits that slot offers; then closes the view. Picking is not built.
+pub(super) fn officer_call(
+    args: &serde_json::Map<String, Value>,
+    process: &(dyn Process + Send + Sync),
+    keys: &dyn GameInput,
+    guard: &mut Guard,
+    authority: &InputAuthority,
+    actions: &mut super::journal::GameJournal,
+) -> Result<Value> {
+    super::allowed(args, &["list", "slot", "request_id", "lease_token"])?;
+    let bad_slot = || {
+        Error::new(
+            "invalid_arguments",
+            "slot is VIEW:INDEX (army, navy or air)",
+        )
+    };
+    let slot = match args.get("slot") {
+        None => None,
+        Some(v) => {
+            let text = v.as_str().unwrap_or_default();
+            let (view, k) = text.split_once(':').ok_or_else(bad_slot)?;
+            let k: usize = k.parse().map_err(|_| bad_slot())?;
+            if !matches!(view, "army" | "navy" | "air") || k > 5 {
+                return Err(bad_slot());
+            }
+            Some((view.to_string(), k))
+        }
+    };
+    if !mgmt::flag(args, "list")? {
+        return Err(Error::new(
+            "not_yet_built",
+            "Only list:true is built: it reads the officer corps slots (and with `slot` the \
+             spirits one offers) and closes the view; picking a spirit is not built yet",
+        ));
+    }
+    let id = super::string(args, "request_id")?;
+    let token = super::string(args, "lease_token")?;
+    let job = Job {
+        kind: "officer_corps",
+        action: json!({"kind":"officer_corps","list":true,
+            "slot": slot.as_ref().map(|(v, k)| format!("{v}:{k}"))}),
+        plan: Box::new(|_| Ok(())),
+        dispatch: Box::new(|process, keys| {
+            let result: Driven = (|| {
+                if !pk::open_now(process, &pk::OFFICER_VIEW) {
+                    keys.press_shifted(KEY_E)?;
+                    wait(process, "open officer corps view", |r, i| {
+                        pk::is_open(r, i, &pk::OFFICER_VIEW)
+                    })?;
+                }
+                // the view slides in from the left edge
+                thread::sleep(Duration::from_millis(600));
+                let slots = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
+                let Some((view, k)) = &slot else {
+                    return Ok(json!({"listing_only": true, "slots": slots,
+                        "verification": "gui_only"}));
+                };
+                let rect = slots
+                    .iter()
+                    .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
+                    .and_then(|s| s["rect"].as_array().cloned())
+                    .ok_or_else(|| {
+                        refuse(
+                            "slot_missing",
+                            format!("The {view} spirits show no slot {k}"),
+                        )
+                    })?;
+                let n = |x: usize| rect.get(x).and_then(Value::as_i64).unwrap_or(0) as i32;
+                let button = gui_tree::Rect {
+                    x: n(0),
+                    y: n(1),
+                    w: n(2),
+                    h: n(3),
+                };
+                // The slot button opens the gui file's top-level spirit_window, which the view
+                // object holds (not a child of its root, not an interface-manager slot: pp22).
+                // Each branch has its own spirit_window (three instances held by the view, pp25),
+                // and a closed one keeps its last list: the one this click opened is the one
+                // drawn (visible or shown), else the one whose list changed.
+                let windows =
+                    |r: &crate::memory::Reader<'_>, i: u64| -> Result<Vec<SpiritWindow>> {
+                        pk::view_roots(r, i, OFFICER_SLOT, "spirit_window")?
+                            .into_iter()
+                            .map(|root| {
+                                Ok(SpiritWindow {
+                                    drawn: gui_tree::visible(r, root).unwrap_or(false)
+                                        || gui_tree::shown(r, root).unwrap_or(false),
+                                    read: spirits_of(&widgets_under(r, i, root, true)?),
+                                })
+                            })
+                            .collect()
+                    };
+                let before = read(process, windows)?;
+                pk::click(process, keys, "officer corps slot", |_, _| Ok(button))?;
+                let after = settled(process, "spirit window", windows)?;
+                let spirits = pick_window(&before, &after).ok_or_else(|| {
+                    Error::new(
+                        "gui_target_unavailable",
+                        format!(
+                            "The slot's spirit window was not told apart ({} windows: {})",
+                            after.len(),
+                            after
+                                .iter()
+                                .map(|w| format!(
+                                    "{} drawn {} spirits {}",
+                                    w.read.0.as_deref().unwrap_or("?"),
+                                    w.drawn,
+                                    w.read.1.len()
+                                ))
+                                .collect::<Vec<_>>()
+                                .join("; ")
+                        ),
+                    )
+                })?;
+                Ok(
+                    json!({"listing_only": true, "slots": slots, "slot": format!("{view}:{k}"),
+                    "title": spirits.0, "spirits": spirits.1, "verification": "gui_only"}),
+                )
+            })();
+            leave(process, keys);
+            result
+        }),
+        settle: Box::new(|_, seen| {
+            Ok(match seen {
+                // Listing changes nothing: whatever it saw is its result.
+                Some(v) => Outcome::Reached(json!({"tool": "officer_corps", "seen": v})),
+                None => Outcome::Unobservable,
+            })
+        }),
+    };
+    ui_action::run(job, id, token, process, keys, guard, authority, actions)
+}
+
+pub(super) fn officer_tool() -> Value {
+    json!({"name":"hoi4_officer_corps","description":"Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. Picking a spirit is not built yet (refused with not_yet_built). Refusal while driving: slot_missing. Results carry verification gui_only.","inputSchema":{"type":"object","properties":{"list":{"type":"boolean"},"slot":{"type":"string","maxLength":16},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["list","request_id","lease_token"],"additionalProperties":false}})
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::doctrines::{RawFolder, RawReduction, RawTemplate, RawTrack};
     use super::super::script;
     use super::*;
+
+    #[test]
+    fn officer_corps_slots_read_as_the_view_draws_them() {
+        // pp18 shape: the army view's academy slot selected, no spirit taken
+        let g = "/officer_core_view/army_spirits_view/spirit_grid";
+        let w = vec![
+            json!({"path": "/officer_core_view/army_spirits_view", "shown": true, "rect": null}),
+            json!({"path": format!("{g}/#1/button"), "shown": true, "rect": [189, 328, 168, 70], "button_state": 0}),
+            json!({"path": format!("{g}/#1/army_spirit_glow"), "shown": false, "rect": null}),
+            json!({"path": format!("{g}/#1/spirit_icon"), "shown": false, "rect": null}),
+            json!({"path": format!("{g}/#0/button"), "shown": true, "rect": [23, 328, 168, 70], "button_state": 2}),
+            json!({"path": format!("{g}/#0/academy_spirit_glow"), "shown": false, "rect": null}),
+            json!({"path": format!("{g}/#0/spirit_icon"), "shown": true, "rect": null}),
+        ];
+        let slots = slots_of(&w);
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0]["entry"], "academy");
+        assert_eq!(slots[0]["selected"], true);
+        assert_eq!(slots[0]["taken"], true);
+        assert_eq!(slots[0]["rect"], json!([23, 328, 168, 70]));
+        assert_eq!(slots[1]["entry"], "army");
+        assert_eq!(slots[1]["selected"], false);
+    }
+
+    #[test]
+    fn the_spirit_window_a_click_opened_is_the_drawn_or_the_changed_one() {
+        let w = |title: &str, n: usize, drawn: bool| SpiritWindow {
+            drawn,
+            read: (
+                Some(title.to_string()),
+                (0..n).map(|k| json!({"index": k})).collect(),
+            ),
+        };
+        // pp25: the army window still holds the academy list; the air window was opened
+        let before = vec![w("Spirit of the Academy", 11, false), w("", 0, false)];
+        let after = vec![
+            w("Spirit of the Academy", 11, false),
+            w("Spirit of the Air Force", 9, false),
+        ];
+        assert_eq!(
+            pick_window(&before, &after).unwrap().0.as_deref(),
+            Some("Spirit of the Air Force")
+        );
+        // a drawn window wins even when nothing changed (the same slot opened twice)
+        let after = vec![
+            w("Spirit of the Academy", 11, true),
+            w("Spirit of the Air Force", 9, false),
+        ];
+        assert_eq!(
+            pick_window(&after, &after).unwrap().0.as_deref(),
+            Some("Spirit of the Academy")
+        );
+        // nothing drawn and nothing changed: not told apart
+        let same = vec![w("Spirit of the Academy", 11, false)];
+        assert!(pick_window(&same, &same).is_none());
+    }
+
+    #[test]
+    fn a_spirit_window_reads_title_names_costs_and_entry_rects() {
+        // pp23 shape: "Spirit of the Academy", items listed last-first
+        let b = "/ideas/grid/box_grid";
+        let w = vec![
+            json!({"path": "/title", "shown": true, "text": "Spirit of the Academy"}),
+            json!({"path": format!("{b}/#1/idea_entry_bg"), "shown": true, "rect": [778, 201, 241, 83]}),
+            json!({"path": format!("{b}/#1/cost"), "shown": true, "text": "20"}),
+            json!({"path": format!("{b}/#1/traits_container/name"), "shown": true, "text": "Tenacious Defense"}),
+            json!({"path": format!("{b}/#0/idea_entry_bg"), "shown": true, "rect": [547, 201, 241, 83]}),
+            json!({"path": format!("{b}/#0/cost"), "shown": true, "text": "20"}),
+            json!({"path": format!("{b}/#0/traits_container/name"), "shown": true, "text": "Bold Attack"}),
+        ];
+        let (title, spirits) = spirits_of(&w);
+        assert_eq!(title.as_deref(), Some("Spirit of the Academy"));
+        assert_eq!(spirits.len(), 2);
+        assert_eq!(spirits[0]["name"], "Bold Attack");
+        assert_eq!(spirits[0]["cost"], json!(20.0));
+        assert_eq!(spirits[0]["rect"], json!([547, 201, 241, 83]));
+        assert_eq!(spirits[1]["name"], "Tenacious Defense");
+    }
 
     const FOLDERS: &str = "land = { ledger = army } naval = { ledger = navy } air = { ledger = air } special_forces = { ledger = army }";
     const GRAND: &str = r#"

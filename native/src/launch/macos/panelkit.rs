@@ -1455,6 +1455,41 @@ pub(super) fn scan_path_for_root(
     }
     Ok(out)
 }
+/// Every window named `name` that the view at interface-manager `slot` holds (the same search
+/// as scan_path_for_root), each once, in field order.
+pub(super) fn view_roots(r: &Reader<'_>, i: u64, slot: u64, name: &str) -> Result<Vec<u64>> {
+    let idler = r.u64(i + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + MANAGER)?;
+    let view = r.u64(manager + slot)?;
+    let mut out = Vec::new();
+    for field in (0..0x6000u64).step_by(8) {
+        let Ok(w) = r.u64(view + field) else { continue };
+        if !plausible(w) {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        for piece in 0..7u64 {
+            match r.read(w + piece * 0x100, 0x100) {
+                Ok(b) => bytes.extend(b),
+                Err(_) => break,
+            }
+        }
+        for c in bytes.chunks_exact(8) {
+            let p = u64::from_le_bytes(c.try_into().unwrap());
+            if !plausible(p) {
+                continue;
+            }
+            if let Ok(Some(root)) = gui_tree::container(r, p, i) {
+                if !out.contains(&root)
+                    && container_name(r, i, root).ok().flatten().as_deref() == Some(name)
+                {
+                    out.push(root);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
 pub(super) fn debug_popups(process: &dyn Process) -> Result<serde_json::Value> {
     read(process, |r, i| {
         let abi = r.string_abi();
@@ -1575,7 +1610,11 @@ pub(super) fn debug_alerts(process: &dyn Process) -> Result<serde_json::Value> {
 /// Probe-only: every interface-manager view slot with a GUI root, its name and visibility
 /// (maps which top-bar panels are open).
 pub(super) fn debug_views(process: &dyn Process) -> Result<serde_json::Value> {
-    read(process, |r, i| {
+    read(process, debug_views_read)
+}
+/// The interface manager's open views (slot, class, shown), for a read already in progress.
+pub(super) fn debug_views_read(r: &Reader<'_>, i: u64) -> Result<serde_json::Value> {
+    {
         let idler = r.u64(i + game::layout(r).idler_global)?;
         let manager = r.u64(idler + MANAGER)?;
         let mut out = Vec::new();
@@ -1600,7 +1639,7 @@ pub(super) fn debug_views(process: &dyn Process) -> Result<serde_json::Value> {
             }
         }
         Ok(serde_json::json!(out))
-    })
+    }
 }
 
 /// Top-bar panels (interface-manager slots, root at +0x490; mapped live 5 November 2026):
