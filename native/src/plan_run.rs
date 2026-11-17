@@ -2563,6 +2563,19 @@ fn shared_stack(entry: &Value, roster: &Value, max: u64) -> Option<String> {
     }
 }
 
+/// Whether the armies step's gather will take the loose divisions now: the plan lets it gather
+/// (`armies` set, `gather` not false) and the game shows the unassigned-divisions alert the
+/// gather selects through.
+fn gather_takes_loose(tools: &dyn Tools, plan: &Value) -> bool {
+    plan["armies"].is_object()
+        && plan["armies"]["gather"] != json!(false)
+        && tools.call("hoi4_alerts", &json!({})).is_ok_and(|read| {
+            list(&read, "alerts")
+                .iter()
+                .any(|a| a["alert"] == json!("unassigned_divisions"))
+        })
+}
+
 /// 9. every division in an army of sensible size, generals only for real armies. At war it runs
 ///    right after the war step: the war cannot start before its armies exist (w15: the opening's
 ///    armies came a month late behind research, production and construction ticks).
@@ -3010,6 +3023,25 @@ fn layout_step(
         let no_create = state.done.contains_key(&format!("layout:nocreate:{home}"));
         if base.is_none() && unassigned_in(&roster, home) > 0 && !no_create {
             if state.skipped(now, "layoutcreate", &home.to_string()) {
+                continue;
+            }
+            // The gather is the working route: while the game shows its unassigned-divisions
+            // alert, one hoi4_army_gather (armies step) takes every loose division into a
+            // formation with room or a new army, and this entry binds the army standing in its
+            // state afterwards. A state-by-state create was refused first and the gather then
+            // did the work (g17c, 17 Nov 2026: army_create in states 5 and 66 NotApplied,
+            // selection_mismatch / selection_unavailable, the gather right after Verified).
+            if gather_takes_loose(tools, plan) {
+                plan_manage::note(
+                    state,
+                    "armies",
+                    format!(
+                        "layout {hint}: the loose divisions in state {home} go to the gather \
+                         (the game's unassigned alert is shown); the entry binds the army there \
+                         afterwards"
+                    ),
+                );
+                state.skip(now, "layoutcreate", &home.to_string(), DAY);
                 continue;
             }
             let (ok, why) = state.act(
@@ -12060,6 +12092,45 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(s2, "layout: Army 1 is North strike (Army 1)");
+    }
+
+    #[test]
+    fn army_layout_leaves_loose_divisions_to_the_gather_while_its_alert_shows() {
+        struct C(RefCell<Vec<String>>);
+        impl Tools for C {
+            fn call(&self, name: &str, _args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push(name.to_string());
+                Ok(match name {
+                    "hoi4_armies" => json!({"armies": [
+                        {"army": "Armee West", "main_state": 66, "division_count": 24}],
+                        "unassigned_by_state": [{"state_id": 66, "divisions": 2}]}),
+                    "hoi4_alerts" => json!({"alerts": [{"alert": "unassigned_divisions"}]}),
+                    _ => json!({"receipt": {"status": "Verified"}}),
+                })
+            }
+        }
+        let plan = json!({"armies": {"max": 24},
+            "army_layout": [
+                {"name_hint": "West", "state": 66, "role": "strike"},
+                {"name_hint": "West reserve", "state": 66, "role": "guard"}]});
+        let tools = C(RefCell::new(Vec::new()));
+        let mut state = State::default();
+        state.layout.insert("West".into(), "Armee West".into());
+        let _ = layout_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            !tools.0.borrow().contains(&"hoi4_army_create".to_string()),
+            "{:?}",
+            tools.0.borrow()
+        );
+        // without the alert (or with the gather off) the state's create is the route
+        let plan_off = json!({"armies": {"max": 24, "gather": false},
+            "army_layout": [
+                {"name_hint": "West", "state": 66, "role": "strike"},
+                {"name_hint": "West reserve", "state": 66, "role": "guard"}]});
+        let mut state = State::default();
+        state.layout.insert("West".into(), "Armee West".into());
+        let _ = layout_step(&mut state, &tools, &plan_off, "l", START).unwrap();
+        assert!(tools.0.borrow().contains(&"hoi4_army_create".to_string()));
     }
 
     #[test]
