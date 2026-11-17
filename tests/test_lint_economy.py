@@ -1,5 +1,5 @@
 """scripts/hoi4facts/lint_economy.py and economy.py: production over all lines sized to the need, construction
-capacity, the AI baseline as a floor, the forecast of the plan's own levers, consumer goods with the history's
+capacity, the AI baseline as a floor for factories (divisions reported), the forecast of the plan's own levers, consumer goods with the history's
 dynamic modifiers. Reads the installed game; skipped without it (the reward reader runs without it)."""
 
 import copy
@@ -119,8 +119,10 @@ class Germany(unittest.TestCase):
         self.assertTrue(errors, f)
         self.assertTrue(any("civilian factories 80 by 1939.09.01 against the AI's 104" in x["message"]
                             for x in errors), errors)
-        # divisions before the first war day: an error like the factories (the AI's 51 on 1937.03.01)
-        self.assertTrue(any(x["where"] == "training" and "the AI's 51" in x["message"] for x in errors), errors)
+        # divisions: the count against the AI is reported (info), not a floor (the force table is: lint_force)
+        self.assertFalse([x for x in errors if x["where"] == "training"], errors)
+        infos = [x for x in f if x["severity"] == "info" and x["where"] == "training"]
+        self.assertTrue(any("the AI's 51" in x["message"] for x in infos), f)
 
     def test_a_written_reason_does_not_lift_the_factory_floor(self):
         plan = copy.deepcopy(self.lopsided_plan)
@@ -128,18 +130,17 @@ class Germany(unittest.TestCase):
         out = lint_plan.lint(plan, self.game)
         errors = [x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "error"]
         self.assertTrue(errors)
-        # the divisions warning is answered by the reason
-        self.assertFalse([x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "warning"])
+        # divisions are never a warning or an error: the count is reported
+        self.assertFalse([x for x in self.rules(out, "plan.ai_baseline") if x["severity"] != "info"
+                          and x["where"] == "training"])
 
-    def test_a_written_reason_does_not_lift_the_division_floor_before_the_war(self):
-        plan = copy.deepcopy(self.lopsided_plan)
-        plan["goal"]["ai_baseline_why"] = "the AI fields under-equipped divisions"
-        out = lint_plan.lint(plan, self.game)
-        errors = [x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "error"
-                  and x["where"] == "training"]
-        self.assertTrue(errors)
+    def test_the_division_count_is_reported_with_what_holds_it(self):
+        out = lint_plan.lint(copy.deepcopy(self.lopsided_plan), self.game)
+        infos = [x for x in self.rules(out, "plan.ai_baseline") if x["severity"] == "info"
+                 and x["where"] == "training"]
+        self.assertTrue(infos)
         # the lopsided plan makes no support equipment: that is what holds its infantry
-        self.assertIn("by support_equipment", errors[0]["message"])
+        self.assertIn("by support_equipment", infos[0]["message"])
 
     def test_entries_of_one_template_add_their_queues_and_equipment_holds_them(self):
         def timeline(training):

@@ -37,11 +37,10 @@ Production is a set of factory targets per equipment over all lines, the ones th
                              reason does not lift it: only goal.ai_baseline_constraint entries the lint confirms
                              (no_free_slots: the forecast finds no free slot outside the construction risk by then;
                              law_unavailable: the law is not offered or its gate is closed under the plan's timeline).
-                             Divisions the same way up to the first war day: a stated divisions target, or the
-                             army forecast (the executor's training queues, caps and training time, each division
+                             Divisions are reported (info), not held: a stated divisions target, or the army
+                             forecast (the executor's training queues, caps and training time, each division
                              started only with its equipment in stock from the planned lines), below BASELINE_SLACK
-                             of the AI's divisions; later division marks stay a warning goal.ai_baseline_why can
-                             answer (the AI fields under-equipped divisions, conquest changes the need).
+                             of the AI's divisions. The army's floor is the force table (lint_force.py).
   economy.unbacked           (warning) a civilian or military target more than UNBACKED_SLACK above what the plan's
                              own levers give on that date (facts.economy.forecast).
   economy.below_forecast     (warning) a target below what the plan's own levers give: the plan aims low.
@@ -593,7 +592,7 @@ def baseline(lint, tl, table, fc=None, lev=()):
     lint.facts["ai_baseline"] = {"file": f"baselines/{lint.tag}-{derive.as_tuple(lint.start)[0]}.json",
                                  "below": [m for _, m in marks] + div_errors + div_marks,
                                  "forecast_below": [m for _, m in fc_marks],
-                                 "forecast_checked_until": (fc or {}).get("war"),
+                                 "forecast_checked_until": (fc or {}).get("war"), "why": why,
                                  "constraints": [{"constraint": c, "confirmed": True, "how": h} for c, h in held]
                                  + [{"constraint": c, "confirmed": False, "how": h} for c, h in refused]}
     if refused:
@@ -617,19 +616,14 @@ def baseline(lint, tl, table, fc=None, lev=()):
                  + ". Use more of what the game offers (laws by date, construction advisors and focuses, "
                    "construction and building-slot techs early, civilian-first to the switch date, build in every "
                    "state outside the construction risk, a smaller import budget): " + lever_text)
-    if div_errors and not covered:
-        lint.add("error", "plan.ai_baseline", "training",
-                 f"before the first war day the plan fields fewer divisions than the game's own AI as {lint.tag}: "
-                 + "; ".join(div_errors[:4]) + (" ..." if len(div_errors) > 4 else "")
-                 + ". A written reason does not lift this floor: add training lines (several entries of one template "
-                   "add their queues), raise the caps, and give the lines of what holds them (an equipment family) "
-                   "the factories (facts.army_forecast, facts.production_need), or name a hard game constraint in "
-                   "goal.ai_baseline_constraint the lint can confirm")
-    if div_marks and not why:
-        lint.add("warning", "plan.ai_baseline", "training",
-                 f"the plan fields fewer divisions than the game's own AI as {lint.tag}: " + "; ".join(div_marks[:4])
-                 + ". Raise the training caps, or say why in goal.ai_baseline_why (the AI fields under-equipped "
-                   "divisions of cheaper templates)")
+    # Divisions: the count against the AI is reported, not a floor. A division count says nothing of what the
+    # force is made of (a plan reached the AI's count with one infantry template and no armour for its wars);
+    # the floor is the force table's readiness (lint_force.py force.readiness, force.breakthrough).
+    if div_errors or div_marks:
+        lint.add("info", "plan.ai_baseline", "training",
+                 f"division count against the game's own AI as {lint.tag} (reported, not a floor; force.readiness "
+                 "holds the force table): " + "; ".join((div_errors + div_marks)[:6])
+                 + (" ..." if len(div_errors) + len(div_marks) > 6 else ""))
 
 
 def _atoms(pred):

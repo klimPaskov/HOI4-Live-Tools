@@ -2895,6 +2895,278 @@
       "description": "template the Occupied Territories view puts on garrison duty (garrison_template_button): plan_seams.rs sets it once the player occupies a state and the template exists. The tool for it is not built yet: the executor sends nothing and the digest (`seams`) says what it would set (gap register occupation.garrison_template)",
       "x-owner": "executor"
     },
+    "force_design": {
+      "type": "object",
+      "x-owner": "player",
+      "description": "The force the plan's wars need, by date (procedure item 6a; lint_force.py). wars: each planned war and what the force must do in it; land / air / navy: the force table (cumulative counts that must exist by `ready`, each tied to a war); budget: the military factories' split between land, air and navy by date with the reason. The executor does not read it: training, templates, production, air_plan and navy carry it out, and the lint holds them to it (force.readiness, force.breakthrough, force.air, force.invasion, force.template_late, force.unused_line).",
+      "properties": {
+        "wars": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "enemies": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/tag"
+                },
+                "description": "the war's targets (the lint matches the plan's dated wars by them)"
+              },
+              "start": {
+                "type": "string",
+                "description": "the first day of the war under the plan"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "offensive",
+                  "defensive"
+                ]
+              },
+              "axes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "strike axes the plan attacks on (the lint counts the army_layout strike entries whose axis lies in the targets' land)"
+              },
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "x-owner": "text",
+                "description": "what the force must do, phase by phase (break the line on the axes, hold the rest of the front, win the air over the axes, cross water, garrison)"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "id",
+              "enemies",
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "land": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "template": {
+                "type": "string",
+                "description": "a start template or a templates[] name"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "breakthrough",
+                  "exploit",
+                  "line",
+                  "assault",
+                  "mountain",
+                  "marine",
+                  "paratrooper",
+                  "garrison",
+                  "reserve",
+                  "anti_tank"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "divisions of the template fielded by `ready` (cumulative, start divisions included)"
+              },
+              "ready": {
+                "type": "string",
+                "description": "a date (1939.9.1) the row must hold by"
+              },
+              "war": {
+                "type": "string",
+                "description": "the force_design.wars id it serves"
+              },
+              "phase": {
+                "type": "string",
+                "x-owner": "text",
+                "description": "the phases[] id it serves"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "template",
+              "role",
+              "count",
+              "ready",
+              "war"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "air": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "fighter",
+                  "heavy_fighter",
+                  "cas",
+                  "tactical_bomber",
+                  "naval_bomber",
+                  "strategic_bomber",
+                  "transport",
+                  "scout"
+                ]
+              },
+              "equipment": {
+                "type": "string",
+                "description": "the airframe or plane equipment key its line makes"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "planes of the kind in hand by `ready` (start wings plus the lines' output)"
+              },
+              "ready": {
+                "type": "string",
+                "description": "a date (1939.9.1) the row must hold by"
+              },
+              "war": {
+                "type": "string"
+              },
+              "mission": {
+                "type": "string",
+                "description": "the mission it flies (air_superiority, cas, naval_strike, port_strike, logistics_strike, ...)"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "kind",
+              "count",
+              "ready",
+              "war"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "navy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "screen",
+                  "cruiser",
+                  "capital",
+                  "carrier",
+                  "submarine",
+                  "convoy"
+                ]
+              },
+              "equipment": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "ready": {
+                "type": "string",
+                "description": "a date (1939.9.1) the row must hold by"
+              },
+              "war": {
+                "type": "string"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "kind",
+              "count",
+              "ready",
+              "war"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "budget": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "a date (1939.9.1) the row must hold by"
+              },
+              "land": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "air": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "navy": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "share of the dockyards' output the navy rows take (the rest convoys)"
+              },
+              "why": {
+                "type": "string",
+                "description": "Free text for people and the player; never read by the executor."
+              }
+            },
+            "required": [
+              "from",
+              "land",
+              "air",
+              "why"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "air_why": {
+        "type": "string",
+        "description": "why the plan has no air arm in a war whose air it cannot pay for (answers force.air_none); a small fighter and support arm it can afford and fuel is the default"
+      },
+      "single_template_why": {
+          "type": "string",
+          "description": "why one template is nearly the whole army (answers the force.single_template warning of a plan with no offensive war)"
+        },
+        "why": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        },
+        "note": {
+          "type": "string",
+          "description": "Free text for people and the player; never read by the executor."
+        }
+      },
+      "required": [
+        "wars",
+        "land"
+      ],
+      "additionalProperties": false
+    },
     "force_posture": {
       "type": "object",
       "properties": {
