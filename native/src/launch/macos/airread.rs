@@ -89,7 +89,7 @@ fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
     expect(r, address, WING_VTABLE, image, "Air wing")?;
     let abi = r.string_abi();
     let w = |offset: u64| fld(abi, &WING, offset);
-    let variants = pointers(r, address + w(WING_VARIANTS)?, 8)?;
+    let variants = pointers(r, address + w(WING_VARIANTS)?, 64)?;
     let (variant, equipment) = match variants.first() {
         Some(v) if *v != 0 => {
             let v = fleetmem::variant(r, image, *v)?;
@@ -147,7 +147,9 @@ pub(super) fn bases_and_wings(
     let f = |class: &xlayout::Class, offset: u64| fld(abi, class, offset);
     let mut bases = Vec::new();
     let mut wings = Vec::new();
-    for b in pointers(r, strategic + f(&STRATEGIC_AIR, SA_BASES)?, 128)? {
+    // Sanity bounds only: a 1939 Germany (aig1 study, st1) overflowed the first ones (128 bases,
+    // 32 pools, 64 wings a pool, 8 variants a wing) and every air read and order failed.
+    for b in pointers(r, strategic + f(&STRATEGIC_AIR, SA_BASES)?, 2048)? {
         expect(r, b, BASE_VTABLE, image, "Air base")?;
         let state = r.u64(b + f(&BASE, BASE_STATE)?)?;
         let province = r.u64(b + f(&BASE, BASE_PROVINCE)?)?;
@@ -174,11 +176,11 @@ pub(super) fn bases_and_wings(
             },
             capacity: r.i32(b + f(&BASE, BASE_CAPACITY)?)?,
         };
-        for container in pointers(r, b + f(&BASE, BASE_CONTAINERS)?, 4)? {
+        for container in pointers(r, b + f(&BASE, BASE_CONTAINERS)?, 16)? {
             expect(r, container, CONTAINER_VTABLE, image, "Air container")?;
-            for pool in pointers(r, container + f(&CONTAINER, CONTAINER_POOLS)?, 32)? {
+            for pool in pointers(r, container + f(&CONTAINER, CONTAINER_POOLS)?, 256)? {
                 expect(r, pool, POOL_VTABLE, image, "Air wing pool")?;
-                for w in pointers(r, pool + f(&POOL, POOL_WINGS)?, 64)? {
+                for w in pointers(r, pool + f(&POOL, POOL_WINGS)?, 512)? {
                     wings.push(wing(r, image, w, &base)?);
                 }
             }

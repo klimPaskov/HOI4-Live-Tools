@@ -208,6 +208,12 @@ pub(super) struct Memory {
     pp_vacant: HashMap<String, (GameHour, Vec<i64>)>,
     /// Since when the fuel stock has been below `manage.fuel_floor`.
     fuel_low_since: Option<GameHour>,
+    /// Reserve plane variants no air plan entry takes: key -> (first seen, amount then).
+    air_reserve_seen: HashMap<String, (GameHour, f64)>,
+    /// Officer corps picks the game refused, by entry.
+    ofc_refused: HashMap<String, u32>,
+    /// (game hour, fuel stock) samples of the fuel rule, the last 30 game days.
+    fuel_samples: Vec<(GameHour, f64)>,
     /// Since when free convoys have been below `manage.convoys_free` of the stock.
     convoys_low_since: Option<GameHour>,
     /// Civilian factories (hoi4_economy) at the last auto-import budget check.
@@ -478,6 +484,15 @@ pub fn step(
     if let Some(done) = air_plan_step(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
+    if let Some(done) = officer_corps_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = air_reserve_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = air_idle_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
     if let Some(done) = country_rules(state, tools, plan, lease, now)? {
         return Ok(Some(done));
     }
@@ -586,8 +601,20 @@ fn route(alert: &str) -> Route {
             "garrisons are short of manpower or equipment; no garrison-template action exists yet",
         ),
         "free_dockyards" => Route::Step("dockyards", &["mdock"], &["production", "manage"]),
-        "events_or_decisions_timeout" => Route::Wake("an event or decision is about to time out"),
-        "modify_officer_corps" => Route::Step("politics_auto", &["pauto"], &["politics_auto"]),
+        // a timed decision or mission (the decisions step answers what the plan wants and
+        // notes what it leaves, which is the reason); an event times out into its first option
+        "events_or_decisions_timeout" => Route::Step(
+            "decisions",
+            &[],
+            &["decisions", "decision_rules", "auto_events", "event_rules"],
+        ),
+        // the officer corps view: its spirits (plan officer_corps, paid in branch experience)
+        // and the military high command seats (politics_auto)
+        "modify_officer_corps" => Route::Step(
+            "officer_corps",
+            &["mofc", "pauto"],
+            &["officer_corps", "politics_auto"],
+        ),
         "mio_traits" => Route::Step("mio", &[], &["mio"]),
         "research_slot_available" => Route::Info,
         "free_civilian_factories" => {
@@ -614,8 +641,15 @@ fn route(alert: &str) -> Route {
 /// step's, wherever that step keeps it (manage, affairs or military rules: g17a, 17 Nov 2026,
 /// the navy and special-project wakes carried no reason because only manage notes were read).
 fn step_reason(state: &State, alert: &str, step: &str) -> String {
+    // the route's plan keys too: a step that writes no note of its own (politics) leaves the
+    // reason to the rule that owns the rest (politics_auto: g17e, modify_government 290 days)
+    let keys = match route(alert) {
+        Route::Step(_, _, keys) => keys,
+        _ => &[][..],
+    };
     [alert, step]
         .iter()
+        .chain(keys.iter())
         .filter(|k| !k.is_empty())
         .find_map(|key| {
             state
@@ -2293,6 +2327,34 @@ fn import_budget_rule(
 /// game day from hoi4_resources fuel.ratio. A plan that allows no auto_import wakes the player at
 /// once; with imports on, fuel still below the floor after `manage.deficit_wake_days` (14) wakes
 /// the player (training missions, refineries and trade are judgement).
+/// Fuel per game day over the last 30 game days of samples (the game stores no burn rate):
+/// "; net -120/day, 95 days left" once 5 days are sampled, else empty. Pure but for the samples.
+fn fuel_trend(state: &mut State, now: GameHour, stock: f64) -> String {
+    let samples = &mut state.manage.fuel_samples;
+    samples.retain(|(at, _)| now - *at <= 30 * DAY && *at <= now);
+    samples.push((now, stock));
+    let (first_at, first) = samples[0];
+    let days = (now - first_at) as f64 / DAY as f64;
+    if days < 5.0 {
+        return String::new();
+    }
+    let net = (stock - first) / days;
+    if net < 0.0 {
+        format!("; net {net:.0}/day, {:.0} days left", stock / -net)
+    } else {
+        format!("; net +{net:.0}/day")
+    }
+}
+
+/// Days of fuel left at the sampled rate, None while it does not fall or is not sampled.
+fn fuel_days_left(state: &State) -> Option<f64> {
+    let samples = &state.manage.fuel_samples;
+    let (&(a, first), &(b, last)) = (samples.first()?, samples.last()?);
+    let days = (b - a) as f64 / DAY as f64;
+    let net = (last - first) / days.max(1.0);
+    (days >= 5.0 && net < 0.0).then(|| last / -net)
+}
+
 fn fuel_rule(
     state: &mut State,
     tools: &dyn Tools,
@@ -2306,21 +2368,23 @@ fn fuel_rule(
     }
     state.skip(now, "mfuel", "x", DAY);
     let floor = fraction(&m["fuel_floor"], 0.25);
-    let Some(ratio) = tools
-        .call("hoi4_resources", &json!({}))
-        .ok()
-        .and_then(|r| r["fuel"]["ratio"].as_f64())
-    else {
+    let read = tools.call("hoi4_resources", &json!({})).ok();
+    let Some(ratio) = read.as_ref().and_then(|r| r["fuel"]["ratio"].as_f64()) else {
         note(state, "fuel", "unknown: hoi4_resources gave no fuel ratio");
         return Ok(None);
     };
+    let trend = read
+        .as_ref()
+        .and_then(|r| r["fuel"]["stock"].as_f64())
+        .map(|stock| fuel_trend(state, now, stock))
+        .unwrap_or_default();
     let shown = round3(ratio);
     if ratio >= floor {
         state.manage.fuel_low_since = None;
         note(
             state,
             "fuel",
-            format!("{shown} of capacity (floor {floor})"),
+            format!("{shown} of capacity (floor {floor}){trend}"),
         );
         return Ok(None);
     }
@@ -2672,12 +2736,13 @@ fn deploy_settings(entry: &Value) -> Option<(i64, Option<i64>, i64)> {
 }
 
 /// The reserve planes a `deploy` entry turns into a new wing now: (aircraft name for
-/// hoi4_air_wing_create, planes), or why none. Reserve = hoi4_stockpile variants of the entry's
+/// hoi4_air_wing_create, planes), or why none. `wings` are the entry's own (wing_owners).
+/// Reserve = hoi4_stockpile variants of the entry's
 /// airframe (and `version`, by design name from hoi4_designs); the entry's own wings below
 /// `wing_size` draw their refill from it first, so only what is left beyond that counts.
 fn deploy_choice(
     entry: &Value,
-    air: &Value,
+    wings: &[&Value],
     stock: &Value,
     designs: &Value,
 ) -> std::result::Result<(String, i64), String> {
@@ -2687,10 +2752,6 @@ fn deploy_choice(
     let Some(airframe) = entry["airframe"].as_str().filter(|a| !a.is_empty()) else {
         return Err("deploy needs the entry's airframe".into());
     };
-    let wings: Vec<&Value> = list(air, "wings")
-        .iter()
-        .filter(|w| wing_matches(entry, w))
-        .collect();
     if let Some(max) = max_wings {
         if wings.len() as i64 >= max {
             return Err(format!("{} wing(s) already (max_wings {max})", wings.len()));
@@ -2702,7 +2763,12 @@ fn deploy_choice(
         .sum();
     let names: HashMap<i64, String> = list(designs, "designs")
         .iter()
-        .filter_map(|d| Some((d["id"].as_i64()?, d["name"].as_str()?.trim().to_string())))
+        // hoi4_designs names it design_id (st1, 17 Nov 2026: read as `id`, no reserve variant
+        // ever had a name and no planned wing was founded)
+        .filter_map(|d| {
+            let id = d["design_id"].as_i64().or_else(|| d["id"].as_i64())?;
+            Some((id, d["name"].as_str()?.trim().to_string()))
+        })
         .filter(|(_, n)| !n.is_empty())
         .collect();
     let version = entry["version"].as_str().filter(|v| !v.is_empty());
@@ -2768,6 +2834,76 @@ fn deploy_base(entry: &Value, flying: &Value, bases: &[Value], planes: i64) -> O
         .flatten()
 }
 
+/// Wings an entry may own: `deploy.max_wings`, else `count` planes in wings of
+/// `deploy.wing_size` (100) rounded up, else every matching wing.
+fn wing_cap(entry: &Value) -> Option<usize> {
+    if let Some(max) = entry["deploy"]["max_wings"].as_i64().filter(|n| *n >= 0) {
+        return Some(max as usize);
+    }
+    let count = entry["count"].as_i64().filter(|n| *n > 0)?;
+    let size = entry["deploy"]["wing_size"]
+        .as_i64()
+        .filter(|n| *n > 0)
+        .unwrap_or(100);
+    Some(((count + size - 1) / size) as usize)
+}
+
+/// Which `air_plan` entry owns each wing (wing name -> entry index). Two entries of one airframe
+/// (the fighters of two axes) used to claim the same wings and send them back and forth between
+/// their bases; now a wing has one owner. Entries whose `when` holds choose first, in plan order,
+/// then the others; an entry takes up to its cap (`wing_cap`), the wings at its base or over its
+/// region first; matching wings left over join the first active entry they match, so none
+/// stands idle at war.
+fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<String, usize> {
+    let mut owner: HashMap<String, usize> = HashMap::new();
+    let order: Vec<usize> = (0..entries.len())
+        .filter(|i| active[*i])
+        .chain((0..entries.len()).filter(|i| !active[*i]))
+        .collect();
+    for &i in &order {
+        let entry = &entries[i];
+        let cap = wing_cap(entry).unwrap_or(usize::MAX);
+        let rank = |w: &Value| -> u8 {
+            let base = entry["base_state"].as_i64();
+            if base.is_some() && w["air_base"]["state_id"].as_i64() == base {
+                0
+            } else if [&entry["region"], &entry["then_region"]]
+                .iter()
+                .any(|r| !r.is_null() && region_matches(r, &w["region"]))
+            {
+                1
+            } else {
+                2
+            }
+        };
+        let mut free: Vec<&Value> = wings
+            .iter()
+            .filter(|w| {
+                let name = text(&w["wing"]);
+                !name.is_empty() && !owner.contains_key(name) && wing_matches(entry, w)
+            })
+            .collect();
+        free.sort_by(|a, b| {
+            rank(a)
+                .cmp(&rank(b))
+                .then_with(|| text(&a["wing"]).cmp(text(&b["wing"])))
+        });
+        for w in free.into_iter().take(cap) {
+            owner.insert(text(&w["wing"]).to_string(), i);
+        }
+    }
+    for w in wings {
+        let name = text(&w["wing"]);
+        if name.is_empty() || owner.contains_key(name) {
+            continue;
+        }
+        if let Some(i) = (0..entries.len()).find(|i| active[*i] && wing_matches(&entries[*i], w)) {
+            owner.insert(name.to_string(), i);
+        }
+    }
+    owner
+}
+
 fn air_plan_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -2785,13 +2921,21 @@ fn air_plan_step(
         return Ok(None);
     };
     let bases = list(&air, "air_bases");
+    let all_wings = list(&air, "wings");
+    let active: Vec<bool> = entries
+        .iter()
+        .map(|e| when_holds(state, tools, &e["when"], now) == Truth::True)
+        .collect();
+    let owners = wing_owners(entries, &active, all_wings);
     let mut flying = 0;
     let mut deploy_notes: Vec<String> = Vec::new();
     for (index, entry) in entries.iter().enumerate() {
-        if when_holds(state, tools, &entry["when"], now) != Truth::True {
-            continue;
-        }
-        let switched = !entry["switch_when"].is_null()
+        let owned: Vec<&Value> = all_wings
+            .iter()
+            .filter(|w| owners.get(text(&w["wing"])) == Some(&index))
+            .collect();
+        let switched = active[index]
+            && !entry["switch_when"].is_null()
             && when_holds(state, tools, &entry["switch_when"], now) == Truth::True;
         let region = if switched && !entry["then_region"].is_null() {
             &entry["then_region"]
@@ -2812,10 +2956,9 @@ fn air_plan_step(
             Value::String(s) if !s.trim().is_empty() => Some(s.trim().to_string()),
             _ => None,
         };
-        for wing in list(&air, "wings")
-            .iter()
-            .filter(|w| wing_matches(entry, w))
-        {
+        // Before its `when` holds an entry flies nothing and moves nothing, but the planes made
+        // for it still become its wings (below) and train in peace (air_idle_step).
+        for wing in owned.iter().copied().filter(|_| active[index]) {
             let name = text(&wing["wing"]).to_string();
             if name.is_empty() || state.skipped(now, "airplan", &name) {
                 continue;
@@ -2888,7 +3031,7 @@ fn air_plan_step(
         } else {
             Value::Null
         };
-        let (aircraft, planes) = match deploy_choice(entry, &air, &stock, &designs) {
+        let (aircraft, planes) = match deploy_choice(entry, &owned, &stock, &designs) {
             Ok(choice) => choice,
             Err(why) => {
                 deploy_notes.push(format!("{key}: {why}"));
@@ -2922,6 +3065,381 @@ fn air_plan_step(
     }
     note(state, "air_plan", line);
     Ok(None)
+}
+
+/// Missions held first when fuel runs short at war: the ones that do not hold the front.
+const FUEL_CUT_ORDER: [&str; 9] = [
+    "training",
+    "strategic_bombing",
+    "port_strike",
+    "logistics_strike",
+    "naval_patrol",
+    "recon",
+    "naval_mines",
+    "naval_minesweeping",
+    "air_supply",
+];
+
+/// Whether the wing flies `mission` now (the mask keeps the last mission after Hold: judge by
+/// the region, as hoi4_air says).
+fn flies(wing: &Value, mission: &str) -> bool {
+    wing["region"].is_object() && strings(wing, "missions").iter().any(|m| m == mission)
+}
+
+/// W: air.training_xp, air.idle_wings, air.fuel_mission_cutback. Every 3 game days, at most one
+/// action (needs a `manage` object; `manage.off` "air_idle" turns it off):
+/// - fuel below `manage.air_training_fuel` (0.5 of capacity): a training wing is held;
+/// - at war, fuel below `manage.fuel_floor` (0.25) or fewer than `manage.fuel_days_floor` (30)
+///   days left at the sampled rate (fuel_rule): a wing on a mission that does not hold the
+///   front is held, in FUEL_CUT_ORDER (superiority, CAS, interception and naval strike stay);
+/// - a wing with no mission trains over its own base's region (wing experience up to the
+///   training maximum, and the country's air experience that pays plane designs, the air
+///   doctrine and the air officer corps) unless `manage.air_training` is false; at war the war
+///   missions and the air plan take training wings like standing ones;
+/// - else the `air_idle` note says why each idle wing stands.
+fn air_idle_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let m = &plan["manage"];
+    if !m.is_object() || off(plan, "air_idle") || state.skipped(now, "mairidle", "x") {
+        return Ok(None);
+    }
+    let Ok(air) = tools.call("hoi4_air", &json!({})) else {
+        state.skip(now, "mairidle", "x", 3 * DAY);
+        note(state, "air_idle", "hoi4_air unreadable");
+        return Ok(None);
+    };
+    let wings = list(&air, "wings");
+    if wings.is_empty() {
+        state.skip(now, "mairidle", "x", 3 * DAY);
+        note(state, "air_idle", "no wings");
+        return Ok(None);
+    }
+    let fuel = tools
+        .call("hoi4_resources", &json!({}))
+        .ok()
+        .and_then(|r| r["fuel"]["ratio"].as_f64());
+    let war = at_war(state, tools, plan, now);
+    let train_floor = fraction(&m["air_training_fuel"], 0.5);
+    let floor = fraction(&m["fuel_floor"], 0.25);
+    let usable = |w: &&Value| {
+        let n = text(&w["wing"]);
+        !n.is_empty() && !state.skipped(now, "airidle", n)
+    };
+    // fuel first: training goes below the training floor, the rear missions below the floor
+    let days_floor = m["fuel_days_floor"].as_f64().unwrap_or(30.0);
+    let short = fuel_days_left(state).is_some_and(|d| d < days_floor);
+    let cut: &[&str] = match fuel {
+        Some(f) if war && (f < floor || short) => &FUEL_CUT_ORDER,
+        Some(f) if f < train_floor => &FUEL_CUT_ORDER[..1],
+        _ => &[],
+    };
+    for mission in cut {
+        if let Some(w) = wings.iter().filter(usable).find(|w| flies(w, mission)) {
+            let name = text(&w["wing"]).to_string();
+            let (ok, why) =
+                state.act(tools, lease, "hoi4_air_hold", json!({"wing": name}), "ah")?;
+            state.skip(now, "airidle", &name, if ok { 30 * DAY } else { 7 * DAY });
+            return Ok(Some(format!(
+                "air fuel {:.2} (training floor {train_floor}, floor {floor}): {name} off {mission}: {ok} {why}",
+                fuel.unwrap_or(0.0)
+            )));
+        }
+    }
+    let idle: Vec<&Value> = wings.iter().filter(|w| !w["region"].is_object()).collect();
+    let why = if m["air_training"] == json!(false) {
+        format!(
+            "manage.air_training is false ({})",
+            m["air_training_why"].as_str().unwrap_or("no reason given")
+        )
+    } else {
+        match fuel {
+            None => "fuel unread, no training".to_string(),
+            Some(f) if f < train_floor => {
+                format!("fuel {f:.2} below the training floor {train_floor}")
+            }
+            Some(_) => {
+                let pick = idle.iter().copied().filter(usable).find(|w| {
+                    w["air_base"]["state_id"].as_i64().is_some()
+                        && w["transfer_to_base_id"].as_i64().is_none()
+                });
+                if let Some(w) = pick {
+                    let name = text(&w["wing"]).to_string();
+                    let base = w["air_base"]["state_id"].as_i64().unwrap_or(0);
+                    let (ok, why) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_air_mission",
+                        json!({"wing": name, "mission": "training", "state_id": base}),
+                        "at",
+                    )?;
+                    state.skip(now, "airidle", &name, 30 * DAY);
+                    return Ok(Some(format!(
+                        "air {name} trains over its base (state {base}){}: {ok} {why}",
+                        if war {
+                            " away from the fronts"
+                        } else {
+                            " in peace"
+                        }
+                    )));
+                }
+                "training refused or tried within 30 days".to_string()
+            }
+        }
+    };
+    state.skip(now, "mairidle", "x", 3 * DAY);
+    let training = wings.iter().filter(|w| flies(w, "training")).count();
+    note(
+        state,
+        "air_idle",
+        if idle.is_empty() {
+            format!("every wing has a mission ({training} training)")
+        } else {
+            format!(
+                "{} wing(s) stand by: {why}; {training} training",
+                idle.len()
+            )
+        },
+    );
+    Ok(None)
+}
+
+/// Experience a spirit slot costs by its place in the branch (common/idea_tags/00_idea.txt
+/// slot costs 20, 35, 50; the window shows the real cost and an entry's `cost` overrides).
+const SPIRIT_SLOT_COST: [f64; 3] = [20.0, 35.0, 50.0];
+
+/// W: advisors.officer_corps_spirits. `officer_corps`: [{slot: "army:0", spirit: "Bold Attack",
+/// cost?, when?}] picked in plan order, one a tick, once the branch's experience covers the
+/// cost (`xp:<branch> >= cost`) on top of `manage.xp_reserve.<branch>`; a pick the game does not
+/// take rests 30 days, the third refusal drops the entry with a note. Every 7 game days.
+fn officer_corps_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let entries = list(plan, "officer_corps");
+    if entries.is_empty() || state.skipped(now, "mofc", "x") {
+        return Ok(None);
+    }
+    let mut waiting: Vec<String> = Vec::new();
+    for entry in entries {
+        let (Some(slot), Some(spirit)) = (entry["slot"].as_str(), entry["spirit"].as_str()) else {
+            continue;
+        };
+        let key = format!("ofc:{slot}:{spirit}");
+        if state.done.contains_key(&key) || state.skipped(now, "ofc", &key) {
+            continue;
+        }
+        if state.manage.ofc_refused.get(&key).copied().unwrap_or(0) >= 3 {
+            continue;
+        }
+        if when_holds(state, tools, &entry["when"], now) != Truth::True {
+            waiting.push(format!("{spirit} ({slot}): when"));
+            continue;
+        }
+        let (branch, index) = slot.split_once(':').unwrap_or((slot, "0"));
+        let cost = entry["cost"]
+            .as_f64()
+            .unwrap_or_else(|| SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]);
+        let reserve = plan["manage"]["xp_reserve"][branch].as_f64().unwrap_or(0.0);
+        let need = cost + reserve;
+        let gate = json!(format!("xp:{branch} >= {need}"));
+        if when_holds(state, tools, &gate, now) != Truth::True {
+            waiting.push(format!(
+                "{spirit} ({slot}): needs {need} {branch} experience"
+            ));
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_officer_corps",
+            json!({"slot": slot, "spirit": spirit}),
+            "oc",
+        )?;
+        if ok {
+            state.done.insert(key, now);
+        } else {
+            *state.manage.ofc_refused.entry(key.clone()).or_insert(0) += 1;
+            state.skip(now, "ofc", &key, 30 * DAY);
+        }
+        return Ok(Some(format!("officer corps {spirit} ({slot}): {ok} {why}")));
+    }
+    state.skip(now, "mofc", "x", 7 * DAY);
+    note(
+        state,
+        "officer_corps",
+        if waiting.is_empty() {
+            "every planned spirit is taken or dropped".to_string()
+        } else {
+            format!("waiting: {}", waiting.join("; "))
+        },
+    );
+    Ok(None)
+}
+
+/// Game days a reserve variant must stand without shrinking before it becomes a wing.
+const RESERVE_STANDS: GameHour = 14 * DAY;
+
+/// W: air.deploy_new_wings for the planes no `air_plan` deploy entry takes (g17e: 90 close air
+/// support planes stood in reserve for two years). A reserve variant of at least
+/// `manage.air_reserve_min` (50) planes that has not shrunk for 14 game days (the wings of its
+/// kind are full and draw nothing from it) becomes a new wing of up to 100 planes at the base of
+/// a wing of the same kind with room, else at the own base with the most room. Carrier planes
+/// stay in reserve for the carriers. Every 7 game days, at most one action.
+fn air_reserve_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let m = &plan["manage"];
+    if !m.is_object() || off(plan, "air_reserve") || state.skipped(now, "mairres", "x") {
+        return Ok(None);
+    }
+    state.skip(now, "mairres", "x", 7 * DAY);
+    let Some(stock) = stockpile(state, tools, now) else {
+        note(state, "air_reserve", "hoi4_stockpile unreadable");
+        return Ok(None);
+    };
+    let min = m["air_reserve_min"]
+        .as_i64()
+        .filter(|n| *n > 0)
+        .unwrap_or(50) as f64;
+    let variants: Vec<&Value> = list(&stock, "equipment")
+        .iter()
+        .flat_map(|row| list(row, "variants"))
+        .filter(|v| {
+            let t = text(&v["type"]);
+            t.contains("plane") && !t.starts_with("cv_")
+        })
+        .collect();
+    if variants.is_empty() {
+        state.manage.air_reserve_seen.clear();
+        note(state, "air_reserve", "no planes in reserve");
+        return Ok(None);
+    }
+    let designs = tools
+        .call("hoi4_designs", &json!({"kind": "plane"}))
+        .unwrap_or(Value::Null);
+    let names: HashMap<i64, String> = list(&designs, "designs")
+        .iter()
+        // hoi4_designs names it design_id (st1, 17 Nov 2026: read as `id`, no reserve variant
+        // ever had a name and no planned wing was founded)
+        .filter_map(|d| {
+            let id = d["design_id"].as_i64().or_else(|| d["id"].as_i64())?;
+            Some((id, d["name"].as_str()?.trim().to_string()))
+        })
+        .filter(|(_, n)| !n.is_empty())
+        .collect();
+    let entries = list(plan, "air_plan");
+    let mut seen: HashMap<String, (GameHour, f64)> = HashMap::new();
+    let mut waiting: Vec<String> = Vec::new();
+    let mut ready: Vec<(String, String, f64)> = Vec::new();
+    for v in variants {
+        let kind = text(&v["type"]).to_string();
+        let amount = v["amount"].as_f64().unwrap_or(0.0).floor();
+        let name = v["design_id"]
+            .as_i64()
+            .and_then(|id| names.get(&id).cloned());
+        let planned = entries.iter().any(|e| {
+            deploy_settings(e).is_some()
+                && e["airframe"]
+                    .as_str()
+                    .is_some_and(|a| !a.is_empty() && kind.starts_with(a))
+                && e["version"]
+                    .as_str()
+                    .filter(|w| !w.is_empty())
+                    .is_none_or(|w| name.as_ref().is_none_or(|n| n.eq_ignore_ascii_case(w)))
+        });
+        if planned || amount < min {
+            continue;
+        }
+        let key = format!("{kind}#{}", v["design_id"]);
+        let (since, then) = match state.manage.air_reserve_seen.get(&key) {
+            // the wings of its kind drew from it: they were short, not full
+            Some((_, then)) if amount < then * 0.9 => (now, amount),
+            Some(seen) => *seen,
+            None => (now, amount),
+        };
+        seen.insert(key.clone(), (since, then));
+        let label = name.clone().unwrap_or_else(|| kind.clone());
+        if now - since < RESERVE_STANDS || state.skipped(now, "airres", &key) {
+            waiting.push(format!("{label} {amount:.0}"));
+            continue;
+        }
+        match name {
+            Some(n) => ready.push((key, n, amount)),
+            None => waiting.push(format!("{label} {amount:.0} (no design name)")),
+        }
+    }
+    state.manage.air_reserve_seen = seen;
+    ready.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let Some((key, aircraft, amount)) = ready.into_iter().next() else {
+        note(
+            state,
+            "air_reserve",
+            if waiting.is_empty() {
+                "no unplanned reserve planes".to_string()
+            } else {
+                format!("unplanned reserve, watched 14 days: {}", waiting.join(", "))
+            },
+        );
+        return Ok(None);
+    };
+    let kind = key.split('#').next().unwrap_or("").to_string();
+    let planes = amount.min(100.0) as i64;
+    let Ok(air) = tools.call("hoi4_air", &json!({})) else {
+        note(state, "air_reserve", "hoi4_air unreadable");
+        return Ok(None);
+    };
+    let bases = list(&air, "air_bases");
+    let room = |b: &Value| b["free"].as_i64().unwrap_or(0);
+    let kin: HashSet<i64> = list(&air, "wings")
+        .iter()
+        .filter(|w| text(&w["aircraft_type"]) == kind)
+        .filter_map(|w| w["air_base"]["state_id"].as_i64())
+        .collect();
+    let base = bases
+        .iter()
+        .filter(|b| room(b) >= planes)
+        .max_by_key(|b| {
+            (
+                b["state_id"].as_i64().is_some_and(|s| kin.contains(&s)),
+                room(b),
+            )
+        })
+        .and_then(|b| b["state_id"].as_i64());
+    let Some(base) = base else {
+        note(
+            state,
+            "air_reserve",
+            format!("{amount:.0} {aircraft} in reserve: no own air base with room for {planes}"),
+        );
+        return Ok(None);
+    };
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_air_wing_create",
+        json!({"state_id": base, "aircraft": aircraft}),
+        "ar",
+    )?;
+    if ok {
+        state.manage.air_reserve_seen.remove(&key);
+    } else {
+        state.skip(now, "airres", &key, 14 * DAY);
+    }
+    Ok(Some(format!(
+        "air reserve: new wing of {aircraft} ({amount:.0} unused in reserve) at state {base}: {ok} {why}"
+    )))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -7267,6 +7785,247 @@ mod tests {
     }
 
     #[test]
+    fn two_entries_of_one_airframe_own_different_wings_and_do_not_trade_bases() {
+        // 1117c: the fighters of two axes, one airframe and version, bases 550 and 551
+        let mut read = air_read();
+        read["wings"] = json!([
+            {"wing": "JG 1", "aircraft_type": "small_plane_airframe_1", "variant": "Bf 109 D", "aircraft": 100,
+             "air_base": {"base_id": 3, "state_id": 550}, "standing_by": true, "missions": []},
+            {"wing": "JG 2", "aircraft_type": "small_plane_airframe_1", "variant": "Bf 109 D", "aircraft": 100,
+             "air_base": {"base_id": 4, "state_id": 551}, "standing_by": true, "missions": []}]);
+        let tools = fake(vec![("hoi4_air", read.clone())]);
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_airframe_1", "version": "Bf 109 D", "base_state": 551, "region": 273,
+             "mission": "air_superiority", "deploy": {"max_wings": 1}},
+            {"airframe": "small_plane_airframe_1", "version": "Bf 109 D", "base_state": 550, "region": 273,
+             "mission": "air_superiority", "deploy": {"max_wings": 1}}]});
+        let entries = list(&plan, "air_plan");
+        let owners = wing_owners(entries, &[true, true], list(&read, "wings"));
+        assert_eq!(owners["JG 2"], 0, "the wing at the entry's base");
+        assert_eq!(owners["JG 1"], 1);
+        // each wing flies from where it is: missions, never a rebase
+        let mut state = State::default();
+        for at in [START, START + 3 * DAY] {
+            step(&mut state, &tools, &plan, "l", at).unwrap();
+        }
+        assert!(actions(&tools).iter().all(|(n, _)| n == "hoi4_air_mission"));
+        // a third wing of the same kind beyond both caps joins the first active entry
+        read["wings"].as_array_mut().unwrap().push(json!(
+            {"wing": "JG 3", "aircraft_type": "small_plane_airframe_1", "variant": "Bf 109 D", "aircraft": 100,
+             "air_base": {"base_id": 4, "state_id": 551}, "standing_by": true, "missions": []}));
+        let owners = wing_owners(entries, &[false, true], list(&read, "wings"));
+        assert_eq!(owners["JG 3"], 1);
+        let owners = wing_owners(entries, &[false, false], list(&read, "wings"));
+        assert!(!owners.contains_key("JG 3"));
+    }
+
+    #[test]
+    fn an_entry_that_waits_for_the_war_still_founds_its_wings_from_the_planes_made() {
+        let tools = fake(vec![
+            ("hoi4_air", air_read()),
+            (
+                "hoi4_stockpile",
+                json!({"equipment": [{"archetype": "small_plane_cas_airframe",
+                "variants": [{"type": "small_plane_cas_airframe_1", "design_id": 9, "amount": 120.0}]}]}),
+            ),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"design_id": 9, "name": "Ju 87"}]}),
+            ),
+        ]);
+        let plan = json!({"air_plan": [
+            {"airframe": "small_plane_cas_airframe_1", "version": "Ju 87", "base_state": 551, "region": 273,
+             "mission": "cas", "when": "date:2000.1.1", "deploy": {"min_planes": 100, "max_wings": 1}}]});
+        let mut state = State::default();
+        let out = step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("air_plan 0: new wing of 100 Ju 87 from reserve at state 551: true Verified")
+        );
+        assert!(actions(&tools)
+            .iter()
+            .all(|(n, _)| n == "hoi4_air_wing_create"));
+    }
+
+    fn peace_plan() -> Value {
+        json!({"manage": {"fuel_floor": 0.3}, "war": {"enemies": ["POL"]}})
+    }
+
+    #[test]
+    fn idle_wings_train_over_their_base_in_peace_and_short_fuel_holds_the_training() {
+        let mut fuel = json!({"fuel": {"ratio": 0.9, "stock": 90000.0}});
+        let tools = fake(vec![
+            ("hoi4_air", air_read()),
+            ("hoi4_resources", fuel.clone()),
+        ]);
+        let mut state = State::default();
+        let out = air_idle_step(&mut state, &tools, &peace_plan(), "l", START).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("air 1. Stormo trains over its base (state 2) in peace: true Verified")
+        );
+        assert_eq!(actions(&tools)[0].1["mission"], "training");
+        // the other idle wing next tick; nothing is sent twice
+        let out = air_idle_step(&mut state, &tools, &peace_plan(), "l", START + 1).unwrap();
+        assert!(out.unwrap().starts_with("air 3. Stormo trains"));
+        // fuel under the training floor: a training wing is held, the others say why they stand
+        let mut read = air_read();
+        read["wings"][0]["missions"] = json!(["training"]);
+        read["wings"][0]["region"] = json!({"id": 10, "name": "Italy"});
+        fuel["fuel"]["ratio"] = json!(0.4);
+        tools.replies.borrow_mut().insert("hoi4_air".into(), read);
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_resources".into(), fuel);
+        let mut state = State::default();
+        let out = air_idle_step(&mut state, &tools, &peace_plan(), "l", START).unwrap();
+        assert!(out.unwrap().contains("1. Stormo off training: true"));
+        assert_eq!(
+            air_idle_step(&mut state, &tools, &peace_plan(), "l", START + 1).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["air_idle"].contains("below the training floor 0.5"));
+        // a plan that keeps wings home says so
+        let mut plan = peace_plan();
+        plan["manage"]["air_training"] = json!(false);
+        plan["manage"]["air_training_why"] = json!("fuel kept for the war");
+        tools.replies.borrow_mut().insert(
+            "hoi4_resources".into(),
+            json!({"fuel": {"ratio": 0.9, "stock": 90000.0}}),
+        );
+        let mut state = State::default();
+        air_idle_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(state.manage.notes["air_idle"].contains("fuel kept for the war"));
+    }
+
+    #[test]
+    fn fuel_falling_at_war_holds_the_rear_missions_first() {
+        let mut read = air_read();
+        read["wings"][0]["missions"] = json!(["air_superiority"]);
+        read["wings"][0]["region"] = json!({"id": 10, "name": "Italy"});
+        read["wings"][2]["missions"] = json!(["port_strike"]);
+        read["wings"][2]["region"] = json!({"id": 10, "name": "Italy"});
+        let tools = fake(vec![
+            ("hoi4_air", read),
+            (
+                "hoi4_resources",
+                json!({"fuel": {"ratio": 0.6, "stock": 6000.0}}),
+            ),
+            ("hoi4_wars", json!({"wars": {"enemies": ["POL"]}})),
+        ]);
+        let mut state = State::default();
+        // 10 days at -1000 a day: 6 days left, under the 30-day floor
+        assert!(fuel_trend(&mut state, START - 10 * DAY, 16000.0).is_empty());
+        assert_eq!(
+            fuel_trend(&mut state, START, 6000.0),
+            "; net -1000/day, 6 days left"
+        );
+        assert_eq!(fuel_days_left(&state).map(|d| d.round()), Some(6.0));
+        let plan = peace_plan();
+        assert!(at_war(&mut state, &tools, &plan, START));
+        let out = air_idle_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(
+            out.unwrap().contains("3. Stormo off port_strike"),
+            "superiority stays"
+        );
+    }
+
+    #[test]
+    fn officer_corps_spirits_are_bought_in_plan_order_when_the_experience_covers_them() {
+        let tools = fake(vec![("hoi4_country_status", json!({"fields": {}}))]);
+        let plan = json!({"officer_corps": [
+            {"slot": "army:0", "spirit": "Bold Attack"},
+            {"slot": "air:1", "spirit": "Air Superiority Doctrine", "cost": 50}],
+            "manage": {"xp_reserve": {"army": 10}}});
+        let mut state = State::default();
+        // experience unread: nothing is bought, the note says what waits
+        assert_eq!(
+            officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["officer_corps"].contains("needs 30 army experience"));
+        assert!(actions(&tools).is_empty());
+        // a refusal rests 30 days and three drop the entry
+        let mut state = State::default();
+        state.done.insert("ofc:army:0:Bold Attack".into(), START);
+        state
+            .manage
+            .ofc_refused
+            .insert("ofc:air:1:Air Superiority Doctrine".into(), 3);
+        assert_eq!(
+            officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(
+            state.manage.notes["officer_corps"],
+            "every planned spirit is taken or dropped"
+        );
+    }
+
+    #[test]
+    fn reserve_planes_no_entry_takes_become_a_wing_once_they_stand_14_days() {
+        let stock = |n: f64| {
+            json!({"equipment": [{"archetype": "small_plane_cas_airframe",
+                "variants": [{"type": "small_plane_cas_airframe_0", "design_id": 7, "amount": n}]},
+                {"archetype": "cv_small_plane_airframe",
+                "variants": [{"type": "cv_small_plane_airframe_1", "design_id": 8, "amount": 300.0}]}]})
+        };
+        let tools = fake(vec![
+            ("hoi4_air", air_read()),
+            ("hoi4_stockpile", stock(90.0)),
+            (
+                "hoi4_designs",
+                json!({"designs": [{"id": 7, "name": "Hs 123"}, {"id": 8, "name": "Bf 109 T"}]}),
+            ),
+        ]);
+        let plan = json!({"manage": {}});
+        let mut state = State::default();
+        assert_eq!(
+            air_reserve_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(state.manage.notes["air_reserve"].contains("Hs 123 90"));
+        // drawn down by the wings meanwhile: the watch starts again
+        tools
+            .replies
+            .borrow_mut()
+            .insert("hoi4_stockpile".into(), stock(60.0));
+        state.manage.stockpile = None;
+        assert_eq!(
+            air_reserve_step(&mut state, &tools, &plan, "l", START + 7 * DAY).unwrap(),
+            None
+        );
+        state.manage.stockpile = None;
+        assert_eq!(
+            air_reserve_step(&mut state, &tools, &plan, "l", START + 14 * DAY).unwrap(),
+            None
+        );
+        state.manage.stockpile = None;
+        let out = air_reserve_step(&mut state, &tools, &plan, "l", START + 21 * DAY).unwrap();
+        assert_eq!(
+            out.as_deref(),
+            Some("air reserve: new wing of Hs 123 (60 unused in reserve) at state 550: true Verified"),
+            "the close air support wing's base has room; carrier planes stay"
+        );
+        // an air plan entry that founds wings of that airframe owns them instead
+        let plan = json!({"manage": {}, "air_plan": [{"airframe": "small_plane_cas_airframe", "deploy": true}]});
+        let mut state = State::default();
+        state.manage.air_reserve_seen.insert(
+            "small_plane_cas_airframe_0#7".into(),
+            (START - 30 * DAY, 60.0),
+        );
+        assert_eq!(
+            air_reserve_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(
+            state.manage.notes["air_reserve"],
+            "no unplanned reserve planes"
+        );
+    }
+
+    #[test]
     fn a_refused_rebase_waits_30_days_and_the_wing_flies_its_mission_meanwhile() {
         let tools = fake(vec![("hoi4_air", air_read())]);
         tools
@@ -7338,6 +8097,20 @@ mod tests {
         );
     }
 
+    /// deploy_choice with the wings of air_read() the entry matches as its own.
+    fn choice(
+        entry: &Value,
+        stock: &Value,
+        designs: &Value,
+    ) -> std::result::Result<(String, i64), String> {
+        let read = air_read();
+        let own: Vec<&Value> = list(&read, "wings")
+            .iter()
+            .filter(|w| wing_matches(entry, w))
+            .collect();
+        deploy_choice(entry, &own, stock, designs)
+    }
+
     fn reserve(amount: f64) -> Value {
         json!({"equipment": [{"archetype": "small_plane_airframe", "stockpile": amount,
             "variants": [{"type": "small_plane_airframe_0", "design_id": 7, "amount": amount}]}]})
@@ -7345,31 +8118,27 @@ mod tests {
 
     #[test]
     fn reserve_planes_beyond_the_wings_refill_found_a_new_wing() {
-        let designs = json!({"designs": [{"id": 7, "name": "CR.32"}]});
+        let designs = json!({"designs": [{"design_id": 7, "name": "CR.32"}]});
         let entry = json!({"airframe": "small_plane_airframe_0", "version": "CR.32",
             "mission": "air_superiority", "region": 273, "base_region": 273, "deploy": true});
         // 1. Stormo holds 40 of 100: 60 of the reserve are its refill
         assert_eq!(
-            deploy_choice(&entry, &air_read(), &reserve(160.0), &designs),
+            choice(&entry, &reserve(160.0), &designs),
             Ok(("CR.32".to_string(), 100))
         );
-        let short = deploy_choice(&entry, &air_read(), &reserve(90.0), &designs).unwrap_err();
+        let short = choice(&entry, &reserve(90.0), &designs).unwrap_err();
         assert!(short.contains("below min_planes 50"), "{short}");
         let capped = json!({"airframe": "small_plane_airframe_0", "deploy": {"max_wings": 1}});
-        assert!(
-            deploy_choice(&capped, &air_read(), &reserve(500.0), &designs)
-                .unwrap_err()
-                .contains("max_wings 1")
-        );
+        assert!(choice(&capped, &reserve(500.0), &designs)
+            .unwrap_err()
+            .contains("max_wings 1"));
         let named = json!({"wing": "1. Stormo", "deploy": true});
-        assert!(
-            deploy_choice(&named, &air_read(), &reserve(500.0), &designs)
-                .unwrap_err()
-                .contains("airframe")
-        );
+        assert!(choice(&named, &reserve(500.0), &designs)
+            .unwrap_err()
+            .contains("airframe"));
         // another variant than the planned version is left in reserve
         let other = json!({"designs": [{"id": 7, "name": "CR.42"}]});
-        assert!(deploy_choice(&entry, &air_read(), &reserve(500.0), &other).is_err());
+        assert!(choice(&entry, &reserve(500.0), &other).is_err());
 
         let tools = fake(vec![
             ("hoi4_air", air_read()),
@@ -8357,7 +9126,7 @@ mod tests {
         replies.push(("hoi4_stockpile", stock_rows(json!(3.0), 120.0, 100.0)));
         let tools = fake(replies);
         let mut state = State::default();
-        let off = json!({"manage": {"off": ["stockpile", "trucks"]}});
+        let off = json!({"manage": {"off": ["stockpile", "trucks", "air_reserve"]}});
         assert_eq!(step(&mut state, &tools, &off, "l", START).unwrap(), None);
         assert_eq!(reads(&tools, "hoi4_stockpile"), 0);
     }

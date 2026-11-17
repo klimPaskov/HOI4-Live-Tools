@@ -417,15 +417,17 @@
    "playbook": [
     "politics-diplomacy-espionage.md#11 PO10"
    ],
-   "plan": [],
+   "plan": [
+    "officer_corps"
+   ],
    "tools": [
     "hoi4_officer_corps"
    ],
-   "blocked": "picking a spirit is not built (the tool refuses not_yet_built) and has no live receipt: every branch holds 0 experience at the 1936 start, so a buy needs a session that has earned army, navy or air experience",
+   "blocked": "the pick (hoi4_officer_corps {slot, spirit}) and its executor rule (officer_corps_step) are built but have no live receipt: every branch holds 0 experience at the 1936 start, so the receipt needs a session that has earned army, navy or air experience",
    "payoff": "low",
    "why": "discounts and small bonuses, not decisive",
    "closing": "both",
-   "owner": "build the pick and its executor rule (plan key officer_corps [{slot, spirit}]). Known (pp22-pp26): the view is CCountryArmyOfficerCorpView at interface-manager slot 0x160, root countryofficercorpview +0x490; the slot entries are grid items of <branch>_spirits_view/spirit_grid (button, <kind>_spirit_glow, spirit_icon shown when taken); a slot button opens the gui file's top-level spirit_window, held by the view object in three instances (view+0x4c8, +0x508, +0x548, vtable 0x36a4f40) whose root shown/visible bits stay clear while drawn, and a closed instance keeps its last list, so the opened one is told apart by its list changing (doctrine_act pick_window). Each spirit is a box_grid item: idea_entry_bg (241x83, the click target), traits_container/name, cost. Still to look at live: the click on idea_entry_bg (a confirmation?), how a taken spirit shows (spirit_icon in the slot, the idea list, experience spent from hoi4_doctrines experience), and a disabled entry when experience is short.",
+   "owner": "live: pick one spirit on a session with branch experience (a study save) and confirm taken_after; then a campaign buys the plan's officer_corps entries. build the pick and its executor rule (plan key officer_corps [{slot, spirit}]). Known (pp22-pp26): the view is CCountryArmyOfficerCorpView at interface-manager slot 0x160, root countryofficercorpview +0x490; the slot entries are grid items of <branch>_spirits_view/spirit_grid (button, <kind>_spirit_glow, spirit_icon shown when taken); a slot button opens the gui file's top-level spirit_window, held by the view object in three instances (view+0x4c8, +0x508, +0x548, vtable 0x36a4f40) whose root shown/visible bits stay clear while drawn, and a closed instance keeps its last list, so the opened one is told apart by its list changing (doctrine_act pick_window). Each spirit is a box_grid item: idea_entry_bg (241x83, the click target), traits_container/name, cost. Still to look at live: the click on idea_entry_bg (a confirmation?), how a taken spirit shows (spirit_icon in the slot, the idea list, experience spent from hoi4_doctrines experience), and a disabled entry when experience is short.",
    "verified": "live read pp18-pp26 17 Nov 2026 (macOS 1.19.4.1): hoi4_officer_corps list:true opens the view (Shift+E) and returns the slots (army academy/army/division_command, navy naval_academy/navy/naval_command, air air_force/air_force_command: selected, taken, button rect); with slot VIEW:INDEX it opens that slot and returns the spirits offered (Spirit of the Academy 11 at 20 army XP, Spirit of the Navy 10 at 35, Spirit of the Air Force 8 at 50, Spirit of Air Force Command 8 at 50, Spirit of Division Command 13 at 50; name, cost, entry rect)."
   },
   {
@@ -5305,7 +5307,7 @@
    "payoff": "high",
    "why": "An air build-up (15-25 fighter factories) is wasted if reserve planes never become wings",
    "closing": "live",
-   "owner": "live: an air_plan entry with deploy founds a wing from BBA reserve planes (the tool was live on legacy reserve only) and gives it the entry's mission; lint air.deploy",
+   "owner": "executor: air_plan entries with deploy found their wings from the planes the lines make also before the entry's `when` holds (the wings train in peace); every wing has one owning entry (wing_owners: two entries of one airframe no longer trade wings between bases); planes no entry takes become a wing after standing 14 game days unshrunk (air_reserve_step, manage.air_reserve_min 50); live: a run founds a wing from new planes",
    "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy reserve only; BBA reserve planes never)"
   },
   {
@@ -5447,6 +5449,8 @@
     "procedure.md#5. XP budget"
    ],
    "plan": [
+    "manage.air_training",
+    "manage.air_training_fuel",
     "air_plan[].mission",
     "xp_budget.air"
    ],
@@ -5457,7 +5461,7 @@
    "payoff": "medium",
    "why": "Air XP gates every plane design and the air doctrine",
    "closing": "both",
-   "owner": "Executor xp_budget step (W-item) or a training rule; live-verify the training mission"
+   "owner": "executor air_idle_step: in peace every wing with no mission trains over its own base while fuel >= manage.air_training_fuel (0.5); manage.air_training false keeps them home with manage.air_training_why written in the air_idle note; at war the war missions and the air plan take training wings; live-verify the training mission"
   },
   {
    "id": "air.plane_design",
@@ -6197,19 +6201,21 @@
     "war-air-naval-peace.md#16 Tactics: air"
    ],
    "plan": [
-    "manage.fuel_floor"
+    "manage.fuel_floor",
+    "manage.air_training_fuel",
+    "manage.fuel_days_floor"
    ],
    "tools": [
     "hoi4_resources",
     "hoi4_air",
     "hoi4_air_hold"
    ],
-   "blocked": "the fuel rule (plan_manage::fuel_rule, manage.fuel_floor) only turns auto-import on and wakes the player; no rule takes a wing off its mission when fuel is short, and hoi4_resources has no burn rate (days_left null: gain and burn are not stored), so 'days of fuel' cannot be judged",
    "payoff": "high",
    "why": "Germany starts at about 0.30 of its fuel capacity (sk6 read); a large air force at war drains fuel and every unit fights at a fuel penalty below 0.25",
    "closing": "both",
-   "owner": "executor: below a second floor (manage.fuel_air_cut, default 0.10) hold (hoi4_air_hold) wings on missions the plan ranks lowest (air_plan order; training, recon, strategic bombing before CAS and superiority), restore them above fuel_floor; burn rate from two hoi4_resources samples a day apart in the rule's state; then a live run where fuel falls",
-   "priority": 8
+   "owner": "executor air_idle_step: below manage.air_training_fuel training wings are held; at war below manage.fuel_floor or under manage.fuel_days_floor (30) days left at the rate fuel_rule samples over 30 game days, wings on rear missions are held one a tick (training, strategic bombing, port and logistics strike, patrol, recon, mines, air supply; superiority, CAS, interception and naval strike stay); no automatic restore yet; live: a run where fuel falls",
+   "priority": 8,
+   "evidence": "offline tests only (plan_manage fuel_falling_at_war_holds_the_rear_missions_first)"
   },
   {
    "id": "air.wing_reinforce_upgrade",

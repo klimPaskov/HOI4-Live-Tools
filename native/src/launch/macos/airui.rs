@@ -24,6 +24,7 @@ use crate::{
     memory::Reader,
     xlayout::{fld, img, Class},
 };
+use serde_json::Value;
 
 pub(super) const GAME: (u32, u32) = (1920, 1080);
 const ICON_GLOBAL: u64 = 0x372c530;
@@ -364,7 +365,57 @@ pub(super) struct RegionView {
     pub enemy_detection: String,
     pub enemy_efficiency: String,
     pub close: Rect,
+    /// Probe-only (gap air.enemy_superiority_read): whether the superiority bar (`progress`, a
+    /// progressbar sprite: green ours, red theirs) and its disabled twin are shown, and the
+    /// plausible fractions in the bar widget's first 0x300 bytes as (offset, value), to find the
+    /// field that holds the share the bar draws.
+    pub bar: Value,
 }
+
+/// Probe-only: the superiority bar widgets of the region window (see RegionView::bar): the
+/// fractions in (0.001, 1] in the bar widget's first 0x800 bytes and one pointer level below
+/// them (0x200 bytes each), as "WIDGET_OFF" or "WIDGET_OFF>INNER_OFF" -> value (f32, or "d" for
+/// f64). st1: nothing in the first 0x300 widget bytes moved between a contested and an own sky.
+fn bar_probe(r: &Reader<'_>, image: u64, root: u64) -> Value {
+    let shown = |name: &str| {
+        nui::child_of(r, image, root, name)
+            .ok()
+            .and_then(|w| gui_tree::shown(r, w).ok())
+    };
+    let fractions = |b: &[u8], prefix: &str, out: &mut serde_json::Map<String, Value>| {
+        for (k, c) in b.chunks_exact(4).enumerate() {
+            let v = f32::from_le_bytes(c.try_into().unwrap_or([0; 4]));
+            if v.is_finite() && v > 0.001 && v <= 1.0 && out.len() < 600 {
+                out.insert(format!("{prefix}{:#x}", k * 4), serde_json::json!(v));
+            }
+        }
+        for (k, c) in b.chunks_exact(8).enumerate() {
+            let v = f64::from_le_bytes(c.try_into().unwrap_or([0; 8]));
+            if v.is_finite() && v > 0.001 && v <= 1.0 && out.len() < 600 {
+                out.insert(format!("{prefix}{:#x}d", k * 8), serde_json::json!(v));
+            }
+        }
+    };
+    let mut out = serde_json::Map::new();
+    if let Some(bytes) = nui::child_of(r, image, root, "progress")
+        .ok()
+        .and_then(|w| r.read(w, 0x800).ok())
+    {
+        fractions(&bytes, "", &mut out);
+        for (k, c) in bytes.chunks_exact(8).enumerate() {
+            let p = u64::from_le_bytes(c.try_into().unwrap_or([0; 8]));
+            if !(0x1_0000_0000..0x8000_0000_0000).contains(&p) || p % 8 != 0 || p == image {
+                continue;
+            }
+            if let Ok(inner) = r.read(p, 0x200) {
+                fractions(&inner, &format!("{:#x}>", k * 8), &mut out);
+            }
+        }
+    }
+    serde_json::json!({"progress_shown": shown("progress"),
+        "progress_disabled_shown": shown("progress_disabled"), "fractions": out})
+}
+
 fn strategic_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let view = nui::view(r, image, SLOT_STRATEGIC)?;
     let root_at = fld(r.string_abi(), &STRATEGIC_VIEW, STRATEGIC_ROOT)?;
@@ -413,6 +464,7 @@ pub(super) fn region_view(r: &Reader<'_>, image: u64) -> Result<Option<RegionVie
         enemy_detection: text("detection_right_text")?,
         enemy_efficiency: text("effeciency_right_text")?,
         close,
+        bar: bar_probe(r, image, root),
     }))
 }
 

@@ -1028,6 +1028,7 @@ pub(super) fn region_json(v: &airui::RegionView) -> Value {
     json!({"region":v.name,"our_active":row(&v.ours),"enemy_active":row(&v.theirs),
         "our_detection":v.our_detection,"our_efficiency":v.our_efficiency,
         "enemy_detection":v.enemy_detection,"enemy_efficiency":v.enemy_efficiency,
+        "superiority_bar_probe":v.bar,
         "note":"As the player's air map shows it (counts of currently active aircraft by type in the region)"})
 }
 
