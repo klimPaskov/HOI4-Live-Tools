@@ -672,6 +672,13 @@ fn row_by_details(
         f64::from(list.x + list.w / 2),
         f64::from(list.y + list.h / 2),
     );
+    // The game keeps each roster's scroll, and one wheel event moves 98 px for 100 px rows, so
+    // the list can sit part of a row off and the clicks below (row top + 62) land between rows
+    // (pp3, 17 Nov 2026: the materiel roster drawn half a row down, "no rows" read). Wheel to
+    // the top first so the rows line up with the list's top edge.
+    close_detail(process, keys);
+    keys.scroll_burst(pk::GAME, centre, ROW_HEIGHT, 40)?;
+    pause(600);
     let mut seen: Vec<String> = Vec::new();
     let mut previous_first: Option<String> = None;
     let mut retried = false;
