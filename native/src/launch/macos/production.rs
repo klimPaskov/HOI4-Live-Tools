@@ -292,6 +292,8 @@ pub(super) fn shown_button(
 pub(super) struct LineMio {
     pub attached: bool,
     pub can_attach: bool,
+    /// The game state of the shown organisation button (3 = disabled), when one is shown.
+    pub button_state: Option<i32>,
 }
 pub(super) fn line_mio(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option<LineMio>> {
     let Some(frame) = row(r, image, handle)? else {
@@ -303,16 +305,27 @@ pub(super) fn line_mio(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option
             None => false,
         })
     };
-    Ok(Some(mio_state(
-        shown("has_mio_background")?,
-        shown("change_manufacturer")?,
-        shown("attach_manufacturer")?,
-    )))
+    let (change, attach) = (shown("change_manufacturer")?, shown("attach_manufacturer")?);
+    let mut state = mio_state(shown("has_mio_background")?, change, attach);
+    let button = if attach {
+        Some("attach_manufacturer")
+    } else if change {
+        Some("change_manufacturer")
+    } else {
+        None
+    };
+    if let Some(name) = button {
+        if let Some(b) = gui_tree::child(r, image, frame, name)? {
+            state.button_state = Some(gui_tree::button_state(r, b)?);
+        }
+    }
+    Ok(Some(state))
 }
 pub(super) fn mio_state(background: bool, change: bool, attach: bool) -> LineMio {
     LineMio {
         attached: background || (change && !attach),
         can_attach: attach || change,
+        button_state: None,
     }
 }
 
