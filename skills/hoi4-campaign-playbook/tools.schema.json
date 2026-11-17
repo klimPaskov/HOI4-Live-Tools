@@ -160,11 +160,15 @@
    "source": "--list-tools"
   },
   "hoi4_air_region_probe": {
-   "description": "What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.",
+   "description": "What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again; `region` (id or display name) instead of `state_id` picks a state inside it from the game files. Adds enemy_air_superiority_estimate: the enemy's share of the active fighters weighted by each side's efficiency shown (theirs / (ours + theirs)), null with no fighter on either side; an estimate from what the window shows, not the game's own superiority figure (not located in memory). Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "lease_token": {
+      "type": "string"
+     },
+     "region": {
+      "maxLength": 96,
       "type": "string"
      },
      "state_id": {
@@ -174,7 +178,6 @@
      }
     },
     "required": [
-     "state_id",
      "lease_token"
     ],
     "type": "object"
@@ -3386,7 +3389,7 @@
    "source": "--list-tools"
   },
   "hoi4_officer_corps": {
-   "description": "Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. Picking a spirit is not built yet (refused with not_yet_built). Refusal while driving: slot_missing. Results carry verification gui_only.",
+   "description": "Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. With slot and spirit (a name the window shows) it picks that spirit: clicks its entry and verifies the slot shows a spirit it did not show before (taken_before/taken_after; Diverged otherwise, e.g. too little experience). Refusals while driving: slot_missing, spirit_unknown (lists the spirits offered). Results carry verification gui_only.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -3402,10 +3405,13 @@
      "slot": {
       "maxLength": 16,
       "type": "string"
+     },
+     "spirit": {
+      "maxLength": 64,
+      "type": "string"
      }
     },
     "required": [
-     "list",
      "request_id",
      "lease_token"
     ],

@@ -948,7 +948,10 @@ pub(super) fn officer_call(
     authority: &InputAuthority,
     actions: &mut super::journal::GameJournal,
 ) -> Result<Value> {
-    super::allowed(args, &["list", "slot", "request_id", "lease_token"])?;
+    super::allowed(
+        args,
+        &["list", "slot", "spirit", "request_id", "lease_token"],
+    )?;
     let bad_slot = || {
         Error::new(
             "invalid_arguments",
@@ -967,19 +970,37 @@ pub(super) fn officer_call(
             Some((view.to_string(), k))
         }
     };
-    if !mgmt::flag(args, "list")? {
+    // A spirit to pick (exact name as the window shows it, case-insensitive) needs its slot.
+    let spirit = match args.get("spirit") {
+        None => None,
+        Some(v) => Some(
+            v.as_str()
+                .map(str::trim)
+                .filter(|t| !t.is_empty() && t.len() <= 64)
+                .ok_or_else(|| Error::new("invalid_arguments", "spirit is a spirit's name"))?
+                .to_string(),
+        ),
+    };
+    if spirit.is_some() && slot.is_none() {
         return Err(Error::new(
-            "not_yet_built",
-            "Only list:true is built: it reads the officer corps slots (and with `slot` the \
-             spirits one offers) and closes the view; picking a spirit is not built yet",
+            "invalid_arguments",
+            "spirit needs slot (VIEW:INDEX) to open its window",
+        ));
+    }
+    let list = mgmt::flag(args, "list")?;
+    if !list && spirit.is_none() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Give list:true (read) or slot and spirit (pick)",
         ));
     }
     let id = super::string(args, "request_id")?;
     let token = super::string(args, "lease_token")?;
+    let pick = spirit.clone();
     let job = Job {
         kind: "officer_corps",
-        action: json!({"kind":"officer_corps","list":true,
-            "slot": slot.as_ref().map(|(v, k)| format!("{v}:{k}"))}),
+        action: json!({"kind":"officer_corps","list":list,
+            "slot": slot.as_ref().map(|(v, k)| format!("{v}:{k}")), "spirit": spirit}),
         plan: Box::new(|_| Ok(())),
         dispatch: Box::new(|process, keys| {
             let result: Driven = (|| {
@@ -1053,9 +1074,67 @@ pub(super) fn officer_call(
                         ),
                     )
                 })?;
+                let Some(want) = &pick else {
+                    return Ok(
+                        json!({"listing_only": true, "slots": slots, "slot": format!("{view}:{k}"),
+                        "title": spirits.0, "spirits": spirits.1, "verification": "gui_only"}),
+                    );
+                };
+                let entry = spirits
+                    .1
+                    .iter()
+                    .find(|e| {
+                        e["name"]
+                            .as_str()
+                            .is_some_and(|n| n.trim().eq_ignore_ascii_case(want))
+                    })
+                    .cloned()
+                    .ok_or_else(|| {
+                        refuse(
+                            "spirit_unknown",
+                            format!(
+                                "{} offers no spirit {want:?}; it offers: {}",
+                                spirits.0.as_deref().unwrap_or("the slot"),
+                                spirits
+                                    .1
+                                    .iter()
+                                    .filter_map(|e| e["name"].as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        )
+                    })?;
+                let r = entry["rect"].as_array().cloned().unwrap_or_default();
+                let n = |x: usize| r.get(x).and_then(Value::as_i64).unwrap_or(0) as i32;
+                let target = gui_tree::Rect {
+                    x: n(0),
+                    y: n(1),
+                    w: n(2),
+                    h: n(3),
+                };
+                if target.w <= 0 || target.h <= 0 {
+                    return Err(refuse(
+                        "gui_geometry_unavailable",
+                        format!("The spirit {want:?} has no drawn entry"),
+                    ));
+                }
+                let before_taken = slots
+                    .iter()
+                    .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
+                    .map(|s| s["taken"] == json!(true))
+                    .unwrap_or(false);
+                pk::click(process, keys, "officer corps spirit", |_, _| Ok(target))?;
+                thread::sleep(Duration::from_millis(500));
+                let after = slots_of(&read(process, |r, i| officer_widgets(r, i, false))?);
+                let taken = after
+                    .iter()
+                    .find(|s| s["view"] == json!(view) && s["index"] == json!(k))
+                    .map(|s| s["taken"] == json!(true))
+                    .unwrap_or(false);
                 Ok(
-                    json!({"listing_only": true, "slots": slots, "slot": format!("{view}:{k}"),
-                    "title": spirits.0, "spirits": spirits.1, "verification": "gui_only"}),
+                    json!({"slot": format!("{view}:{k}"), "spirit": entry["name"],
+                    "cost": entry["cost"], "taken_before": before_taken, "taken_after": taken,
+                    "title": spirits.0, "verification": "gui_only"}),
                 )
             })();
             leave(process, keys);
@@ -1063,6 +1142,14 @@ pub(super) fn officer_call(
         }),
         settle: Box::new(|_, seen| {
             Ok(match seen {
+                // A pick holds when the slot shows a spirit it did not show before.
+                Some(v) if v.get("taken_after").is_some() => {
+                    if v["taken_after"] == json!(true) && v["taken_before"] != json!(true) {
+                        Outcome::Reached(json!({"tool": "officer_corps", "seen": v}))
+                    } else {
+                        Outcome::Diverged(json!({"tool": "officer_corps", "seen": v}))
+                    }
+                }
                 // Listing changes nothing: whatever it saw is its result.
                 Some(v) => Outcome::Reached(json!({"tool": "officer_corps", "seen": v})),
                 None => Outcome::Unobservable,
@@ -1073,7 +1160,7 @@ pub(super) fn officer_call(
 }
 
 pub(super) fn officer_tool() -> Value {
-    json!({"name":"hoi4_officer_corps","description":"Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. Picking a spirit is not built yet (refused with not_yet_built). Refusal while driving: slot_missing. Results carry verification gui_only.","inputSchema":{"type":"object","properties":{"list":{"type":"boolean"},"slot":{"type":"string","maxLength":16},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["list","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_officer_corps","description":"Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. With slot and spirit (a name the window shows) it picks that spirit: clicks its entry and verifies the slot shows a spirit it did not show before (taken_before/taken_after; Diverged otherwise, e.g. too little experience). Refusals while driving: slot_missing, spirit_unknown (lists the spirits offered). Results carry verification gui_only.","inputSchema":{"type":"object","properties":{"list":{"type":"boolean"},"slot":{"type":"string","maxLength":16},"spirit":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
 }
 
 #[cfg(test)]

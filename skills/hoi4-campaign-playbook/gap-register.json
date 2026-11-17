@@ -417,15 +417,17 @@
    "playbook": [
     "politics-diplomacy-espionage.md#11 PO10"
    ],
-   "plan": [],
+   "plan": [
+    "officer_corps"
+   ],
    "tools": [
     "hoi4_officer_corps"
    ],
-   "blocked": "picking a spirit is not built (the tool refuses not_yet_built) and has no live receipt: every branch holds 0 experience at the 1936 start, so a buy needs a session that has earned army, navy or air experience",
+   "blocked": "the pick (hoi4_officer_corps {slot, spirit}) and its executor rule (officer_corps_step) are built but have no live receipt: every branch holds 0 experience at the 1936 start, so the receipt needs a session that has earned army, navy or air experience",
    "payoff": "low",
    "why": "discounts and small bonuses, not decisive",
    "closing": "both",
-   "owner": "build the pick and its executor rule (plan key officer_corps [{slot, spirit}]). Known (pp22-pp26): the view is CCountryArmyOfficerCorpView at interface-manager slot 0x160, root countryofficercorpview +0x490; the slot entries are grid items of <branch>_spirits_view/spirit_grid (button, <kind>_spirit_glow, spirit_icon shown when taken); a slot button opens the gui file's top-level spirit_window, held by the view object in three instances (view+0x4c8, +0x508, +0x548, vtable 0x36a4f40) whose root shown/visible bits stay clear while drawn, and a closed instance keeps its last list, so the opened one is told apart by its list changing (doctrine_act pick_window). Each spirit is a box_grid item: idea_entry_bg (241x83, the click target), traits_container/name, cost. Still to look at live: the click on idea_entry_bg (a confirmation?), how a taken spirit shows (spirit_icon in the slot, the idea list, experience spent from hoi4_doctrines experience), and a disabled entry when experience is short.",
+   "owner": "live: pick one spirit on a session with branch experience (a study save) and confirm taken_after; then a campaign buys the plan's officer_corps entries. build the pick and its executor rule (plan key officer_corps [{slot, spirit}]). Known (pp22-pp26): the view is CCountryArmyOfficerCorpView at interface-manager slot 0x160, root countryofficercorpview +0x490; the slot entries are grid items of <branch>_spirits_view/spirit_grid (button, <kind>_spirit_glow, spirit_icon shown when taken); a slot button opens the gui file's top-level spirit_window, held by the view object in three instances (view+0x4c8, +0x508, +0x548, vtable 0x36a4f40) whose root shown/visible bits stay clear while drawn, and a closed instance keeps its last list, so the opened one is told apart by its list changing (doctrine_act pick_window). Each spirit is a box_grid item: idea_entry_bg (241x83, the click target), traits_container/name, cost. Still to look at live: the click on idea_entry_bg (a confirmation?), how a taken spirit shows (spirit_icon in the slot, the idea list, experience spent from hoi4_doctrines experience), and a disabled entry when experience is short.",
    "verified": "live read pp18-pp26 17 Nov 2026 (macOS 1.19.4.1): hoi4_officer_corps list:true opens the view (Shift+E) and returns the slots (army academy/army/division_command, navy naval_academy/navy/naval_command, air air_force/air_force_command: selected, taken, button rect); with slot VIEW:INDEX it opens that slot and returns the spirits offered (Spirit of the Academy 11 at 20 army XP, Spirit of the Navy 10 at 35, Spirit of the Air Force 8 at 50, Spirit of Air Force Command 8 at 50, Spirit of Division Command 13 at 50; name, cost, entry rect)."
   },
   {
@@ -5235,7 +5237,7 @@
    "payoff": "medium",
    "why": "+25% air support on attacks; damage itself small since 1.17",
    "closing": "offline",
-   "owner": "Executor: air.war_missions only targets 'our first border state with an enemy' (plan_run.rs:3348); follow the executing offensive's region and the width cap"
+   "owner": "Executor: air.war_missions only targets 'our first border state with an enemy' (plan_run.rs:3348); follow the executing offensive's region and the width cap; hoi4_air_mission cas with `region` Verified on a 1939 Germany (Ju 87 over Western Poland, 18 Nov)"
   },
   {
    "id": "air.enemy_superiority_read",
@@ -5255,11 +5257,10 @@
     "hoi4_air_region_probe",
     "hoi4_air_regions"
    ],
-   "blocked": "hoi4_air_regions reports regions[].enemy_air_superiority null (not located in memory); the executor rule (manage.enemy_air_superiority) reads that field and acts on nothing while it is null; hoi4_air_region_probe counts active planes through input (not a superiority value) and is not read by the executor",
    "payoff": "high",
    "why": "Without it air superiority is assumed, attacks run under red air and fighters pile up past 3:1",
    "closing": "both",
-   "owner": "offline done: null seam field with reason in hoi4_air_regions, the rule's digest note names it, tests; live: locate per-region air superiority (both sides) in memory, fill enemy_air_superiority (0..1 enemy share), verify against the air map for 3 regions; the probe is not fed to the rule (it holds the input lane and reads plane counts, not superiority)",
+   "owner": "the game's own per-region figure is still not located (a widget scan and a one-level pointer scan found nothing that differs between a contested and an own sky, 17 Nov); instead hoi4_air_region_probe returns enemy_air_superiority_estimate (enemy fighters x efficiency shown over both sides', from the region window, takes `region`), live 18 Nov on a 1939 Germany: Western Poland 800 fighters at 76% vs 500 at 56% -> 0.315, Western Germany 500 vs 0 -> 0.0; at war the air_superiority rule probes up to three front regions (own CAS regions, then manage.air_front_regions) when hoi4_air_regions has no figure; open: the game's own figure, and a war run that acts on the estimate",
    "priority": 10
   },
   {
@@ -5283,7 +5284,7 @@
    "payoff": "medium",
    "why": "Out-of-range wings fly nothing; range is the most common air failure",
    "closing": "live",
-   "owner": "live: a follow_region wing rebases into the new mission region after switch_when (then_region) or a phase override moves it; lint air.deploy",
+   "owner": "live: a follow_region wing rebases into the new mission region after switch_when (then_region) or a phase override moves it; lint air.deploy; tool live on 1.19.4 BBA wings 17 Nov (hoi4_air_rebase across regions, a 1939 Germany save)",
    "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy planes; BBA wings never listed)",
    "verified": "game-actions of the Italy runs ag1, d1-d3 and others (8-14 Nov 2026, one small theatre): air_rebase Verified 190 times, NotApplied 11 (air_plan with base_state/base_region); follow_region moving with a front over several regions not yet seen live"
   },
@@ -5305,7 +5306,7 @@
    "payoff": "high",
    "why": "An air build-up (15-25 fighter factories) is wasted if reserve planes never become wings",
    "closing": "live",
-   "owner": "live: an air_plan entry with deploy founds a wing from BBA reserve planes (the tool was live on legacy reserve only) and gives it the entry's mission; lint air.deploy",
+   "owner": "executor: air_plan entries with deploy found their wings from the planes the lines make also before the entry's `when` holds (the wings train in peace); every wing has one owning entry (wing_owners: two entries of one airframe no longer trade wings between bases); planes no entry takes become a wing after standing 14 game days unshrunk (air_reserve_step, manage.air_reserve_min 50); live: a run founds a wing from new planes",
    "evidence": "tool only, not the executor rule: LIVE_VERIFICATION_1_19_4.md: 31 Oct, 3 DLC (legacy reserve only; BBA reserve planes never)"
   },
   {
@@ -5447,6 +5448,8 @@
     "procedure.md#5. XP budget"
    ],
    "plan": [
+    "manage.air_training",
+    "manage.air_training_fuel",
     "air_plan[].mission",
     "xp_budget.air"
    ],
@@ -5457,7 +5460,7 @@
    "payoff": "medium",
    "why": "Air XP gates every plane design and the air doctrine",
    "closing": "both",
-   "owner": "Executor xp_budget step (W-item) or a training rule; live-verify the training mission"
+   "owner": "executor air_idle_step: in peace every wing with no mission trains over its own base while fuel >= manage.air_training_fuel (0.5); manage.air_training false keeps them home with manage.air_training_why written in the air_idle note; at war the war missions and the air plan take training wings; live-verify the training mission; live 18 Nov: training is button-only (Pilot Exercises, no region; memory keeps region 0 with the training bit), hoi4_air_mission training Verified and hoi4_air reports missions [\"training\"]"
   },
   {
    "id": "air.plane_design",
@@ -6197,19 +6200,21 @@
     "war-air-naval-peace.md#16 Tactics: air"
    ],
    "plan": [
-    "manage.fuel_floor"
+    "manage.fuel_floor",
+    "manage.air_training_fuel",
+    "manage.fuel_days_floor"
    ],
    "tools": [
     "hoi4_resources",
     "hoi4_air",
     "hoi4_air_hold"
    ],
-   "blocked": "the fuel rule (plan_manage::fuel_rule, manage.fuel_floor) only turns auto-import on and wakes the player; no rule takes a wing off its mission when fuel is short, and hoi4_resources has no burn rate (days_left null: gain and burn are not stored), so 'days of fuel' cannot be judged",
    "payoff": "high",
    "why": "Germany starts at about 0.30 of its fuel capacity (sk6 read); a large air force at war drains fuel and every unit fights at a fuel penalty below 0.25",
    "closing": "both",
-   "owner": "executor: below a second floor (manage.fuel_air_cut, default 0.10) hold (hoi4_air_hold) wings on missions the plan ranks lowest (air_plan order; training, recon, strategic bombing before CAS and superiority), restore them above fuel_floor; burn rate from two hoi4_resources samples a day apart in the rule's state; then a live run where fuel falls",
-   "priority": 8
+   "owner": "executor air_idle_step: below manage.air_training_fuel training wings are held; at war below manage.fuel_floor or under manage.fuel_days_floor (30) days left at the rate fuel_rule samples over 30 game days, wings on rear missions are held one a tick (training, strategic bombing, port and logistics strike, patrol, recon, mines, air supply; superiority, CAS, interception and naval strike stay); no automatic restore yet; live: a run where fuel falls",
+   "priority": 8,
+   "evidence": "offline tests only (plan_manage fuel_falling_at_war_holds_the_rear_missions_first)"
   },
   {
    "id": "air.wing_reinforce_upgrade",

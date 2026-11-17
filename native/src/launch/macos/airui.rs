@@ -365,6 +365,7 @@ pub(super) struct RegionView {
     pub enemy_efficiency: String,
     pub close: Rect,
 }
+
 fn strategic_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let view = nui::view(r, image, SLOT_STRATEGIC)?;
     let root_at = fld(r.string_abi(), &STRATEGIC_VIEW, STRATEGIC_ROOT)?;

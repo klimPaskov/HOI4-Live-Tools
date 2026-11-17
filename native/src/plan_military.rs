@@ -1342,6 +1342,68 @@ fn casualty_rule(
 // ---------------------------------------------------------------------------------------------
 // W2-5, rule 27: enemy air superiority over our front.
 
+/// The front regions (where own CAS flies, then `manage.air_front_regions`), at most three, each
+/// judged through hoi4_air_region_probe's enemy_air_superiority_estimate (input: the air map's
+/// region window). Empty when no front region is known or no probe gives an estimate.
+fn probe_front(tools: &dyn Tools, plan: &Value, lease: &str) -> Vec<(i64, String, f64)> {
+    // input on the map: only at war, where the rule has something to act on
+    let at_war = tools
+        .call("hoi4_wars", &json!({}))
+        .is_ok_and(|w| !list(&w["wars"], "enemies").is_empty());
+    if !at_war {
+        return Vec::new();
+    }
+    let Ok(air) = tools.call("hoi4_air", &json!({})) else {
+        return Vec::new();
+    };
+    let mut want: Vec<(String, Option<i64>, String)> = Vec::new();
+    for w in list(&air, "wings") {
+        if strings(w, "missions").iter().any(|m| m == "cas") {
+            if let Some(id) = w["region"]["id"].as_i64() {
+                if !want.iter().any(|x| x.1 == Some(id)) {
+                    want.push((
+                        id.to_string(),
+                        Some(id),
+                        text(&w["region"]["name"]).to_string(),
+                    ));
+                }
+            }
+        }
+    }
+    for r in list(&plan["manage"], "air_front_regions") {
+        let (arg, id) = match r {
+            Value::Number(n) => (n.to_string(), n.as_i64()),
+            Value::String(t) => (t.clone(), t.trim().parse().ok()),
+            _ => continue,
+        };
+        if !want
+            .iter()
+            .any(|x| x.0 == arg || (id.is_some() && x.1 == id))
+        {
+            want.push((arg.clone(), id, arg));
+        }
+    }
+    let mut out = Vec::new();
+    for (arg, id, name) in want.into_iter().take(3) {
+        let Ok(seen) = tools.call(
+            "hoi4_air_region_probe",
+            &json!({"region": arg, "lease_token": lease}),
+        ) else {
+            continue;
+        };
+        let Some(v) = seen["enemy_air_superiority_estimate"].as_f64() else {
+            continue;
+        };
+        let shown = seen["region"].as_str().unwrap_or(&name).to_string();
+        // the window that opened is the region read; an id only when it is the one asked for
+        let same = shown.eq_ignore_ascii_case(&name) || name.parse::<i64>().is_ok();
+        if let Some(id) = id.filter(|_| same) {
+            out.push((id, shown, v));
+        }
+    }
+    out
+}
+
 fn air_superiority_rule(
     state: &mut State,
     tools: &dyn Tools,
@@ -1358,7 +1420,7 @@ fn air_superiority_rule(
     let regions = tools
         .call("hoi4_air_regions", &json!({}))
         .unwrap_or(Value::Null);
-    let read: Vec<(i64, String, f64)> = list(&regions, "regions")
+    let mut read: Vec<(i64, String, f64)> = list(&regions, "regions")
         .iter()
         .filter_map(|r| {
             Some((
@@ -1368,6 +1430,11 @@ fn air_superiority_rule(
             ))
         })
         .collect();
+    if read.is_empty() {
+        // the game's own figure is not in memory: judge the front regions as the player's air
+        // map shows them (hoi4_air_region_probe: active fighters times efficiency, each side)
+        read = probe_front(tools, plan, lease);
+    }
     if read.is_empty() {
         state.skip(now, "mairsup", "x", 3 * DAY);
         // The seam: hoi4_air_regions carries the field per region, null with the tool's reason
@@ -4165,6 +4232,32 @@ mod tests {
         assert!(state.military.notes["air_superiority"].starts_with("unknown"));
         assert!(actions(&tools).is_empty());
         assert!(take_alarms(&mut state).is_empty());
+    }
+
+    #[test]
+    fn at_war_without_the_figure_the_front_is_judged_from_the_region_window() {
+        let mut wings = air();
+        wings["wings"] = json!([{"wing": "StG 1", "missions": ["cas"],
+            "region": {"id": 31, "name": "Western Poland"}}]);
+        let tools = fake(vec![
+            (
+                "hoi4_air_regions",
+                json!({"regions": [{"region_id": 31, "name": "Western Poland",
+                    "enemy_air_superiority": null}]}),
+            ),
+            ("hoi4_air", wings),
+            ("hoi4_wars", json!({"wars": {"enemies": ["POL"]}})),
+            (
+                "hoi4_air_region_probe",
+                json!({"region": "Western Poland", "enemy_air_superiority_estimate": 0.38}),
+            ),
+        ]);
+        let plan = json!({"manage": {"enemy_air_superiority": 0.6}});
+        let mut state = State::default();
+        let _ = air_superiority_rule(&mut state, &tools, &plan, "l", START).unwrap();
+        let line = &state.military.notes["air_superiority"];
+        assert!(!line.starts_with("unknown"), "{line}");
+        assert!(line.starts_with("enemy at or below 0.6"), "{line}");
     }
 
     #[test]

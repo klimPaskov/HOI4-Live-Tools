@@ -371,6 +371,8 @@ pub const RECEIPT_TOOLS: &[&str] = &[
     "hoi4_air_mission",
     "hoi4_air_rebase",
     "hoi4_air_wing_create",
+    "hoi4_air_hold",
+    "hoi4_officer_corps",
     "hoi4_army_assign",
     "hoi4_army_commander",
     "hoi4_army_create",
@@ -5002,7 +5004,6 @@ fn extras_step(
         return Ok(Some(step));
     }
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
-        state.skip(now, "aircheck", "x", 3 * DAY);
         let wars = tools.call("hoi4_wars", &json!({}))?;
         // The own states on a border with an enemy, the war's theatre and its guard states:
         // a wing flies from a base that lies there. A wing based elsewhere (the home country
@@ -5019,7 +5020,9 @@ fn extras_step(
             let air = tools.call("hoi4_air", &json!({}))?;
             for wing in list(&air, "wings") {
                 let name = text(&wing["wing"]).to_string();
-                if wing["standing_by"] != json!(true)
+                // a wing training in peace (plan_manage air_idle_step) is free for the war
+                let training_only = strings(wing, "missions") == ["training"];
+                if (wing["standing_by"] != json!(true) && !training_only)
                     || state.skipped(now, "airwing", &name)
                     || plan_manage::air_plan_claims(plan, wing)
                 {
@@ -5047,6 +5050,9 @@ fn extras_step(
                 )));
             }
         }
+        // every wing that could go has gone: look again in 3 days (was set before the first
+        // order, so a war's wings left one at a time, three days apart)
+        state.skip(now, "aircheck", "x", 3 * DAY);
     }
     Ok(None)
 }

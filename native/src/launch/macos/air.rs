@@ -437,7 +437,17 @@ pub(super) fn assign(
         .as_ref()
         .and_then(|dir| super::mapdata::state_regions(dir).ok())
         .and_then(|m| m.get(&state).map(|v| v.0));
-    if let Some(region) = region {
+    // Training (Pilot Exercises) has no region: the mission button alone starts it over the
+    // wing's base and the region click is refused ("None of the selected Air Wings can be
+    // assigned here"); in memory the bit is set and the region stays 0 (st2, 17 Nov 2026).
+    let regionless = mission == "training";
+    if regionless
+        && read(process, |r, i| super::airact::own_wing(r, i, name))?
+            .is_some_and(|w| w.mission_mask & (1 << (wanted - 1)) != 0 && w.region_id <= 0)
+    {
+        return Ok(());
+    }
+    if let Some(region) = region.filter(|_| !regionless) {
         let bit = 1 << (wanted - 1);
         if read(process, |r, i| super::airact::own_wing(r, i, name))?
             .is_some_and(|w| w.mission_mask & bit != 0 && w.region_id == region)
@@ -490,6 +500,10 @@ pub(super) fn assign(
             let _ = deselect(process, keys);
             return Err(error);
         }
+    }
+    if regionless {
+        let _ = deselect(process, keys);
+        return Ok(());
     }
     // The state's centre where the camera already is (aiming height); the Find view
     // (which centres it and waits for the camera to rest) otherwise.

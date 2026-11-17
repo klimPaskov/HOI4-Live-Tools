@@ -1192,6 +1192,22 @@
       "$ref": "#/definitions/vp_targets",
       "x-owner": "executor"
     },
+    "officer_corps": {
+      "type": "array",
+      "x-owner": "executor",
+      "description": "officer corps spirits to buy in this order (plan_manage.rs officer_corps_step): each once the branch's experience covers its cost on top of manage.xp_reserve.<branch>; hoi4_officer_corps {slot, spirit} picks it (live list: pp18-pp26)",
+      "items": {
+        "type": "object",
+        "required": ["slot", "spirit"],
+        "properties": {
+          "slot": {"type": "string", "pattern": "^(army|navy|air):[0-5]$", "description": "VIEW:INDEX as hoi4_officer_corps list reads it"},
+          "spirit": {"type": "string", "description": "the spirit's name as its window shows it"},
+          "cost": {"type": "number", "description": "experience; default by slot place 20, 35, 50"},
+          "when": {"description": "plan predicate"},
+          "why": {"type": "string"}
+        }
+      }
+    },
     "special_projects": {
       "type": "object",
       "properties": {
@@ -3411,6 +3427,8 @@
               "resources",
               "stockpile",
               "trucks",
+              "air_idle",
+              "air_reserve",
               "casualties",
               "air_superiority",
               "overdrawn",
@@ -3567,7 +3585,7 @@
           "maximum": 100,
           "default": 0.6,
           "x-rule": "air_superiority",
-          "description": "enemy air superiority over a front region above which one more fighter wing goes there per action (rule 27, plan_military.rs); a fraction or a percent. Reported unknown today: no tool maps air superiority by region"
+          "description": "enemy air superiority over a front region above which one more fighter wing goes there per action (rule 27, plan_military.rs); a fraction or a percent. Read from hoi4_air_regions when it has the figure; otherwise at war from hoi4_air_region_probe's enemy_air_superiority_estimate over up to three front regions (fighters times the efficiency shown, each side; an estimate)"
         },
         "air_front_regions": {
           "type": "array",
@@ -3587,6 +3605,40 @@
           "default": 10,
           "x-rule": "air_superiority",
           "description": "when the only front region is above the limit, its attacking armies hold this many game days"
+        },
+        "air_training": {
+          "type": "boolean",
+          "x-rule": "air_idle",
+          "default": true,
+          "description": "in peace (and away from the fronts at war) every wing with no mission trains over its own base while fuel allows (plan_manage.rs air_idle_step); false keeps them standing, with air_training_why written in the run's air_idle note"
+        },
+        "air_training_why": {
+          "type": "string",
+          "default": "",
+          "x-rule": "air_idle",
+          "description": "why the plan keeps idle wings from training (written in the air_idle note)"
+        },
+        "air_training_fuel": {
+          "type": "number",
+          "x-rule": "air_idle",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "fuel / capacity below which training wings are held and no wing starts training"
+        },
+        "fuel_days_floor": {
+          "type": "number",
+          "x-rule": "air_idle",
+          "default": 30,
+          "minimum": 0,
+          "description": "at war, days of fuel left at the rate sampled over 30 game days below which wings on rear missions are held one at a time (training, strategic bombing, port and logistics strike, patrol, recon, mines, air supply; superiority, CAS, interception and naval strike stay); fuel_floor does the same"
+        },
+        "air_reserve_min": {
+          "type": "integer",
+          "x-rule": "air_reserve",
+          "default": 50,
+          "minimum": 1,
+          "description": "reserve planes of one variant no air_plan deploy entry takes that, unshrunk for 14 game days, become a new wing at a base of their kind with room (plan_manage.rs air_reserve_step; manage.off air_reserve turns it off)"
         },
         "fuel_floor": {
           "type": "number",

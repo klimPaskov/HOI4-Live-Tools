@@ -708,9 +708,12 @@ Real gaps (no tool; use the workaround):
   hoi4_fleets and hoi4_wars report them as null today, so these atoms stay unknown and
   the gated invasion waits; pair them in an `any` with a date for the 50-day
   patrol.
-- Air superiority by region: `hoi4_air_region_probe` counts planes on both sides. The
-  executor's `manage.enemy_air_superiority` rule waits on a gap (not executable:
-  `hoi4_air_regions` reports `enemy_air_superiority` null until the read is built).
+- Air superiority by region: the game's own figure is not read (`hoi4_air_regions` reports
+  `enemy_air_superiority` null). `hoi4_air_region_probe` (by `state_id` or `region`) opens the
+  region window and returns `enemy_air_superiority_estimate`: the enemy's share of the active
+  fighters, each side weighted by the efficiency shown. At war the
+  `manage.enemy_air_superiority` rule falls back to that probe for up to three front regions
+  (where own CAS flies, then `manage.air_front_regions`), every 3 days.
 - Dockyard repair share and ship refit: none.
 - Licence, lend-lease and volunteer dialogs: none.
 - Per-state occupation law and garrison template assignment: `hoi4_occupation_law` sets the default law only.
