@@ -32,7 +32,8 @@ Production is a set of factory targets per equipment over all lines, the ones th
   plan.ai_baseline           (error) where a baseline of the game's own AI exists for the country and start
                              (skills/hoi4-campaign-playbook/baselines/<TAG>-<year>.json), a plan checkpoint or horizon
                              target below BASELINE_SLACK of the AI's civilian, military or total factories on that
-                             date, or the forecast of the plan's own levers below FORECAST_SLACK of them. A written
+                             date, or the forecast of the plan's own levers below FORECAST_SLACK of them up to the first war day
+                             (the forecast leaves out what conquest adds). A written
                              reason does not lift it: only goal.ai_baseline_constraint entries the lint confirms
                              (no_free_slots: the forecast finds no free slot outside the construction risk by then;
                              law_unavailable: the law is not offered or its gate is closed under the plan's timeline).
@@ -547,6 +548,7 @@ def baseline(lint, tl, table, fc=None, lev=()):
     plan_at = _plan_marks(lint)
     horizon_end = max([x for x, _ in lint.horizon()] + list(plan_at) or [None]) if (lint.horizon() or plan_at) else None
     rows = (fc or {}).get("rows") or []
+    fc_until = _day((fc or {}).get("war")) if (fc or {}).get("war") else None
     for row in b.get("rows") or []:
         d = _day(row["date"])
         if d is None or (horizon_end is not None and d > horizon_end):
@@ -565,7 +567,9 @@ def baseline(lint, tl, table, fc=None, lev=()):
             if "divisions" in v and v["divisions"] < BASELINE_SLACK * row["divisions"]:
                 div_marks.append(f"divisions {v['divisions']} by {when} against the AI's {row['divisions']} on "
                                  f"{row['date']}")
-        r = econmod.at(rows, d) if rows else None
+        # the forecast models the economy the plan builds, not what conquest adds: it is held to the AI only up
+        # to the first war day (later marks are the plan's targets, checked above)
+        r = econmod.at(rows, d) if rows and (fc_until is None or d <= fc_until) else None
         if r and (r["civ"] < FORECAST_SLACK * ai_c or r["mil"] < FORECAST_SLACK * ai_m):
             fc_marks.append((d, f"{r['civ']} civilian / {r['mil']} military on {row['date']} against the AI's "
                                 f"{ai_c} / {ai_m}"))
@@ -581,6 +585,7 @@ def baseline(lint, tl, table, fc=None, lev=()):
     lint.facts["ai_baseline"] = {"file": f"baselines/{lint.tag}-{derive.as_tuple(lint.start)[0]}.json",
                                  "below": [m for _, m in marks] + div_marks,
                                  "forecast_below": [m for _, m in fc_marks],
+                                 "forecast_checked_until": (fc or {}).get("war"),
                                  "constraints": [{"constraint": c, "confirmed": True, "how": h} for c, h in held]
                                  + [{"constraint": c, "confirmed": False, "how": h} for c, h in refused]}
     if refused:
