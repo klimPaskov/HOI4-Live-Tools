@@ -60,6 +60,10 @@ WING_PLANES = 100        # one air wing (war-air-naval-peace.md §5; the wing si
 AIR_SHARE = 0.35         # of the military output to a war's first day the air force may take (fighters first)
 MIN_PLANES = 20          # an air row below this is no air arm: the plan says why (force_design.air_why)
 SINGLE_SHARE = 0.85      # one template carrying more than this share of the army
+LOGISTICS_DAYS = 120     # a war planned longer than this needs tactical bombers on logistics strike (§5.1, AI11)
+STRATEGIC_DAYS = 365     # strategic bombing only in a war longer than a year (AI14)
+STRATEGIC_PLANES = 1000  # about 1000 bombers beat the repairs (AI14)
+DECISIVE_DAYS = 120      # a war planned longer than this needs its reasons (force.decisive)
 
 PLANE_KINDS = ("fighter", "heavy_fighter", "cas", "tactical_bomber", "naval_bomber", "strategic_bomber",
                "transport", "scout")
@@ -309,6 +313,69 @@ def side_aggregate(lint, tags):
             "submarines": sum(r["submarines"] for r in rows)}
 
 
+def ai_growth_rate():
+    """Divisions a year per start military factory the game's own AI added in peace, measured in this install's
+    baselines (skills/hoi4-campaign-playbook/baselines/*.json, rows up to `peace_until`): the rate the start
+    order of battle of an enemy is grown by to the war's first day. None without a baseline."""
+    import glob
+    import json
+    import os
+    here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    rates = []
+    for path in sorted(glob.glob(os.path.join(here, "skills", "hoi4-campaign-playbook", "baselines", "*.json"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                b = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        until = b.get("peace_until")
+        rows = [r for r in b.get("rows") or [] if until is None or r.get("date", "") <= until]
+        if len(rows) < 2 or not rows[0].get("military_factories"):
+            continue
+        d0, d1 = derive.day(rows[0]["date"]), derive.day(rows[-1]["date"])
+        if d0 is None or d1 is None or d1 <= d0:
+            continue
+        rates.append((rows[-1]["divisions"] - rows[0]["divisions"]) / ((d1 - d0) / 365.0)
+                     / rows[0]["military_factories"])
+    return sum(rates) / len(rates) if rates else None
+
+
+def start_military_factories(lint, tag):
+    cache = lint.__dict__.setdefault("_start_mil", {})
+    if tag not in cache:
+        try:
+            sb = derive.state_buildings(lint.game, lint.ctx, lint.start)
+            cache[tag] = sum((sb.get(sid) or {}).get("arms_factory", 0) for sid, r in lint.world.states().items()
+                             if r.get("owner") == tag)
+        except Exception:  # noqa: BLE001
+            cache[tag] = 0
+    return cache[tag]
+
+
+def grown(lint, side, day, grow=None):
+    """The side's start aggregate with its land force grown to day at the AI's peace rate (ai_growth_rate): an
+    estimate of the enemy the war meets, the floor of the start OOB kept. Adds divisions_est, width_est,
+    tank_battalions_est and growth_why."""
+    out = dict(side)
+    rate = ai_growth_rate()
+    start = derive.day(lint.start)
+    if rate is None or day is None or start is None or day <= start or not side["divisions"]:
+        out.update(divisions_est=side["divisions"], width_est=side["width"],
+                   tank_battalions_est=side["tank_battalions"], growth_why="no growth estimate (no baseline)")
+        return out
+    years = (day - start) / 365.0
+    tags = [t for t in side["tags"] if grow is None or t in grow]
+    mil = sum(start_military_factories(lint, t) for t in tags)
+    add = rate * mil * years
+    f = (side["divisions"] + add) / side["divisions"]
+    out.update(divisions_est=int(round(side["divisions"] + add)), width_est=round(side["width"] * f, 1),
+               tank_battalions_est=int(round(side["tank_battalions"] * f)),
+               growth_why=f"{side['divisions']} start divisions + {rate:.2f} a year per start military factory "
+                          f"(the AI's peace rate in the baselines) x {mil} factories of {', '.join(tags)} x "
+                          f"{years:.1f} years")
+    return out
+
+
 # ---------------------------------------------------------------------------------------------- dates
 _CAP = re.compile(r"^capitulated:([A-Z][A-Z0-9]{2})$")
 _WAR = re.compile(r"^at_war_with:([A-Z][A-Z0-9]{2})$")
@@ -515,7 +582,8 @@ def needs(lint, tl, wars):
         side = side_aggregate(lint, war["enemy_tags"])
         # the front: the targets and the joiners that border them (an earlier war's enemy that is not a target
         # keeps its divisions and fighters on its own land); the line, the breakthrough and the air are sized on it
-        air_side = side_aggregate(lint, war["targets"] + war["joiners"])
+        # the targets grow to the war's day; a bordering joiner (often by a colony) counts with its start force
+        air_side = grown(lint, side_aggregate(lint, war["targets"] + war["joiners"]), war["start"], war["targets"])
         mix = derive.terrain_mix(g, war["theatre"]) if war["theatre"] else {}
         need = {"war": war["id"], "kind": war["kind"], "start": war["start_date"], "enemy": side,
                 "theatre_terrain": {k: round(v, 2) for k, v in sorted(mix.items(), key=lambda x: -x[1])[:5]},
@@ -528,12 +596,12 @@ def needs(lint, tl, wars):
         if war["kind"] == "offensive":
             line_width = axes * pw * LINE_DEPTH
             front = air_side
-            defended = front["width"] >= line_width
-            mobile = max(MOBILE_PER_AXIS * axes, int(-(-MOBILE_PER_ENEMY * front["divisions"] // 1)))
+            defended = front["width_est"] >= line_width
+            mobile = max(MOBILE_PER_AXIS * axes, int(-(-MOBILE_PER_ENEMY * front["divisions_est"] // 1)))
             armour = max(ARMOUR_PER_AXIS * axes, -(-mobile // 2))
             row = {"role": "breakthrough", "armour": armour, "mobile": mobile, "required": defended,
-                   "why": (f"{', '.join(front['tags'])} field {front['divisions']} divisions, {front['width']:g} "
-                           f"front-line width "
+                   "why": (f"{', '.join(front['tags'])} field about {front['divisions_est']} divisions on the day "
+                           f"({front['growth_why']}), {front['width_est']:g} front-line width "
                            f"against {line_width:g} ({axes} strike axes x plains width {pw:g} x {LINE_DEPTH}): "
                            + (f"a defended line; armour on every axis to break it and mobile divisions to exploit "
                               f"({MOBILE_PER_AXIS} per axis, {MOBILE_PER_ENEMY:.0%} of the enemy's divisions, half "
@@ -542,16 +610,26 @@ def needs(lint, tl, wars):
                                                "advance"))}
             afford = breakthrough_cost(lint, day, row["mobile"])
             row.update(afford)
-            if defended and not afford["affordable"]:
-                row["required"] = False
-                row["why"] += f"; not affordable: {afford['afford_why']}"
+            if defended and not afford["affordable"] and afford.get("division_ic") and out_mil:
+                # what BREAK_SHARE of the output pays, never below the start-strength share: the plan that wants
+                # more raises its military output (more factories earlier) and the lint follows
+                floor = max(MOBILE_PER_AXIS * axes, int(-(-MOBILE_PER_ENEMY * front["divisions"] // 1)))
+                paid = int(BREAK_SHARE * out_mil // afford["division_ic"])
+                if paid < row["mobile"]:
+                    row["mobile"] = max(floor, paid)
+                    row["armour"] = max(ARMOUR_PER_AXIS * axes, -(-row["mobile"] // 2))
+                    row["why"] += (f"; {BREAK_SHARE:.0%} of the {round(out_mil)} IC the military factories make by "
+                                   f"then pays {paid} at {afford['division_ic']} IC ({afford['unit']}): sized to "
+                                   f"{row['mobile']} (raise the output to field more)")
             need["rows"].append(row)
         # air: a first-class arm (air_rows)
         bt = next((r for r in need["rows"] if r["role"] == "breakthrough"), None)
-        need["rows"] += air_rows(lint, war, air_side, out_mil, axes, bool(bt and bt["required"]))
-        if air_side["tank_battalions"] >= AT_ENEMY_ARMOUR:
+        need["rows"] += air_rows(lint, war, air_side, out_mil, axes, bool(bt and bt["required"]),
+                                 planned_days(lint, war))
+        need["planned_days"] = planned_days(lint, war)
+        if air_side["tank_battalions_est"] >= AT_ENEMY_ARMOUR:
             need["rows"].append({"role": "anti_tank", "required": False, "enemy_tank_battalions":
-                                 air_side["tank_battalions"],
+                                 air_side["tank_battalions_est"],
                                  "why": f"the front fields {air_side['tank_battalions']} tank battalions at the "
                                         "start: anti-tank in the line divisions that face them"})
         hills = sum(mix.get(t, 0) for t in ("mountain", "hills"))
@@ -563,7 +641,22 @@ def needs(lint, tl, wars):
     return out
 
 
-def air_rows(lint, war, front, out_mil, axes, breakthrough):
+def planned_days(lint, war):
+    """Days the plan gives a war: force_design.wars[].duration_days of the entry naming its targets, else from its
+    first day to the latest capitulation checkpoint of its targets; None when the plan dates no end."""
+    fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
+    for x in fd.get("wars") or []:
+        if isinstance(x, dict) and set(x.get("enemies") or []) & set(war["targets"]) and \
+                isinstance(x.get("duration_days"), int):
+            return x["duration_days"]
+    caps = capitulation_days(lint)
+    ends = [caps[t] for t in war["targets"] if t in caps]
+    if war.get("start") is None or not ends:
+        return None
+    return max(ends) - war["start"]
+
+
+def air_rows(lint, war, front, out_mil, axes, breakthrough, days=None):
     """The air force a war needs on its first day, inside what the plan can pay (AIR_SHARE of its military output
     to that day): fighters FIGHTER_RATIO x the front's start fighters; once those are paid, close air support over
     the breakthrough axes (one wing an axis); naval strike planes for a landing against a stronger fleet;
@@ -586,15 +679,17 @@ def air_rows(lint, war, front, out_mil, axes, breakthrough):
         why += "; the country has no fighter equipment, no variant and no line: no air contest"
     elif want and not superiority:
         why += (f"; {AIR_SHARE:.0%} of the {round(out_mil or 0)} IC its military factories make by then pays {cap} "
-                f"at {f_cost} IC" + (": it contests the air but cannot win it" if cap >= MIN_PLANES else
-                                     ": no air contest"))
+                f"at {f_cost} IC" + (f": {want} win it, so the plan raises the air share or the output "
+                                     "(force.decisive)" if cap >= MIN_PLANES else
+                                     f": {want} win it; raise the air share or the output (force.decisive)"))
     rows.append({"role": "fighters", "planes": planes, "want": want, "required": planes >= MIN_PLANES,
                  "superiority": superiority, "enemy_fighters": fighters, "ic": round(spent),
                  "unit_cost": f_cost, "unit_cost_from": how, "budget_ic": round(budget), "why": why})
     if bombers and not superiority:
         rows.append({"role": "anti_air", "required": False, "enemy_bombers": bombers,
-                     "why": f"{', '.join(front['tags'])} fly {bombers} bombers and CAS and the plan cannot win the "
-                            "air: anti-air in the line divisions, radar and state anti-air where they bomb"})
+                     "why": f"{', '.join(front['tags'])} fly {bombers} bombers and CAS and the fighters are short of "
+                            "superiority: anti-air in the line divisions, radar and state anti-air where they bomb, "
+                            "until the fighters win it"})
     if war["kind"] == "offensive" and breakthrough:
         c_cost, c_how = kind_cost(lint, "cas")
         cas_want = WING_PLANES * max(1, axes)
@@ -603,7 +698,28 @@ def air_rows(lint, war, front, out_mil, axes, breakthrough):
                      "unit_cost": c_cost, "unit_cost_from": c_how,
                      "why": f"one wing of close air support over each of the {max(1, axes)} breakthrough axes, once "
                             "the fighters win the air there (at most 3 per enemy combat width)"
-                            + ("" if superiority else "; the fighters cannot win the air first: none required")})
+                            + ("" if superiority else "; the fighters do not win the air first yet: none required")})
+    # bombers where the war uses them: tactical bombers on logistics strike behind the front in a war planned past
+    # LOGISTICS_DAYS (§5.1, AI11, AI12: rail, hubs, air bases), one wing an axis once fighters and CAS are paid;
+    # strategic bombers in a war past a year (AI14), about STRATEGIC_PLANES to beat the repairs
+    if war["kind"] == "offensive":
+        long_war = days is None or days >= LOGISTICS_DAYS
+        t_cost, t_how = kind_cost(lint, "tactical_bomber")
+        left = budget - spent - sum(r.get("planes", 0) * (r.get("unit_cost") or 0) for r in rows
+                                    if r["role"] == "cas")
+        t_want = WING_PLANES * max(1, axes)
+        t_planes = min(t_want, int(left // t_cost)) if t_cost and superiority and long_war else 0
+        rows.append({"role": "tactical_bombers", "planes": t_planes, "want": t_want if long_war else 0,
+                     "required": long_war and t_planes >= MIN_PLANES, "unit_cost": t_cost, "unit_cost_from": t_how,
+                     "why": (f"the war is planned for {days if days is not None else 'an undated number of'} days: "
+                             f"logistics strike on rail, hubs and air bases behind the front, one wing for each of "
+                             f"{max(1, axes)} axes once the fighters and CAS are paid" if long_war else
+                             f"the war is planned for {days} days, under {LOGISTICS_DAYS}: no logistics campaign")})
+        if days is None or days >= STRATEGIC_DAYS:
+            rows.append({"role": "strategic_bombers", "planes": 0, "want": STRATEGIC_PLANES, "required": False,
+                         "why": f"the war runs a year or more: about {STRATEGIC_PLANES} strategic bombers on "
+                                "industry, ports and air bases (AI14), or the reason for none in "
+                                "force_design.bomber_why"})
     if any(force_kind(g, u) == "para" for u in template_units_all(lint)):
         rows.append({"role": "transport", "planes": WING_PLANES, "required": True,
                      "why": "the plan fields paratroopers: transport planes to drop them"})

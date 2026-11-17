@@ -139,13 +139,13 @@ class StrategizeTests(unittest.TestCase):
             self.assertFalse(any("validate_plan.py" in " ".join(c) for c in fake.commands))
 
     def test_review_gate_rules(self):
-        self.assertEqual((strategize.PASS_TOTAL, strategize.MAX_TOTAL), (22, 32))
-        self.assertEqual(strategize.CRITICAL_ROWS, ("1", "2", "7", "13"))
-        ok, detail = strategize.review_passes({"total": 22, "scores": {"1": 1, "2": 1, "7": 1, "13": 1},
+        self.assertEqual((strategize.PASS_TOTAL, strategize.MAX_TOTAL), (24, 34))
+        self.assertEqual(strategize.CRITICAL_ROWS, ("1", "2", "7", "13", "17"))
+        ok, detail = strategize.review_passes({"total": 24, "scores": {"1": 1, "2": 1, "7": 1, "13": 1, "17": 1},
                                                "findings": []})
         self.assertTrue(ok, detail)
-        self.assertIn("22/32", detail)
-        self.assertFalse(strategize.review_passes({"total": 21, "scores": {}, "findings": []})[0])
+        self.assertIn("24/34", detail)
+        self.assertFalse(strategize.review_passes({"total": 23, "scores": {}, "findings": []})[0])
         self.assertFalse(strategize.review_passes({"total": 16, "scores": {"1": 1, "2": 1, "7": 1}, "findings": []})[0])
         self.assertFalse(strategize.review_passes({"total": 28, "scores": {"2": 0}, "findings": []})[0])
         self.assertFalse(strategize.review_passes({"total": 28, "scores": {"13": 0}, "findings": []})[0])
@@ -176,8 +176,8 @@ class StrategizeTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("16/32", detail)
         for bad in (None, 0, -4, "32", True):
-            self.assertEqual(strategize.max_total({"max": bad}, {}), 32, bad)
-        self.assertEqual([strategize.pass_mark(m) for m in (32, 22, 64)], [22, 16, 44])
+            self.assertEqual(strategize.max_total({"max": bad}, {}), 34, bad)
+        self.assertEqual([strategize.pass_mark(m) for m in (34, 22, 64)], [24, 16, 46])
 
 
 

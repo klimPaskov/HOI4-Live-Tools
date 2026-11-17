@@ -1,14 +1,35 @@
 # Rules and modes
 
-Profile revision: `fair-mp-2026-11-09`. Two modes exist. **FAIR** (the default) is the multiplayer ruleset
-below plus the house rules. **META** allows exploits and must be chosen by the user or the campaign
-assignment. A host's own agreement always wins in a real multiplayer game; this skill never authorizes
-cheating against other players.
+Profile revision: `fair-mp-2026-11-18`. Two modes exist. **FAIR** (the default) is a roughly historical
+timeline plus the multiplayer ruleset below and the house rules. **META** drops the timeline and the
+multiplayer bans and must be chosen by the user or the campaign assignment. A host's own agreement always wins
+in a real multiplayer game; this skill never authorizes cheating against other players.
+
+## What FAIR and META mean
+
+Both modes play to steamroll the AI. FAIR is not a handicap: a FAIR plan reaches every goal in full (for
+Germany: Britain invaded and capitulated, the Soviet Union destroyed, the Allies beaten) and is as strong as
+the game allows in everything the two lists below leave free. The game's own AI is a sanity floor, never a
+target; plans aim for dominance (economy and force well above the AI, set from the country's best build) and
+for wars that are decisive and short.
+
+| | FAIR | META |
+|---|---|---|
+| Timeline | roughly historical expansion and war starts for the country (Germany: no early Anschluss, no early wars; the general European war no earlier than the Danzig crisis; the dated nation rules below) | none: the earliest Anschluss, earlier wars, any order |
+| Rules | the multiplayer ruleset below (no space marines, no military access, the submarine limits and the rest) | the multiplayer bans lifted; the forbidden techniques allowed |
+| Shortcuts | everything the timeline and the multiplayer list allow, optimised: research, construction, designs, templates, doctrines, trade, focus routes, intelligence, concentration, encirclement | every human-doable interface shortcut and exploit (exploits.md) on top |
+| Never, in either | console, debug or event commands, save editing, memory writes, hidden enemy intelligence, reloading to undo an outcome, pausing a real game | the same |
+| Goals | the same start date and the same final goals in both, so the two plans compare when each goal falls and what it costs | |
+
+Nothing in FAIR restricts optimisation beyond timing and the multiplayer list. A lint, a procedure line or a
+playbook note that limits a FAIR plan in any other way is a defect to fix, not a rule. Where the numbers show
+a goal needs more (more ships, planes, divisions or factories, sooner), the plan provides it by the date by
+the strongest legitimate route; no message, lint or note treats a goal as doubtful or scales it down.
 
 ## Where the rules apply
 
 * **FAIR is the default** for every campaign and for multiplayer games, unless the players agree that META
-  exploit play is allowed. Do not switch a losing FAIR run to META.
+  play is allowed. Do not switch a losing FAIR run to META: make the FAIR plan stronger.
 * **House rules and general rules** apply in every FAIR game.
 * **Axis, Allies and nation rules** apply whenever the campaign is in the historical WW2 setting with those
   nations (a historical bookmark, the historical tags). A rule for a side binds every nation on that side;
@@ -165,9 +186,11 @@ House bans beyond the ruleset, including cases where the normal UI permits them:
 | AI manipulation | No repeated empty-port or invasion cycling to reset AI behaviour, no surrender or VP-drop cheese without a supportable operational objective | Feints, flanks and supported airborne operations are allowed |
 | Equipment exploitation | No equipment-disable or stat loopholes, invulnerability, or known pathological damage or visibility stacking | Optimise actual cost, supply, reliability, attack and survivability |
 
-For the historical FAIR showcases, avoid prewar opportunistic world conquest. Germany uses its historical
-diplomatic expansion and begins the general European war no earlier than July 1939; Poland before the Low
-Countries and France. China may pursue national unification through its ordinary content and defend
+The FAIR timeline: no prewar opportunistic world conquest. Germany takes its historical diplomatic expansion
+in its historical order and season (the Rhineland, then Austria in 1938, the Sudetenland, Czechia) and begins
+the general European war at the Danzig crisis, no earlier than July 1939; Poland before the Low Countries and
+France; Barbarossa from 1941. Japan fights China from 1937 and the Allies from 1941. Inside those dates every
+war is planned to be won fast and completely. China may pursue national unification through its ordinary content and defend
 against Japan; no rule requires China to lose. There is no forced historical defeat and no delay of an
 otherwise won war beyond the dated rules above (Barbarossa from 1941, Sea Lion after its prerequisites,
 Japan against the Allies from 1941, the Soviet Union against the Axis from 1942).
@@ -177,8 +200,9 @@ ambiguity. This needs no pause and no user question.
 
 ## META opt-in
 
-META lifts the FAIR general, side and nation rules and the house bans on normal-UI exploits for the
-authorized campaign. The house rules (console, saves, hidden intelligence, reloads, pausing) stay absolute:
+META lifts the FAIR timeline, the general, side and nation rules and the house bans on normal-UI exploits for
+the authorized campaign. A META plan has its own timeline (the earliest Anschluss, earlier wars) and gets its
+own strategist pass; it keeps the FAIR plan's start date and final goals. The house rules (console, saves, hidden intelligence, reloads, pausing) stay absolute:
 an exploit that needs console, script invocation, file manipulation, a memory write or privileged command
 posting is unavailable. Everything the FAIR rules ban is META-only. The exploit playbook is
 [exploits.md](exploits.md): META-only, never used in a FAIR run.

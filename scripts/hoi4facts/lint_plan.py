@@ -540,6 +540,7 @@ NEW_RULES |= {"force.required", "force.breakthrough", "force.single_template", "
 NEW_RULES |= {"force.sea_required", "force.sea_control", "force.sea_screens", "force.sea_lift", "force.sea_port",
               "force.sea_patrol", "force.sea_raid", "force.carrier_air", "force.navy_unused", "force.navy_readiness",
               "force.navy_design", "force.navy_tools"}
+NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive"}  # bombers, designed cost, decisive wars
 SEVERITIES = ("error", "warning", "info")
 _PRED_TAG = re.compile(r"^(capitulated|at_war|at_war_with|exists|not_exists|not_at_war):([A-Z][A-Z0-9]{2})$")
 _PRED_STATE = re.compile(r"^(state_controller|owner|controller):(\d+)\s*==?\s*([A-Z][A-Z0-9]{2})$"

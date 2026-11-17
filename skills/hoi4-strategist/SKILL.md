@@ -155,8 +155,8 @@ critic in a fresh context:
 `python3 scripts/strategist/run.py --role critic --run RUN --prompt skills/hoi4-strategist/prompts/critic.md`.
 It writes `RUN/review/critic-1.json`. Answer every finding in `RUN/review/answers-1.json` (fix, or rebut
 with a source), re-run step 7, then run the critic again for round 2. At most 2 rounds; protocol in
-[references/rubric.md](references/rubric.md). *Gate:* no open `blocker`, rubric total ≥ 22 of 32, and no
-0 in rows 1, 2, 7 or 13. If round 2 still fails, write `RUN/strategist-blocked.md` and stop.
+[references/rubric.md](references/rubric.md). *Gate:* no open `blocker`, rubric total ≥ 24 of 34, and no
+0 in rows 1, 2, 7, 13 or 17. If round 2 still fails, write `RUN/strategist-blocked.md` and stop.
 
 **9. Reconcile live.** Only when the game is loaded and paused on day 1 (allowed pre-start setup) and
 the operator runs `python3 scripts/strategist/reconcile.py --run RUN --call-cmd "<broker call command>"`.

@@ -2947,6 +2947,15 @@
                 "minimum": 0,
                 "description": "strike axes the plan attacks on (the lint counts the army_layout strike entries whose axis lies in the targets' land)"
               },
+              "duration_days": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "days the plan gives the war from its first day to the enemy's capitulation (force.decisive)"
+              },
+              "decisive": {
+                "type": "string",
+                "description": "why the war is won fast: the force ratio on the axes, the air, the supply (force.decisive)"
+              },
               "tasks": {
                 "type": "array",
                 "items": {

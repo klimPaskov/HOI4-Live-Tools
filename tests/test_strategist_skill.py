@@ -8,7 +8,7 @@
 (e) the playbook SKILL.md, its INDEX.md and AGENTS.md point to the skill;
 (f) the 29-item campaign checklist is in procedure.md (one section per item with its facts command and
     resolution), in the plan.md coverage table, and enforced by SKILL.md step 5; the brief template has
-    an exact call for every player-owned key; the rubric has 16 rows and the 22 of 32 pass mark.
+    an exact call for every player-owned key; the rubric has 17 rows and the 24 of 34 pass mark.
 """
 
 import json
@@ -208,19 +208,19 @@ class StrategistSkillTest(unittest.TestCase):
     def test_rubric_rows_and_threshold(self):
         text = read(os.path.join(SKILL, "references", "rubric.md"))
         rows = re.findall(r"^\| (\d+) \|", text, re.M)
-        self.assertEqual(rows, [str(i) for i in range(1, 17)])
-        self.assertIn("22 of 32", text)
+        self.assertEqual(rows, [str(i) for i in range(1, 18)])
+        self.assertIn("24 of 34", text)
         self.assertNotIn("16 of 22", text)
-        self.assertIn("no 0 in rows 1, 2, 7 or\n13", text)
-        self.assertIn('"max": 32', text)
+        self.assertIn("no 0 in rows 1, 2, 7, 13 or\n17", text)
+        self.assertIn('"max": 34', text)
         for sev in ("blocker", "major", "minor"):
             self.assertIn(sev, text)
         for name in ("Force posture and XP budget", "Templates and doctrines", "Air, naval and overseas supply",
-                     "Occupation, peace", "Continuous-management thresholds"):
+                     "Occupation, peace", "Continuous-management thresholds", "Dominance and decisive wars"):
             self.assertIn(name, text)
         skill = read(os.path.join(SKILL, "SKILL.md"))
-        self.assertIn("22 of 32", skill)
-        self.assertIn("0 in rows 1, 2, 7 or 13", skill)
+        self.assertIn("24 of 34", skill)
+        self.assertIn("0 in rows 1, 2, 7, 13 or 17", skill)
         for rel in ("prompts/critic.md", "prompts/answer.md"):
             self.assertNotIn("of 22", read(os.path.join(SKILL, rel)), rel)
 

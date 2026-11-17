@@ -42,6 +42,17 @@ plan's own economy (the army forecast of the executor's training, equipment coun
   force.readiness         (error) a force_design row the plan's own arithmetic does not field: land rows against the
                           army forecast by template (90% of the count by the ready date), air rows against start
                           planes plus line output, navy rows against start ships plus dockyard output.
+  force.bombers           (error) a war planned past LOGISTICS_DAYS whose tactical bombers (one wing an axis on
+                          logistics strike, once fighters and CAS are paid) the start wings and lines do not give,
+                          with no force_design.bomber_why; (warning) a war of a year or more with no strategic
+                          bombers and no reason.
+  force.design_cost       (error) a tank, plane or ship design a line builds with no modules: costed on the bare
+                          chassis, so the table counts too many units.
+  force.decisive          (error) an offensive war not planned to be won fast: no planned duration or reasons
+                          (force_design.wars[].duration_days, decisive), the breakthrough force or the fighters short
+                          on its first day, fewer divisions than the game's own AI fields then (a floor), or under
+                          half the enemy's estimated divisions (force.py grown: the start OOB grown at the AI's
+                          peace rate).
   force.budget            (error) no factory budget by date (force_design.budget); (warning) a budget row whose land
                           / air shares are more than BUDGET_POINTS off the plan's lines on that date.
 
@@ -88,6 +99,8 @@ def check(lint):
     # the air force as an arm: use by phase, deployment, bases, research, designs, doctrine, fuel
     from . import lint_force_air
     lint_force_air.check(ctx)
+    ctx.bombers()
+    ctx.design_cost()
     ctx.support_companies()
     ctx.invasions()
     # the navy as an arm: the sea operations the plan schedules and what each needs (navy.py)
@@ -96,6 +109,7 @@ def check(lint):
     ctx.unused_lines()
     ctx.table()
     ctx.budget()
+    ctx.decisive()
     return lint
 
 
@@ -314,6 +328,104 @@ class Ctx:
                               f"({round(made)}) give about {round(have)}: give the line the factories that make them "
                               "by then, or plan fewer")
 
+    def bombers(self):
+        """force.bombers: the tactical bombers a long war's logistics campaign needs (force.py air_rows) against
+        the start wings and the lines; a war of a year or more with no strategic bombers and no reason."""
+        why = (self.fd or {}).get("bomber_why")
+        for w in self.offensive():
+            if w["start"] is None:
+                continue
+            tac = self.need_of(w, "tactical_bombers")
+            if tac and tac["required"] and not why:
+                have, start, made = self.air_have("tactical_bomber", w["start"])
+                if have < READY_SLACK * tac["planes"]:
+                    self.lint.add("error", "force.bombers", "production",
+                                  f"{w['id']} ({w['start_date']}): about {round(have)} tactical bombers ({start} at "
+                                  f"the start, {round(made)} from the lines) against {tac['planes']} ({tac['why']}): "
+                                  "a tactical bomber line (a medium airframe design for logistics strike) sized "
+                                  "from the war's date back, wings in air_plan on logistics_strike, or the reason "
+                                  "in force_design.bomber_why")
+            strat = self.need_of(w, "strategic_bombers")
+            if strat and not why:
+                rows = [r for r in self.fd_list("air") if r.get("kind") == "strategic_bomber"]
+                if not rows and self.air_have("strategic_bomber", w["start"])[0] < fm.MIN_PLANES:
+                    self.lint.add("warning", "force.bombers", "force_design.bomber_why",
+                                  f"{w['id']} ({w['start_date']}): {strat['why']}")
+
+    def design_cost(self):
+        """force.design_cost: a tank, plane or ship design a line builds with no modules is costed on the bare
+        chassis, hull or airframe; the force table and the lines' output then count too many units."""
+        designs = {d.get("id"): d for d in self.lint.list_of("designs")}
+        seen = set()
+        for i, x in enumerate(self.lint.list_of("production")):
+            d = designs.get(x.get("design"))
+            if not d or d.get("id") in seen or d.get("kind") not in ("tank", "plane", "ship"):
+                continue
+            seen.add(d.get("id"))
+            if isinstance(d.get("modules"), dict) and d["modules"]:
+                continue
+            cost, how = fm.unit_cost(self.lint, x.get("equipment"))
+            self.lint.add("error", "force.design_cost", f"designs {d.get('id')}",
+                          f"the line production[{i}] builds {d.get('id')} ({d.get('base')}), a design with no "
+                          f"modules: it is costed at {cost} IC ({how}), not as designed. Give the design its modules "
+                          "(slot -> module, from facts.py designs <TAG> --kind " + str(d.get("kind")) + ") so its "
+                          "cost, the line's output and the force table count real units")
+
+    def decisive(self):
+        """force.decisive: each offensive war is planned to be won fast: a planned duration and its reasons
+        (force_design.wars[].duration_days and decisive), the breakthrough force on the axes, air superiority
+        over the front, at least the game's own AI's division count on that date (a sanity floor), and our
+        divisions against the enemy's estimated strength. facts.force.decisive gives the numbers."""
+        from . import lint_economy
+        base = lint_economy.load_baseline(self.lint.tag, self.lint.start)
+        named = self.fd_list("wars")
+        rows = []
+        for w in self.offensive():
+            if w["start"] is None:
+                continue
+            need = next((x for x in self.needs if x["war"] == w["id"]), {})
+            entry = next((x for x in named if set(x.get("enemies") or []) & set(w["targets"])), {})
+            army = self.army(w["start"])
+            ours = sum(army.values())
+            front = need.get("front") or {}
+            enemy = front.get("divisions_est") or front.get("divisions") or 0
+            floor = _baseline_at(base, w["start"], "divisions")
+            problems = []
+            days = need.get("planned_days")
+            if days is None:
+                problems.append("no planned duration (force_design.wars[].duration_days, or a capitulation "
+                                "checkpoint for its targets)")
+            if not entry.get("decisive"):
+                problems.append("no reasons it is won fast (force_design.wars[].decisive: the force ratio on the "
+                                "axes, the air, the supply)")
+            bt = self.need_of(w, "breakthrough")
+            if bt and bt["required"]:
+                armour = sum(n for t, n in army.items() if self.profile(t)["kind"] == "armour")
+                mobile = sum(n for t, n in army.items() if fm.is_mobile(self.profile(t)["kind"]))
+                if armour + 0.5 < bt["armour"] or mobile + 0.5 < bt["mobile"]:
+                    problems.append(f"{round(armour)} armoured and {round(mobile)} mobile divisions on the axes "
+                                    f"against {bt['armour']} and {bt['mobile']}")
+            f = self.need_of(w, "fighters")
+            if f and f["want"]:
+                have = self.air_have("fighter", w["start"])[0]
+                if have < READY_SLACK * f["want"]:
+                    problems.append(f"about {round(have)} fighters against the {f['want']} that win the air")
+            if floor and ours < floor:
+                problems.append(f"{round(ours)} divisions, under the game's own AI's {round(floor)} on that date "
+                                "(a floor, not a target)")
+            if enemy and ours < 0.5 * enemy:
+                problems.append(f"{round(ours)} divisions against about {enemy} enemy divisions "
+                                f"({front.get('growth_why', 'start OOB')}): the line cannot hold the rest of the "
+                                "front while the axes break through")
+            rows.append({"war": w["id"], "date": w["start_date"], "planned_days": days, "divisions": round(ours),
+                         "enemy_divisions_est": enemy, "ai_divisions": floor, "problems": problems})
+            if problems:
+                self.lint.add("error", "force.decisive", f"force_design.wars {w['id']}",
+                              f"{w['id']} ({w['start_date']}) is not planned to be won fast: " + "; ".join(problems)
+                              + ". Plan the force, the air and the economy that crush it on the axes in weeks, "
+                                "and say why")
+        self.lint.facts.setdefault("force", {})["decisive"] = rows
+
     def support_companies(self):
         for w in self.wars:
             if w["start"] is None:
@@ -525,6 +637,18 @@ class Ctx:
                 self.lint.add("warning", "force.budget", f"force_design.budget[{i}]",
                               f"on {r.get('from')} the lines put " + ", ".join(off)
                               + " of the military factories: size the lines to the budget")
+
+
+def _baseline_at(base, day, key):
+    """The AI baseline's value of `key` on day, linear between its rows (None outside them or without one)."""
+    if not base:
+        return None
+    pts = [(derive.day(r.get("date")), r.get(key)) for r in base.get("rows") or [] if r.get(key) is not None]
+    pts = [(d, v) for d, v in pts if d is not None]
+    for (d0, v0), (d1, v1) in zip(pts, pts[1:]):
+        if d0 <= day <= d1:
+            return v0 + (v1 - v0) * (day - d0) / max(1, d1 - d0)
+    return None
 
 
 def plane_fams_start(lint, g):

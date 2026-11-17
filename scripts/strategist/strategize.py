@@ -50,11 +50,11 @@ SKILL = os.path.join(ROOT, "skills", "hoi4-strategist")
 PROMPTS = os.path.join(SKILL, "prompts")
 FIX_ROUNDS = 2
 REVIEW_ROUNDS = 2
-# Critic rubric (skills/hoi4-strategist/references/rubric.md): 16 rows scored 0-2, pass at 22 of 32 with no 0
+# Critic rubric (skills/hoi4-strategist/references/rubric.md): 17 rows scored 0-2, pass at 24 of 34 with no 0
 # in a critical row. A critic file that states another `max` is scored against the same share of it.
-PASS_TOTAL = 22
-MAX_TOTAL = 32
-CRITICAL_ROWS = ("1", "2", "7", "13")
+PASS_TOTAL = 24
+MAX_TOTAL = 34
+CRITICAL_ROWS = ("1", "2", "7", "13", "17")
 
 
 def log(msg):
