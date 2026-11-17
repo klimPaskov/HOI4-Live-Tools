@@ -145,6 +145,8 @@ pub(crate) struct Layout {
     pub(crate) state_status: u64,
     /// Extra shared building slots of the state (history and effects such as
     /// add_extra_state_shared_building_slots); 0 = not mapped on this build.
+    // read by the macOS state table only
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) state_extra_slots: u64,
     pub(crate) province_vtable: u64,
     pub(crate) province_owner: u64,

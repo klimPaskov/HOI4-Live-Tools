@@ -1047,6 +1047,18 @@ impl MacClock {
         // pause the game as surely as an action: every call is guarded, a memory read only costs
         // two clock reads (pm2, 17 Nov 2026: the game stood paused for four minutes after a
         // politics read sent without a request id).
+        // A run that fixes the game speed (HOI4_SPEED_LOCK=<internal speed 0..4>, set by a
+        // no-pause campaign) refuses a player's speed change to another value: pr1 (17 Nov 2026)
+        // the player set speed 2 for a stretch of 1937 against a brief that says speed 3.
+        if name == "hoi4_time" && !crate::autopilot::autopilot().in_step() {
+            if let Some(Err(e)) = arguments
+                .get("speed")
+                .and_then(Value::as_i64)
+                .map(|want| speed_lock(std::env::var("HOI4_SPEED_LOCK").ok().as_deref(), want))
+            {
+                return Err(e);
+            }
+        }
         let guard_pause = !journaled
             && name != "hoi4_time"
             && !name.starts_with("hoi4_peace")
@@ -6843,5 +6855,27 @@ fn design_arg(process: &dyn Process, value: &Value) -> Result<i32> {
             "design_ambiguous",
             format!("Several own designs are named {name:?}: pass the design id ({found:?})"),
         )),
+    }
+}
+
+/// `HOI4_SPEED_LOCK` (internal speed 0..4): any other requested speed is refused.
+fn speed_lock(lock: Option<&str>, want: i64) -> Result<()> {
+    match lock.and_then(|l| l.trim().parse::<i64>().ok()) {
+        Some(locked) if locked != want => Err(Error::new(
+            "speed_locked",
+            format!("This run holds the game at internal speed {locked} (HOI4_SPEED_LOCK); speed {want} is refused. Keep playing at the run's speed"),
+        )),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod speed_lock_tests {
+    #[test]
+    fn a_locked_run_refuses_other_speeds_only() {
+        assert!(super::speed_lock(Some("2"), 2).is_ok());
+        assert_eq!(super::speed_lock(Some("2"), 1).unwrap_err().code, "speed_locked");
+        assert!(super::speed_lock(None, 1).is_ok());
+        assert!(super::speed_lock(Some(""), 4).is_ok());
     }
 }
