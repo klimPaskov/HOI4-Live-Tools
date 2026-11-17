@@ -3146,7 +3146,8 @@
    "payoff": "medium",
    "why": "about six traits by the war on the main lines",
    "closing": "live",
-   "owner": "live: queue traits for an organisation whose policy is refused (LIVE-QUEUE Q37)"
+   "owner": "a route to any organisation's trait tree (its Details button in the roster a production line opens, or the filled slot's entry), live-mapped",
+   "blocked": "hoi4_mio_trait reaches an organisation only through an EMPTY designer slot of the politics view (industrial_org_entry, countrypoliticsview.gui); a filled Research & Production slot draws political_selectable_idea_entry_grid, so organisations of filled kinds (Germany 1936: Mauser, Rheinmetall) are refused organization_not_offered (g17a, 17 Nov 2026)"
   },
   {
    "id": "mio.policy",

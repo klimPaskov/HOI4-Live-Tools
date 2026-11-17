@@ -6360,7 +6360,15 @@ impl MacClock {
                 process.check()?;
                 Ok(n)
             };
-            let start = queued()?;
+            // The queues standing before: the verdict counts the lines of the queues added since,
+            // not the template's total, which falls whenever an older queue deploys meanwhile.
+            let standing = {
+                process.begin_snapshot()?;
+                let r = crate::memory::Reader::new(process);
+                let ids = deployment::queue_ids(&r, process.image_base(), template)?;
+                process.check()?;
+                ids
+            };
             let retry = actions.receipt_exists(id);
             if !retry {
                 self.keys.preflight()?;
@@ -6369,11 +6377,15 @@ impl MacClock {
             let keys = &self.keys;
             let mut settle = || {
                 let now = queued()?;
-                let detail = json!({"template":template,"queued_lines":now});
+                process.begin_snapshot()?;
+                let r = crate::memory::Reader::new(process);
+                let added = deployment::added_lines(&r, process.image_base(), template, &standing)?;
+                process.check()?;
+                let detail = json!({"template":template,"queued_lines":now,"added_lines":added});
                 Ok(if retry {
                     journal::Outcome::Diverged(detail)
                 } else {
-                    settle::queue_growth(start as i64, now as i64, count as i64).outcome(detail)
+                    settle::queue_growth(0, added as i64, count as i64).outcome(detail)
                 })
             };
             let mut dispatch = || {
