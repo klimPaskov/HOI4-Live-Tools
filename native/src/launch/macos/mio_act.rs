@@ -1319,7 +1319,11 @@ fn mio_trait(
     index: Option<usize>,
 ) -> Driven {
     let result: Driven = (|| {
-        open_org(process, keys, slot, display)?;
+        // The slot whose list offered the organisation: the re-open below must use it, not the
+        // asked slot (g17a/g17b, 17 Nov 2026: a trait of Rheinmetall, found in another slot's
+        // list, was queued, and the re-open through the asked tank slot then answered
+        // organization_not_offered, so a queued trait read as a refusal every year).
+        let found = open_org(process, keys, slot, display)?;
         let entries = settled(process, "trait entries", trait_entries)?;
         let summary = |entries: &[TraitEntry]| -> Vec<Value> {
             entries
@@ -1355,8 +1359,8 @@ fn mio_trait(
             // Queueing a trait detaches the detail window from the list window (window_not_found
             // right after a click that did queue, live 6 Nov 2026): reopen it and read again.
             leave(process, keys);
-            open_system(process, keys, slot)?;
-            open_roster(process, keys, slot)?;
+            open_system(process, keys, found)?;
+            open_roster(process, keys, found)?;
             open_detail(process, keys, display)?;
             after = read(process, trait_entries).unwrap_or_default();
         }

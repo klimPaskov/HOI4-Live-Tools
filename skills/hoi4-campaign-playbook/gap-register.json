@@ -3145,9 +3145,9 @@
    ],
    "payoff": "high",
    "why": "about six traits by the war on the main lines; the owner counts organisations without traits as unassigned",
-   "closing": "live",
-   "owner": "a route to any organisation's trait tree (its Details button in the roster a production line opens, or the filled slot's entry), live-mapped",
-   "blocked": "hoi4_mio_trait reaches an organisation only through an EMPTY designer slot of the politics view (industrial_org_entry, countrypoliticsview.gui); a filled Research & Production slot draws political_selectable_idea_entry_grid, so organisations of filled kinds (Germany 1936: Mauser, Rheinmetall) are refused organization_not_offered (g17a, 17 Nov 2026)"
+   "closing": "none",
+   "owner": "the executor's mio traits rule (plan_affairs mio_auto_traits) queues one trait per organisation as points arrive",
+   "verified": "pp11 (17 Nov 2026, fresh 1936 GER): hoi4_mio_trait GER_mauser_organization and GER_rheinmetall_organization trait 0 Verified, trait_queued true (queue 1), each found in the list of another slot than the asked one"
   },
   {
    "id": "mio.policy",
