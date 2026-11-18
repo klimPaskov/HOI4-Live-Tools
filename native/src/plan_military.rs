@@ -236,8 +236,21 @@ pub(super) fn digest(state: &State) -> Option<Value> {
     (!state.military.notes.is_empty()).then(|| json!(state.military.notes))
 }
 
-/// Everything after plan_manage's step, at most one action: rests that are over, the running
-/// naval invasion, the casualty and air superiority rules, army groups, the navy.
+/// The military rules as lanes of the pass (plan_run.rs `lanes`): rests that are over, the
+/// running naval invasion, the casualty and air superiority rules, army groups, the navy.
+pub(super) const LANES: [super::Lane; 6] = [
+    ("rests", |state, tools, _, lease, now| {
+        rest_step(state, tools, lease, now)
+    }),
+    ("invasion", invasion_step),
+    ("casualties", casualty_rule),
+    ("air_superiority", air_superiority_rule),
+    ("army_groups", army_group_step),
+    ("navy", navy_step),
+];
+
+/// The military rules in one chain (the tests' view of the old domain).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn step(
     state: &mut State,
     tools: &dyn Tools,
@@ -245,22 +258,14 @@ pub(super) fn step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    if let Some(done) = rest_step(state, tools, lease, now)? {
-        return Ok(Some(done));
+    // a direct call stands for a tick at `now` (the ledger counts game hours)
+    state.clock = now;
+    for (_, rule) in LANES {
+        if let Some(done) = rule(state, tools, plan, lease, now)? {
+            return Ok(Some(done));
+        }
     }
-    if let Some(done) = invasion_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = casualty_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = air_superiority_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = army_group_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    navy_step(state, tools, plan, lease, now)
+    Ok(None)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -3456,13 +3461,13 @@ mod tests {
             .insert("strike_north".into(), "1. Armee".into());
         // before its date: waits
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", t0 - DAY).unwrap(),
+            army_group_step(clocked(&mut state, t0 - DAY), &tools, &plan, "l", t0 - DAY).unwrap(),
             None
         );
         assert!(state.military.notes["army_group"].contains("when false"));
         // the second army does not exist yet: waits, nothing sent
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", t0).unwrap(),
+            army_group_step(clocked(&mut state, t0), &tools, &plan, "l", t0).unwrap(),
             None
         );
         assert!(state.military.notes["army_group"].contains("waiting for 2. Armee"));
@@ -3472,10 +3477,11 @@ mod tests {
         );
         // checked once a game day
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", t0 + 12).unwrap(),
+            army_group_step(clocked(&mut state, t0 + 12), &tools, &plan, "l", t0 + 12).unwrap(),
             None
         );
-        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + DAY).unwrap();
+        let out =
+            army_group_step(clocked(&mut state, t0 + DAY), &tools, &plan, "l", t0 + DAY).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("army group Heeresgruppe Süd from 1. Armee, 2. Armee: true Verified")
@@ -3495,7 +3501,8 @@ mod tests {
             ),
         );
         tools.refusing("hoi4_army_commander", "commander_unavailable");
-        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + DAY).unwrap();
+        let out =
+            army_group_step(clocked(&mut state, t0 + DAY), &tools, &plan, "l", t0 + DAY).unwrap();
         assert!(out
             .unwrap()
             .contains("Rundstedt: false commander_unavailable"));
@@ -3504,7 +3511,8 @@ mod tests {
             "never reassign"
         );
         tools.allow();
-        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + DAY).unwrap();
+        let out =
+            army_group_step(clocked(&mut state, t0 + DAY), &tools, &plan, "l", t0 + DAY).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("army group Heeresgruppe Süd (HG 1) field marshal Bock: true Verified")
@@ -3513,7 +3521,7 @@ mod tests {
         // never repeats, also after a restart through plan_state.json
         let later = t0 + 3 * DAY;
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", later).unwrap(),
+            army_group_step(clocked(&mut state, later), &tools, &plan, "l", later).unwrap(),
             None
         );
         let mut fresh = restarted(&state, later);
@@ -3535,13 +3543,27 @@ mod tests {
         let mut state = State::default();
         for day in [0, 10, 29] {
             assert_eq!(
-                army_group_step(&mut state, &tools, &plan, "l", t0 + day * DAY).unwrap(),
+                army_group_step(
+                    clocked(&mut state, t0 + day * DAY),
+                    &tools,
+                    &plan,
+                    "l",
+                    t0 + day * DAY
+                )
+                .unwrap(),
                 None
             );
         }
         assert!(state.military.notes["army_group"].contains("waiting for Nord"));
         assert!(actions(&tools).is_empty());
-        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + 31 * DAY).unwrap();
+        let out = army_group_step(
+            clocked(&mut state, t0 + 31 * DAY),
+            &tools,
+            &plan,
+            "l",
+            t0 + 31 * DAY,
+        )
+        .unwrap();
         assert_eq!(
             out.as_deref(),
             Some("army group Heeresgruppe Ost from A, B: true Verified")
@@ -3555,7 +3577,14 @@ mod tests {
                 &[("HG 1", None)],
             ),
         );
-        let out = army_group_step(&mut state, &tools, &plan, "l", t0 + 32 * DAY).unwrap();
+        let out = army_group_step(
+            clocked(&mut state, t0 + 32 * DAY),
+            &tools,
+            &plan,
+            "l",
+            t0 + 32 * DAY,
+        )
+        .unwrap();
         assert_eq!(
             out.as_deref(),
             Some("army group Heeresgruppe Ost (HG 1) field marshal Bock: true Verified")
@@ -3573,7 +3602,14 @@ mod tests {
             ),
         );
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", t0 + 40 * DAY).unwrap(),
+            army_group_step(
+                clocked(&mut state, t0 + 40 * DAY),
+                &tools,
+                &plan,
+                "l",
+                t0 + 40 * DAY
+            )
+            .unwrap(),
             None
         );
         assert_eq!(actions(&tools).len(), 2);
@@ -3593,7 +3629,7 @@ mod tests {
             json!({"army_group": [{"id": "g", "armies": ["A", "B"], "marshal": "Manstein"}]});
         let mut state = State::default();
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            army_group_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap(),
             None
         );
         assert!(actions(&tools).is_empty());
@@ -3608,7 +3644,14 @@ mod tests {
             ),
         );
         assert_eq!(
-            army_group_step(&mut state, &tools, &plan, "l", START + 8 * DAY).unwrap(),
+            army_group_step(
+                clocked(&mut state, START + 8 * DAY),
+                &tools,
+                &plan,
+                "l",
+                START + 8 * DAY
+            )
+            .unwrap(),
             None
         );
         assert!(actions(&tools).is_empty());
@@ -3631,13 +3674,22 @@ mod tests {
             ..Default::default()
         };
         tools.refusing("hoi4_army_commander", "insufficient_command_power");
-        assert!(army_group_step(&mut state, &tools, &plan, "l", START)
-            .unwrap()
-            .is_some());
+        assert!(
+            army_group_step(clocked(&mut state, START), &tools, &plan, "l", START)
+                .unwrap()
+                .is_some()
+        );
         // waits 7 game days for command power
         for day in 1..7 {
             assert_eq!(
-                army_group_step(&mut state, &tools, &plan, "l", START + day * DAY).unwrap(),
+                army_group_step(
+                    clocked(&mut state, START + day * DAY),
+                    &tools,
+                    &plan,
+                    "l",
+                    START + day * DAY
+                )
+                .unwrap(),
                 None
             );
         }
@@ -3647,7 +3699,14 @@ mod tests {
         let mut sent = 1;
         for hour in [7 * DAY, 9 * DAY + 1, 11 * DAY + 2, 13 * DAY + 3] {
             state.clock = START + hour;
-            army_group_step(&mut state, &tools, &plan, "l", START + hour).unwrap();
+            army_group_step(
+                clocked(&mut state, START + hour),
+                &tools,
+                &plan,
+                "l",
+                START + hour,
+            )
+            .unwrap();
             sent = actions(&tools).len();
         }
         assert_eq!(
@@ -4392,7 +4451,7 @@ mod tests {
             "armies": ["Seelöwe"]}]});
         let mut state = State::default();
         // Man the Guns' transport: cap 6, preparation 50 days
-        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: 6 divisions of Seelöwe into their own army (Seelöwe (sealion)): true Verified")
@@ -4405,7 +4464,7 @@ mod tests {
         assert_eq!(state.layout["Seelöwe (sealion)"], "Army 9");
         assert_eq!(state.war_cool["Army 9"], START + 2 * DAY);
         // the landing army moves and is ordered, not the planned one
-        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: Army 9 to the port state 59: true Verified")
@@ -4415,15 +4474,36 @@ mod tests {
             json!({"armies": [{"army": "Army 9", "main_state": 59, "battle_plan_orders": 0,
                 "division_count": 6, "divisions": ["a"]}]}),
         );
-        let out = invasion_step(&mut state, &tools, &plan, "l", START + DAY).unwrap();
+        let out = invasion_step(
+            clocked(&mut state, START + DAY),
+            &tools,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap();
         assert!(out.unwrap().starts_with("invasion sealion: Army 9 from 59"));
         assert!(state.military.notes["invasion:sealion"]
             .contains("preparation 50 days, cap 6 divisions (techs: mtg_transport)"));
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", START + 50 * DAY).unwrap(),
+            invasion_step(
+                clocked(&mut state, START + 50 * DAY),
+                &tools,
+                &plan,
+                "l",
+                START + 50 * DAY
+            )
+            .unwrap(),
             None
         );
-        let out = invasion_step(&mut state, &tools, &plan, "l", START + 51 * DAY).unwrap();
+        let out = invasion_step(
+            clocked(&mut state, START + 51 * DAY),
+            &tools,
+            &plan,
+            "l",
+            START + 51 * DAY,
+        )
+        .unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: Army 9 executes: true Verified")
@@ -4455,7 +4535,7 @@ mod tests {
         let mut state = State::default();
         // not at war: the when is unknown/false, nothing starts
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap(),
             None
         );
         assert!(actions(&tools).is_empty());
@@ -4466,7 +4546,7 @@ mod tests {
         };
         let plan = plan_at_war;
         // the fleet supports first (TF 2 is already on strike force), then the army stages
-        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: TF 1 invasion_support: true Verified")
@@ -4481,18 +4561,32 @@ mod tests {
             navy_step(&mut state, &tools, &plan, "l", START).unwrap(),
             None
         );
-        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: Seelöwe to the port state 59: true Verified")
         );
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            invasion_step(
+                clocked(&mut state, START + DAY),
+                &tools,
+                &plan,
+                "l",
+                START + DAY
+            )
+            .unwrap(),
             None
         );
         // in the port state: the order
         tools.reply("hoi4_armies", invader(59, false));
-        let out = invasion_step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        let out = invasion_step(
+            clocked(&mut state, START + 2 * DAY),
+            &tools,
+            &plan,
+            "l",
+            START + 2 * DAY,
+        )
+        .unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: Seelöwe from 59 to state 120: true Verified")
@@ -4504,18 +4598,46 @@ mod tests {
         // preparing: nothing for 10 days; then execute, refused while not ready, 5 days apart
         let ordered = START + 2 * DAY;
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", ordered + 9 * DAY).unwrap(),
+            invasion_step(
+                clocked(&mut state, ordered + 9 * DAY),
+                &tools,
+                &plan,
+                "l",
+                ordered + 9 * DAY
+            )
+            .unwrap(),
             None
         );
         tools.refusing("hoi4_army_plan", "plan_not_executable");
-        let out = invasion_step(&mut state, &tools, &plan, "l", ordered + 10 * DAY).unwrap();
+        let out = invasion_step(
+            clocked(&mut state, ordered + 10 * DAY),
+            &tools,
+            &plan,
+            "l",
+            ordered + 10 * DAY,
+        )
+        .unwrap();
         assert!(out.unwrap().contains("executes: false plan_not_executable"));
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", ordered + 12 * DAY).unwrap(),
+            invasion_step(
+                clocked(&mut state, ordered + 12 * DAY),
+                &tools,
+                &plan,
+                "l",
+                ordered + 12 * DAY
+            )
+            .unwrap(),
             None
         );
         tools.allow();
-        let out = invasion_step(&mut state, &tools, &plan, "l", ordered + 15 * DAY).unwrap();
+        let out = invasion_step(
+            clocked(&mut state, ordered + 15 * DAY),
+            &tools,
+            &plan,
+            "l",
+            ordered + 15 * DAY,
+        )
+        .unwrap();
         assert_eq!(
             out.as_deref(),
             Some("invasion sealion: Seelöwe executes: true Verified")
@@ -4557,7 +4679,7 @@ mod tests {
             {"id": "b", "from_state": 59, "target_state": 120, "armies": ["Seelöwe"],
              "when": "date:2000.1.1"}]});
         let mut state = State::default();
-        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap();
         assert!(out.unwrap().contains("false not_coastal"));
         assert!(state.done.contains_key("inv:a:aborted"));
         assert!(
@@ -4570,7 +4692,14 @@ mod tests {
         assert_eq!(alarms[0]["rule"], "H16");
         // never repeated; the next one waits for its date
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", START + DAY).unwrap(),
+            invasion_step(
+                clocked(&mut state, START + DAY),
+                &tools,
+                &plan,
+                "l",
+                START + DAY
+            )
+            .unwrap(),
             None
         );
         assert_eq!(actions(&tools).len(), 1);
@@ -4579,12 +4708,26 @@ mod tests {
             "armies": ["Seelöwe"], "stage_days": 4}]});
         tools.refusing("hoi4_naval_invasion", "no_transports");
         let mut state = State::default();
-        let out = invasion_step(&mut state, &tools, &plan, "l", START).unwrap();
+        let out = invasion_step(clocked(&mut state, START), &tools, &plan, "l", START).unwrap();
         assert!(out.unwrap().contains("no_transports"));
         assert!(!state.done.contains_key("inv:c:aborted"));
-        invasion_step(&mut state, &tools, &plan, "l", START + 2 * DAY).unwrap();
+        invasion_step(
+            clocked(&mut state, START + 2 * DAY),
+            &tools,
+            &plan,
+            "l",
+            START + 2 * DAY,
+        )
+        .unwrap();
         assert!(!state.done.contains_key("inv:c:aborted"));
-        invasion_step(&mut state, &tools, &plan, "l", START + 5 * DAY).unwrap();
+        invasion_step(
+            clocked(&mut state, START + 5 * DAY),
+            &tools,
+            &plan,
+            "l",
+            START + 5 * DAY,
+        )
+        .unwrap();
         assert!(state.done.contains_key("inv:c:aborted"));
         assert_eq!(take_alarms(&mut state)[0]["reason"], "invasion:c");
     }
@@ -4597,11 +4740,11 @@ mod tests {
         let mut state = State::default();
         let at = date_hour("1936.6.1").unwrap();
         assert_eq!(
-            invasion_step(&mut state, &tools, &plan, "l", at - DAY).unwrap(),
+            invasion_step(clocked(&mut state, at - DAY), &tools, &plan, "l", at - DAY).unwrap(),
             None
         );
         assert!(!state.done.contains_key("inv:x:start"));
-        invasion_step(&mut state, &tools, &plan, "l", at).unwrap();
+        invasion_step(clocked(&mut state, at), &tools, &plan, "l", at).unwrap();
         assert!(state.done.contains_key("inv:x:start"));
     }
 
@@ -4721,6 +4864,12 @@ mod tests {
     }
 
     /// One hold step at game hour `now` (a fresh tick: its read cache is empty).
+    /// The state at game hour `now` (a direct step call stands for a tick at `now`).
+    fn clocked(state: &mut State, now: GameHour) -> &mut State {
+        state.clock = now;
+        state
+    }
+
     fn hold_at(
         state: &mut State,
         tools: &dyn Tools,
@@ -4894,7 +5043,11 @@ mod tests {
         let tools = Corridor::new();
         *tools.refuse.borrow_mut() = Some("input_readback_failed");
         let plan = corridor_plan();
-        let mut state = State::default();
+        // a war runs: the hold's march rests on the war's scale
+        let mut state = State {
+            war_active: true,
+            ..State::default()
+        };
         for day in 0..3 {
             let out = hold_at(&mut state, &tools, &plan, START + day * DAY).unwrap();
             assert!(out.contains("false input_readback_failed"), "{out}");

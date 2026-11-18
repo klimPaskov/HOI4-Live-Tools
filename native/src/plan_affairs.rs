@@ -264,29 +264,62 @@ struct Run<'a> {
     now: GameHour,
 }
 
-type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
-
-/// The force spends of this module (plan_run.rs `force_first`): the plan's designs.
-pub(super) fn force_step(
-    state: &mut State,
-    tools: &dyn Tools,
-    plan: &Value,
-    lease: &str,
-    now: GameHour,
-) -> Result<Option<String>> {
-    designs_step(
-        state,
-        &Run {
+impl<'a> Run<'a> {
+    fn new(tools: &'a dyn Tools, plan: &'a Value, lease: &'a str, now: GameHour) -> Self {
+        Run {
             tools,
             plan,
             lease,
             now,
-        },
-    )
+        }
+    }
 }
 
-/// Everything after plan_manage's step, at most one action: diplomacy, faction, incoming
-/// proposals, trade, designs and line switches, MIOs, intelligence.
+#[cfg_attr(not(test), allow(dead_code))]
+type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
+
+/// The affairs sections as lanes of the pass (plan_run.rs `lanes`), in their old chain order;
+/// the design companies are three lanes: lines first, the plan's organisations, then the traits
+/// of every organisation on a line.
+pub(super) const LANES: [super::Lane; 12] = [
+    ("diplomacy", |s, t, p, l, n| {
+        diplomacy_step(s, &Run::new(t, p, l, n))
+    }),
+    ("faction", |s, t, p, l, n| {
+        faction_step(s, &Run::new(t, p, l, n))
+    }),
+    ("call_allies", |s, t, p, l, n| {
+        call_allies_step(s, &Run::new(t, p, l, n))
+    }),
+    ("incoming", |s, t, p, l, n| {
+        incoming_step(s, &Run::new(t, p, l, n))
+    }),
+    ("trade", |s, t, p, l, n| {
+        trade_step(s, &Run::new(t, p, l, n))
+    }),
+    ("designs", |s, t, p, l, n| {
+        designs_step(s, &Run::new(t, p, l, n))
+    }),
+    ("line_designs", |s, t, p, l, n| {
+        line_design_step(s, &Run::new(t, p, l, n))
+    }),
+    ("decommission", |s, t, p, l, n| {
+        decommission_step(s, &Run::new(t, p, l, n))
+    }),
+    ("mio", |s, t, p, l, n| mio_plan(s, &Run::new(t, p, l, n))),
+    ("mio_lines", |s, t, p, l, n| {
+        mio_lines(s, &Run::new(t, p, l, n))
+    }),
+    ("mio_traits", |s, t, p, l, n| {
+        mio_auto_traits(s, &Run::new(t, p, l, n))
+    }),
+    ("intelligence", |s, t, p, l, n| {
+        intelligence_step(s, &Run::new(t, p, l, n))
+    }),
+];
+
+/// The affairs sections in one chain (the tests' view of the old domain).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn step(
     state: &mut State,
     tools: &dyn Tools,
@@ -294,12 +327,9 @@ pub fn step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let run = Run {
-        tools,
-        plan,
-        lease,
-        now,
-    };
+    // a direct call stands for a tick at `now` (the ledger counts game hours)
+    state.clock = now;
+    let run = Run::new(tools, plan, lease, now);
     let sections: [Section; 10] = [
         diplomacy_step,
         faction_step,
@@ -2220,11 +2250,24 @@ fn mio_refused(state: &mut State, now: GameHour, kind: &str, org: &str, why: &st
     state.skip(now, kind, org, days * DAY);
 }
 
+/// The design companies in the old chain order: the plan's organisations, lines, traits.
+#[cfg_attr(not(test), allow(dead_code))]
 fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
+    if let Some(done) = mio_plan(state, run)? {
+        return Ok(Some(done));
+    }
+    if let Some(done) = mio_lines(state, run)? {
+        return Ok(Some(done));
+    }
+    mio_auto_traits(state, run)
+}
+
+/// The plan's `mio` entries: design team flags, policies, listed traits in order.
+fn mio_plan(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
     let entries = list(plan, "mio");
     if entries.is_empty() || state.skipped(now, "mmio", "x") {
-        return mio_lines(state, run);
+        return Ok(None);
     }
     let mut waits: Vec<String> = Vec::new();
     for entry in entries {
@@ -2314,12 +2357,6 @@ fn mio_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
             return Ok(Some(format!("mio {org} trait {index}: {ok} {why}")));
         }
     }
-    if let Some(done) = mio_lines(state, run)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = mio_auto_traits(state, run)? {
-        return Ok(Some(done));
-    }
     if !waits.is_empty() {
         note(state, "mio", waits.join("; "));
         state.skip(now, "mmio", "x", DAY);
@@ -2340,6 +2377,29 @@ fn planned_line_org(plan: &Value, equipment: &str) -> Option<String> {
         (!org.is_empty() && !line.is_empty() && super::plan_manage::family(line) == family)
             .then(|| org.to_string())
     })
+}
+
+/// The organisation of the own country's catalogue (hoi4_mios, allowed for the tag or unknown)
+/// whose equipment list names this line's equipment or its family, most traits first; None when
+/// only a category names it (the roster's first row is taken then).
+fn catalogue_line_org(tools: &dyn Tools, equipment: &str) -> Option<String> {
+    let read = tools.call("hoi4_mios", &json!({})).ok()?;
+    let family = super::plan_manage::family(equipment);
+    list(&read["organisations"], "entries")
+        .iter()
+        .filter(|o| o["allowed_for_tag"] != json!(false))
+        .filter(|o| {
+            strings(o, "equipment")
+                .iter()
+                .any(|e| e == equipment || e == family)
+        })
+        .max_by_key(|o| {
+            (
+                o["allowed_for_tag"] == json!(true),
+                o["traits"].as_u64().unwrap_or(0),
+            )
+        })
+        .and_then(|o| o["key"].as_str().map(String::from))
 }
 
 /// Rule (manage.off "mio_lines"): every own production line that can take an organisation has
@@ -2372,7 +2432,10 @@ fn mio_lines(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         if state.done.contains_key(&key) || state.skipped(now, "miol", &handle) {
             continue;
         }
+        // the plan's organisation for the equipment, else the catalogue's that names the
+        // equipment itself (its key is then known, so the trait rule can queue its traits)
         let org = planned_line_org(plan, &equipment)
+            .or_else(|| catalogue_line_org(tools, &equipment))
             .filter(|_| !state.done.contains_key(&format!("miolany:{handle}")));
         let mut args = json!({"line": row["entry_index"], "equipment": equipment});
         if let Some(o) = &org {
@@ -2381,6 +2444,20 @@ fn mio_lines(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         let (ok, why) = state.act(tools, run.lease, "hoi4_mio_line", args, "ml")?;
         if ok {
             state.done.insert(key, now);
+            match &org {
+                // the organisation on the line: its traits are queued by the trait rule
+                Some(o) => {
+                    state.done.insert(format!("mioorg:{o}"), now);
+                }
+                None => note(
+                    state,
+                    "mio_traits",
+                    format!(
+                        "{equipment}: the line took the roster's first organisation, whose key no \
+                         read gives: its traits are queued only when the plan's mio names it"
+                    ),
+                ),
+            }
         } else {
             match code(&why) {
                 "line_takes_no_organization" => {
@@ -2470,7 +2547,24 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
     {
         return Ok(None);
     }
-    for entry in list(plan, "mio") {
+    // the plan's organisations, then every organisation the executor put on a line that the
+    // plan does not list (each keeps one trait queued, like an "auto" entry)
+    let mut entries: Vec<Value> = list(plan, "mio").to_vec();
+    let listed: HashSet<String> = entries
+        .iter()
+        .filter_map(|e| e["organisation"].as_str().or(e["organization"].as_str()))
+        .map(|o| o.trim().to_string())
+        .collect();
+    let mut attached: Vec<String> = state
+        .done
+        .keys()
+        .filter_map(|k| k.strip_prefix("mioorg:"))
+        .filter(|o| !listed.contains(*o))
+        .map(String::from)
+        .collect();
+    attached.sort();
+    entries.extend(attached.into_iter().map(|o| json!({"organisation": o})));
+    for entry in &entries {
         let org = entry["organisation"]
             .as_str()
             .or(entry["organization"].as_str())
@@ -2489,7 +2583,10 @@ fn mio_auto_traits(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         if gate(state, tools, &entry["when"], now).is_some() {
             continue;
         }
-        state.skip(now, "mioauto", &org, 30 * DAY);
+        // monthly; every 3 game days while the game's mio_traits alert is open (an organisation
+        // with a trait point and nothing queued)
+        let open = state.manage.alert_since.contains_key("mio_traits");
+        state.skip(now, "mioauto", &org, if open { 3 * DAY } else { 30 * DAY });
         let listing = tools.call(
             "hoi4_mio_trait",
             &json!({"organization": org, "list": true,
@@ -4117,7 +4214,7 @@ mod tests {
         let out = step(&mut state, &tools, &plan, "l", at).unwrap();
         assert!(out
             .unwrap()
-            .contains("skipped: the same order failed 3 times"));
+            .contains("skipped: the same order failed 3 time(s)"));
         assert_eq!(actions(&tools).len(), 1);
         assert!(!state.done.contains_key("dip:id:n"));
     }

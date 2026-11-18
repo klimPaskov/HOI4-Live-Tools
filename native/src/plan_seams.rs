@@ -1293,6 +1293,11 @@ fn defense_lines_step(
 
 #[cfg(test)]
 mod tests {
+    /// The state at game hour `now` (a direct step call stands for a tick at `now`).
+    fn clocked(state: &mut super::State, now: super::GameHour) -> &mut super::State {
+        state.clock = now;
+        state
+    }
     use super::*;
     use crate::error::Error;
     use std::cell::RefCell;
@@ -1369,12 +1374,20 @@ mod tests {
             {"id": "coast", "army": "Armia Poznan", "kind": "area_defense", "states": [85],
              "settings": ["ports", "victory_points", "moats"]}]});
         let mut state = State::default();
-        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
-        assert!(out.contains("fallback for Armia Poznan: true"), "{out}");
-        assert!(state.done.contains_key("dl:vistula:on"));
-        let out = step(&mut state, &f, &plan, "l", START + DAY)
+        let out = step(clocked(&mut state, START), &f, &plan, "l", START)
             .unwrap()
             .unwrap();
+        assert!(out.contains("fallback for Armia Poznan: true"), "{out}");
+        assert!(state.done.contains_key("dl:vistula:on"));
+        let out = step(
+            clocked(&mut state, START + DAY),
+            &f,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("area_defense for Armia Poznan: true"), "{out}");
         let sent = actions(&f);
         assert_eq!(sent[0].0, "hoi4_army_fallback");
@@ -1404,8 +1417,15 @@ mod tests {
         let plan = json!({"war": {"supply_hold": 0.5}, "defense_lines": [
             {"id": "v", "army": "Armia Poznan", "kind": "fallback", "states": [11]}]});
         let mut state = State::default();
-        step(&mut state, &f, &plan, "l", START).unwrap();
-        step(&mut state, &f, &plan, "l", START + DAY).unwrap();
+        step(clocked(&mut state, START), &f, &plan, "l", START).unwrap();
+        step(
+            clocked(&mut state, START + DAY),
+            &f,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap();
         assert_eq!(actions(&f).len(), 1, "only the line itself");
         // worn to 4 of its best 20: it falls back
         f.replies.insert(
@@ -1413,9 +1433,15 @@ mod tests {
             json!({"armies": [{"army": "Armia Poznan", "supply_percent_mean": 60.0,
                 "organisation_mean": 4.0}]}),
         );
-        let out = step(&mut state, &f, &plan, "l", START + 2 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 2 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 2 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("under a quarter of its best 20.0"), "{out}");
         // supply_hold 0.5 reads as 50%: 40% supply falls back
         let mut state = State::default();
@@ -1424,10 +1450,16 @@ mod tests {
             json!({"armies": [{"army": "Armia Poznan", "supply_percent_mean": 40.0,
                 "organisation_mean": 20.0}]}),
         );
-        step(&mut state, &f, &plan, "l", START).unwrap();
-        let out = step(&mut state, &f, &plan, "l", START + DAY)
-            .unwrap()
-            .unwrap();
+        step(clocked(&mut state, START), &f, &plan, "l", START).unwrap();
+        let out = step(
+            clocked(&mut state, START + DAY),
+            &f,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("supply 40% under 50%"), "{out}");
     }
 
@@ -1446,10 +1478,16 @@ mod tests {
         let plan = json!({"defense_lines": [
             {"id": "vistula", "army": "Armia Poznan", "kind": "fallback", "states": [11]}]});
         let mut state = State::default();
-        step(&mut state, &f, &plan, "l", START).unwrap();
-        let out = step(&mut state, &f, &plan, "l", START + DAY)
-            .unwrap()
-            .unwrap();
+        step(clocked(&mut state, START), &f, &plan, "l", START).unwrap();
+        let out = step(
+            clocked(&mut state, START + DAY),
+            &f,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(
             out.contains("falls back (supply 20% under 35%): true"),
             "{out}"
@@ -1458,7 +1496,14 @@ mod tests {
         assert_eq!(sent[1].0, "hoi4_army_plan");
         assert_eq!(sent[1].1["execute"], true);
         // once only
-        step(&mut state, &f, &plan, "l", START + 2 * DAY).unwrap();
+        step(
+            clocked(&mut state, START + 2 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 2 * DAY,
+        )
+        .unwrap();
         assert_eq!(actions(&f).len(), 2);
         // fall_back:false keeps the army on its front
         let mut state = State::default();
@@ -1485,7 +1530,10 @@ mod tests {
             {"id": "d", "army": "Armia Poznan", "kind": "fallback", "states": [10],
              "until": "at_war_with:GER"}]});
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &plan, "l", START).unwrap(),
+            None
+        );
         assert_eq!(state.seams.notes["defense_lines:a"], "waits, when false");
         assert_eq!(
             state.seams.notes["defense_lines:b"],
@@ -1519,14 +1567,20 @@ mod tests {
         let plan = json!({"garrison_template": {"template": "gar"},
             "templates": [{"id": "gar", "name": "Garrison Cavalry"}]});
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &plan, "l", START).unwrap(),
+            None
+        );
         assert!(state.seams.notes["garrison_template"].contains("waits for an occupied state"));
         f.replies.insert(
             "hoi4_occupation",
             json!({"states": [{"state_id": 5, "role": "occupied_by_player"}]}),
         );
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &plan, "l", START).unwrap(),
+            None
+        );
         let line = &state.seams.notes["garrison_template"];
         assert!(
             line.contains("hoi4_occupation_garrison {\"template\":\"Garrison Cavalry\"}")
@@ -1556,15 +1610,24 @@ mod tests {
         let plan = json!({});
         let mut state = State::default();
         // fill 0.7 < 0.9: waits, no input
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &plan, "l", START).unwrap(),
+            None
+        );
         assert!(state.seams.notes["exercises"].contains("below 0.90"));
         f.replies.insert(
             "hoi4_supply",
             json!({"divisions": [{"equipment_fill_min": 1.0}, {"equipment_fill_min": 0.95}]}),
         );
-        let out = step(&mut state, &f, &plan, "l", START + 15 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 15 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 15 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("exercises start 1 armies: true"), "{out}");
         let sent = actions(&f);
         assert_eq!(sent[0].1["armies"], json!(["Armee Nord"]));
@@ -1572,9 +1635,15 @@ mod tests {
         // a war: the armies still exercising are stopped once
         f.replies
             .insert("hoi4_wars", json!({"wars": {"at_war": true}}));
-        let out = step(&mut state, &f, &plan, "l", START + 30 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 30 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 30 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("exercises stopped at war: true"), "{out}");
         assert_eq!(actions(&f)[1].1["on"], json!(false));
         // switched off by the plan
@@ -1582,7 +1651,10 @@ mod tests {
         let mut state = State::default();
         f.replies
             .insert("hoi4_wars", json!({"wars": {"at_war": false}}));
-        assert_eq!(step(&mut state, &f, &off, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &off, "l", START).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -1615,7 +1687,9 @@ mod tests {
         state
             .layout
             .insert("west_guard".into(), "Armia Poznan".into());
-        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        let out = step(clocked(&mut state, START), &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
         assert!(out.contains("exercise drill: start: true"), "{out}");
         assert!(state.done.contains_key("ex:drill:on"));
         let sent = actions(&f);
@@ -1625,7 +1699,14 @@ mod tests {
         assert_eq!(sent[0].1["on"], json!(true));
         assert_eq!(sent[0].1["stop_at_max"], json!(true));
         // the next day: the running entry is left alone, the other still waits
-        step(&mut state, &f, &plan, "l", START + DAY).unwrap();
+        step(
+            clocked(&mut state, START + DAY),
+            &f,
+            &plan,
+            "l",
+            START + DAY,
+        )
+        .unwrap();
         assert!(state.seams.notes["xp_budget.army:later"].starts_with("waits, when"));
         assert!(!state.seams.notes.contains_key("xp_budget.army:t"));
         assert_eq!(actions(&f).len(), 1);
@@ -1637,16 +1718,29 @@ mod tests {
                 {"army": "Armia Poznan", "division_count": 6, "exercising": false},
                 {"army": "Armia Krakow", "division_count": 6, "exercising": false}]}),
         );
-        let out = step(&mut state, &f, &plan, "l", START + 15 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 15 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 15 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("restart 1 idle armies: true"), "{out}");
         let sent = actions(&f);
         assert_eq!(sent.len(), 2);
         assert_eq!(sent[1].1["armies"], json!(["Armia Poznan"]));
         assert_eq!(sent[1].1["stop_at_max"], json!(true));
         // the restart is not repeated within 14 days
-        step(&mut state, &f, &plan, "l", START + 16 * DAY).unwrap();
+        step(
+            clocked(&mut state, START + 16 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 16 * DAY,
+        )
+        .unwrap();
         assert_eq!(actions(&f).len(), 2);
         f.replies.insert(
             "hoi4_wars",
@@ -1657,9 +1751,15 @@ mod tests {
             "hoi4_wars",
             json!({"wars": {"at_war": true, "enemies": ["GER"]}}),
         );
-        let out = step(&mut state, &f, &plan, "l", START + 17 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 17 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 17 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("exercise drill: stop: true"), "{out}");
         let sent = actions(&f);
         assert_eq!(sent.len(), 3);
@@ -1668,7 +1768,7 @@ mod tests {
         assert!(state.done.contains_key("ex:drill:off"));
         // at war nothing new starts
         let mut state = State::default();
-        step(&mut state, &f, &plan, "l", START).unwrap();
+        step(clocked(&mut state, START), &f, &plan, "l", START).unwrap();
         assert_eq!(
             state.seams.notes["xp_budget.army:later"],
             "at war: no exercise started"
@@ -1701,7 +1801,7 @@ mod tests {
         let mut t = START;
         let mut out = Vec::new();
         for _ in 0..4 {
-            if let Some(line) = step(&mut state, &f, &plan, "l", t).unwrap() {
+            if let Some(line) = step(clocked(&mut state, t), &f, &plan, "l", t).unwrap() {
                 out.push(line);
             }
             t += DAY;
@@ -1718,7 +1818,7 @@ mod tests {
         // a new rifle line: a new round of three
         f.replies.insert("hoi4_production_lines", lines(true));
         for _ in 0..12 {
-            step(&mut state, &f, &plan, "l", t).unwrap();
+            step(clocked(&mut state, t), &f, &plan, "l", t).unwrap();
             t += DAY;
         }
         let sent = actions(&f);
@@ -1778,7 +1878,10 @@ mod tests {
         let plan = json!({"production_priority": ["infantry_equipment", "ship_hull_heavy"],
             "production": [{"equipment": "ship_hull_heavy_2", "remove": true}]});
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &plan, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &plan, "l", START).unwrap(),
+            None
+        );
         assert!(actions(&f).is_empty());
     }
 
@@ -1791,7 +1894,7 @@ mod tests {
         state
             .layout
             .insert("west_guard".into(), "Armia Poznan".into());
-        step(&mut state, &f, &plan, "l", START).unwrap();
+        step(clocked(&mut state, START), &f, &plan, "l", START).unwrap();
         assert!(state.seams.notes["defense_lines:v"].contains("for Armia Poznan"));
     }
 
@@ -1844,7 +1947,9 @@ mod tests {
         let plan = json!({"commanders": [{"general": "Erwin Rommel", "traits": ["panzer_expert"]}],
             "manage": {"cp_trait_prefer": ["logistics_wizard"]}});
         let mut state = State::default();
-        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        let out = step(clocked(&mut state, START), &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
         assert!(
             out.contains("trait for Erwin Rommel:panzer_expert: true"),
             "{out}"
@@ -1855,12 +1960,28 @@ mod tests {
         assert_eq!(sent[0].1["trait"], json!("panzer_expert"));
         assert!(state.done.contains_key("cps:Erwin Rommel:panzer_expert"));
         // one trait a week
-        assert_eq!(step(&mut state, &f, &plan, "l", START + DAY).unwrap(), None);
+        assert_eq!(
+            step(
+                clocked(&mut state, START + DAY),
+                &f,
+                &plan,
+                "l",
+                START + DAY
+            )
+            .unwrap(),
+            None
+        );
         assert_eq!(actions(&f).len(), 1);
         // the plan's list is done: the general leading the most divisions, preferences passed on
-        let out = step(&mut state, &f, &plan, "l", START + 8 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 8 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 8 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("trait for Gerd von Rundstedt: true"), "{out}");
         let sent = actions(&f);
         assert_eq!(sent[1].1["general"], json!("Gerd von Rundstedt"));
@@ -1888,13 +2009,18 @@ mod tests {
         let f = cp_game(50.0);
         let plan = json!({"manage": {"command_power_max": 60}});
         let mut state = State::default();
-        assert!(step(&mut state, &f, &plan, "l", START).unwrap().is_some());
+        assert!(step(clocked(&mut state, START), &f, &plan, "l", START)
+            .unwrap()
+            .is_some());
         assert_eq!(actions(&f).len(), 1);
         // switched off
         let f = cp_game(80.0);
         let off = json!({"manage": {"off": ["cp_spend"]}});
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &off, "l", START).unwrap(), None);
+        assert_eq!(
+            step(clocked(&mut state, START), &f, &off, "l", START).unwrap(),
+            None
+        );
         assert!(actions(&f).is_empty());
         assert!(!state.seams.notes.contains_key("cp_spend"));
     }
@@ -1911,19 +2037,34 @@ mod tests {
         let plan = json!({"war": {"enemies": ["POL"]}});
         let mut state = State::default();
         // at war: both generals are refused, a day apart
-        let out = step(&mut state, &f, &plan, "l", START).unwrap().unwrap();
+        let out = step(clocked(&mut state, START), &f, &plan, "l", START)
+            .unwrap()
+            .unwrap();
         assert!(
             out.contains("Gerd von Rundstedt: false no_enabled_trait"),
             "{out}"
         );
-        let out = step(&mut state, &f, &plan, "l", START + DAY + 1)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + DAY + 1),
+            &f,
+            &plan,
+            "l",
+            START + DAY + 1,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("Erwin Rommel: false"), "{out}");
         assert!(take_alarms(&mut state).is_empty());
         // then nothing is left to try: a note and one wake naming why
         assert_eq!(
-            step(&mut state, &f, &plan, "l", START + 2 * DAY + 2).unwrap(),
+            step(
+                clocked(&mut state, START + 2 * DAY + 2),
+                &f,
+                &plan,
+                "l",
+                START + 2 * DAY + 2
+            )
+            .unwrap(),
             None
         );
         assert!(state.seams.notes["cp_spend"].contains("no enabled trait for any general"));
@@ -1940,10 +2081,24 @@ mod tests {
         );
         let peace = json!({"war": {"enemies": ["POL"]}});
         let mut state = State::default();
-        step(&mut state, &f, &peace, "l", START).unwrap();
-        step(&mut state, &f, &peace, "l", START + DAY + 1).unwrap();
+        step(clocked(&mut state, START), &f, &peace, "l", START).unwrap();
+        step(
+            clocked(&mut state, START + DAY + 1),
+            &f,
+            &peace,
+            "l",
+            START + DAY + 1,
+        )
+        .unwrap();
         assert_eq!(
-            step(&mut state, &f, &peace, "l", START + 2 * DAY + 2).unwrap(),
+            step(
+                clocked(&mut state, START + 2 * DAY + 2),
+                &f,
+                &peace,
+                "l",
+                START + 2 * DAY + 2
+            )
+            .unwrap(),
             None
         );
         assert!(
@@ -1957,9 +2112,15 @@ mod tests {
         f.replies
             .insert("hoi4_wars", json!({"wars": {"enemies": ["POL"]}}));
         state.pcache = None;
-        let out = step(&mut state, &f, &peace, "l", START + 9 * DAY)
-            .unwrap()
-            .unwrap();
+        let out = step(
+            clocked(&mut state, START + 9 * DAY),
+            &f,
+            &peace,
+            "l",
+            START + 9 * DAY,
+        )
+        .unwrap()
+        .unwrap();
         assert!(out.contains("false no_enabled_trait"), "{out}");
         // at war the same refusal again doubles the rest (14 then 28 days), never a fixed beat
         let pick = out
@@ -1980,7 +2141,9 @@ mod tests {
             }
         }
         state.pcache = None;
-        let again = step(&mut state, &f, &peace, "l", later).unwrap().unwrap();
+        let again = step(clocked(&mut state, later), &f, &peace, "l", later)
+            .unwrap()
+            .unwrap();
         assert!(
             again.contains(&format!("trait for {pick}: false")),
             "{again}"
@@ -1998,14 +2161,29 @@ mod tests {
             ),
         );
         let mut state = State::default();
-        assert!(step(&mut state, &f, &plan, "l", START).unwrap().is_some());
+        assert!(step(clocked(&mut state, START), &f, &plan, "l", START)
+            .unwrap()
+            .is_some());
         assert_eq!(
-            step(&mut state, &f, &plan, "l", START + 20 * DAY).unwrap(),
+            step(
+                clocked(&mut state, START + 20 * DAY),
+                &f,
+                &plan,
+                "l",
+                START + 20 * DAY
+            )
+            .unwrap(),
             None
         );
         assert_eq!(actions(&f).len(), 1);
-        assert!(step(&mut state, &f, &plan, "l", START + 29 * DAY)
-            .unwrap()
-            .is_some());
+        assert!(step(
+            clocked(&mut state, START + 29 * DAY),
+            &f,
+            &plan,
+            "l",
+            START + 29 * DAY
+        )
+        .unwrap()
+        .is_some());
     }
 }

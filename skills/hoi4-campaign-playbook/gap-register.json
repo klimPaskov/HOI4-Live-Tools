@@ -3330,7 +3330,7 @@
     "hoi4_research"
    ],
    "payoff": "medium",
-   "why": "a deliberate gap is good play while it waits for a named bonus or date, but the executor fills every empty slot from the plan or the fallback, so a planned wait is lost",
+   "why": "a deliberate gap is good play while it waits for a named bonus or date; the research lane holds the named slot (research_waits) and fills every other slot from the plan or the fallback",
    "closing": "live",
    "owner": "executor: the research step holds the named slot until the tech, the date or the banked days pass"
   },
