@@ -1605,7 +1605,76 @@ pub(super) fn debug_bytes(process: &dyn Process, spec: &str) -> Result<Value> {
                 format!("{:016x}", u64::from_le_bytes(w))
             })
             .collect();
-        Ok(json!({"army": army, "words": words}))
+        Ok(json!({"army": army, "address": format!("{group:#x}"), "words": words}))
+    })
+}
+/// Probe only (macprobe `dbg_card:ARMY`): the widget tree of the army's card window (names,
+/// rectangles, shown flags, to depth 4), for mapping controls such as the air-wing attachment.
+/// Probe only: raw words of the army object (`len` bytes) with its address.
+pub(super) fn debug_army_words(
+    process: &dyn Process,
+    army: &str,
+    len: usize,
+) -> Result<(u64, Vec<u64>)> {
+    read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        let bytes = r.read(group, len.min(0x4000))?;
+        Ok((
+            group,
+            bytes
+                .chunks(8)
+                .map(|c| {
+                    let mut w = [0u8; 8];
+                    w[..c.len()].copy_from_slice(c);
+                    u64::from_le_bytes(w)
+                })
+                .collect(),
+        ))
+    })
+}
+pub(super) fn debug_card(process: &dyn Process, army: &str) -> Result<Value> {
+    read(process, |r, i| {
+        let portrait = card_widget(r, i, army, "portrait_btn")?;
+        let _ = portrait;
+        let u = ui(r)?;
+        let group = group_named(r, i, army)?;
+        let handle = r.u64(group + u.group_handle)?;
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let bar = r.u64(r.u64(idler + u.manager)? + u.leader_view)?;
+        let (_, data, count) = r.array_header(bar + u.leader_portraits)?;
+        fn walk(r: &Reader<'_>, i: u64, o: u64, depth: usize, out: &mut Vec<Value>) {
+            for c in gui_tree::children(r, o)
+                .unwrap_or_default()
+                .into_iter()
+                .take(40)
+            {
+                let name = gui_tree::name(r, c, i).ok().flatten();
+                let rect = gui_tree::rect_unclipped(r, i, c, GAME)
+                    .ok()
+                    .map(|x| [x.x, x.y, x.w, x.h]);
+                let shown = gui_tree::shown(r, c).ok();
+                out.push(
+                    json!({"d": depth, "name": name, "rect": rect, "shown": shown,
+                    "at": format!("{c:#x}")}),
+                );
+                if depth < 4 {
+                    if let Ok(Some(inner)) = gui_tree::container(r, c, i) {
+                        walk(r, i, inner, depth + 1, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for index in 0..count.min(64) as u64 {
+            let p = r.u64(data + index * 8)?;
+            if r.u64(p + u.portrait_group)? != handle {
+                continue;
+            }
+            if let Some(window) = gui_tree::container(r, r.u64(p + u.portrait_window)?, i)? {
+                walk(r, i, window, 0, &mut out);
+            }
+        }
+        Ok(json!({"army": army, "widgets": out}))
     })
 }
 /// Supply-hub motorization of an army (0 none, 1 partial, 2 full): hubs it draws from use
@@ -2153,7 +2222,7 @@ fn group_cards_in_order(cards: Vec<(u64, Rect)>, armies: &BTreeSet<u64>, parent:
 /// an army group as one card and its armies' cards only while the group is selected (the AI's
 /// 1939 Germany: fifteen armies in groups, every front and move order failed with "Army card not
 /// shown", war bed 18 Nov 2026). One click on the group card, then the army's card is read again.
-fn shown_card(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
+pub(super) fn shown_card(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
     let first = read(process, |r, i| card_rect(r, i, army, "portrait_btn"));
     match first {
         Err(e) if e.message == "Army card not shown" => {
@@ -2575,11 +2644,7 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
 /// The two ends of the border between own state `own` and state `target` (unit positions of the
 /// province pairs that face each other, at their mean height): a segment front is dragged from one
 /// to the other. None when the two states do not touch.
-fn segment_ends(
-    process: &dyn Process,
-    own: i32,
-    target: i32,
-) -> Result<Option<(MapPoint, MapPoint)>> {
+fn segment_ends(process: &dyn Process, own: i32, target: i32) -> Result<Option<Vec<MapPoint>>> {
     let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
@@ -2601,7 +2666,44 @@ fn segment_ends(
         .iter()
         .filter_map(at)
         .collect();
-    Ok(segment_from_points(&mine, &theirs))
+    Ok(segment_path(&mine, &theirs))
+}
+
+/// The border points of `segment_from_points` in order from one end to the other (by their
+/// position along the line between the two ends): a drag through them follows a bending border
+/// instead of cutting across own land.
+pub(super) fn segment_path(
+    mine: &[((f64, f64), f64)],
+    theirs: &[((f64, f64), f64)],
+) -> Option<Vec<MapPoint>> {
+    let (a, b) = segment_from_points(mine, theirs)?;
+    let pairs: Vec<(f64, MapPoint)> = mine
+        .iter()
+        .filter_map(|(p, hp)| {
+            let (q, hq) = theirs.iter().min_by(|x, y| {
+                let dx = (x.0 .0 - p.0).hypot(x.0 .1 - p.1);
+                let dy = (y.0 .0 - p.0).hypot(y.0 .1 - p.1);
+                dx.total_cmp(&dy)
+            })?;
+            let gap = (q.0 - p.0).hypot(q.1 - p.1);
+            Some((gap, ((p.0 + q.0) / 2.0, (hp + hq) / 2.0, (p.1 + q.1) / 2.0)))
+        })
+        .collect();
+    let closest = pairs.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+    let (ax, az) = (b.0 - a.0, b.2 - a.2);
+    let len2 = (ax * ax + az * az).max(1e-9);
+    let mut pts: Vec<(f64, MapPoint)> = pairs
+        .into_iter()
+        .filter(|p| p.0 <= closest * 2.0 + 1.0)
+        .map(|(_, m)| (((m.0 - a.0) * ax + (m.2 - a.2) * az) / len2, m))
+        .collect();
+    pts.sort_by(|x, y| x.0.total_cmp(&y.0));
+    pts.dedup_by(|x, y| (x.1 .0 - y.1 .0).hypot(x.1 .2 - y.1 .2) < 1.0);
+    let mut path: Vec<MapPoint> = pts.into_iter().map(|p| p.1).collect();
+    if path.len() < 2 {
+        path = vec![a, b];
+    }
+    Some(path)
 }
 
 /// The border midpoints of the facing province pairs (each own province with its nearest target
@@ -2714,8 +2816,9 @@ pub(super) fn front(
         })?),
         None => None,
     };
-    let near = match ends {
-        Some((a, b)) => Some(((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0, (a.2 + b.2) / 2.0)),
+    let near = match ends.as_deref() {
+        Some([a, .., b]) => Some(((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0, (a.2 + b.2) / 2.0)),
+        Some(_) => None,
         None => front_border_point(process, army, state)
             .ok()
             .flatten()
@@ -2874,37 +2977,74 @@ pub(super) fn front(
         }
     }
     super::ui::trace("front: candidates", t0);
-    if let Some((a, b)) = ends {
-        // drag along the border from one end of the segment to the other (left button, then the
-        // right one): the game draws the front over the dragged stretch only
-        let screen = read(process, |r, i| {
-            Ok((
-                super::screenmap::to_screen_at(r, i, a.0, a.1, a.2)?,
-                super::screenmap::to_screen_at(r, i, b.0, b.1, b.2)?,
-            ))
+    if let Some(path) = ends {
+        // Drag along the border through every facing province pair, button held (left, then the
+        // right one): the game draws the front over the dragged stretch only. A straight drag
+        // between the two ends cut across own land on a bending border and the game took the
+        // whole border (Silesia-Lodz, 18 Nov 2026).
+        let screen: Vec<Option<(f64, f64)>> = read(process, |r, i| {
+            path.iter()
+                .map(|p| super::screenmap::to_screen_at(r, i, p.0, p.1, p.2))
+                .collect::<Result<Vec<_>>>()
         })?;
         let inside =
             |p: &(f64, f64)| (300.0..1700.0).contains(&p.0) && (120.0..860.0).contains(&p.1);
-        let (Some(sa), Some(sb)) = screen else {
+        let mut pts: Vec<(f64, f64)> = Vec::new();
+        for p in screen {
+            let Some(p) = p.filter(inside) else {
+                let _ = keys.press(Key::Escape);
+                return Err(Error::new(
+                    "input_geometry_unverified",
+                    format!("The segment {path:?} does not fit the map area at once"),
+                ));
+            };
+            if pts
+                .last()
+                .is_none_or(|q: &(f64, f64)| (q.0 - p.0).hypot(q.1 - p.1) >= 6.0)
+            {
+                pts.push(p);
+            }
+        }
+        // Each point onto the highlighted border itself (the province midpoints lie beside the
+        // dashed line; a press off the line made the release a plain click and the game took the
+        // whole border, airdbg4 18 Nov 2026). Points with no highlight within reach are dropped.
+        let snapped: Vec<(f64, f64)> = pts
+            .iter()
+            .filter_map(|p| {
+                highlighted_near(&plain, &drawing, &tooltip, 1, *p, 3)
+                    .into_iter()
+                    .next()
+                    .filter(|q| (q.0 - p.0).hypot(q.1 - p.1) < 45.0)
+            })
+            .collect();
+        let mut pts: Vec<(f64, f64)> = Vec::new();
+        for p in snapped {
+            if pts
+                .last()
+                .is_none_or(|q: &(f64, f64)| (q.0 - p.0).hypot(q.1 - p.1) >= 6.0)
+            {
+                pts.push(p);
+            }
+        }
+        if pts.len() < 2 {
             let _ = keys.press(Key::Escape);
             return Err(Error::new(
                 "input_geometry_unverified",
-                "The segment's ends do not project to the screen",
-            ));
-        };
-        if !inside(&sa) || !inside(&sb) {
-            let _ = keys.press(Key::Escape);
-            return Err(Error::new(
-                "input_geometry_unverified",
-                format!("The segment {sa:?} - {sb:?} does not fit the map area at once"),
+                "The segment's border is not highlighted at two points or more at this zoom",
             ));
         }
-        super::ui::trace_text(&format!("front: segment drag {sa:?} -> {sb:?}"));
+        super::ui::trace_text(&format!("front: segment drag through {pts:?}"));
         for right in [false, true] {
-            if right {
-                keys.right_drag(GAME, sa, sb)?;
+            if pts.len() == 2 {
+                if right {
+                    keys.right_drag(GAME, pts[0], pts[1])?;
+                } else {
+                    keys.drag(GAME, pts[0], pts[1])?;
+                }
+            } else if right {
+                keys.right_drag_path(GAME, &pts)?;
             } else {
-                keys.drag(GAME, sa, sb)?;
+                keys.drag_path(GAME, &pts)?;
             }
             let deadline = std::time::Instant::now() + std::time::Duration::from_millis(800);
             while std::time::Instant::now() < deadline {

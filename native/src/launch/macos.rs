@@ -524,6 +524,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         // Probe-only (macprobe): raw bytes of an own army object, for mapping fields.
         n if n.starts_with("dbg_army_bytes:") => armies::debug_bytes(process, &n[15..]),
         n if n.starts_with("dbg_rows:") => armies::debug_rows(process, &n[9..]),
+        n if n.starts_with("dbg_wing:") => airact::debug_wing(process, &n[9..]),
+        n if n.starts_with("dbg_card:") => armies::debug_card(process, &n[9..]),
         n if n.starts_with("dbg_hex:") => occupation::debug_hex(process, &n[8..]),
         n if n.starts_with("dbg_country:") => occupation::debug_country(process, &n[12..]),
         "dbg_states" => occupation::debug_states(process),
@@ -4515,6 +4517,71 @@ impl MacClock {
                     self.keys
                         .press(Key::Escape)
                         .map(|_| json!({"pressed":"escape"}))
+                }
+                // DEBUG: one wing (`root`) toward one army (`path`) in ONE call (a new call drops
+                // the wing selection): `index` 0 left click the icon above the card, 1 right
+                // click the portrait, 2 right click the icon; returns the words that changed.
+                "attach" => {
+                    self.keys.preflight()?;
+                    let wing = string(args, "root")?.to_string();
+                    let army = string(args, "path")?.to_string();
+                    let how = args.get("index").and_then(Value::as_u64).unwrap_or(0);
+                    let words = |p: &dyn Process| -> Result<(u64, Vec<u64>)> {
+                        let w = ui::read(p, |r, i| airact::own_wing(r, i, &wing))?
+                            .ok_or_else(|| Error::new("wing_unknown", "No such wing"))?;
+                        let b = p.read(w.address, 0xa00)?;
+                        Ok((
+                            w.address,
+                            b.chunks(8)
+                                .map(|c| {
+                                    let mut x = [0u8; 8];
+                                    x[..c.len()].copy_from_slice(c);
+                                    u64::from_le_bytes(x)
+                                })
+                                .collect(),
+                        ))
+                    };
+                    let (wa, w0) = words(process)?;
+                    let (ga, a0) = armies::debug_army_words(process, &army, 0x3000)?;
+                    air::select_wing(process, &self.keys, &wing)?;
+                    let card = armies::shown_card(process, &self.keys, &army)?;
+                    let (cx, cy) = card.center();
+                    let icon = (cx, f64::from(card.y) - 50.0);
+                    std::thread::sleep(Duration::from_millis(300));
+                    match how {
+                        1 => {
+                            self.keys.right_click(navalui::GAME, cx, cy)?;
+                        }
+                        2 => {
+                            self.keys.right_click(navalui::GAME, icon.0, icon.1)?;
+                        }
+                        _ => {
+                            self.keys.click(navalui::GAME, icon.0, icon.1)?;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(900));
+                    let (_, w1) = words(process)?;
+                    let (_, a1) = armies::debug_army_words(process, &army, 0x3000)?;
+                    let diff = |a: &[u64], b: &[u64]| -> Vec<String> {
+                        a.iter()
+                            .zip(b)
+                            .enumerate()
+                            .filter(|(_, (x, y))| x != y)
+                            .map(|(k, (x, y))| format!("{:#x}: {x:#x} -> {y:#x}", k * 8))
+                            .take(24)
+                            .collect()
+                    };
+                    let refs: Vec<String> = a1
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, v)| **v == wa)
+                        .map(|(k, _)| format!("{:#x}", k * 8))
+                        .collect();
+                    Ok(
+                        json!({"wing_at": format!("{wa:#x}"), "army_at": format!("{ga:#x}"),
+                        "clicked": [icon.0, icon.1, cx, cy, how], "wing_diff": diff(&w0, &w1),
+                        "army_diff": diff(&a0, &a1), "army_refs_wing": refs}),
+                    )
                 }
                 "find" => {
                     self.keys.preflight()?;

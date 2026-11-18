@@ -184,6 +184,7 @@ struct Knobs {
     widen: bool,
     state_weight: f64,
     cover: usize,
+    way: bool,
 }
 
 fn knobs(cfg: &Value) -> Option<Knobs> {
@@ -211,6 +212,7 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         widen: k["widen"] != json!(false),
         state_weight: number("state_weight", 2.0).max(1.0),
         cover: number("cover", 1.0).max(0.0) as usize,
+        way: k["way"] == json!(true),
     })
 }
 
@@ -1022,9 +1024,18 @@ fn choose(
         if legs.last() != Some(target) {
             legs.push(*target);
         }
-        let Some(leg) = legs.iter().copied().find(|p| !world.held(*p)) else {
+        let Some(mut leg) = legs.iter().copied().find(|p| !world.held(*p)) else {
             continue;
         };
+        // with `way` (an operation's line: its states' victory points) a row without a path goes the way
+        // from the army: its leg is the first province of that way (o2a: Lodz 9508 touched no
+        // held land, the row was passed over and the column went for the nearest point)
+        if knobs.way && path.is_empty() && !world.frontier(leg) {
+            match world.way(&here, *target, closed) {
+                Some((_, first)) => leg = first,
+                None => continue,
+            }
+        }
         if closed.contains(&leg) || !world.passable(leg) || !world.frontier(leg) {
             continue;
         }
@@ -2545,6 +2556,17 @@ mod tests {
         let sent = args["divisions"].as_array().cloned().unwrap();
         assert_eq!(sent.len(), 2);
         assert!(!sent.contains(&json!("d2")));
+    }
+
+    #[test]
+    fn with_way_a_row_without_a_path_goes_the_way_from_the_army() {
+        // an operation's line: row 30 lies behind 20 and 21; the column goes for it at once
+        let map = Map::new(11);
+        let mut state = State::default();
+        let way = json!({"war": {"enemies": ["ENE"], "theatre": [1, 4], "strike": {"way": true}},
+            "vp_targets": [{"province": 30, "state": 3, "army": "Army 1"}]});
+        let line = run(&mut state, &map, &way, START).unwrap().unwrap();
+        assert!(line.contains("row 30, leg 2"), "{line}");
     }
 
     #[test]

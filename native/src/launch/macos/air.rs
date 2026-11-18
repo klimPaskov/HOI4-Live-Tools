@@ -579,10 +579,12 @@ pub(super) fn assign(
         "input_readback_failed",
         "The wing's mission or region did not change (the region is out of the wing's range, or every point clicked lay under a map marker)",
     ));
+    let mut tried = Vec::new();
     for target in targets {
         super::ui::trace_text(&format!(
             "air region click at {target:?} (state {state}, region {region:?})"
         ));
+        tried.push(format!("({:.0},{:.0})", target.0, target.1));
         keys.right_click(GAME, target.0, target.1)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1200);
         while std::time::Instant::now() < deadline {
@@ -595,6 +597,20 @@ pub(super) fn assign(
         if result.is_ok() {
             break;
         }
+    }
+    // What was clicked and what the wing shows after it, so a refusal says where it looked.
+    if let Err(e) = &mut result {
+        let after = read(process, |r, i| super::airact::own_wing(r, i, name))
+            .ok()
+            .flatten()
+            .map(|w| format!("mask {} region {}", w.mission_mask, w.region_id))
+            .unwrap_or_default();
+        let height = read(process, super::screenmap::camera_height).unwrap_or(-1.0);
+        e.message = format!(
+            "{} [state {state}, region {region:?}, clicked {}, camera {height:.0}, wing after: {after}]",
+            e.message,
+            tried.join(" ")
+        );
     }
     let _ = deselect(process, keys);
     result
