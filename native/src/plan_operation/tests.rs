@@ -11,6 +11,8 @@ struct Game {
     enemies: RefCell<Vec<&'static str>>,
     held: RefCell<Vec<i64>>,
     refuse_multi: RefCell<bool>,
+    /// (division id, army, template) as hoi4_supply lists them
+    divs: RefCell<Vec<(String, String, String)>>,
     calls: RefCell<Vec<(String, Value)>>,
 }
 
@@ -38,6 +40,7 @@ impl Game {
             enemies: RefCell::new(vec![]),
             held: RefCell::new(vec![]),
             refuse_multi: RefCell::new(false),
+            divs: RefCell::new(vec![]),
             calls: RefCell::new(vec![]),
         }
     }
@@ -150,6 +153,44 @@ impl Tools for Game {
                         }
                     }
                 })
+            }
+            "hoi4_supply" => {
+                let rows: Vec<Value> = self
+                    .divs
+                    .borrow()
+                    .iter()
+                    .map(|(id, a, t)| json!({"id": id, "army": a, "template": t}))
+                    .collect();
+                return Ok(json!({"divisions": rows}));
+            }
+            "hoi4_army_detach" => {
+                let into = match args["into"].as_str() {
+                    Some(into) => into.to_string(),
+                    None => {
+                        let mut roster = self.roster.borrow_mut();
+                        let rows = roster["armies"].as_array_mut().unwrap();
+                        rows.push(
+                            json!({"army": "Army 9", "army_group": null, "commander": "x",
+                            "plan": [], "exercising": false}),
+                        );
+                        "Army 9".to_string()
+                    }
+                };
+                let ids = strings(args, "divisions");
+                for d in self.divs.borrow_mut().iter_mut() {
+                    if ids.contains(&d.0) {
+                        d.1 = into.clone();
+                    }
+                }
+            }
+            "hoi4_army_rename" => {
+                let to = text(&args["name"]).to_string();
+                self.unit(&army, |r| r["army"] = json!(to.clone()));
+                for d in self.divs.borrow_mut().iter_mut() {
+                    if d.1 == army {
+                        d.1 = to.clone();
+                    }
+                }
             }
             "hoi4_army_exercise" => {
                 for a in strings(args, "armies") {
@@ -543,4 +584,52 @@ fn a_far_line_that_does_not_draw_at_war_is_taken_one_state_at_a_time() {
         &Value::Null,
     );
     assert_eq!(arrow_executing(&roster, &group, &[93]), Some(true));
+}
+
+#[test]
+fn a_mobile_formation_gathers_its_templates_from_the_other_armies_but_not_from_a_wing() {
+    let game = Game::new();
+    let d = |id: &str, army: &str, t: &str| (id.to_string(), army.to_string(), t.to_string());
+    *game.divs.borrow_mut() = vec![
+        d("d1", "Mitte", "Pz"),
+        d("d2", "Mitte", "Inf"),
+        d("d3", "WestA", "Pz"),
+        d("d4", "WestA", "Pz"),
+        d("d5", "WestA", "Inf"),
+        d("d6", "Nord", "Pz"),
+    ];
+    let mut plan = plan();
+    plan["operations"][0]["formations"][2] = json!({"army": "Schnell", "role": "mobile",
+        "divisions": {"Pz": 4}, "front": {"enemy": "POL", "own_states": [67]},
+        "offensive": {"axis": [67, 10], "target_line": [10]}});
+    let mut state = State::default();
+    burst(&mut state, &game, &plan, START);
+    let moves: Vec<(String, Value)> = game
+        .orders()
+        .into_iter()
+        .filter(|(n, _)| n == "hoi4_army_detach" || n == "hoi4_army_rename")
+        .collect();
+    assert_eq!(
+        moves,
+        vec![
+            (
+                "hoi4_army_detach".into(),
+                json!({"army": "WestA", "divisions": ["d3", "d4"]})
+            ),
+            (
+                "hoi4_army_rename".into(),
+                json!({"army": "Army 9", "name": "Schnell"})
+            ),
+            (
+                "hoi4_army_detach".into(),
+                json!({"army": "Mitte", "divisions": ["d1"], "into": "Schnell"})
+            ),
+        ]
+    );
+    // the wing keeps its armour; the assembled army gets its own front
+    assert_eq!(game.divs.borrow()[5].1, "Nord");
+    assert!(game
+        .orders()
+        .iter()
+        .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Schnell")));
 }

@@ -675,6 +675,154 @@ fn one(
     Ok(None)
 }
 
+/// The assembly of a `mobile` formation: its `divisions` ({template: count}) are gathered out of
+/// every other army (a wing keeps its own: it fights on a separate border) with hoi4_army_detach,
+/// a source army never emptied; without the army on the map the first detach forms it and the new
+/// army is renamed to the formation's name. Bed 1 (bp2): the 8 Panzer and 12 motorised divisions
+/// stood one to four in every army, the hold on the French border included.
+#[allow(clippy::too_many_arguments)]
+fn assemble(
+    state: &mut State,
+    tools: &dyn Tools,
+    id: &str,
+    op: &Value,
+    units: &[Unit],
+    roster: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let wings: HashSet<&str> = units
+        .iter()
+        .filter(|u| u.role == Role::Wing)
+        .map(|u| u.name.as_str())
+        .collect();
+    let mobiles: Vec<(String, Vec<(String, i64)>)> = list(op, "formations")
+        .iter()
+        .filter(|f| text(&f["role"]) == "mobile")
+        .filter_map(|f| {
+            let want: Vec<(String, i64)> = f["divisions"]
+                .as_object()?
+                .iter()
+                .filter_map(|(t, n)| Some((t.clone(), n.as_i64()?)))
+                .collect();
+            Some((resolve(state, text(&f["army"])), want))
+        })
+        .filter(|(name, want)| !name.is_empty() && !want.is_empty())
+        .collect();
+    let mobile_names: HashSet<String> = mobiles.iter().map(|m| m.0.clone()).collect();
+    for (name, want) in &mobiles {
+        let done = key(id, &format!("asm:{name}"));
+        if state.done.contains_key(&done) || state.skipped(now, "opasm", name) {
+            continue;
+        }
+        let tries = key(id, &format!("asmtry:{name}"));
+        let n = state.done.get(&tries).copied().unwrap_or(0);
+        if n >= 12 {
+            state.op_notes.insert(
+                format!("{id}:{name}"),
+                format!("{name}: assembly stopped after {n} moves"),
+            );
+            continue;
+        }
+        let Ok(read) = tools.call("hoi4_supply", &json!({"summary": false})) else {
+            continue;
+        };
+        let divisions = list(&read, "divisions");
+        let size = |army: &str| {
+            divisions
+                .iter()
+                .filter(|d| text(&d["army"]) == army)
+                .count()
+        };
+        // per template: what the army still lacks, and where it stands elsewhere
+        let mut moves: Vec<(String, Vec<String>)> = Vec::new();
+        for (template, count) in want {
+            let have = divisions
+                .iter()
+                .filter(|d| text(&d["army"]) == name && text(&d["template"]) == template)
+                .count() as i64;
+            let mut lack = count - have;
+            for d in divisions.iter().filter(|d| {
+                let army = text(&d["army"]);
+                text(&d["template"]) == template
+                    && !army.is_empty()
+                    && army != name
+                    && !wings.contains(army)
+                    && !mobile_names.contains(army)
+            }) {
+                if lack <= 0 {
+                    break;
+                }
+                let army = text(&d["army"]).to_string();
+                let Some(div) = d["id"].as_str() else {
+                    continue;
+                };
+                match moves.iter_mut().find(|m| m.0 == army) {
+                    Some(m) => m.1.push(div.to_string()),
+                    None => moves.push((army, vec![div.to_string()])),
+                }
+                lack -= 1;
+            }
+        }
+        // a source army keeps one division; one detach moves at most 18
+        for m in moves.iter_mut() {
+            let keep = size(&m.0).saturating_sub(1);
+            m.1.truncate(keep.min(18));
+        }
+        moves.retain(|m| !m.1.is_empty());
+        moves.sort_by_key(|m| std::cmp::Reverse(m.1.len()));
+        let Some((source, ids)) = moves.into_iter().next() else {
+            state.done.insert(done, now);
+            continue;
+        };
+        state.done.insert(tries, n + 1);
+        let exists = army_row(roster, name).is_some();
+        let before: HashSet<String> = list(roster, "armies")
+            .iter()
+            .map(|a| text(&a["army"]).to_string())
+            .collect();
+        let mut args = json!({"army": source, "divisions": ids});
+        if exists {
+            args["into"] = json!(name);
+        }
+        let mut line = order(
+            state,
+            tools,
+            lease,
+            id,
+            &format!("assemble {name}: {} division(s) out of {source}", ids.len()),
+            "hoi4_army_detach",
+            args,
+        )?;
+        if state.last_ok == Some(false) {
+            state.skip(now, "opasm", name, DAY / 4);
+            return Ok(Some(line));
+        }
+        if !exists {
+            // the new army: the one name the roster did not have; renamed to the formation's
+            let after = tools.call("hoi4_armies", &json!({"threat": false}))?;
+            let new = list(&after, "armies")
+                .iter()
+                .map(|a| text(&a["army"]).to_string())
+                .find(|a| !before.contains(a));
+            if let Some(new) = new {
+                let renamed = order(
+                    state,
+                    tools,
+                    lease,
+                    id,
+                    &format!("name the new army {new} {name}"),
+                    "hoi4_army_rename",
+                    json!({"army": new, "name": name}),
+                )?;
+                line = format!("{line}; {renamed}");
+            }
+        }
+        return Ok(Some(line));
+    }
+    Ok(None)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn prepare(
     state: &mut State,
@@ -708,6 +856,10 @@ fn prepare(
             "hoi4_army_exercise",
             json!({"armies": training, "on": false}),
         )?;
+        return Ok(Some(line));
+    }
+    // ASSEMBLE: a mobile formation gathers its templates' divisions out of the other armies
+    if let Some(line) = assemble(state, tools, id, op, units, roster, lease, now)? {
         return Ok(Some(line));
     }
     // the group: formed when its line armies stand in none (never regrouped)

@@ -6284,7 +6284,7 @@
    "payoff": "high",
    "why": "Per-army orders lost Poland (0 capitulations above 30 divisions); the game's own AI wins it with one group front and one country-wide offensive, and the same shape drawn through the tools held every own state",
    "closing": "both",
-   "owner": "executor: the operation step (native/src/plan_operation.rs) owns the armies from prepare_from, draws in the stated order, reconciles with the order read-back, executes in the declaration tick, draws the next line (phase line, else one state) when one is held or stalls, and gives no other land order to an owned army; open: moving divisions between armies by template (no tool), reserves and fallback lines, air superiority read",
+   "owner": "executor: the operation step (native/src/plan_operation.rs) owns the armies from prepare_from, assembles mobile formations, draws in the stated order, reconciles with the order read-back, executes in the declaration tick, draws the next line (phase line, else one state) when one is held or stalls, and gives no other land order to an owned army; assembles a mobile formation by template with hoi4_army_detach; open: reserves and fallback lines, air superiority read",
    "priority": 1
   }
  ]

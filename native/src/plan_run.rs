@@ -2490,17 +2490,32 @@ fn war_first_steps(
             plan_operation::wake(state);
             state.pcache = None;
             let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
+            state.war_active = true;
+            let air = war_burst(state, tools, plan, lease, now, air_war_step)?;
             state.last_ok = Some(true);
-            return Ok(Some(match executed {
-                Some(line) => format!("{declared}; {line}"),
-                None => declared,
-            }));
+            let line = [Some(declared), executed, air]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Ok(Some(line));
         }
     }
     let steps: [Step; 11] = [
-        // the operations: prepare, execute, advance (plan_operation.rs)
+        // the operations: prepare, execute, advance (plan_operation.rs); the air burst follows in
+        // the same tick (o1d: the operation acted in every tick of the first war days and the
+        // air step behind it first ran on day 3, every wing still on its peace training)
         |state, tools, plan, lease, now| {
-            war_burst(state, tools, plan, lease, now, plan_operation::step)
+            let Some(ops) = war_burst(state, tools, plan, lease, now, plan_operation::step)? else {
+                return Ok(None);
+            };
+            let ok = state.last_ok;
+            let air = war_burst(state, tools, plan, lease, now, air_war_step)?;
+            state.last_ok = ok;
+            Ok(Some(match air {
+                Some(air) => format!("{ops}; {air}"),
+                None => ops,
+            }))
         },
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
