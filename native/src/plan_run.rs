@@ -5533,7 +5533,11 @@ fn air_war_missions(
                     // A region on the contact line is the nearest the operation has: failing
                     // there, the wing is out of range from its base and is rebased at once (o1l:
                     // wings at inland bases failed over Danzig and Poznan alike).
-                    if (why.contains("Diverged") || why.contains("NotApplied"))
+                    // (the tool's own refusal reads "input_readback_failed: ... did not change",
+                    // o1m: never counted, so no wing was ever rebased)
+                    if (why.contains("Diverged")
+                        || why.contains("NotApplied")
+                        || why.contains("input_readback_failed"))
                         && !why.contains("events_open")
                     {
                         let moved = state.done.contains_key(&format!("airmoved:{name}"));
@@ -11621,9 +11625,15 @@ mod tests {
                     "hoi4_air_mission" => {
                         let s = args["state_id"].as_i64().unwrap();
                         self.0.borrow_mut().push(s);
-                        Ok(
-                            json!({"receipt": {"status": if s == 87 { "Verified" } else { "Diverged" }}}),
-                        )
+                        // the live refusal: the tool's own read-back error, not a receipt
+                        if s == 87 {
+                            Ok(json!({"receipt": {"status": "Verified"}}))
+                        } else {
+                            Err(crate::error::Error::new(
+                                "input_readback_failed",
+                                "The wing's mission or region did not change",
+                            ))
+                        }
                     }
                     _ => Ok(json!({"receipt": {"status": "Verified"}})),
                 }
