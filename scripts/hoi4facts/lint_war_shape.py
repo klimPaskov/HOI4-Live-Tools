@@ -27,6 +27,8 @@ lint_force.check after the force rules, on the same war list from force.plan_war
                           history/countries) while the plan has no war with the guarantor that day.
   war.declaration_gate    a focus in a declaration's `when` that the focus timeline completes less than GATE_SLACK
                           days before the declaration's date (or never): the war starts late.
+  (a war fought as an operation, plan key `operations`, is checked by lint_operations.py instead: its placement,
+  lines, holds and air; the layout rules below then leave the armies it places alone)
   war.attack_force        on an offensive war's first day: the layout in force (entries whose `when` holds by then,
                           the latest per formation) places less than PLACED_SHARE of the forecast army; the strike
                           formations on the war's axes carry less than ATTACK_RATIO (or force_design.wars[]
@@ -168,7 +170,7 @@ class Shape:
             if w["kind"] != "offensive" or "at war at the start" in w["source"]:
                 continue
             pid, eff = self.war_at(w["start"])
-            if eff.get("operations"):
+            if eff.get("operations") or self.ops.of_war(w):
                 continue
             ax = eff.get("axes")
             if isinstance(ax, list) and any(_ints(a) for a in ax if isinstance(a, list)):
@@ -200,7 +202,8 @@ class Shape:
             ok = hostile | {tag} | self.gone(day)
             taken = self.taken(day)
             pid, eff = self.war_at(day)
-            reserve = set(eff.get("reserve") or [])
+            # an army an operation places takes no victory-point row: its group's lines carry it
+            reserve = set(eff.get("reserve") or []) | self.owned
             # the armies this war uses: a row in the target's land, or a layout axis into it
             targets = set(w["targets"])
             fighting = {e.get("army") for _, e in rows
@@ -233,6 +236,8 @@ class Shape:
         lint = self.lint
         nb = None
         for w in self.wars:
+            if self.ops.of_war(w):
+                continue  # the operation's holds are checked in lint_operations
             day = w["start"]
             # the sectors the war does not attack: borders with the joiners, the likely joiners and enemies
             # carried from earlier wars; the target's own border is the attack front (diplomacy.borders_unheld)
@@ -290,7 +295,8 @@ class Shape:
 
     def mobile(self):
         lint = self.lint
-        strike = [e for e in self.layout() if e.get("role") == "strike" and not e.get("task_of")]
+        strike = [e for e in self.layout() if e.get("role") == "strike" and not e.get("task_of")
+                  and e.get("name_hint") not in self.owned]
         prof = {}
 
         def kind(name):
@@ -344,7 +350,7 @@ class Shape:
             cov = (c.get("overrides") or then.get("overrides") or {})
             cov = cov.get("war") if isinstance(cov, dict) and isinstance(cov.get("war"), dict) else {}
             ov = dict(ov, **cov)
-            if ov.get("operations"):
+            if ov.get("operations") or self.ops.ops:
                 continue
             ax = ov.get("axes")
             if isinstance(ax, list) and any(_ints(a) for a in ax if isinstance(a, list)):
@@ -417,7 +423,7 @@ class Shape:
                         return True
             return False
         for w in self.wars:
-            if w["kind"] != "offensive" or "at war at the start" in w["source"]:
+            if w["kind"] != "offensive" or "at war at the start" in w["source"] or self.ops.of_war(w):
                 continue
             day = w["start"]
             live = {}
@@ -466,6 +472,12 @@ class Shape:
 def check(ctx):
     s = Shape(ctx.lint, ctx.tl, ctx.wars)
     s.needs = ctx.needs
+    # large land wars written as operations (lint_operations.py): their placement, lines and holds are checked
+    # there, and the rules below leave the armies an operation places alone
+    from . import lint_operations
+    s.owned = lint_operations.owned_armies(ctx.lint.plan)
+    s.ops = lint_operations.Ops(s)
+    s.ops.run()
     s.declaration_gates()
     s.attack_force()
     s.recovery()

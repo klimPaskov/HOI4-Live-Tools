@@ -2047,6 +2047,493 @@
       "x-owner": "executor",
       "description": "army groups and field marshals (plan_military.rs army_group_step, W2-1): grouped once, led once, never churned; done-memory agrp:<id> and agfm:<id>"
     },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/definitions/id"
+          },
+          "war": {
+            "type": "string",
+            "minLength": 1,
+            "description": "force_design.wars[].id this operation fights"
+          },
+          "enemies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/tag"
+            },
+            "minItems": 1,
+            "description": "the land enemies the operation attacks: every axis and line state lies in their land, and each is at war with the plan on the execute day"
+          },
+          "prepare_from": {
+            "$ref": "#/definitions/predicate",
+            "description": "from here, in peace: the armies are assembled, their old orders deleted, the fronts and lines drawn; nothing executes. At least 30 days before the war day, so the planning bonus is full"
+          },
+          "execute_on": {
+            "$ref": "#/definitions/predicate",
+            "description": "the execute, normally at_war_with:<TAG> (the declaration itself stays in diplomacy)"
+          },
+          "execution": {
+            "enum": [
+              "careful",
+              "balanced",
+              "rush"
+            ],
+            "description": "battle-plan execution mode of every executed order"
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1,
+            "description": "army_group id of the main body: its line formations carry no orders of their own and follow the group front and the group offensive"
+          },
+          "front": {
+            "type": "object",
+            "properties": {
+              "enemy": {
+                "$ref": "#/definitions/tag"
+              },
+              "own_states": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/state_id"
+                },
+                "minItems": 1,
+                "description": "own states whose border with `enemy` the front runs along, in order"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "enemy",
+              "own_states"
+            ],
+            "description": "the group front: one click on the border with `enemy`"
+          },
+          "offensive": {
+            "type": "object",
+            "properties": {
+              "axis": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/state_id"
+                },
+                "minItems": 2,
+                "description": "own start state, then the enemy states the arrow runs through, in order"
+              },
+              "target_line": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/state_id"
+                },
+                "minItems": 1,
+                "description": "enemy states the target line runs through, in order from one edge of the enemy's land to the other (one state is allowed for a mobile formation)"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "axis",
+              "target_line"
+            ],
+            "description": "the group's one offensive: a bending stroke through target_line"
+          },
+          "formations": {
+            "type": "array",
+            "minItems": 1,
+            "description": "war-day placement of the attack, one entry per army",
+            "items": {
+              "type": "object",
+              "properties": {
+                "army": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "army_layout name_hint"
+                },
+                "role": {
+                  "enum": [
+                    "line",
+                    "mobile",
+                    "wing"
+                  ],
+                  "description": "line: an army of `group` with no orders of its own. mobile: armour and motorised with its own narrow front and arrow, drawn before the group's. wing: own front and offensive on a separate border"
+                },
+                "divisions": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "minProperties": 1,
+                  "description": "{template: divisions} standing in this army on the war day (templates as in `templates` and training)"
+                },
+                "commander": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "general, when army_layout names none for this army"
+                },
+                "front": {
+                  "type": "object",
+                  "properties": {
+                    "enemy": {
+                      "$ref": "#/definitions/tag"
+                    },
+                    "own_states": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/state_id"
+                      },
+                      "minItems": 1,
+                      "description": "own states whose border with `enemy` the front runs along, in order"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "enemy",
+                    "own_states"
+                  ],
+                  "description": "own front (mobile and wing only)"
+                },
+                "offensive": {
+                  "type": "object",
+                  "properties": {
+                    "axis": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/state_id"
+                      },
+                      "minItems": 2,
+                      "description": "own start state, then the enemy states the arrow runs through, in order"
+                    },
+                    "target_line": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/definitions/state_id"
+                      },
+                      "minItems": 1,
+                      "description": "enemy states the target line runs through, in order from one edge of the enemy's land to the other (one state is allowed for a mobile formation)"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "axis",
+                    "target_line"
+                  ],
+                  "description": "own offensive (mobile and wing only)"
+                },
+                "why": {
+                  "type": "string",
+                  "description": "Free text for people and the player; never read by the executor."
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "army",
+                "role",
+                "divisions"
+              ]
+            }
+          },
+          "holds": {
+            "type": "array",
+            "description": "every other border with a country at war with the plan, or likely to join, on the execute day: a concentrated front that is never executed",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/definitions/id"
+                },
+                "facing": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/tag"
+                  },
+                  "minItems": 1
+                },
+                "group": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "army_group id that gets the hold front (never the operation's group); without it each army gets its own front"
+                },
+                "armies": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "army": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "divisions": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "minProperties": 1,
+                        "description": "{template: divisions} standing in this army on the war day (templates as in `templates` and training)"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "army",
+                      "divisions"
+                    ]
+                  }
+                },
+                "states": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "minItems": 1,
+                  "description": "own border states the hold front runs along"
+                },
+                "min_per_province": {
+                  "type": "number",
+                  "minimum": 1,
+                  "description": "divisions per border province facing `facing`, at least"
+                },
+                "fallback_states": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "minItems": 0,
+                  "description": "own states of a fallback line behind the front"
+                },
+                "why": {
+                  "type": "string",
+                  "description": "Free text for people and the player; never read by the executor."
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "facing",
+                "armies",
+                "states",
+                "min_per_province"
+              ]
+            }
+          },
+          "reserve": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "army": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "divisions": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "minProperties": 1,
+                  "description": "{template: divisions} standing in this army on the war day (templates as in `templates` and training)"
+                },
+                "station": {
+                  "$ref": "#/definitions/state_id"
+                },
+                "release_when": {
+                  "$ref": "#/definitions/predicate"
+                },
+                "to": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "a hold id of this operation, or \"operation\": the front the army takes when released"
+                },
+                "why": {
+                  "type": "string",
+                  "description": "Free text for people and the player; never read by the executor."
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "army",
+                "divisions",
+                "station",
+                "release_when",
+                "to"
+              ]
+            }
+          },
+          "air": {
+            "type": "object",
+            "properties": {
+              "regions": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "minItems": 1,
+                "description": "strategic air regions of the target line and the axis"
+              },
+              "superiority": {
+                "type": "boolean"
+              },
+              "cas": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "regions",
+              "superiority",
+              "cas"
+            ],
+            "description": "air attached to the operation: air_plan entries carry the wings over these regions from the war day"
+          },
+          "supply": {
+            "type": "object",
+            "properties": {
+              "motorization": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "floor": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "head-of-advance supply percent below which the weekly check switches to careful"
+              },
+              "railways": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "motorization",
+              "floor"
+            ]
+          },
+          "phase_lines": {
+            "type": "array",
+            "description": "follow-on lines in order: each replaces the group offensive once, when its `when` holds",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/definitions/id"
+                },
+                "when": {
+                  "$ref": "#/definitions/predicate"
+                },
+                "target_line": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "minItems": 1,
+                  "description": "as offensive.target_line"
+                },
+                "axis": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/state_id"
+                  },
+                  "minItems": 2,
+                  "description": "as offensive.axis"
+                },
+                "execution": {
+                  "enum": [
+                    "careful",
+                    "balanced",
+                    "rush"
+                  ]
+                },
+                "why": {
+                  "type": "string",
+                  "description": "Free text for people and the player; never read by the executor."
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "when",
+                "target_line"
+              ]
+            }
+          },
+          "on_capitulation": {
+            "type": "object",
+            "properties": {
+              "next": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "operation id whose preparation starts at once (its formations and holds are the new placement), or null"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "next"
+            ],
+            "description": "every enemy capitulated: the operation's orders are stopped and deleted"
+          },
+          "success": {
+            "type": "object",
+            "properties": {
+              "capitulated_by": {
+                "$ref": "#/definitions/date"
+              },
+              "casualty_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "enemy casualties per own casualty"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "capitulated_by"
+            ]
+          },
+          "why": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          },
+          "note": {
+            "type": "string",
+            "description": "Free text for people and the player; never read by the executor."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "war",
+          "enemies",
+          "prepare_from",
+          "execute_on",
+          "execution",
+          "group",
+          "front",
+          "offensive",
+          "formations",
+          "holds",
+          "air",
+          "supply",
+          "on_capitulation",
+          "success"
+        ]
+      },
+      "x-owner": "player",
+      "x-executor-planned": "W3-14",
+      "description": "large land wars as operations (more than about 30 divisions): one army-group front on the enemy border and one group offensive whose target line spans the enemy country, executed on the declaration; the armour in its own army; every other hostile border held by a front that is never executed; the war-day placement by formation and template. Read by the lint (lint_operations.py) and, until the executor's operation step (W3-14) is built, carried out from the brief. Small theatres keep war.axes and the strike keys"
+    },
     "air_plan": {
       "type": "array",
       "items": {
