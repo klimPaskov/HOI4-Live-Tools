@@ -50,7 +50,11 @@ Rules: facts only from the dossier, the pack or `scripts/hoi4facts/facts.py`, ne
 per-division enemy positions and no AI strategy files; plan keys only from the schema; never touch the
 game; never ask for input. A land war against more than about 30 enemy divisions is written as an operation
 (`operations[]`, procedure item 18 step 0): one group front, one country-wide group offensive, the armour in
-its own army, a hold on every other hostile border, the war-day placement by template. If a gate cannot pass, write `RUN/strategist-blocked.md` and stop.
+its own army, a hold on every other hostile border, the war-day placement by template. The game's own AI's marks are a floor, never the target: on every war day
+the attacking templates out-gun the AI's and the enemy's main template in soft attack and breakthrough
+(`scripts/hoi4facts/divstats.py`), and the air over the operation, the military factories and the divisions
+stand above the AI's by `force_design.dominance_margin` (lint `force.dominance`, procedure item 18 step 00).
+If a gate cannot pass, write `RUN/strategist-blocked.md` and stop.
 
 Finish with a short summary: goal reading, phases, coverage (executor / player / not applicable
 counts), lint totals, open warnings.

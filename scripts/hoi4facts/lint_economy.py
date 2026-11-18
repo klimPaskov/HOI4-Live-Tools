@@ -49,7 +49,7 @@ Production is a set of factory targets per equipment over all lines, the ones th
   economy.forecast           (info) no forecast could be made (the reason).
 facts.economy: factories, consumer goods at the start (ideas, and the dynamic modifiers the history adds,
 resolved with the variables it sets), the scripts that change them later, free slots, `forecast` (economy.py: the
-plan's own dated levers day by day with the switch date the arithmetic picks, by quarter and on the AI's dates) and
+plan's own dated levers day by day with the plan's dated switch (else the one the arithmetic picks), by quarter and on the AI's dates) and
 `levers` (laws, advisors, techs and focuses the game offers that the plan leaves out or takes late, with the
 factories each adds by the first war day); economy.consumer_goods (info) names the scripts. facts.production_need:
 need and what the country has per family. facts.ai_baseline: the marks below the AI, the forecast's, and each
@@ -330,6 +330,33 @@ def _dynamic_consumer_goods(lint):
     return tot, rows, {k: sorted(set(v))[:6] for k, v in changes.items()}
 
 
+def baseline_floors(lint):
+    """{day: (civilian, military)}: the AI baseline's marks at BASELINE_SLACK."""
+    b = load_baseline(lint.tag, lint.start)
+    floors = {}
+    for row in (b or {}).get("rows") or []:
+        d = _day(row["date"])
+        if d:
+            floors[d] = (BASELINE_SLACK * row["civilian_factories"], BASELINE_SLACK * row["military_factories"])
+    return floors
+
+
+def forecast_of(lint, tl=None):
+    """The plan's economy forecast (economy.forecast on the AI marks), computed once per lint run: the economy
+    rules and the production model (Lint.military_on, the idle-factory feed) read the same one."""
+    fc = getattr(lint, "_econ_fc", None)
+    if fc is not None:
+        return fc
+    if tl is None:
+        tl = getattr(lint, "_timeline", None)
+        if tl is None:
+            from . import conditions as cond
+            tl = cond.Timeline(lint)
+    floors = baseline_floors(lint)
+    lint._econ_fc = econmod.forecast(lint, tl, marks=list(floors), floors=floors)
+    return lint._econ_fc
+
+
 def economy(lint, tl):
     w = lint.world
     tag = lint.tag
@@ -387,16 +414,10 @@ def economy(lint, tl):
                            "slots for every factory the targets need")
                 break
     # the plan's own levers by date (economy.forecast): laws, ideas, advisors, focus gifts, techs, annexations,
-    # slots outside the construction risk; the switch date the arithmetic gives
-    b = load_baseline(lint.tag, lint.start)
-    floors = {}
-    for row in (b or {}).get("rows") or []:
-        d = _day(row["date"])
-        if d:
-            floors[d] = (BASELINE_SLACK * row["civilian_factories"], BASELINE_SLACK * row["military_factories"])
+    # slots outside the construction risk; the plan's dated switch, else the one the arithmetic gives
     fc, lev = None, []
     try:
-        fc = econmod.forecast(lint, tl, marks=list(floors), floors=floors)
+        fc = forecast_of(lint, tl)
         lev = econmod.levers(lint, tl, fc)
     except Exception as exc:  # noqa: BLE001 - advisory: the economy rules then run without the forecast
         lint.add("info", "economy.forecast", "construction", f"no forecast: {type(exc).__name__}: {exc}")
@@ -411,7 +432,7 @@ def economy(lint, tl):
                        "fallback": fallback},
         "forecast": fc,
         "levers": lev,
-        "note": "forecast: what the plan's own dated levers give with the switch date the arithmetic picks "
+        "note": "forecast: what the plan's own dated levers give with the plan's dated switch (else the arithmetic's) "
                 "(economy.py); levers: what the game offers that the plan leaves out or takes late, with the "
                 "factories it adds by the first war day when taken at the start (law gates and focus time are "
                 "the plan's to judge)"}

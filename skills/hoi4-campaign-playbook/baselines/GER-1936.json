@@ -178,6 +178,9 @@
   },
   {
    "date": "1939.09.01",
+   "fighters": 2400,
+   "cas": 950,
+   "air_note": "fighters and close air support as hoi4_air read them in the AI study save aig1 on 1939.09.01 (800 of the CAS generation 1); the count may include allied wings at shared bases (read before the own-wing filter of PR #274), so it is an upper bound",
    "civilian_factories": 104,
    "military_factories": 67,
    "naval_factories": 10,

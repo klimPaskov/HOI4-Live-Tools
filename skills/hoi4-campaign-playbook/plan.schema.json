@@ -3849,6 +3849,11 @@
             "additionalProperties": false
           }
         },
+        "dominance_margin": {
+          "type": "number",
+          "minimum": 0,
+          "description": "lint force.dominance: how far above the game's own AI's marks (baselines) the plan must stand on each land war day (attack templates' soft attack and breakthrough, air staged over the operation, military factories, divisions); default 0.10"
+        },
         "bomber_why": {
           "type": "string",
           "description": "why a war the force design asks bombers for flies none (answers force.bombers)"

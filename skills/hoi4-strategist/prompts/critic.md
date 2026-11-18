@@ -34,8 +34,13 @@ items present; each resolved by an executor key, a player item with an exact cal
 brief, or "not applicable" with a reason you can confirm with a facts command. A missing or unresolved
 item is a finding (a blocker when it decides the goal, such as an overseas theatre with no convoy plan,
 an enemy with no peace item, or a land war with no templates). Compare the plan's main line and armour templates on each war day with the game's own AI's
-(`facts.force.quality`): a template below it, idle experience or political power, an unnamed staff seat or no
-exercise is a major finding under row 6, a blocker when the war's `decisive` reasons rest on division counts.
+(`facts.force.quality`, `facts.force.firepower`: soft attack and breakthrough from divstats.py): a template
+level with or below the AI's or the enemy's main template, idle experience or political power, an unnamed or
+wrong-branch staff seat, CAS of an older airframe, wings based out of range or no exercise is a major finding
+under row 6, a blocker when the war's `decisive` reasons rest on division counts. Read `facts.force.dominance`:
+the AI's marks are a floor, never the target; any axis at or under the AI on a war day (attack quality, air
+over the operation, military factories, divisions, factories on a baseline date) is a blocker under row 17
+unless the plan names that axis, its best reachable figure and what a margin would cost elsewhere.
 For every land war against more than about
 30 enemy divisions read its operation (`operations[]`) against lint `facts.force.operations`: the target line
 and phase lines against the surrender threshold, the placement against the forecast by template, the attack
