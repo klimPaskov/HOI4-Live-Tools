@@ -76,7 +76,9 @@ division a province): at war the strike engine moves it as one column, at most `
 (4) divisions a province, on the largest victory point of each state of its `offensive.target_line`
 in order, the way from the column when no path is given, resting by organisation; it posts no
 covers. From the prepare on the air goes too: wings rebase to free bases facing the operation and
-take their missions over its regions in peace. In peace it reconciles the wanted orders with the
+take their missions over its regions in peace. A declaration against an operation's enemy waits
+while that operation's prepare still has a refused front or assembly (at most three game days).
+In peace it reconciles the wanted orders with the
 read-back on every pass and sends only the difference: exercises stopped, line armies and the
 armies of a hold group cleared of their own orders, mobile and wing fronts and lines, the group
 front and its line, each hold's front; a group line that misses its states is cleared and drawn

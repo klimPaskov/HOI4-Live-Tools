@@ -649,3 +649,15 @@ fn a_mobile_formation_gathers_its_templates_from_the_other_armies_but_not_from_a
         .any(|(n, a)| n == "hoi4_army_rename" && *a == renamed));
     assert_eq!(resolve(&state, "Schnell"), "Schnell");
 }
+
+#[test]
+fn a_declaration_waits_for_an_operation_still_preparing() {
+    let plan = json!({"operations": [{"id": "op_poland", "enemies": ["POL"]}]});
+    let mut state = State::default();
+    assert_eq!(unready(&state, &plan, "POL"), None, "not started");
+    state.done.insert(key("op_poland", "prep"), START);
+    assert_eq!(unready(&state, &plan, "POL").as_deref(), Some("op_poland"));
+    assert_eq!(unready(&state, &plan, "FRA"), None, "another enemy");
+    state.done.insert(key("op_poland", "ready"), START);
+    assert_eq!(unready(&state, &plan, "POL"), None);
+}

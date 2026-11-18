@@ -614,6 +614,22 @@ pub(super) fn active(state: &State) -> bool {
     })
 }
 
+/// A running operation against `target` whose prepare has not finished (some front, hold or
+/// assembly does not read back yet): its id. The declaration waits for it (o2b, 18 Nov 2026: the
+/// war was declared while the West hold's front was still refused, and France took four states).
+pub(super) fn unready(state: &State, plan: &Value, target: &str) -> Option<String> {
+    list(plan, "operations")
+        .iter()
+        .enumerate()
+        .map(|(i, op)| (op_id(op, i), op))
+        .find(|(id, op)| {
+            started(state, id)
+                && !state.done.contains_key(&key(id, "ready"))
+                && strings(op, "enemies").iter().any(|e| e == target)
+        })
+        .map(|(id, _)| id)
+}
+
 /// Ends the quiet timer: the next call of the step looks at once (after a declaration).
 pub(super) fn wake(state: &mut State) {
     state.bad.remove(&super::skip_key("opstep", "x"));
@@ -663,6 +679,15 @@ fn one(
         now,
     )? {
         return Ok(Some(line));
+    }
+    // every order of the prepare reads back (none rests after a failure): a declaration
+    // against its enemies may go out
+    let resting = state
+        .bad
+        .iter()
+        .any(|(k, until)| *until > now && (k.starts_with("opdraw:") || k.starts_with("opasm:")));
+    if !resting {
+        state.done.entry(key(id, "ready")).or_insert(now);
     }
     if op["execute_on"].is_null() || !holds(state, tools, &op["execute_on"], now) {
         state.op_notes.insert(

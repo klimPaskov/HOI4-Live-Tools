@@ -1108,6 +1108,17 @@ fn diplomacy_items(
             waits.push(format!("{label}: waiting"));
             continue;
         }
+        // an operation against the target still preparing holds the declaration, at most three
+        // game days from the first time it held it
+        if action == "declare_war" {
+            if let Some(op) = super::plan_operation::unready(state, plan, &target) {
+                let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
+                if now - first < 3 * DAY {
+                    waits.push(format!("{label}: operation {op} still preparing"));
+                    continue;
+                }
+            }
+        }
         if let Some(why) = gate(state, tools, &item["when"], now) {
             waits.push(format!("{label}: {why}"));
             continue;
