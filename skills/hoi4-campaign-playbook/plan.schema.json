@@ -2058,7 +2058,7 @@
           "war": {
             "type": "string",
             "minLength": 1,
-            "description": "force_design.wars[].id this operation fights"
+            "description": "force_design.wars[].id this operation fights; a war larger than one army group (five armies) is fought by several operations with the same war, each its own group, front and target line, the lines together spanning the enemy land"
           },
           "enemies": {
             "type": "array",

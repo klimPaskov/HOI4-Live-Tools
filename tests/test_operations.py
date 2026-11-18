@@ -233,5 +233,54 @@ class Poland(unittest.TestCase):
         self.assertFalse([m for m in self.errors(out, "war.axes_missing") if "war_eng" in m])
 
 
+def split_poland():
+    """The Polish war by two army groups: ag_ost north of Warsaw, ag_sued from Silesia to the Romanian border."""
+    plan = poland()
+    a = plan["operations"][0]
+    a["front"] = {"enemy": "POL", "own_states": [63, 68, 66]}
+    a["offensive"] = {"axis": [66, 86, 87, 10], "target_line": VISTULA[:4]}
+    b = copy.deepcopy(a)
+    b.update(id="op_poland_sued", group="ag_sued", holds=[], phase_lines=[],
+             front={"enemy": "POL", "own_states": [67]},
+             offensive={"axis": [67, 762, 88], "target_line": VISTULA[4:]})
+    b["formations"] = [f for f in a["formations"] if f["army"] == "Armee Sued"]
+    a["formations"] = [f for f in a["formations"] if f["army"] != "Armee Sued"]
+    plan["operations"].append(b)
+    plan["army_group"][0]["armies"].remove("Armee Sued")
+    plan["army_group"].append({"id": "ag_sued", "armies": ["Armee Sued"], "marshal": "Fedor von Bock"})
+    return plan
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class SeveralOperations(unittest.TestCase):
+    """A war fought by several operations, one per army group: the lines, the placement and the holds are judged
+    over all of them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.game = lint_plan.load_game(GAME_DIR)
+        cls.good = lint_plan.lint(split_poland(), cls.game)
+
+    def errors(self, out, rule):
+        return [f["message"] for f in out["findings"] if f["rule"] == rule and f["severity"] == "error"]
+
+    def test_two_sectors_span_the_country_together(self):
+        bad = [f for f in self.good["findings"] if f["rule"].startswith("war.") and f["severity"] == "error"]
+        self.assertEqual(bad, [])
+        facts = self.good["facts"]["force"]["operations"]
+        self.assertEqual([f["id"] for f in facts], ["op_poland", "op_poland_sued"])
+        self.assertEqual(facts[0]["with"], ["op_poland_sued"])
+        self.assertEqual((facts[0]["attack"], facts[1]["attack"], facts[0]["war_attack"]), (52, 24, 76))
+        self.assertGreaterEqual(facts[1]["surrender"]["POL"]["first_line"], facts[1]["surrender"]["POL"]["vp_needed"])
+
+    def test_each_operation_has_its_own_group_and_armies(self):
+        plan = split_poland()
+        plan["operations"][1]["group"] = "ag_ost"
+        plan["operations"][1]["formations"].append(dict(plan["operations"][0]["formations"][0]))
+        found = self.errors(lint_plan.lint(plan, self.game), "war.operation_refs")
+        self.assertTrue(any("also the group of op_poland" in m for m in found), found)
+        self.assertTrue(any("is placed in op_poland and op_poland_sued" in m for m in found), found)
+
+
 if __name__ == "__main__":
     unittest.main()
