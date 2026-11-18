@@ -37,6 +37,10 @@ Production is a set of factory targets per equipment over all lines, the ones th
                              reason does not lift it: only goal.ai_baseline_constraint entries the lint confirms
                              (no_free_slots: the forecast finds no free slot outside the construction risk by then;
                              law_unavailable: the law is not offered or its gate is closed under the plan's timeline).
+                             A civilian shortfall alone is a warning (plan.ai_baseline at "split"): on a date where
+                             the forecast meets the AI's military factories and its total (civilian + military), an
+                             earlier switch is the plan's choice of what the factories make, not a smaller economy;
+                             goal.ai_baseline_why says why the split wins the war.
                              Divisions are reported (info), not held: a stated divisions target, or the army
                              forecast (the executor's training queues, caps and training time, each division
                              started only with its equipment in stock from the planned lines), below BASELINE_SLACK
@@ -569,7 +573,7 @@ def baseline(lint, tl, table, fc=None, lev=()):
     constraints = goal.get("ai_baseline_constraint") or []
     if isinstance(constraints, dict):
         constraints = [constraints]
-    marks, div_marks, div_errors, fc_marks = [], [], [], []
+    marks, div_marks, div_errors, fc_marks, split = [], [], [], [], []
     war_day = getattr(tl, "war_day", None)
     plan_at = _plan_marks(lint)
     horizon_end = max([x for x, _ in lint.horizon()] + list(plan_at) or [None]) if (lint.horizon() or plan_at) else None
@@ -582,23 +586,27 @@ def baseline(lint, tl, table, fc=None, lev=()):
         ai_c, ai_m = row["civilian_factories"], row["military_factories"]
         ai_f = ai_c + ai_m + row.get("naval_factories", 0)
         near = [(x, v) for x, v in plan_at.items() if d - 31 <= x <= d + 92]
+        # the forecast models the economy the plan builds, not what conquest adds: it is held to the AI only up
+        # to the first war day (later marks are the plan's targets, checked above)
+        r = econmod.at(rows, d) if rows and (fc_until is None or d <= fc_until) else None
+        # the floor is what the factories make: military and total at or above the AI's make a civilian
+        # shortfall the plan's split (an earlier switch), a warning with its reason, not an error
+        meets = bool(r) and r["mil"] >= BASELINE_SLACK * ai_m and r["civ"] + r["mil"] >= BASELINE_SLACK * (ai_c + ai_m)
         for x, v in near:
             when = derive.fmt(derive.date_of(x))
             if "factories" in v and v["factories"] < BASELINE_SLACK * ai_f:
                 marks.append((d, f"factories {v['factories']} by {when} against the AI's {ai_f} on {row['date']}"))
             for k_plan, ai_v in (("civilian_factories", ai_c), ("military_factories", ai_m)):
                 if k_plan in v and v[k_plan] < BASELINE_SLACK * ai_v:
-                    marks.append((d, f"{k_plan.replace('_', ' ')} {v[k_plan]} by {when} against the AI's {ai_v} on "
-                                     f"{row['date']}"))
+                    text = (f"{k_plan.replace('_', ' ')} {v[k_plan]} by {when} against the AI's {ai_v} on "
+                            f"{row['date']}")
+                    (split if k_plan == "civilian_factories" and meets else marks).append((d, text))
             if "divisions" in v and v["divisions"] < BASELINE_SLACK * row["divisions"]:
                 (div_errors if war_day is None or d <= war_day else div_marks).append(
                     f"divisions {v['divisions']} by {when} against the AI's {row['divisions']} on {row['date']}")
-        # the forecast models the economy the plan builds, not what conquest adds: it is held to the AI only up
-        # to the first war day (later marks are the plan's targets, checked above)
-        r = econmod.at(rows, d) if rows and (fc_until is None or d <= fc_until) else None
         if r and (r["civ"] < FORECAST_SLACK * ai_c or r["mil"] < FORECAST_SLACK * ai_m):
-            fc_marks.append((d, f"{r['civ']} civilian / {r['mil']} military on {row['date']} against the AI's "
-                                f"{ai_c} / {ai_m}"))
+            text = f"{r['civ']} civilian / {r['mil']} military on {row['date']} against the AI's {ai_c} / {ai_m}"
+            (split if meets else fc_marks).append((d, "forecast " + text if meets else text))
         divs, _ = tl.army_at(d)
         if divs < BASELINE_SLACK * row["divisions"]:
             held = ", ".join(f"{t} by {why}" for t, why in tl.limit_at(d).items()) if hasattr(tl, "limit_at") else ""
@@ -613,6 +621,7 @@ def baseline(lint, tl, table, fc=None, lev=()):
     lint.facts["ai_baseline"] = {"file": f"baselines/{lint.tag}-{derive.as_tuple(lint.start)[0]}.json",
                                  "below": [m for _, m in marks] + div_errors + div_marks,
                                  "forecast_below": [m for _, m in fc_marks],
+                                 "civilian_split": [m for _, m in split],
                                  "forecast_checked_until": (fc or {}).get("war"), "why": why,
                                  "constraints": [{"constraint": c, "confirmed": True, "how": h} for c, h in held]
                                  + [{"constraint": c, "confirmed": False, "how": h} for c, h in refused]}
@@ -637,6 +646,13 @@ def baseline(lint, tl, table, fc=None, lev=()):
                  + ". Use more of what the game offers (laws by date, construction advisors and focuses, "
                    "construction and building-slot techs early, civilian-first to the switch date, build in every "
                    "state outside the construction risk, a smaller import budget): " + lever_text)
+    if split:
+        lint.add("warning", "plan.ai_baseline", "split",
+                 "fewer civilian factories than the game's own AI while the plan's forecast meets its military and "
+                 "total factories on the same dates (an earlier switch): " + "; ".join(m for _, m in split[:6])
+                 + (" ..." if len(split) > 6 else "") + ". goal.ai_baseline_why: say what the military "
+                 "factory-days buy by the first war day and what the civilian factories cost later"
+                 + (f" (given: {why})" if why else ""))
     # Divisions: the count against the AI is reported, not a floor. A division count says nothing of what the
     # force is made of (a plan reached the AI's count with one infantry template and no armour for its wars);
     # the floor is the force table's readiness (lint_force.py force.readiness, force.breakthrough).
