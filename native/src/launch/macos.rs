@@ -5736,11 +5736,18 @@ impl MacClock {
                         .filter(|a| (2..=12).contains(&a.len()))
                         .and_then(|a| {
                             a.iter()
-                                .map(|x| x.as_i64().filter(|v| (1..4096).contains(v)).map(|v| v as i32))
+                                .map(|x| {
+                                    x.as_i64()
+                                        .filter(|v| (1..4096).contains(v))
+                                        .map(|v| v as i32)
+                                })
                                 .collect::<Option<Vec<i32>>>()
                         })
                         .ok_or_else(|| {
-                            Error::new("invalid_arguments", "states must be 2..12 state ids (1..4095)")
+                            Error::new(
+                                "invalid_arguments",
+                                "states must be 2..12 state ids (1..4095)",
+                            )
                         })?,
                 ),
             };

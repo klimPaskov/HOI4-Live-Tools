@@ -1055,7 +1055,11 @@ pub fn declare_due_step(
     diplomacy_items(state, &run, true)
 }
 
-fn diplomacy_items(state: &mut State, run: &Run<'_>, declarations_only: bool) -> Result<Option<String>> {
+fn diplomacy_items(
+    state: &mut State,
+    run: &Run<'_>,
+    declarations_only: bool,
+) -> Result<Option<String>> {
     let (tools, plan, now) = (run.tools, run.plan, run.now);
     let items = list(plan, "diplomacy");
     if items.is_empty() || (!declarations_only && state.skipped(now, "mdip", "x")) {
@@ -3408,7 +3412,7 @@ mod tests {
             ("hoi4_designs", json!({"designs": []})),
         ]);
         let plan = json!({"manage": {"off": ["mio_lines"]},
-            
+
             "designs": [{"id": "t1", "kind": "tank", "base": "Panzer III", "name": "Panzer III S", "xp": 0}],
             "production": [{"equipment": "medium_tank_chassis", "factories": 5, "design": "t1"}]});
         let mut state = State::default();
@@ -3862,7 +3866,10 @@ mod tests {
             {"id": "dow", "action": "declare", "target": "POL"}]});
         let mut state = State::default();
         let out = declare_due_step(&mut state, &tools, &plan, "l", START).unwrap();
-        assert_eq!(out.as_deref(), Some("diplomacy declare_war POL: true Verified"));
+        assert_eq!(
+            out.as_deref(),
+            Some("diplomacy declare_war POL: true Verified")
+        );
         let sent = actions(&tools);
         assert_eq!(sent.len(), 1);
         assert_eq!(sent[0].1["action"], "declare_war");
@@ -3873,9 +3880,13 @@ mod tests {
         );
         assert_eq!(actions(&tools).len(), 1);
         // a plan without a declaration reads nothing
-        let quiet = json!({"diplomacy": [{"id": "imp", "action": "improve_relations", "target": "ITA"}]});
+        let quiet =
+            json!({"diplomacy": [{"id": "imp", "action": "improve_relations", "target": "ITA"}]});
         let mut fresh = State::default();
-        assert_eq!(declare_due_step(&mut fresh, &tools, &quiet, "l", START).unwrap(), None);
+        assert_eq!(
+            declare_due_step(&mut fresh, &tools, &quiet, "l", START).unwrap(),
+            None
+        );
     }
 
     #[test]

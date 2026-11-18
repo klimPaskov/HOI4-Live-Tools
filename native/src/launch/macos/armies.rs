@@ -18,8 +18,8 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) mod exercise;
-pub(super) mod orders;
 pub(super) mod mode;
+pub(super) mod orders;
 mod select;
 
 #[derive(Clone, Copy)]
@@ -3104,8 +3104,11 @@ pub(super) fn offensive_across(
     let first = states.first().copied().unwrap_or(0);
     let area = (420.0, 140.0, 1700.0, 880.0);
     select_for_orders(process, keys, army)?;
-    let framed = super::screenmap::frame_two(process, keys, a, b, area, || find_state(process, keys, first))?;
-    let inside = |p: &(f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
+    let framed = super::screenmap::frame_two(process, keys, a, b, area, || {
+        find_state(process, keys, first)
+    })?;
+    let inside =
+        |p: &(f64, f64)| (area.0..area.2).contains(&p.0) && (area.1..area.3).contains(&p.1);
     let screen: Option<Vec<(f64, f64)>> = match framed {
         None => None,
         Some(_) => read(process, |r, i| {
@@ -3151,7 +3154,8 @@ pub(super) fn offensive_across(
 fn across_centre(pts: &[(f64, f64)]) -> Option<(f64, f64)> {
     (!pts.is_empty()).then(|| {
         let n = pts.len() as f64;
-        pts.iter().fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n))
+        pts.iter()
+            .fold((0.0, 0.0), |a, p| (a.0 + p.0 / n, a.1 + p.1 / n))
     })
 }
 /// The two points farthest apart (None for fewer than two distinct points).

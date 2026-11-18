@@ -166,11 +166,18 @@ fn node(r: &Reader<'_>, image: u64, order: u64, depth: usize) -> Result<OrderNod
 }
 
 /// Every order of the orders group at `group`, with the list it sits in.
-pub(crate) fn group_orders(r: &Reader<'_>, image: u64, group: u64) -> Result<Vec<(List, OrderNode)>> {
+pub(crate) fn group_orders(
+    r: &Reader<'_>,
+    image: u64,
+    group: u64,
+) -> Result<Vec<(List, OrderNode)>> {
     let u = ui(r)?;
     let mut out = Vec::new();
-    let lists = std::iter::once((List::Top, Some(u.group_orders)))
-        .chain(u.group_fallback_lists.into_iter().map(|l| (List::Defensive, l)));
+    let lists = std::iter::once((List::Top, Some(u.group_orders))).chain(
+        u.group_fallback_lists
+            .into_iter()
+            .map(|l| (List::Defensive, l)),
+    );
     for (list, at) in lists {
         let Some(at) = at else { continue };
         let (_, data, count) = r.array_header(group + at)?;
@@ -186,7 +193,9 @@ pub(crate) fn state_of_province(r: &Reader<'_>, image: u64, province: i32) -> Op
     let g = crate::game::layout(r);
     let l = crate::construction::layout(r);
     let gs = r.u64(image + g.gs_global).ok()?;
-    let raw = r.array_entry(gs + l.gs_provinces, province as usize, 8).ok()?;
+    let raw = r
+        .array_entry(gs + l.gs_provinces, province as usize, 8)
+        .ok()?;
     let p = u64::from_le_bytes(raw.try_into().ok()?);
     if p == 0 || r.u64(p).ok()? != image + l.province_vtable {
         return None;
@@ -248,11 +257,31 @@ mod tests {
 
     #[test]
     fn a_group_front_with_a_deep_offensive_reads_its_line_arrow_and_target() {
-        let target = OrderNode { kind: 2, id: 192, provinces: vec![851, 861, 871, 881], divisions: 47, ..Default::default() };
-        let arrow = OrderNode { kind: 1, id: 193, executing: true, provinces: vec![671, 861], divisions: 47,
-                                children: vec![target], ..Default::default() };
-        let front = OrderNode { kind: 2, id: 190, executing: true, provinces: vec![631, 632, 661, 671],
-                                divisions: 47, children: vec![arrow], ..Default::default() };
+        let target = OrderNode {
+            kind: 2,
+            id: 192,
+            provinces: vec![851, 861, 871, 881],
+            divisions: 47,
+            ..Default::default()
+        };
+        let arrow = OrderNode {
+            kind: 1,
+            id: 193,
+            executing: true,
+            provinces: vec![671, 861],
+            divisions: 47,
+            children: vec![target],
+            ..Default::default()
+        };
+        let front = OrderNode {
+            kind: 2,
+            id: 190,
+            executing: true,
+            provinces: vec![631, 632, 661, 671],
+            divisions: 47,
+            children: vec![arrow],
+            ..Default::default()
+        };
         let standing = BTreeMap::from([(631, 2), (661, 3)]);
         let row = order_json(&front, List::Top, &st, &standing);
         assert_eq!(row["kind"], "front");
@@ -270,7 +299,12 @@ mod tests {
 
     #[test]
     fn area_defence_lists_states_and_a_defensive_line_is_a_fallback() {
-        let area = OrderNode { kind: 5, states: vec![55, 56], divisions: 10, ..Default::default() };
+        let area = OrderNode {
+            kind: 5,
+            states: vec![55, 56],
+            divisions: 10,
+            ..Default::default()
+        };
         let row = order_json(&area, List::Top, &st, &BTreeMap::new());
         assert_eq!(row["kind"], "area_defense");
         assert_eq!(row["states"], json!([55, 56]));
@@ -281,9 +315,19 @@ mod tests {
 
     #[test]
     fn the_summary_counts_fronts_and_their_offensives() {
-        let arrow = OrderNode { kind: 1, ..Default::default() };
-        let front = OrderNode { kind: 2, children: vec![arrow], ..Default::default() };
-        let fb = OrderNode { kind: 2, ..Default::default() };
+        let arrow = OrderNode {
+            kind: 1,
+            ..Default::default()
+        };
+        let front = OrderNode {
+            kind: 2,
+            children: vec![arrow],
+            ..Default::default()
+        };
+        let fb = OrderNode {
+            kind: 2,
+            ..Default::default()
+        };
         assert_eq!(
             summary(&[(List::Top, front), (List::Defensive, fb)]),
             "fallback x1, front x1, offensive x1"

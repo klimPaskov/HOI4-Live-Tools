@@ -300,7 +300,16 @@ fn drag_sequence(
     post: impl FnMut(u32, Point) -> Result<()>,
     pause: impl FnMut(std::time::Duration),
 ) -> Result<()> {
-    drag_path_sequence(&[a, b], kinds, steps, step_ms, check, before_down, post, pause)
+    drag_path_sequence(
+        &[a, b],
+        kinds,
+        steps,
+        step_ms,
+        check,
+        before_down,
+        post,
+        pause,
+    )
 }
 
 /// A drag through every point of `path` with the button held: down at the first point, `steps`
@@ -318,7 +327,10 @@ fn drag_path_sequence(
 ) -> Result<()> {
     let (down, dragged, up) = kinds;
     let Some(&a) = path.first() else {
-        return Err(Error::new("invalid_arguments", "A drag needs at least one point"));
+        return Err(Error::new(
+            "invalid_arguments",
+            "A drag needs at least one point",
+        ));
     };
     let settle = std::time::Duration::from_millis(64);
     check()?;

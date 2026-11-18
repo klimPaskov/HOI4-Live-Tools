@@ -7514,7 +7514,13 @@ fn switch_phase(
 /// Whether at least `n` members of an `any` list hold (a contingency's `min_true`: one lost
 /// border province is not a lost border). Any other predicate is judged as it is. Unknown when
 /// too few hold and enough are unknown to reach `n`.
-fn judge_at_least(state: &mut State, tools: &dyn Tools, when: &Value, n: usize, now: GameHour) -> Truth {
+fn judge_at_least(
+    state: &mut State,
+    tools: &dyn Tools,
+    when: &Value,
+    n: usize,
+    now: GameHour,
+) -> Truth {
     let Some(members) = when["any"].as_array() else {
         return judge(state, tools, when, now);
     };
@@ -16888,14 +16894,18 @@ mod tests {
 
     #[test]
     fn land_orders_off_leaves_the_land_war_to_the_drawn_plans() {
-        let plan = json!({"war": {"land_orders": false}, "army_layout": [{"name_hint": "A", "count": 6}]});
+        let plan =
+            json!({"war": {"land_orders": false}, "army_layout": [{"name_hint": "A", "count": 6}]});
         assert!(!land_orders(&plan));
         assert!(land_orders(&json!({"war": {}})));
         let tools = fake(vec![("hoi4_overview", json!({"player": "GER"}))]);
         let mut state = State::default();
         let now = hour("1939.09.02");
         assert_eq!(war_step(&mut state, &tools, &plan, "l", now).unwrap(), None);
-        assert_eq!(layout_step(&mut state, &tools, &plan, "l", now).unwrap(), None);
+        assert_eq!(
+            layout_step(&mut state, &tools, &plan, "l", now).unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -16919,7 +16929,14 @@ mod tests {
         tick(&mut state, &game(json!(["FRA"])), &plan, "l", t0).unwrap();
         assert_eq!(state.strategy.phase_id().as_deref(), Some("P2"));
         // two hold: the recovery phase, with P2's war orders still in force underneath
-        tick(&mut state, &game(json!(["FRA", "ENG"])), &plan, "l", t0 + DAY).unwrap();
+        tick(
+            &mut state,
+            &game(json!(["FRA", "ENG"])),
+            &plan,
+            "l",
+            t0 + DAY,
+        )
+        .unwrap();
         assert_eq!(state.strategy.phase_id().as_deref(), Some("PC"));
         let merged = strategy_overrides(&state, &plan).expect("P2's war block is kept");
         assert_eq!(merged["war"]["axes"], json!([[841], [842]]));

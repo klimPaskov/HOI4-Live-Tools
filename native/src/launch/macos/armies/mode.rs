@@ -157,7 +157,8 @@ pub(in super::super) fn clear_orders(
         let deadline = Instant::now() + Duration::from_millis(SLIDE_MS);
         loop {
             let shown = read(process, |r, i| {
-                Ok(kit::find_deep(r, i, bar, "btn_order_delete", 6)?.and_then(|w| shown_rect(r, i, w)))
+                Ok(kit::find_deep(r, i, bar, "btn_order_delete", 6)?
+                    .and_then(|w| shown_rect(r, i, w)))
             })?;
             if shown.is_some() {
                 break;
@@ -179,7 +180,9 @@ pub(in super::super) fn clear_orders(
         let at = button.center();
         keys.right_click(GAME, at.0, at.1)?;
         let _ = super::super::ui::accept_command(process, keys);
-        let gone = wait(process, "orders deleted", |r, i| Ok(super::plan_nodes(r, i, army)? == 0));
+        let gone = wait(process, "orders deleted", |r, i| {
+            Ok(super::plan_nodes(r, i, army)? == 0)
+        });
         if gone.is_ok() {
             break;
         }
