@@ -314,6 +314,7 @@ mod plan_encircle;
 // Operations: a large land war as drawn and executed battle plans (plan key `operations`).
 #[path = "plan_operation.rs"]
 mod plan_operation;
+pub(crate) use plan_operation::guard_outside as operation_guard_outside;
 // One spending order per experience pool (plan key `xp_budget`).
 #[path = "plan_xp.rs"]
 mod plan_xp;
@@ -472,6 +473,51 @@ impl Tools for Timed<'_> {
         e.0 += 1;
         e.1 += t.elapsed().as_millis();
         out
+    }
+}
+
+/// The reads one tick shares: the same read with the same arguments is answered from the first
+/// answer for up to `TICK_READ_FRESH`, and every action (a call with a request_id) forgets them
+/// all, so a read after an order is always fresh. g17i (18 Nov 2026): one tick read hoi4_states
+/// 8 times, hoi4_wars 5 and hoi4_armies 5.
+struct TickReads<'a> {
+    inner: &'a dyn Tools,
+    seen: std::cell::RefCell<HashMap<String, (std::time::Instant, Value)>>,
+}
+const TICK_READ_FRESH: Duration = Duration::from_secs(2);
+const TICK_SHARED_READS: [&str; 12] = [
+    "hoi4_economy",
+    "hoi4_production_lines",
+    "hoi4_stockpile",
+    "hoi4_armies",
+    "hoi4_research",
+    "hoi4_overview",
+    "hoi4_country_status",
+    "hoi4_states",
+    "hoi4_wars",
+    "hoi4_template_get",
+    "hoi4_division_templates",
+    "hoi4_doctrines",
+];
+impl Tools for TickReads<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        if args.get("request_id").is_some() || !TICK_SHARED_READS.contains(&name) {
+            if args.get("request_id").is_some() {
+                self.seen.borrow_mut().clear();
+            }
+            return self.inner.call(name, args);
+        }
+        let key = format!("{name} {args}");
+        if let Some((at, v)) = self.seen.borrow().get(&key) {
+            if at.elapsed() < TICK_READ_FRESH {
+                return Ok(v.clone());
+            }
+        }
+        let out = self.inner.call(name, args)?;
+        self.seen
+            .borrow_mut()
+            .insert(key, (std::time::Instant::now(), out.clone()));
+        Ok(out)
     }
 }
 
@@ -9124,7 +9170,11 @@ pub fn run(
         if !state.persist.restored && now > 0 {
             restore_memory(state, tools, &plan, plan_path, now);
         }
-        let step = tick(state, tools, &plan, lease, now);
+        let shared = TickReads {
+            inner: tools,
+            seen: Default::default(),
+        };
+        let step = tick(state, &shared, &plan, lease, now);
         if state.persist.restored {
             save_memory(state, plan_path, now);
         }
