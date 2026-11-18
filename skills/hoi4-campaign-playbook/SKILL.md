@@ -36,7 +36,7 @@ each situation to the right file. Core files, in reading order:
    [politics, diplomacy and espionage](references/politics-diplomacy-espionage.md).
 5. [Tactics index](references/tactics.md): every tactic in one line, with the section that explains it.
 6. [Nation openers](references/nation-openers.md) for the first years of any major or strong minor, and one
-   country card with a dated checkpoint table: [Germany FAIR](references/germany-fair.md),
+   country card with a dated checkpoint table: [Germany FAIR](references/germany-fair.md), [Japan FAIR](references/japan-fair.md),
    [Nationalist China FAIR](references/china-fair.md) or [Poland META](references/poland-meta.md).
 
 To write, review or revise a campaign plan (plan.json, plan.md, plan.brief.md) for any tag, date

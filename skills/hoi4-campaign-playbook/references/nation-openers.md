@@ -150,11 +150,14 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
 
 ## Japan (JAP)
 
+The dated FAIR plan with its checkpoints and arithmetic is [japan-fair](japan-fair.md); the bullets below are the opener.
+
 - **Start:** non-aligned; Limited Conscription, Limited Exports, Partial Mobilisation; -20% justify time; 3 slots;
   Army, Navy, Zaibatsu and Civic factions.
-- **Day 0:** train air and navy; promote generals to field marshals; Korea on Local Police Force; agency; cancel tank
-  lines; finish the start carriers and give new hulls the cheapest engine (PR26); 2 convoy lines, 2 fighter, 3 support,
-  the rest infantry equipment; steel from Manchukuo, rubber from Siam; cancel the USA oil import if fuel allows;
+- **Day 0:** train air and navy; promote generals to field marshals as command power accrues (it starts at 0); Korea
+  on Local Police Force; agency; close the tankette line; finish the start carriers and give new hulls the cheapest
+  engine (PR26); no plane line on day 0: rifles, artillery, support, trucks and the Type 89 medium line (japan-fair
+  JF07); steel from Manchukuo, rubber from Siam; cancel the USA oil import if fuel allows;
   research tools, computing, construction, heavy MG, concentrated industry and the improved small airframe (apply the
   fighter bonus).
 - **Focus and PP:** Imperial Defense Plan, Showa Aircraft Industries (Naval Reform), Purge the Kodoha Faction, the
@@ -183,16 +186,17 @@ War reference and scripts: [italo-ethiopian-war.md](italo-ethiopian-war.md) §12
   linking every hub and port, motorised hubs, max air bases in Indochina and Siam; spare IC to AA in Siam or coastal
   forts on Okinawa (EC25).
 - **1937 China war:** three collaboration governments on China (do not capitulate China before the third); push from
-  Beijing and invade at Shanghai with marines; escalate the war once or twice before the landing (each escalation
-  raises US war support); link both armies to pocket a large group; follow railways, cross rivers early; Harsh Quotas
-  in China until annexed, civilian oversight after; trade no civilian factories away until China is finished.
+  Beijing and invade at Shanghai with marines; do not escalate the war (each escalation raises US war support and the
+  later US surrender limit; japan-fair JF-06); link both armies to pocket a large group; follow railways, cross rivers
+  early; Harsh Quotas in China until annexed, civilian oversight after; trade no civilian factories away until China
+  is finished. The war day is the East Hebei focus timed to 1937-07-07 (japan-fair section 3).
 - **Production:** fighters from October 1937 (60-70 on the base design, then 90 while modules are added; convert
   every base to the final design), gun 2 at 30, CAS after the fighter; a licensed Axis infantry weapon is fine; keep
   the gun-2 line and open a new line for gun 3 (PR39); flame tanks 20 from 1942 (licensed from Germany); super-heavy
   howitzers 10 from 1939.
 - **Army:** about 140 divisions for 1941: 60 port garrisons, 30 north and 30 south against the Raj, 20 marines (T17-T20);
-  generals with Infantry Expert, breakthrough-type tactic for chief, generals and field marshal; doctrine Guerilla War
-  first, then Superior Firepower or Grand Battleplan with Grand Assault before the war.
+  generals with Infantry Expert, breakthrough-type tactic for chief, generals and field marshal; doctrine: keep the
+  start Grand Battleplan (no mastery restart before the 1937 war) with the Grand Assault subdoctrines.
 - **Navy and air:** carrier navy (better): carriers only, carrier focuses, improved carriers; Base Strike (Patrol
   Boats, Massed Carrier Fleet); air doctrine with Medium-Range Escort and Precision Naval Bombing, switched to escort
   before a fleet battle (NA40); carrier fighter: improved carrier airframe, three heavy MG, engine III, from Mitsubishi

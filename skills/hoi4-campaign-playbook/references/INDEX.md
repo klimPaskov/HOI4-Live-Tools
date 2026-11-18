@@ -16,7 +16,7 @@
 | Fighting a war tick by tick (fronts, encirclement, game alerts) | war-operating-loop.md |
 | Planning a war, encirclement, air/naval, invasion, peace conference | war-air-naval-peace.md |
 | Advisors, decisions, diplomacy, factions, espionage, formables | politics-diplomacy-espionage.md |
-| Germany / Nationalist China / Poland dated plan + checkpoints | germany-fair.md / china-fair.md / poland-meta.md |
+| Germany / Japan / Nationalist China / Poland dated plan + checkpoints | germany-fair.md / japan-fair.md / china-fair.md / poland-meta.md |
 | Italo-Ethiopian War 1936 (By Blood Alone): missions, deadlines, victory points, supply, the Christmas offensive | italo-ethiopian-war.md |
 | Italy conquers Ethiopia / Ethiopia pushes Italy out of Africa (1936): dated plans, VP order, construction triggers | ../plans/italy-ethiopia-1936.md / ../plans/ethiopia-italy-1936.md (+ .plan.json) |
 | Ready-made validated standing plan (Germany 1936-38) | ../plans/germany-fair-1936-1938.md (+ .plan.json; check with scripts/validate_plan.py) |
