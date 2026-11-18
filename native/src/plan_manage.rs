@@ -453,23 +453,44 @@ fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Valu
     Some(read).filter(|r| r["equipment"].is_array())
 }
 
-/// The force spends of this module (plan_run.rs `force_first`): template edits, then officer
-/// corps spirits, at most one action.
-pub(super) fn force_step(
-    state: &mut State,
-    tools: &dyn Tools,
-    plan: &Value,
-    lease: &str,
-    now: GameHour,
-) -> Result<Option<String>> {
-    if let Some(done) = templates_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    officer_corps_step(state, tools, plan, lease, now)
-}
+/// The manage rules as lanes of the pass (plan_run.rs `lanes`), in their old chain order. The
+/// first, `manage`, takes the reads every rule leans on (the failure ledger's wake, the game's
+/// alert row) and never acts.
+pub(super) const LANES: [super::Lane; 19] = [
+    ("manage", |state, tools, plan, _, now| {
+        // the tick only gets here when no conference is open
+        state.manage.peace = None;
+        ledger_wake(state, plan, now);
+        alerts(state, tools, plan, now);
+        Ok(None)
+    }),
+    ("templates", templates_step),
+    ("template_cleanup", template_cleanup_step),
+    ("occupation", occupation_step),
+    ("resources", resources_step),
+    ("import_budget", import_budget_rule),
+    ("fuel", fuel_rule),
+    ("convoys", convoy_rule),
+    ("air_plan", air_plan_step),
+    ("officer_corps", officer_corps_step),
+    ("air_reserve", air_reserve_step),
+    ("air_idle", air_idle_step),
+    ("country", country_rules),
+    // the stockpile rule first: a shortage the front feels (or a cover target) is the war's
+    ("stockpile", stockpile_rule),
+    ("balance", balance_rule),
+    ("naval_queue", naval_queue_rule),
+    ("dockyards", dockyard_rule),
+    ("overdrawn", overdrawn_rule),
+    ("equipment", |state, tools, plan, _, now| {
+        equipment_rule(state, tools, plan, now);
+        Ok(None)
+    }),
+];
 
-/// Everything after the extras step, at most one action: the alert row and the failure ledger
-/// (no input), templates, occupation, resources, the air plan and the `manage` rules.
+/// The manage rules in one chain (the first that acts ends it): the tests' view of the old
+/// domain; the executor offers each rule as its own lane.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn step(
     state: &mut State,
     tools: &dyn Tools,
@@ -477,63 +498,13 @@ pub fn step(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    // the tick only gets here when no conference is open
-    state.manage.peace = None;
-    ledger_wake(state, plan, now);
-    alerts(state, tools, plan, now);
-    if let Some(done) = templates_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
+    // a direct call stands for a tick at `now` (the ledger counts game hours)
+    state.clock = now;
+    for (_, rule) in LANES {
+        if let Some(done) = rule(state, tools, plan, lease, now)? {
+            return Ok(Some(done));
+        }
     }
-    if let Some(done) = template_cleanup_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = occupation_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = resources_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = import_budget_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = fuel_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = convoy_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = air_plan_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = officer_corps_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = air_reserve_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = air_idle_step(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = country_rules(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    // the stockpile rule first: a shortage the front feels (or a cover target) is the war's
-    if let Some(done) = stockpile_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = balance_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = naval_queue_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = dockyard_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    if let Some(done) = overdrawn_rule(state, tools, plan, lease, now)? {
-        return Ok(Some(done));
-    }
-    equipment_rule(state, tools, plan, now);
     Ok(None)
 }
 
@@ -692,6 +663,46 @@ fn step_reason(state: &State, alert: &str, step: &str) -> String {
                 .map(|n| format!("; {key}: {n}"))
         })
         .unwrap_or_default()
+}
+
+/// The game's open actionable alerts as omissions for the player's wake (`hoi4_wait_change`
+/// `now.omissions`): the item, how many game days it has been open, the game's own todo, the
+/// executor rule that owns it, that rule's dated note, and whether the note says there is
+/// nothing to do while the game says there is.
+fn omission_rows(state: &State, read: &Value, ignore: &[String], now: GameHour) -> Vec<Value> {
+    let mut rows: Vec<Value> = Vec::new();
+    for alert in list(read, "alerts") {
+        let frame = alert["frame"].as_i64().unwrap_or(-1);
+        let name = alert["alert"]
+            .as_str()
+            .map_or_else(|| format!("frame_{frame}"), String::from);
+        if rows.iter().any(|r| r["item"] == json!(name)) {
+            continue;
+        }
+        let owner = match route(&name) {
+            Route::Info => continue,
+            Route::Wake(_) => "player",
+            Route::Step(step, _, _) => step,
+        };
+        let owner = if ignore.contains(&name) {
+            "player (manage.alerts_ignore)"
+        } else {
+            owner
+        };
+        let since = state.manage.alert_since.get(&name).copied().unwrap_or(now);
+        let reason = step_reason(state, &name, owner);
+        let note = reason.trim_start_matches("; ").to_string();
+        let lower = note.to_lowercase();
+        let contradicts = ["no free", "none ", "nothing", "no idle", "no factory"]
+            .iter()
+            .any(|w| lower.contains(w));
+        rows.push(json!({"item": name, "days_open": (now - since) / DAY,
+            "todo": alert["todo"], "owner": owner,
+            "owner_note": if note.is_empty() { Value::Null } else { json!(note) },
+            "note_contradicts_read": contradicts}));
+    }
+    rows.sort_by_key(|r| -r["days_open"].as_i64().unwrap_or(0));
+    rows
 }
 
 fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
@@ -866,6 +877,8 @@ fn alerts(state: &mut State, tools: &dyn Tools, plan: &Value, now: GameHour) {
         .manage
         .alert_since
         .retain(|name, _| seen.contains(name));
+    let omissions = omission_rows(state, &read, &ignore, now);
+    crate::watch::feed().set_omissions(Value::Array(omissions));
     let line = if lines.is_empty() {
         "no alerts".to_string()
     } else {
@@ -2032,6 +2045,19 @@ pub(super) fn peace(
         "hoi4_peace_submit" if ok => {
             conf.rounds += 1;
             conf.spent = false;
+            // a new round: the points changed, so a take refused for its price is a new order
+            let stale: Vec<String> = state
+                .failures
+                .keys()
+                .filter(|k| k.starts_with("hoi4_peace_take "))
+                .cloned()
+                .collect();
+            for signature in stale {
+                state.failures.remove(&signature);
+                state.failed_run.remove(&signature);
+                state.failed_wall.remove(&signature);
+                state.failed_cost.remove(&signature);
+            }
         }
         "hoi4_peace_exit" if ok => conf.exited = true,
         _ => {}
@@ -5035,7 +5061,8 @@ fn feed(
         .as_i64()
         .filter(|n| *n > 0)
         .unwrap_or(3);
-    let give = idle.min(step);
+    // half the free factories at least (the rest go to the line chosen next, in the same turn)
+    let give = idle.min(step.max((idle + 1) / 2));
     let (ok, result) = state.act(
         tools,
         lease,
@@ -5052,7 +5079,7 @@ fn feed(
         format!("{idle} idle military factories: +{give} to {equipment} ({why})"),
     );
     Ok(Some(format!(
-        "production_set {equipment} {factories}+{give}: {ok} {result}"
+        "production_set {equipment} {factories}+{give} of {idle} idle: {ok} {result}"
     )))
 }
 
@@ -5074,13 +5101,34 @@ pub(super) fn rebalance_step(
     // the balance rule owns idle factories while it is on: two owners fought over the same
     // factories (pr1: +2 by the feed, -1 by the balance, again and again)
     let balance_on = !off(plan, "balance") && !off(plan, "stockpile");
+    // one free factory is enough by default: it loses its output the day it is free
     if balance_on
-        || idle < plan["production_min_idle"].as_i64().unwrap_or(2).max(1)
+        || idle < plan["production_min_idle"].as_i64().unwrap_or(1).max(1)
         || state.skipped(now, "prodset", "x")
     {
         return Ok(None);
     }
-    feed(state, tools, plan, lease, now, &military, idle)
+    // every free factory in this turn: fed by cover, re-chosen after each line from fresh reads
+    let mut lines: Vec<String> = Vec::new();
+    let (mut military, mut idle) = (military, idle);
+    while idle > 0 && lines.len() < BALANCE_TURN_SETS {
+        let Some(line) = feed(state, tools, plan, lease, now, &military, idle)? else {
+            break;
+        };
+        let failed = line.contains(": false");
+        lines.push(line);
+        if failed {
+            break;
+        }
+        let economy = tools.call("hoi4_economy", &json!({}))?;
+        let before = idle;
+        (military, idle) = military_lines(tools, &economy)?;
+        if idle >= before {
+            // the read does not show the factories given: no second order on a stale read
+            break;
+        }
+    }
+    Ok((!lines.is_empty()).then(|| lines.join("; ")))
 }
 
 /// Before the first unpause (the game paused at the hour this server first saw, no work done
@@ -6064,9 +6112,11 @@ fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
             } else {
                 "nothing makes it".into()
             };
+            // the free factories shared out over the short equipment in one turn, by need
+            let share = (idle + short.len() as i64 - 1) / short.len().max(1) as i64;
             match line_of(arche) {
                 Some(line) => {
-                    let give = idle.min((line.requested / 5).max(2));
+                    let give = idle.min((line.requested / 5).max(2).max(share));
                     return Some(BalanceAct::Set {
                         index: line.index,
                         equipment: line.equipment.clone(),
@@ -6106,7 +6156,7 @@ fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
             .collect();
         planned.sort_by_key(|(l, gap)| (priority_rank(b, &l.archetype), -gap, l.index));
         if let Some((line, gap)) = planned.first() {
-            let give = idle.min(*gap).min((line.requested / 5).max(2));
+            let give = idle.min(*gap);
             return Some(BalanceAct::Set {
                 index: line.index,
                 equipment: line.equipment.clone(),
@@ -6185,9 +6235,41 @@ fn active_training(
     out
 }
 
-/// Rule: production balance (manage.off "balance" or "stockpile" turns it off). Once a game day, or every
-/// tick while it acts.
+/// Rule: production balance (manage.off "balance" or "stockpile" turns it off). Free military
+/// factories are all given in one turn: the balance decides again after each line it feeds (by
+/// need, from fresh reads) until none is free, at most BALANCE_TURN_SETS lines (a free factory
+/// loses its output the day it is free: it27c had 10 free on day 1, fed two a turn, for 50 days).
 fn balance_rule(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let mut lines: Vec<String> = Vec::new();
+    while lines.len() < BALANCE_TURN_SETS {
+        let Some(line) = balance_once(state, tools, plan, lease, now)? else {
+            break;
+        };
+        if lines.last() == Some(&line) {
+            // the read did not show the last order: no second order on a stale read
+            break;
+        }
+        // only the free factories are given on: a pull or a closed duplicate ends the turn
+        let more = !line.contains(": false") && line.contains(" idle");
+        lines.push(line);
+        if !more {
+            break;
+        }
+    }
+    Ok((!lines.is_empty()).then(|| lines.join("; ")))
+}
+
+/// Most production lines the balance feeds in one turn.
+const BALANCE_TURN_SETS: usize = 8;
+
+/// One balance decision and its action (see `balance_rule`).
+fn balance_once(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,
@@ -6747,7 +6829,9 @@ mod tests {
             clock: START,
             ..Default::default()
         };
-        for _ in 0..4 {
+        // each refusal rests the identical order (1, then 3, then 9 game hours)
+        for hour in [START, START + 1, START + 4, START + 5] {
+            state.clock = hour;
             state
                 .act(
                     &tools,
@@ -6763,7 +6847,7 @@ mod tests {
             3,
             "the fourth is refused by the ledger"
         );
-        step(&mut state, &tools, &json!({}), "l", START).unwrap();
+        step(&mut state, &tools, &json!({}), "l", START + 5).unwrap();
         let alarms = wakes(&mut state);
         assert_eq!(alarms.len(), 1);
         assert_eq!(alarms[0]["rule"], 35);
@@ -7570,13 +7654,12 @@ mod tests {
             clock: START,
             ..Default::default()
         };
-        for _ in 0..3 {
-            let out = peace(&mut state, &tools, &plan, "l", START).unwrap();
-            assert!(matches!(out, Tick::Acted(s) if s.contains(": false")));
-        }
+        // refused once: the identical exit is not sent again unchanged in the same moment
+        let out = peace(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(matches!(out, Tick::Acted(s) if s.contains(": false")));
         let out = peace(&mut state, &tools, &plan, "l", START).unwrap();
         assert!(matches!(out, Tick::Stop(_)), "{out:?}");
-        assert_eq!(actions(&tools).len(), 3);
+        assert_eq!(actions(&tools).len(), 1);
         assert_eq!(wakes(&mut state)[0]["reason"], "peace_refused");
     }
 
@@ -9812,7 +9895,7 @@ mod tests {
     }
 
     #[test]
-    fn idle_factories_go_to_the_longest_shortfall_in_chunks() {
+    fn idle_factories_go_to_the_longest_shortfall_all_in_one_turn() {
         let mut b = BalanceIn {
             total: 30,
             ..Default::default()
@@ -9838,7 +9921,10 @@ mod tests {
                 index, factories, ..
             }) => {
                 assert_eq!(index, 1);
-                assert_eq!(factories, 4, "a chunk of max(2, a fifth), not all 8 idle");
+                assert_eq!(
+                    factories, 10,
+                    "the only short equipment takes all 8 free factories in one turn"
+                );
             }
             other => panic!("{other:?}"),
         }

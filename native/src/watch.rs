@@ -472,6 +472,9 @@ struct FeedState {
     entries: VecDeque<Entry>,
     next: u64,
     last: Option<Compact>,
+    /// What the game lists as actionable and is still open, with the executor rule that owns
+    /// each item (written by the executor's alert rule, plan_manage.rs).
+    omissions: Option<Value>,
     samples: u64,
     sampled_at: Option<Instant>,
 }
@@ -482,6 +485,7 @@ impl Default for Feed {
                 entries: VecDeque::new(),
                 next: 1,
                 last: None,
+                omissions: None,
                 samples: 0,
                 sampled_at: None,
             }),
@@ -569,7 +573,11 @@ impl Feed {
             "changes": rows,
             "more": more,
             "missed": since + 1 < oldest && since > 0,
-            "now": s.last.as_ref().map(Compact::brief),
+            "now": s.last.as_ref().map(|c| {
+                let mut brief = c.brief();
+                brief["omissions"] = s.omissions.clone().unwrap_or(json!([]));
+                brief
+            }),
             "watcher": {"samples": s.samples,
                 "last_sample_ms_ago": s.sampled_at.map(|t| t.elapsed().as_millis() as u64)},
         })
@@ -612,6 +620,13 @@ impl Feed {
                 Ok((guard, _)) => s = guard,
                 Err(_) => return json!({"error": "feed unavailable"}),
             }
+        }
+    }
+
+    /// The open omissions (see `FeedState::omissions`); they ride in every reply's `now`.
+    pub fn set_omissions(&self, omissions: Value) {
+        if let Ok(mut s) = self.inner.lock() {
+            s.omissions = Some(omissions);
         }
     }
 

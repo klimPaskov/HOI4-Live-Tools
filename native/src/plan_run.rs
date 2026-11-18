@@ -58,11 +58,10 @@
 //!                          (stable across a reorder or a revision), else by list position and idea
 //!   politics_auto          the standing political-power policy for what the picks leave unspent
 //!                          (plan_manage.rs rule 4; default on, false switches it off)
-//!   scheduler              {"max_wait_days":1}: every domain of `DOMAINS` (politics, decisions,
-//!                          training, production, construction, extras, manage, military, affairs)
-//!                          gets a turn at least this often ("war_max_wait_days":3 at war); one kept
-//!                          waiting longer goes ahead of the war-first block for one tick, and the
-//!                          war takes the tick after
+//!   scheduler              the pass scheduler (`lanes_tick`): every lane (`lanes`) is offered once a
+//!                          pass in value order, the war-first block every other tick while a war or
+//!                          an operation runs; {"war_every_tick": true} gives the war every tick it has
+//!                          an order for (the old max_wait_days/force_first keys are read by nothing)
 //!   decisions              decision keys taken whenever enabled
 //!   training               {"template","queue","batch","deploy_state","when"?} keep a training queue, or a
 //!                          list of them (plan_manage.rs, with `training_rules`)
@@ -590,15 +589,10 @@ pub struct State {
     war_cool: HashMap<String, GameHour>,
     /// per army: (target, main state, game hour) of the last progress seen
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
-    /// The game day on which an idle research slot or focus was offered the tick ahead of the
-    /// war-first block and started nothing (that day the war runs first again).
-    cheap_first_spent: Option<GameHour>,
-    /// The game day on which the force spends (plan_run.rs `force_first`) found nothing to buy,
-    /// and whether the last tick was theirs (the next one belongs to the war-first block).
-    force_first_spent: Option<GameHour>,
-    force_first_yield: bool,
-    /// The domain scheduler's turns (no domain starves behind the war-first block).
+    /// The lanes' last turns (the digest's `scheduler`).
     sched: Sched,
+    /// The pass scheduler (`lanes_tick`).
+    round: Round,
     /// armies on direct move orders (their battle plan did not advance)
     war_move: HashSet<String>,
     /// armies resting (plan stopped for organisation or supply) since a game hour
@@ -700,13 +694,11 @@ struct Persist {
     note: Option<String>,
 }
 
-/// The domain scheduler (see [`DOMAINS`]).
+/// The lanes' last turns (see [`lanes`]).
 #[derive(Default)]
 struct Sched {
     /// Domain -> the game hour it was last offered a turn (acted or found nothing to do).
     turns: HashMap<&'static str, GameHour>,
-    /// An overdue domain acted in the last tick: this tick belongs to the war-first block.
-    yielded: bool,
     /// The war-first block (or the idle research/focus pass) already ran in this tick, so the
     /// construction domain leaves the triggered build order to it.
     war_ran: bool,
@@ -813,10 +805,8 @@ impl Default for State {
             setup_failed_runs: 0,
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
-            cheap_first_spent: None,
-            force_first_spent: None,
-            force_first_yield: false,
             sched: Sched::default(),
+            round: Round::default(),
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
             war_guard: HashMap::new(),
@@ -1041,21 +1031,38 @@ enum Rest {
 }
 
 /// Game hours a failed order rests after `in_row` failures in a row, the last of which held the
-/// input `cost` seconds (see `State::backing_off`).
-fn ledger_rest(war: bool, in_row: u32, cost: u64) -> (GameHour, Rest) {
-    let (first, base, cap, per_second, cost_cap, given_up) = if war {
-        (2, 12, 4 * DAY, 16, 20 * DAY, 6 * DAY)
+/// input `cost` seconds (see `State::backing_off`). An identical order is never re-sent unchanged
+/// at once: it rests from its first refusal, three times longer with each refusal in a row, so a
+/// step that wants it sooner must change it; after GIVE_UP_AFTER refusals it is given up for long
+/// (60 game days in peace, 6 at war, doubling) and the player is told.
+fn ledger_rest(war: bool, in_row: u32, cost: u64, passing: bool) -> (GameHour, Rest) {
+    let (cap, per_second, cost_cap, given_up) = if war {
+        (4 * DAY, 16, 20 * DAY, 6 * DAY)
     } else {
-        (3, 10 * DAY, 80 * DAY, 32, 60 * DAY, 60 * DAY)
+        (80 * DAY, 32, 60 * DAY, 60 * DAY)
     };
+    // one game hour: a pass offers every lane within seconds, so the same order cannot go out
+    // again in the same pass or the next, and five refusals in a row (about a day and a half of
+    // game time) give it up with the player told
+    let base: GameHour = 1;
     if in_row >= GIVE_UP_AFTER {
         // each further failure of a given-up order doubles its rest (g17i, 18 Nov 2026: one
         // layout march the game refused was sent 69 times in 20 months, every 6 game days)
         let more = (in_row - GIVE_UP_AFTER).min(4);
         return ((given_up << more).min(given_up * 8), Rest::GivenUp);
     }
-    let repeated = if in_row >= first {
-        (base << (in_row - first).min(4)).min(cap)
+    // 1, 3, 9, 27 game hours at least; from the second refusal at war (the third in peace) the
+    // longer rests: 12 game hours at war, 10 game days in peace, doubling. A first failure the
+    // tool could not tell apart from success (unconfirmed, a torn read) may go again at once.
+    let (first, long) = if war { (2, 12) } else { (3, 10 * DAY) };
+    let repeated = if in_row >= 2 || (in_row == 1 && !passing) {
+        let short = base * 3_i64.pow((in_row - 1).min(4));
+        let long = if in_row >= first {
+            long << (in_row - first).min(4)
+        } else {
+            0
+        };
+        short.max(long).min(cap)
     } else {
         0
     };
@@ -1070,6 +1077,22 @@ fn ledger_rest(war: bool, in_row: u32, cost: u64) -> (GameHour, Rest) {
         (repeated, Rest::Repeated)
     }
 }
+/// A failure that says nothing about the order itself: the effect was not observed, a read tore
+/// or timed out, the input was held back. The game's own refusal (a typed reason) is not passing.
+fn passing_failure(cause: &str) -> bool {
+    [
+        "action_unconfirmed",
+        "gui_",
+        "readback",
+        "timeout",
+        "input_",
+        "torn",
+        "unreadable",
+    ]
+    .iter()
+    .any(|c| cause.starts_with(c))
+}
+
 /// A focus start that failed for a passing reason (a GUI read or a readback), not because the
 /// game refuses the focus (requirements, an exclusive branch, a known unavailability).
 fn focus_failure_passing(code: &str) -> bool {
@@ -1280,6 +1303,15 @@ impl State {
         }
         result
     }
+    /// The ledger forgets an order whose circumstances changed (a step that knows the game
+    /// moved under it: a focus completed, a war began), so it counts as a new order.
+    fn ledger_forget(&mut self, name: &str, args: &Value) {
+        let signature = format!("{name} {args}");
+        self.failures.remove(&signature);
+        self.failed_wall.remove(&signature);
+        self.failed_cost.remove(&signature);
+        self.failed_run.remove(&signature);
+    }
     /// An order the game refused for command power is not sent again while the command power
     /// held (hoi4_country_status, read without input) is still below the cost that refusal
     /// named; Some(refusal in the tool's words) while it is short. A wait estimated from the base
@@ -1331,7 +1363,9 @@ impl State {
     /// Some(reason) while the order waits.
     fn backing_off(&mut self, signature: &str) -> Option<String> {
         let clock = self.clock;
-        let war = war_order(signature.split(' ').next().unwrap_or(""));
+        // a land or air order rests on the war's scale only while a war runs: a peacetime march
+        // the game refuses is not offered again every few game hours (g17i: 84 refusals)
+        let war = war_order(signature.split(' ').next().unwrap_or("")) && self.war_active;
         let times = self.failures.get_mut(signature)?;
         times.retain(|t| clock - *t < LEDGER_KEEP);
         let last = times.iter().copied().max();
@@ -1344,7 +1378,7 @@ impl State {
             });
         let last = last?;
         let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
-        let (rest, why) = ledger_rest(war, in_row, cost);
+        let (rest, why) = ledger_rest(war, in_row, cost, passing_failure(&cause));
         if rest <= 0 {
             return None;
         }
@@ -1375,7 +1409,8 @@ impl State {
                 "skipped: the last try of this order failed after {cost} s on the input; it waits {span}"
             ),
             Rest::Repeated => format!(
-                "skipped: the same order failed {in_row} times in a row; it waits {span}"
+                "skipped: the same order failed {in_row} time(s) in a row ({cause}); it is not \
+                 sent unchanged for {span}"
             ),
         })
     }
@@ -1654,53 +1689,180 @@ pub fn tick(
     if let Some(step) = plan_manage::day0_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
-    // 1a'. hold_targets (plan_military.rs): corridor posts are bound before the war step runs,
-    // so it never sends a holding army elsewhere
-    // A failed hold order does not end the tick (the war step behind it still acts).
+    lanes_tick(state, tools, plan, lease, now)
+}
+
+/// The pass scheduler (EVERY-TICK DESIGN). A pass offers every lane once, in value order; a lane
+/// that acts gives this tick its action and the next tick goes on from the lane after it, so no
+/// lane waits behind another's endless work (the old tick returned at the first domain that
+/// acted and began again from the top: ten free factories on day 1 waited weeks behind earlier
+/// domains, it27a). While a war or an operation runs the war-first block takes every other tick
+/// (war, lane, war, lane ...) and every tick once all lanes are quiet. A pass in which no lane
+/// acts ends the tick with Nothing.
+fn lanes_tick(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Tick> {
+    let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
+    let war_first = war_on && plan["war"]["first"] != json!(false);
+    state.sched.war_ran = war_first;
+    let lanes = lanes(plan, war_first);
+    // `scheduler.war_every_tick`: the war-first block takes every tick it has an order for
+    let war_turn =
+        war_first && (!state.round.war_last || plan["scheduler"]["war_every_tick"] == json!(true));
+    if war_turn {
+        if let Some(line) = war_lane(state, tools, plan, lease, now)? {
+            state.round.war_last = true;
+            return Ok(Tick::Acted(line));
+        }
+    }
+    state.round.war_last = false;
+    let mut restarted = false;
+    loop {
+        if state.round.cursor >= lanes.len() {
+            let acted = state.round.end_pass(now);
+            if !acted || restarted {
+                break;
+            }
+            restarted = true;
+        }
+        if state.round.cursor == 0 {
+            state.round.began = now;
+        }
+        let (name, step) = lanes[state.round.cursor];
+        state.round.cursor += 1;
+        state.sched.turns.insert(name, now);
+        state.last_ok = None;
+        if let Some(line) = step(state, tools, plan, lease, now)? {
+            state.round.acted.push(name);
+            return Ok(Tick::Acted(line));
+        }
+    }
+    // every lane is quiet: the war takes the turn it left to them
+    if war_first && !war_turn {
+        if let Some(line) = war_lane(state, tools, plan, lease, now)? {
+            state.round.war_last = true;
+            return Ok(Tick::Acted(line));
+        }
+    }
+    Ok(Tick::Nothing)
+}
+
+/// The war-first block's turn: hold posts bound first (a holding army is never sent elsewhere by
+/// the war step), then the war, operations and their air; a failed hold order does not end the
+/// turn (the war step behind it still acts).
+fn war_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     state.last_ok = None;
     let hold_failed = match plan_military::hold_step(state, tools, plan, lease, now)? {
-        Some(step) if state.last_ok != Some(false) => return Ok(Tick::Acted(step)),
+        Some(step) if state.last_ok != Some(false) => return Ok(Some(step)),
         failed => failed,
     };
-    // 1a. war first: at war a game day passes in about 2.5 s at speed 3, and one construction
-    // step can take 100 s (w15, 6 Nov 2026: 111-day stalls while the tick built factories), so
-    // the war executive acts before everything else unless the plan says "war": {"first": false}.
-    let war_on = plan["war"].is_object() && plan["war"]["enabled"] != json!(false);
-    // Research and the focus are one click each, but war preparation can queue dozens of army
-    // moves, and the war-first block acts once per tick: a slot or focus left idle starves
-    // (shakedown 10 Nov 2026: four slots and the focus still idle on 10 January). So while a
-    // slot is idle or no focus runs, the tick offers them first; when they start nothing, the war
-    // runs first again for the rest of that game day.
-    let day = now / DAY;
-    let cheap_first = war_on
-        && plan["war"]["first"] != json!(false)
-        && state.cheap_first_spent != Some(day)
-        && cheap_work_idle(tools);
-    let war_first = war_on && plan["war"]["first"] != json!(false) && !cheap_first;
-    state.sched.war_ran = war_first || cheap_first;
-    if war_first {
-        // the force spends at peace before the war-first block (force_first)
-        if let Some(step) = force_first(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        // a domain the war-first block kept waiting a whole day gets this tick (DOMAINS)
-        if let Some(step) = overdue_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        if let Some(step) = war_first_steps(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
+    if let Some(step) = war_first_steps(state, tools, plan, lease, now)? {
+        return Ok(Some(step));
     }
-    if let Some(step) = hold_failed {
-        return Ok(Tick::Acted(step));
+    Ok(hold_failed)
+}
+
+/// A research slot `research_waits` holds now (see `held_research_slots`).
+struct HeldSlot {
+    index: usize,
+    slot: usize,
+    tech: Option<String>,
+    target: String,
+    why: String,
+    days_held: i64,
+    days_max: i64,
+}
+
+/// The idle slots the plan's `research_waits` hold now. A wait is over (for good) when its
+/// technology is researched or running, its date has come, or it held its slot `days` (default
+/// the 30 days the game banks for an empty slot).
+fn held_research_slots(
+    state: &mut State,
+    plan: &Value,
+    now: GameHour,
+    slots: &[Option<String>],
+    done: &HashSet<String>,
+    busy: &HashSet<String>,
+) -> Vec<HeldSlot> {
+    let mut out: Vec<HeldSlot> = Vec::new();
+    for (index, w) in list(plan, "research_waits").iter().enumerate() {
+        let over = format!("rwait:{index}:over");
+        if state.done.contains_key(&over) {
+            continue;
+        }
+        let tech = w["tech"]
+            .as_str()
+            .filter(|t| !t.is_empty())
+            .map(String::from);
+        let date = w["date"].as_str().and_then(date_hour);
+        if tech.is_none() && date.is_none() {
+            continue;
+        }
+        if tech
+            .as_ref()
+            .is_some_and(|t| done.contains(t) || busy.contains(t))
+            || date.is_some_and(|d| now >= d)
+        {
+            state.done.insert(over, now);
+            continue;
+        }
+        let slot = match w["slot"].as_u64() {
+            Some(s) => s as usize,
+            None => match slots.iter().rposition(Option::is_none) {
+                Some(s) => s,
+                None => continue,
+            },
+        };
+        if slots.get(slot).is_none_or(Option::is_some) || out.iter().any(|h| h.slot == slot) {
+            continue;
+        }
+        let since = *state.done.entry(format!("rwait:{index}")).or_insert(now);
+        let days_max = w["days"].as_f64().map_or(30, |d| d.ceil() as i64);
+        if now - since > days_max * DAY {
+            state.done.insert(over, now);
+            continue;
+        }
+        out.push(HeldSlot {
+            index,
+            slot,
+            target: tech
+                .clone()
+                .or_else(|| w["date"].as_str().map(String::from))
+                .unwrap_or_default(),
+            tech,
+            why: text(&w["why"]).to_string(),
+            days_held: (now - since) / DAY,
+            days_max,
+        });
     }
-    // 2. research
+    out
+}
+
+/// Research (a lane): an idle slot gets the plan's next startable technology, else the in-time
+/// fallback; a slot `research_waits` names is held for its technology.
+fn research_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     let research = tools.call("hoi4_research", &json!({"limit": 1}))?;
     let slots: Vec<Option<String>> = list(&research, "slots")
         .iter()
         .map(|s| s["researching"].as_str().map(String::from))
         .collect();
-    if let Some(empty) = slots.iter().position(Option::is_none) {
+    if slots.iter().any(Option::is_none) {
         let idle_slots = slots.iter().filter(|s| s.is_none()).count();
         let mut done: HashSet<String> = HashSet::new();
         let mut offset = 0;
@@ -1731,6 +1893,52 @@ pub fn tick(
             available
                 .as_ref()
                 .and_then(|v| v["start_years"][t].as_i64())
+        };
+        // `research_waits`: an idle slot the plan holds for a named technology (a bonus about to
+        // land, a tech that opens on a date) stays empty for it, at most its `days` (else the
+        // banked days); the technology starts there the moment it can
+        let held = held_research_slots(state, plan, now, &slots, &done, &busy);
+        let Some(empty) = slots
+            .iter()
+            .enumerate()
+            .position(|(i, s)| s.is_none() && !held.iter().any(|h| h.slot == i))
+        else {
+            let h = &held[0];
+            if let Some(tech) = h
+                .tech
+                .as_ref()
+                .filter(|t| startable.as_ref().is_some_and(|s| s.contains(*t)))
+            {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_research_start",
+                    json!({"technology": tech, "slot": h.slot}),
+                    "rw",
+                )?;
+                if ok {
+                    state.done.insert(format!("rwait:{}:over", h.index), now);
+                }
+                state.stages.research = Some((
+                    format!(
+                        "research: started {tech} in slot {} held for it: {ok}",
+                        h.slot
+                    ),
+                    false,
+                ));
+                return Ok(Some(format!(
+                    "research {tech} slot {} (the slot research_waits held for it): {ok} {why}",
+                    h.slot
+                )));
+            }
+            state.stages.research = Some((
+                format!(
+                    "research: slot {} held for {} ({}), {} of {} days",
+                    h.slot, h.target, h.why, h.days_held, h.days_max
+                ),
+                false,
+            ));
+            return Ok(None);
         };
         // `research_path`: [{"year":1936,"techs":[...]}, ...] in order; an entry counts from its
         // year on (the plan's forward view: industry first, nothing ahead of its time).
@@ -1780,7 +1988,7 @@ pub fn tick(
                     ),
                     false,
                 ));
-                return Ok(Tick::Acted(format!("research {tech} slot {empty}")));
+                return Ok(Some(format!("research {tech} slot {empty}")));
             }
             state.skip(
                 now,
@@ -1891,9 +2099,7 @@ pub fn tick(
                         ),
                         false,
                     ));
-                    return Ok(Tick::Acted(format!(
-                        "research {tech} slot {empty} (fallback)"
-                    )));
+                    return Ok(Some(format!("research {tech} slot {empty} (fallback)")));
                 }
                 state.skip(
                     now,
@@ -1934,9 +2140,7 @@ pub fn tick(
                             format!("research: started {tech} slot {empty} from the catalogue fallback (priority list had nothing startable)"),
                             false,
                         ));
-                        return Ok(Tick::Acted(format!(
-                            "research {tech} slot {empty} (fallback)"
-                        )));
+                        return Ok(Some(format!("research {tech} slot {empty} (fallback)")));
                     }
                     state.skip(
                         now,
@@ -1975,7 +2179,17 @@ pub fn tick(
         state.stages.research =
             Some((format!("research: all {} slot(s) busy", slots.len()), false));
     }
-    // 3. focus
+    Ok(None)
+}
+
+/// The national focus (a lane): the next focus of the path, else the fallback.
+fn focus_lane(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     let focus = tools.call("hoi4_focus_completed", &json!({"limit": 100}))?;
     if let Some(active) = focus["active_key"].as_str() {
         state.stages.focus = Some((format!("focus: active {active}"), false));
@@ -2019,6 +2233,8 @@ pub fn tick(
             let refused: Vec<String> = state.stages.focus_refused.drain().map(|(k, _)| k).collect();
             for key in refused {
                 state.bad.remove(&skip_key("focus", &key));
+                // the game changed under the order: it is no longer the same order
+                state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
             }
         }
         let mut candidates: Vec<String> = startable(state, &path).into_iter().take(8).collect();
@@ -2054,6 +2270,7 @@ pub fn tick(
                     state.stages.focus_refused.drain().map(|(k, _)| k).collect();
                 for key in refused {
                     state.bad.remove(&skip_key("focus", &key));
+                    state.ledger_forget("hoi4_focus_start", &json!({"focus": key}));
                 }
                 candidates = startable(state, &path).into_iter().take(8).collect();
                 candidates.extend(startable(state, &fallback).into_iter().take(4));
@@ -2090,7 +2307,7 @@ pub fn tick(
             if ok {
                 state.stages.focus_why.remove(&key);
                 state.stages.focus = Some((format!("focus: started {key}"), false));
-                return Ok(Tick::Acted(format!("focus {key}")));
+                return Ok(Some(format!("focus {key}")));
             }
             // A focus the game disables (requirements, exclusive branch) waits 10 game days
             // (6 game hours was under a second at speed 3) and does not hold up the next key.
@@ -2148,195 +2365,165 @@ pub fn tick(
             ));
         }
     }
-    if cheap_first {
-        // neither research nor the focus acted: the war-first block gets the rest of the day
-        state.cheap_first_spent = Some(day);
-        if let Some(step) = war_first_steps(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    // 4.-8a'''. the domains, in the scheduler's order (each one offered a turn, see DOMAINS)
-    for (name, step) in DOMAINS {
-        state.sched.turns.insert(name, now);
-        if let Some(line) = step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(line));
-        }
-    }
-    // 9. armies (here unless the war runs first, which runs them right after itself)
-    if !war_first && !cheap_first {
-        if let Some(step) = plan_formations::command_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-        if let Some(step) = armies_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    // 8b. war executive (when it does not run first)
-    if war_on && plan["war"]["first"] == json!(false) {
-        if let Some(step) = war_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    if !war_first && !cheap_first {
-        if let Some(step) = plan_ship::step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    if plan["disband"].is_object() && !war_first && !cheap_first {
-        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
-            return Ok(Tick::Acted(step));
-        }
-    }
-    Ok(Tick::Nothing)
+    Ok(None)
 }
 
-/// One domain's turn: at most one action (the line for the digest), None when it has nothing
-/// to do.
+/// One lane's turn: at most one action (the line for the digest), None when it has nothing to
+/// do.
 type Step = fn(&mut State, &dyn Tools, &Value, &str, GameHour) -> Result<Option<String>>;
 
-/// The domains below the war-first block, in tick order. Each owns a spendable resource and has
-/// a default use for it, and none may starve another: the war-first block acts once per tick
-/// and returns, so without a turn guarantee everything behind it (political power, decisions,
-/// production, construction, management) waits as long as the war finds an order to give.
-/// [`overdue_step`] offers a domain not reached for `scheduler.max_wait_days` game days a turn
-/// ahead of the war-first block.
-const DOMAINS: [(&str, Step); 10] = [
-    ("politics", politics_step),
-    // `decision_rules` (guarded, targeted, counted, never-take) before the plain `decisions` list
-    ("decisions", decisions_step),
-    ("training", |state, tools, plan, lease, now| {
-        // one template or a list, with training_rules (plan_manage.rs)
-        if plan["training"].is_null() {
-            return Ok(None);
-        }
-        plan_manage::training_step(state, tools, plan, lease, now)
-    }),
-    ("production", |state, tools, plan, lease, now| {
-        // military factories on no line go to the priority line the divisions lack most, a few
-        // at a time (plan_manage.rs), then the plan's lines
+/// A lane of the pass: its name (the digest's and the scheduler's) and its step.
+type Lane = (&'static str, Step);
+
+/// The step of lane `name` in a module's lane list (a missing name is a programming error).
+fn lane_of(list: &[Lane], name: &str) -> Lane {
+    *list
+        .iter()
+        .find(|(n, _)| *n == name)
+        .unwrap_or_else(|| panic!("no lane {name}"))
+}
+
+/// The lanes of one pass, in value order: free factories first (a free factory loses its output
+/// the day it is free), then the construction queue, research slots and the focus, the one-shot
+/// spends (political power, officer corps, design companies, doctrines, decisions), training,
+/// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
+/// so a rule with work every pass never holds back the rules behind it.
+fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
+    let manage = &plan_manage::LANES;
+    let affairs = &plan_affairs::LANES;
+    let military = &plan_military::LANES;
+    let mut out: Vec<Lane> = Vec::new();
+    if !war_first {
+        // hold posts bound before any other army order (plan_military.rs)
+        out.push(("hold", plan_military::hold_step));
+    }
+    // the manage reads (ledger wake, the game's alert row) open the pass
+    out.push(lane_of(manage, "manage"));
+    for name in ["stockpile", "balance"] {
+        out.push(lane_of(manage, name));
+    }
+    out.push(("production", |state, tools, plan, lease, now| {
+        // idle military factories to the priority lines when the balance rule is off, then the
+        // plan's own lines (plan_manage.rs)
         let economy = tools.call("hoi4_economy", &json!({}))?;
         if let Some(step) = plan_manage::rebalance_step(state, tools, plan, lease, now, &economy)? {
             return Ok(Some(step));
         }
         production_step(state, tools, plan, lease, now)
-    }),
-    ("construction", |state, tools, plan, lease, now| {
+    }));
+    for name in ["naval_queue", "dockyards", "convoys"] {
+        out.push(lane_of(manage, name));
+    }
+    out.push(("construction", |state, tools, plan, lease, now| {
         // The triggered build order, in peace (and at war when the war does not run first; a
-        // war-first tick ran it right after the war step). Its items go before the open
+        // war-first tick runs it inside the war block). Its items go before the open
         // `construction` jobs so those cannot take the factories an ordered item waits for.
         if !state.sched.war_ran {
             if let Some(step) = construction_plan_step(state, tools, plan, lease, now)? {
                 return Ok(Some(step));
             }
         }
-        // construction with idle civilian factories, before the armies (which always find
-        // something to retry) so they cannot starve it
         let economy = tools.call("hoi4_economy", &json!({}))?;
         construction_step(state, tools, plan, lease, now, &economy)
-    }),
-    // special projects, doctrines, air missions in war (one action at most)
-    ("extras", extras_step),
-    // continuous management (plan_manage.rs): alerts, templates, occupation, resources,
-    // air_plan, manage
-    ("manage", plan_manage::step),
-    // military domains (plan_military.rs): naval invasions, casualty ratio, air superiority,
-    // army groups, navy
-    ("military", plan_military::step),
-    // state, economy and diplomacy affairs (plan_affairs.rs): diplomacy, faction, trade, designs
-    // and line switches, MIOs, intelligence
-    ("affairs", plan_affairs::step),
-    // steps ahead of their tools (plan_seams.rs): defensive lines; nothing is sent until the
-    // order's tool is built
-    ("seams", plan_seams::step),
-];
-
-/// The scheduler's turn guarantee: the domains not offered a turn for `scheduler.max_wait_days`
-/// (default 1) game days, longest-waiting first, until one acts. A domain seen for the first
-/// time starts its clock now. Never twice in a row: after an overdue domain acted, the next
-/// tick belongs to the war-first block, so the war keeps at least every other tick.
-fn overdue_step(
-    state: &mut State,
-    tools: &dyn Tools,
-    plan: &Value,
-    lease: &str,
-    now: GameHour,
-) -> Result<Option<String>> {
-    if std::mem::take(&mut state.sched.yielded) {
-        return Ok(None);
+    }));
+    out.push(("research", research_lane));
+    out.push(("focus", focus_lane));
+    out.push(("politics", politics_step));
+    out.push(lane_of(manage, "officer_corps"));
+    for name in ["mio_lines", "mio", "mio_traits"] {
+        out.push(lane_of(affairs, name));
     }
-    // At war the war burst comes first: the other domains wait up to three game days for their
-    // turn (`scheduler.war_max_wait_days`), not one (wb3: daily turns of slow management orders,
-    // a 45 s trait pick among them, took 46% of the input lane in a two-front war).
-    let (key, default) = if state.war_active {
-        ("war_max_wait_days", 3 * DAY)
-    } else {
-        ("max_wait_days", DAY)
-    };
-    let wait = plan["scheduler"][key]
-        .as_f64()
-        .filter(|d| *d > 0.0)
-        .map_or(default, |d| (d * DAY as f64).round() as GameHour);
-    let mut due: Vec<(GameHour, usize)> = Vec::new();
-    for (i, (name, _)) in DOMAINS.iter().enumerate() {
-        let last = *state.sched.turns.entry(name).or_insert(now);
-        if now.saturating_sub(last) >= wait {
-            due.push((last, i));
+    // special projects, doctrines, air missions in war
+    out.push(("extras", extras_step));
+    // `decision_rules` (guarded, targeted, counted, never-take) before the plain `decisions` list
+    out.push(("decisions", decisions_step));
+    out.push(("training", |state, tools, plan, lease, now| {
+        // one template or a list, with training_rules (plan_manage.rs)
+        if plan["training"].is_null() {
+            return Ok(None);
+        }
+        plan_manage::training_step(state, tools, plan, lease, now)
+    }));
+    for name in [
+        "templates",
+        "template_cleanup",
+        "air_plan",
+        "air_reserve",
+        "air_idle",
+    ] {
+        out.push(lane_of(manage, name));
+    }
+    for (name, step) in military.iter() {
+        out.push((name, *step));
+    }
+    out.push(lane_of(affairs, "intelligence"));
+    for name in [
+        "occupation",
+        "resources",
+        "import_budget",
+        "fuel",
+        "country",
+        "overdrawn",
+        "equipment",
+    ] {
+        out.push(lane_of(manage, name));
+    }
+    for (name, step) in affairs.iter() {
+        if !["mio_lines", "mio", "mio_traits", "intelligence"].contains(name) {
+            out.push((name, *step));
         }
     }
-    due.sort_unstable();
-    for (_, i) in due {
-        let (name, step) = DOMAINS[i];
-        state.sched.turns.insert(name, now);
-        if let Some(line) = step(state, tools, plan, lease, now)? {
-            state.sched.yielded = true;
-            return Ok(Some(format!("{line} (overdue {name} turn)")));
+    // steps ahead of their tools (plan_seams.rs): nothing is sent until the order's tool is built
+    out.push(("seams", plan_seams::step));
+    if !war_first {
+        out.push(("command", plan_formations::command_step));
+        out.push(("armies", armies_step));
+    }
+    if plan["war"].is_object()
+        && plan["war"]["enabled"] != json!(false)
+        && plan["war"]["first"] == json!(false)
+    {
+        out.push(("war", war_step));
+    }
+    if !war_first {
+        out.push(("ship", plan_ship::step));
+        if plan["disband"].is_object() {
+            out.push(("disband", disband_step));
         }
     }
-    Ok(None)
+    out
 }
 
-/// The force spends at peace, ahead of the war-first block: the plan's template edits, officer
-/// corps spirits, designs and political power (advisors, laws). Each is a one-shot buy with its
-/// own timers, and the war that follows is fought with what they bought; behind a war
-/// preparation that finds an order every tick they got no turn (fk1, 18 Nov 2026: 8 ticks in
-/// the 22 days before the declaration, all of them the operation's prepare: no template edit, no
-/// spirit, no advisor, 540 political power idle). Every other tick at most (the next belongs to
-/// the war), and once a day when nothing was bought. At war the domain scheduler alone decides.
-fn force_first(
-    state: &mut State,
-    tools: &dyn Tools,
-    plan: &Value,
-    lease: &str,
-    now: GameHour,
-) -> Result<Option<String>> {
-    if std::mem::take(&mut state.force_first_yield)
-        || plan["scheduler"]["force_first"] == json!(false)
-        || state.war_active
-        || state.force_first_spent == Some(now / DAY)
-    {
-        return Ok(None);
-    }
-    if plan_manage::at_war(state, tools, plan, now) {
-        state.force_first_spent = Some(now / DAY);
-        return Ok(None);
-    }
-    let found = match politics_step(state, tools, plan, lease, now)? {
-        Some(line) => Some(line),
-        None => plan_manage::force_step(state, tools, plan, lease, now)?,
-    };
-    let found = match found {
-        Some(line) => Some(line),
-        None => plan_affairs::force_step(state, tools, plan, lease, now)?,
-    };
-    match found {
-        Some(line) => {
-            state.force_first_yield = true;
-            Ok(Some(format!("{line} (force spend before the war)")))
+/// Where the pass stands (see [`lanes_tick`]).
+#[derive(Default)]
+struct Round {
+    /// The next lane to offer.
+    cursor: usize,
+    /// Lanes that acted in this pass, in order.
+    acted: Vec<&'static str>,
+    /// The war-first block acted in the last tick: this tick belongs to a lane.
+    war_last: bool,
+    /// The game hour the pass began.
+    began: GameHour,
+    /// The last finished pass that acted: lanes and game hours (the digest's `pass`).
+    last: Option<String>,
+}
+
+impl Round {
+    /// Close the pass: Some lane acted in it (true) or it was quiet.
+    fn end_pass(&mut self, now: GameHour) -> bool {
+        self.cursor = 0;
+        let acted = std::mem::take(&mut self.acted);
+        if acted.is_empty() {
+            return false;
         }
-        None => {
-            state.force_first_spent = Some(now / DAY);
-            Ok(None)
-        }
+        self.last = Some(format!(
+            "{} lane(s) acted in {} game hours: {}",
+            acted.len(),
+            now.saturating_sub(self.began),
+            acted.join(", ")
+        ));
+        true
     }
 }
 
@@ -2798,23 +2985,6 @@ fn war_burst(
         began.elapsed().as_secs(),
         lines.join("; ")
     )))
-}
-
-/// An idle research slot or no active focus (reads only; an unreadable answer counts as busy).
-fn cheap_work_idle(tools: &dyn Tools) -> bool {
-    let slot_idle = tools
-        .call("hoi4_research", &json!({"limit": 1}))
-        .map(|r| {
-            list(&r, "slots")
-                .iter()
-                .any(|s| s["researching"].as_str().is_none())
-        })
-        .unwrap_or(false);
-    slot_idle
-        || tools
-            .call("hoi4_focus_completed", &json!({"limit": 1}))
-            .map(|f| f["active_key"].is_null())
-            .unwrap_or(false)
 }
 
 /// The armies standing in state `id` ("name n") when every one of them holds `max` divisions or
@@ -9841,9 +10011,8 @@ mod tests {
         let calls = tools.actions.borrow();
         assert_eq!(calls.len(), 1, "an interrupted action is never resent");
         assert_eq!(calls[0].1["technology"], "radio");
-        assert!(!names(&reads).contains(&"hoi4_technology_list".into()));
         assert!(
-            state.bad.is_empty(),
+            !state.bad.keys().any(|k| k.starts_with("tech:")),
             "Unfinished research must not be skipped"
         );
     }
@@ -10059,9 +10228,7 @@ mod tests {
             );
             assert!(result.is_err());
             assert_eq!(tools.actions.borrow().len(), 1);
-            assert!(!names(&reads)
-                .iter()
-                .any(|n| n == "hoi4_focus_completed" || n == "hoi4_economy"));
+            assert!(!names(&reads).iter().any(|n| n == "hoi4_focus_completed"));
         }
     }
 
@@ -10337,7 +10504,13 @@ mod tests {
             "{step:?}"
         );
         assert_eq!(
-            tools.calls.borrow().last().unwrap().1["factories"],
+            tools
+                .calls
+                .borrow()
+                .iter()
+                .find(|(n, _)| n == "hoi4_production_set")
+                .unwrap()
+                .1["factories"],
             json!(15)
         );
         tools.replies.insert("hoi4_production_lines", lines(15, 4));
@@ -10353,7 +10526,8 @@ mod tests {
             matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+3")),
             "{step:?}"
         );
-        // the divisions lack support equipment most: it gets the next step, 2 per the plan
+        // the divisions lack support equipment most: it gets half the free factories (more than
+        // the plan's rebalance_step 2), the rest go to the line chosen next
         tools.replies.insert("hoi4_production_lines", lines(12, 4));
         tools.replies.insert(
             "hoi4_supply",
@@ -10366,7 +10540,7 @@ mod tests {
         let mut state = State::default();
         let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+2")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("production_set support_equipment_1 4+3")),
             "{step:?}"
         );
         assert!(plan_manage::digest(&state).unwrap()["production"]
@@ -12221,7 +12395,7 @@ mod tests {
     }
 
     #[test]
-    fn a_domain_the_war_kept_waiting_a_day_gets_the_next_tick_then_the_war_again() {
+    fn a_lane_gets_the_tick_after_the_war_then_the_war_again() {
         let w = War {
             liberate: false,
             front_ok: true,
@@ -12235,8 +12409,6 @@ mod tests {
         // (no cost: this fake reads no political power, and a costed pick waits for a read)
         plan["politics"] = json!([{"id": "chief", "category": "military_staff", "slot": 0,
             "idea": "ITA_chief"}]);
-        // the scheduler alone (the force spends before the war are their own test)
-        plan["scheduler"] = json!({"force_first": false});
         let politics = |w: &War| {
             w.calls
                 .borrow()
@@ -12244,20 +12416,16 @@ mod tests {
                 .filter(|(n, _)| n == "hoi4_politics_choose")
                 .count()
         };
-        // the war-first block acts on the first tick; the domains' clocks start
+        // the war-first block acts on the first tick
         assert!(matches!(
             tick(&mut state, &w, &plan, "l", START).unwrap(),
             Tick::Acted(_)
         ));
         assert_eq!(politics(&w), 0);
-        // a game day later the politics domain, never reached, goes ahead of the war
-        let out = tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
-        assert!(
-            matches!(&out, Tick::Acted(line) if line.contains("overdue politics turn")),
-            "{out:?}"
-        );
+        // the next tick belongs to a lane: politics, in the same game hour
+        tick(&mut state, &w, &plan, "l", START).unwrap();
         assert_eq!(politics(&w), 1);
-        // and the next tick belongs to the war-first block again
+        // and the next one to the war-first block again
         let armies = |w: &War| {
             w.calls
                 .borrow()
@@ -12266,17 +12434,9 @@ mod tests {
                 .count()
         };
         let before = armies(&w);
-        tick(&mut state, &w, &plan, "l", START + DAY + 1).unwrap();
+        tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
         assert!(armies(&w) > before);
         assert_eq!(politics(&w), 1);
-        // scheduler.max_wait_days stretches the guarantee
-        let mut state = State::default();
-        plan["scheduler"] = json!({"max_wait_days": 3, "force_first": false});
-        tick(&mut state, &w, &plan, "l", START).unwrap();
-        tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
-        assert_eq!(politics(&w), 1);
-        tick(&mut state, &w, &plan, "l", START + 3 * DAY).unwrap();
-        assert_eq!(politics(&w), 2);
     }
 
     /// The war fake with every research slot idle.
@@ -12300,7 +12460,7 @@ mod tests {
     }
 
     #[test]
-    fn an_idle_research_slot_goes_ahead_of_the_war_first_block() {
+    fn an_idle_research_slot_gets_the_tick_after_the_war() {
         let lab = IdleLab(War {
             liberate: false,
             front_ok: true,
@@ -12309,17 +12469,14 @@ mod tests {
         let mut state = State::default();
         let mut plan = war_plan();
         plan["research_priority"] = json!(["tech_a"]);
+        // the war takes the first tick, the idle slot the second (no game hour passes)
+        tick(&mut state, &lab, &plan, "l", START).unwrap();
         tick(&mut state, &lab, &plan, "l", START).unwrap();
         let calls = lab.0.calls.borrow();
         assert!(
             calls.iter().any(|(n, _)| n == "hoi4_research_start"),
             "{calls:?}"
         );
-        assert!(
-            !calls.iter().any(|(n, _)| n.starts_with("hoi4_army_")),
-            "{calls:?}"
-        );
-        assert_eq!(state.cheap_first_spent, None);
     }
 
     #[test]
@@ -12340,7 +12497,6 @@ mod tests {
             .borrow()
             .iter()
             .any(|(n, _)| n.starts_with("hoi4_army_")));
-        assert_eq!(state.cheap_first_spent, Some(START / DAY));
     }
 
     /// An army standing in an own state an enemy holds part of.
@@ -12468,9 +12624,157 @@ mod tests {
         assert_eq!(moves(&w), 1, "no second fall-back order within 3 days");
     }
 
+    /// Day 1 with ten things due: every read says something is waiting; every action works and
+    /// changes what the next read says.
+    struct DayOne {
+        calls: RefCell<Vec<(String, Value)>>,
+        requested: RefCell<i64>,
+        researching: RefCell<bool>,
+        focus: RefCell<bool>,
+        line_org: RefCell<bool>,
+        queued: RefCell<u64>,
+        war: bool,
+    }
+    impl DayOne {
+        fn new(war: bool) -> Self {
+            DayOne {
+                calls: RefCell::new(vec![]),
+                requested: RefCell::new(2),
+                researching: RefCell::new(false),
+                focus: RefCell::new(false),
+                line_org: RefCell::new(false),
+                queued: RefCell::new(0),
+                war,
+            }
+        }
+        fn sent(&self, tool: &str) -> usize {
+            self.calls
+                .borrow()
+                .iter()
+                .filter(|(n, a)| n == tool && a.get("request_id").is_some())
+                .count()
+        }
+    }
+    impl Tools for DayOne {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            if args.get("request_id").is_some() {
+                match name {
+                    "hoi4_production_set" => {
+                        *self.requested.borrow_mut() = args["factories"].as_i64().unwrap_or(0)
+                    }
+                    "hoi4_research_start" => *self.researching.borrow_mut() = true,
+                    "hoi4_focus_start" => *self.focus.borrow_mut() = true,
+                    "hoi4_mio_line" => *self.line_org.borrow_mut() = true,
+                    "hoi4_train" => *self.queued.borrow_mut() += 1,
+                    _ => {}
+                }
+                return Ok(json!({"receipt": {"status": "Verified"}}));
+            }
+            Ok(match name {
+                "hoi4_overview" => json!({"paused": true}),
+                "hoi4_research" => json!({"slots": [{"researching":
+                    if *self.researching.borrow() { json!("tech_a") } else { Value::Null }}]}),
+                "hoi4_technology_list" => json!({"available_only": true,
+                    "technologies": ["tech_a"], "start_years": {"tech_a": 1936}}),
+                "hoi4_focus_completed" => json!({"active_key":
+                    if *self.focus.borrow() { json!("f") } else { Value::Null }, "completed": []}),
+                "hoi4_economy" => json!({"factory_trigger_count": {"military": 12},
+                    "political_power": {"raw_signed": 50 * 100_000},
+                    "civilian_factories_available_for_projects": 0}),
+                "hoi4_production_lines" => json!({"lines": [{"line_kind": "military",
+                    "entry_index": 0, "line_handle": "h0", "equipment_id": "infantry_equipment_1",
+                    "factory_counters": {"requested_factories_raw_signed":
+                        *self.requested.borrow()},
+                    "has_organization": *self.line_org.borrow()}]}),
+                "hoi4_decisions_list" => json!({"decisions": [
+                    {"decision": "dec_a", "enabled": true, "cost": 0}]}),
+                "hoi4_division_templates" => json!({"templates": [
+                    {"template": "Inf", "queued_lines": *self.queued.borrow()}]}),
+                "hoi4_wars" if self.war => json!({"wars": {"enemies": ["ETH"]}}),
+                "hoi4_armies" if self.war => json!({"armies": [{"army": "Army 1",
+                    "division_count": 10, "main_state": 1, "battle_plan_orders": 0,
+                    "commander": "X"}], "unassigned_by_state": []}),
+                _ => json!({}),
+            })
+        }
+    }
+
+    fn day_one_plan() -> Value {
+        json!({"research_priority": ["tech_a"], "focus_path": ["f"],
+            "politics": [{"id": "staff", "category": "military_staff", "slot": 0,
+                "idea": "GER_staff"}],
+            "production_priority": ["infantry_equipment"],
+            "manage": {"off": ["balance", "alerts"], "day0_production": false},
+            "mio": [{"organisation": "GER_mauser_organization", "traits": [2]}],
+            "decisions": ["dec_a"],
+            "training": {"template": "Inf", "queue": 1, "count": 1}})
+    }
+
     #[test]
-    fn the_same_failing_order_is_not_sent_a_fourth_time_within_ten_days() {
-        // (an order outside the war: war orders rest from their second failure, in hours)
+    fn day_one_issues_everything_due_without_one_domain_waiting_for_another() {
+        let tools = DayOne::new(false);
+        let plan = day_one_plan();
+        let mut state = State {
+            wall: Some(0),
+            ..State::default()
+        };
+        // the paused day-1 setup: the same game hour, tick after tick
+        for _ in 0..30 {
+            if tick(&mut state, &tools, &plan, "l", START).unwrap() == Tick::Nothing {
+                break;
+            }
+        }
+        for tool in [
+            "hoi4_research_start",
+            "hoi4_focus_start",
+            "hoi4_politics_choose",
+            "hoi4_mio_line",
+            "hoi4_mio_trait",
+            "hoi4_decision_take",
+            "hoi4_train",
+        ] {
+            assert_eq!(tools.sent(tool), 1, "{tool} issued once on day 1");
+        }
+        // all ten free military factories in the first turn, before any other lane acted
+        assert_eq!(*tools.requested.borrow(), 12);
+        let first_other = tools
+            .calls
+            .borrow()
+            .iter()
+            .position(|(n, a)| a.get("request_id").is_some() && n != "hoi4_production_set")
+            .unwrap();
+        let last_set = tools
+            .calls
+            .borrow()
+            .iter()
+            .rposition(|(n, a)| a.get("request_id").is_some() && n == "hoi4_production_set")
+            .unwrap();
+        assert!(last_set < first_other);
+        // nothing sent twice
+        let sent: Vec<String> = tools
+            .calls
+            .borrow()
+            .iter()
+            .filter(|(_, a)| a.get("request_id").is_some())
+            .map(|(n, a)| {
+                let mut a = a.clone();
+                a.as_object_mut().map(|o| {
+                    o.remove("request_id");
+                    o.remove("lease_token")
+                });
+                format!("{n} {a}")
+            })
+            .collect();
+        let unique: HashSet<&String> = sent.iter().collect();
+        assert_eq!(unique.len(), sent.len(), "{sent:?}");
+    }
+
+    #[test]
+    fn the_same_failing_order_is_not_sent_again_unchanged() {
+        // a refusal (not a passing failure) rests the identical order from its first failure
         struct Refuse(RefCell<usize>);
         impl Tools for Refuse {
             fn call(&self, _: &str, _: &Value) -> Result<Value> {
@@ -12496,7 +12800,7 @@ mod tests {
                 .unwrap();
             assert!(!ok);
         }
-        assert_eq!(*tools.0.borrow(), 3);
+        assert_eq!(*tools.0.borrow(), 1);
         // another order still goes out, and the first one again after the window
         state
             .act(
@@ -12507,7 +12811,7 @@ mod tests {
                 "t",
             )
             .unwrap();
-        assert_eq!(*tools.0.borrow(), 4);
+        assert_eq!(*tools.0.borrow(), 2);
         state.clock = START + 11 * DAY;
         state.wall = Some(1_000 + 121);
         state
@@ -12519,7 +12823,7 @@ mod tests {
                 "t",
             )
             .unwrap();
-        assert_eq!(*tools.0.borrow(), 5);
+        assert_eq!(*tools.0.borrow(), 3);
     }
 
     #[test]
@@ -12552,10 +12856,10 @@ mod tests {
     #[test]
     fn a_given_up_order_rests_twice_as_long_after_each_further_failure() {
         // g17i: one refused layout march was sent 69 times in 20 months, every 6 game days
-        assert_eq!(ledger_rest(true, GIVE_UP_AFTER, 0).0, 6 * DAY);
-        assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 1, 0).0, 12 * DAY);
-        assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 9, 0).0, 48 * DAY);
-        assert_eq!(ledger_rest(false, GIVE_UP_AFTER + 2, 0).0, 240 * DAY);
+        assert_eq!(ledger_rest(true, GIVE_UP_AFTER, 0, false).0, 6 * DAY);
+        assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 1, 0, false).0, 12 * DAY);
+        assert_eq!(ledger_rest(true, GIVE_UP_AFTER + 9, 0, false).0, 48 * DAY);
+        assert_eq!(ledger_rest(false, GIVE_UP_AFTER + 2, 0, false).0, 240 * DAY);
     }
 
     #[test]
@@ -12619,7 +12923,8 @@ mod tests {
         // then one more try
         send(&mut state, "hoi4_air_wing_create", given_up + 60 * DAY);
         assert_eq!(*tools.0.borrow(), 6);
-        // a war order given up rests 6 game days only
+        // a war order given up rests 6 game days only (while a war runs)
+        state.war_active = true;
         for k in 0..5 {
             send(
                 &mut state,
@@ -12727,30 +13032,43 @@ mod tests {
         );
         send(&mut state, "hoi4_army_create", START + 60 * DAY, 100_001);
         assert_eq!(*tools.0.borrow(), 2);
-        // a war order that held the input 9 s rests 9 * 16 game hours (6 days)
+        // a war order that held the input 9 s rests 9 * 16 game hours (6 days) while a war runs
+        state.war_active = true;
         state.act_seconds = Some(9);
         send(&mut state, "hoi4_army_move", START, 0);
         let why = send(&mut state, "hoi4_army_move", START + 5 * DAY, 0);
         assert!(why.ends_with("it waits 1 more game days"), "{why}");
         send(&mut state, "hoi4_army_move", START + 6 * DAY, 0);
         assert_eq!(*tools.0.borrow(), 4);
-        // a quick refusal is not held back before the third failure
+        // a quick refusal rests from its first failure too: not again in the same game hour
         state.act_seconds = Some(1);
         send(&mut state, "hoi4_army_assign", START, 500);
-        send(&mut state, "hoi4_army_assign", START, 501);
+        let why = send(&mut state, "hoi4_army_assign", START, 500);
+        assert!(
+            why.starts_with("skipped: the same order failed 1 time(s) in a row"),
+            "{why}"
+        );
+        assert_eq!(*tools.0.borrow(), 5);
+        // while the game stands still the rest runs on wall time at speed 3's rate (8 game hours
+        // a wall second)
+        send(&mut state, "hoi4_army_front", START, 1_000);
+        send(&mut state, "hoi4_army_front", START, 1_000);
         assert_eq!(*tools.0.borrow(), 6);
-        // while the game stands still the rest runs on wall time at speed 3's rate: 12 game
-        // hours of a war order's second failure are 2 wall seconds
-        send(&mut state, "hoi4_army_front", START, 1_000);
-        send(&mut state, "hoi4_army_front", START, 1_000);
-        assert_eq!(*tools.0.borrow(), 8);
+        send(&mut state, "hoi4_army_front", START, 1_001);
+        assert_eq!(*tools.0.borrow(), 7);
         let why = send(&mut state, "hoi4_army_front", START, 1_001);
         assert!(
-            why.starts_with("skipped: the same order failed 2 times"),
+            why.starts_with("skipped: the same order failed 2 time(s)"),
             "{why}"
         );
         send(&mut state, "hoi4_army_front", START, 1_002);
-        assert_eq!(*tools.0.borrow(), 9);
+        assert_eq!(
+            *tools.0.borrow(),
+            7,
+            "the second refusal at war rests 12 game hours"
+        );
+        send(&mut state, "hoi4_army_front", START, 1_003);
+        assert_eq!(*tools.0.borrow(), 8);
     }
 
     #[test]
@@ -12781,24 +13099,27 @@ mod tests {
                 .unwrap()
                 .1
         };
-        for k in 0..3 {
-            send(&mut state, START + k);
-        }
-        // the third failure (at START + 2 hours) rests ten game days
-        let why = send(&mut state, START + 9 * DAY);
+        // the first refusal rests a game hour, the second three, the third ten game days, the
+        // fourth twenty
+        send(&mut state, START);
+        let why = send(&mut state, START);
         assert!(
-            why.starts_with(
-                "skipped: the same order failed 3 times in a row; it waits 2 more game days"
-            ),
+            why.starts_with("skipped: the same order failed 1 time(s) in a row"),
             "{why}"
         );
+        assert_eq!(*tools.0.borrow(), 1);
+        send(&mut state, START + 1);
+        let why = send(&mut state, START + 3);
+        assert!(why.ends_with("for 1 more game hours"), "{why}");
+        send(&mut state, START + 4);
         assert_eq!(*tools.0.borrow(), 3);
-        send(&mut state, START + 10 * DAY + 2);
+        send(&mut state, START + 4 + 10 * DAY - 1);
+        assert_eq!(*tools.0.borrow(), 3);
+        send(&mut state, START + 4 + 10 * DAY);
         assert_eq!(*tools.0.borrow(), 4);
-        // the fourth failure doubles the rest: 20 game days
-        send(&mut state, START + 29 * DAY);
+        send(&mut state, START + 4 + 30 * DAY - 1);
         assert_eq!(*tools.0.borrow(), 4);
-        send(&mut state, START + 30 * DAY + 2);
+        send(&mut state, START + 4 + 30 * DAY);
         assert_eq!(*tools.0.borrow(), 5);
         // the ledger survives a save of the memory beyond the old ten-day window
         let memory = state.memory(START + 40 * DAY);
@@ -17671,13 +17992,14 @@ mod tests {
         );
         assert!(state.strategy.contingencies.contains_key("unrest"));
         assert_eq!(news_of(&state, "contingency_triggered").len(), 1);
-        // within the judgement interval nothing is read again
+        // within the judgement interval the contingency is not judged again (other lanes of the
+        // pass may read the country status for their own rules)
         let calm = status(0.7);
         assert_eq!(
             acted(tick(&mut state, &calm, &plan, "l", now + 1).unwrap()),
             "research calm_tech slot 0"
         );
-        assert!(!names(&calm).contains(&"hoi4_country_status".to_string()));
+        assert!(state.strategy.contingencies.contains_key("unrest"));
         // unreadable: the contingency stays as it is
         assert_eq!(
             acted(tick(&mut state, &slot_idle(vec![]), &plan, "l", now + DAY).unwrap()),

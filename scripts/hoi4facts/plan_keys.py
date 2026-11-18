@@ -84,7 +84,8 @@ HAND_PLANS = [
 ENTRY_VARS = {
     "politics": (["politics_step", "politics_auto_step", "politics_key", "politics_reserve"], ["pick"]),
     "production": (["production_step", "wanted_switches"], ["line"]),
-    "research_path": (["tick"], ["step"]),
+    "research_path": (["research_lane"], ["step"]),
+    "research_waits": (["held_research_slots"], ["w"]),
     "construction": (["construction_step"], ["job"]),
     "construction_plan": (["construction_plan_step"], ["item"]),
     "army_layout": (["layout_step"], ["e", "x"]),
@@ -99,7 +100,7 @@ ENTRY_VARS = {
     "designs": (["designs_step", "wanted_switches", "decommission_step"], ["entry", "e"]),
     "diplomacy": (["diplomacy_items", "justify", "declare", "relation", "widening", "expiry_watch",
                    "justify_items", "dip_target"], ["item", "j", "o"]),
-    "mio": (["mio_step"], ["entry"]),
+    "mio": (["mio_plan", "mio_auto_traits"], ["entry"]),
     "incoming_proposals": (["incoming_step", "incoming_answer"], ["rule"]),
     "trade": (["trade_step"], ["item"]),
     "army_group": (["army_group_step", "marshals"], ["entry", "e"]),
