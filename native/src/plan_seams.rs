@@ -218,7 +218,10 @@ pub(super) fn slash_max(text: &str) -> Option<f64> {
 /// Whether command power is high enough to spend: within 20 of the cap, or at 80% of it, and
 /// at least one trait's cost; pure.
 pub(super) fn cp_should_spend(cp: f64, max: f64) -> bool {
-    cp >= TRAIT_COST && (cp >= max - 20.0 || cp >= 0.8 * max)
+    // a trait is bought the day its cost is on hand (land research I4: command power buys
+    // traits and promotions; power kept near the cap buys nothing); `max` stays for the note
+    let _ = max;
+    cp >= TRAIT_COST
 }
 
 /// Generals by the divisions of the armies they lead, most first (ties by name); pure.
@@ -441,7 +444,7 @@ fn cp_spend_step(
         note(
             state,
             key,
-            format!("command power {cp:.0} of {max:.0} held for the war by rule: nothing can be bought in peace ({why})"),
+            format!("command power {cp:.0} of {max:.0} unspent: no general has an enabled trait in peace ({why}); promotions go with the army groups, preferred tactics and army HQ have no tool yet"),
         );
         return Ok(None);
     }
@@ -1802,7 +1805,10 @@ mod tests {
     fn command_power_is_spent_near_its_cap_and_the_cap_comes_from_a_tooltip() {
         assert!(cp_should_spend(60.0, 80.0));
         assert!(cp_should_spend(64.0, 80.0));
-        assert!(!cp_should_spend(59.0, 80.0));
+        assert!(
+            cp_should_spend(20.0, 80.0),
+            "one trait's cost on hand is spent"
+        );
         assert!(cp_should_spend(85.0, 100.0));
         assert!(!cp_should_spend(10.0, 20.0), "below one trait's cost");
         assert_eq!(slash_max("Command Power: 63.5 / 100"), Some(100.0));
@@ -1847,13 +1853,21 @@ mod tests {
     }
 
     #[test]
-    fn command_power_below_the_threshold_is_kept_and_the_rule_can_be_switched_off() {
+    fn command_power_below_one_trait_is_kept_and_the_rule_can_be_switched_off() {
+        let mut f = cp_game(10.0);
+        f.replies
+            .insert("hoi4_tooltip", json!({"text": "Command Power 10 / 120"}));
+        let mut state = State::default();
+        assert_eq!(step(&mut state, &f, &json!({}), "l", START).unwrap(), None);
+        assert!(state.seams.notes["cp_spend"].contains("10 of 120: kept"));
+        // far from the cap, one trait's cost on hand is spent
         let mut f = cp_game(50.0);
         f.replies
             .insert("hoi4_tooltip", json!({"text": "Command Power 50 / 120"}));
         let mut state = State::default();
-        assert_eq!(step(&mut state, &f, &json!({}), "l", START).unwrap(), None);
-        assert!(state.seams.notes["cp_spend"].contains("50 of 120: kept"));
+        assert!(step(&mut state, &f, &json!({}), "l", START)
+            .unwrap()
+            .is_some());
         // the plan's cap without a tooltip
         let f = cp_game(50.0);
         let plan = json!({"manage": {"command_power_max": 60}});
@@ -1917,7 +1931,8 @@ mod tests {
             None
         );
         assert!(
-            state.seams.notes["cp_spend"].contains("75 of 80 held for the war by rule"),
+            state.seams.notes["cp_spend"]
+                .contains("75 of 80 unspent: no general has an enabled trait in peace"),
             "{}",
             state.seams.notes["cp_spend"]
         );

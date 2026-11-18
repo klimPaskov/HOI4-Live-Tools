@@ -221,8 +221,7 @@ const OWNED_FRESH: std::time::Duration = std::time::Duration::from_secs(600);
 
 fn publish(owned: &HashMap<String, String>) {
     // unit tests run side by side in one process: only a test that asks for it sets the snapshot
-    #[cfg(test)]
-    if !owned.contains_key("__test_publish__") {
+    if cfg!(test) && !owned.contains_key("__test_publish__") {
         return;
     }
     if let Ok(mut slot) = OWNED_NOW.lock() {
