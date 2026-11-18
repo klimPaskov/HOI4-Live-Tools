@@ -4917,7 +4917,11 @@ pub(super) fn day0_step(
     let economy = tools.call("hoi4_economy", &json!({}))?;
     let (military, idle) = military_lines(tools, &economy)?;
     if idle <= 0 {
-        note(state, "production", "day 0: no free military factory");
+        note(
+            state,
+            "production",
+            "day 0: no free military factory (the balance rule assigns later ones)",
+        );
         state.done.insert(KEY.into(), now);
         return Ok(None);
     }
@@ -6171,6 +6175,24 @@ fn balance_rule(
         .collect();
     needs.sort();
     let Some(act) = balance_decide(&b) else {
+        // military factories on no line never wait for a shortfall: the balance found nothing to
+        // move, so the idle ones go to the priority lines (g17i, 18 Nov 2026: 38 factories, 30
+        // requested, 8 idle for 361 days under a stale "no free military factory")
+        // (after two game days idle, so the other production rules act on them first)
+        let requested: i64 = b.lines.iter().map(|l| l.requested).sum();
+        if total > requested {
+            let since = *state.done.entry("milidle".into()).or_insert(now);
+            if now - since >= 2 * DAY && !state.skipped(now, "prodset", "x") {
+                let (military, idle) = military_lines(tools, &economy)?;
+                if idle > 0 {
+                    if let Some(line) = feed(state, tools, plan, lease, now, &military, idle)? {
+                        return Ok(Some(line));
+                    }
+                }
+            }
+        } else {
+            state.done.remove("milidle");
+        }
         return rest(
             state,
             format!(
