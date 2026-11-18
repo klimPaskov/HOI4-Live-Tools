@@ -3146,6 +3146,9 @@ fn layout_step(
     let Some(entries) = plan["army_layout"].as_array() else {
         return Ok(None);
     };
+    if !land_orders(plan) {
+        return Ok(None);
+    }
     if state.skipped(now, "layout", "all") {
         return Ok(None);
     }
@@ -5428,6 +5431,14 @@ fn provinces_held(tools: &dyn Tools, me: &str, states: &[i32]) -> Option<usize> 
 }
 
 /// One war decision: at most one action, or None when nothing needs doing.
+/// Whether the executor gives land orders at all. `war.land_orders: false` leaves the land war to
+/// the armies' own battle plans as drawn (the game's AI wins Poland with one group front, one
+/// deep offensive and nothing else, ord1 18 Nov 2026): no war step, no layout marches, no hold
+/// posts; declarations, air, supply and the economy still run.
+pub(crate) fn land_orders(plan: &Value) -> bool {
+    plan["war"]["land_orders"] != json!(false)
+}
+
 fn war_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -5436,6 +5447,9 @@ fn war_step(
     now: GameHour,
 ) -> Result<Option<String>> {
     let cfg = &plan["war"];
+    if !land_orders(plan) {
+        return Ok(None);
+    }
     let me = match cfg["me"].as_str() {
         Some(t) => t.to_string(),
         None => text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string(),
@@ -16870,6 +16884,18 @@ mod tests {
             changes.last().unwrap()["detail"]["reason"],
             "contingency core_lost"
         );
+    }
+
+    #[test]
+    fn land_orders_off_leaves_the_land_war_to_the_drawn_plans() {
+        let plan = json!({"war": {"land_orders": false}, "army_layout": [{"name_hint": "A", "count": 6}]});
+        assert!(!land_orders(&plan));
+        assert!(land_orders(&json!({"war": {}})));
+        let tools = fake(vec![("hoi4_overview", json!({"player": "GER"}))]);
+        let mut state = State::default();
+        let now = hour("1939.09.02");
+        assert_eq!(war_step(&mut state, &tools, &plan, "l", now).unwrap(), None);
+        assert_eq!(layout_step(&mut state, &tools, &plan, "l", now).unwrap(), None);
     }
 
     #[test]

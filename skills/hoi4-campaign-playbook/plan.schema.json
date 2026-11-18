@@ -5346,6 +5346,12 @@
           "x-owner": "executor",
           "description": "false switches the war executive off (default on when war is an object)"
         },
+        "land_orders": {
+          "type": "boolean",
+          "default": true,
+          "x-owner": "executor",
+          "description": "false: the executor gives no land orders (no war step, no layout marches, no hold posts); the armies' own battle plans as drawn carry the land war, while declarations, air, supply and the economy still run"
+        },
         "first": {
           "type": "boolean",
           "default": true,

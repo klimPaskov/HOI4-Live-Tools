@@ -2821,6 +2821,9 @@ pub(super) fn hold_step(
     if entries.is_empty() && state.military.held.is_empty() {
         return Ok(None);
     }
+    if !super::land_orders(plan) {
+        return Ok(None);
+    }
     let (invading, _) = invasion_claims(state, plan);
     let roles: HashSet<&str> = list(plan, "army_layout")
         .iter()
