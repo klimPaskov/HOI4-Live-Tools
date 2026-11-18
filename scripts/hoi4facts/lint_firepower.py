@@ -308,7 +308,7 @@ def dominance(ctx, land, facts):
             staged = sum(r.get("count") or 0 for r in lint.list_of("air_plan")
                          if r.get("mission") == mission and r.get("region") in regions
                          and (_date_gate(r.get("when")) or tl.start) <= day)
-            judge(where, f"{tag} {key} staged over the operation", staged, ai, out)
+            judge(where, f"{tag} {key} staged over the operation", staged, ai, out, unsure)
         table.append({"war": w["id"], "date": _fmt(day), "rows": out})
     last = max(w["start"] for w in land)
     for r in rows:
