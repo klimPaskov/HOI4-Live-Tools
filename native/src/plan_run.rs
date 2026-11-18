@@ -5447,6 +5447,9 @@ fn air_war_missions(
         near.extend(ints(&plan["war"]["theatre"]));
         near.extend(ints(&plan["war"]["guard_states"]));
         let operation = operation_targets(tools);
+        // a wing that waits after a failed try is asked again within hours, not in 3 days (o1l:
+        // after one try each, every wing waited and the air check slept for 3 days)
+        let mut waiting = false;
         let contact: HashSet<i64> = list(&wars, "borders")
             .iter()
             .filter(|b| b["hostile"] == json!(true))
@@ -5459,9 +5462,12 @@ fn air_war_missions(
                 // a wing training in peace (plan_manage air_idle_step) is free for the war
                 let training_only = strings(wing, "missions") == ["training"];
                 if (wing["standing_by"] != json!(true) && !training_only)
-                    || state.skipped(now, "airwing", &name)
                     || plan_manage::air_plan_claims(plan, wing)
                 {
+                    continue;
+                }
+                if state.skipped(now, "airwing", &name) {
+                    waiting = true;
                     continue;
                 }
                 // over the front its base lies on, else the first front of the theatre
@@ -5501,6 +5507,7 @@ fn air_war_missions(
                         state.skip(now, "airwing", &name, if ok { DAY } else { 7 * DAY });
                         if ok {
                             state.done.remove(&format!("airfar:{name}"));
+                            state.done.insert(format!("airmoved:{name}"), now);
                             let mine = format!("airtry:{name}:");
                             state.done.retain(|k, _| !k.starts_with(&mine));
                         }
@@ -5523,8 +5530,15 @@ fn air_war_missions(
                     // a mission the game did not take (read back) tries the next region of the operation; with none left the wing
                     // goes to a front base facing the operation; a refusal before input (an open
                     // event, o1g) only waits
-                    if why.contains("Diverged") || why.contains("NotApplied") {
-                        if operation.contains(&state_id) {
+                    // A region on the contact line is the nearest the operation has: failing
+                    // there, the wing is out of range from its base and is rebased at once (o1l:
+                    // wings at inland bases failed over Danzig and Poznan alike).
+                    if (why.contains("Diverged") || why.contains("NotApplied"))
+                        && !why.contains("events_open")
+                    {
+                        let moved = state.done.contains_key(&format!("airmoved:{name}"));
+                        if operation.contains(&state_id) && (moved || !contact.contains(&state_id))
+                        {
                             state.done.insert(format!("airtry:{name}:{state_id}"), now);
                         } else {
                             state.done.insert(format!("airfar:{name}"), now);
@@ -5539,7 +5553,12 @@ fn air_war_missions(
         }
         // every wing that could go has gone: look again in 3 days (was set before the first
         // order, so a war's wings left one at a time, three days apart)
-        state.skip(now, "aircheck", "x", 3 * DAY);
+        state.skip(
+            now,
+            "aircheck",
+            "x",
+            if waiting { DAY / 4 } else { 3 * DAY },
+        );
     }
     Ok(None)
 }
@@ -11582,7 +11601,7 @@ mod tests {
     #[test]
     fn a_wing_that_fails_over_one_operation_region_tries_the_next_contact_region() {
         // o1k: Danzig (807) is named most but out of range; Lodz (87) on the contact line takes it
-        struct Two(std::cell::RefCell<Vec<i64>>);
+        struct Two(std::cell::RefCell<Vec<i64>>, std::cell::Cell<i64>);
         impl Tools for Two {
             fn call(&self, name: &str, args: &Value) -> Result<Value> {
                 match name {
@@ -11594,7 +11613,11 @@ mod tests {
                     "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 66, "free": 400}],
                         "wings": [{"wing": "JG 136", "aircraft_type": "small_plane_airframe_0",
                             "aircraft": 100, "standing_by": true,
-                            "air_base": {"base_id": 3, "state_id": 64}}]})),
+                            "air_base": {"base_id": 3, "state_id": self.1.get()}}]})),
+                    "hoi4_air_rebase" => {
+                        self.1.set(args["state_id"].as_i64().unwrap());
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
                     "hoi4_air_mission" => {
                         let s = args["state_id"].as_i64().unwrap();
                         self.0.borrow_mut().push(s);
@@ -11606,16 +11629,20 @@ mod tests {
                 }
             }
         }
-        let tools = Two(Default::default());
+        let tools = Two(Default::default(), std::cell::Cell::new(64));
         let plan = json!({"air": {"war_missions": true}, "war": {"theatre": [64, 66]}});
         let mut state = State::default();
-        for i in 0..3 {
+        for i in 0..8 {
             air_war_missions(&mut state, &tools, &plan, "l", START + i * (DAY / 4 + 1)).unwrap();
         }
-        // contact regions first (807, 87), the deep one (10) never needed
-        assert_eq!(*tools.0.borrow(), vec![807, 87]);
-        assert!(state.done.contains_key("airtry:JG 136:807"));
-        assert!(!state.done.contains_key("airfar:JG 136"));
+        // the contact region first (807); failing there the wing is out of range: it is
+        // rebased to the front base facing the operation, tries the contact region once more,
+        // then flies over Lodz (87) from there
+        let calls = tools.0.borrow().clone();
+        assert_eq!(calls[0], 807);
+        assert!(calls.contains(&87), "{calls:?}");
+        assert!(!calls.contains(&10), "{calls:?}");
+        assert_eq!(tools.1.get(), 66);
     }
 
     #[test]
