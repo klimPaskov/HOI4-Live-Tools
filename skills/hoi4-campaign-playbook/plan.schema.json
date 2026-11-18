@@ -788,6 +788,12 @@
       "description": "equipment keys (base or variant) whose lines come first: idle factories go to them, and the executor keeps their lines on top of the production view's priority order in this order (hoi4_production_priority, a new round when a matching line is added or removed; gap register production.line_priority_order)",
       "x-owner": "executor"
     },
+    "production_floors": {
+      "type": "boolean",
+      "default": false,
+      "x-owner": "executor",
+      "description": "true: each `production` entry with `factories` is a floor from its `from` date (the latest reached entry of an archetype wins: the day-0 split, then the ramps by date). The balance fills floors before any need, from idle factories or from a line above its own floor, and the stockpile rule leaves them the idle factories they lack"
+    },
     "production_min_idle": {
       "type": "integer",
       "minimum": 0,

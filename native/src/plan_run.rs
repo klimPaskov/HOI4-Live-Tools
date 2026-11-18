@@ -1720,6 +1720,16 @@ fn lanes_tick(
         }
     }
     state.round.war_last = false;
+    // A free research slot and a free focus are checked every tick (cheap reads, each lost day
+    // is a day of the slot): a pass of slow GUI orders left the focus idle for 14 game days
+    // (g17j 1936.4). They act before the pass resumes.
+    for (name, step) in FAST_LANES {
+        state.last_ok = None;
+        if let Some(line) = step(state, tools, plan, lease, now)? {
+            state.sched.turns.insert(name, now);
+            return Ok(Tick::Acted(line));
+        }
+    }
     let mut restarted = false;
     loop {
         if state.round.cursor >= lanes.len() {
@@ -2388,6 +2398,9 @@ fn lane_of(list: &[Lane], name: &str) -> Lane {
 /// spends (political power, officer corps, design companies, doctrines, decisions), training,
 /// air, navy, intelligence and the rest. Each manage, military and affairs rule is its own lane,
 /// so a rule with work every pass never holds back the rules behind it.
+/// The lanes checked every tick ahead of the pass (see `lanes_tick`).
+const FAST_LANES: [Lane; 2] = [("research", research_lane), ("focus", focus_lane)];
+
 fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
     let manage = &plan_manage::LANES;
     let affairs = &plan_affairs::LANES;
@@ -2426,8 +2439,6 @@ fn lanes(plan: &Value, war_first: bool) -> Vec<Lane> {
         let economy = tools.call("hoi4_economy", &json!({}))?;
         construction_step(state, tools, plan, lease, now, &economy)
     }));
-    out.push(("research", research_lane));
-    out.push(("focus", focus_lane));
     out.push(("politics", politics_step));
     out.push(lane_of(manage, "officer_corps"));
     for name in ["mio_lines", "mio", "mio_traits"] {
@@ -12738,13 +12749,19 @@ mod tests {
         ] {
             assert_eq!(tools.sent(tool), 1, "{tool} issued once on day 1");
         }
-        // all ten free military factories in the first turn, before any other lane acted
+        // all ten free military factories in the first turn, before any other pass lane acted
+        // (the free research slot and the focus go ahead of the pass every tick)
         assert_eq!(*tools.requested.borrow(), 12);
+        let fast = [
+            "hoi4_production_set",
+            "hoi4_research_start",
+            "hoi4_focus_start",
+        ];
         let first_other = tools
             .calls
             .borrow()
             .iter()
-            .position(|(n, a)| a.get("request_id").is_some() && n != "hoi4_production_set")
+            .position(|(n, a)| a.get("request_id").is_some() && !fast.contains(&n.as_str()))
             .unwrap();
         let last_set = tools
             .calls

@@ -5380,7 +5380,24 @@ fn stockpile_rule(
     let economy = tools.call("hoi4_economy", &json!({}))?;
     let (military, idle) = military_lines(tools, &economy)?;
     let step = m["rebalance_step"].as_i64().filter(|n| *n > 0).unwrap_or(3);
-    let give = idle.min(step);
+    // the plan's dated lines under their floor keep the idle factories they lack (the balance
+    // fills them first); a stock below its target gets only the rest (g17j day 0: trucks 7 -> 10
+    // took the rifles' planned 12)
+    let (floors, _) = production_floors(plan, &read, now);
+    let arche_of = |eq: &str| archetype_row(&read, eq).unwrap_or_else(|| family(eq).to_string());
+    let asked = |a: &str| -> i64 {
+        military
+            .iter()
+            .filter(|l| arche_of(&l.1) == a)
+            .map(|l| l.2)
+            .sum()
+    };
+    let reserved: i64 = floors
+        .iter()
+        .filter(|(a, _)| a.as_str() != archetype)
+        .map(|(a, f)| (f - asked(a)).max(0))
+        .sum();
+    let give = (idle - reserved).max(0).min(step);
     // No idle factory: a shortage the divisions feel (or a cover under the critical days) takes
     // factories from a line whose equipment nobody lacks and whose stock covers twice its
     // target. Without this owner a stock stayed at 0 for eight months while every factory
@@ -5398,6 +5415,7 @@ fn stockpile_rule(
         let candidates: Vec<MilLine> = military
             .iter()
             .filter(|l| !recent.contains(&l.1))
+            .filter(|l| floors.get(&arche_of(&l.1)).is_none_or(|f| l.2 > *f))
             .cloned()
             .collect();
         let rates = supply(state, tools, now)
@@ -5998,6 +6016,12 @@ struct BalanceIn {
     priority: Vec<String>,
     /// Lines (equipment) that gave factories away within the last 30 days.
     pulled: HashSet<String>,
+    /// The plan's dated lines (`production[].factories` from its `from` date, the latest reached
+    /// entry of an archetype): floors filled before any need, from idle factories or from a
+    /// line above its own floor (the day-0 split, then the ramps by date).
+    floors: HashMap<String, i64>,
+    /// The equipment a floor's new line makes (the plan entry's equipment).
+    floor_equipment: HashMap<String, String>,
     /// A shortfall this many days of production long or longer may pull from a surplus line.
     pull_days: f64,
 }
@@ -6091,6 +6115,9 @@ fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
                     .then(y.index.cmp(&x.index))
             })
     };
+    if let Some(act) = floor_decide(b, idle, &line_of) {
+        return Some(act);
+    }
     // the archetypes short of what the divisions need, longest shortfall first
     let mut short: Vec<(String, f64)> = b
         .need
@@ -6185,7 +6212,8 @@ fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
             let stock = b.stock.get(&l.archetype).copied().unwrap_or(0.0);
             let need = b.need.get(&l.archetype).copied().unwrap_or(0.0);
             let planned = b.targets.get(&l.archetype).copied().unwrap_or(0);
-            stock > 0.0 && stock >= 2.0 * need && l.requested > planned
+            let floor = b.floors.get(&l.archetype).copied().unwrap_or(0);
+            stock > 0.0 && stock >= 2.0 * need && l.requested > planned.max(floor)
         })
         .max_by_key(|l| (l.requested, -l.index))?;
     let take = (donor.requested / 5).max(1);
@@ -6206,6 +6234,139 @@ fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
             b.need.get(&donor.archetype).copied().unwrap_or(0.0)
         ),
     })
+}
+
+/// Factories an archetype's lines ask for.
+fn asked_for(b: &BalanceIn, arche: &str) -> i64 {
+    b.lines
+        .iter()
+        .filter(|l| l.archetype == arche)
+        .map(|l| l.requested)
+        .sum()
+}
+
+/// Step 2b of the balance: the plan's dated lines first. A line under its floor gets the idle
+/// factories (a new line when none runs); with none idle, a line above its own floor (or one
+/// the plan neither sizes nor needs) gives the gap, at once: a ramp is the plan's decision and
+/// a factory idle or on the wrong line loses more than the efficiency a move costs.
+fn floor_decide<'a>(
+    b: &'a BalanceIn,
+    idle: i64,
+    line_of: &dyn Fn(&str) -> Option<&'a ProdLine>,
+) -> Option<BalanceAct> {
+    let mut gaps: Vec<(&String, i64)> = b
+        .floors
+        .iter()
+        .map(|(a, f)| (a, f - asked_for(b, a)))
+        .filter(|(_, g)| *g > 0)
+        .collect();
+    gaps.sort_by(|x, y| {
+        priority_rank(b, x.0)
+            .cmp(&priority_rank(b, y.0))
+            .then(y.1.cmp(&x.1))
+            .then(x.0.cmp(y.0))
+    });
+    for (arche, gap) in gaps {
+        let floor = b.floors[arche];
+        if idle > 0 {
+            let give = idle.min(gap);
+            return match line_of(arche) {
+                Some(line) => Some(BalanceAct::Set {
+                    index: line.index,
+                    equipment: line.equipment.clone(),
+                    factories: line.requested + give,
+                    why: format!(
+                        "{idle} idle: +{give} to {} (the plan's line is {floor} factories by now)",
+                        line.equipment
+                    ),
+                }),
+                None => b
+                    .floor_equipment
+                    .get(arche)
+                    .or_else(|| b.variant.get(arche))
+                    .map(|v| BalanceAct::Add {
+                        equipment: v.clone(),
+                        factories: give,
+                        why: format!("{idle} idle: the plan's {v} line ({floor} factories by now)"),
+                    }),
+            };
+        }
+        let Some(line) = line_of(arche) else {
+            continue;
+        };
+        let surplus = |l: &ProdLine| match b.floors.get(&l.archetype) {
+            Some(f) => l.requested - f,
+            None if fill_days(b, &l.archetype) <= 0.0 && !b.targets.contains_key(&l.archetype) => {
+                l.requested
+            }
+            None => 0,
+        };
+        let Some(donor) = b
+            .lines
+            .iter()
+            .filter(|l| l.archetype != *arche && surplus(l) > 0)
+            .max_by_key(|l| (surplus(l), -l.index))
+        else {
+            continue;
+        };
+        let take = gap.min(surplus(donor));
+        return Some(BalanceAct::Set {
+            index: donor.index,
+            equipment: donor.equipment.clone(),
+            factories: donor.requested - take,
+            why: format!(
+                "no idle factory: {take} of {} factories leave {} (above its plan line) for {} (the plan's line is {floor}, it asks {})",
+                donor.requested, donor.equipment, line.equipment, line.requested
+            ),
+        });
+    }
+    None
+}
+
+/// The plan's dated production floors by archetype: the latest reached `production` entry with
+/// `factories` (not a `remove` or a `replace`), and the equipment it names.
+fn production_floors(
+    plan: &Value,
+    stock: &Value,
+    now: GameHour,
+) -> (HashMap<String, i64>, HashMap<String, String>) {
+    let mut floors: HashMap<String, (GameHour, i64)> = HashMap::new();
+    let mut equipment: HashMap<String, String> = HashMap::new();
+    // opt-in (`production_floors: true`): a plan whose lines are only a day-0 suggestion keeps
+    // the balance by need alone
+    if plan["production_floors"] != json!(true) {
+        return (HashMap::new(), HashMap::new());
+    }
+    for entry in list(plan, "production") {
+        let eq = text(&entry["equipment"]);
+        let Some(f) = entry["factories"].as_i64() else {
+            continue;
+        };
+        if eq.is_empty()
+            || entry["remove"] == json!(true)
+            || !entry["replace"].is_null()
+            || entry["floor"] == json!(false)
+            || !super::reached(entry, now)
+        {
+            continue;
+        }
+        let from = match entry.get("from") {
+            Some(v) if !v.is_null() => crate::alarms::stop_on_date(&json!({"stop_on_date": v}))
+                .ok()
+                .flatten()
+                .map_or(0, |(h, _)| h),
+            _ => 0,
+        };
+        let a = archetype_row(stock, eq).unwrap_or_else(|| family(eq).to_string());
+        if floors.get(&a).is_none_or(|(at, _)| from >= *at) {
+            floors.insert(a.clone(), (from, f));
+            equipment.insert(a, eq.to_string());
+        }
+    }
+    (
+        floors.into_iter().map(|(a, (_, f))| (a, f)).collect(),
+        equipment,
+    )
 }
 
 /// The training entries whose `when` holds now (the planned force the equipment is for).
@@ -6427,6 +6588,7 @@ fn balance_once(
             }
         }
     }
+    (b.floors, b.floor_equipment) = production_floors(plan, &stock, now);
     b.priority = strings(plan, "production_priority")
         .iter()
         .map(|k| archetype_row(&stock, k).unwrap_or_else(|| family(k).to_string()))
@@ -9875,6 +10037,72 @@ mod tests {
             balance_decide(&b),
             Some(BalanceAct::Remove { .. })
         ));
+    }
+
+    #[test]
+    fn the_plans_dated_lines_are_floors_filled_before_any_need() {
+        // g17j day 0: trucks 10 (the stockpile rule), rifles 10 of the plan's 12, none idle
+        let mut b = BalanceIn {
+            total: 26,
+            ..Default::default()
+        };
+        b.lines = vec![
+            pl(0, "artillery_equipment_1", 4, 4, 10.0),
+            pl(2, "motorized_equipment_1", 10, 10, 10.0),
+            pl(3, "infantry_equipment_1", 10, 10, 10.0),
+            pl(1, "support_equipment_1", 2, 2, 10.0),
+        ];
+        for (a, f) in [
+            ("infantry_equipment", 12),
+            ("artillery_equipment", 4),
+            ("support_equipment", 5),
+            ("motorized_equipment", 7),
+        ] {
+            b.floors.insert(a.into(), f);
+        }
+        b.need.insert("motorized_equipment".into(), 900.0);
+        b.per_day.insert("motorized_equipment".into(), 10.0);
+        // support is 3 short and the trucks 3 above: the trucks give the support its line
+        match balance_decide(&b) {
+            Some(BalanceAct::Set {
+                index, factories, ..
+            }) => assert_eq!((index, factories), (2, 7)),
+            other => panic!("{other:?}"),
+        }
+        // idle factories go to the floors before the trucks' shortfall
+        b.lines[1].requested = 7;
+        b.lines[3].requested = 5;
+        b.total = 28;
+        match balance_decide(&b) {
+            Some(BalanceAct::Set {
+                index, factories, ..
+            }) => assert_eq!((index, factories), (3, 12)),
+            other => panic!("{other:?}"),
+        }
+        // a ramp by date with no line: a new line from the idle factories
+        b.lines[2].requested = 12;
+        b.total = 31;
+        b.floors.insert("small_plane_airframe".into(), 8);
+        b.floor_equipment.insert(
+            "small_plane_airframe".into(),
+            "small_plane_airframe_1".into(),
+        );
+        match balance_decide(&b) {
+            Some(BalanceAct::Add {
+                equipment,
+                factories,
+                ..
+            }) => assert_eq!(
+                (equipment.as_str(), factories),
+                ("small_plane_airframe_1", 3)
+            ),
+            other => panic!("{other:?}"),
+        }
+        // the line then grows to its floor from a line above its own (none here: it waits)
+        b.total = 28;
+        b.lines.push(pl(4, "small_plane_airframe_1", 1, 1, 10.0));
+        b.lines[1].requested = 6;
+        assert_eq!(balance_decide(&b), None);
     }
 
     #[test]
