@@ -3461,6 +3461,48 @@
                 "minimum": 0,
                 "description": "divisions of the formations on the war's axes per enemy division on the front, on its first day (lint war.attack_force; default 1.0)"
               },
+              "placement": {
+                "type": "array",
+                "x-owner": "lint",
+                "description": "war-day placement of a war without an operation (a small theatre, a war reached by sea): each army with its divisions by template that day and its role (attack: on the war's axes or in its landings; hold: a border or coast; garrison). Read by lint war.attack_force: the rows name the forecast army, the attack carries attack_ratio x the enemy front in a land war, the armour is among the attackers. Large land wars state it in operations[] instead",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "army": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "army_layout name_hint"
+                    },
+                    "role": {
+                      "enum": [
+                        "attack",
+                        "hold",
+                        "garrison"
+                      ],
+                      "description": "attack: on the war's axes or in its landings; hold: a border or coast; garrison: occupied land"
+                    },
+                    "divisions": {
+                      "type": "object",
+                      "description": "{template: divisions} standing in the army on the war day",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "minProperties": 1
+                    },
+                    "why": {
+                      "type": "string",
+                      "description": "Free text for people and the player; never read by the executor."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "army",
+                    "role",
+                    "divisions"
+                  ]
+                }
+              },
               "tasks": {
                 "type": "array",
                 "items": {

@@ -489,7 +489,8 @@ def plan_wars(lint, tl):
         wars.append(dict(gr, kind="offensive"))
     # a war the force design plans (a later horizon declares it) is held to the same checks from its start
     fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
-    covered = {t for x in wars for t in x["targets"]}
+    # a country a declaration lists as a joiner (a guarantor, an ally of the target) is fought in that war
+    covered = {t for x in wars for t in x["targets"]} | {j for x in wars for j in x["joiners"]}
     for x in fd.get("wars") or []:
         if not isinstance(x, dict) or x.get("kind", "offensive") != "offensive":
             continue

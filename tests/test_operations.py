@@ -212,6 +212,26 @@ class Poland(unittest.TestCase):
         self.assertFalse(self.errors(plan, "war.mobile_axis"))
         self.assertFalse([m for m in self.errors(plan, "war.objective_not_at_war") if "Armee Panzer" in m])
 
+    def test_a_small_or_sea_war_states_its_war_day_in_the_force_design(self):
+        plan = poland(False)
+        war = plan["force_design"]["wars"][0]
+        war["placement"] = [{"army": "Armee Ost", "role": "attack", "divisions": {INF: 10}},
+                            {"army": "Armee Panzer", "role": "hold", "divisions": {PZ: 3}},
+                            {"army": "Armee Niemand", "role": "hold", "divisions": {INF: 60}}]
+        found = self.errors(plan, "war.attack_force")
+        self.assertTrue(any("attack rows carry 10 divisions" in m and "outside the attack (Armee Panzer)" in m
+                            and "Armee Niemand" in m for m in found), found)
+        war["placement"] = [{"army": "Armee Ost", "role": "attack", "divisions": {INF: 72, PZ: 3, MOT: 1}},
+                            {"army": "Armee West", "role": "hold", "divisions": {INF: 29}}]
+        self.assertFalse(self.errors(plan, "war.attack_force"))
+
+    def test_a_war_reached_by_sea_is_no_operation_and_needs_no_land_axis(self):
+        plan = poland()
+        plan["diplomacy"].append({"id": "eng", "action": "declare", "target": "ENG", "when": "date >= 1940.6.1"})
+        out = lint_plan.lint(plan, self.game)
+        self.assertFalse([m for m in self.errors(out, "war.operation_required") if "war_eng" in m])
+        self.assertFalse([m for m in self.errors(out, "war.axes_missing") if "war_eng" in m])
+
 
 if __name__ == "__main__":
     unittest.main()
