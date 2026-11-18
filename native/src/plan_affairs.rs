@@ -253,6 +253,9 @@ fn code(why: &str) -> &str {
     why.split(':').next().unwrap_or("").trim()
 }
 
+/// How long a due declaration waits for its operation's prepare to read back.
+const OP_DECLARE_WAIT: GameHour = 10 * DAY;
+
 /// One section's view of the tick.
 struct Run<'a> {
     tools: &'a dyn Tools,
@@ -1134,20 +1137,27 @@ fn diplomacy_items(
             waits.push(format!("{label}: waiting"));
             continue;
         }
-        // an operation against the target still preparing holds the declaration, at most three
-        // game days from the first time it held it
-        if action == "declare_war" {
-            if let Some(op) = super::plan_operation::unready(state, plan, &target) {
-                let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
-                if now - first < 3 * DAY {
-                    waits.push(format!("{label}: operation {op} still preparing"));
-                    continue;
-                }
-            }
-        }
         if let Some(why) = gate(state, tools, &item["when"], now) {
             waits.push(format!("{label}: {why}"));
             continue;
+        }
+        // An operation against the target still preparing holds the declaration, at most
+        // OP_DECLARE_WAIT from the day the declaration itself was due. The wait used to count
+        // from the first tick of the prepare, weeks before the declaration's own `when`, so it
+        // had always run out: b1f (18 Nov 2026) declared on the day its focus completed with the
+        // West hold undrawn, and France took four states while no attack executed.
+        if action == "declare_war" {
+            if let Some(op) = super::plan_operation::unready(state, plan, &target) {
+                let first = *state.done.entry(format!("declwait:{key}")).or_insert(now);
+                if now - first < OP_DECLARE_WAIT {
+                    waits.push(format!(
+                        "{label}: operation {op} still preparing ({} of {} days waited)",
+                        (now - first) / DAY,
+                        OP_DECLARE_WAIT / DAY
+                    ));
+                    continue;
+                }
+            }
         }
         if let Some(max) = item["world_tension_max"].as_f64() {
             let wt = json!(format!("world_tension <= {max}"));
