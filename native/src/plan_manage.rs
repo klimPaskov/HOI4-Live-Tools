@@ -6022,6 +6022,9 @@ struct BalanceIn {
     floors: HashMap<String, i64>,
     /// The equipment a floor's new line makes (the plan entry's equipment).
     floor_equipment: HashMap<String, String>,
+    /// Archetypes the plan closed (`remove: true`, no floor reached since): with floors on, the
+    /// balance never feeds or re-adds them and their lines give to the floors.
+    removed: HashSet<String>,
     /// A shortfall this many days of production long or longer may pull from a surplus line.
     pull_days: f64,
 }
@@ -6133,7 +6136,7 @@ fn balance_decide(b: &BalanceIn) -> Option<BalanceAct> {
     });
     if idle > 0 {
         // 3. idle and new factories by need, in chunks of max(2, a fifth of the line) (PR10)
-        for (arche, days) in &short {
+        for (arche, days) in short.iter().filter(|(a, _)| !b.removed.contains(a)) {
             let shown = if days.is_finite() {
                 format!("{days:.0} days of production")
             } else {
@@ -6296,6 +6299,7 @@ fn floor_decide<'a>(
         };
         let surplus = |l: &ProdLine| match b.floors.get(&l.archetype) {
             Some(f) => l.requested - f,
+            None if b.removed.contains(&l.archetype) => l.requested,
             None if fill_days(b, &l.archetype) <= 0.0 && !b.targets.contains_key(&l.archetype) => {
                 l.requested
             }
@@ -6330,15 +6334,37 @@ fn production_floors(
     stock: &Value,
     now: GameHour,
 ) -> (HashMap<String, i64>, HashMap<String, String>) {
+    production_floors_removed(plan, stock, now).0
+}
+
+/// [`production_floors`] and the archetypes the plan removed with no floor reached since.
+#[allow(clippy::type_complexity)]
+fn production_floors_removed(
+    plan: &Value,
+    stock: &Value,
+    now: GameHour,
+) -> (
+    (HashMap<String, i64>, HashMap<String, String>),
+    HashSet<String>,
+) {
+    let mut removed: HashSet<String> = HashSet::new();
     let mut floors: HashMap<String, (GameHour, i64)> = HashMap::new();
     let mut equipment: HashMap<String, String> = HashMap::new();
     // opt-in (`production_floors: true`): a plan whose lines are only a day-0 suggestion keeps
     // the balance by need alone
     if plan["production_floors"] != json!(true) {
-        return (HashMap::new(), HashMap::new());
+        return ((HashMap::new(), HashMap::new()), removed);
     }
     for entry in list(plan, "production") {
         let eq = text(&entry["equipment"]);
+        // ships are built by dockyards (the naval queue's lines): a ship entry is never a floor of
+        // the military factories (v213 added a destroyer line with them on each turn, g17j2)
+        if eq.starts_with("ship_hull") || entry["kind"] == json!("naval") {
+            continue;
+        }
+        if !eq.is_empty() && entry["remove"] == json!(true) && super::reached(entry, now) {
+            removed.insert(archetype_row(stock, eq).unwrap_or_else(|| family(eq).to_string()));
+        }
         let Some(f) = entry["factories"].as_i64() else {
             continue;
         };
@@ -6363,9 +6389,13 @@ fn production_floors(
             equipment.insert(a, eq.to_string());
         }
     }
+    removed.retain(|a| !floors.contains_key(a));
     (
-        floors.into_iter().map(|(a, (_, f))| (a, f)).collect(),
-        equipment,
+        (
+            floors.into_iter().map(|(a, (_, f))| (a, f)).collect(),
+            equipment,
+        ),
+        removed,
     )
 }
 
@@ -6588,7 +6618,7 @@ fn balance_once(
             }
         }
     }
-    (b.floors, b.floor_equipment) = production_floors(plan, &stock, now);
+    ((b.floors, b.floor_equipment), b.removed) = production_floors_removed(plan, &stock, now);
     b.priority = strings(plan, "production_priority")
         .iter()
         .map(|k| archetype_row(&stock, k).unwrap_or_else(|| family(k).to_string()))
@@ -10103,6 +10133,17 @@ mod tests {
         b.lines.push(pl(4, "small_plane_airframe_1", 1, 1, 10.0));
         b.lines[1].requested = 6;
         assert_eq!(balance_decide(&b), None);
+        // a line the plan removed (re-added for fielded divisions) gives its factories to a floor
+        b.removed.insert("light_tank_chassis".into());
+        b.lines.push(pl(8, "light_tank_chassis_2", 3, 3, 10.0));
+        b.need.insert("light_tank_chassis".into(), 40.0);
+        b.total = 31;
+        match balance_decide(&b) {
+            Some(BalanceAct::Set {
+                index, factories, ..
+            }) => assert_eq!((index, factories), (8, 0)),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

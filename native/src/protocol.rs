@@ -1655,8 +1655,21 @@ impl Server {
                 let empty = json!({});
                 let mut args = msg["params"].get("arguments").unwrap_or(&empty).clone();
                 // the executor's own orders never come this way (they call Server::call): a
-                // land order from outside on an army a running operation owns is refused
-                if let Some(why) = crate::plan_run::operation_guard_outside(name, &mut args) {
+                // land order from outside on an army a running operation owns is refused, unless
+                // the operator overrides it (`operator_override: true`, stripped before the call:
+                // a hand order of the live engineer where the executor cannot do what a war
+                // needs; logged to stderr)
+                let operator = args
+                    .as_object_mut()
+                    .and_then(|o| o.remove("operator_override"))
+                    .is_some_and(|v| v == json!(true));
+                if operator {
+                    eprintln!("[operator_override] {name} {args}");
+                }
+                if let Some(why) = (!operator)
+                    .then(|| crate::plan_run::operation_guard_outside(name, &mut args))
+                    .flatten()
+                {
                     let mut v = content(json!({"error": Error::new("owned_by_operation", why)}));
                     v["isError"] = json!(true);
                     return Some(json!({"jsonrpc":"2.0","id":id,"result":v}));
