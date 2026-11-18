@@ -911,6 +911,11 @@
           "exclusiveMinimum": 0,
           "description": "max_wait_days while at war with a plan enemy: the war burst comes first and the other domains wait up to this many game days for their turn"
         },
+        "force_first": {
+          "type": "boolean",
+          "default": true,
+          "description": "at peace the force spends (political power, template edits, officer corps spirits, designs) get a tick ahead of the war-first block, every other tick at most and once a game day when nothing is bought; false leaves them to the domain turns"
+        },
         "why": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
