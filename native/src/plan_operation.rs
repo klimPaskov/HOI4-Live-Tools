@@ -181,6 +181,20 @@ fn owned_names(state: &State, plan: &Value, op: &Value, roster: &Value) -> Vec<S
     names
 }
 
+/// Whether an operation of the plan names `hint` as one of its formation or hold armies.
+pub(super) fn names_army(plan: &Value, hint: &str) -> bool {
+    !hint.is_empty()
+        && list(plan, "operations").iter().any(|op| {
+            list(op, "formations")
+                .iter()
+                .any(|f| text(&f["army"]) == hint)
+                || list(op, "holds")
+                    .iter()
+                    .flat_map(|h| list(h, "armies").iter())
+                    .any(|a| text(&a["army"]) == hint)
+        })
+}
+
 /// A layout role name means the army bound to it, anything else is an army name.
 fn resolve(state: &State, hint: &str) -> String {
     state
