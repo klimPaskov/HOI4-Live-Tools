@@ -44,6 +44,10 @@ Full FAIR plan with checkpoints: [germany-fair.md](germany-fair.md).
   expert), Fate of Czechoslovakia, Four Year Plan (pick Speer in its Captain of Industry event), Reichsautobahn,
   Goebbels (replaces Todt), KdF-Wagen, Heraeus (Seldte), Accelerate Rearmament, Concentrated Armament, Production
   Targets, Autarky (Limited Exports), Institute Price Controls (every price-control decision except Gömbös).
+- **FAIR timing:** the same order with Austria, the Sudetenland and Czechia in their 1938-39 season (the economy and
+  army focuses fill 1936-37), War Economy on its war-support gate (above 50%, about November 1938), promotions as
+  command power accrues (it starts at 0), and line artillery kept for the attacking infantry against the AI
+  ([germany-fair.md](germany-fair.md) sections 4 and 6).
 - **Focus and PP 1938-39:** Reassert Eastern Claims, Modern Maneuver Warfare, New Panzer Doctrine, the medium-tank
   research focus, Molotov-Ribbentrop (so the USSR does not take Memel), Coal Liquefaction (Develop Ersatz Material),
   Danzig or War no earlier than July 1939 (Military High Command, logistics advisor, Total Mobilisation), Around
