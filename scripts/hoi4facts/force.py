@@ -487,6 +487,19 @@ def plan_wars(lint, tl):
                      "declares)"], "gone": set(), "kind": "defensive"})
     for gr in groups.values():
         wars.append(dict(gr, kind="offensive"))
+    # a war the force design plans (a later horizon declares it) is held to the same checks from its start
+    fd = lint.plan.get("force_design") if isinstance(lint.plan.get("force_design"), dict) else {}
+    covered = {t for x in wars for t in x["targets"]}
+    for x in fd.get("wars") or []:
+        if not isinstance(x, dict) or x.get("kind", "offensive") != "offensive":
+            continue
+        enemies = [t for t in x.get("enemies") or [] if isinstance(t, str) and t not in covered]
+        day = derive.day(x.get("start")) if isinstance(x.get("start"), str) else None
+        if not enemies or day is None:
+            continue
+        wars.append({"start": day, "targets": enemies, "joiners": set(), "gone": set(), "kind": "offensive",
+                     "source": [f"force_design.wars {x.get('id')} (planned; a later horizon declares it)"]})
+        covered |= set(enemies)
     wars.sort(key=lambda x: (x["start"] is None, x["start"] or 0))
     neighbours = {}
 

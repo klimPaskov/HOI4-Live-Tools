@@ -87,6 +87,20 @@ class ScriptedWar(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class PlannedWar(unittest.TestCase):
+    def test_a_war_a_later_horizon_declares_is_checked_from_its_start(self):
+        game = lint_plan.load_game(GAME_DIR)
+        plan = germany_at_war()
+        plan["force_design"] = {"wars": [
+            {"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 3},
+            {"id": "war_sov", "enemies": ["SOV"], "kind": "offensive", "axes": 3, "start": "1941.6.22"}]}
+        out = lint_plan.lint(plan, game)
+        war = next(w for w in out["facts"]["force"]["wars"] if "SOV" in w["targets"])
+        self.assertEqual(war["start_date"], "1941.06.22")
+        self.assertTrue(any(r["war"] == war["id"] and r["problems"] for r in out["facts"]["force"]["decisive"]))
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
 class Duration(unittest.TestCase):
     def test_the_label_follows_the_plans_own_timetable(self):
         game = lint_plan.load_game(GAME_DIR)
