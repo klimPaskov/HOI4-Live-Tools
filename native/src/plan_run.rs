@@ -60,8 +60,9 @@
 //!                          (plan_manage.rs rule 4; default on, false switches it off)
 //!   scheduler              {"max_wait_days":1}: every domain of `DOMAINS` (politics, decisions,
 //!                          training, production, construction, extras, manage, military, affairs)
-//!                          gets a turn at least this often; one kept waiting longer goes ahead of
-//!                          the war-first block for one tick, and the war takes the tick after
+//!                          gets a turn at least this often ("war_max_wait_days":3 at war); one kept
+//!                          waiting longer goes ahead of the war-first block for one tick, and the
+//!                          war takes the tick after
 //!   decisions              decision keys taken whenever enabled
 //!   training               {"template","queue","batch","deploy_state","when"?} keep a training queue, or a
 //!                          list of them (plan_manage.rs, with `training_rules`)
@@ -149,6 +150,10 @@
 //!   war                    {"enemies":["FRA"],"min_army":6,"per_target":2,"reserve":["Army 9"],"cooldown_hours":12}
 //!                          send armies at the nearest enemy-held states (own states held by an enemy first):
 //!                          step into the state, draw front and offensive lines, execute the plan.
+//!                          Every army in the same tick: the step runs as a burst ("burst_orders":16,
+//!                          "burst_seconds":30) and the air follows it in that tick; a `reserve` army
+//!                          holds the state it stands in as a guard; a guard faces enemy-held land
+//!                          bordering its post or within "guard_reach":70 map units.
 //!                          Optional: "axes":[[842,843,271],[835,271]] ordered targets (an army follows the
 //!                          axis whose next enemy-held state is nearest; "axes":[] is a hold phase unless
 //!                          "posture":"attack" says the phase attacks, then each army takes its layout
@@ -316,14 +321,10 @@ pub const DAY: GameHour = 24;
 /// How long a failure stays in the ledger (game hours): the backoff counts failures since the
 /// order last worked within this window.
 const LEDGER_KEEP: GameHour = 120 * DAY;
-/// A failed try that held the input this many seconds or longer waits in proportion.
+/// A failed try that held the input this many seconds or longer rests in proportion.
 const COSTLY_FAILURE: u64 = 5;
-/// The wall-clock wait after a costly failed try, in multiples of the time it took.
-const COST_FACTOR: u64 = 10;
 /// Failures in a row after which an order is given up and reported.
 const GIVE_UP_AFTER: u32 = 5;
-/// Wall seconds a given-up order rests before one more try.
-const GIVE_UP_SECONDS: u64 = 1800;
 /// Game hours a second of wall time stands for while the game clock stands still (speed 3 runs
 /// about 22 game days a minute).
 const STILL_HOURS_PER_SECOND: u64 = 8;
@@ -523,6 +524,13 @@ pub struct State {
     war_stage: HashMap<String, u8>,
     /// The war step runs as the opening pass: it only draws the lines of armies that have none.
     war_lines_only: bool,
+    /// Armies given a war order (sent or failed) in this tick: a burst gives each army at most
+    /// one order per tick and goes on to the next (not persisted).
+    war_tick: HashSet<String>,
+    /// A war burst runs (`war_tick` is kept only then).
+    war_bursting: bool,
+    /// At war with an enemy of the plan (set by the war step; not persisted).
+    war_active: bool,
     /// The first tick with nothing left to do in a paused game was noted (`setup_complete`).
     setup_noted: bool,
     /// Runs that ended on a failed order while the opening was not yet noted as set up.
@@ -732,6 +740,9 @@ impl Default for State {
             war_assign: HashMap::new(),
             war_stage: HashMap::new(),
             war_lines_only: false,
+            war_tick: HashSet::new(),
+            war_bursting: false,
+            war_active: false,
             setup_noted: false,
             setup_failed_runs: 0,
             war_cool: HashMap::new(),
@@ -932,6 +943,57 @@ impl Moves {
 fn skip_key(kind: &str, key: &str) -> String {
     format!("{kind}:{key}")
 }
+
+/// Orders of the war itself: the war moves in game hours, so their failures rest hours.
+fn war_order(tool: &str) -> bool {
+    matches!(
+        tool,
+        "hoi4_army_front"
+            | "hoi4_army_offensive"
+            | "hoi4_army_plan"
+            | "hoi4_army_move"
+            | "hoi4_army_fallback"
+            | "hoi4_army_area_defense"
+            | "hoi4_air_mission"
+            | "hoi4_air_rebase"
+    )
+}
+
+/// Why a failed order rests (the longest of the reasons wins).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Rest {
+    Repeated,
+    Costly,
+    GivenUp,
+}
+
+/// Game hours a failed order rests after `in_row` failures in a row, the last of which held the
+/// input `cost` seconds (see `State::backing_off`).
+fn ledger_rest(war: bool, in_row: u32, cost: u64) -> (GameHour, Rest) {
+    let (first, base, cap, per_second, cost_cap, given_up) = if war {
+        (2, 12, 4 * DAY, 4, 3 * DAY, 6 * DAY)
+    } else {
+        (3, 10 * DAY, 80 * DAY, 16, 30 * DAY, 60 * DAY)
+    };
+    if in_row >= GIVE_UP_AFTER {
+        return (given_up, Rest::GivenUp);
+    }
+    let repeated = if in_row >= first {
+        (base << (in_row - first).min(4)).min(cap)
+    } else {
+        0
+    };
+    let costly = if cost >= COSTLY_FAILURE {
+        ((cost as GameHour) * per_second).min(cost_cap)
+    } else {
+        0
+    };
+    if costly > repeated {
+        (costly, Rest::Costly)
+    } else {
+        (repeated, Rest::Repeated)
+    }
+}
 /// A focus start that failed for a passing reason (a GUI read or a readback), not because the
 /// game refuses the focus (requirements, an exclusive branch, a known unavailability).
 fn focus_failure_passing(code: &str) -> bool {
@@ -1066,6 +1128,11 @@ impl State {
             return Ok((false, why));
         }
         let clock = self.clock;
+        if war_order(name) && self.war_bursting {
+            if let Some(army) = args["army"].as_str().filter(|a| !a.is_empty()) {
+                self.war_tick.insert(army.to_string());
+            }
+        }
         self.seq += 1;
         let mut args = args;
         if let Some(object) = args.as_object_mut() {
@@ -1158,76 +1225,73 @@ impl State {
                 .map_or(0, |d| d.as_secs())
         })
     }
-    /// The failure ledger: an order that failed `n >= 3` times (since its last success, within
-    /// LEDGER_KEEP) waits `10 * 2^(n-3)` game days (at most 80) AND `2 * 2^(n-3)` wall minutes
-    /// (at most 60) after its last failure. Game time alone was not enough: at speed 3 ten game
-    /// days pass in about 25 s, so a failing selection went out about 40 times in one shakedown
-    /// (10 Nov 2026). Some(reason) while the order waits.
+    /// The failure ledger, in GAME time only: a failed order rests a span of game hours that
+    /// depends on its kind, on how many times in a row it failed, and on how long the failed try
+    /// held the input. Wall seconds never count while the game runs: at speed 3 a wall minute is
+    /// about three game weeks, and a wall-clock rest of 260 s held a war order for about 25 game
+    /// days while the front collapsed (wb3, 18 Nov 2026).
     ///
-    /// From the first failure on, a try that held the input for COSTLY_FAILURE seconds or more
-    /// waits COST_FACTOR times that long (at most an hour) before the same order goes out
-    /// again: every player call and every other executor step queue behind the input, so a
-    /// search that ends in a refusal after 47 s must not come back with the next skip timer
-    /// (14 Nov 2026: four such tries took 69 game days of input in one year).
+    /// - War orders (an army's front, offensive, plan, move, fall-back, area defence; an air
+    ///   mission or rebase): the second failure in a row rests 12 game hours, each further one
+    ///   twice that, at most 4 game days; a try that held the input `cost` seconds rests
+    ///   `cost * 4` game hours (at most 3 game days); given up after GIVE_UP_AFTER failures in
+    ///   a row, the order rests 6 game days, then one more try decides.
+    /// - Every other order: the third failure in a row rests 10 game days, each further one
+    ///   twice that, at most 80; a costly try rests `cost * 16` game hours (at most 30 days);
+    ///   a given-up order rests 60 game days.
+    ///
+    /// While the game clock stands still (a paused setup) a game hour is taken as
+    /// 1 / STILL_HOURS_PER_SECOND wall seconds, so a paused game neither spins nor waits forever.
+    /// Some(reason) while the order waits.
     fn backing_off(&mut self, signature: &str) -> Option<String> {
         let clock = self.clock;
-        let since_failure = self
-            .failed_wall
-            .get(signature)
-            .map(|at| self.wall_now().saturating_sub(*at));
-        // Given up: the same order failed GIVE_UP_AFTER times in a row. It rests for
-        // GIVE_UP_SECONDS of wall time, then one more try decides (a success clears the count,
-        // another failure rests it again).
-        if let (Some((n, cause)), Some(passed)) = (self.failed_run.get(signature), since_failure) {
-            if *n >= GIVE_UP_AFTER && passed < GIVE_UP_SECONDS {
-                return Some(format!(
-                    "skipped: given up after {n} failures in a row ({cause}); the player was told, the order rests {} more wall minutes",
-                    (GIVE_UP_SECONDS - passed).div_ceil(60)
-                ));
-            }
-        }
-        let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
-        let cost_left = match since_failure {
-            Some(passed) if cost >= COSTLY_FAILURE => {
-                (COST_FACTOR * cost).min(3600).saturating_sub(passed)
-            }
-            _ => 0,
-        };
+        let war = war_order(signature.split(' ').next().unwrap_or(""));
         let times = self.failures.get_mut(signature)?;
         times.retain(|t| clock - *t < LEDGER_KEEP);
-        let n = times.len();
-        if n < 3 {
-            return (cost_left > 0).then(|| {
-                format!(
-                    "skipped: the last try of this order failed after {cost} s on the input; it waits {cost_left} more wall seconds"
-                )
-            });
-        }
-        let last = times.iter().copied().max().unwrap_or(clock);
-        let doubling = 1u64 << (n - 3).min(4);
-        let game_wait = (10 * DAY * doubling as GameHour).min(80 * DAY);
-        let wall_wait = (120 * doubling).min(3600);
-        // no game hour has passed since the failure (a paused game): the wall wait alone counts
-        let game_left = if clock == last {
-            0
-        } else {
-            game_wait - (clock - last).clamp(0, game_wait)
-        };
-        let wall_left = self
-            .failed_wall
+        let last = times.iter().copied().max();
+        let in_window = times.len() as u32;
+        let (in_row, cause) = self
+            .failed_run
             .get(signature)
-            .map_or(0, |at| {
-                wall_wait.saturating_sub(self.wall_now().saturating_sub(*at))
-            })
-            .max(cost_left);
-        if game_left == 0 && wall_left == 0 {
+            .map_or((in_window, String::new()), |(n, c)| {
+                ((*n).max(in_window), c.clone())
+            });
+        let last = last?;
+        let cost = self.failed_cost.get(signature).copied().unwrap_or(0);
+        let (rest, why) = ledger_rest(war, in_row, cost);
+        if rest <= 0 {
             return None;
         }
-        Some(format!(
-            "skipped: the same order failed {n} times in a row; it waits {} more game days and {} more wall seconds",
-            (game_left + DAY - 1) / DAY,
-            wall_left
-        ))
+        // game hours passed since the failure; a clock standing still counts wall time instead
+        let passed: GameHour = if clock > last {
+            clock - last
+        } else {
+            let since = self
+                .failed_wall
+                .get(signature)
+                .map_or(u64::MAX, |at| self.wall_now().saturating_sub(*at));
+            (since.saturating_mul(STILL_HOURS_PER_SECOND)).min(i64::MAX as u64) as GameHour
+        };
+        if passed >= rest {
+            return None;
+        }
+        let left = rest - passed;
+        let span = if left >= DAY {
+            format!("{} more game days", (left + DAY - 1) / DAY)
+        } else {
+            format!("{left} more game hours")
+        };
+        Some(match why {
+            Rest::GivenUp => format!(
+                "skipped: given up after {in_row} failures in a row ({cause}); the player was told, the order rests {span}"
+            ),
+            Rest::Costly => format!(
+                "skipped: the last try of this order failed after {cost} s on the input; it waits {span}"
+            ),
+            Rest::Repeated => format!(
+                "skipped: the same order failed {in_row} times in a row; it waits {span}"
+            ),
+        })
     }
     fn dispatch(&mut self, tools: &dyn Tools, name: &str, args: &Value) -> Result<(bool, String)> {
         let args = args.clone();
@@ -1366,6 +1430,7 @@ pub fn tick(
         }
     }
     state.con.digest = None;
+    state.war_tick.clear();
     state.stages.research = None;
     state.stages.focus = None;
     state.con.baseline.get_or_insert(now);
@@ -2072,10 +2137,18 @@ fn overdue_step(
     if std::mem::take(&mut state.sched.yielded) {
         return Ok(None);
     }
-    let wait = plan["scheduler"]["max_wait_days"]
+    // At war the war burst comes first: the other domains wait up to three game days for their
+    // turn (`scheduler.war_max_wait_days`), not one (wb3: daily turns of slow management orders,
+    // a 45 s trait pick among them, took 46% of the input lane in a two-front war).
+    let (key, default) = if state.war_active {
+        ("war_max_wait_days", 3 * DAY)
+    } else {
+        ("max_wait_days", DAY)
+    };
+    let wait = plan["scheduler"][key]
         .as_f64()
         .filter(|d| *d > 0.0)
-        .map_or(DAY, |d| (d * DAY as f64).round() as GameHour);
+        .map_or(default, |d| (d * DAY as f64).round() as GameHour);
     let mut due: Vec<(GameHour, usize)> = Vec::new();
     for (i, (name, _)) in DOMAINS.iter().enumerate() {
         let last = *state.sched.turns.entry(name).or_insert(now);
@@ -2379,7 +2452,7 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
-    let steps: [Step; 9] = [
+    let steps: [Step; 10] = [
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
         // offensive line before any name, commander or disband. Lines cost nothing to hold and
@@ -2388,7 +2461,7 @@ fn war_first_steps(
         // 2026). Everything else the war step does keeps its place below.
         |state, tools, plan, lease, now| {
             state.war_lines_only = true;
-            let out = war_step(state, tools, plan, lease, now);
+            let out = war_burst(state, tools, plan, lease, now, war_step);
             state.war_lines_only = false;
             out
         },
@@ -2409,25 +2482,101 @@ fn war_first_steps(
                 Ok(None)
             }
         },
-        war_step,
+        |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, war_step),
+        |state, tools, plan, lease, now| war_burst(state, tools, plan, lease, now, air_war_step),
         construction_plan_step,
         armies_step,
     ];
     // A step whose order failed (or that the failure ledger held back) does not end the tick:
     // the next steps still get it (shakedown 10 Nov 2026: a failing army_create in the layout
     // ran first in every tick and the war step behind it never drew an offensive).
+    // The war burst and the air burst (steps 6 and 7) run in the same tick: the air follows the
+    // armies' fighting at once, and the steps behind them wait for the next tick.
     let mut failed: Option<String> = None;
-    for step in steps {
+    let mut burst: Vec<String> = Vec::new();
+    for (i, step) in steps.into_iter().enumerate() {
+        let chained = i == 6 || i == 7;
+        if !chained && !burst.is_empty() {
+            break;
+        }
         state.last_ok = None;
         if let Some(line) = step(state, tools, plan, lease, now)? {
             if state.last_ok == Some(false) {
                 failed.get_or_insert(line);
                 continue;
             }
+            if chained {
+                burst.push(line);
+                continue;
+            }
             return Ok(Some(line));
         }
     }
+    if !burst.is_empty() {
+        state.last_ok = Some(true);
+        return Ok(Some(burst.join("; ")));
+    }
     Ok(failed)
+}
+
+/// The war step as a burst: one call gives at most one order (its army then cools down), so the
+/// step is called again and again within the same tick until no army has an order left, the
+/// burst has given `war.burst_orders` orders (default 16) or held the input
+/// `war.burst_seconds` (default 30). Every army gets its order in the tick that needs it: a war
+/// that opens draws, plans and executes every army's lines at once, and one army's failed order
+/// never holds the others (wb3, 18 Nov 2026: one order per tick behind the other domains gave
+/// about ten orders in 37 game days of a two-front war). The same line twice ends the burst.
+/// The line returned lists every order; `last_ok` is false only when none worked.
+fn war_burst(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    step: Step,
+) -> Result<Option<String>> {
+    let cfg = &plan["war"];
+    let max_orders = cfg["burst_orders"].as_u64().unwrap_or(16).max(1) as usize;
+    let max_seconds = cfg["burst_seconds"].as_u64().unwrap_or(30);
+    let began = std::time::Instant::now();
+    let mut lines: Vec<String> = Vec::new();
+    let mut any_ok = false;
+    state.war_tick.clear();
+    state.war_bursting = true;
+    let ran = (|| -> Result<()> {
+        while lines.len() < max_orders {
+            state.last_ok = None;
+            let Some(line) = step(state, tools, plan, lease, now)? else {
+                break;
+            };
+            let ok = state.last_ok != Some(false);
+            if lines.contains(&line) {
+                break;
+            }
+            any_ok |= ok;
+            lines.push(line);
+            if began.elapsed().as_secs() >= max_seconds {
+                break;
+            }
+        }
+        Ok(())
+    })();
+    state.war_bursting = false;
+    state.war_tick.clear();
+    ran?;
+    if lines.is_empty() {
+        return Ok(None);
+    }
+    state.last_ok = Some(any_ok);
+    if lines.len() == 1 {
+        return Ok(lines.pop());
+    }
+    Ok(Some(format!(
+        "war burst of {} orders in {} s: {}",
+        lines.len(),
+        began.elapsed().as_secs(),
+        lines.join("; ")
+    )))
 }
 
 /// An idle research slot or no active focus (reads only; an unreadable answer counts as busy).
@@ -5156,6 +5305,38 @@ fn extras_step(
     if let Some(step) = doctrine_fill(state, tools, plan, lease, now)? {
         return Ok(Some(step));
     }
+    air_war_missions(state, tools, plan, lease, now)
+}
+
+/// Air at war, in the war-first block right after the armies (`war_burst`): the plan's
+/// `air_plan` (its superiority entries over the fighting regions, then support), then the default
+/// war missions of the wings it leaves. As one domain turn among ten (`manage`, `extras`) the
+/// air waited up to days behind the war and flew one wing per turn.
+fn air_war_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if !state.war_active {
+        return Ok(None);
+    }
+    if let Some(line) = plan_manage::air_plan_step(state, tools, plan, lease, now)? {
+        return Ok(Some(line));
+    }
+    air_war_missions(state, tools, plan, lease, now)
+}
+
+/// `air.war_missions`: every standing-by wing based on a front flies its type's war mission
+/// there (one wing per call).
+fn air_war_missions(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
         let wars = tools.call("hoi4_wars", &json!({}))?;
         // The own states on a border with an enemy, the war's theatre and its guard states:
@@ -5328,6 +5509,9 @@ fn war_step(
             !enemies.is_empty()
         }
     };
+    if !lines_only {
+        state.war_active = !pre_war && !enemies.is_empty();
+    }
     // Objective strikes (`war.strike`): once on, the step owns the driven armies and the rest of
     // the war step (battle plans, rests, pocket fall-back, stall answers) does not run.
     if !lines_only && !pre_war {
@@ -5340,6 +5524,9 @@ fn war_step(
     let mut targets: Vec<(i32, bool)> = Vec::new();
     // Every state an enemy at war controls (the encirclement's pocket and neck).
     let mut enemy_held: HashSet<i32> = HashSet::new();
+    // Own states an enemy controls whole: retaken with a front and an offensive like any enemy
+    // land, not with whole-army marches (g17g2: Armee Mitte re-sent "move 66" for weeks).
+    let mut taken_own: HashSet<i32> = HashSet::new();
     for row in list(&mine, "states") {
         if let (Some(id), Some(x), Some(z)) = (
             row["state_id"].as_i64(),
@@ -5350,6 +5537,7 @@ fn war_step(
             if text(&row["owner"]) == me && text(&row["controller"]) != me {
                 enemies.insert(text(&row["controller"]).to_string());
                 enemy_held.insert(id as i32);
+                taken_own.insert(id as i32);
                 targets.push((id as i32, true));
             } else if text(&row["owner"]) == me {
                 // Part of an own state an enemy holds (w22: Ethiopia took Eritrea province by
@@ -5594,6 +5782,80 @@ fn war_step(
     for (n, p) in &state.war_guard {
         guards.entry(n.clone()).or_insert(*p);
     }
+    // A reserve is "ready to move", never "gone": a `war.reserve` army the executor does not
+    // drive still holds the sector it stands in, as a guard of that state (a front on the
+    // enemy-held land next to it, no move, no attack). In wb3 (18 Nov 2026) the West armies in
+    // reserve took no order at all and France walked through the empty Westwall into Baden and
+    // Moselland. Armies the player claimed stay the player's.
+    for a in list(&roster, "armies") {
+        let n = text(&a["army"]);
+        if strings(cfg, "reserve").iter().any(|r| r == n) && !guards.contains_key(n) {
+            if let Some(here) = a["main_state"].as_i64().map(|s| s as i32) {
+                if mine_ids.contains(&here) {
+                    guards.insert(n.to_string(), here);
+                }
+            }
+        }
+    }
+    // A formation laid out for another war holds its own sector until that war comes: an
+    // army_layout role whose axis has no state an enemy of this war holds guards its layout state
+    // (g17g2: the West armies were drawn toward Poland, and France walked into the empty west).
+    for a in list(&roster, "armies") {
+        let n = text(&a["army"]);
+        if guards.contains_key(n) {
+            continue;
+        }
+        let Some(entry) = layout_entry(state, plan, n) else {
+            continue;
+        };
+        let axis: Vec<i32> = list(entry, "axis")
+            .iter()
+            .filter_map(|v| v.as_i64().map(|v| v as i32))
+            .collect();
+        let sector = entry["state"].as_i64().map(|s| s as i32);
+        if let Some(sector) = sector.filter(|s| mine_ids.contains(s)) {
+            if !axis.is_empty() && !axis.iter().any(|id| targets.iter().any(|t| t.0 == *id)) {
+                guards.insert(n.to_string(), sector);
+            }
+        }
+    }
+    // The land a guard faces: an enemy-held state that borders its post, else the nearest one
+    // within `war.guard_reach` map units of it (default 70, about two states). A guard never
+    // faces a far front: a western guard drew nothing toward Poland, and draws its line the
+    // day France is at war with it.
+    let guard_reach = cfg["guard_reach"].as_f64().unwrap_or(70.0);
+    let contacts: Vec<(i32, Vec<i32>)> = wars_read
+        .as_ref()
+        .map(|w| list(w, "enemy_held_adjacent_states"))
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|c| {
+            Some((
+                c["state_id"].as_i64()? as i32,
+                list(c, "adjacent_own_states")
+                    .iter()
+                    .filter_map(|x| x.as_i64().map(|v| v as i32))
+                    .collect(),
+            ))
+        })
+        .collect();
+    let facing_of = |state: &State, post: i32| -> Option<i32> {
+        if let Some((id, _)) = contacts.iter().find(|(_, adj)| adj.contains(&post)) {
+            return Some(*id);
+        }
+        let (px, pz) = state.centers.get(&post).copied()?;
+        contacts
+            .iter()
+            .map(|(id, _)| *id)
+            .chain(targets.iter().filter(|(_, own)| !*own).map(|(id, _)| *id))
+            .filter_map(|id| {
+                let (x, z) = state.centers.get(&id).copied()?;
+                let d = ((x - px).powi(2) + (z - pz).powi(2)).sqrt();
+                (d <= guard_reach).then_some((id, d))
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(id, _)| id)
+    };
     // A defender's hold: every theatre army without a battle-plan order holds where it stands
     // with a front line toward the nearest enemy-held state, as a guard does (no move, no
     // offensive, never executed). The game then spreads its divisions along the border and they
@@ -5683,7 +5945,9 @@ fn war_step(
         let Some(&post) = guards.get(&name) else {
             continue;
         };
-        if state.war_cool.get(&name).is_some_and(|until| *until > now) {
+        if state.war_cool.get(&name).is_some_and(|until| *until > now)
+            || state.war_tick.contains(&name)
+        {
             continue;
         }
         // An army holding a corridor (plan_military.rs hold_targets) takes no guard order; in a
@@ -5713,22 +5977,11 @@ fn war_step(
             if hold_only && defend {
                 continue;
             }
-            // The front tool takes an enemy-held state: the one nearest the post (the game
-            // refuses an own, own-controlled state as a front target, live w16).
-            let facing = state.centers.get(&post).copied().and_then(|(px, pz)| {
-                // only an enemy-owned state: an own state the enemy holds part of is still own
-                // and own-controlled to the front tool (e6, 16 Nov 2026: ten refused guard fronts
-                // to the half-occupied 835 and 842)
-                targets
-                    .iter()
-                    .filter(|(_, liberate)| !*liberate)
-                    .filter_map(|(id, _)| {
-                        let (x, z) = state.centers.get(id).copied()?;
-                        Some((*id, (x - px).powi(2) + (z - pz).powi(2)))
-                    })
-                    .min_by(|a, b| a.1.total_cmp(&b.1))
-                    .map(|(id, _)| id)
-            });
+            // The front tool takes an enemy-held state: one bordering the post, else the nearest
+            // within reach (the game refuses an own, own-controlled state as a front target, live
+            // w16; an own state the enemy holds part of is still own-controlled to the tool, e6,
+            // 16 Nov 2026, so only enemy-controlled land is faced).
+            let facing = facing_of(state, post);
             // With no enemy-held state placed yet there is no front to draw: the post itself is
             // own and own-controlled, which the tool refuses (e2/e5, 16 Nov 2026: ten refused
             // guard fronts to own states 835, 836, 842 counted against the order).
@@ -5856,7 +6109,7 @@ fn war_step(
     driven.sort_by_key(|a| std::cmp::Reverse(a["division_count"].as_u64().unwrap_or(0)));
     for army in driven {
         let name = text(&army["army"]).to_string();
-        if guards.contains_key(&name) {
+        if guards.contains_key(&name) || state.war_tick.contains(&name) {
             continue;
         }
         let here = army["main_state"].as_i64().map(|s| s as i32);
@@ -6115,7 +6368,11 @@ fn war_step(
         // battle plans (w11 and w23: the plans stalled for weeks in the Ethiopian mountains and a
         // direct move broke each stall).
         let direct = cfg["direct_moves"] == json!(true);
-        let liberate = direct || targets.iter().any(|t| t.0 == target && t.1);
+        // A retake moves province by province only inside a state the enemy holds part of (the
+        // front tool takes no own-controlled state); an own state the enemy controls whole gets
+        // the battle plan: front, offensive and execute without a planning wait.
+        let liberate = direct
+            || (targets.iter().any(|t| t.0 == target && t.1) && !taken_own.contains(&target));
         // Battle plan orders that plan (a planning bonus above zero): a front stands.
         let orders = if army["planning"]["mean"].as_f64().unwrap_or(0.0) > 0.0 {
             army["battle_plan_orders"].as_u64().unwrap_or(0)
@@ -6754,19 +7011,21 @@ fn war_step(
                 continue;
             }
             // Planning before execution and the bound pause after a captured hub (plan_war.rs).
+            // Own land the enemy took is retaken at once: no planning wait.
             let mean = org.map(|o| o.1);
             let planning = army["planning"]["mean"].as_f64();
-            if plan_war::execute_gate(
-                state,
-                plan,
-                &name,
-                target,
-                supply_read.as_ref(),
-                mean,
-                planning,
-                now,
-            )
-            .is_some()
+            if !own_target
+                && plan_war::execute_gate(
+                    state,
+                    plan,
+                    &name,
+                    target,
+                    supply_read.as_ref(),
+                    mean,
+                    planning,
+                    now,
+                )
+                .is_some()
             {
                 state.war_cool.insert(name.clone(), now + cooldown);
                 continue;
@@ -11407,6 +11666,7 @@ mod tests {
 
     #[test]
     fn the_same_failing_order_is_not_sent_a_fourth_time_within_ten_days() {
+        // (an order outside the war: war orders rest from their second failure, in hours)
         struct Refuse(RefCell<usize>);
         impl Tools for Refuse {
             fn call(&self, _: &str, _: &Value) -> Result<Value> {
@@ -11425,7 +11685,7 @@ mod tests {
                 .act(
                     &tools,
                     "l",
-                    "hoi4_army_move",
+                    "hoi4_army_create",
                     json!({"army": "Army 1", "state_id": 5}),
                     "t",
                 )
@@ -11438,7 +11698,7 @@ mod tests {
             .act(
                 &tools,
                 "l",
-                "hoi4_army_move",
+                "hoi4_army_create",
                 json!({"army": "Army 1", "state_id": 6}),
                 "t",
             )
@@ -11450,7 +11710,7 @@ mod tests {
             .act(
                 &tools,
                 "l",
-                "hoi4_army_move",
+                "hoi4_army_create",
                 json!({"army": "Army 1", "state_id": 5}),
                 "t",
             )
@@ -11500,14 +11760,13 @@ mod tests {
             wall: Some(0),
             ..State::default()
         };
-        let send = |state: &mut State, hour: GameHour, wall: u64| -> String {
+        let send = |state: &mut State, name: &str, hour: GameHour| -> String {
             state.clock = hour;
-            state.wall = Some(wall);
             state
                 .act(
                     &tools,
                     "l",
-                    "hoi4_air_mission",
+                    name,
                     json!({"wing": "5", "state_id": 550}),
                     "t",
                 )
@@ -11516,14 +11775,14 @@ mod tests {
         };
         // Each try comes after the ledger's own waits, months of game time apart: the count
         // does not start afresh when the old failures leave the 120-day window.
-        for k in 0..5u64 {
-            send(&mut state, START + (k as GameHour) * 200 * DAY, k * 10_000);
+        for k in 0..5 {
+            send(&mut state, "hoi4_air_wing_create", START + k * 200 * DAY);
         }
         assert_eq!(*tools.0.borrow(), 5);
         assert_eq!(state.gave_up.len(), 1);
         let alarm = &state.gave_up[0];
         assert_eq!(alarm["code"], "wake_player");
-        assert_eq!(alarm["evidence"]["tool"], "hoi4_air_mission");
+        assert_eq!(alarm["evidence"]["tool"], "hoi4_air_wing_create");
         assert_eq!(
             alarm["evidence"]["args"],
             json!({"wing": "5", "state_id": 550})
@@ -11534,17 +11793,33 @@ mod tests {
                 .is_some_and(|c| c.starts_with("unknown_wing")),
             "{alarm}"
         );
-        // not sent again, however much game time passes, for half an hour of wall time
-        let why = send(&mut state, START + 2000 * DAY, 40_000 + 600);
+        // a given-up order rests 60 game days (game time, whatever the wall clock says)
+        let given_up = START + 800 * DAY;
+        let why = send(&mut state, "hoi4_air_wing_create", given_up + 59 * DAY);
         assert!(
-            why.starts_with("skipped: given up after 5 failures"),
+            why.starts_with("skipped: given up after 5 failures")
+                && why.ends_with("1 more game days"),
             "{why}"
         );
         assert_eq!(*tools.0.borrow(), 5);
         assert_eq!(state.gave_up.len(), 1, "reported once");
         // then one more try
-        send(&mut state, START + 2000 * DAY, 40_000 + 1800);
+        send(&mut state, "hoi4_air_wing_create", given_up + 60 * DAY);
         assert_eq!(*tools.0.borrow(), 6);
+        // a war order given up rests 6 game days only
+        for k in 0..5 {
+            send(
+                &mut state,
+                "hoi4_air_mission",
+                START + 2000 * DAY + k * 5 * DAY,
+            );
+        }
+        assert_eq!(*tools.0.borrow(), 11);
+        let last = START + 2020 * DAY;
+        let why = send(&mut state, "hoi4_air_mission", last + 5 * DAY);
+        assert!(why.starts_with("skipped: given up"), "{why}");
+        send(&mut state, "hoi4_air_mission", last + 6 * DAY);
+        assert_eq!(*tools.0.borrow(), 12);
     }
 
     #[test]
@@ -11627,28 +11902,47 @@ mod tests {
                 .unwrap()
                 .1
         };
-        // a 47 s search that ends in a refusal
+        // a 47 s search that ends in a refusal rests 47 * 16 game hours (about 31 days, at
+        // most 30): in game time, however little wall time passed
         send(&mut state, "hoi4_army_create", START, 0);
         assert_eq!(*tools.0.borrow(), 1);
-        // a month of game time later (80 s at speed 3) the same order is not sent
-        let why = send(&mut state, "hoi4_army_create", START + 30 * DAY, 80);
+        let why = send(&mut state, "hoi4_army_create", START + 29 * DAY, 100_000);
         assert_eq!(*tools.0.borrow(), 1);
         assert!(
-            why.starts_with("skipped: the last try of this order failed after 47 s on the input; it waits 390 more"),
+            why.starts_with("skipped: the last try of this order failed after 47 s on the input; it waits 1 more game days"),
             "{why}"
         );
-        // ten times its duration later it may be tried again
-        send(&mut state, "hoi4_army_create", START + 30 * DAY, 470);
+        send(&mut state, "hoi4_army_create", START + 30 * DAY, 100_001);
         assert_eq!(*tools.0.borrow(), 2);
+        // a war order that held the input 31 s rests 31 * 4 game hours (about 5 days, at most
+        // 3): wb3's pocket fall-back was held ~25 game days by 260 wall seconds
+        state.act_seconds = Some(31);
+        send(&mut state, "hoi4_army_move", START, 0);
+        let why = send(&mut state, "hoi4_army_move", START + 2 * DAY, 0);
+        assert!(why.ends_with("it waits 1 more game days"), "{why}");
+        send(&mut state, "hoi4_army_move", START + 3 * DAY, 0);
+        assert_eq!(*tools.0.borrow(), 4);
         // a quick refusal is not held back before the third failure
         state.act_seconds = Some(1);
         send(&mut state, "hoi4_army_assign", START, 500);
         send(&mut state, "hoi4_army_assign", START, 501);
-        assert_eq!(*tools.0.borrow(), 4);
+        assert_eq!(*tools.0.borrow(), 6);
+        // while the game stands still the rest runs on wall time at speed 3's rate: 12 game
+        // hours of a war order's second failure are 2 wall seconds
+        send(&mut state, "hoi4_army_front", START, 1_000);
+        send(&mut state, "hoi4_army_front", START, 1_000);
+        assert_eq!(*tools.0.borrow(), 8);
+        let why = send(&mut state, "hoi4_army_front", START, 1_001);
+        assert!(
+            why.starts_with("skipped: the same order failed 2 times"),
+            "{why}"
+        );
+        send(&mut state, "hoi4_army_front", START, 1_002);
+        assert_eq!(*tools.0.borrow(), 9);
     }
 
     #[test]
-    fn a_failing_order_backs_off_in_game_and_wall_time_and_each_retry_doubles_the_wait() {
+    fn a_failing_order_backs_off_in_game_time_and_each_retry_doubles_the_wait() {
         struct Refuse(RefCell<usize>);
         impl Tools for Refuse {
             fn call(&self, _: &str, _: &Value) -> Result<Value> {
@@ -11662,9 +11956,8 @@ mod tests {
             wall: Some(0),
             ..State::default()
         };
-        let send = |state: &mut State, hour: GameHour, wall: u64| -> String {
+        let send = |state: &mut State, hour: GameHour| -> String {
             state.clock = hour;
-            state.wall = Some(wall);
             state
                 .act(
                     &tools,
@@ -11676,22 +11969,24 @@ mod tests {
                 .unwrap()
                 .1
         };
-        for _ in 0..3 {
-            send(&mut state, START, 0);
+        for k in 0..3 {
+            send(&mut state, START + k);
         }
-        // ten game days pass in 25 s at speed 3: the wall clock holds the order back
-        let why = send(&mut state, START + 11 * DAY, 25);
+        // the third failure (at START + 2 hours) rests ten game days
+        let why = send(&mut state, START + 9 * DAY);
         assert!(
-            why.starts_with("skipped: the same order failed 3 times"),
+            why.starts_with(
+                "skipped: the same order failed 3 times in a row; it waits 2 more game days"
+            ),
             "{why}"
         );
         assert_eq!(*tools.0.borrow(), 3);
-        send(&mut state, START + 11 * DAY, 130);
+        send(&mut state, START + 10 * DAY + 2);
         assert_eq!(*tools.0.borrow(), 4);
-        // the fourth failure doubles both waits: 20 game days and 240 s
-        send(&mut state, START + 26 * DAY, 10_000);
+        // the fourth failure doubles the rest: 20 game days
+        send(&mut state, START + 29 * DAY);
         assert_eq!(*tools.0.borrow(), 4);
-        send(&mut state, START + 31 * DAY + 1, 10_000);
+        send(&mut state, START + 30 * DAY + 2);
         assert_eq!(*tools.0.borrow(), 5);
         // the ledger survives a save of the memory beyond the old ten-day window
         let memory = state.memory(START + 40 * DAY);
@@ -12041,6 +12336,280 @@ mod tests {
         assert!(army_orders(&w).is_empty(), "{:?}", w.calls.borrow());
     }
 
+    /// A two-front war opening: `n` armies, each in its own border state facing a Polish state,
+    /// and the West army (in `war.reserve`) beside a French state; at war with both.
+    struct Opening {
+        n: usize,
+        calls: RefCell<Vec<(String, Value)>>,
+        lines: RefCell<HashMap<String, u64>>,
+        executing: RefCell<HashSet<String>>,
+    }
+    impl Opening {
+        fn new(n: usize) -> Self {
+            Opening {
+                n,
+                calls: RefCell::new(vec![]),
+                lines: RefCell::new(HashMap::new()),
+                executing: RefCell::new(HashSet::new()),
+            }
+        }
+        /// Orders sent (tool, args) since `from` calls.
+        fn orders_since(&self, from: usize) -> Vec<(String, Value)> {
+            self.calls.borrow()[from..]
+                .iter()
+                .filter(|(n, a)| n.starts_with("hoi4_army_") && a.get("request_id").is_some())
+                .cloned()
+                .collect()
+        }
+    }
+    impl Tools for Opening {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            let army = text(&args["army"]).to_string();
+            let sent = args.get("request_id").is_some();
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0})),
+                "hoi4_overview" => Ok(json!({"player": "GER"})),
+                "hoi4_states" => {
+                    let rows: Vec<Value> = match text(&args["query"]) {
+                        "GER" => (1..=self.n)
+                            .map(|i| {
+                                json!({"state_id": i, "owner": "GER", "controller": "GER",
+                                "x": i as f64 * 100.0, "z": 0.0})
+                            })
+                            .chain([json!({"state_id": 50, "owner": "GER", "controller": "GER",
+                                "x": -500.0, "z": 0.0})])
+                            .collect(),
+                        "POL" => (1..=self.n)
+                            .map(|i| {
+                                json!({"state_id": 100 + i, "owner": "POL",
+                                "controller": "POL", "x": i as f64 * 100.0, "z": 50.0})
+                            })
+                            .collect(),
+                        "FRA" => vec![json!({"state_id": 200, "owner": "FRA",
+                            "controller": "FRA", "x": -530.0, "z": 0.0})],
+                        _ => vec![],
+                    };
+                    Ok(json!({ "states": rows }))
+                }
+                "hoi4_armies" => {
+                    let lines = self.lines.borrow();
+                    let executing = self.executing.borrow();
+                    let armies: Vec<Value> = (1..=self.n)
+                        .map(|i| (format!("Army {i}"), i as i64, 12))
+                        .chain([("West".to_string(), 50, 10)])
+                        .map(|(a, at, size)| {
+                            json!({"army": a, "division_count": size, "main_state": at,
+                                "battle_plan_orders": lines.get(&a).copied().unwrap_or(0),
+                                "plan_executing": executing.contains(&a),
+                                "planning": {"mean": 0.3}, "commander": "X"})
+                        })
+                        .collect();
+                    Ok(json!({"unassigned_by_state": [], "armies": armies}))
+                }
+                "hoi4_wars" if args.get("enemies").is_none() => {
+                    let contact: Vec<Value> = (1..=self.n)
+                        .map(|i| json!({"state_id": 100 + i, "adjacent_own_states": [i]}))
+                        .chain([json!({"state_id": 200, "adjacent_own_states": [50]})])
+                        .collect();
+                    Ok(
+                        json!({"wars": {"validated": true, "enemies": ["POL", "FRA"]},
+                        "enemy_held_adjacent_states": contact}),
+                    )
+                }
+                "hoi4_army_front" | "hoi4_army_offensive" if sent => {
+                    *self.lines.borrow_mut().entry(army).or_default() += 1;
+                    Ok(json!({"receipt": {"status": "Verified"}}))
+                }
+                "hoi4_army_plan" if sent => {
+                    if args["execute"] == json!(true) {
+                        self.executing.borrow_mut().insert(army);
+                    }
+                    Ok(json!({"receipt": {"status": "Verified"}}))
+                }
+                _ if sent => Ok(json!({"receipt": {"status": "Verified"}})),
+                _ => Ok(json!({})),
+            }
+        }
+    }
+    fn opening_plan() -> Value {
+        json!({"war": {"enemies": ["POL", "FRA"], "axes": [], "posture": "attack",
+            "planning_wait": false, "reserve": ["West"], "min_army": 3, "rest": false,
+            "avoid_pockets": false, "supply_first": false}})
+    }
+
+    #[test]
+    fn a_war_that_opens_draws_every_armys_lines_in_one_tick_and_executes_them_all_in_the_next() {
+        // wb3, 18 Nov 2026: one order per tick, about ten orders in 37 game days of a two-front
+        // war. Six armies on the Polish border and a reserve beside France.
+        let w = Opening::new(6);
+        let plan = opening_plan();
+        let mut state = State::default();
+        tick(&mut state, &w, &plan, "l", START).unwrap();
+        let first = w.orders_since(0);
+        for i in 1..=6 {
+            let army = format!("Army {i}");
+            let kinds: Vec<&str> = first
+                .iter()
+                .filter(|(_, a)| a["army"] == json!(army))
+                .map(|(n, _)| n.as_str())
+                .collect();
+            assert_eq!(
+                kinds,
+                ["hoi4_army_front", "hoi4_army_offensive"],
+                "{army} in the first tick: {first:?}"
+            );
+        }
+        // the reserve holds its sector: a front on the French state beside it, nothing more
+        let west: Vec<(String, Value)> = first
+            .iter()
+            .filter(|(_, a)| a["army"] == json!("West"))
+            .cloned()
+            .collect();
+        assert_eq!(west.len(), 1, "{west:?}");
+        assert_eq!(west[0].0, "hoi4_army_front");
+        assert_eq!(west[0].1["state_id"], json!(200));
+        assert_eq!(first.len(), 13, "orders in the first tick");
+        // the next tick executes every plan at once
+        let mark = w.calls.borrow().len();
+        tick(&mut state, &w, &plan, "l", START + 6).unwrap();
+        let second = w.orders_since(mark);
+        let executed: Vec<&Value> = second
+            .iter()
+            .filter(|(n, a)| n == "hoi4_army_plan" && a["execute"] == json!(true))
+            .map(|(_, a)| &a["army"])
+            .collect();
+        assert_eq!(executed.len(), 6, "{second:?}");
+        assert!(
+            !executed.contains(&&json!("West")),
+            "the reserve never attacks"
+        );
+        assert!(
+            w.orders_since(0).iter().all(|(n, _)| n != "hoi4_army_move"),
+            "no whole-army march"
+        );
+    }
+
+    #[test]
+    fn an_army_laid_out_for_another_war_holds_its_sector_and_is_not_drawn_east() {
+        // g17g2: the West armies were drawn toward Poland and France walked into the empty west
+        let w = Opening::new(2);
+        let mut plan = opening_plan();
+        plan["war"].as_object_mut().unwrap().remove("reserve");
+        plan["army_layout"] = json!([{"name_hint": "West", "state": 50, "role": "strike",
+            "axis": [999]}]);
+        let mut state = State::default();
+        state.layout.insert("West".into(), "West".into());
+        for hour in 0..3 {
+            tick(&mut state, &w, &plan, "l", START + hour * 6).unwrap();
+        }
+        let west: Vec<(String, Value)> = w
+            .orders_since(0)
+            .into_iter()
+            .filter(|(_, a)| a["army"] == json!("West"))
+            .collect();
+        assert_eq!(west.len(), 1, "{west:?}");
+        assert_eq!(west[0].0, "hoi4_army_front");
+        assert_eq!(
+            west[0].1["state_id"],
+            json!(200),
+            "the French state beside it"
+        );
+    }
+
+    #[test]
+    fn one_armys_failing_order_does_not_hold_the_others_in_the_tick() {
+        struct Failing(Opening);
+        impl Tools for Failing {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_army_front"
+                    && args["army"] == json!("Army 1")
+                    && args.get("request_id").is_some()
+                {
+                    self.0
+                        .calls
+                        .borrow_mut()
+                        .push((name.to_string(), args.clone()));
+                    return Err(Error::new(
+                        "input_readback_failed",
+                        "No front line was placed",
+                    ));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let w = Failing(Opening::new(4));
+        let mut state = State::default();
+        tick(&mut state, &w, &opening_plan(), "l", START).unwrap();
+        let orders = w.0.orders_since(0);
+        for i in 2..=4 {
+            assert!(
+                orders
+                    .iter()
+                    .any(|(n, a)| n == "hoi4_army_offensive"
+                        && a["army"] == json!(format!("Army {i}"))),
+                "Army {i}: {orders:?}"
+            );
+        }
+        // the failed army's front is tried again within days of game time, however little
+        // wall time passes (the old ledger held a slow failure for wall minutes)
+        let mark = w.0.calls.borrow().len();
+        for day in 1..=8 {
+            tick(&mut state, &w, &opening_plan(), "l", START + day * DAY).unwrap();
+        }
+        assert!(
+            w.0.orders_since(mark)
+                .iter()
+                .any(|(n, a)| n == "hoi4_army_front" && a["army"] == json!("Army 1")),
+            "tried again within a game week"
+        );
+    }
+
+    #[test]
+    fn own_land_the_enemy_holds_whole_is_retaken_with_a_battle_plan_not_a_march() {
+        // g17g2, 18 Nov 2026: Armee Mitte re-sent "move 66" province by province for weeks
+        let w = war(true);
+        let tools = Validated {
+            inner: &w,
+            at_war: vec!["FRA", "POL"],
+            holders: vec![],
+        };
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [], "posture": "attack",
+            "rest": false, "avoid_pockets": false, "supply_first": false}});
+        let mut state = State::default();
+        for hour in 0..4 {
+            tick(&mut state, &tools, &plan, "l", START + hour * 6).unwrap();
+        }
+        let orders = army_orders(&w);
+        let kinds: Vec<(&str, &Value)> = orders
+            .iter()
+            .map(|(n, a)| (n.as_str(), &a["state_id"]))
+            .collect();
+        assert!(
+            kinds.contains(&("hoi4_army_front", &json!(5))),
+            "{orders:?}"
+        );
+        assert!(
+            kinds.contains(&("hoi4_army_offensive", &json!(5))),
+            "{orders:?}"
+        );
+        assert!(
+            orders
+                .iter()
+                .any(|(n, a)| n == "hoi4_army_plan" && a["execute"] == json!(true)),
+            "executed without a planning wait: {orders:?}"
+        );
+        assert!(
+            !orders.iter().any(|(n, _)| n == "hoi4_army_move"),
+            "{orders:?}"
+        );
+    }
+
     #[test]
     fn a_victory_point_row_a_neutral_holds_waits_for_its_own_war() {
         // g17g2, 18 Nov 2026: the armour took its Belgian row (Liege) in the Poland war
@@ -12107,12 +12676,12 @@ mod tests {
             );
         }
         assert!(orders(&w).is_empty(), "{:?}", w.calls.borrow());
-        // an own state to retake is still retaken
+        // an own state to retake is still retaken (held whole by the enemy: with a battle plan)
         let w = war(true);
         let mut state = State::default();
         let step = tick(&mut state, &w, &plan, "l", START).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front and offensive Army 1 -> state 5")),
             "{step:?}"
         );
         // a defender's hold retakes nothing and prepares nothing on enemy land: its armies only
@@ -12765,8 +13334,8 @@ mod tests {
         let (_, args) = last_action(&w);
         assert_eq!(
             args["state_id"],
-            json!(28),
-            "the front faces the nearest enemy state"
+            json!(18),
+            "the front faces the enemy state bordering the post"
         );
         assert_eq!(state.war_guard.get("Army 1"), Some(&42));
     }
@@ -12789,13 +13358,25 @@ mod tests {
                 .filter(|(n, _)| n == "hoi4_army_move")
                 .count()
         };
+        let lines = |w: &War| {
+            w.calls
+                .borrow()
+                .iter()
+                .filter(|(n, a)| {
+                    (n == "hoi4_army_front" || n == "hoi4_army_offensive")
+                        && a.get("request_id").is_some()
+                })
+                .count()
+        };
+        // a state the enemy holds whole: its lines once, no march
         tick(&mut state, &w, &plan, "l", START).unwrap();
-        assert_eq!(moves(&w), 1);
+        assert_eq!(lines(&w), 2);
         // a day later, still on the way: no second order
         for h in 1..24 {
             tick(&mut state, &w, &plan, "l", START + h * DAY / 24 * 2).unwrap();
         }
-        assert_eq!(moves(&w), 1);
+        assert_eq!(lines(&w), 2);
+        assert_eq!(moves(&w), 0);
     }
 
     #[test]
@@ -12811,7 +13392,7 @@ mod tests {
         let plan = json!({"war": {"enemies": ["FRA"], "axes": [[28]]}});
         let step = tick(&mut state, &w, &plan, "l", START).unwrap();
         assert!(
-            matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")),
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front and offensive Army 1 -> state 5")),
             "{step:?}"
         );
     }
@@ -12860,8 +13441,8 @@ mod tests {
         assert!(!state.war_move.contains("Army 1"));
         tick(&mut state, &w, &plan, "l", START + 12 * DAY + 1).unwrap();
         assert_eq!(moves(&w), 1);
-        let calls = w.calls.borrow();
-        let last_two: Vec<&str> = calls[calls.len() - 2..]
+        let sent = army_orders(&w);
+        let last_two: Vec<&str> = sent[sent.len() - 2..]
             .iter()
             .map(|(n, _)| n.as_str())
             .collect();
@@ -14308,7 +14889,7 @@ mod tests {
     }
 
     #[test]
-    fn own_states_held_by_an_enemy_come_first_and_are_attacked_by_moving_in() {
+    fn own_states_held_by_an_enemy_come_first_and_are_retaken_with_a_battle_plan() {
         let w = War {
             liberate: true,
             front_ok: true,
@@ -14316,7 +14897,10 @@ mod tests {
         };
         let mut state = State::default();
         let step = tick(&mut state, &w, &war_plan(), "l", START).unwrap();
-        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")));
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front and offensive Army 1 -> state 5")),
+            "{step:?}"
+        );
     }
 
     #[test]

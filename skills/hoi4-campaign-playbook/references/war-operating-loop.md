@@ -144,6 +144,14 @@ the player decides strategy:
 - `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
   every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
   axis whose next enemy-held state is nearest: front line, offensive line, execute.
+- Every army in the same tick. The runner calls its war step again and again within one tick
+  until no army has an order left (`burst_orders` 16, `burst_seconds` 30): a war that opens
+  draws every army's lines at once and executes them all in the next tick, and one army's failed
+  order never holds the others. The air follows in the same tick (`air_plan` entries, then the
+  default war missions). At war the other domains wait up to three game days for their turn
+  (`scheduler.war_max_wait_days`).
+- A failed war order (front, offensive, plan, move, air mission) rests in game time: 12 game
+  hours after its second failure in a row, doubling to 4 days, never wall seconds.
 - Lines first. An army without its lines gets its front and its offensive line in one step,
   before any rename, commander or disband: planning only grows once the lines stand. In a game
   still paused before the first unpause the executor draws them too, and the feed says
@@ -220,11 +228,17 @@ the player decides strategy:
 - Advance in bounds (`bound`, default on): after a captured hub, port or railway the next
   advance waits until it feeds the front (rail about 10 days, 5 on cores), at most 12 days.
 - `"motorization": 2`: every driven army's supply hubs use trucks.
-- `"reserve": ["Army 2"]`: armies only the player commands. Executing plans are never touched.
+- `"reserve": ["Army 2"]`: armies the runner does not drive. A reserve is ready to move, never
+  gone: it still holds the state it stands in with a front on the enemy-held land next to it (no
+  move, no attack), so a second front is never left empty. Executing plans are never touched.
 - `"guard_states": [559, 844]` (or `"guards": {"Army 3": 844}`): the army standing in that own
   state holds a front there and never attacks. Keep one on every own border state the offensive
-  leaves behind: an empty border state is walked into.
-- An own state an enemy takes draws the nearest fighting army off its axis at once.
+  leaves behind: an empty border state is walked into. A guard faces only enemy-held land that
+  borders its post or lies within `guard_reach` (70 map units, about two states); a guard with
+  no enemy beside it stands ready and draws its line the day a neighbour is at war with it.
+- An own state an enemy takes draws the nearest fighting army off its axis at once. A state the
+  enemy holds whole is retaken with a front, an offensive and an execute order without a planning
+  wait; only inside a state the enemy holds part of does the army go province by province.
 - The war step runs right after events (`"first": false` puts it back after construction): a
   game day passes in about 2.5 s at speed 3.
 - `"armies": {"states": [550, 559], "generals": [...], "consolidate": false}`: armies are made

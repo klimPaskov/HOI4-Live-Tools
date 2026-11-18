@@ -1421,7 +1421,12 @@ pub(super) fn step(
                 break;
             }
             let all = &by_army[name];
-            if all.len() < 2 || reserve.contains(name) || (!knobs.guards && guards.contains(name)) {
+            // an army given an order in this tick's war burst waits for the next tick
+            if all.len() < 2
+                || reserve.contains(name)
+                || (!knobs.guards && guards.contains(name))
+                || state.war_tick.contains(name)
+            {
                 continue;
             }
             let members: Vec<&Division> = all.iter().copied().filter(|d| !kept(&d.id)).collect();

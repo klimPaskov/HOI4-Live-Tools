@@ -905,6 +905,12 @@
           "exclusiveMinimum": 0,
           "description": "a domain (politics, decisions, training, production, construction, extras, manage, military, affairs) not offered a turn for this many game days goes ahead of the war-first block for one tick"
         },
+        "war_max_wait_days": {
+          "type": "number",
+          "default": 3,
+          "exclusiveMinimum": 0,
+          "description": "max_wait_days while at war with a plan enemy: the war burst comes first and the other domains wait up to this many game days for their turn"
+        },
         "why": {
           "type": "string",
           "description": "Free text for people and the player; never read by the executor."
@@ -5380,7 +5386,7 @@
             "type": "string"
           },
           "x-owner": "executor",
-          "description": "army names the executor never drives"
+          "description": "army names the executor never drives into an attack or a move: a reserve still holds the state it stands in with a front on the enemy-held land beside it (a guard of that state), so a second front is never left empty"
         },
         "player_claim_seconds": {
           "type": "integer",
@@ -5611,6 +5617,27 @@
           "items": {"type": "string"},
           "x-owner": "executor",
           "description": "country tags a coming war is declared on (set it in the phase before the declaration): at peace with all of them, the armies draw their fronts and offensive lines on them as in a hold phase and plan, nothing executes, so the first day of the war only gives the execute order"
+        },
+        "burst_orders": {
+          "type": "integer",
+          "default": 16,
+          "minimum": 1,
+          "x-owner": "executor",
+          "description": "orders one tick's war burst may give: the war step is called again within the tick until no army has an order left, so every army gets its order in the tick that needs it"
+        },
+        "burst_seconds": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1,
+          "x-owner": "executor",
+          "description": "wall seconds of input after which a tick's war burst ends (the rest go in the next tick)"
+        },
+        "guard_reach": {
+          "type": "number",
+          "default": 70,
+          "exclusiveMinimum": 0,
+          "x-owner": "executor",
+          "description": "map units around a guard's post (and a reserve army's state) within which it faces enemy-held land; land bordering the post always counts. A guard with no enemy in reach stands ready"
         },
         "defend_per_state": {
           "type": "number",
