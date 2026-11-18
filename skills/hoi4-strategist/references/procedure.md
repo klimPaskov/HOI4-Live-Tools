@@ -26,6 +26,18 @@ Every item ends in exactly one of:
 Items 1, 2 and 29 are never "not applicable". Write every resolution into the coverage table, plan.md
 §25 (all 29 rows: resolution, where it lives, the facts command used, the check).
 
+**Every decision names its source (hard rule, lint `playbook.refs`).** Each force, economy, air and political
+decision entry (templates, production, politics, politics_auto.order, officer_corps, mio, designs, doctrines,
+air_plan, research_path blocks) says in its `why` which row it follows: `[P <reference>.md#<row>]` for a
+playbook reference row (the lint checks the file and the row exist), `[R <report> <row>]` for a research row,
+`[G <guide> <section>]` for a section of the owner's guides, or `[NONE: <reason>]` for a deliberate departure
+with its reason. Read the playbook rows for the country and the arm before writing the decision (the country
+reference, templates-equipment-production, economy-build-orders, army-organisation, war-air-naval-peace,
+research-doctrines-projects, politics-diplomacy-espionage), and when the research or a guide says something the
+playbook lacks, write it as a playbook delta in plan.md §25 rather than inventing a rule. A threshold, cap or
+cadence in a plan is a game fact (cite it), a project safety rule, or a value judgement with its reason and
+its exception; never a bare number that holds back a better action.
+
 **Key or atom not in the schema yet.** Some items name keys whose executor step a later build item adds
 (schema `x-executor-planned`: `xp_budget.*[].cost`, `sea_transfer`, `operations`), keys that do not exist
 yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
@@ -475,25 +487,25 @@ Read: `research-doctrines-projects.md` §1, §3.1, §3.5, §4.4, §7.
 3. `F research-timeline RUN/plan.json`; every block finishes before the next block year. Do not copy the
    timeline into plan.md: the gates write it for the final plan to `RUN/plan.timelines.md`; plan.md §3
    cites it (`[D research-timeline]`) and names only the dates its argument rests on.
-4. **Every slot busy, all the time (user rule).** Research serves the whole campaign, not only the current
-   war: the game goes on after the goal, and the economy compounds. List enough techs that no slot waits
-   until the horizon. When a block runs out before the next block year, fill the slots first with in-year
-   techs of other folders the campaign uses (industry, construction, electronics, support companies,
-   logistics, equipment the templates use). Pull a tier forward only when nothing in-year remains, and say so
-   in plan.md §3: research speed is 1 / (2 x years ahead + 1), so half a year ahead doubles the time and one
-   year triples it, and ordinary bonuses do not reduce it (only ahead-of-time bonuses do; `F tech <id>` shows
-   the days) (RE01). Order: industry (production, construction, industry folder: the concentrated/dispersed
-   line, machine tools, construction), then the equipment the planned templates use, then what the war plan
-   needs. Never cut an industry tech because "it does not help this war". **Every slot stays busy to the
-   horizon:** the campaign goes on after this war, so a tech no current template uses (support companies,
-   the next weapons, armour, electronics) still earns its slot when the alternative is an empty one; a tech
-   taken out of the list is replaced by another in-time tech, never by idle time, and
-   `alarms.research_slot_empty` stays on: while the plan lists research the executor owns the slots, so
-   the alarm waits `alarms.slot_empty_grace_days` (default 2) for the executor to fill a slot and leaves
-   a list that ran out to `research_slot_idle_plan_exhausted`; what it still reports is a slot nobody is
-   filling. Lint `research.idle` fails a plan with more than 25% of slot-time
-   unplanned, with or without a fallback, and one with any unplanned slot-time (above 2%) while in-time
-   techs remain unlisted; it names them.
+4. **Slots busy by default, idle only for a named reason.** Research serves the whole campaign, not only the
+   current war: the game goes on after the goal, and the economy compounds. List enough techs that no slot
+   waits by accident until the horizon. When a block runs out before the next block year, fill the slots first
+   with in-year techs of other folders the campaign uses (industry, construction, electronics, support
+   companies, logistics, equipment the templates use). Pull a tier forward only when it pays, and say so in
+   plan.md §3: research speed is 1 / (2 x years ahead + 1), so half a year ahead doubles the time and one year
+   triples it, and ordinary bonuses do not reduce it (only ahead-of-time bonuses do; `F tech <id>` shows the
+   days) (RE01). Order by pay-off for this campaign: industry and construction usually come early, then the
+   equipment the planned templates use, then what the war plan needs; never cut an industry tech because "it
+   does not help this war". A slot held empty on purpose is good play when it waits for something named: a
+   focus or decision bonus that lands on an expensive tech (keep 100% bonuses for tools, concentrated industry
+   and construction rather than letting a cheap tech eat them), a tech that opens on a date, a re-order. Write
+   it in `research_waits` [{tech or date, slot, days, why}]: an empty slot banks up to
+   BASE_RESEARCH_POINTS_SAVED (30) days, so a longer wait loses research (lint warns). `alarms.research_slot_empty`
+   stays on: while the plan lists research the executor owns the slots, so the alarm waits
+   `alarms.slot_empty_grace_days` for the executor to fill a slot and leaves a list that ran out to
+   `research_slot_idle_plan_exhausted`. Lint `research.idle` fails a plan whose unplanned slot-time comes with
+   in-time techs left unlisted and no named wait (the idle share is reported, never the verdict); it names
+   them.
 5. `research_fallback` false, or restricted with `research_fallback_prefixes` to the same families; it is
    a safety net, not the plan. No naval or air folder techs unless item 3 needs them.
 6. Limited-use research bonuses (focus and decision rewards): `research_bonuses` {"<bonus category or
@@ -1254,7 +1266,7 @@ threshold, call) when the player must act.
 
 | Rule | Default threshold | Key today |
 |---|---|---|
-| Idle research slot, focus, factories, PP | civs ≥ 4 idle, mils ≥ 2, PP > 150 (`native/src/alarms.rs`); an alarm is never switched off to stop noise: one set to false needs `alarms.why` naming it with the reason (lint `alarms.silenced`), and a noisy alarm goes into the tool-gap list | `alarms` |
+| Idle research slot, focus, factories, PP | judged by value, not a count: a free factory always has a line; political power and experience buy the best available pick at once early in a campaign and are held only for a named costlier pick (write it: `politics[]` with its date, `politics_auto.threshold_why`); the alarm defaults in `native/src/alarms.rs` (civs ≥ 4, mils ≥ 2, PP > 150) are wake-up noise floors, not targets, and a run is never judged good because they stayed quiet; an alarm is never switched off to stop noise: one set to false needs `alarms.why` naming it with the reason (lint `alarms.silenced`), and a noisy alarm goes into the tool-gap list | `alarms` |
 | Game alert row (`hoi4_alerts {}`) | any named alert → its fix; officer corps, MIO, admiral alerts wake the player | `manage` |
 | Armies and generals | few formations (≤ 3 per marshal, ≥ 3 divisions, ≤ 24), small roles are tasks inside them, a general on every army | `armies`, `army_layout` |
 | Rest and resume | rest below 30% of the army's highest organisation seen, resume at 80% and 70% supply; at most 20 days (not while supply is under 35%). These are the executor defaults; absolute `rest_below` / `resume_above` replace the shares | `war.rest_below_pct`, `war.resume_above_pct`, `war.supply_resume`, `war.rest_max_days` |

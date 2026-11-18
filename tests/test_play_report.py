@@ -71,7 +71,49 @@ class AuditTests(unittest.TestCase):
         self.assertIn("free_dockyards [NO REASON]", text)
         self.assertIn("pace: 10.0 game days per wall minute over 1 running minutes", text)
         self.assertIn("P1 duplicate military lines: max 1", text)
-        self.assertIn("P6 political power samples: max 160, samples above 150: 1/1", text)
+        self.assertIn("P6 political power on hand: max 160, last 160", text)
+        self.assertNotIn("above 150", text)
+        # the omissions come first, each with the days the game flagged it and its reason
+        self.assertLess(text.index("OMISSIONS"), text.index("1 self-pauses"))
+        self.assertIn("free_dockyards", text.split("1 self-pauses")[0])
+
+    def test_omissions_name_a_false_reason_repeats_and_a_polling_player(self):
+        run = tempfile.mkdtemp(prefix="hoi4live_omit_")
+        self.addCleanup(shutil.rmtree, run, True)
+        wake = {"reason": "alert:free_military_factories",
+                "message": "game alert free_military_factories has stayed 15 game days; production: day 0: no free "
+                           "military factory"}
+        feed = [{"seq": 1, "kind": "wake_player", "date": "1936.02.01.00", "detail": wake},
+                {"seq": 2, "kind": "alert_raised", "date": "1936.02.01.00", "detail": {"alert": "mio_traits"}},
+                {"seq": 3, "kind": "focus_finished", "date": "1937.02.01.00", "detail": {}}]
+        with open(os.path.join(run, "feed.jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(c) + "\n" for c in feed))
+        prod = {"date": "1936.06.01", "mil": 38, "pp": 40.0,
+                "lines": [[0, "military", "infantry_equipment_1", 30, 30, 50.0]], "stock": []}
+        with open(os.path.join(run, "watch.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"t": 0, "date": "1936.06.01.00", "paused": False, "prod": prod}) + "\n")
+        with open(os.path.join(run, "plan.json"), "w", encoding="utf-8") as f:
+            json.dump({"manage": {"alerts_ignore": ["mio_traits"]}}, f)
+        with open(os.path.join(run, "game-actions.jsonl"), "w", encoding="utf-8") as f:
+            for n in range(5):
+                f.write(json.dumps({"id": "plan-m-%d" % n, "action": {"kind": "army_move", "army": "A",
+                                                                       "province_id": 7},
+                                    "status": "NotApplied"}) + "\n")
+        calls = [{"tool": "hoi4_wait_change", "args": {"since": n}, "source": "player"} for n in range(6)]
+        calls += [{"tool": "hoi4_overview", "args": {}, "source": "player"}] * 3
+        calls += [{"tool": "hoi4_production_set", "args": {"line": 0}, "source": "player"},
+                  {"tool": "hoi4_plan", "args": {"op": "get"}, "source": "player"}]
+        with open(os.path.join(run, "calls.jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(c) + "\n" for c in calls))
+        text = "\n".join(audit.omission_lines(run))
+        self.assertIn("free_military_factories 360 d", text)
+        self.assertIn("FALSE REASON", text)
+        self.assertIn("read: 8 free on 1936.06.01", text)
+        self.assertIn("mio_traits 360 d", text)
+        self.assertIn("HIDDEN by the plan's alerts_ignore", text)
+        self.assertIn("executor repeated identical actions: 5 sends in 1 groups; worst: 5x army_move FAILED", text)
+        self.assertIn("player calls 11: waits 6, overviews 3 (82% of the calls), actions 1", text)
+        self.assertIn("3x hoi4_overview", text)
 
 
 class GateTests(unittest.TestCase):

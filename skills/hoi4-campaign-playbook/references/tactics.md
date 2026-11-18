@@ -124,7 +124,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - RE01 Ahead-of-time costs a lot
 - RE02 Big bonuses on big techs
 - RE03 Research without spending a bonus
-- RE04 Never idle
+- RE04 Idle only for a named tech
 - RE05 Industry order
 - RE06 Keep the grand doctrine
 - RE07 Mastery multipliers

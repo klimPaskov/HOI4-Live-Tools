@@ -28,32 +28,35 @@ SETUP (game is PAUSED on day one; at most 3 batches, then unpause):
     (the tool counts speeds from 0: {SPEED_ARG} is the game's speed {SPEED}).
     From then on never pause.
 
-THE LOOP (every turn):
- A. hoi4_wait_change '{"since":SEQ,"urgent_only":true,"timeout_seconds":10}'  (SEQ from the last reply).
- B. React only to what it says, with ONE batch:
-    wake_player              -> the one item the executor hands you: read its `message` and `evidence`
-                                and do that item (the tool it names, once)
-    own_province_lost        -> nothing: the executor retakes own land with the armies on that front. An
-                                order of yours takes an army off its line and its plan
+THE LOOP (every turn). You add what a plan cannot: judgement at decision points, noticing what the executor
+missed, and asking for a revision with evidence. Polling adds nothing: never call hoi4_overview, and never
+hoi4_observe in the loop (the wait reply carries `now`).
+ A. ONE wait: hoi4_wait_change '{"since":SEQ,"urgent_only":true,"timeout_seconds":10}' (SEQ from the last reply).
+ B. On a reply with changes, ONE omissions read: hoi4_alerts '{}'. Each alert is something the game itself says
+    can be done now (a free factory, a buyable pick, an empty slot, a company with no trait, a fleet with no
+    admiral); its `todo` names the fix. A `wake_player` change carries the executor's own `message` and
+    `evidence`: compare its reason with the alerts. A reason that says nothing can be done (for example "no
+    free military factory") while the game's alert says it can is the executor's mistake.
+ C. Act on each omission in ONE batch, in this order of cost to the war: free military factories and
+    dockyards, design companies (MIO) without a line or a queued trait, advisor / officer-corps / doctrine /
+    special-project seats with the means on hand, armies or wings with no orders, events still open.
+    For each, either do the real action (the alert's `todo` tool, once, with exact arguments), or, when it
+    belongs to the plan or the executor (an owned army, a held pick, a rule that keeps it idle), one
+    hoi4_plan {"op":"request_revision","reason":"<item>: <days open>, <what the read shows>, <what to do>"}
+    with the evidence. A balance or an empty slot is right only while the plan names the costlier pick or
+    the technology it waits for; otherwise it is an omission.
+ D. Feed items that need no read:
+    own_province_lost        -> nothing: the executor retakes own land with the armies on that front
     army_encirclement_risk   -> the executor falls back; never order that army forward
-    event_opened             -> nothing if the plan names the event (the executor answers it within a
-                                game day). An event still open 2 game days later: hoi4_events once,
-                                then hoi4_event_choose {"event":"<id>","option":<index from 0>} by the
-                                brief's rule for it (option_keys names each option as the brief does)
-    research_slot_idle       -> nothing (the executor fills it); still idle 5 game days later:
-                                hoi4_technology_list {"available":true}, start the plan's next tech
-    focus_finished           -> nothing
-    checkpoint_missed        -> the executor has already applied the plan's contingency for it. When
-                                the brief's action for it is `revise`: one hoi4_plan
-                                {"op":"request_revision","reason":"<checkpoint id> missed"}; log it
-    goal_at_risk / phase_changed / contingency_triggered -> log one line
+    event_opened             -> the plan's rule answers it within a game day; an event the plan does not
+                                name: hoi4_events once, then hoi4_event_choose by the brief's rule, at once
+    checkpoint_missed        -> when the brief's action for it is `revise`: one request_revision; log it
     plan_revised             -> re-read {RUN}/plan.brief.md once; drop items it no longer lists
-    army_gone / big army_size_changed -> hoi4_war_stats; one log line
-    peace_conference_opened  -> follow the brief's peace items (the executor runs them when the plan has
-                                a peace key)
- C. Checkpoints are judged by the executor and arrive in the feed (checkpoint_missed; no change means
-    met). Do not check them yourself.
- D. Your items from the brief, at their dates, one batch per turn.
+    goal_at_risk / phase_changed / contingency_triggered / army_gone -> log one line
+    peace_conference_opened  -> follow the brief's peace items
+ E. Your items from the brief, at their dates, in the same batch as C.
+ Never send the same call with the same arguments twice in a game day: if it failed, the refusal is the
+ answer; change something real or ask for a revision with the refusal as evidence.
 
 READS (exact calls; no other arguments exist — never guess one):
     {CALL} hoi4_observe '{"since":0}'        situation now (wars, armies, events, idle slots, alerts)
@@ -72,7 +75,7 @@ READS (exact calls; no other arguments exist — never guess one):
     {CALL} hoi4_war_stats '{}'               losses
     Each read at most once per feed change that concerns it. The reply of step A carries `now` (date,
     wars, armies, open events, idle slots, own provinces held by others): that is the situation; a read
-    repeats it only in more detail. The win check and hoi4_war_stats: once, for the final reply.
+    repeats it only in more detail, and hoi4_alerts is the one read every wake makes. The win check and hoi4_war_stats: once, for the final reply.
     THE WAR RESULT: {CALL} hoi4_wars '{}' gives each war a `result` ("WON: ..." or "ongoing: ...") and
     wars.wars_won / wars.fighting. That line is the answer. An enemy that owns no land is beaten even if the
     game keeps the war open (a government in exile). A country_capitulated event can be about ANY country:
@@ -85,7 +88,7 @@ DON'T: walk states, divisions, wings or ships one by one through the interface (
 act on the few chosen); re-read the same state every turn; order an army the executor is moving (the executor owns every
 army in the plan's army_layout, army_group and hold_targets, all research, focus, production, construction,
 laws, events and templates in the plan — your items are only what the brief lists); send a move that failed
-twice; start research that is not in hoi4_technology_list {"available":true}; build in front states;
+once without changing it; start research that is not in hoi4_technology_list {"available":true}; build in front states;
 reassign a general who already has an army; walk an action through other arguments after a refusal (other
 slots, indexes or states): the refusal's message is the answer, log it once.
 

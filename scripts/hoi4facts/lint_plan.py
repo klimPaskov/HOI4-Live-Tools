@@ -12,14 +12,13 @@ mods) through hoi4facts.Game and hoi4facts.derive; nothing is country specific.
 
 Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/references/lessons.jsonl):
   research.start_year      research_path tech with start_year after its block year
-  research.idle            the slots' time to the horizon is taken 15% larger than the calendar gives (the
-                           game researches faster than base days and the run goes on past the horizon);
-                           more than 25% of that time has nothing planned (an error,
-                           with or without a fallback: the fallback is a safety net, not the plan); or any
-                           slot time is left unplanned (above 2%) while in-time techs the country can
-                           research are not listed (land, industry, electronics and support folders; naval
-                           and air ones when the plan has such a goal): an idle slot is only acceptable
-                           when nothing in-time remains
+  research.idle            slot time to the horizon (taken 15% larger than the calendar gives: the game
+                           researches faster than base days) left unplanned while in-time techs the country
+                           can research are not listed and no research_waits entry names the technology or
+                           date a slot is held for (an idle slot waiting for a named tech is good play; the
+                           share is reported, never the verdict); a research_waits entry without its target
+                           or reason, or waiting for a tech the plan never lists; (warning) a wait longer
+                           than BASE_RESEARCH_POINTS_SAVED banks, or unplanned time with nothing in-time left
   research.throughput      (warning) a block's base research days do not fit the slots before the
                            next block year (research_cost x BASE_TECH_COST, no speed bonus)
   research.prerequisites   prerequisite not at the start or earlier in the path under either parent
@@ -129,6 +128,11 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            (facts.capitulation_levers)
   conquest.tool_gap        (warning) a used lever no tool carries yet (LEVER_TOOL_GAPS, from the gap register's
                            not-executable rows): report it in RUN/tool-gaps.md
+  playbook.refs            (lint_refs.py) a force, economy, air or political decision entry (templates, production,
+                           politics, politics_auto.order, officer_corps, mio, designs, doctrines, air_plan,
+                           research_path) whose why names no source: a playbook row [P file#row], a research row
+                           [R report row], a guide section [G guide section], or a departure [NONE: reason];
+                           a [P ...] reference to a file or row the playbook does not have
   gap.blocked              (warning, lint_gaps.py) a plan key that relies on a lever the gap register lists as not
                            executable: report it in RUN/tool-gaps.md and plan a workaround the tools carry
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
@@ -328,9 +332,11 @@ Tactics rules (the strong-player habits the plan can state; numbers from the def
                            decisions and decision_rules picks once due, affordable and open, every pick that could
                            be taken now (due, gate open) keeping its cost in reserve, politics_auto.order buying only
                            above that reserve
-                           and its threshold; a pick the income cannot pay by the horizon; projected PP above
-                           100 (or above the next pick that can still be bought) with nothing bought for more
-                           than 60 days in a row; (warning) a dated buy affordable more than 30 days late
+                           and its threshold; a pick the income cannot pay by the horizon; power above the
+                           cheapest pick still to buy (a named pick being saved for keeps its cost) with
+                           nothing bought for as long as the income alone would pay another pick (a forgone
+                           buy); (warning) a politics_auto threshold above its cheapest entry with no
+                           threshold_why; a dated buy affordable more than 30 days late
   templates.column_height  a template column with more battalions than the designer opens (MIN_DIVISION_BRIGADE_HEIGHT)
   politics.unknown_idea    an idea named by politics or politics_auto.order that is neither in common/ideas nor
                            an advisor (character id or idea_token) of the tag
@@ -556,8 +562,7 @@ POCKET_SHARE = 0.5        # war.pocket_threshold: fall back at this hostile shar
 EXECUTOR_POCKET_SHARE = 0.5  # the encirclement_risk read of hoi4_armies the executor falls back on
 AHEAD_YEARS = 0.5         # research.ahead: warning from half a year ahead, error from one year
 PP_LATE_DAYS = 30         # politics.pp_budget: a purchase this late against its date warns
-PP_IDLE = 100             # politics.pp_budget: political power above this with no planned buy is idle
-PP_IDLE_DAYS = 60         # ... and idle this many days in a row warns
+PP_IDLE = 50              # politics.pp_budget: a military staff seat's cost, the cheapest buy when the plan names none
 MONTHLY_LOSS_SHARE = 0.15  # politics.unneeded_conscription: assumed share of the fielded manpower lost a month at war
 WAR_CIV_DAYS = 365        # construction.war_civs: a civilian factory queued at war needs this long to the goal
 # production.balance: share of the theatre divisions' equipment lost a month at war (combat and attrition; an
@@ -582,6 +587,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
+NEW_RULES |= {"playbook.refs"}  # every decision names its source (lint_refs.py)
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 # the plan against the game's own conditions, the management inventory, production over all lines
 NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",
@@ -926,23 +932,47 @@ class Lint:
             self.facts["research"]["idle_share"] = round(idle, 3)
             spare = self.unlisted_in_time_techs(derive.date_of(end_day - 1)[0]) if idle > RESEARCH_IDLE_SLACK else []
             self.facts["research"]["unlisted_in_time"] = len(spare)
-            if RESEARCH_IDLE_SLACK < idle <= 0.25 and spare:
-                self.add("error", "research.idle", "research_path",
-                         f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
-                         f"nothing planned ({total:.0f} of {capacity} slot-days, research-speed margin included) while {len(spare)} in-time techs are "
-                         f"not listed (e.g. {', '.join(spare[:8])}): every slot stays busy while an in-time tech "
-                         f"remains (industry and production first, then the army's equipment and support, then "
-                         f"what later wars need); the campaign goes on after this war")
-            if idle > 0.25:
-                # The fallback is a safety net, not the plan (user rule: every slot busy with proper,
-                # in-time techs, industry first): an unplanned quarter of the slots fails either way.
+            # An empty slot is right while a named technology or date is waited for (a bonus to land, a tech that
+            # opens on a date, a re-order): research_waits names it with its reason. Without a named wait, slot time
+            # left unplanned while in-time techs remain is lost research; the share is reported, never the verdict.
+            waits = [x for x in plan.get("research_waits") or [] if isinstance(x, dict)]
+            named = [x for x in waits if (x.get("tech") or x.get("date")) and str(x.get("why") or "").strip()]
+            bank = derive.define(game, "BASE_RESEARCH_POINTS_SAVED", 30)
+            planned_techs = {t for b in blocks for t in b[3]} | {x for x in plan.get("research_priority") or []
+                                                                 if isinstance(x, str)}
+            for i, x in enumerate(waits):
+                where = f"research_waits[{i}]"
+                if not (x.get("tech") or x.get("date")) or not str(x.get("why") or "").strip():
+                    self.add("error", "research.idle", where,
+                             "a research wait names neither the technology or date it waits for, or gives no reason")
+                elif x.get("tech") and x["tech"] not in planned_techs:
+                    self.add("error", "research.idle", where,
+                             f"the slot waits for {x['tech']}, which no research_path block or research_priority lists")
+                if isinstance(x.get("days"), (int, float)) and bank and x["days"] > bank:
+                    self.add("warning", "research.idle", where,
+                             f"a slot left empty {x['days']:g} days banks only {bank:g} of them "
+                             f"(BASE_RESEARCH_POINTS_SAVED): the rest is lost research")
+            # a named wait excuses the slot-days it waits (its `days`, else the banked days), not any amount
+            excused = sum(float(x["days"]) if isinstance(x.get("days"), (int, float)) else float(bank or 30)
+                          for x in named)
+            unplanned = max(0.0, capacity - total)
+            covered = unplanned <= excused + RESEARCH_IDLE_SLACK * capacity
+            if idle > RESEARCH_IDLE_SLACK and spare and not covered:
                 how = ("research_fallback is off" if fallback in (False, "priority_only") else
-                       "the fallback (%s) is a safety net, not a plan"
+                       "the fallback (%s) fills slots with whatever it finds, which is no plan"
                        % ", ".join(plan.get("research_fallback_prefixes") or ["the whole catalogue"]))
                 self.add("error", "research.idle", "research_path",
                          f"about {idle:.0%} of the {slots} slots' time to {derive.fmt(derive.date_of(end_day))} has "
-                         f"nothing planned ({total:.0f} of {capacity} slot-days, research-speed margin included); {how}: list in-time techs "
-                         f"(industry first, then the templates' equipment) or pull the next tier forward")
+                         f"nothing planned ({total:.0f} of {capacity} slot-days, research-speed margin included) while "
+                         f"{len(spare)} in-time techs are not listed (e.g. {', '.join(spare[:8])}) and "
+                         + (f"the named waits cover only {excused:.0f} slot-days of the {unplanned:.0f} unplanned"
+                            if named else "no research_waits entry names the technology or date a slot is held for")
+                         + f"; {how}: list the techs that pay most for the campaign, or name the wait and its reason")
+            elif idle > RESEARCH_IDLE_SLACK and not covered:
+                self.add("warning", "research.idle", "research_path",
+                         f"about {idle:.0%} of the slot time to {derive.fmt(derive.date_of(end_day))} has nothing planned "
+                         f"and no in-time tech is left unlisted: pull the next tier forward where the ahead-of-time cost "
+                         f"pays, or name the wait in research_waits")
         # naval / air folders
         planned = [t for b in blocks for t in b[3]] + [x for x in plan.get("research_priority") or [] if isinstance(x, str)]
         fams = defaultdict(list)
@@ -4642,8 +4672,8 @@ class Lint:
         dated picks (politics, decisions, decision_rules) in order once affordable and open, every pick that
         could be taken now (date due, gate open) keeping its cost in reserve, and politics_auto.order buying
         only from the power above that reserve (and above its threshold). A pick whose `available` gate never
-        opens under the plan (politics.available) is never bought and holds nothing back. Power above PP_IDLE
-        (or above the next pick that can still be bought) with nothing bought for PP_IDLE_DAYS is idle."""
+        opens under the plan (politics.available) is never bought and holds nothing back. Power above the cheapest
+        pick still to buy, with nothing bought for as long as the income alone would pay that pick, is idle."""
         if not self.tag:
             return
         start = derive.day(self.start)
@@ -4707,6 +4737,11 @@ class Lint:
         f = w.country(self.tag).get("political_power")
         balance = float(f["v"]) if f and isinstance(f.get("v"), (int, float)) else 0.0
         pending, auto_left = list(buys), list(orders)
+        # power is idle when it could pay for something and nothing is bought: above the cheapest pick still to
+        # buy (a named pick being saved for keeps its cost), or, with nothing left to buy, above the plan's own
+        # cheapest pick (a military staff seat's cost when the plan names none)
+        costs = [b["cost"] for b in buys if not b["never"]] + [e["cost"] for e in orders]
+        cheapest = min(costs) if costs else PP_IDLE
         bought = {}
         income = 0.0
         day = start
@@ -4740,8 +4775,13 @@ class Lint:
                     break
             # power above what the next buyable pick needs, with nothing bought: idle (a pick that can never
             # be bought saves nothing)
-            nxt = [b["cost"] for b in pending if not b["never"]]
-            level = max(PP_IDLE, min(nxt) if nxt else 0.0)
+            # what is held for the named picks that are due (the reserve) is saving, not idle; idle is what lies
+            # above it and could still pay for the cheapest other pick
+            nxt = [b["cost"] for b in pending if not b["never"]] + [e["cost"] for e in auto_left]
+            level = reserve + (min(nxt) if nxt else cheapest)
+            if auto_left and not off:
+                # below the politics_auto threshold the power is held by that threshold (its own warning above)
+                level = max(level, threshold)
             if balance > level and not got:
                 if not idle_run:
                     idle_from = day
@@ -4765,7 +4805,16 @@ class Lint:
                                    "spent": round(sum(v[2] for v in bought.values())),
                                    "not_bought": [b["label"] for b in pending] + [e["label"] for e in auto_left],
                                    "reserved_at_end": round(reserved)}
-        if idle_worst[0] > PP_IDLE_DAYS:
+        if auto and isinstance(auto, dict) and orders and not off:
+            held = float(auto.get("threshold", 100)) if isinstance(auto.get("threshold"), (int, float)) else 100.0
+            low = min(e["cost"] for e in orders)
+            if held > low and not str(auto.get("threshold_why") or "").strip():
+                self.add("warning", "politics.pp_budget", "politics_auto.threshold",
+                         f"politics_auto buys only from {held:g} PP above the reserve while its cheapest entry costs "
+                         f"{low:g}: early in a campaign the best affordable pick is bought at once; a balance is right "
+                         f"only while a named costlier pick is saved for (politics[] with its date, or threshold_why)")
+        # idle long enough that its income alone would have paid for another pick: a forgone buy, not a number of days
+        if idle_worst[0] and idle_worst[0] * max(rates["per_day_idle"], 0.01) >= cheapest:
             blocked = [b["label"] for b in pending if b["never"]]
             tail = (f"; the never-available {', '.join(blocked)} {'is' if len(blocked) == 1 else 'are'} never "
                     f"bought and nothing in politics_auto.order takes the power instead" if blocked else
@@ -5922,6 +5971,7 @@ class Lint:
         __import__((__package__ or "hoi4facts") + ".lint_fair", fromlist=["check"]).check(self)  # fair.* (FAIR mode)
         __import__((__package__ or "hoi4facts") + ".lint_horizons", fromlist=["check"]).check(self)  # plan.horizons
         __import__((__package__ or "hoi4facts") + ".lint_gaps", fromlist=["check"]).check(self)  # gap.blocked
+        __import__((__package__ or "hoi4facts") + ".lint_refs", fromlist=["check"]).check(self)  # playbook.refs
         # focus/decision/politics conditions, declaration borders, stop date
         __import__((__package__ or "hoi4facts") + ".lint_conditions", fromlist=["check"]).check(self)
         __import__((__package__ or "hoi4facts") + ".lint_manage", fromlist=["check"]).check(self)  # manage.owner

@@ -51,8 +51,10 @@ Germany, Poland and China appear only as worked examples.
    three years before the first planned war (switch date = war date - 2.9 x
    civilian payback; civilian factories queued in the last 18 months never repay),
    checked against equipment stockpiles and the army size the next focus demands.
-3. **Never idle a slot.** Keep every research slot, the focus slot, every
-   production line and the construction queue busy. Check `hoi4_economy` for
+3. **Nothing assignable sits unassigned by accident.** Every free military factory and dockyard has a line,
+   every civilian factory a project, every design company a line and a queued trait, the focus slot a focus.
+   A research slot is held empty only for a named technology (a bonus about to land, a tech opening on a
+   date; up to 30 banked days, RE04). Check `hoi4_economy` for
    idle civilian factories each session; if construction is refused in a state
    (no free slot), try newly gained states.
 4. **Laws and advisors:** trade law and economy law first, conscription as the

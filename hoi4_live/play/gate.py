@@ -342,9 +342,13 @@ def gate_lines(snap, plan=None, units=None, baseline=None, marks=None, target=No
     out.append(f"manpower pool {mp} / AI pool {pool}")
     out.append(f"armies {len(ar.get('armies') or [])}: " + ", ".join(
         f"{a.get('army')} {a.get('division_count')}" for a in ar.get("armies") or []))
-    out.append(f"idle: research slots {now.get('idle_research_slots')}, civilian factories "
-               f"{ec.get('civilian_factories_idle')}")
-    out.append("alerts: " + ", ".join(a.get("alert") or str(a.get("frame")) for a in al.get("alerts") or []))
+    out.append(f"idle: research slots {now.get('idle_research_slots')} (right only while a named technology or "
+               f"date is waited for), civilian factories {ec.get('civilian_factories_idle')}")
+    # the game's own list of what can be done now: each open alert is an omission until it is acted on or a
+    # named, costlier pick is being saved for
+    out.append("OMISSIONS the game lists now: " + (", ".join(
+        (a.get("alert") or str(a.get("frame"))) + (f" ({a['todo']})" if a.get("todo") else "")
+        for a in al.get("alerts") or []) or "none"))
     flines, fok = force(reads, date, plan or {}, units or {}, plan_start or "1936.1.1")
     out.append("FORCE " + ("not gated (no force table)" if fok is None else "on the plan path" if fok
                            else "OFF the plan path (gate fails)"))
