@@ -2999,6 +2999,35 @@ fn layout_step(
         .layout
         .retain(|_, a| a.is_empty() || present.contains(a));
     let taken: HashSet<String> = state.layout.values().cloned().collect();
+    // A strike role formed away from its state (form_strike_role) marches there once.
+    for e in entries {
+        let hint = text(&e["name_hint"]);
+        let home = e["state"].as_i64().unwrap_or(0);
+        let key = format!("layoutformed:{hint}");
+        if !state.done.contains_key(&key) || state.skipped(now, "layoutmove", hint) {
+            continue;
+        }
+        let Some(army) = state.layout.get(hint).filter(|a| !a.is_empty()).cloned() else {
+            state.done.remove(&key);
+            continue;
+        };
+        let row = armies.iter().find(|a| text(&a["army"]) == army);
+        if row.is_none_or(|a| a["main_state"].as_i64() == Some(home)) {
+            state.done.remove(&key);
+            continue;
+        }
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_move",
+            json!({"army": army, "state_id": home}),
+            "lm",
+        )?;
+        state.skip(now, "layoutmove", hint, if ok { 20 * DAY } else { 3 * DAY });
+        return Ok(Some(format!(
+            "layout: {army} ({hint}) marches to its state {home}: {ok} {why}"
+        )));
+    }
     for (index, e) in entries.iter().enumerate() {
         let hint = text(&e["name_hint"]).to_string();
         let home = e["state"].as_i64().unwrap_or(0);
@@ -3088,7 +3117,14 @@ fn layout_step(
                 .iter()
                 .any(|x| x["state"].as_i64() == Some(home) && text(&x["role"]) == "strike");
         if first_strike {
-            let Some(base) = base else { continue };
+            let Some(base) = base else {
+                if let Some(step) =
+                    form_strike_role(state, tools, plan, lease, now, e, &hint, armies)?
+                {
+                    return Ok(Some(step));
+                }
+                continue;
+            };
             state.layout.insert(hint.clone(), base.clone());
             return Ok(Some(format!("layout: {base} is {hint}")));
         }
@@ -3227,6 +3263,98 @@ fn layout_step(
             )));
         }
     }
+    Ok(None)
+}
+
+/// Game days a strike role of `army_layout` waits for an army to stand in its state before it is
+/// formed from another army.
+const LAYOUT_FORM_WAIT_DAYS: i64 = 30;
+
+/// A strike role whose state has no army and gets none by itself (the divisions trained there are
+/// gathered into the plan's gather army: Armee Nord never formed in g17e and g17f, so the Polish
+/// theatre went to war without its northern formation). After LAYOUT_FORM_WAIT_DAYS the role is
+/// formed: `count` divisions of its templates are detached from the army holding the most of
+/// them (the gather army first), the new army takes the role, and the layout step then marches
+/// it to the role's state. The donor keeps more divisions than it gives.
+#[allow(clippy::too_many_arguments)]
+fn form_strike_role(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+    entry: &Value,
+    hint: &str,
+    armies: &[Value],
+) -> Result<Option<String>> {
+    let since = *state
+        .done
+        .entry(format!("layoutwait:{hint}"))
+        .or_insert(now);
+    if now.saturating_sub(since) < LAYOUT_FORM_WAIT_DAYS * DAY
+        || state.skipped(now, "layoutentry", hint)
+    {
+        return Ok(None);
+    }
+    let templates = strings(entry, "templates");
+    let count = entry["count"].as_u64().unwrap_or(1).max(1) as usize;
+    let gather = text(&plan["armies"]["gather_into"]).to_string();
+    let gather = state.layout.get(&gather).cloned().unwrap_or(gather);
+    let mut donors: Vec<(&str, u64)> = armies
+        .iter()
+        .filter_map(|a| Some((a["army"].as_str()?, a["division_count"].as_u64()?)))
+        .filter(|(_, n)| *n as usize > 2 * count)
+        .collect();
+    // the gather army first, then the largest
+    donors.sort_by_key(|(a, n)| (*a != gather, std::cmp::Reverse(*n)));
+    for (donor, _) in donors {
+        let detail = tools.call("hoi4_supply", &json!({"army": donor}))?;
+        let pick: Vec<String> = list(&detail, "divisions")
+            .iter()
+            .filter(|d| text(&d["army"]) == donor)
+            .filter(|d| templates.iter().any(|t| t == text(&d["template"])))
+            .filter_map(|d| d["id"].as_str().map(str::to_string))
+            .take(count)
+            .collect();
+        if pick.is_empty() {
+            continue;
+        }
+        let before: HashSet<String> = armies
+            .iter()
+            .map(|a| text(&a["army"]).to_string())
+            .collect();
+        let (ok, why) = state.act(
+            tools,
+            lease,
+            "hoi4_army_detach",
+            json!({"army": donor, "divisions": pick}),
+            "lf",
+        )?;
+        if !ok {
+            state.skip(now, "layoutentry", hint, 3 * DAY);
+            return Ok(Some(format!(
+                "layout: forming {hint} from {donor}: {ok} {why}"
+            )));
+        }
+        let after = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        let Some(new) = list(&after, "armies")
+            .iter()
+            .map(|a| text(&a["army"]).to_string())
+            .find(|n| !before.contains(n))
+        else {
+            state.skip(now, "layoutentry", hint, DAY);
+            return Ok(Some(format!(
+                "layout: forming {hint} from {donor}: no new army seen"
+            )));
+        };
+        state.layout.insert(hint.to_string(), new.clone());
+        state.done.insert(format!("layoutformed:{hint}"), now);
+        return Ok(Some(format!(
+            "layout: {hint} formed from {} division(s) of {donor} -> {new} (no army stood in its state for {LAYOUT_FORM_WAIT_DAYS} days)",
+            pick.len()
+        )));
+    }
+    state.skip(now, "layoutentry", hint, 10 * DAY);
     Ok(None)
 }
 
@@ -11519,6 +11647,79 @@ mod tests {
         assert_eq!(tools.sent("hoi4_army_detach"), 0);
         assert_eq!(state.layout["J_guard"], "Army 3");
         assert_eq!(state.war_guard.get("Army 3"), Some(&844));
+    }
+
+    #[test]
+    fn a_strike_role_with_no_army_in_its_state_is_formed_from_the_gather_army_and_marches_home() {
+        // g17e/g17f: no army ever stood in East Prussia (state 5), so Armee Nord never formed
+        let tools = Lay {
+            calls: RefCell::new(vec![]),
+            armies: RefCell::new(json!({"armies": [
+                {"army": "Armee West Mitte", "main_state": 64, "division_count": 24, "commander": null}],
+                "unassigned_by_state": []})),
+            divisions: json!([
+                {"army": "Armee West Mitte", "id": "a", "template": "Panzer-Division"},
+                {"army": "Armee West Mitte", "id": "b", "template": "Infanterie-Division"},
+                {"army": "Armee West Mitte", "id": "c", "template": "Infanterie-Division"},
+                {"army": "Armee West Mitte", "id": "d", "template": "Infanterie-Division"}]),
+            refuse: vec![],
+        };
+        let plan = json!({"armies": {"gather_into": "Armee West Mitte"}, "army_layout": [
+            {"name_hint": "Armee Nord", "state": 5, "role": "strike",
+             "templates": ["Infanterie-Division"], "count": 2},
+            {"name_hint": "Armee West Mitte", "state": 64, "role": "strike"}]});
+        let mut state = State::default();
+        state
+            .layout
+            .insert("Armee West Mitte".into(), "Armee West Mitte".into());
+        // it waits for an army to stand in its state first
+        assert_eq!(
+            layout_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert_eq!(tools.sent("hoi4_army_detach"), 0);
+        let now = START + 31 * DAY;
+        state.clock = now;
+        let out = layout_step(&mut state, &tools, &plan, "l", now)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("Armee Nord formed from 2 division(s) of Armee West Mitte"),
+            "{out}"
+        );
+        let detach = tools
+            .calls
+            .borrow()
+            .iter()
+            .rev()
+            .find(|(n, _)| n == "hoi4_army_detach")
+            .cloned()
+            .unwrap();
+        assert_eq!(detach.1["divisions"], json!(["b", "c"]));
+        assert_eq!(state.layout["Armee Nord"], "Army 11");
+        // then it marches to its state, once
+        let out = layout_step(&mut state, &tools, &plan, "l", now + 1)
+            .unwrap()
+            .unwrap();
+        assert!(
+            out.contains("Army 11 (Armee Nord) marches to its state 5: true"),
+            "{out}"
+        );
+        let moved = tools
+            .calls
+            .borrow()
+            .iter()
+            .rev()
+            .find(|(n, _)| n == "hoi4_army_move")
+            .cloned()
+            .unwrap();
+        assert_eq!(moved.1["state_id"], json!(5));
+        assert_ne!(
+            layout_step(&mut state, &tools, &plan, "l", now + 2)
+                .unwrap()
+                .map(|s| s.contains("marches")),
+            Some(true)
+        );
     }
 
     #[test]
