@@ -314,6 +314,9 @@ mod plan_encircle;
 // Operations: a large land war as drawn and executed battle plans (plan key `operations`).
 #[path = "plan_operation.rs"]
 mod plan_operation;
+// One spending order per experience pool (plan key `xp_budget`).
+#[path = "plan_xp.rs"]
+mod plan_xp;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -544,6 +547,10 @@ pub struct State {
     /// The game day on which an idle research slot or focus was offered the tick ahead of the
     /// war-first block and started nothing (that day the war runs first again).
     cheap_first_spent: Option<GameHour>,
+    /// The game day on which the force spends (plan_run.rs `force_first`) found nothing to buy,
+    /// and whether the last tick was theirs (the next one belongs to the war-first block).
+    force_first_spent: Option<GameHour>,
+    force_first_yield: bool,
     /// The domain scheduler's turns (no domain starves behind the war-first block).
     sched: Sched,
     /// armies on direct move orders (their battle plan did not advance)
@@ -761,6 +768,8 @@ impl Default for State {
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             cheap_first_spent: None,
+            force_first_spent: None,
+            force_first_yield: false,
             sched: Sched::default(),
             war_move: HashSet::new(),
             war_rest: HashMap::new(),
@@ -1357,6 +1366,19 @@ impl State {
                         "plan_action_failed",
                         format!("{name} returned {status}; standing plan stopped"),
                     )),
+                    // A march some of whose divisions took the order is an order sent: the
+                    // army is on its way and its step watches it (o2c, 18 Nov 2026: the armour
+                    // column's Warsaw leg read NotApplied with 2 of 6 divisions heading, counted
+                    // as refused, and the column stood 35 days).
+                    "NotApplied" if name == "hoi4_army_move" && heading_count(&body) > 0 => {
+                        Ok((
+                            true,
+                            format!(
+                                "Verified (partial: {} division(s) heading)",
+                                heading_count(&body)
+                            ),
+                        ))
+                    }
                     "NotApplied" | "Diverged" => Ok((false, status)),
                     _ => Err(Error::new(
                         "action_uncertain",
@@ -1381,6 +1403,20 @@ fn ints(v: &Value) -> Vec<i64> {
 }
 /// The stable `id` of a plan list item (a non-empty string or a number), used for its
 /// done-memory instead of its position so a revised or reordered list keeps what was done.
+/// The divisions a march receipt reads as heading for the order's target.
+fn heading_count(body: &Value) -> i64 {
+    let receipt = &body["receipt"];
+    [
+        &receipt["detail"]["divisions_heading"],
+        &receipt["detail"]["seen"]["divisions_heading"],
+        &receipt["seen"]["divisions_heading"],
+        &body["observed"]["divisions_heading"],
+    ]
+    .iter()
+    .find_map(|v| v.as_i64())
+    .unwrap_or(0)
+}
+
 fn item_id(item: &Value) -> Option<String> {
     match &item["id"] {
         Value::String(id) if !id.trim().is_empty() => Some(id.trim().to_string()),
@@ -1594,6 +1630,10 @@ pub fn tick(
     let war_first = war_on && plan["war"]["first"] != json!(false) && !cheap_first;
     state.sched.war_ran = war_first || cheap_first;
     if war_first {
+        // the force spends at peace before the war-first block (force_first)
+        if let Some(step) = force_first(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
         // a domain the war-first block kept waiting a whole day gets this tick (DOMAINS)
         if let Some(step) = overdue_step(state, tools, plan, lease, now)? {
             return Ok(Tick::Acted(step));
@@ -2204,6 +2244,51 @@ fn overdue_step(
         }
     }
     Ok(None)
+}
+
+/// The force spends at peace, ahead of the war-first block: the plan's template edits, officer
+/// corps spirits, designs and political power (advisors, laws). Each is a one-shot buy with its
+/// own timers, and the war that follows is fought with what they bought; behind a war
+/// preparation that finds an order every tick they got no turn (fk1, 18 Nov 2026: 8 ticks in
+/// the 22 days before the declaration, all of them the operation's prepare: no template edit, no
+/// spirit, no advisor, 540 political power idle). Every other tick at most (the next belongs to
+/// the war), and once a day when nothing was bought. At war the domain scheduler alone decides.
+fn force_first(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if std::mem::take(&mut state.force_first_yield)
+        || plan["scheduler"]["force_first"] == json!(false)
+        || state.war_active
+        || state.force_first_spent == Some(now / DAY)
+    {
+        return Ok(None);
+    }
+    if plan_manage::at_war(state, tools, plan, now) {
+        state.force_first_spent = Some(now / DAY);
+        return Ok(None);
+    }
+    let found = match politics_step(state, tools, plan, lease, now)? {
+        Some(line) => Some(line),
+        None => plan_manage::force_step(state, tools, plan, lease, now)?,
+    };
+    let found = match found {
+        Some(line) => Some(line),
+        None => plan_affairs::force_step(state, tools, plan, lease, now)?,
+    };
+    match found {
+        Some(line) => {
+            state.force_first_yield = true;
+            Ok(Some(format!("{line} (force spend before the war)")))
+        }
+        None => {
+            state.force_first_spent = Some(now / DAY);
+            Ok(None)
+        }
+    }
 }
 
 /// The done-memory and skip-timer key of the plan's `politics` pick at `index`.
@@ -5127,9 +5212,11 @@ fn doctrine_fill(
             "naval" | "navy" => "navy",
             _ => "army",
         };
+        // every spend the plan's xp_budget lists comes before a default fill (plan_xp.rs)
         let reserve = plan["manage"]["xp_reserve"][kind]
             .as_f64()
-            .unwrap_or(if kind == "army" { 30.0 } else { 0.0 });
+            .unwrap_or(if kind == "army" { 30.0 } else { 0.0 })
+            + plan_xp::ahead(state, tools, plan, kind, &plan_xp::Spender::Unlisted, now).0;
         let xp = folder["experience"]
             .as_f64()
             .or_else(|| read["experience"][kind]["value"].as_f64())
@@ -5288,7 +5375,23 @@ fn extras_step(
             };
             let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
             let cost = entry["xp"].as_f64().unwrap_or(100.0);
-            if xp < cost {
+            // the spends the plan's xp_budget lists before this doctrine (templates, officer
+            // corps, designs) are paid first (plan_xp.rs)
+            let who = item_id(entry).map_or(plan_xp::Spender::Unlisted, |id| {
+                plan_xp::Spender::Ref(format!("doctrine:{id}"))
+            });
+            let (before, names) = plan_xp::ahead(state, tools, plan, kind, &who, now);
+            if xp < cost + before {
+                if before > 0.0 {
+                    plan_manage::note(
+                        state,
+                        "doctrines",
+                        format!(
+                            "{doctrine}: {xp:.0} {kind} experience, {before:.0} held for {} first",
+                            names.join(", ")
+                        ),
+                    );
+                }
                 break;
             }
             // the game disabled Unlock at this experience (the plan's cost is an estimate; the
@@ -9358,6 +9461,18 @@ fn war_mission(kind: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn a_march_some_divisions_took_reads_as_heading() {
+        use serde_json::json;
+        let partial = json!({"receipt": {"status": "NotApplied",
+            "detail": {"divisions": 6, "divisions_heading": 2}}});
+        assert_eq!(super::heading_count(&partial), 2);
+        let none = json!({"receipt": {"status": "NotApplied",
+            "detail": {"divisions": 6, "divisions_heading": 0}}});
+        assert_eq!(super::heading_count(&none), 0);
+        assert_eq!(super::heading_count(&json!({})), 0);
+    }
+
+    #[test]
     fn war_mission_covers_designer_airframes() {
         assert_eq!(war_mission("fighter_equipment_1"), Some("air_superiority"));
         assert_eq!(
@@ -12031,6 +12146,8 @@ mod tests {
         // (no cost: this fake reads no political power, and a costed pick waits for a read)
         plan["politics"] = json!([{"id": "chief", "category": "military_staff", "slot": 0,
             "idea": "ITA_chief"}]);
+        // the scheduler alone (the force spends before the war are their own test)
+        plan["scheduler"] = json!({"force_first": false});
         let politics = |w: &War| {
             w.calls
                 .borrow()
@@ -12065,7 +12182,7 @@ mod tests {
         assert_eq!(politics(&w), 1);
         // scheduler.max_wait_days stretches the guarantee
         let mut state = State::default();
-        plan["scheduler"] = json!({"max_wait_days": 3});
+        plan["scheduler"] = json!({"max_wait_days": 3, "force_first": false});
         tick(&mut state, &w, &plan, "l", START).unwrap();
         tick(&mut state, &w, &plan, "l", START + DAY).unwrap();
         assert_eq!(politics(&w), 1);

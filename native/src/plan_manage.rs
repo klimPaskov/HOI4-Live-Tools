@@ -212,6 +212,8 @@ pub(super) struct Memory {
     air_reserve_seen: HashMap<String, (GameHour, f64)>,
     /// Officer corps picks the game refused, by entry.
     ofc_refused: HashMap<String, u32>,
+    /// officer corps picks moved to the branch's next slot after a spirit_unknown
+    ofc_slot_shift: HashMap<String, usize>,
     /// (game hour, fuel stock) samples of the fuel rule, the last 30 game days.
     fuel_samples: Vec<(GameHour, f64)>,
     /// Since when free convoys have been below `manage.convoys_free` of the stock.
@@ -445,6 +447,21 @@ fn stockpile(state: &mut State, tools: &dyn Tools, now: GameHour) -> Option<Valu
     let read = tools.call("hoi4_stockpile", &json!({})).ok()?;
     state.manage.stockpile = Some((now, read.clone()));
     Some(read).filter(|r| r["equipment"].is_array())
+}
+
+/// The force spends of this module (plan_run.rs `force_first`): template edits, then officer
+/// corps spirits, at most one action.
+pub(super) fn force_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if let Some(done) = templates_step(state, tools, plan, lease, now)? {
+        return Ok(Some(done));
+    }
+    officer_corps_step(state, tools, plan, lease, now)
 }
 
 /// Everything after the extras step, at most one action: the alert row and the failure ledger
@@ -1279,10 +1296,20 @@ fn templates_step(
                         .and_then(|d| d["experience"]["army"]["value"].as_f64()),
                 );
             }
+            // the spends the plan's xp_budget lists before this edit are paid first (plan_xp.rs)
+            let who = item_id(entry).map_or(super::plan_xp::Spender::Unlisted, |id| {
+                super::plan_xp::Spender::Ref(format!("template:{id}"))
+            });
+            let (before, names) = super::plan_xp::ahead(state, tools, plan, "army", &who, now);
             // an unreadable XP leaves the check to the tool's own insufficient_experience
             if let Some(Some(xp)) = army_xp {
-                if xp < need {
-                    waits.push(format!("{name}: army XP {xp} < {need}"));
+                if xp < need + before {
+                    let held = if names.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({before:.0} held for {} first)", names.join(", "))
+                    };
+                    waits.push(format!("{name}: army XP {xp} < {need}{held}"));
                     break;
                 }
             }
@@ -3223,10 +3250,28 @@ fn air_idle_step(
 /// slot costs 20, 35, 50; the window shows the real cost and an entry's `cost` overrides).
 const SPIRIT_SLOT_COST: [f64; 3] = [20.0, 35.0, 50.0];
 
+/// The refusals an officer corps pick has had (plan_xp.rs: a dropped pick holds nothing back).
+pub(super) fn ofc_refused(state: &State, key: &str) -> u32 {
+    state.manage.ofc_refused.get(key).copied().unwrap_or(0)
+}
+
+/// Spirit slots per officer corps branch (hoi4_officer_corps list, pp24: army 3, navy 3, air 2).
+fn spirit_slots(branch: &str) -> usize {
+    if branch == "air" {
+        2
+    } else {
+        3
+    }
+}
+
 /// W: advisors.officer_corps_spirits. `officer_corps`: [{slot: "army:0", spirit: "Bold Attack",
 /// cost?, when?}] picked in plan order, one a tick, once the branch's experience covers the
-/// cost (`xp:<branch> >= cost`) on top of `manage.xp_reserve.<branch>`; a pick the game does not
-/// take rests 30 days, the third refusal drops the entry with a note. Every 7 game days.
+/// cost (`xp:<branch> >= cost`) on top of `manage.xp_reserve.<branch>` and of what the
+/// `xp_budget` spends listed before it still need (plan_xp.rs); a pick the game does not take
+/// rests 30 days, the third refusal drops the entry with a note. A spirit its slot does not offer
+/// (`spirit_unknown`: the plan named the wrong slot, fk1 18 Nov 2026: Effective Training
+/// Programs is air:0, not air:1) is looked for in the branch's other slots the next day. Every 7
+/// game days.
 fn officer_corps_step(
     state: &mut State,
     tools: &dyn Tools,
@@ -3259,28 +3304,57 @@ fn officer_corps_step(
             .as_f64()
             .unwrap_or_else(|| SPIRIT_SLOT_COST[index.parse::<usize>().unwrap_or(0).min(2)]);
         let reserve = plan["manage"]["xp_reserve"][branch].as_f64().unwrap_or(0.0);
-        let need = cost + reserve;
+        let (before, names) = super::plan_xp::ahead(
+            state,
+            tools,
+            plan,
+            branch,
+            &super::plan_xp::Spender::Spirit(entry),
+            now,
+        );
+        let need = cost + reserve + before;
         let gate = json!(format!("xp:{branch} >= {need}"));
         if when_holds(state, tools, &gate, now) != Truth::True {
+            let held = if names.is_empty() {
+                String::new()
+            } else {
+                format!(" ({before:.0} held for {} first)", names.join(", "))
+            };
             waiting.push(format!(
-                "{spirit} ({slot}): needs {need} {branch} experience"
+                "{spirit} ({slot}): needs {need} {branch} experience{held}"
             ));
             continue;
         }
+        // the slot tried: the plan's, else the next one of the branch after a spirit_unknown
+        let shift = state.manage.ofc_slot_shift.get(&key).copied().unwrap_or(0);
+        let first: usize = index.parse().unwrap_or(0);
+        let tried = format!("{branch}:{}", (first + shift) % spirit_slots(branch));
         let (ok, why) = state.act(
             tools,
             lease,
             "hoi4_officer_corps",
-            json!({"slot": slot, "spirit": spirit}),
+            json!({"slot": tried, "spirit": spirit}),
             "oc",
         )?;
         if ok {
             state.done.insert(key, now);
+        } else if super::plan_military::code(&why) == "spirit_unknown"
+            && shift + 1 < spirit_slots(branch)
+        {
+            state.manage.ofc_slot_shift.insert(key.clone(), shift + 1);
+            state.skip(now, "ofc", &key, DAY);
+            note(
+                state,
+                "officer_corps",
+                format!("{spirit}: not offered in {tried}; the next slot of {branch} tomorrow"),
+            );
         } else {
             *state.manage.ofc_refused.entry(key.clone()).or_insert(0) += 1;
             state.skip(now, "ofc", &key, 30 * DAY);
         }
-        return Ok(Some(format!("officer corps {spirit} ({slot}): {ok} {why}")));
+        return Ok(Some(format!(
+            "officer corps {spirit} ({tried}): {ok} {why}"
+        )));
     }
     state.skip(now, "mofc", "x", 7 * DAY);
     note(
@@ -3767,10 +3841,17 @@ fn politics_auto_choice(
         return Err(("vacant; nothing enabled".to_string(), waiting));
     }
     // `ideas` best first: only an idea ranked above the current one; an unlisted current idea
-    // (a law the plan or a focus chose) is left alone
+    // (a law the plan or a focus chose) is left alone. A staff or design seat holds no law: an
+    // advisor there the order does not name gives the seat to the one it names (fk1, 18 Nov
+    // 2026: a naval officer sat in the high command seat the order gave Rommel, with 540
+    // political power idle).
+    let advisor_seat = matches!(
+        text(&entry["category"]),
+        "military_staff" | "research_production"
+    );
     let better = match ideas.iter().position(|i| i == current) {
         Some(at) => &ideas[..at],
-        None if current.is_empty() => &ideas[..],
+        None if current.is_empty() || advisor_seat => &ideas[..],
         None => {
             return Err((
                 format!("holds {current}, which the order does not rank"),
@@ -8022,6 +8103,44 @@ mod tests {
     }
 
     #[test]
+    fn a_spirit_waits_for_the_experience_an_earlier_budget_spend_still_needs() {
+        // the xp_budget lists the line-artillery template before the army spirit: with 60 army
+        // experience the spirit (35) waits while the template (40) is due and undone
+        let tools = fake(vec![
+            ("hoi4_country_status", json!({"fields": {}})),
+            (
+                "hoi4_doctrines",
+                json!({"experience": {"army": {"value": 60.0}}}),
+            ),
+            (
+                "hoi4_officer_corps",
+                json!({"receipt": {"status": "Verified"}}),
+            ),
+        ]);
+        let plan = json!({
+            "officer_corps": [{"slot": "army:1", "spirit": "Motorization Drive", "cost": 35}],
+            "xp_budget": {"army": [
+                {"id": "x_tpl", "cost": 40, "purpose": "template", "ref": "template:t_art", "when": "xp:army >= 40"},
+                {"id": "x_oc", "cost": 35, "purpose": "officer_corps_spirit", "ref": "spirit:motorization_drive"}]}});
+        let mut state = State::default();
+        assert_eq!(
+            officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap(),
+            None
+        );
+        assert!(
+            state.manage.notes["officer_corps"].contains("held for x_tpl first"),
+            "{:?}",
+            state.manage.notes
+        );
+        // the template edit done: the spirit is bought
+        let mut state = State::default();
+        state.done.insert("tpl:id:t_art".into(), START);
+        let out = officer_corps_step(&mut state, &tools, &plan, "l", START).unwrap();
+        assert!(out.is_some_and(|l| l.contains("Motorization Drive (army:1): true")));
+        assert!(state.done.contains_key("ofc:army:1:Motorization Drive"));
+    }
+
+    #[test]
     fn reserve_planes_no_entry_takes_become_a_wing_once_they_stand_14_days() {
         let stock = |n: f64| {
             json!({"equipment": [{"archetype": "small_plane_cas_airframe",
@@ -8526,6 +8645,22 @@ mod tests {
             politics_auto_step(&mut state, &tools, &off, "l", START).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn an_ordered_advisor_replaces_a_staff_holder_the_order_does_not_name() {
+        // fk1: a naval officer held the high command seat the order gives Rommel
+        let offered: Vec<(String, bool)> = ["GER_erwin_rommel", "GER_erich_bey"]
+            .iter()
+            .map(|s| (s.to_string(), true))
+            .collect();
+        let none: Vec<String> = Vec::new();
+        let seat = json!({"category": "military_staff", "slot": 5, "ideas": ["GER_erwin_rommel"]});
+        assert_eq!(
+            politics_auto_choice(&seat, "GER_erich_bey", &offered, &none, &none),
+            Ok("GER_erwin_rommel".into())
+        );
+        assert!(politics_auto_choice(&seat, "GER_erwin_rommel", &offered, &none, &none).is_err());
     }
 
     #[test]

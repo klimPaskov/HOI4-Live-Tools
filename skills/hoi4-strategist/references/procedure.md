@@ -238,7 +238,7 @@ combat XP a day, most training XP a day, each by its full define key).
    air wing on training, naval exercises to about 100 XP, attachés (100 PP + 50 command power), volunteers
    (AR15-AR17, RE10).
 Resolution: the `xp` fields of `doctrines` (and of `templates` once that key has one) in spend order,
-`xp_budget` (key pending); plan.md §13 table. Check: rubric row 12.
+`xp_budget` (the executor pays its template, design, officer corps and doctrine spends in this order and holds each due earlier spend's cost back); plan.md §13 table. Check: rubric row 12.
 
 ## C. Army forces and equipment
 
@@ -553,7 +553,7 @@ the projected balance never sits above about 100 PP with no planned buy for more
 what they leave unspent (default: every vacant military staff seat; laws and political advisors only when the
 order names them). After the order, the executor fills every vacant advisor seat with the first advisor the game
 enables there, political advisors first (`politics_auto.fill_vacant`, default true; `never` holds), and an order
-entry whose seat holds what it does not rank takes its idea at another vacant seat that offers it. Every idea the
+entry whose seat holds a law it does not rank takes its idea at another vacant seat that offers it; a military staff or design seat held by an advisor the entry does not rank is given to the entry's advisor (a naval officer in a high command seat the order gives Rommel is replaced). Every idea the
 plan names must be an idea or an advisor's idea_token or character id (lint `politics.unknown_idea`: 'raeder' or
 'manstein' are never offered, GER_erich_von_manstein is). The executor holds back the cost of each `politics` pick that could be bought now (its `when`
 holds and the game has not just refused it) and lets `politics_auto` spend only above that; a gated or refused

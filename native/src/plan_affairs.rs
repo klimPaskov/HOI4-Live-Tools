@@ -263,6 +263,25 @@ struct Run<'a> {
 
 type Section = fn(&mut State, &Run<'_>) -> Result<Option<String>>;
 
+/// The force spends of this module (plan_run.rs `force_first`): the plan's designs.
+pub(super) fn force_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    designs_step(
+        state,
+        &Run {
+            tools,
+            plan,
+            lease,
+            now,
+        },
+    )
+}
+
 /// Everything after plan_manage's step, at most one action: diplomacy, faction, incoming
 /// proposals, trade, designs and line switches, MIOs, intelligence.
 pub fn step(
@@ -380,12 +399,19 @@ fn designs_step(state: &mut State, run: &Run<'_>) -> Result<Option<String>> {
         if let Some(b) = branch.filter(|_| need > 0.0) {
             let read = xp.get_or_insert_with(|| tools.call("hoi4_doctrines", &json!({})).ok());
             // an unreadable XP leaves the check to the tool's own insufficient_experience
-            if let Some(have) = read
+            let have = read
                 .as_ref()
-                .and_then(|d| d["experience"][b]["value"].as_f64())
-            {
-                if have < need {
-                    waits.push(format!("{label}: {b} XP {have} < {need}"));
+                .and_then(|d| d["experience"][b]["value"].as_f64());
+            // the spends the plan's xp_budget lists before this design are paid first
+            let who = item_id(entry).map_or(super::plan_xp::Spender::Unlisted, |id| {
+                super::plan_xp::Spender::Ref(format!("design:{id}"))
+            });
+            let (before, _) = super::plan_xp::ahead(state, tools, plan, b, &who, now);
+            if let Some(have) = have {
+                if have < need + before {
+                    waits.push(format!(
+                        "{label}: {b} XP {have} < {need} + {before:.0} held"
+                    ));
                     blocked.insert(b);
                     continue;
                 }

@@ -624,7 +624,7 @@
                 "items": {
                   "type": "string"
                 },
-                "description": "ranked best first: only an idea above the slot's current one is taken, and a current idea the list does not rank is left alone; absent: the first enabled idea, only while the slot is vacant"
+                "description": "ranked best first: only an idea above the slot's current one is taken; a current law the list does not rank is left alone, while a military_staff or research_production seat held by an advisor the list does not rank goes to the list's first enabled advisor; absent: the first enabled idea, only while the slot is vacant"
               },
               "cost": {
                 "type": "number",
@@ -3971,7 +3971,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp). The executor runs army entries with purpose exercise (plan_seams.rs: start at peace once `when` holds with hoi4_army_exercise, stop at war; gap register training.exercises); the XP spends themselves are the player's (cost)",
+      "description": "every XP spend per branch in order: templates, doctrines, designs, officer-corps spirits, exercises (lint templates.xp). The executor runs army entries with purpose exercise (plan_seams.rs: start at peace once `when` holds with hoi4_army_exercise, stop at war; gap register training.exercises), and pays the spends in this order (plan_xp.rs): a template edit, design, officer corps spirit or doctrine waits while an entry listed before it is due (its `when` holds without its own xp clause), not done and not resting after a refusal, and leaves that entry's cost in the pool; a spend not listed comes after every listed one",
       "x-owner": "executor"
     },
     "stockpile_targets": {
