@@ -61,4 +61,6 @@ counts), lint totals, open warnings.
 
 Operator notes: if `RUN/operator-notes.md` exists, read it first. It holds corrections from the user or the operator (and earlier review findings); treat each as a finding to fix or to rebut with a source, and record how in plan.md §11.
 
+Decision table: if `RUN/decisions.md` exists (the pipeline's decisions step wrote it before you), it is BINDING INPUT: each row says what the playbook, the private sources, the web research and the game files say and the decision with its reason. Implement every row; cite it as `[D <row id>]` in the `why` of the entries that carry it (lint playbook.refs accepts it as the source). A row you cannot follow on the game files or the arithmetic goes in `_meta.decision_departures` as {row, reason, instead}: the reason is the game fact or arithmetic that forbids it, never a lint ("a lint failed" is an error: lint decisions.coverage); keep the row's intent with the nearest legal decision and say so in plan.md §11. Every row is either cited or departed from.
+
 Files: change nothing outside RUN (the tools, skills, schema and plans in the repository are what the plan is checked with). If a tool or fact reader is wrong or missing, write the gap with evidence to `RUN/tool-gaps.md` and continue with the best sourced workaround.

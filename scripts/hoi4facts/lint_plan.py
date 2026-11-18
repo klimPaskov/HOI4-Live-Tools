@@ -130,9 +130,13 @@ Rules (error unless marked; rule ids match skills/hoi4-campaign-playbook/referen
                            not-executable rows): report it in RUN/tool-gaps.md
   playbook.refs            (lint_refs.py) a force, economy, air or political decision entry (templates, production,
                            politics, politics_auto.order, officer_corps, mio, designs, doctrines, air_plan,
-                           research_path) whose why names no source: a playbook row [P file#row], a research row
-                           [R report row], a guide section [G guide section], or a departure [NONE: reason];
-                           a [P ...] reference to a file or row the playbook does not have
+                           research_path) whose why names no source: a playbook row [P file#row], a decision table
+                           row [D row], a research row [R report row], a guide section [G guide section], or a
+                           departure [NONE: reason]; a [P ...] or [D ...] reference to a row that does not exist
+  decisions.coverage       (lint_refs.py, when the plan has a decision table: decisions.md beside plan.json or
+                           --decisions) a table row the plan neither cites ([D row]) nor lists in
+                           _meta.decision_departures with a game-fact or arithmetic reason; a departure whose reason
+                           is a lint
   gap.blocked              (warning, lint_gaps.py) a plan key that relies on a lever the gap register lists as not
                            executable: report it in RUN/tool-gaps.md and plan a workaround the tools carry
   conquest.mandatory       a state the goal must control has no vp target (warning: provinces of a
@@ -481,6 +485,8 @@ Each war's shape on its first day (lint_war_shape.py):
   war.operation_line       a front, axis or target-line state in the wrong land; a line that is no chain, can be
                            walked around, or (with its phase lines) leaves an enemy above its surrender threshold
   war.operation_support    air.regions miss a region of the target line, or no air_plan row flies over them
+  war.armour_terrain       a mobile formation's axis crosses a state at least 85% forest, marsh, mountain or jungle
+                           before its last state (error), or averages under 50% open ground (warning)
 
 Hand plans: with _meta.source "hand" (or --hand) every coverage-build and tactics error above is reported as
 a warning, so the two hand plans keep 0 errors while their gaps stay visible; the older rules are
@@ -587,7 +593,7 @@ NEW_RULES = {"coverage.checklist", "posture.shares", "navy.required", "navy.over
              "peace.order", "construction.railway_node", "supply.axis_reach", "production.balance",
              "conquest.vp_selection", "conquest.levers", "conquest.tool_gap"}
 NEW_RULES |= {"focus.available", "focus.idle", "focus.unconfirmed"}  # the focus slot walk (plan_gates)
-NEW_RULES |= {"playbook.refs"}  # every decision names its source (lint_refs.py)
+NEW_RULES |= {"playbook.refs", "decisions.coverage"}  # every decision names its source (lint_refs.py)
 NEW_RULES |= {"force.home_divisions"}  # every start division outside the theatre has a stated use
 # the plan against the game's own conditions, the management inventory, production over all lines
 NEW_RULES |= {"focus.condition", "focus.condition_unchecked", "decision.condition", "politics.visible",
@@ -607,7 +613,7 @@ NEW_RULES |= {"force.bombers", "force.design_cost", "force.decisive", "force.sea
 NEW_RULES |= {"war.axes_missing", "war.objective_not_at_war", "war.hold_sector", "war.mobile_axis",
               "war.recovery_phase", "war.guarantor", "war.declaration_gate", "war.attack_force",
               "war.operation_required", "war.operation_refs", "war.operation_timing", "war.operation_line",
-              "war.operation_support", "force.template_floor", "force.staff", "force.exercise", "force.firepower", "force.regular",
+              "war.operation_support", "war.armour_terrain", "force.template_floor", "force.staff", "force.exercise", "force.firepower", "force.regular",
               "force.idle_xp", "force.idle_pp", "force.staff_domain", "force.cas_generation", "force.air_range",
               "force.dominance"}  # lint_war_shape.py  # bombers, designed cost, decisive wars
 SEVERITIES = ("error", "warning", "info")
@@ -718,8 +724,9 @@ def _ints(v):
 
 
 class Lint:
-    def __init__(self, plan, game, k=FRONT_K, schema=None, hand=None):
+    def __init__(self, plan, game, k=FRONT_K, schema=None, hand=None, decisions=None):
         self.plan = plan
+        self.decisions = decisions  # the run's decision table text (decisions.md) or None
         self.game = game
         self.k = k
         self.schema = schema if schema is not None else load_schema()
@@ -6103,10 +6110,11 @@ def match_or_none(name, table):
     return derive.match_commander(name, table)
 
 
-def lint(plan, game, k=FRONT_K, schema=None, hand=None):
+def lint(plan, game, k=FRONT_K, schema=None, hand=None, decisions=None):
     """{"errors": n, "warnings": n, "infos": n, "findings": [...], "facts": {...}}. hand: True reports
-    the coverage-build rules as warnings (default: when _meta.source is "hand")."""
-    lt = Lint(plan, game, k, schema, hand).run()
+    the coverage-build rules as warnings (default: when _meta.source is "hand"). decisions: the text of the run's
+    decision table (decisions.md), which [D row] sources and decisions.coverage check against."""
+    lt = Lint(plan, game, k, schema, hand, decisions).run()
     count = Counter(f["severity"] for f in lt.findings)
     return {"errors": count["error"], "warnings": count["warning"], "infos": count["info"],
             "findings": lt.findings, "facts": lt.facts}
@@ -6132,6 +6140,8 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true", help="print the findings and facts as JSON")
     ap.add_argument("--hand", action="store_true",
                     help="hand-written plan: report the coverage-build rules as warnings (as _meta.source hand)")
+    ap.add_argument("--decisions", default=None,
+                    help="the run's decision table (default: decisions.md beside the plan, when it exists)")
     args = ap.parse_args(argv)
     try:
         with open(args.plan, encoding="utf-8") as fh:
@@ -6145,7 +6155,16 @@ def main(argv=None):
     if not os.path.isdir(args.game):
         print(f"game directory not found: {args.game}", file=sys.stderr)
         return 2
-    out = lint(plan, load_game(args.game, args.userdir, args.mod), args.front_distance, hand=args.hand or None)
+    table_path = args.decisions or os.path.join(os.path.dirname(os.path.abspath(args.plan)), "decisions.md")
+    decisions = None
+    if os.path.exists(table_path):
+        with open(table_path, encoding="utf-8") as fh:
+            decisions = fh.read()
+    elif args.decisions:
+        print(f"decision table not found: {args.decisions}", file=sys.stderr)
+        return 2
+    out = lint(plan, load_game(args.game, args.userdir, args.mod), args.front_distance, hand=args.hand or None,
+               decisions=decisions)
     if args.json:
         print(json.dumps(out, indent=2, default=sorted))
     else:

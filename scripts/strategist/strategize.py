@@ -3,14 +3,22 @@
 
 Usage:
     strategize.py --run RUN [--tag ITA --date 1936.1.1 --goal "..." --mode fair --horizon 1937.1.1]
-                  [--game DIR] [--userdir DIR] [--mod PATH ...] [--provider NAME] [--from gates|critic]
-                  [--dry-run]
+                  [--game DIR] [--userdir DIR] [--mod PATH ...] [--provider NAME]
+                  [--from decisions|gates|critic] [--decisions-only] [--source PATH ...] [--dry-run]
 
 RUN/run_spec.json is written from the options when it does not exist yet (an existing spec wins).
 Steps, each gated; the script owns the order so no step can be skipped or self-reviewed:
 
   1. dossier    facts.py dossier build -> RUN/dossier/ (deterministic, cached by its manifest), then
                 pack.py -> RUN/pack/ (the facts every plan needs, the schema digest, the lint rules)
+  1c. decisions run.py --role researcher, prompt prompts/decisions.md -> RUN/decisions.md: the sourced
+                decision table for the request (per decision area: what the playbook, the private sources in
+                RUN/sources/, the run-time web research and the game files say, the decision and its reason).
+                Skipped when RUN/decisions.md exists; `--decisions-only` stops after it. Private sources are
+                optional (run_spec `sources` or `--source`: text files, copied into RUN/sources/); the public
+                product works from the playbook, the web and the game files alone. The plan cites the rows
+                ([D <row id>]) and every row it does not follow is a departure with its reason (lint
+                decisions.coverage), so the restore-or-justify pass runs at every gate.
   2. strategist run.py --role strategist, prompt skills/hoi4-strategist/prompts/strategist.md
                 (procedure steps 1-7; it stops before the critic)
   3. gates      validate_plan.py --strict, lint_plan.py --json -> RUN/lint.json, and check_calls.py
@@ -49,6 +57,10 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 SKILL = os.path.join(ROOT, "skills", "hoi4-strategist")
 PROMPTS = os.path.join(SKILL, "prompts")
 FIX_ROUNDS = 2
+# Private sources copied into RUN/sources/: text only, and never a file above this size (the guide folders hold
+# multi-megabyte base64 exports that would flood a model's context).
+SOURCE_EXTS = (".md", ".txt", ".json", ".csv")
+SOURCE_MAX_BYTES = 1500000
 REVIEW_ROUNDS = 2
 # Critic rubric (skills/hoi4-strategist/references/rubric.md): 17 rows scored 0-2, pass at 24 of 34 with no 0
 # in a critical row. A critic file that states another `max` is scored against the same share of it.
@@ -366,6 +378,65 @@ def publish(run_dir, dest):
     return dest
 
 
+def copy_sources(spec, args, run_dir):
+    """Copies the optional private sources (run_spec `sources` and --source: files or folders) into RUN/sources/
+    and returns (copied, skipped). Folders are read one level deep; only text files up to SOURCE_MAX_BYTES."""
+    import shutil
+    paths = list(spec.get("sources") or []) + list(getattr(args, "source", None) or [])
+    if not paths:
+        return [], []
+    dest = os.path.join(run_dir, "sources")
+    os.makedirs(dest, exist_ok=True)
+    copied, skipped = [], []
+    for path in paths:
+        path = os.path.expanduser(path)
+        files = [os.path.join(path, n) for n in sorted(os.listdir(path))] if os.path.isdir(path) else [path]
+        for f in files:
+            if not os.path.isfile(f):
+                continue
+            name = os.path.basename(f)
+            if not name.lower().endswith(SOURCE_EXTS) or os.path.getsize(f) > SOURCE_MAX_BYTES:
+                skipped.append(name)
+                continue
+            shutil.copyfile(f, os.path.join(dest, name))
+            copied.append(name)
+    return copied, skipped
+
+
+def decisions_step(runner, run_dir, spec, args, report):
+    """1c: the sourced decision table. Returns a failure text or None."""
+    table = os.path.join(run_dir, "decisions.md")
+    if not runner.dry and os.path.exists(table):
+        report["steps"].append({"step": "decisions", "kept": True})
+        return None
+    copied, skipped = copy_sources(spec, args, run_dir) if not runner.dry else ([], [])
+    if skipped:
+        log("sources not copied (not text or above %d bytes): %s" % (SOURCE_MAX_BYTES, ", ".join(skipped)))
+    code, _, secs = agent(runner, "researcher", run_dir, "decisions.md", args)
+    step = {"step": "decisions", "exit": code, "seconds": round(secs), "sources": len(copied)}
+    report["steps"].append(step)
+    if runner.dry:
+        return None
+    if code != 0 or not os.path.exists(table):
+        return "the decision table step exited %s without RUN/decisions.md" % code
+    rows = decision_rows(table)
+    step["rows"] = len(rows)
+    if not rows:
+        return "RUN/decisions.md has no decision rows (| D-<AREA>-<nn> | ...)"
+    return None
+
+
+DECISION_ROW = re.compile(r"(?m)^\|\s*(D-[A-Z]+-\d{2}[a-z]?)\s*\|")
+
+
+def decision_rows(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return DECISION_ROW.findall(f.read())
+    except OSError:
+        return []
+
+
 def strategize(args, runner=None):
     runner = runner or Runner(args.dry_run)
     run_dir = os.path.abspath(args.run)
@@ -377,7 +448,7 @@ def strategize(args, runner=None):
     start_at = getattr(args, "from_step", None) or "dossier"
     # 1. dossier (deterministic; the strategist re-uses it)
     dossier = os.path.join(run_dir, "dossier")
-    if start_at == "dossier" and (runner.dry or not os.path.exists(os.path.join(dossier, "dossier.md"))):
+    if start_at in ("dossier", "decisions") and (runner.dry or not os.path.exists(os.path.join(dossier, "dossier.md"))):
         code, out = runner.run([sys.executable, os.path.join(ROOT, "scripts", "hoi4facts", "facts.py")]
                                + game_args(args) + ["--mode", spec.get("mode", "fair"),
                                "dossier", "build", "--tag", spec["tag"], "--date", spec["start_date"],
@@ -400,6 +471,7 @@ def strategize(args, runner=None):
     # Reuse a reviewed plan made for the same request: the gates decide whether it still holds on this install.
     reused = None
     if start_at == "dossier" and not getattr(args, "no_reuse", False) and not runner.dry \
+            and not getattr(args, "decisions_only", False) \
             and not os.path.exists(os.path.join(run_dir, "plan.json")):
         reused = find_reusable(spec, read_json(os.path.join(dossier, "manifest.json")), libraries(args))
         if reused:
@@ -411,8 +483,17 @@ def strategize(args, runner=None):
     if not runner.dry:
         seed_tool_gaps(run_dir)  # after a reuse: a reviewed plan brings its answered table
 
+    # 1c. the sourced decision table (skipped when resuming from the gates or the critic, or reusing a plan)
+    if start_at in ("dossier", "decisions") and not reused:
+        failure = decisions_step(runner, run_dir, spec, args, report)
+        if failure:
+            return finish(run_dir, report, failure, started)
+        if getattr(args, "decisions_only", False):
+            report["ok"] = True
+            return finish(run_dir, report, None, started)
+
     # 2. strategist (skipped when resuming from the gates or the critic, or reusing a plan)
-    if start_at == "dossier":
+    if start_at in ("dossier", "decisions"):
         code, _, secs = agent(runner, "strategist", run_dir, "strategist.md", args)
         report["steps"].append({"step": "strategist", "exit": code, "seconds": round(secs)})
         if code != 0:
@@ -618,8 +699,13 @@ def main(argv=None):
     ap.add_argument("--userdir")
     ap.add_argument("--mod", action="append")
     ap.add_argument("--provider")
-    ap.add_argument("--from", dest="from_step", choices=["dossier", "gates", "critic"], default="dossier",
-                    help="resume an existing run: gates (validate, lint, calls, then review) or critic")
+    ap.add_argument("--from", dest="from_step", choices=["dossier", "decisions", "gates", "critic"],
+                    default="dossier", help="resume an existing run: decisions (the table, then the strategist), "
+                    "gates (validate, lint, calls, then review) or critic")
+    ap.add_argument("--decisions-only", action="store_true",
+                    help="stop after RUN/decisions.md (the sourced decision table)")
+    ap.add_argument("--source", action="append",
+                    help="a private source (text file or folder) copied into RUN/sources/ for the table (repeat)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--library", action="append", help="folder of reviewed plans to reuse (repeat; see Reuse)")
     ap.add_argument("--no-reuse", action="store_true", help="always plan afresh")

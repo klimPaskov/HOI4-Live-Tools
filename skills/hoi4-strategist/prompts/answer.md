@@ -14,6 +14,8 @@ Finish with one line: findings fixed, rebutted, open.
 
 Operator notes: if `RUN/operator-notes.md` exists, read it first. It holds corrections from the user or the operator (and earlier review findings); treat each as a finding to fix or to rebut with a source, and record how in plan.md §11.
 
+Decision table: if `RUN/decisions.md` exists, a fix never drops or dilutes a table row to pass a gate: change the force, the lines or the dates until the row holds; a row the game files or the arithmetic forbid goes in `_meta.decision_departures` with that fact (lint decisions.coverage rejects a lint as the reason).
+
 Pack: `RUN/pack/index.md` lists the facts already computed for this run (read them instead of re-running the
 commands), `RUN/pack/schema/<key>.md` the fields of each plan key and `RUN/pack/lint-rules.md` what each lint rule
 checks. Batch reads and edits: every turn re-reads everything before it.

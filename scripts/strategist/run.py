@@ -32,7 +32,8 @@ PLAYBOOK_DIR = os.path.join(ROOT, "skills", "hoi4-campaign-playbook")
 STRATEGIST_DIR = os.path.join(ROOT, "skills", "hoi4-strategist")
 # The skill each role works from: planning roles use the strategist skill (which points into the
 # playbook references); the player uses the playbook.
-SKILL_FOR_ROLE = {"strategist": STRATEGIST_DIR, "critic": STRATEGIST_DIR, "player": PLAYBOOK_DIR}
+SKILL_FOR_ROLE = {"strategist": STRATEGIST_DIR, "critic": STRATEGIST_DIR, "researcher": STRATEGIST_DIR,
+                  "player": PLAYBOOK_DIR}
 SKILL_DIR = PLAYBOOK_DIR
 TOOLS_DIR = os.path.join(ROOT, "scripts")
 MANIFEST = "agents-manifest.json"
