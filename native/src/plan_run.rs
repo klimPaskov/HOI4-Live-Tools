@@ -5336,8 +5336,11 @@ fn air_war_step(
     air_war_missions(state, tools, plan, lease, now)
 }
 
-/// `air.war_missions`: every standing-by wing based on a front flies its type's war mission
-/// there (one wing per call).
+/// `air.war_missions`: every standing-by wing based on a front flies its type's war mission over
+/// the enemy side (one wing per call): over the target states of the own executing offensives
+/// first (the operation), else over the enemy states across the border its base lies on. Never
+/// over the own base state: e1c1 (18 Nov 2026) sent 1,400 fighters and the CAS over a quiet own
+/// state while the battle for Poland was fought one region further.
 fn air_war_missions(
     state: &mut State,
     tools: &dyn Tools,
@@ -5358,6 +5361,7 @@ fn air_war_missions(
         let mut near: HashSet<i64> = fronts.iter().copied().collect();
         near.extend(ints(&plan["war"]["theatre"]));
         near.extend(ints(&plan["war"]["guard_states"]));
+        let operation = operation_targets(tools);
         if let Some(first) = fronts.first().copied() {
             let air = tools.call("hoi4_air", &json!({}))?;
             for wing in list(&air, "wings") {
@@ -5371,11 +5375,13 @@ fn air_war_missions(
                     continue;
                 }
                 // over the front its base lies on, else the first front of the theatre
-                let state_id = match wing["air_base"]["state_id"].as_i64() {
-                    Some(base) if !near.contains(&base) => continue,
-                    Some(base) if fronts.contains(&base) => base,
-                    _ => first,
-                };
+                let base = wing["air_base"]["state_id"].as_i64();
+                // an inland wing joins a running operation (the game refuses it out of range,
+                // and the refusal is not asked again for 7 days); without one it stays home
+                if base.is_some_and(|b| !near.contains(&b)) && operation.is_empty() {
+                    continue;
+                }
+                let state_id = air_target(&wars, &operation, base, first);
                 let Some(mission) = war_mission(text(&wing["aircraft_type"])) else {
                     continue;
                 };
@@ -5397,6 +5403,73 @@ fn air_war_missions(
         state.skip(now, "aircheck", "x", 3 * DAY);
     }
     Ok(None)
+}
+
+/// Target states of the own executing offensives (armies and army groups, from the battle-plan
+/// read-back `plan`), most named first: the regions the operation is fought in.
+fn operation_targets(tools: &dyn Tools) -> Vec<i64> {
+    let Ok(read) = tools.call("hoi4_armies", &json!({"threat": false})) else {
+        return Vec::new();
+    };
+    let mut count: Vec<(i64, usize)> = Vec::new();
+    for row in list(&read, "armies")
+        .iter()
+        .chain(list(&read, "army_groups").iter())
+    {
+        for order in list(row, "plan") {
+            for off in list(order, "offensives") {
+                if off["executing"] != json!(true) {
+                    continue;
+                }
+                for id in ints(&off["target"]["states"]) {
+                    match count.iter_mut().find(|c| c.0 == id) {
+                        Some(c) => c.1 += 1,
+                        None => count.push((id, 1)),
+                    }
+                }
+            }
+        }
+    }
+    count.sort_by_key(|c| std::cmp::Reverse(c.1));
+    count.into_iter().map(|c| c.0).collect()
+}
+
+/// The state a war wing based in `base` flies over: an operation target across the border its
+/// base lies on, else the first operation target, else the first enemy state across its border,
+/// else (no enemy states listed) the front state itself.
+fn air_target(wars: &Value, operation: &[i64], base: Option<i64>, first_front: i64) -> i64 {
+    let hostile: Vec<&Value> = list(wars, "borders")
+        .iter()
+        .filter(|b| b["hostile"] == json!(true))
+        .collect();
+    let across: Vec<i64> = hostile
+        .iter()
+        .filter(|b| base.is_some_and(|s| ints(&b["own_border_states"]).contains(&s)))
+        .flat_map(|b| ints(&b["neighbour_states"]))
+        .collect();
+    if let Some(t) = operation.iter().find(|t| across.contains(t)) {
+        return *t;
+    }
+    if let Some(t) = operation.first() {
+        return *t;
+    }
+    if let Some(t) = across.first() {
+        return *t;
+    }
+    let first_enemy = hostile
+        .iter()
+        .find(|b| ints(&b["own_border_states"]).contains(&first_front))
+        .and_then(|b| ints(&b["neighbour_states"]).first().copied());
+    match base {
+        Some(b) if ints_any(&hostile, b) => b,
+        _ => first_enemy.unwrap_or(first_front),
+    }
+}
+
+fn ints_any(hostile: &[&Value], state: i64) -> bool {
+    hostile
+        .iter()
+        .any(|b| ints(&b["own_border_states"]).contains(&state))
 }
 
 /// Game hours between two stages of one army's war order.
@@ -11232,6 +11305,33 @@ mod tests {
             step.starts_with("air JG 1 air_superiority over state 64: true"),
             "{step}"
         );
+    }
+
+    #[test]
+    fn war_wings_fly_over_the_operation_and_never_over_their_own_base() {
+        let wars = json!({"borders": [
+            {"neighbour_tag": "FRA", "hostile": true, "own_border_states": [42], "neighbour_states": [28]},
+            {"neighbour_tag": "POL", "hostile": true, "own_border_states": [66, 67], "neighbour_states": [86, 85]}]});
+        // the operation's targets: a Silesian wing flies over the one across its border
+        assert_eq!(air_target(&wars, &[10, 85], Some(66), 42), 85);
+        // a western wing joins the operation (no target across its own border)
+        assert_eq!(air_target(&wars, &[10, 85], Some(42), 42), 10);
+        // no operation: over the enemy across its border, never its own base state
+        assert_eq!(air_target(&wars, &[], Some(42), 42), 28);
+        assert_eq!(air_target(&wars, &[], Some(66), 42), 86);
+        // an inland base and no operation: across the first front
+        assert_eq!(air_target(&wars, &[], None, 42), 28);
+        struct Ops;
+        impl Tools for Ops {
+            fn call(&self, _: &str, _: &Value) -> Result<Value> {
+                Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                    {"executing": true, "target": {"states": [85, 10]}},
+                    {"executing": false, "target": {"states": [5]}}]}]}],
+                    "armies": [{"plan": [{"offensives": [
+                    {"executing": true, "target": {"states": [10]}}]}]}]}))
+            }
+        }
+        assert_eq!(operation_targets(&Ops), vec![10, 85]);
     }
 
     #[test]

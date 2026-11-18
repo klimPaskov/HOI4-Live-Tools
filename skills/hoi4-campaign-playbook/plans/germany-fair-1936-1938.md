@@ -300,8 +300,9 @@ only acts when a facility is empty and a matching idle scientist exists; Germany
 build a facility first (not automated). Everything else falls back to the first visible
 project of that specialisation.
 
-`air.war_missions: true`: in war, standing-by wings fly over the first own border state
-with an enemy. The runner chooses the mission from the wing's `aircraft_type`: a type
+`air.war_missions: true`: in war, standing-by wings fly over the enemy side: over the target
+states of the own executing offensives first (the operation's regions), else over the enemy
+state across the border their base lies on; never over their own base state. The runner chooses the mission from the wing's `aircraft_type`: a type
 containing `fighter` flies air superiority, one containing `cas` flies close air support.
 With BBA the types are airframe keys: Ju 87 wings (`small_plane_cas_airframe_1`) match
 `cas`, but Bf 109 wings (`small_plane_airframe_1`) contain neither word and are **skipped**,
