@@ -11,6 +11,8 @@ struct Game {
     enemies: RefCell<Vec<&'static str>>,
     held: RefCell<Vec<i64>>,
     refuse_multi: RefCell<bool>,
+    /// every offensive draw refused
+    refuse_all: RefCell<bool>,
     /// (division id, army, template) as hoi4_supply lists them
     divs: RefCell<Vec<(String, String, String)>>,
     calls: RefCell<Vec<(String, Value)>>,
@@ -40,6 +42,7 @@ impl Game {
             enemies: RefCell::new(vec![]),
             held: RefCell::new(vec![]),
             refuse_multi: RefCell::new(false),
+            refuse_all: RefCell::new(false),
             divs: RefCell::new(vec![]),
             calls: RefCell::new(vec![]),
         }
@@ -93,6 +96,9 @@ impl Tools for Game {
                 };
                 return Ok(json!({"states": [{"state_id": s, "controller": c,
                     "provinces": [{"controller": c}]}]}));
+            }
+            "hoi4_army_offensive" if *self.refuse_all.borrow() => {
+                return Ok(json!({"receipt": {"status": "NotApplied"}}));
             }
             "hoi4_army_offensive" if args["states"].is_array() && *self.refuse_multi.borrow() => {
                 return Ok(json!({"receipt": {"status": "NotApplied"}}));
@@ -660,4 +666,57 @@ fn a_declaration_waits_for_an_operation_still_preparing() {
     assert_eq!(unready(&state, &plan, "FRA"), None, "another enemy");
     state.done.insert(key("op_poland", "ready"), START);
     assert_eq!(unready(&state, &plan, "POL"), None);
+}
+
+#[test]
+fn an_operation_already_at_war_prepares_by_the_war_rules_and_executes() {
+    // it15 (18 Nov 2026): Italy starts at war with Ethiopia; the prepare cleared every offensive
+    // that read back over part of the line until its draws ran out, and nothing executed
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    *game.enemies.borrow_mut() = vec!["POL"];
+    for day in 0..6 {
+        burst(&mut state, &game, &plan, START + day * DAY);
+        game.unit("Army Group 1", |r| {
+            if let Some(front) = r["plan"].as_array_mut().and_then(|p| p.first_mut()) {
+                for off in front["offensives"].as_array_mut().unwrap() {
+                    off["target"]["states"] = json!([85, 90]);
+                }
+            }
+        });
+    }
+    let sent = game.orders();
+    assert!(
+        !sent
+            .iter()
+            .any(|(_, a)| a["army"] == json!("Army Group 1") && a["clear_orders"] == json!(true)),
+        "{sent:?}"
+    );
+    assert!(sent
+        .iter()
+        .any(|(_, a)| a["army"] == json!("Army Group 1") && a["execute"] == json!(true)));
+}
+
+#[test]
+fn at_war_an_attacker_whose_offensive_never_draws_executes_its_front() {
+    let game = Game::new();
+    let plan = plan();
+    let mut state = State::default();
+    *game.enemies.borrow_mut() = vec!["POL"];
+    *game.refuse_all.borrow_mut() = true;
+    for hour in 0..80 {
+        burst(&mut state, &game, &plan, START + hour * 7);
+    }
+    let executed: Vec<String> = game
+        .orders()
+        .iter()
+        .filter(|(_, a)| a["execute"] == json!(true))
+        .map(|(_, a)| text(&a["army"]).to_string())
+        .collect();
+    assert!(
+        executed.contains(&"Army Group 1".to_string()),
+        "{executed:?}"
+    );
+    assert!(state.done.contains_key("op:op_pol:exec"));
 }

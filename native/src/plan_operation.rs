@@ -404,6 +404,23 @@ fn arrow_executing(roster: &Value, u: &Unit, line: &[i64]) -> Option<bool> {
     found
 }
 
+/// The enemies the player is at war with (hoi4_wars `wars.enemies`).
+fn war_tags(wars: &Value) -> Vec<String> {
+    list(&wars["wars"], "enemies")
+        .iter()
+        .filter_map(|t| t.as_str().or_else(|| t["tag"].as_str()).map(str::to_string))
+        .collect()
+}
+
+/// Whether the unit's offensive draws ran out (for its line or its one-state line).
+fn drawn_out(state: &State, id: &str, u: &Unit) -> bool {
+    let prefix = key(id, &format!("draw:{}:", u.name));
+    state
+        .done
+        .iter()
+        .any(|(k, n)| k.starts_with(&prefix) && *n >= 2 * REDRAWS)
+}
+
 fn executing(roster: &Value, name: &str) -> bool {
     if army_row(roster, name).is_some_and(|r| r["plan_executing"] == json!(true)) {
         return true;
@@ -649,10 +666,7 @@ fn one(
     now: GameHour,
 ) -> Result<Option<String>> {
     let enemies = strings(op, "enemies");
-    let at_war: Vec<String> = list(&wars["wars"], "enemies")
-        .iter()
-        .filter_map(|t| t.as_str().or_else(|| t["tag"].as_str()).map(str::to_string))
-        .collect();
+    let at_war = war_tags(wars);
     let executed = state.done.contains_key(&key(id, "exec"));
     let (units, group) = units(state, plan, op, roster);
     if executed {
@@ -696,9 +710,15 @@ fn one(
         );
         return Ok(None);
     }
-    // EXECUTE: every attacker, never a hold
+    // EXECUTE: every attacker, never a hold. At war an attacker whose offensive never read back
+    // executes its front alone (its divisions attack along the line) rather than stand.
+    let front_only = |state: &State, u: &Unit| {
+        at_war.contains(&u.enemy) && has_front(roster, &u.name) && drawn_out(state, id, u)
+    };
     for u in units.iter().filter(|u| attacker(u)) {
-        if executing(roster, &u.name) || offensives(roster, &u.name).is_empty() {
+        if executing(roster, &u.name)
+            || (offensives(roster, &u.name).is_empty() && !front_only(state, u))
+        {
             continue;
         }
         if state.skipped(now, "opexec", &u.name) {
@@ -718,14 +738,34 @@ fn one(
     }
     let attackers: Vec<&Unit> = units
         .iter()
-        .filter(|u| attacker(u) && !offensives(roster, &u.name).is_empty())
+        .filter(|u| {
+            attacker(u) && (!offensives(roster, &u.name).is_empty() || front_only(state, u))
+        })
         .collect();
     if let Some(line) = strikes(
         state, tools, plan, op, &units, roster, &enemies, &at_war, lease, now,
     )? {
         return Ok(Some(line));
     }
-    if attackers.iter().all(|u| executing(roster, &u.name)) && !attackers.is_empty() {
+    // an attacker still drawing at war (no offensive yet, its draws not out) is waited for: the
+    // operation counts as executed only once nothing is left to execute
+    let drawing = units.iter().any(|u| {
+        attacker(u)
+            && at_war.contains(&u.enemy)
+            && army_row(roster, &u.name)
+                .or_else(|| group_row(roster, &u.name))
+                .is_some()
+            && !executing(roster, &u.name)
+            && offensives(roster, &u.name).is_empty()
+            && !drawn_out(state, id, u)
+            && state
+                .done
+                .get(&key(id, &format!("fronts:{}", u.name)))
+                .copied()
+                .unwrap_or(0)
+                < 3 * REDRAWS
+    });
+    if attackers.iter().all(|u| executing(roster, &u.name)) && !attackers.is_empty() && !drawing {
         state.done.insert(key(id, "exec"), now);
         state.done.insert(key(id, "line"), 0);
         state.done.insert(key(id, "moved"), now);
@@ -1175,6 +1215,10 @@ fn prepare(
         .collect();
     ordered.extend(units.iter().filter(|u| u.role == Role::Group));
     ordered.extend(units.iter().filter(|u| u.role == Role::Hold));
+    // a unit already at war with its enemy prepares by the war's rules (it15, 18 Nov 2026:
+    // Italy starts at war with Ethiopia; the peace rules cleared every offensive that read back
+    // over two of the line's three states until the draws ran out, and nothing ever executed)
+    let fighting = war_tags(wars);
     for u in ordered {
         // a line that would not draw is drawn one state at a time, its first state first
         let one = key(id, &format!("one:{}:{}", u.name, line_tag(&u.line)));
@@ -1182,7 +1226,9 @@ fn prepare(
             Some(first) => vec![*first],
             None => u.line.clone(),
         };
-        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, true)? {
+        let peace = !fighting.contains(&u.enemy);
+        if let Some(line) = reconcile(state, tools, id, u, &line, roster, wars, lease, now, peace)?
+        {
             return Ok(Some(line));
         }
     }

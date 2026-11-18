@@ -939,7 +939,8 @@ fn pick_window(
 }
 
 /// hoi4_officer_corps: list:true opens the officer corps view (Shift+E), returns its spirit slots
-/// and, with `slot`, the spirits that slot offers; then closes the view. Picking is not built.
+/// and, with `slot`, the spirits that slot offers; with `slot` and `spirit` it picks that spirit
+/// (live-verified fk1, 18 Nov 2026: army:0, army:1, army:2 and air:0); then closes the view.
 pub(super) fn officer_call(
     args: &serde_json::Map<String, Value>,
     process: &(dyn Process + Send + Sync),
@@ -1160,7 +1161,7 @@ pub(super) fn officer_call(
 }
 
 pub(super) fn officer_tool() -> Value {
-    json!({"name":"hoi4_officer_corps","description":"Live-verified read (pp18, pp23, 17 Nov 2026): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. With slot and spirit (a name the window shows) it picks that spirit: clicks its entry and verifies the slot shows a spirit it did not show before (taken_before/taken_after; Diverged otherwise, e.g. too little experience). Refusals while driving: slot_missing, spirit_unknown (lists the spirits offered). Results carry verification gui_only.","inputSchema":{"type":"object","properties":{"list":{"type":"boolean"},"slot":{"type":"string","maxLength":16},"spirit":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_officer_corps","description":"Live-verified read (pp18, pp23, 17 Nov 2026) and pick (fk1, 18 Nov 2026: army:0, army:1, army:2, air:0): the officer corps spirits with ordinary input. list:true opens the officer corps view (Shift+E), returns its spirit slots (view army/navy/air, index, entry kind such as academy, army or division_command, the slot button's rect, selected, taken: a spirit shown in the slot) and closes it, changing nothing. With slot \"VIEW:INDEX\" (e.g. \"army:0\") it also opens that slot's spirit window and returns its title and the spirits offered (index, name, cost in the branch's experience, entry rect); the window closes with the view. With slot and spirit (a name the window shows) it picks that spirit: clicks its entry and verifies the slot shows a spirit it did not show before (taken_before/taken_after; Diverged otherwise, e.g. too little experience). Refusals while driving: slot_missing, spirit_unknown (lists the spirits offered). Results carry verification gui_only.","inputSchema":{"type":"object","properties":{"list":{"type":"boolean"},"slot":{"type":"string","maxLength":16},"spirit":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
 }
 
 #[cfg(test)]
