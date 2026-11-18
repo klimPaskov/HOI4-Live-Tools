@@ -6261,6 +6261,31 @@
    "closing": "offline",
    "owner": "executor/lint: sum the planes air_plan sends per region (wings and deploy wing_size) against hoi4_air air_bases capacity in that region; the strategist lint names a shortfall with the air bases to build (state, level, finish date) before the plan's war date",
    "priority": 7
+  },
+  {
+   "id": "orders.operations",
+   "domain": "orders",
+   "capability": "Fight a large land war as an operation: one army-group front, one group offensive with a country-wide target line, the armour in its own army, hold fronts on the other borders, war-day placement by template",
+   "playbook": [
+    "war-operating-loop.md#Large wars: operations",
+    "procedure.md#18. Operations"
+   ],
+   "plan": [
+    "operations"
+   ],
+   "tools": [
+    "hoi4_army_front",
+    "hoi4_army_offensive",
+    "hoi4_army_plan",
+    "hoi4_armies",
+    "hoi4_army_group_create",
+    "hoi4_air_mission"
+   ],
+   "payoff": "high",
+   "why": "Per-army orders lost Poland (0 capitulations above 30 divisions); the game's own AI wins it with one group front and one country-wide offensive, and the same shape drawn through the tools held every own state",
+   "closing": "both",
+   "owner": "executor: the operation step (W3-14) assembles the armies by template, draws in the stated order, verifies by order read-back, executes on the declaration and gives no other land order to an owned army; until then the lint checks the key and the orders are drawn from the brief",
+   "priority": 1
   }
  ]
 }

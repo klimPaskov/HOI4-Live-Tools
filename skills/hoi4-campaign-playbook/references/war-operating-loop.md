@@ -18,6 +18,49 @@ and follow it every war tick.
 - **Few orders, long-lived.** At speed 3 a decision and its call cost days of game time; give
   each army one order that holds for weeks and let rules carry the rest (section 5c).
 - **Watch supply and organisation.** An attack that outruns supply stops and gets encircled.
+- **Large wars are operations.** Above about 30 divisions a side, orders army by army cost more
+  input than the game clock gives and leave armies idle or wandering. The war is then drawn once
+  and executed by the game (next section); the steps of sections 1 to 5c are for small theatres.
+
+## Large wars: operations
+
+The plan writes each large land war as one entry of `operations` (plan.schema.json). Its shape is
+the one the game's own AI uses and the one that held every own state when drawn through the tools:
+
+- **One army-group front** on the enemy border. The line armies of the group have no orders of
+  their own: an army with its own front ignores the group's.
+- **One group offensive whose target line spans the enemy country**: enemy states in order from
+  one edge of its land to the other, drawn as one bending stroke. A line one state deep, or a
+  stroke at one city's depth, leaves most of the group standing.
+- **The armour in an army of its own** (armour and motorised only) with a narrow front and its own
+  arrow on the main axis. Draw it before the group front, or the group keeps its divisions.
+- **A hold on every other hostile border**: a second army group with one front, 2 or more
+  divisions a border province (3 or more facing a major), never executed.
+- **The war-day placement**: which army holds how many divisions of which template that day.
+
+Order of work:
+
+1. From `prepare_from` (at least 30 days before the war day, in peace): bring each army to its
+   divisions by template; delete old orders (`hoi4_army_plan` with `clear_orders`) on every army
+   of the operation and of its holds.
+2. Mobile and wing armies: own front (`hoi4_army_front`), own offensive (`hoi4_army_offensive`).
+3. The group: front with the group selected, then the offensive through the target-line states.
+4. Each hold: the group front on its border. Then execution mode, air wings staged for the
+   operation's regions, motorisation.
+5. Read the orders back (`hoi4_armies` with plans): front provinces, divisions on each order, the
+   target line's states. Redraw once on a mismatch; report what still differs.
+6. On the declaration: execute the group, and each mobile and wing army by its own card. Read back
+   that every order of the operation executes and no hold does. Air superiority, then close air
+   support, over the operation's regions only.
+7. Weekly: a phase line whose condition holds replaces the group offensive once; head supply under
+   the floor switches to careful; a lost hold state releases the reserve.
+8. On capitulation: stop and delete the orders; the next operation's preparation starts at once
+   (assigning the new front is the rail move).
+
+Never: execute a hold; execute a group whose front faces a country the operation does not attack
+(execute its armies one by one); give an army of a running operation a march, strike or retake
+order; redraw a front or line that reads back correctly; regroup armies or change commanders
+between preparation and capitulation.
 
 ## 1. Before the war (or on day one)
 

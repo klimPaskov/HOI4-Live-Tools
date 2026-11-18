@@ -48,7 +48,9 @@ lists the reference plans).
 
 Rules: facts only from the dossier, the pack or `scripts/hoi4facts/facts.py`, never from memory; in fair mode no
 per-division enemy positions and no AI strategy files; plan keys only from the schema; never touch the
-game; never ask for input. If a gate cannot pass, write `RUN/strategist-blocked.md` and stop.
+game; never ask for input. A land war against more than about 30 enemy divisions is written as an operation
+(`operations[]`, procedure item 18 step 0): one group front, one country-wide group offensive, the armour in
+its own army, a hold on every other hostile border, the war-day placement by template. If a gate cannot pass, write `RUN/strategist-blocked.md` and stop.
 
 Finish with a short summary: goal reading, phases, coverage (executor / player / not applicable
 counts), lint totals, open warnings.

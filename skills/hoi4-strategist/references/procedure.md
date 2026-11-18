@@ -27,7 +27,7 @@ Items 1, 2 and 29 are never "not applicable". Write every resolution into the co
 §25 (all 29 rows: resolution, where it lives, the facts command used, the check).
 
 **Key or atom not in the schema yet.** Some items name keys whose executor step a later build item adds
-(schema `x-executor-planned`: `xp_budget.*[].cost`, `sea_transfer`), keys that do not exist
+(schema `x-executor-planned`: `xp_budget.*[].cost`, `sea_transfer`, `operations`), keys that do not exist
 yet (`commanders`), or predicate atoms the executor cannot read yet (x-atoms `readable: false`:
 `var:<name>`, `mission_days:<id>`, `surrender_progress:<TAG>`, `naval_dominance:<region>`,
 `naval_intel:<TAG>`, gaps the register lists as not executable until hoi4_wars and hoi4_fleets read
@@ -758,6 +758,43 @@ contingency; plan.md §16. Check: rubric row 6.
 Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strategy.md` "Land operations";
 `generic-playbook.md` §4. Facts: `F vp <ENEMY>`, `F route <from> <to> [--avoid-rivers]`,
 `F province <id>`, `F weather <region>`, `F terrain-width <theatre>`.
+0. **Operation or strikes: decide it first, per war.** A land war against more than about 30 enemy divisions
+   (lint `facts.force.needs[].front.divisions_est`) is an **operation** (`operations[]`, `war-operating-loop.md`
+   "Large wars: operations"); a smaller theatre keeps `war.axes`, `vp_targets` and `war.strike` (step 7). Per
+   army orders do not carry a large war: the game's own plan execution does, when the plan is one army-group
+   front and one group offensive drawn across the whole enemy country. Write, per operation:
+   a. **The line.** `front` {`enemy`, `own_states`}: the border the strike group stands on. `offensive`
+      {`axis`, `target_line`}: `target_line` is the enemy states in order from one edge of the country to the
+      other (a river line, a rail line, the far border), far enough that the states in and in front of it hold
+      the enemy's surrender threshold, or followed by `phase_lines` that do (lint fact
+      `facts.force.operations[].surrender`: `first_line`, `all_lines`, `vp_needed`). Never a line one state
+      deep, never a stroke at one city's depth. `axis` is the main effort: own start state, then the enemy
+      states the arrow runs through (`F route`).
+   b. **The war-day placement.** `formations` [{`army`, `role`, `divisions` {template: count}}]: every army of
+      the attack with what stands in it that day, from the army forecast by template (`facts.force.army_mix`).
+      `line` armies belong to the `group` and carry no orders of their own. All armour and motorised divisions
+      stand in `mobile` armies (at most 24 divisions each) with their own narrow `front` and `offensive` on the
+      main axis. A separate border (an exclave, a second country of the same war) is a `wing` with its own
+      front and line. The attack carries `force_design.wars[].attack_ratio` x the enemy front estimate (default
+      1.0); when the plan's force cannot, raise the force, not the hope.
+   c. **The holds.** `holds` [{`id`, `facing`, `group`, `armies` with `divisions`, `states`, `min_per_province`}]:
+      every other border with a country at war that day or likely to join (joiners, guarantors, enemies of
+      earlier wars), in an army group of its own, at 2 or more divisions a border province (3 or more facing a
+      major). A hold is never executed. What is neither attack nor hold is `reserve` with a station and a
+      release predicate.
+   d. **Timing.** `prepare_from` at least 30 days before the war day (plans drawn in peace, the planning bonus
+      full); `execute_on` the declaration (`at_war_with:<TAG>`); the declaration's focus gate done 14 days
+      earlier (lint `war.declaration_gate`); army groups formed before `prepare_from` and never regrouped: the
+      strike group is the same armies in every operation, `on_capitulation.next` names the operation it turns
+      to.
+   e. **Air and supply.** `air.regions`: the strategic regions of the target line and the axis, with `air_plan`
+      rows that fly superiority and close air support over them from the war day; `supply` {`motorization`,
+      `floor`}.
+   Until the executor's operation step is built the key is carried out from the brief: one brief line per
+   operation with the draw order (delete old orders, mobile and wing armies first, then the group front and the
+   group offensive, then the holds) and the execute. Lint `war.operation_required`, `war.operation_refs`,
+   `war.operation_timing`, `war.operation_line`, `war.operation_support`, `war.attack_force`, `war.hold_sector`,
+   `war.objective_not_at_war`.
 1. **Capitulation aim, then the cheapest set.** Take only enough VP to capitulate the enemy, the easiest and
    most valuable first. In order:
    a. **Lower the threshold first.** List every lever in lint `facts.capitulation_levers` (enemy war support
@@ -856,12 +893,13 @@ Read: `war-operating-loop.md` §2-§6; `war-air-naval-peace.md` §1-§4; `strate
       purchases and volunteers from decisions (`decision_rules` with `when` and political power), the
       scripted missions it can win (each held mission is a checkpoint), and the escalation or outside help the
       enemy's actions trigger (contingencies on the predicate that reads it, or the brief when no atom does).
-Resolution: executor `war` (with `war.strike`), `vp_targets`, `phases`, `hold_targets`, `defense_lines`; player
-`retake_rules`; plan.md §7, §7.1, §8. Check: lint `war.strike_choice`, `orders.defense_reserve`, `conquest.vp_selection`, `conquest.levers`, `conquest.tool_gap`, `conquest.threshold`,
+Resolution: executor `war` (with `war.strike`), `vp_targets`, `phases`, `hold_targets`, `defense_lines`;
+`operations` for every large land war (brief lines until its executor step is built); player `retake_rules`; plan.md §7, §7.1, §8. Check: lint `war.strike_choice`, `orders.defense_reserve`, `conquest.vp_selection`, `conquest.levers`, `conquest.tool_gap`, `conquest.threshold`,
 `conquest.mandatory`, `conquest.adjacency`,
 `conquest.by_order`, `conquest.rivers`, `army.guards` (a hold post outside its army's guard states),
-`war.planning_wait`, `war.supply_floor`; validate_plan (hold corridors touch on the map graph, armies
-known); rubric rows 7 and 8.
+`war.planning_wait`, `war.supply_floor`, the `war.operation_*` rules, `war.attack_force`, `war.hold_sector`,
+`war.axes_missing`, `war.guarantor`, `war.declaration_gate`; validate_plan (hold corridors touch on the map
+graph, armies known); rubric rows 7 and 8.
 
 ### 19. Supply and logistics
 Read: `supply-logistics-deployment.md` §1, §5, §6, §10; `strategy.md` "Economy compounds only if the

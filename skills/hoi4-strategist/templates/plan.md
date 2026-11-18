@@ -90,6 +90,12 @@ Alternatives considered for the overall approach: <option> — rejected because 
 
 **P1 <name> (<enter> -> <exit>).** <goal, armies, guards, events>. Exit: `<predicate>`.
 
+### 7.0 Operations (land wars against more than about 30 enemy divisions)
+
+| Operation (`operations` id) | War day | Group front (enemy, own states) | Target line, then phase lines (states) | VP in and before the lines / needed [D lint] | Attack: armies, divisions by template | Enemy est. / ratio [D lint] | Holds: border, divisions, per province | Air regions | Prepared from |
+|---|---|---|---|---|---|---|---|---|---|
+| <id> | <date> | <TAG> <s1, s2> | <a-b-c>; <pl2: d-e-f> | <n> / <need> | <army: 24 inf>; <armour army: 8 Pz, 10 mot> | <n> / <r> | <TAG>: <n> on <p> provinces = <x> | <r1, r2> | <date> |
+
 ### 7.1 Victory-point order
 
 | # | Province | VP | Running VP | Route (rivers) | By |

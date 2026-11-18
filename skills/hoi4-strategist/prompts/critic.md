@@ -33,7 +33,11 @@ walk the coverage table (plan.md §25) against `skills/hoi4-strategist/reference
 items present; each resolved by an executor key, a player item with an exact call that is also in the
 brief, or "not applicable" with a reason you can confirm with a facts command. A missing or unresolved
 item is a finding (a blocker when it decides the goal, such as an overseas theatre with no convoy plan,
-an enemy with no peace item, or a land war with no templates).
+an enemy with no peace item, or a land war with no templates). For every land war against more than about
+30 enemy divisions read its operation (`operations[]`) against lint `facts.force.operations`: the target line
+and phase lines against the surrender threshold, the placement against the forecast by template, the attack
+against the enemy estimate, the holds per border province; a large war without an operation, or one whose
+numbers only hold with a lowered `attack_ratio`, is a blocker under row 7 or 17.
 
 Output: `RUN/review/critic-<n>.json` in the rubric's format, with `max` 32 (n = 1 + the number of
 existing `critic-*.json` files). Every finding has a severity (blocker, major, minor), the evidence, and a fix.
