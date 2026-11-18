@@ -2203,6 +2203,16 @@
                   "minLength": 1,
                   "description": "general, when army_layout names none for this army"
                 },
+                "drive": {
+                  "enum": [
+                    "strike"
+                  ],
+                  "description": "a mobile formation driven by the strike engine instead of a front and arrow: one column, at most `strike.stack` divisions a province, on the largest victory point of each `offensive.target_line` state in order"
+                },
+                "strike": {
+                  "type": "object",
+                  "description": "strike-engine settings for a `drive: strike` formation (as war.strike: stack, after_vp, widen, cover)"
+                },
                 "front": {
                   "type": "object",
                   "properties": {
