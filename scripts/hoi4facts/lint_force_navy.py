@@ -99,7 +99,8 @@ def _required(ctx, ops):
                  "give it the fleet, planes, convoys and landing techs it needs by its date (facts.force.navy)")
     # land across the sea the checkpoints take
     targets = {}
-    for c in lint.list_of("checkpoints"):
+    goal = lint.plan.get("goal") if isinstance(lint.plan.get("goal"), dict) else {}
+    for c in [{"id": "goal", "must": goal.get("predicates")}] + list(lint.list_of("checkpoints")):
         for a in fm._atoms(c.get("must")):
             sid = None
             for p in _PRED_STATE:
@@ -162,16 +163,7 @@ def _overseas_enemies(ctx):
     """(tag, where) for every country the plan capitulates or fights offensively: capitulated:TAG in the goal and
     the checkpoints, the enemies of offensive force_design.wars entries."""
     lint = ctx.lint
-    out = {}
-    goal = lint.plan.get("goal") if isinstance(lint.plan.get("goal"), dict) else {}
-    sources = [("goal.predicates", goal.get("predicates"))] + [
-        (f"checkpoints {c.get('id')}", c.get("must")) for c in lint.list_of("checkpoints")]
-    for where, pred in sources:
-        for a in fm._atoms(pred):
-            if isinstance(a, str) and a.startswith("capitulated:"):
-                tag = a.split(":", 1)[1].strip()
-                if tag and tag != lint.tag:
-                    out.setdefault(tag, where)
+    out = dict(fm.goal_enemies(lint))
     for w in (ctx.fd or {}).get("wars") or []:
         if isinstance(w, dict) and w.get("kind", "offensive") == "offensive":
             for tag in w.get("enemies") or []:

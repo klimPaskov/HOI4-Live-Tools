@@ -174,7 +174,8 @@ Read: `strategy.md` "Force architecture", "Air and naval support"; `templates-eq
      numbers allow (facts.force.navy gives what each costs).
    - **Garrison** for occupied land (item 23).
    Then write `force_design`: `wars` [{`id`, `enemies`, `kind`, `axes`, `duration_days`, `decisive`, `tasks`
-   phase by phase, `why`}], `sea` (item 21.7), `bomber_why` when no bombers,
+   phase by phase, `why`}] (every country the goal or the checkpoints defeat has its war here, even one a later
+   horizon fights: lint `force.required`; one whose capital lies across the sea has its landing in `sea`), `sea` (item 21.7), `bomber_why` when no bombers,
    `land` [{`template`, `role` (breakthrough, exploit, line, assault, mountain, marine, paratrooper,
    garrison, reserve, anti_tank), `count` (divisions fielded by `ready`, start divisions included), `ready`,
    `war`, `phase`, `why`}], `air` [{`kind`, `equipment`, `count` (planes by `ready`), `ready`, `war`,

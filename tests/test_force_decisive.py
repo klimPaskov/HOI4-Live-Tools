@@ -55,6 +55,21 @@ class Decisive(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
+class GoalWars(unittest.TestCase):
+    def test_every_country_the_goal_defeats_has_its_war(self):
+        game = lint_plan.load_game(GAME_DIR)
+        plan = germany_at_war()
+        plan["force_design"] = {"wars": [{"id": "war_pol", "enemies": ["POL"], "kind": "offensive", "axes": 3}]}
+        plan["goal"]["predicates"] = ["capitulated:POL", "vp_share:SOV <= 0.2", "vp_share:FRA <= 0.9",
+                                      "capitulated:ISR"]
+        out = lint_plan.lint(plan, game)
+        msgs = [f["message"] for f in out["findings"] if f["rule"] == "force.required"]
+        self.assertTrue(any("defeats SOV" in m for m in msgs), msgs)
+        self.assertFalse(any("defeats POL" in m or "defeats FRA" in m for m in msgs), msgs)
+        self.assertFalse(any("defeats ISR" in m for m in msgs), msgs)  # holds no state at the start
+
+
+@unittest.skipUnless(HAVE_GAME, f"game files not found at {GAME_DIR}")
 class Duration(unittest.TestCase):
     def test_the_label_follows_the_plans_own_timetable(self):
         game = lint_plan.load_game(GAME_DIR)
