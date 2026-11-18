@@ -595,7 +595,6 @@
         "boolean"
       ],
       "properties": {
-        "threshold_why": {"type": "string", "minLength": 1, "description": "why power is banked up to `threshold`; without it the threshold counts 0 (power is spent at once on the order's best affordable pick)"},
         "enabled": {
           "type": "boolean",
           "default": true
@@ -692,8 +691,7 @@
         },
         "threshold_why": {
           "type": "string",
-          "x-owner": "text",
-          "description": "the named, costlier pick the threshold saves for (lint politics.pp_budget warns on a threshold above the cheapest order entry without it)"
+          "description": "the named, costlier pick the threshold saves for; without it the executor counts the threshold as 0 and spends at once on the best affordable pick (lint politics.pp_budget warns on a threshold above the cheapest order entry without it)"
         },
         "recheck_pp": {
           "type": "number",
