@@ -716,12 +716,51 @@ fn exercise_step(
         let running = state.done.contains_key(&format!("ex:{id}:on"));
         let (on, done) = if running {
             if !at_war {
+                // A standing order, not a one-off: armies raised after the first start, armies that
+                // took new divisions and armies the game stopped at the maximum are started again
+                // every 14 days. Without it every division built after the first start went to war
+                // untrained (bp2 1939: all new divisions Trained at 0% while the 1936 ones were
+                // Regular); the tool refuses an army whose divisions are all at the maximum.
+                if state.skipped(now, "exidle", &id) {
+                    note(
+                        state,
+                        &key,
+                        "exercising (idle armies are checked every 14 days)",
+                    );
+                    continue;
+                }
+                state.skip(now, "exidle", &id, 14 * DAY);
+                let Ok(read) = tools.call("hoi4_armies", &json!({"threat": false})) else {
+                    note(state, &key, "hoi4_armies unreadable");
+                    continue;
+                };
+                let named: Vec<String> = strings(entry, "armies")
+                    .iter()
+                    .map(|a| resolve(state, a))
+                    .filter(|a| !a.is_empty())
+                    .collect();
+                let idle: Vec<String> = list(&read, "armies")
+                    .iter()
+                    .filter(|a| a["exercising"].as_bool() == Some(false))
+                    .filter(|a| a["division_count"].as_u64().unwrap_or(1) > 0)
+                    .map(|a| text(&a["army"]).to_string())
+                    .filter(|a| !a.is_empty() && (named.is_empty() || named.contains(a)))
+                    .collect();
+                if idle.is_empty() {
+                    note(state, &key, "exercising (every army exercises)");
+                    continue;
+                }
+                let args = json!({"armies": idle, "on": true, "stop_at_max": true});
+                let (ok, why) = state.act(tools, lease, EXERCISE_TOOL, args, "ex")?;
                 note(
                     state,
                     &key,
-                    "exercising (the game stops each army at the maximum)",
+                    format!("restart exercises ({} idle armies): {ok} {why}", idle.len()),
                 );
-                continue;
+                return Ok(Some(format!(
+                    "exercise {id}: restart {} idle armies: {ok} {why}",
+                    idle.len()
+                )));
             }
             (false, format!("ex:{id}:off"))
         } else {
@@ -1520,19 +1559,42 @@ mod tests {
         assert!(state.seams.notes["xp_budget.army:later"].starts_with("waits, when"));
         assert!(!state.seams.notes.contains_key("xp_budget.army:t"));
         assert_eq!(actions(&f).len(), 1);
+        // 14 days on: an army of the entry that does not exercise (the game stopped it, or it took
+        // new divisions) is started again; an army outside the entry is not
+        f.replies.insert(
+            "hoi4_armies",
+            json!({"armies": [
+                {"army": "Armia Poznan", "division_count": 6, "exercising": false},
+                {"army": "Armia Krakow", "division_count": 6, "exercising": false}]}),
+        );
+        let out = step(&mut state, &f, &plan, "l", START + 15 * DAY)
+            .unwrap()
+            .unwrap();
+        assert!(out.contains("restart 1 idle armies: true"), "{out}");
+        let sent = actions(&f);
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1].1["armies"], json!(["Armia Poznan"]));
+        assert_eq!(sent[1].1["stop_at_max"], json!(true));
+        // the restart is not repeated within 14 days
+        step(&mut state, &f, &plan, "l", START + 16 * DAY).unwrap();
+        assert_eq!(actions(&f).len(), 2);
+        f.replies.insert(
+            "hoi4_wars",
+            json!({"wars": {"at_war": false, "enemies": []}}),
+        );
         // a war starts: the running entry stops once
         f.replies.insert(
             "hoi4_wars",
             json!({"wars": {"at_war": true, "enemies": ["GER"]}}),
         );
-        let out = step(&mut state, &f, &plan, "l", START + 3 * DAY)
+        let out = step(&mut state, &f, &plan, "l", START + 17 * DAY)
             .unwrap()
             .unwrap();
         assert!(out.contains("exercise drill: stop: true"), "{out}");
         let sent = actions(&f);
-        assert_eq!(sent.len(), 2);
-        assert_eq!(sent[1].1["on"], json!(false));
-        assert!(sent[1].1.get("stop_at_max").is_none());
+        assert_eq!(sent.len(), 3);
+        assert_eq!(sent[2].1["on"], json!(false));
+        assert!(sent[2].1.get("stop_at_max").is_none());
         assert!(state.done.contains_key("ex:drill:off"));
         // at war nothing new starts
         let mut state = State::default();
