@@ -42,7 +42,8 @@
 //!   state_controller:<id>       the one tag holding every province (== TAG)          readable
 //!   province_controlled:<p>     the province's controller is the player; found in the
 //!   province_controller:<p>     victory points and provinces_held_by_others of the own and
-//!                               the enemies' hoi4_states reads (other provinces: unknown)
+//!                               the enemies' hoi4_states reads, else in its own state's read
+//!                               (hoi4_province_graph names the state; hoi4_states{query:id})
 //!   own_surrender_progress      the share of the player's own victory points others hold (the
 //!                               game's surrender progress: the country capitulates when it
 //!                               reaches its surrender limit), hoi4_states{query:<own tag>}
@@ -948,6 +949,7 @@ fn province_controller(ctx: &mut Ctx, p: i64) -> Read<String> {
     if let Ok(enemies) = enemies(ctx) {
         tags.extend(enemies);
     }
+    let tags_read = tags.clone();
     for tag in tags {
         let Some(read) = ctx.read("hoi4_states", &json!({"query": tag})) else {
             continue;
@@ -967,8 +969,58 @@ fn province_controller(ctx: &mut Ctx, p: i64) -> Read<String> {
             }
         }
     }
+    // Not listed (a plain province neither a victory point nor held by others): find its state
+    // in the map files and read that state by id, which lists every province with its
+    // controller. Without this an own province retaken read as unknown forever, so a
+    // contingency on it never ended (i18a, 1936: Italy held in a "retake Eritrea" phase that
+    // attacks nothing from January to November).
+    let mut ids: Vec<i64> = Vec::new();
+    for tag in tags_read {
+        if let Some(read) = ctx.read("hoi4_states", &json!({"query": tag})) {
+            ids.extend(
+                read["states"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|r| r["state_id"].as_i64()),
+            );
+        }
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    for chunk in ids.chunks(128) {
+        let Some(graph) = ctx.read("hoi4_province_graph", &json!({"states": chunk})) else {
+            continue;
+        };
+        let Some(state) = graph["provinces"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|x| x["province"].as_i64() == Some(p))
+            .and_then(|x| x["state_id"].as_i64())
+        else {
+            continue;
+        };
+        if let Some(c) = ctx
+            .read("hoi4_states", &json!({"query": state.to_string()}))
+            .and_then(|read| {
+                read["states"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|r| r["provinces"].as_array().into_iter().flatten())
+                    .find(|x| x["province"].as_i64() == Some(p))
+                    .and_then(|x| x["controller"].as_str())
+                    .filter(|c| !c.is_empty())
+                    .map(str::to_string)
+            })
+        {
+            return Ok(c);
+        }
+        break;
+    }
     Err(format!(
-        "province {p} not found in the own or enemy state reads (only victory points and provinces held by others are listed; state_fully_controlled:<state> reads every province)"
+        "province {p} not found in the own or enemy state reads nor in its own state's read"
     ))
 }
 
@@ -1379,6 +1431,26 @@ mod tests {
             calls: RefCell::new(Vec::new()),
         }
     }
+    #[test]
+    fn a_plain_province_is_read_from_its_own_state() {
+        // province 3: no victory point, held by nobody else: neither tag read lists it (i18a: a
+        // retaken Eritrean province stayed unknown and its contingency never ended)
+        assert_eq!(
+            eval(&game(), json!("province_controlled:3")),
+            Truth::Unknown
+        );
+        let mut f = game();
+        f.replies.insert(
+            "hoi4_province_graph",
+            json!({"provinces": [{"province": 3, "state_id": 551, "neighbours": []}]}),
+        );
+        assert_eq!(eval(&f, json!("province_controlled:3")), Truth::True);
+        assert_eq!(
+            eval(&f, json!("province_controller:3 == ETH")),
+            Truth::False
+        );
+    }
+
     #[test]
     fn capitulation_is_the_war_ending_in_a_conference_or_annexation() {
         // at war: not capitulated
