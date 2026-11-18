@@ -110,6 +110,9 @@ def check(lint):
     ctx.table()
     ctx.budget()
     ctx.decisive()
+    # the shape of each war on its first day: axes, objectives at war, hold sectors, the mobile arm's axis
+    from . import lint_war_shape
+    lint_war_shape.check(ctx)
     return lint
 
 
