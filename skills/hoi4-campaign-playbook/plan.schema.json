@@ -2102,6 +2102,10 @@
                 },
                 "minItems": 1,
                 "description": "own states whose border with `enemy` the front runs along, in order"
+              },
+              "click_state": {
+                "$ref": "#/definitions/state_id",
+                "description": "the state the front order clicks near (the nearest highlighted border to it); without it the enemy's border state nearest the middle of own_states"
               }
             },
             "additionalProperties": false,
@@ -2185,6 +2189,10 @@
                       },
                       "minItems": 1,
                       "description": "own states whose border with `enemy` the front runs along, in order"
+                    },
+                    "click_state": {
+                      "$ref": "#/definitions/state_id",
+                      "description": "the state the front order clicks near (the nearest highlighted border to it); without it the enemy's border state nearest the middle of own_states"
                     }
                   },
                   "additionalProperties": false,
@@ -2290,12 +2298,18 @@
                   "minItems": 1,
                   "description": "own border states the hold front runs along"
                 },
+                "click_state": {
+                  "$ref": "#/definitions/state_id",
+                  "description": "the state the hold front clicks near; without it the enemy's border state nearest the middle of `states`"
+                },
                 "min_per_province": {
+                  "x-owner": "lint",
                   "type": "number",
                   "minimum": 1,
                   "description": "divisions per border province facing `facing`, at least"
                 },
                 "fallback_states": {
+                  "x-owner": "text",
                   "type": "array",
                   "items": {
                     "$ref": "#/definitions/state_id"
@@ -2337,9 +2351,11 @@
                   "description": "{template: divisions} standing in this army on the war day (templates as in `templates` and training)"
                 },
                 "station": {
+                  "x-owner": "text",
                   "$ref": "#/definitions/state_id"
                 },
                 "release_when": {
+                  "x-owner": "text",
                   "$ref": "#/definitions/predicate"
                 },
                 "to": {
@@ -2375,6 +2391,7 @@
                 "description": "strategic air regions of the target line and the axis"
               },
               "superiority": {
+                "x-owner": "text",
                 "type": "boolean"
               },
               "cas": {
@@ -2403,6 +2420,7 @@
                 "description": "head-of-advance supply percent below which the weekly check switches to careful"
               },
               "railways": {
+                "x-owner": "text",
                 "type": "array",
                 "items": {
                   "type": "array",
@@ -2485,7 +2503,13 @@
             ],
             "description": "every enemy capitulated: the operation's orders are stopped and deleted"
           },
+          "stall_days": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "game days without a province gained on the current line before the next line is drawn (default 7)"
+          },
           "success": {
+            "x-owner": "text",
             "type": "object",
             "properties": {
               "capitulated_by": {
@@ -2530,8 +2554,7 @@
           "success"
         ]
       },
-      "x-owner": "player",
-      "x-executor-planned": "W3-14",
+      "x-owner": "executor",
       "description": "large land wars as operations (more than about 30 divisions): one army-group front on the enemy border and one group offensive whose target line spans the enemy country, executed on the declaration; the armour in its own army; every other hostile border held by a front that is never executed; the war-day placement by formation and template. Read by the lint (lint_operations.py) and, until the executor's operation step (W3-14) is built, carried out from the brief. Small theatres keep war.axes and the strike keys"
     },
     "air_plan": {
