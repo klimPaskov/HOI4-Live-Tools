@@ -5434,7 +5434,10 @@ fn air_war_missions(
                 // an inland wing goes to a front air base first: from its home base the game
                 // sets the mission over no region at all (ab2, 18 Nov 2026: 9 German wings
                 // "Diverged", region 0, while Poland held the air over the operation)
-                if base.is_some_and(|b| !near.contains(&b)) {
+                // a wing whose mission did not take (out of range: o1c, the He 51s on the Rhine
+                // under a theatre that spans the whole country) goes to the front first
+                let far = state.done.contains_key(&format!("airfar:{name}"));
+                if far || (base.is_some_and(|b| !near.contains(&b)) && !operation.is_empty()) {
                     let planes = wing["aircraft"].as_i64().unwrap_or(0);
                     if let Some(to) = front_air_base(&air, &wars, &operation, &fronts, planes) {
                         let (ok, why) = state.act(
@@ -5445,6 +5448,9 @@ fn air_war_missions(
                             "ar",
                         )?;
                         state.skip(now, "airwing", &name, if ok { DAY } else { 7 * DAY });
+                        if ok {
+                            state.done.remove(&format!("airfar:{name}"));
+                        }
                         return Ok(Some(format!(
                             "air {name} rebases to front state {to} for {mission}: {ok} {why}"
                         )));
@@ -5458,7 +5464,13 @@ fn air_war_missions(
                     json!({"wing": name, "mission": mission, "state_id": state_id}),
                     "am",
                 )?;
-                state.skip(now, "airwing", &name, if ok { 30 * DAY } else { 7 * DAY });
+                if ok {
+                    state.skip(now, "airwing", &name, 30 * DAY);
+                } else {
+                    // the next pass rebases it to a front base facing the operation
+                    state.done.insert(format!("airfar:{name}"), now);
+                    state.skip(now, "airwing", &name, DAY / 4);
+                }
                 return Ok(Some(format!(
                     "air {name} {mission} over state {state_id}: {ok} {why}"
                 )));
@@ -5493,7 +5505,12 @@ fn front_air_base(
     list(air, "air_bases")
         .iter()
         .filter_map(|b| Some((b["state_id"].as_i64()?, b["free"].as_i64().unwrap_or(0))))
-        .filter(|(s, free)| fronts.contains(s) && *free >= planes.max(1))
+        // with an operation only a base facing it (a base on another front is as far away)
+        .filter(|(s, free)| {
+            fronts.contains(s)
+                && (facing.is_empty() || facing.contains(s))
+                && *free >= planes.max(1)
+        })
         .max_by_key(|(s, free)| (facing.contains(s), *free))
         .map(|(s, _)| s)
 }
@@ -11439,14 +11456,55 @@ mod tests {
             front_air_base(&air, &wars, &[85], &[42, 66, 67], 100),
             Some(66)
         );
+        assert_eq!(front_air_base(&air, &wars, &[85], &[42, 66, 67], 300), None);
+        // no operation: any front base with room
         assert_eq!(
-            front_air_base(&air, &wars, &[85], &[42, 66, 67], 300),
+            front_air_base(&air, &wars, &[], &[42, 66, 67], 300),
             Some(42)
         );
         assert_eq!(
             front_air_base(&air, &wars, &[85], &[42, 66, 67], 1000),
             None
         );
+    }
+
+    #[test]
+    fn a_wing_whose_mission_does_not_take_is_rebased_to_the_front_facing_the_operation() {
+        struct Far(std::cell::RefCell<Vec<(String, Value)>>);
+        impl Tools for Far {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                match name {
+                    "hoi4_wars" => Ok(json!({"borders": [{"neighbour_tag": "POL", "hostile": true,
+                        "own_border_states": [66], "neighbour_states": [85]}]})),
+                    "hoi4_armies" => Ok(json!({"army_groups": [{"plan": [{"offensives": [
+                        {"executing": true, "target": {"states": [85]}}]}]}]})),
+                    "hoi4_air" => Ok(json!({"air_bases": [{"state_id": 66, "free": 400}],
+                        "wings": [{"wing": "JG 136", "aircraft_type": "small_plane_airframe_0",
+                            "aircraft": 100, "standing_by": true,
+                            "air_base": {"base_id": 3, "state_id": 52}}]})),
+                    // the mission does not take from the far base
+                    "hoi4_air_mission" => Ok(json!({"receipt": {"status": "Diverged"}})),
+                    _ => Ok(json!({"receipt": {"status": "Verified"}})),
+                }
+            }
+        }
+        let tools = Far(Default::default());
+        // the theatre spans the whole country: the far base counts as near
+        let plan = json!({"air": {"war_missions": true}, "war": {"theatre": [52, 66]}});
+        let mut state = State::default();
+        let first = air_war_missions(&mut state, &tools, &plan, "l", START)
+            .unwrap()
+            .unwrap();
+        assert!(
+            first.contains("air_superiority over state 85: false"),
+            "{first}"
+        );
+        let next = air_war_missions(&mut state, &tools, &plan, "l", START + DAY / 4 + 1)
+            .unwrap()
+            .unwrap();
+        assert!(next.contains("rebases to front state 66"), "{next}");
+        assert!(!state.done.contains_key("airfar:JG 136"));
     }
 
     #[test]
