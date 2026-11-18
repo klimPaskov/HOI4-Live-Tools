@@ -303,7 +303,9 @@ fn cp_spend_step(
     // power held for the war is spent the day it starts.
     let war = super::plan_manage::at_war(state, tools, plan, now);
     if war && !state.seams.cp_war {
-        state.bad.retain(|k, _| !k.starts_with("cpp:") && k != "cps:x");
+        state
+            .bad
+            .retain(|k, _| !k.starts_with("cpp:") && k != "cps:x");
         state.seams.cp_why.clear();
     }
     state.seams.cp_war = war;
