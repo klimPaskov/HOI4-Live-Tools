@@ -391,6 +391,22 @@
       "x-owner": "executor",
       "description": "event id prefix -> option index or \"last\""
     },
+    "research_waits": {
+      "type": "array",
+      "x-owner": "planner",
+      "description": "slots deliberately held empty: each names the technology (or date) a slot waits for and why (a focus or decision bonus that lands on it, a tech that opens on a date, a re-order). lint research.idle accepts unplanned slot time only with a named wait; days beyond BASE_RESEARCH_POINTS_SAVED warn. The executor holding a slot for it is a planned step (executor change list, 18 Nov night)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tech": {"type": "string"},
+          "date": {"type": "string"},
+          "slot": {"type": "integer"},
+          "days": {"type": "number"},
+          "why": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
     "research_priority": {
       "type": "array",
       "items": {
@@ -671,6 +687,11 @@
           "type": "boolean",
           "default": true,
           "description": "after the order, every vacant advisor seat (political advisors, then theorists and designers, then the military staff) takes the first advisor the game enables there (never respected); an entry whose seat holds what it does not rank takes its idea at another vacant seat of the category that offers it"
+        },
+        "threshold_why": {
+          "type": "string",
+          "x-owner": "text",
+          "description": "the named, costlier pick the threshold saves for (lint politics.pp_budget warns on a threshold above the cheapest order entry without it)"
         },
         "recheck_pp": {
           "type": "number",

@@ -165,8 +165,187 @@ MANAGEMENT = ["decisions_available", "modify_government", "modify_officer_corps"
               "missing_equipment_production", "not_enough_garrison"]
 
 
+# OMISSIONS: what sat unused while the game said it could be used. A run is judged by these first, never by a
+# threshold that was not crossed. Each game alert below is raised by the game itself only while the thing is
+# actionable (a free factory, an affordable pick, an open slot), so its open days are days of an omission unless
+# a named, costlier pick was being saved for; the written reason is shown and checked against the reads.
+OMISSION_ALERTS = [
+    ("free_military_factories", "military factories on no production line"),
+    ("free_civilian_factories", "civilian factories with no construction"),
+    ("free_dockyards", "dockyards on no line"),
+    ("mio_traits", "design companies with a trait point and no trait queued"),
+    ("modify_government", "advisor or law seat buyable with the power on hand"),
+    ("modify_officer_corps", "officer-corps spirit buyable with the experience on hand"),
+    ("doctrines_available", "doctrine buyable with the experience on hand"),
+    ("special_project_available", "special project slot open"),
+    ("scientist_unassigned", "scientist without a project"),
+    ("research_slot_available", "research slot empty"),
+    ("admiral_assignable", "fleet without an admiral"),
+    ("decisions_available", "decision takeable"),
+    ("operative_recruitable", "operative recruitable"),
+    ("unassigned_divisions", "divisions in no army"),
+    ("air_wings_without_mission", "air wings without a mission"),
+    ("no_divisions_in_training", "nothing in training"),
+    ("missing_equipment_production", "equipment the divisions need with no line"),
+    ("outdated_equipment_in_production", "outdated equipment in production"),
+]
+# A written reason that says nothing can be done although the game's own alert says it can.
+NOTHING_CLAIM = re.compile(r"\bno free\b|\bno idle\b|nothing can be bought|nothing to (buy|do|queue)|"
+                           r"no trait to queue|none open|nothing (is )?buyable", re.I)
+WAIT_TOOLS = {"hoi4_wait_change", "hoi4_wait_for", "hoi4_observe"}
+OVERVIEW_TOOLS = {"hoi4_overview", "hoi4_briefing", "hoi4_sitrep"}
+DECISION_CALLS = {"hoi4_event_choose"}
+ACTION_WORDS = ("_start", "_set", "_choose", "_add", "_assign", "_move", "_take", "_create", "_build", "_queue",
+                "_hire", "_adopt", "_mission", "_rebase", "_trait", "_law", "_declare", "_gather", "_edit", "_train",
+                "_exercise", "_order", "_cancel", "_remove", "_priority", "_import", "_invite", "_join")
+
+
+def is_action_call(d):
+    t = str(d.get("tool") or "")
+    if t == "hoi4_plan":
+        args = d.get("args")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except ValueError:
+                args = {}
+        return (args or {}).get("op") not in (None, "get")
+    return t not in WAIT_TOOLS and t.endswith(ACTION_WORDS)
+
+
+def alert_spans(changes, last_date):
+    """{alert: days open} and {alert: the owning step's last written reason} from the feed."""
+    spans, open_at, why = collections.defaultdict(int), {}, {}
+    for c in changes:
+        k, det, dt = c.get("kind"), c.get("detail") or {}, c["date"][:10]
+        if k == "wake_player":
+            r = str(det.get("reason"))
+            if r.startswith("alert:"):
+                open_at.setdefault(r[6:], dt)
+                m = str(det.get("message") or "")
+                hit = re.search(r"; (\w+): (.*)$", m) or re.search(r"the plan ignores it \(([^)]*)", m)
+                if hit:
+                    why[r[6:]] = hit.group(0).lstrip("; ")
+        elif k == "alert_raised":
+            open_at.setdefault(det.get("alert"), dt)
+        elif k == "alert_cleared":
+            a = det.get("alert")
+            if a in open_at:
+                spans[a] += max(0, days(open_at.pop(a), dt))
+    for a, t in open_at.items():
+        if last_date != "?":
+            spans[a] += max(0, days(t, last_date))
+    return spans, why
+
+
+def free_military(samples):
+    """[(date, free)] military factories on no line per production sample (factories minus the lines' requests)."""
+    out = []
+    for s in samples:
+        mil = s.get("mil")
+        lines = [x for x in s.get("lines") or [] if len(x) > 3 and x[1] == "military"]
+        if isinstance(mil, (int, float)) and lines:
+            out.append((s.get("date"), int(mil - sum(x[3] or 0 for x in lines))))
+    return out
+
+
+def monitor_reads(run):
+    """Reads the harness monitor makes in the player's name (calls.jsonl of a harness run tags them 'player'):
+    one hoi4_observe per monitor.log line, three production reads per prod.log sample."""
+    if not _lines(run, "monitor.log") or _jsonl(run, "watch.jsonl"):
+        return collections.Counter()
+    obs = sum(1 for x in _lines(run, "monitor.log") if " paused=" in x)
+    prod = len(_jsonl(run, "prod.log"))
+    return collections.Counter({"hoi4_observe": obs, "hoi4_production_lines": prod, "hoi4_stockpile": prod,
+                                "hoi4_economy": prod})
+
+
+def omission_lines(run, acts=None, changes=None, plan=None):
+    """The omissions of a run, first: each open game alert by days with its written reason (a reason that the
+    reads contradict is a finding of its own), alerts the plan hides, identical repeated actions and reads per
+    actor, and the player's calls by kind (waits and overviews against actions and decisions)."""
+    acts = actions(run) if acts is None else acts
+    changes = feed(run) if changes is None else changes
+    if plan is None:
+        try:
+            with open(os.path.join(run, "plan.json"), encoding="utf-8") as f:
+                plan = json.load(f)
+        except (OSError, ValueError):
+            plan = {}
+    ignored = set(((plan.get("manage") or {}) if isinstance(plan, dict) else {}).get("alerts_ignore") or [])
+    last_date = changes[-1]["date"][:10] if changes else "?"
+    spans, why = alert_spans(changes, last_date)
+    free = free_military(production(run))
+    out = ["OMISSIONS (judged first; days the game itself flagged the item as actionable):"]
+    rows = []
+    for alert, what in OMISSION_ALERTS:
+        n = spans.get(alert, 0)
+        if not n:
+            continue
+        reason = why.get(alert)
+        note = []
+        if alert in ignored:
+            note.append("HIDDEN by the plan's alerts_ignore")
+        if reason:
+            note.append("reason given: %s" % reason[:110])
+            if NOTHING_CLAIM.search(reason):
+                note.append("FALSE REASON: it says nothing can be done while the game's alert says it can")
+        else:
+            note.append("NO reason given")
+        if alert == "free_military_factories" and free:
+            worst = max(free, key=lambda x: x[1])
+            if worst[1] > 0:
+                note.append("read: %d free on %s (the samples' worst), %d on %s (last)" % (
+                    worst[1], worst[0], free[-1][1], free[-1][0]))
+        rows.append((n, "  %s %d d: %s; %s" % (alert, n, what, "; ".join(note))))
+    out += [r for _, r in sorted(rows, key=lambda r: -r[0])] or ["  no game alert stayed open"]
+    # identical actions per actor: the same action (same arguments) sent again, failed or not
+    groups = collections.defaultdict(collections.Counter)
+    for aid, (a, status, _d) in acts.items():
+        who = "executor" if str(aid).startswith("plan-") else "player"
+        groups[who][(json.dumps(a, sort_keys=True), status == "Verified")] += 1
+    for who in ("executor", "player"):
+        rep = [(n, k) for k, n in groups[who].items() if n >= 2]
+        if rep:
+            rep.sort(key=lambda x: -x[0])
+            out.append("  %s repeated identical actions: %d sends in %d groups; worst: %s" % (
+                who, sum(n for n, _ in rep), len(rep), "; ".join(
+                    "%dx %s %s" % (n, json.loads(k[0]).get("kind"), "verified each time" if k[1] else "FAILED")
+                    for n, k in rep[:4])))
+    # the player's calls: waits and overviews against actions and decisions; repeated identical reads
+    calls = [d for d in _jsonl(run, "calls.jsonl") if (d.get("source") or "player") == "player"]
+    if calls:
+        tools = collections.Counter(d.get("tool") for d in calls)
+        tools.subtract(monitor_reads(run))
+        tools = +tools
+        total = sum(tools.values())
+        waits = sum(n for t, n in tools.items() if t in WAIT_TOOLS)
+        views = sum(n for t, n in tools.items() if t in OVERVIEW_TOOLS)
+        player_acts = max(sum(1 for aid in acts if not str(aid).startswith("plan-")),
+                          sum(1 for d in calls if is_action_call(d) and d.get("tool") not in DECISION_CALLS))
+        revisions = sum(1 for c in changes if c.get("kind") == "revision_requested")
+        decisions = sum(n for t, n in tools.items() if t in DECISION_CALLS) + revisions
+        out.append("  player calls %d: waits %d, overviews %d (%.0f%% of the calls), actions %d, decisions %d "
+                   "(events chosen and revisions asked)%s" % (
+                       total, waits, views, 100.0 * (waits + views) / total if total else 0, player_acts, decisions,
+                       "; harness monitor reads excluded" if monitor_reads(run) else ""))
+        reads = collections.Counter((d.get("tool"), json.dumps(d.get("args"), sort_keys=True)) for d in calls
+                                    if d.get("tool") not in WAIT_TOOLS and not is_action_call(d))
+        for tool, n in monitor_reads(run).items():
+            mine = [k for k in reads if k[0] == tool]
+            if mine:
+                top = max(mine, key=lambda k: reads[k])
+                reads[top] = max(0, reads[top] - n)
+        dup = [(n, t) for (t, _a), n in reads.items() if n >= 3]
+        if dup:
+            dup.sort(key=lambda x: -x[0])
+            out.append("  player identical reads (same tool and arguments, 3+ times): %s" % ", ".join(
+                "%dx %s" % (n, t) for n, t in dup[:6]))
+    return out
+
+
 def audit_lines(run, name=None):
-    """The bar audit as lines of text (the sections the game is not needed for)."""
+    """The bar audit as lines of text (the sections the game is not needed for). The omissions come first."""
     name = name or os.path.basename(os.path.normpath(run))
     acts = actions(run)
     by_kind = collections.defaultdict(collections.Counter)
@@ -228,14 +407,16 @@ def audit_lines(run, name=None):
 
     stab = [e.get("stability") for _, e in wake_ev.get("stability_low", []) if isinstance(e, dict)]
     pps = [d.get("pp") for d in samples if d.get("pp") is not None]
-    out = [
-        "BAR AUDIT %s: feed to %s, %d actions, %d watch samples" % (name, last_date, len(acts), len(samples)),
+    out = ["BAR AUDIT %s: feed to %s, %d actions, %d watch samples" % (name, last_date, len(acts), len(samples))]
+    out += omission_lines(run, acts, changes)
+    out += [
         "1 self-pauses: %d" % sp,
         "2 failed actions: %d; repeated failures: %d in %d groups: %s" % (
             sum(1 for _, s, _ in acts.values() if s != "Verified"), sum(repeat_fail.values()), len(repeat_fail),
             "; ".join("%sx %s" % (n, json.loads(g).get("kind"))
                       for g, n in sorted(repeat_fail.items(), key=lambda x: -x[1]))),
-        "3 research: slot_idle events %d, idle watch samples %d" % (
+        "3 research: slot_idle events %d, idle watch samples %d (an idle slot is right while a named "
+        "technology or date is waited for; a fault only without one)" % (
             sum(1 for c in changes if c.get("kind") == "research_slot_idle"), idle_samples),
         "4 political power: idle wakes %d; max PP %s; actions %s; decisions_available open %d d, "
         "modify_officer_corps open %d d" % (
@@ -314,11 +495,8 @@ def alert_lines(run, changes, spans):
                 why[str(d["reason"])[6:]] = hit.group(0)[:90]
     marked = dict(sorted(((k + (" [plan ignores]" if k in ignored else " [reason]" if k in why else " [NO REASON]"),
                            v) for k, v in spans.items()), key=lambda x: -x[1])[:14])
-    long = [k for k, v in spans.items() if v >= 60 and k not in ignored and k not in why]
-    out = ["alerts open (days): %s" % marked,
-           "alerts open 60+ days without a written reason: %d %s" % (len(long), long)]
-    out += ["  reason %s: %s" % (k, why[k]) for k in sorted(why) if spans.get(k, 0) >= 60]
-    return out
+    # every open alert is listed with its reason in OMISSIONS above; a written reason does not make it fine
+    return ["alerts open (days): %s" % marked]
 
 
 def production_lines(run, acts):
@@ -354,8 +532,8 @@ def production_lines(run, acts):
         s["date"], s.get("mil"), sum(x[3] or 0 for x in mil),
         ", ".join("%s %s/%s" % (fam(x[2])[:18], x[3], x[4]) for x in mil)))
     pps = [x.get("pp") or 0 for x in prod]
-    out.append("P6 political power samples: max %.0f, samples above 150: %d/%d"
-               % (max(pps), sum(1 for p in pps if p > 150), len(pps)))
+    out.append("P6 political power on hand: max %.0f, last %.0f (judged against what it could buy: the "
+               "modify_government omission above)" % (max(pps), pps[-1]))
     return out
 
 

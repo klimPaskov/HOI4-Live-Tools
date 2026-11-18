@@ -198,7 +198,7 @@ tech_recon, radio, artillery1; 1937 construction2, improved_machine_tools, excav
 focus requirement), excavation3 (Vereinigte Stahlwerke), basic_medium_tank_chassis with armor_tech_2/engine_tech_2 (No Step Back keys),
 plane modules range_improvements/armor_piercing_bombs and later improved_small_airframe (By Blood Alone keys; there are no fighter1/2 or CAS1/2
 with BBA), oil_processing, rubber_processing, improved infantry weapons; radar comes from the special project `sp_air_radar`, encryption
-techs are hidden with La Resistance; 1939+ doctrines. Never leave a slot idle.
+techs are hidden with La Resistance; 1939+ doctrines. Keep the slots busy; hold one empty only for a named tech (the 100% Four Year Plan and Autarky bonuses belong on tools 3 and 4, RE04).
 
 **Production**: a rifle (infantry_equipment) costs 0.5 IC; a military factory makes 4.5 IC a day (3.5 unpowered), so a
 factory at ~85% makes about 7-8 rifles a day. Targets: 1936 12-15 factories on rifles, 3 support, 4-6 artillery, 3 trucks, 2 tanks; 1937-38 add fighters and CAS

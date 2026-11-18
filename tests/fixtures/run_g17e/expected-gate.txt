@@ -14,8 +14,8 @@ path to 1939.09.01: stock plus today's output equips 117 more Infanterie-Divisio
   support_equipment: stock 72.0, made 9.66/d, used 8.34/d, cover None d, fielded 2616.0/2630.0, factories 9
 manpower pool 595910.0 / AI pool 867710
 armies 5: Armee Süd 23, Armee West Nord 20, Armee West Süd 2, Armee West Mitte 23, Armee Mitte 20
-idle: research slots 0, civilian factories 0
-alerts: missing_equipment_production, decisions_available, admiral_assignable, modify_officer_corps, special_project_available, mio_traits, doctrines_available
+idle: research slots 0 (right only while a named technology or date is waited for), civilian factories 0
+OMISSIONS the game lists now: missing_equipment_production (logistics requests equipment nothing produces: hoi4_production_add), decisions_available (decisions can be taken: hoi4_decisions_list), admiral_assignable (an admiral can be assigned to a naval headquarters: hoi4_fleet_admiral {fleet, list:true} lists the admirals offered, then hoi4_fleet_admiral {fleet, admiral}), modify_officer_corps (a high command or military advisor can be picked: hoi4_politics_options), special_project_available (a special project can start: hoi4_special_projects, hoi4_special_project_assign), mio_traits (military industrial organisation traits can be unlocked: hoi4_mios), doctrines_available (a doctrine can be unlocked: hoi4_doctrines)
 FORCE not gated (no force table)
   divisions by template: Infanterie-Division 82 (line), Panzer-Division 3 (armour), Infanterie-Division (mot.) 1 (motorised/mechanised), Kavallerie-Brigade 1 (garrison), Gebirgs-Brigade 1 (special forces)
   divisions by role: armour 3, motorised/mechanised 1, special forces 1, line 82, garrison 1

@@ -46,6 +46,14 @@ For every land war against more than about
 and phase lines against the surrender threshold, the placement against the forecast by template, the attack
 against the enemy estimate, the holds per border province; a large war without an operation, or one whose
 numbers only hold with a lowered `attack_ratio`, is a blocker under row 7 or 17.
+Check the sources (row 2): for each force, economy, air and political decision read the playbook row its `why`
+cites and say whether the decision does what the row says; open the country's playbook reference and the arm's
+references and list every row that matches the plan's situation which the plan contradicts or leaves out
+without a `[NONE: reason]`: each is a major finding, a blocker when it would change the war's result (the
+template's artillery and armour, the tank chassis, the trade and economy laws, design companies on the lines,
+collaboration governments against the capitulation threshold). Judge spending and idle time by value, never by a
+threshold: free factories with no line, buyable picks held with no named target, or a slot held empty with no
+named wait are findings; a balance or an empty slot held for a named, costlier pick is not.
 
 Output: `RUN/review/critic-<n>.json` in the rubric's format, with `max` 32 (n = 1 + the number of
 existing `critic-*.json` files). Every finding has a severity (blocker, major, minor), the evidence, and a fix.
