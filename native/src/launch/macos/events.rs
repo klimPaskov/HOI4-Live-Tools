@@ -676,23 +676,10 @@ fn click_option(
         .get(option)
         .ok_or_else(|| Error::new("invalid_arguments", "No such event option"))?;
     let event = top.event;
-    if let Some(clash) = open.iter().filter(|e| e.event != event).find(|e| {
-        e.centres
-            .iter()
-            .flatten()
-            .any(|&(ox, oy)| same_spot((x, y), (ox, oy)))
-    }) {
-        return Err(Error::new(
-            "event_covered",
-            format!(
-                "An option of {} lies on the same spot as this option of {}; answer {} first",
-                clash.id, top.id, clash.id
-            ),
-        ));
-    }
+    let solo = spot_sharers(open, at, (x, y))?;
     let others: Vec<u64> = open
         .iter()
-        .filter(|e| e.event != event)
+        .filter(|e| e.event != event && !solo.contains(&e.event))
         .map(|e| e.event)
         .collect();
     let answered = |r: &crate::memory::Reader<'_>, i: u64| {
@@ -705,6 +692,24 @@ fn click_option(
         }
         Ok(!now.iter().any(|e| e.event == event))
     };
+    for _ in 0..solo.len() {
+        keys.click(GAME, x, y)?;
+        match wait(process, "event answered", answered) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.code == "input_readback_failed" => {
+                let now = read(process, open_events)?;
+                let still = |id: u64| now.iter().any(|o| o.event == id);
+                if !still(event) {
+                    return Ok(());
+                }
+                // Send it again only when the click answered one of the one-option windows.
+                if solo.iter().all(|&o| still(o)) {
+                    return Err(e);
+                }
+            }
+            Err(e) => return Err(e),
+        }
+    }
     keys.click(GAME, x, y)?;
     match wait(process, "event answered", answered) {
         Ok(()) => Ok(()),
@@ -721,6 +726,31 @@ fn click_option(
         }
         Err(e) => Err(e),
     }
+}
+
+/// The other windows with an option on the spot `at` of `open[at]`. A window with one option
+/// decides nothing: when it lies on the spot, the click may answer it instead and is sent again
+/// (o1j, 18 Nov 2026: a one-option window on the very spot of the MEFO event's first option
+/// refused every answer for two weeks of war). A window with a choice on the spot is refused.
+fn spot_sharers(open: &[Open], at: usize, spot: (f64, f64)) -> Result<Vec<u64>> {
+    let top = &open[at];
+    let mut solo = Vec::new();
+    for e in open.iter().filter(|e| e.event != top.event) {
+        if !e.centres.iter().flatten().any(|&c| same_spot(spot, c)) {
+            continue;
+        }
+        if e.options.len() != 1 {
+            return Err(Error::new(
+                "event_covered",
+                format!(
+                    "An option of {} lies on the same spot as this option of {}; answer {} first",
+                    e.id, top.id, e.id
+                ),
+            ));
+        }
+        solo.push(e.event);
+    }
+    Ok(solo)
 }
 
 /// Two option buttons whose click points this close could be one button on screen (an
@@ -765,6 +795,39 @@ mod tests {
             list(&MissingPeace).unwrap_err().code,
             "fixture_missing_peace"
         );
+    }
+
+    fn window(event: u64, id: &str, centres: &[(f64, f64)]) -> Open {
+        Open {
+            event,
+            id: id.into(),
+            title: String::new(),
+            description: String::new(),
+            leader: None,
+            options: centres.iter().map(|_| "o".to_string()).collect(),
+            centres: Some(centres.to_vec()),
+            scan: None,
+            layout: "EventWindow".into(),
+        }
+    }
+
+    #[test]
+    fn a_one_option_window_on_the_spot_does_not_block_the_answer() {
+        // o1j: news (one option) and MEFO (two) open on the same spot
+        let open = vec![
+            window(1, "mtg_netherlands.66", &[(1043.0, 474.0)]),
+            window(
+                2,
+                "germany_mefo_bills.1",
+                &[(1043.0, 474.0), (1043.0, 521.0)],
+            ),
+        ];
+        assert_eq!(spot_sharers(&open, 1, (1043.0, 474.0)).unwrap(), vec![1]);
+        assert!(spot_sharers(&open, 1, (1043.0, 521.0)).unwrap().is_empty());
+        // the one-option window's click could answer MEFO: refused, answer MEFO first
+        let e = spot_sharers(&open, 0, (1043.0, 474.0)).unwrap_err();
+        assert_eq!(e.code, "event_covered");
+        assert!(e.message.contains("germany_mefo_bills.1"));
     }
 
     #[test]
