@@ -526,9 +526,26 @@ fn order(
     args: Value,
 ) -> Result<String> {
     let (ok, why) = state.act(tools, lease, tool, args, "op")?;
+    if !ok && why.contains("events_open") {
+        // an open event holds every order of the operation: the next tick's event pass answers
+        // it at once (o1g: germany_mefo_bills.1 in the declaration tick held the attack 7 days)
+        state.op_events_now = true;
+    }
     let line = format!("operation {id}: {what}: {ok} {why}");
     state.op_notes.insert(id.to_string(), line.clone());
     Ok(line)
+}
+
+/// A mobile army's front in peace is a narrow segment: the border between its one own state and
+/// the click state only (o1f/o1g: on the whole 26-province border its arrow started over Gdynia
+/// whatever the target); every other front takes the whole highlighted border.
+fn front_args(u: &Unit, click: i64, peace: bool) -> Value {
+    match (u.role, u.own_states.as_slice()) {
+        (Role::Mobile, [own]) if peace => {
+            json!({"army": u.name, "state_id": click, "from_state": own})
+        }
+        _ => json!({"army": u.name, "state_id": click}),
+    }
 }
 
 fn offensive_args(name: &str, line: &[i64], anchor: Option<i64>) -> Value {
@@ -1096,7 +1113,7 @@ fn reconcile(
             id,
             &format!("front of {} near state {click}", u.name),
             "hoi4_army_front",
-            json!({"army": u.name, "state_id": click}),
+            front_args(u, click, peace),
         )?;
         if state.last_ok == Some(false) {
             state.skip(now, "opdraw", &u.name, 2);

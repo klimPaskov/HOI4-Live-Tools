@@ -2572,6 +2572,77 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
     }
     Ok(best.map(|b| b.1))
 }
+/// The two ends of the border between own state `own` and state `target` (unit positions of the
+/// province pairs that face each other, at their mean height): a segment front is dragged from one
+/// to the other. None when the two states do not touch.
+fn segment_ends(
+    process: &dyn Process,
+    own: i32,
+    target: i32,
+) -> Result<Option<(MapPoint, MapPoint)>> {
+    let exe = &process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe;
+    let dir = super::mapdata::game_dir(exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let heights = super::mapdata::unit_heights(&dir)?;
+    let at = |p: &i32| -> Option<((f64, f64), f64)> {
+        Some((
+            positions.get(p).copied()?,
+            heights.get(p).copied().unwrap_or(super::screenmap::GROUND),
+        ))
+    };
+    let mine: Vec<_> = super::mapdata::state_provinces(&dir, own)?
+        .iter()
+        .filter_map(at)
+        .collect();
+    let theirs: Vec<_> = super::mapdata::state_provinces(&dir, target)?
+        .iter()
+        .filter_map(at)
+        .collect();
+    Ok(segment_from_points(&mine, &theirs))
+}
+
+/// The border midpoints of the facing province pairs (each own province with its nearest target
+/// province, kept within twice the closest pair's gap) and the two that lie farthest apart.
+pub(super) fn segment_from_points(
+    mine: &[((f64, f64), f64)],
+    theirs: &[((f64, f64), f64)],
+) -> Option<(MapPoint, MapPoint)> {
+    let pairs: Vec<(f64, MapPoint)> = mine
+        .iter()
+        .filter_map(|(p, hp)| {
+            let (q, hq) = theirs.iter().min_by(|a, b| {
+                let da = (a.0 .0 - p.0).hypot(a.0 .1 - p.1);
+                let db = (b.0 .0 - p.0).hypot(b.0 .1 - p.1);
+                da.total_cmp(&db)
+            })?;
+            let gap = (q.0 - p.0).hypot(q.1 - p.1);
+            Some((gap, ((p.0 + q.0) / 2.0, (hp + hq) / 2.0, (p.1 + q.1) / 2.0)))
+        })
+        .collect();
+    let closest = pairs.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+    if !closest.is_finite() {
+        return None;
+    }
+    let border: Vec<MapPoint> = pairs
+        .iter()
+        .filter(|p| p.0 <= closest * 2.0 + 1.0)
+        .map(|p| p.1)
+        .collect();
+    let mut best: Option<(f64, MapPoint, MapPoint)> = None;
+    for a in &border {
+        for b in &border {
+            let d = (a.0 - b.0).hypot(a.2 - b.2);
+            if best.is_none_or(|x| d > x.0) {
+                best = Some((d, *a, *b));
+            }
+        }
+    }
+    best.map(|(_, a, b)| (a, b))
+}
+
 #[allow(dead_code)]
 fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result<Option<MapPoint>> {
     let exe = &process
@@ -2612,6 +2683,7 @@ pub(super) fn front(
     keys: &dyn GameInput,
     army: &str,
     state: i32,
+    segment: Option<i32>,
 ) -> Result<()> {
     let t0 = std::time::Instant::now();
     clear_notices(process, keys)?;
@@ -2631,10 +2703,24 @@ pub(super) fn front(
     // Centre on the target state's province nearest the army: valid fronts are highlighted
     // only along the army's own line, which the state's centre can be far from (seen live:
     // an army in Bale facing Hararghe).
-    let near = front_border_point(process, army, state)
-        .ok()
-        .flatten()
-        .or_else(|| front_point_province(process, army, state).ok().flatten());
+    // A segment front (`segment` = the own state): the border between that state and the
+    // target only, dragged from end to end; the camera centres its middle.
+    let ends = match segment {
+        Some(own) => Some(segment_ends(process, own, state)?.ok_or_else(|| {
+            Error::new(
+                "invalid_target",
+                format!("Own state {own} does not border state {state}: no segment to draw"),
+            )
+        })?),
+        None => None,
+    };
+    let near = match ends {
+        Some((a, b)) => Some(((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0, (a.2 + b.2) / 2.0)),
+        None => front_border_point(process, army, state)
+            .ok()
+            .flatten()
+            .or_else(|| front_point_province(process, army, state).ok().flatten()),
+    };
     // The Find view is only needed when the border point is not already in the usable area.
     let visible = super::screenmap::front_height_ok(process)
         && near.is_some_and(|(x, y, z)| {
@@ -2788,6 +2874,53 @@ pub(super) fn front(
         }
     }
     super::ui::trace("front: candidates", t0);
+    if let Some((a, b)) = ends {
+        // drag along the border from one end of the segment to the other (left button, then the
+        // right one): the game draws the front over the dragged stretch only
+        let screen = read(process, |r, i| {
+            Ok((
+                super::screenmap::to_screen_at(r, i, a.0, a.1, a.2)?,
+                super::screenmap::to_screen_at(r, i, b.0, b.1, b.2)?,
+            ))
+        })?;
+        let inside =
+            |p: &(f64, f64)| (300.0..1700.0).contains(&p.0) && (120.0..860.0).contains(&p.1);
+        let (Some(sa), Some(sb)) = screen else {
+            let _ = keys.press(Key::Escape);
+            return Err(Error::new(
+                "input_geometry_unverified",
+                "The segment's ends do not project to the screen",
+            ));
+        };
+        if !inside(&sa) || !inside(&sb) {
+            let _ = keys.press(Key::Escape);
+            return Err(Error::new(
+                "input_geometry_unverified",
+                format!("The segment {sa:?} - {sb:?} does not fit the map area at once"),
+            ));
+        }
+        super::ui::trace_text(&format!("front: segment drag {sa:?} -> {sb:?}"));
+        for right in [false, true] {
+            if right {
+                keys.right_drag(GAME, sa, sb)?;
+            } else {
+                keys.drag(GAME, sa, sb)?;
+            }
+            let deadline = std::time::Instant::now() + std::time::Duration::from_millis(800);
+            while std::time::Instant::now() < deadline {
+                if read(process, |r, i| orders(r, i, army))? > before {
+                    let _ = keys.press(Key::Escape);
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+        }
+        let _ = keys.press(Key::Escape);
+        return Err(Error::new(
+            "input_readback_failed",
+            "No segment front was placed by a drag along the border",
+        ));
+    }
     for (x, y) in candidates {
         keys.click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
@@ -4421,6 +4554,23 @@ pub(super) fn split(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_segment_runs_between_the_farthest_facing_province_pairs() {
+        // own provinces along x = 0, the target's along x = 10; one own province far inland
+        let mine = [
+            ((0.0, 0.0), 1.0),
+            ((0.0, 10.0), 1.0),
+            ((0.0, 20.0), 1.0),
+            ((-40.0, 10.0), 1.0),
+        ];
+        let theirs = [((10.0, 0.0), 3.0), ((10.0, 10.0), 3.0), ((10.0, 20.0), 3.0)];
+        let (a, b) = super::segment_from_points(&mine, &theirs).unwrap();
+        let mut ends = [a, b];
+        ends.sort_by(|x, y| x.2.total_cmp(&y.2));
+        assert_eq!(ends, [(5.0, 2.0, 0.0), (5.0, 2.0, 20.0)]);
+        assert!(super::segment_from_points(&[], &theirs).is_none());
+    }
+
     #[test]
     fn a_folded_army_tries_its_own_group_card_first_and_never_an_army_or_new_card() {
         let rect = |x: i32| Rect {

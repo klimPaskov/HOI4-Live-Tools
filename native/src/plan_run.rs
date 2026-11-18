@@ -628,6 +628,8 @@ pub struct State {
     op_owned_at: Option<GameHour>,
     /// The operation step sends the order (its own armies pass the ownership guard).
     op_acting: bool,
+    /// an operation order was refused for an open event: the next event pass answers at once
+    op_events_now: bool,
     /// Each operation's last status line (digest).
     op_notes: BTreeMap<String, String>,
 }
@@ -799,6 +801,7 @@ impl Default for State {
             op_owned: HashMap::new(),
             op_owned_at: None,
             op_acting: false,
+            op_events_now: false,
             op_notes: BTreeMap::new(),
         }
     }
@@ -1474,6 +1477,9 @@ pub fn tick(
     plan_operation::refresh(state, tools, plan, now);
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
+    if list(&events, "events").is_empty() {
+        state.op_events_now = false;
+    }
     if events["peace_conference_open"] == json!(true) {
         // the plan's `peace` demands, else the stop (plan_manage.rs)
         return plan_manage::peace(state, tools, plan, lease, now);
@@ -1491,9 +1497,14 @@ pub fn tick(
         let auto = plan["auto_events"] != json!(false);
         let news = key.contains("news") || list(top, "options").len() == 1;
         let waited = now.saturating_sub(first);
-        let patience = plan["wait_events_days"]
-            .as_i64()
-            .map_or(2 * DAY, |days| days.saturating_mul(DAY));
+        // an operation whose orders an open event refused does not wait for the model
+        let patience = if state.op_events_now {
+            0
+        } else {
+            plan["wait_events_days"]
+                .as_i64()
+                .map_or(2 * DAY, |days| days.saturating_mul(DAY))
+        };
         // A choice event is the model's decision unless the plan names an option for it
         // (or it has waited `wait_events_days`, below).
         // `event_rules` come first: an option by its name; an unknown condition waits.
@@ -1525,7 +1536,7 @@ pub fn tick(
         // that it takes option 0, the one the game itself takes when the event times out. Left
         // open it blocked every other step until that timeout (g17a, 17 Nov 2026:
         // denmark_trade_deal.1 and GER_inner_circle.03 open 13 days each).
-        let lapsed = waited > patience && chosen.is_none() && !news;
+        let lapsed = (waited > patience || state.op_events_now) && chosen.is_none() && !news;
         let how = if lapsed {
             format!(
                 "{how} (unanswered {} game days: the game's own timeout choice)",
@@ -1534,7 +1545,7 @@ pub fn tick(
         } else {
             how
         };
-        if auto && (news || chosen.is_some() || waited > patience) {
+        if auto && (news || chosen.is_some() || waited > patience || state.op_events_now) {
             let option = chosen.unwrap_or(0);
             let args = json!({"event": key, "option": option});
             if state
