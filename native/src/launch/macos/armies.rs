@@ -2078,6 +2078,82 @@ pub(super) fn card_widget(r: &Reader<'_>, image: u64, army: &str, name: &str) ->
 fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect> {
     gui_tree::rect(r, image, card_widget(r, image, army, name)?, GAME)
 }
+/// Cards in the bar that belong to no own army: army group cards (the new-army cards have no
+/// handle). The parent's own card first when its handle is known, then the others.
+fn group_cards(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<Rect>> {
+    let u = ui(r)?;
+    let group = group_named(r, image, army)?;
+    let parent = r.u64(group + u.army_group)?;
+    if parent == 0 {
+        return Ok(Vec::new());
+    }
+    let parent_handle = r.u64(parent + u.group_handle).unwrap_or(0);
+    let mut armies = BTreeSet::new();
+    for g in membership(r, image)?.into_values().filter(|g| *g != 0) {
+        armies.insert(r.u64(g + u.group_handle)?);
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let bar = r.u64(r.u64(idler + u.manager)? + u.leader_view)?;
+    if r.u64(bar)? != image + u.leader_view_vtable {
+        return Err(Error::new("invalid_gui", "Exact army card bar required"));
+    }
+    let (_, data, count) = r.array_header(bar + u.leader_portraits)?;
+    let mut cards = Vec::new();
+    for index in 0..count.min(64) as u64 {
+        let portrait = r.u64(data + index * 8)?;
+        let handle = r.u64(portrait + u.portrait_group)?;
+        if handle == 0 || armies.contains(&handle) {
+            continue;
+        }
+        let Some(window) = gui_tree::container(r, r.u64(portrait + u.portrait_window)?, image)?
+        else {
+            continue;
+        };
+        let Some(button) = gui_tree::child(r, image, window, "portrait_btn")? else {
+            continue;
+        };
+        let Ok(rect) = gui_tree::rect(r, image, button, GAME) else {
+            continue;
+        };
+        cards.push((handle, rect));
+    }
+    Ok(group_cards_in_order(cards, &armies, parent_handle))
+}
+/// Army group cards to try, the parent's first: every card that is not an own army's and not a
+/// new-army card (handle 0), in bar order.
+fn group_cards_in_order(cards: Vec<(u64, Rect)>, armies: &BTreeSet<u64>, parent: u64) -> Vec<Rect> {
+    let (mut first, rest): (Vec<_>, Vec<_>) = cards
+        .into_iter()
+        .filter(|(h, _)| *h != 0 && !armies.contains(h))
+        .partition(|(h, _)| *h == parent);
+    first.extend(rest);
+    first.into_iter().map(|(_, r)| r).collect()
+}
+/// The card of `army`, shown first when it is folded into its army group's card: the bar shows
+/// an army group as one card and its armies' cards only while the group is selected (the AI's
+/// 1939 Germany: fifteen armies in groups, every front and move order failed with "Army card not
+/// shown", war bed 18 Nov 2026). One click on the group card, then the army's card is read again.
+fn shown_card(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
+    let first = read(process, |r, i| card_rect(r, i, army, "portrait_btn"));
+    match first {
+        Err(e) if e.message == "Army card not shown" => {
+            let groups = read(process, |r, i| group_cards(r, i, army))?;
+            for rect in groups.into_iter().take(4) {
+                let (x, y) = rect.center();
+                keys.click(GAME, x, y)?;
+                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1200);
+                while std::time::Instant::now() < deadline {
+                    if let Ok(card) = read(process, |r, i| card_rect(r, i, army, "portrait_btn")) {
+                        return Ok(card);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
+            Err(e)
+        }
+        other => other,
+    }
+}
 
 /// Select exactly `army` with its card: the selection must hold all of its
 /// divisions, not a selection left over from before.
@@ -2100,6 +2176,7 @@ pub(super) fn select_army_quick(
     // The card strip re-lays out when an army is added or removed (a detach creating a new army
     // moved Army 1's card and the next click missed it, live 6 Nov 2026): wait for a stable
     // rectangle, and click once more on a fresh read if the selection does not follow.
+    shown_card(process, keys, army)?;
     let mut last = None;
     for _ in 0..2 {
         let card = settled(process, "army card", |r, i| {
@@ -2714,6 +2791,7 @@ pub(super) fn execute(
     run: bool,
 ) -> Result<()> {
     clear_notices(process, keys)?;
+    shown_card(process, keys, army)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
         return Err(Error::new(
             "invalid_target",
@@ -2833,7 +2911,7 @@ pub(super) fn offensive(
     let provinces = read(process, |r, i| army_provinces(r, i, army))?;
     let (dx, dy) = super::mapdata::direction_to(game_dir, state, &provinces)?;
     let before = read(process, |r, i| plan_nodes(r, i, army))?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let card = shown_card(process, keys, army)?;
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
@@ -3114,7 +3192,7 @@ pub(super) fn defense_span(
 /// Select `army` with its card (the battle-plan toolbar shows) and return the card's centre.
 fn select_for_orders(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<()> {
     clear_notices(process, keys)?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let card = shown_card(process, keys, army)?;
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))
@@ -3386,7 +3464,7 @@ pub(super) fn move_to(
     province: Option<i32>,
 ) -> Result<()> {
     clear_notices(process, keys)?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let card = shown_card(process, keys, army)?;
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
@@ -3880,6 +3958,7 @@ fn assign_commander_once(
     }
     // An army or an army group is selected by its own card; the group's
     // panel then offers its field marshal slot at the same place.
+    shown_card(process, keys, army)?;
     let card = settled(process, "card", |r, i| {
         card_rect(r, i, army, "portrait_btn")
     })?;
@@ -4196,6 +4275,26 @@ pub(super) fn split(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_folded_army_tries_its_own_group_card_first_and_never_an_army_or_new_card() {
+        let rect = |x: i32| Rect {
+            x,
+            y: 0,
+            w: 10,
+            h: 10,
+        };
+        let armies: BTreeSet<u64> = [11, 12].into_iter().collect();
+        // bar order: new-army card, army 11, group 7, group 9 (the parent), army 12
+        let cards = vec![
+            (0, rect(0)),
+            (11, rect(1)),
+            (7, rect(2)),
+            (9, rect(3)),
+            (12, rect(4)),
+        ];
+        let order = super::group_cards_in_order(cards, &armies, 9);
+        assert_eq!(order.iter().map(|r| r.x).collect::<Vec<_>>(), [3, 2]);
+    }
     use super::*;
 
     #[test]
