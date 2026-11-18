@@ -311,6 +311,9 @@ mod plan_seams;
 /// Encirclement (find a pocket, close it with two pincers, hold the ring, reduce it, resume).
 #[path = "plan_encircle.rs"]
 mod plan_encircle;
+// Operations: a large land war as drawn and executed battle plans (plan key `operations`).
+#[path = "plan_operation.rs"]
+mod plan_operation;
 
 /// Game time is counted in in-game hours (the `raw` value of the `date` object
 /// that `hoi4_overview` returns). Every skip, cooldown and patience below is a
@@ -619,6 +622,14 @@ pub struct State {
     strategy: Strategy,
     /// this tick's predicate reads (game hour, cache): each read at most once per tick
     pcache: Option<(GameHour, Cache)>,
+    /// Armies and army groups an active operation owns -> the operation (plan_operation.rs).
+    op_owned: HashMap<String, String>,
+    /// The game hour `op_owned` was last worked out.
+    op_owned_at: Option<GameHour>,
+    /// The operation step sends the order (its own armies pass the ownership guard).
+    op_acting: bool,
+    /// Each operation's last status line (digest).
+    op_notes: BTreeMap<String, String>,
 }
 
 /// What `run` knows about the persisted memory next to plan.json.
@@ -785,6 +796,10 @@ impl Default for State {
             persist: Persist::default(),
             strategy: Strategy::default(),
             pcache: None,
+            op_owned: HashMap::new(),
+            op_owned_at: None,
+            op_acting: false,
+            op_notes: BTreeMap::new(),
         }
     }
 }
@@ -1103,6 +1118,14 @@ impl State {
                 ),
             ));
         }
+        // An army an operation owns takes land orders from that operation only.
+        let mut args = args;
+        if !self.op_acting {
+            if let Some(why) = plan_operation::guard(&self.op_owned, name, &mut args) {
+                self.last_ok = Some(false);
+                return Ok((false, why));
+            }
+        }
         let signature = format!("{name} {args}");
         // Divisions sent out of an overdrawn stack in their own army are not the army's move:
         // they neither wait for its commitment nor count against its budget or commit it.
@@ -1134,7 +1157,6 @@ impl State {
             }
         }
         self.seq += 1;
-        let mut args = args;
         if let Some(object) = args.as_object_mut() {
             object.insert(
                 "request_id".into(),
@@ -1448,6 +1470,8 @@ pub fn tick(
     let concentrated = plan_formations::concentrate(plan);
     let plan = concentrated.as_ref().unwrap_or(plan);
     state.moves.rules = MoveRules::of(plan);
+    // operations own their armies from their prepare on: worked out before any step orders one
+    plan_operation::refresh(state, tools, plan, now);
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
     if events["peace_conference_open"] == json!(true) {
@@ -2455,9 +2479,29 @@ fn war_first_steps(
     lease: &str,
     now: GameHour,
 ) -> Result<Option<String>> {
+    // A war whose declaration is due starts before any line is redrawn, and an operation that
+    // waits for that war executes in the same tick (e1h1, 18 Nov 2026: the executor declared and
+    // the groups executed a day later).
+    state.last_ok = None;
+    if let Some(declared) = plan_affairs::declare_due_step(state, tools, plan, lease, now)? {
+        if state.last_ok == Some(false) {
+            state.last_ok = None;
+        } else {
+            plan_operation::wake(state);
+            state.pcache = None;
+            let executed = war_burst(state, tools, plan, lease, now, plan_operation::step)?;
+            state.last_ok = Some(true);
+            return Ok(Some(match executed {
+                Some(line) => format!("{declared}; {line}"),
+                None => declared,
+            }));
+        }
+    }
     let steps: [Step; 11] = [
-        // a war whose declaration is due starts before any line is redrawn
-        plan_affairs::declare_due_step,
+        // the operations: prepare, execute, advance (plan_operation.rs)
+        |state, tools, plan, lease, now| {
+            war_burst(state, tools, plan, lease, now, plan_operation::step)
+        },
         layout_step,
         // The opening pass of the war step: an army without its lines gets its front and its
         // offensive line before any name, commander or disband. Lines cost nothing to hold and
@@ -3152,15 +3196,18 @@ fn layout_step(
     if state.skipped(now, "layout", "all") {
         return Ok(None);
     }
-    let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
-    let armies = list(&roster, "armies");
-    let present: HashSet<String> = armies
+    let mut roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+    let all_present: HashSet<String> = list(&roster, "armies")
         .iter()
         .map(|a| text(&a["army"]).to_string())
         .collect();
     state
         .layout
-        .retain(|_, a| a.is_empty() || present.contains(a));
+        .retain(|_, a| a.is_empty() || all_present.contains(a));
+    // an army an operation owns is neither marched nor split by the layout
+    plan_operation::hide_owned(state, &mut roster);
+    let armies = list(&roster, "armies");
+    let present = all_present;
     let taken: HashSet<String> = state.layout.values().cloned().collect();
     // A strike role formed away from its state (form_strike_role) marches there once.
     for e in entries {
@@ -5583,7 +5630,8 @@ fn war_step(
     // The opening pass has work only while an army it may order stands without its lines (a
     // guard holds one, its front; a driven army two): one cheap read decides.
     if lines_only {
-        let roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        let mut roster = tools.call("hoi4_armies", &json!({"threat": false}))?;
+        plan_operation::hide_owned(state, &mut roster);
         let waiting = list(&roster, "armies").iter().any(|a| {
             let name = text(&a["army"]);
             let guard_done = state.war_stage.get(&format!("guard:{name}")) == Some(&2);
@@ -5755,7 +5803,9 @@ fn war_step(
             )));
         }
     }
-    let roster = tools.call("hoi4_armies", &json!({}))?;
+    let mut roster = tools.call("hoi4_armies", &json!({}))?;
+    // the armies an operation owns take no order from the war step (strike, guard, retake)
+    plan_operation::hide_owned(state, &mut roster);
     let mut vp_rows: HashMap<i64, Value> = HashMap::new();
     let mut load: HashMap<i32, usize> = HashMap::new();
     for target in state.war_assign.values() {
@@ -8979,6 +9029,9 @@ pub fn run(
     }
     if let Some(military) = plan_military::digest(state) {
         result["military"] = military;
+    }
+    if let Some(operations) = plan_operation::digest(state) {
+        result["operations"] = operations;
     }
     if let Some(affairs) = plan_affairs::digest(state) {
         result["affairs"] = affairs;
