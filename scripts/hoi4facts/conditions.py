@@ -452,6 +452,12 @@ class Timeline:
     def template_units(self, name):
         """Battalions and support companies of a template the plan fields (a start template, else a plan
         template by name or id), one entry per unit."""
+        # a plan template with `base` edits that template in place: its battalions replace the start ones
+        for x in self.lint.list_of("templates"):
+            if x.get("base") == name and x.get("regiments"):
+                from .validate import template_columns
+                return [u for c in template_columns(x.get("regiments")) or [] for u in c] + \
+                    list(x.get("support") or [])
         t = self.lint.start_templates().get(name)
         if t:
             return [u for u, n in t["regiments"].items() for _ in range(n)] + list(t["support"])
