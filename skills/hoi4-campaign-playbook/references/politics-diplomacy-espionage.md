@@ -104,7 +104,7 @@ Germany starts 1936 in `partial_economic_mobilisation`, `limited_conscription` a
 | closed_economy | at war, fascist or communist, War Economy or higher; not China under the Nine Power Treaty | export 0 |
 | uncontrolled_exports | Poland's start law, cannot be chosen | export 25%, consumer goods +5%, agency upgrades +15% slower, no market access |
 
-China under the Nine Power Treaty is locked on Free Trade. Practical rule: Free Trade is the 1936 default for any country whose resource balance allows it; the export share is reserved even with no buyer, so step down (Export Focus, then Limited Exports) when exports starve your own lines.
+China under the Nine Power Treaty is locked on Free Trade. Practical rule: Free Trade is the 1936 default for any country whose resource balance allows it; whether an unsold export share is lost is unverified (read the resource panel with an unsold surplus first); step down (Export Focus, then Limited Exports) when exports starve your own lines.
 
 ### Conscription law
 | Law | Gate | Recruitable pop | Side cost |
@@ -399,7 +399,7 @@ Gaps:
 | ID | Tactic | How it works | When | Mode |
 |---|---|---|---|---|
 | DI01 | Claims and cores, not Conquer | Conquer costs 200 + 50 per state, threat 2, and expires 60 days after completion; claimed (125 + 10 per state, threat 0.15) and core goals (125, threat 0.1) never expire and make the peace cheaper | Every war plan | FAIR |
-| DI02 | One justification at a time | Each nation already at war with you or being justified against makes the next goal 1.5x dearer; -50% at 100% world tension; -75% against a major already at war; fascists justify 80% faster during a major war; goals on a target that sent lend-lease (-25%), docking rights (-20%) or volunteers (-50%) against you are cheaper | Chained wars | FAIR |
+| DI02 | One justification at a time | Each nation already at war with you or being justified against makes the next goal 1.5x dearer; -50% at 100% world tension; -75% against a major already at war; fascists justify 80% faster during a major war; goals on a target that sent lend-lease (-25%), docking rights (-20%) or volunteers (-50%) against you are cheaper. Justify against a major right after it enters a war | Chained wars | FAIR |
 | DI03 | World-tension gates by ideology | Democracy: justify only on threat countries, join a faction at 80% (50% defending), lend-lease 50%, volunteers 50%, guarantee 25%. Neutral: justify 50%, join 40%, lend-lease 60%, volunteers 40%, guarantee 40%. Isolation laws add +100% to the justify gate and +75% to guarantees | Democracies, neutrals, USA | FAIR |
 | DI04 | Before 25% world tension | Democracies cannot guarantee below 25% tension; list who can guarantee a target and at what tension before declaring | 1936-38 expansion | FAIR |
 | DI05 | Guarantees | A guarantee costs 15 + 15 per guarantee held and lowers tension by 5; breaking one costs 20% war support | Democracies | FAIR |
@@ -422,6 +422,7 @@ Gaps:
 | DI22 | Volunteer recall timing | Recall takes 2 days per division; none in the first 180 days, no return to the same country for 180 days after a recall; 95% of equipment comes back | Recall while a port link exists, never with a deployed HQ among them (MX41) | FAIR |
 | DI23 | Automatic diplomatic responses | Since 1.19.4 the own diplomacy screen (right-click the top-bar flag) sets accept, decline or off per request type, with accept-all and decline-all. It stops request pop-ups from covering panels mid-war, where a hidden panel makes army orders fail. Set only types the plan always answers the same way (decline what would hand an AI access, territory or a pact the plan does not want); leave the rest off so they still reach the event rules. No tool sets it yet (gap register): until one does, answer requests through `event_rules` | Before a long war, once the plan's answers are fixed | FAIR |
 | DI24 | Faction manpower contribution | A faction member can pay a share of its monthly manpower gain into the faction's garrison pool; the leader's contribution rules set a floor of 5%, 10% or 15% (needs the faction's military side unlocked). Giving earns contribution score and faction influence, drawing spends both (OC09). Worth it for a member with surplus manpower whose allies garrison large conquests; a country short of manpower or the one doing the conquering keeps it at the floor. Check free manpower first (`hoi4_country_status`). No tool or plan key sets it yet (gap register) | Faction members in a long coalition war | FAIR |
+| DI25 | Later wars cost less tension | Every tension source is scaled by a factor that falls 0.5% a month from 1936 to a floor of 0.25; a justified war adds 10, a war without a goal 14. Read the tension a war will add on its date, not at 1936 rates, before deciding a guarantee gate will close | Chained wars | FAIR |
 
 ## 13. Tactics: intelligence
 

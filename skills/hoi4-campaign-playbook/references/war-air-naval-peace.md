@@ -29,7 +29,7 @@ Everything below is FAIR unless it says META.
 | Terrain attack penalty (attacker) | forest -15%, hills -25%, urban -30%, jungle -30%, marsh -40%, mountain -50%, plains/desert 0 |
 | Combat width per province | plains/hills/desert 70, urban 80, forest/jungle 60, mountain/marsh 50 (extra side 35/40/30/25) |
 | Battalion width | infantry 2, artillery 3, support 0 |
-| Over-width penalty | -1% per % over width, hard cap -33% (cannot join beyond that) |
+| Over-width penalty | -1% per 1% of the battle width over (not per width point), hard cap -33% (cannot join beyond that); a side o% over fights at about 1 - o squared of a perfect fill |
 | Stacking penalty | -2% per division above 5 (+3 allowed per extra direction) |
 | Reserve join chance | 2% an hour per idle reserve; speed and radio help |
 | Two simultaneous combats (defender) | -50% |
@@ -739,7 +739,7 @@ Never improvise raw input for a gap.
 | OP09 | Supply floor | No new offensive below 50% supply; below 35% (attrition starts) stop and pull 25-50% of the divisions out; resume at 70%. Out of supply the attacker loses 25% attack and 65% defence; careful execution needs full supply | Every offensive | FAIR |
 | OP10 | Split overstacked armies | Overstacking a province is the usual cause of starvation: when a province is overdrawn on two reads, split the army and move half next door | Strike armies | FAIR |
 | OP11 | Advance in bounds | End each push just past a captured hub or port and wait until it connects (captured rail is dead 10 days, 5 on cores; the timer restarts when the path changes; river links work at once); rest org and planning, then plan the next hub | Every deep offensive | FAIR |
-| OP12 | Encircle, do not push | An encircled unit fights at -30%, gets no manpower, equipment or fuel even with air supply, and shatters when routed with no retreat; neutral or allied contact cancels the encirclement | Every war | FAIR |
+| OP12 | Encircle, do not push | An encircled unit fights at -30%, gets no manpower, equipment or fuel even with air supply, and shatters when routed with no retreat; neutral or allied contact cancels the encirclement. The AI looks for pockets only every 72 hours per army: close the neck with fast divisions inside three days (OP51) | Every war | FAIR |
 | OP13 | Reduce the pocket | Widen the junction (one tank each way plus infantry on the neck), hold the outer ring two deep, take ports inside the pocket, then attack every pocket province explicitly: the battle plan only clears empty pockets of 2 provinces or fewer | After a pocket closes | FAIR |
 | OP14 | Pocket size by strength | Small repeated pockets when forces are equal; large ones only when much stronger; against a large country kill divisions first, against a small one take VPs | Choosing operations | FAIR |
 | OP15 | Never leave a tile empty behind the spear | Hold the corridor when a strike leg runs more than 2 provinces; holders on flank tiles within one tile of the path; salients 1-3 tiles wide invite encirclement | Every advance | FAIR |
@@ -762,7 +762,7 @@ Never improvise raw input for a gap.
 | OP32 | Area defence for the rear | An area-defence order weighs VPs, ports, hubs and rail, recaptures lost ground and lets one general hold 72 divisions | Rear, coasts, occupied land | FAIR |
 | OP33 | Guards stay dug in | +2% per entrenchment level, lost on any move; give guards their front once and never re-issue it while the border is unchanged | Holding fronts | FAIR |
 | OP34 | Poke defence and support attacks | Attack the tile in front and halt before winning: the enemy retreats while you keep planning and entrenchment; a support attack joins a battle without advancing | Defensive chokes | FAIR |
-| OP35 | Counter-attack after a failed attack | The attacker's org is lowest right after a repulsed attack; let the AI bleed on rivers and forest, then counter-attack that province; never defend open plains | Defensive wars | FAIR |
+| OP35 | Counter-attack after a failed attack | The attacker's org is lowest right after a repulsed attack; let the AI bleed on rivers and forest, then counter-attack that province; never defend open plains. The AI launches its plans at half preparation and keeps attacking with half-organised divisions (OP54) | Defensive wars | FAIR |
 | OP36 | Mobile reserve one state behind | Reserves join a battle at about 2% an hour and do not recover org in reserve; keep a mobile reserve behind threatened hubs | Defence | FAIR |
 | OP37 | Force Attack and Last Stand | +20% attack and +25% breakthrough (or +20% defence and +25% entrenchment) for 7 days; no organisation damage, so a losing division cannot break and retreat and fights on with +60% strength damage until it dies, every casualty costing 20% more war support; costs per battalion since 1.19, so only on a small army at the decisive tile | Closing a pocket, holding a choke; never on a tile you are clearly losing | FAIR |
 | OP38 | Overrun | Entering a province a unit retreats into destroys it; motorised divisions follow the tanks to catch retreats | After a breakthrough | FAIR |
@@ -778,6 +778,10 @@ Never improvise raw input for a gap.
 | OP48 | Undeployed reserve batches | Train about 20 batches of infantry before the war and leave them undeployed; deploy one batch onto a breakthrough the front cannot close | Defensive war start | FAIR |
 | OP49 | Special forces on fronts, not plans | Rangers and mountaineers on battle plans across rivers and through many tiles lose equipment fast; give them a front line and attack tile by tile | Rangers in forests, mountaineers inland | FAIR |
 | OP50 | Probe before the assault | A cheap preliminary attack strips a strong tile's organisation before the main assault; the Probing Attack ability keeps the prober's dig-in | Strong defended tiles | FAIR |
+| OP51 | Close the pocket inside 72 hours | The AI refreshes the provinces it treats as encirclement points only every three days per army: a two-province neck cut by fast divisions inside one window traps the army before it re-plans, a slow infantry pincer lets it walk out. Keep the spearhead supplied for the 3-5 days it must hold the neck | Every offensive | FAIR |
+| OP52 | Forts turn the AI away | The AI will not attack a front it reads as fortified (forts on half its provinces, level 1 counts, a unit there above 20% organisation) unless it has a 50% advantage; level 1-2 forts on a secondary front free its divisions for the main one | Secondary fronts | FAIR |
+| OP53 | Look strong where you cannot lose | The AI weights the easiest-looking front almost twice its main enemy's: a thin but fortified sector, or a weak ally next to you, draws its reserves; strike where it moved them from, and never look weak on the front you cannot afford to lose | Every war against the AI | FAIR |
+| OP54 | Bleed the half-prepared attack | The AI executes plans at 50% preparation and attacks with divisions at 45-85% organisation and 30-60% strength: hold a dug-in line with a reserve behind it, let it attack, then counter-attack the exhausted divisions (OP35) | Defensive wars | FAIR |
 
 ## 16. Tactics: air
 

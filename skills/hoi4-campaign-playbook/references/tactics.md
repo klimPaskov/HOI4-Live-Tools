@@ -118,6 +118,8 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - EC27 Re-set the auto-import budget
 - EC28 Split long railways
 - EC29 Civilian nuclear reactor
+- EC30 Price every choice in factory-days
+- EC31 Conquer a minor before an industry focus
 
 ## Research, doctrines and MIOs: [research-doctrines-projects.md §10](research-doctrines-projects.md#10-tactics-research-doctrines-and-mios)
 
@@ -239,6 +241,10 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - OP48 Undeployed reserve batches
 - OP49 Special forces on fronts, not plans
 - OP50 Probe before the assault
+- OP51 Close the pocket inside 72 hours
+- OP52 Forts turn the AI away
+- OP53 Look strong where you cannot lose
+- OP54 Bleed the half-prepared attack
 
 ## Air: [war-air-naval-peace.md §16](war-air-naval-peace.md#16-tactics-air)
 
@@ -401,6 +407,7 @@ FAIR unless marked; [rules-and-modes.md](rules-and-modes.md) defines the modes.
 - DI22 Volunteer recall timing
 - DI23 Automatic diplomatic responses
 - DI24 Faction manpower contribution
+- DI25 Later wars cost less tension
 
 ## Intelligence: [politics-diplomacy-espionage.md §13](politics-diplomacy-espionage.md#13-tactics-intelligence)
 
