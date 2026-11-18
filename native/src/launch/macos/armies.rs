@@ -2169,9 +2169,18 @@ pub(super) fn select_army_quick(
     keys: &dyn GameInput,
     army: &str,
 ) -> Result<Rect> {
+    // An army group's card selects the divisions of all its armies (a division belongs to an
+    // army, and the army to the group).
     let size = read(process, |r, i| {
         let group = group_named(r, i, army)?;
-        Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
+        let parent = ui(r)?.army_group;
+        let mut count = 0u64;
+        for g in membership(r, i)?.values() {
+            if *g == group || (*g != 0 && r.u64(*g + parent)? == group) {
+                count += 1;
+            }
+        }
+        Ok(count)
     })?;
     // The card strip re-lays out when an army is added or removed (a detach creating a new army
     // moved Army 1's card and the next click missed it, live 6 Nov 2026): wait for a stable
@@ -2842,7 +2851,9 @@ fn army_provinces(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i32>> {
     let mut out = Vec::new();
     for index in 0..count.min(4096) as u64 {
         let division = r.u64(data + index * 8)?;
-        if r.u64(division + u.division_group)? != group {
+        // A division of an army in the army group `army` stands with the group.
+        let own = r.u64(division + u.division_group)?;
+        if own != group && (own == 0 || r.u64(own + u.army_group)? != group) {
             continue;
         }
         let location = r.u64(division + u.division_location)?;

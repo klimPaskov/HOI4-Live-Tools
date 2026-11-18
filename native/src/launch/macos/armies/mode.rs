@@ -132,6 +132,47 @@ fn buttons(r: &Reader<'_>, image: u64, bar: u64) -> Result<[Option<u64>; 3]> {
     }
     Ok(out)
 }
+/// Delete every order of `army` the way a player does: the army's card selects it, a right
+/// click on the battle plan bar's delete button (`btn_order_delete`, "Right-Click this button to
+/// delete all orders of currently selected army") and the confirmation is accepted. The caller
+/// verifies by the army's battle-plan orders (none left).
+pub(in super::super) fn clear_orders(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+) -> Result<()> {
+    clear_notices(process, keys)?;
+    select_army_quick(process, keys, army)?;
+    let bar = read(process, bar)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            "the battle plan bar (battleplantools_window) was not found",
+        )
+    })?;
+    let deadline = Instant::now() + Duration::from_millis(SLIDE_MS);
+    let button = loop {
+        let rect = read(process, |r, i| {
+            Ok(kit::find_deep(r, i, bar, "btn_order_delete", 6)?.and_then(|w| shown_rect(r, i, w)))
+        })?;
+        match rect {
+            Some(rect) => break rect,
+            None if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(60)),
+            None => {
+                let _ = clear_selection(process, keys);
+                return Err(Error::new(
+                    "gui_target_unavailable",
+                    "the battle plan bar's delete button (btn_order_delete) is not shown",
+                ));
+            }
+        }
+    };
+    std::thread::sleep(Duration::from_millis(300));
+    let at = button.center();
+    keys.right_click(GAME, at.0, at.1)?;
+    let _ = super::super::ui::accept_command(process, keys);
+    let _ = clear_selection(process, keys);
+    Ok(())
+}
 /// The mode controls below the bar's window `bar` (None: the bar was not found).
 fn seen_in(r: &Reader<'_>, image: u64, bar: Option<u64>) -> Result<Seen> {
     let mut seen = Seen::default();

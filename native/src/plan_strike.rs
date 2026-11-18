@@ -24,6 +24,9 @@
 //!               that wears its divisions out keeps its attack (the defender wears too): no new
 //!               order is sent until the army has rested (`resume` or `rest_days`), then it
 //!               chooses again, usually the same objective
+//!   reopen      true: an army with every objective in reach closed does not wait out the
+//!               closures: the objective it would choose without them is reopened (the worn
+//!               gate still holds back a worn army)
 //!   worn_gate   0.5: an army under this share of its best organisation opens no new strike
 //!               until `rest_days` after its last order (retaking own land does not wait)
 //!   feed        true: outside a strike, a stack its province cannot feed (`floor` 0.35 of
@@ -169,6 +172,7 @@ struct Knobs {
     rest_days: GameHour,
     max_days: GameHour,
     close_days: GameHour,
+    reopen: bool,
     beside: f64,
     guards: bool,
     halt: bool,
@@ -195,6 +199,7 @@ fn knobs(cfg: &Value) -> Option<Knobs> {
         rest_days: number("rest_days", 10.0) as GameHour,
         max_days: number("max_days", 18.0) as GameHour,
         close_days: number("close_days", 25.0) as GameHour,
+        reopen: k["reopen"].as_bool().unwrap_or(true),
         beside: number("beside", 2.0),
         guards: k["guards"] == json!(true),
         halt: k["halt"] == json!(true),
@@ -1421,7 +1426,12 @@ pub(super) fn step(
                 break;
             }
             let all = &by_army[name];
-            if all.len() < 2 || reserve.contains(name) || (!knobs.guards && guards.contains(name)) {
+            // an army given an order in this tick's war burst waits for the next tick
+            if all.len() < 2
+                || reserve.contains(name)
+                || (!knobs.guards && guards.contains(name))
+                || state.war_tick.contains(name)
+            {
                 continue;
             }
             let members: Vec<&Division> = all.iter().copied().filter(|d| !kept(&d.id)).collect();
@@ -1730,6 +1740,16 @@ pub(super) fn step(
                 order = Some(o);
                 break;
             }
+            // Every objective in reach is closed: an army does not stand idle for the rest of
+            // a closure while it can fight (live Italy 18 Nov 2026: North Strike stood 10-45
+            // days at 68-87% organisation with "no objective open now"). The closures are
+            // passed over and the objective chosen without them is reopened; the worn gate
+            // below still holds back an army too worn to strike.
+            if order.is_none() && knobs.reopen && closed.iter().any(|p| Some(*p) != turned) {
+                let shut: HashSet<i64> = full.iter().copied().chain(turned).collect();
+                // (the closure ends once the game takes the order)
+                order = choose(&world, &knobs, &rows(plan, &names), &movers, &shut);
+            }
             let Some(order) = order else {
                 continue;
             };
@@ -1943,6 +1963,7 @@ pub(super) fn step(
     let army = state.strike.armies.entry(a.army).or_default();
     if a.tool == "hoi4_army_move" && a.mode != Mode::Rest {
         if ok {
+            army.closed.remove(&a.objective);
             army.mode = a.mode;
             army.objective = a.objective;
             army.since = now;
@@ -2342,6 +2363,31 @@ mod tests {
             "{line}"
         );
         assert!(map.actions().iter().all(|(_, a)| a.get("halt").is_none()));
+    }
+
+    #[test]
+    fn an_army_with_every_objective_closed_reopens_one_instead_of_standing_idle() {
+        let map = Map::new(11);
+        let mut state = State::default();
+        let on = plan(json!(true));
+        map.set(36.0, None);
+        let army = state.strike.armies.entry("Army 1".into()).or_default();
+        for p in 0..100 {
+            army.closed.insert(p, START + 25 * DAY);
+        }
+        let line = run(&mut state, &map, &on, START).unwrap().unwrap();
+        assert!(line.contains("on province 20"), "{line}");
+        assert!(!state.strike.armies["Army 1"].closed.contains_key(&20));
+        // with "reopen": false the army waits out the closures
+        let map = Map::new(11);
+        let mut state = State::default();
+        let off = plan(json!({"reopen": false}));
+        map.set(36.0, None);
+        let army = state.strike.armies.entry("Army 1".into()).or_default();
+        for p in 0..100 {
+            army.closed.insert(p, START + 25 * DAY);
+        }
+        assert_eq!(run(&mut state, &map, &off, START), Some(None));
     }
 
     #[test]

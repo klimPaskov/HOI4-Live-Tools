@@ -4898,11 +4898,13 @@ mod tests {
         }
         assert_eq!(tools.moves().len(), 3);
         assert!(take_alarms(&mut state).is_empty());
-        // three failures in ten game days: never sent again, the player is woken once
-        for day in 3..8 {
-            assert_eq!(hold_at(&mut state, &tools, &plan, START + day * DAY), None);
+        // the ledger rests the war order in game time, longer after each failure (a day after
+        // the third, two after the fourth, six once given up after the fifth), and the player
+        // is woken once the first time it holds the order back
+        for day in 3..=10 {
+            let _ = hold_at(&mut state, &tools, &plan, START + day * DAY);
         }
-        assert_eq!(tools.moves().len(), 3);
+        assert_eq!(tools.moves().len(), 5);
         let alarms = take_alarms(&mut state);
         assert_eq!(alarms.len(), 1);
         assert_eq!(alarms[0]["reason"], "hold:north");

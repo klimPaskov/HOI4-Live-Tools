@@ -2904,7 +2904,7 @@ fn wing_owners(entries: &[Value], active: &[bool], wings: &[Value]) -> HashMap<S
     owner
 }
 
-fn air_plan_step(
+pub(super) fn air_plan_step(
     state: &mut State,
     tools: &dyn Tools,
     plan: &Value,

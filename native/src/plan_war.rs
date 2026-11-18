@@ -2676,10 +2676,9 @@ mod tests {
             "{step}"
         );
         assert_eq!(state.war_assign.get("Army 2"), Some(&28));
-        // Army 2 draws its own front and offensive line at the target next
-        let step = acted(tick(&mut state, &w, &p, "l", now + 1).unwrap());
+        // Army 2 draws its own front and offensive line at the target in the same tick's burst
         assert!(
-            step.starts_with("war front and offensive Army 2 -> state 28"),
+            step.contains("war front and offensive Army 2 -> state 28"),
             "{step}"
         );
         // the next stall of Army 1 on 28 is the direct move
