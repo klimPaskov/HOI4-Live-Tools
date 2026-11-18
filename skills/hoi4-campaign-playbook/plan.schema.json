@@ -2969,6 +2969,11 @@
                 "type": "string",
                 "description": "why the war is won fast: the force ratio on the axes, the air, the supply (force.decisive)"
               },
+              "attack_ratio": {
+                "type": "number",
+                "minimum": 0,
+                "description": "divisions of the formations on the war's axes per enemy division on the front, on its first day (lint war.attack_force; default 1.0)"
+              },
               "tasks": {
                 "type": "array",
                 "items": {
